@@ -287,7 +287,7 @@ Adaptive Step Size
 ==================
 
 When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated at the end of each
-iteration. Two algorithms are available via ``--step-size-method``.
+iteration. The available algorithms are selected via ``--step-size-method``.
 
 Barzilai-Borwein (``"bb"``, default)
 ------------------------------------
@@ -321,19 +321,41 @@ A dimensionless merit function tracks progress:
 
 The current step size is recorded on every line of ``<label>_report.log``.
 
+Harvey BFGS (``"harvey_bfgs"``)
+--------------------------------
+
+This method follows the inverse-BFGS update used by easyMECP: it builds a full
+inverse Hessian from successive effective-gradient and Cartesian-displacement
+pairs, including negative-curvature updates, and limits the total Cartesian
+step using Harvey's ``STPMX`` rule. Numerically singular updates are skipped.
+
+For non-Link calculations, each state also reads the checkpoint from its own
+previous MECP step. This preserves orbital continuity in the same way as
+``%chk`` with ``guess=read``. Like easyMECP, ChemSmart maintains one rolling
+checkpoint per state (``<label>_A.chk`` and ``<label>_B.chk``) instead of one
+checkpoint per iteration. Iteration ``.com`` and ``.log`` files and the two
+rolling checkpoints are kept in ``<label>_steps``; the report and trajectory
+remain in the main job directory.
+
+Seam-minimum verification uses a separate pair of temporary rolling
+checkpoints. They are deleted after a successful verification, so the final
+``<label>_A.chk`` and ``<label>_B.chk`` continue to represent the converged
+MECP geometry. Temporary checkpoints are retained if verification fails.
+
 Output Files
 ============
 
-Three output files are produced alongside the Gaussian sub-job input/output files; the
+Three output files are produced in the main job directory; Gaussian sub-job input/output files are stored in
+``<label>_steps``. The
 third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
 
 ``<label>_report.log``
    Step-by-step optimization log. The file header records the run settings; each subsequent line reports one step, using
-   a **1-indexed** six-digit zero-padded step counter (``000001`` = first step):
+   a **1-indexed** step counter (``1`` = first step):
 
    .. code::
 
-      step=NNNNNN E_A=<Hartree> E_B=<Hartree> dE=<±Hartree>
+      step=N E_A=<Hartree> E_B=<Hartree> dE=<±Hartree>
       pgrad_max=<H/Bohr> pgrad_rms=<H/Bohr>
       disp_max=<Bohr> disp_rms=<Bohr>
       seam_max=<Bohr> seam_rms=<Bohr>
@@ -351,7 +373,7 @@ third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`
       :math:`\mathbf{d}_\text{seam} = -(\Delta E / \|\mathbf{g}_\Delta\|^2)\,\mathbf{g}_\Delta` that
       moves the geometry toward the crossing surface.
 
-   The final line reads ``Converged at step NNNNNN.`` on successful convergence. The presence of this ``Converged``
+   The final line reads ``Converged at step N.`` on successful convergence. The presence of this ``Converged``
    marker is used by ``skip_completed`` to avoid re-running a finished job.
 
 ``<label>_traj.xyz``
@@ -413,7 +435,7 @@ Add ``--verify-seam-minimum`` to the MECP command after the optimization converg
        --convergence tight --verify-seam-minimum
 
 The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states
-× 3N Cartesian coordinates), each labelled ``<label>_step900000_A`` etc.  For a 10-atom molecule this is 120
+× 3N Cartesian coordinates), labelled ``<label>_check_step1_A``, ``<label>_check_step2_A``, etc. For a 10-atom molecule this is 120
 additional Gaussian calculations.  The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with
 ``--hess-step-size``.
 
@@ -422,7 +444,7 @@ Results are written to ``<label>_seam_check.log``:
 .. code::
 
    CHEMSMART MECP seam-minimum verification
-   label=... hess_step=1.00e-03 Bohr step_prefix=900000
+   label=... hess_step=1.00e-03 Bohr check_step_start=1
    energy_diff=+1.234567e-06 Hartree n_projected=7
    n_negative_eigenvalues=0  MECP MINIMUM
 
@@ -488,10 +510,10 @@ Use the grow/shrink adaptive method instead of the default Barzilai-Borwein:
 
 .. note::
 
-   Each MECP step generates two Gaussian sub-jobs named ``<label>_step<NNNNNN>_A`` and ``<label>_step<NNNNNN>_B``
-   (single-point energy + forces), where ``<NNNNNN>`` is the **1-indexed** six-digit zero-padded step number (e.g.
-   ``000001`` for the first step, ``000010`` for the tenth). Steps are numbered starting from 1 up to ``max_steps`` (up
-   to 999 999). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job itself honours
+   Each MECP step generates two Gaussian sub-jobs in ``<label>_steps``, named
+   ``<label>_step<N>_A`` and ``<label>_step<N>_B``
+   (single-point energy + forces), where ``<N>`` is the **1-indexed** step number (for example, ``step1`` and
+   ``step10``). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job itself honours
    ``skip_completed`` via the ``Converged`` marker in the report file.
 
 ***********

@@ -27,9 +27,8 @@ class GaussianMECPJob(GaussianJob):
     for a molecular species.
 
     At each iteration (step 1, 2, …, max_steps) two Gaussian sub-jobs are
-    executed, labelled ``<label>_step<NNNNNN>_A`` and
-    ``<label>_step<NNNNNN>_B`` where ``<NNNNNN>`` is the **1-indexed**
-    six-digit zero-padded step number (e.g. ``000001`` for the first step),
+    executed, labelled ``<label>_step<N>_A`` and
+    ``<label>_step<N>_B`` where ``<N>`` is the **1-indexed** step number,
     supporting up to 999 999 steps.
 
     Attributes:
@@ -179,7 +178,9 @@ class GaussianMECPJob(GaussianJob):
         state_settings.title = title
         return state_settings
 
-    def _run_state(self, positions_bohr, step_idx, state):
+    def _run_state(
+        self, positions_bohr, step_idx, state, checkpoint_tag=None
+    ):
         if state == "A":
             charge = self.settings.charge_a
             multiplicity = self.settings.multiplicity_a
@@ -194,10 +195,20 @@ class GaussianMECPJob(GaussianJob):
         settings = self._state_settings(
             charge=charge,
             multiplicity=multiplicity,
-            title=f"{title} step {step_idx:06d}",
+            title=f"{title} step {step_idx}",
             state=state,
         )
-        state_label = f"{self.label}_step{step_idx:06d}_{state}"
+        job_tag = f"{checkpoint_tag}_" if checkpoint_tag else ""
+        state_label = f"{self.label}_{job_tag}step{step_idx}_{state}"
+
+        checkpoint_key = (checkpoint_tag, state)
+        oldchkfile = self._state_checkpoint_files.get(checkpoint_key)
+        if oldchkfile and not self.settings.use_link:
+            route = settings.additional_route_parameters or ""
+            if "guess=" not in route.lower():
+                settings.additional_route_parameters = (
+                    f"{route} guess=read".strip()
+                )
 
         if self.settings.use_link:
             from chemsmart.jobs.gaussian.link import GaussianLinkJob
@@ -217,6 +228,12 @@ class GaussianMECPJob(GaussianJob):
                 jobrunner=self.jobrunner,
                 skip_completed=False,
             )
+        job.set_folder(self.steps_folder)
+        checkpoint_part = f"{checkpoint_tag}_" if checkpoint_tag else ""
+        job.checkpoint_filename = (
+            f"{self.label}_{checkpoint_part}{state}.chk"
+        )
+        job.oldchkfile = oldchkfile
         job.run()
         output = job._output()
         if output is None or output.energies is None or not output.energies:
@@ -234,6 +251,8 @@ class GaussianMECPJob(GaussianJob):
                 f"coordinate shape {np.array(mol.positions).shape}."
             )
         gradient = -forces
+        if os.path.isfile(job.chkfile):
+            self._state_checkpoint_files[checkpoint_key] = job.chkfile
         return energy, gradient
 
     def _write_trajectory_frame(self, positions_bohr, step_idx):
@@ -305,22 +324,26 @@ class GaussianMECPJob(GaussianJob):
         )
 
     @staticmethod
-    def _update_inverse_hessian(inv_hessian, delta_x, delta_g):
-        """Return a curvature-safe inverse-BFGS update.
+    def _update_inverse_hessian(
+        inv_hessian, delta_x, delta_g, return_diagnostics=False
+    ):
+        """Return Harvey/easyMECP's inverse-BFGS update.
 
-        The rank-three form used by Harvey is algebraically equivalent to
-        the conventional inverse-BFGS formula.  If the secant pair does not
-        have positive curvature, retain the previous approximation.
+        easyMECP applies the rank-three update even for negative curvature.
+        This implementation does the same and only skips a numerically
+        singular or non-finite update.
         """
         h_del_g = inv_hessian @ delta_g
         fac = float(np.dot(delta_g, delta_x))
         fae = float(np.dot(delta_g, h_del_g))
-        curvature_tol = 1.0e-8 * np.linalg.norm(delta_x) * np.linalg.norm(
-            delta_g
+        scale = max(
+            float(np.linalg.norm(delta_x) * np.linalg.norm(delta_g)), 1.0
         )
+        singular_tol = np.finfo(float).eps * scale
 
-        if fac <= curvature_tol or fae <= 1.0e-30:
-            return inv_hessian
+        if abs(fac) <= singular_tol or abs(fae) <= singular_tol:
+            result = (inv_hessian, "SKIP_SINGULAR", fac, fae)
+            return result if return_diagnostics else result[0]
 
         w = delta_x / fac - h_del_g / fae
         updated = (
@@ -329,7 +352,13 @@ class GaussianMECPJob(GaussianJob):
             - np.outer(h_del_g, h_del_g) / fae
             + fae * np.outer(w, w)
         )
-        return 0.5 * (updated + updated.T)
+        if not np.all(np.isfinite(updated)):
+            result = (inv_hessian, "SKIP_NONFINITE", fac, fae)
+            return result if return_diagnostics else result[0]
+
+        updated = 0.5 * (updated + updated.T)
+        result = (updated, "UPDATE", fac, fae)
+        return result if return_diagnostics else result[0]
 
     def _bfgs_displacement(
         self,
@@ -397,25 +426,24 @@ class GaussianMECPJob(GaussianJob):
             # 第一步: 用对角逆 Hessian (Harvey Initialize 子程序)
             inv_hess = initial_hi_val * np.eye(n)
             displacement_flat = -inv_hess @ eff_grad_flat
+            update_status = "INITIAL"
+            fac = float("nan")
+            fae = float("nan")
         else:
             # BFGS 更新 (Harvey UpdateX 子程序)
             delta_x = (curr_positions - prev_positions).ravel()  # DelX
             delta_g = (eff_grad_flat - prev_eff_grad)  # DelG
 
-            inv_hess = self._update_inverse_hessian(
-                inv_hessian, delta_x, delta_g
+            inv_hess, update_status, fac, fae = self._update_inverse_hessian(
+                inv_hessian,
+                delta_x,
+                delta_g,
+                return_diagnostics=True,
             )
 
             displacement_flat = -inv_hess @ eff_grad_flat
-
-            # A finite positive-definite inverse Hessian should always yield a
-            # descent direction.  Reset defensively if accumulated numerical
-            # error or noisy electronic gradients violate that invariant.
-            if not np.all(np.isfinite(displacement_flat)) or float(
-                np.dot(eff_grad_flat, displacement_flat)
-            ) >= 0.0:
-                inv_hess = initial_hi_val * np.eye(n)
-                displacement_flat = -inv_hess @ eff_grad_flat
+            if not np.all(np.isfinite(displacement_flat)):
+                raise RuntimeError("Harvey BFGS produced a non-finite step.")
 
         # 3. 位移限制 (Harvey UpdateX 中的 STPMX 逻辑)
         # STPMX = 0.1 Å -> 0.1 * (1/Bohr) Bohr
@@ -435,7 +463,15 @@ class GaussianMECPJob(GaussianJob):
         # seam_correction: 精确线性 seam 修正 (用于日志对比)
         seam_correction = -(ea - eb) / diff_norm_sq * diff_grad
 
-        return displacement, eff_grad, seam_correction, inv_hess
+        return (
+            displacement,
+            eff_grad,
+            seam_correction,
+            inv_hess,
+            update_status,
+            fac,
+            fae,
+        )
 
     def _adapt_step_size(self, current_step_size, prev_merit, current_merit):
         """
@@ -537,7 +573,7 @@ class GaussianMECPJob(GaussianJob):
         seam_max = float(np.max(np.abs(seam_correction)))
         seam_rms = self._rms(seam_correction)
         f.write(
-            f"step={step_idx:06d} E_A={ea:.10f} E_B={eb:.10f} "
+            f"step={step_idx} E_A={ea:.10f} E_B={eb:.10f} "
             f"dE={energy_diff:+.6e} "
             f"pgrad_max={pgrad_max:.3e} pgrad_rms={pgrad_rms:.3e} "
             f"disp_max={disp_max:.3e} disp_rms={disp_rms:.3e} "
@@ -564,6 +600,9 @@ class GaussianMECPJob(GaussianJob):
         inv_hessian = None
         prev_eff_grad = None
         prev_positions_bfgs = None
+        self.steps_folder = os.path.join(self.folder, f"{self.label}_steps")
+        os.makedirs(self.steps_folder, exist_ok=True)
+        self._state_checkpoint_files = {}
 
         with open(self.report_file, "w") as report:
             report.write("CHEMSMART self-contained MECP optimization\n")
@@ -587,6 +626,9 @@ class GaussianMECPJob(GaussianJob):
                         projected_grad,
                         seam_correction,
                         inv_hessian,
+                        bfgs_status,
+                        bfgs_fac,
+                        bfgs_fae,
                     ) = self._bfgs_displacement(
                         ea=ea,
                         eb=eb,
@@ -618,6 +660,12 @@ class GaussianMECPJob(GaussianJob):
                     seam_correction,
                     current_step_size,
                 )
+                if self.settings.step_size_method == "harvey_bfgs":
+                    report.write(
+                        f"bfgs_status={bfgs_status} "
+                        f"delta_g_dot_delta_x={bfgs_fac:+.8e} "
+                        f"delta_g_dot_h_delta_g={bfgs_fae:+.8e}\n"
+                    )
 
                 if self._is_converged(
                     energy_diff=energy_diff,
@@ -784,8 +832,7 @@ class GaussianMECPJob(GaussianJob):
         Args:
             positions_bohr (np.ndarray): Current geometry, shape (n_atoms, 3).
             h (float): Finite-difference step size in Bohr.
-            step_prefix (int): Starting sub-job step index (to avoid
-                clashing with MECP optimisation step labels).
+            step_prefix (int): First check-specific sub-job step index.
 
         Returns:
             np.ndarray: Average symmetrised Hessian, shape (3N, 3N),
@@ -810,10 +857,18 @@ class GaussianMECPJob(GaussianJob):
             step_p = step_prefix + 2 * j
             step_m = step_prefix + 2 * j + 1
 
-            _, g_A_plus = self._run_state(pos_plus, step_p, "A")
-            _, g_B_plus = self._run_state(pos_plus, step_p, "B")
-            _, g_A_minus = self._run_state(pos_minus, step_m, "A")
-            _, g_B_minus = self._run_state(pos_minus, step_m, "B")
+            _, g_A_plus = self._run_state(
+                pos_plus, step_p, "A", checkpoint_tag="check"
+            )
+            _, g_B_plus = self._run_state(
+                pos_plus, step_p, "B", checkpoint_tag="check"
+            )
+            _, g_A_minus = self._run_state(
+                pos_minus, step_m, "A", checkpoint_tag="check"
+            )
+            _, g_B_minus = self._run_state(
+                pos_minus, step_m, "B", checkpoint_tag="check"
+            )
 
             H_A[:, j] = (g_A_plus.ravel() - g_A_minus.ravel()) / (2 * h)
             H_B[:, j] = (g_B_plus.ravel() - g_B_minus.ravel()) / (2 * h)
@@ -822,7 +877,7 @@ class GaussianMECPJob(GaussianJob):
         H_B = (H_B + H_B.T) / 2
         return (H_A + H_B) / 2
 
-    def verify_seam_minimum(self, h=None, step_prefix=900000):
+    def verify_seam_minimum(self, h=None, step_prefix=1):
         """
         Verify that the current MECP geometry is a **minimum on the crossing
         seam**, not merely a crossing point.
@@ -860,8 +915,9 @@ class GaussianMECPJob(GaussianJob):
         Args:
             h (float, optional): Finite-difference step size in Bohr.
                 Defaults to ``settings.hess_step_size`` (1 × 10⁻³ Bohr).
-            step_prefix (int, optional): Starting sub-job step index
-                (default: 900000, well above any normal MECP step).
+            step_prefix (int, optional): Starting check-specific sub-job step
+                index (default: 1). The ``check`` name component prevents
+                clashes with normal MECP steps.
 
         Returns:
             dict: Keys ``"eigenvalues"`` (1-D array, non-projected modes),
@@ -879,8 +935,12 @@ class GaussianMECPJob(GaussianJob):
         logger.info(
             f"verify_seam_minimum: computing gradient difference at {self.label}"
         )
-        ea, grad_a = self._run_state(positions_bohr, step_prefix - 1, "A")
-        eb, grad_b = self._run_state(positions_bohr, step_prefix - 1, "B")
+        ea, grad_a = self._run_state(
+            positions_bohr, step_prefix, "A", checkpoint_tag="check"
+        )
+        eb, grad_b = self._run_state(
+            positions_bohr, step_prefix, "B", checkpoint_tag="check"
+        )
         diff_grad = grad_a - grad_b
 
         logger.info(
@@ -888,7 +948,7 @@ class GaussianMECPJob(GaussianJob):
             f"(h={h} Bohr, {4 * 3 * len(self.molecule.symbols)} sub-jobs)"
         )
         H_avg = self._compute_numerical_hessian(
-            positions_bohr, h=h, step_prefix=step_prefix
+            positions_bohr, h=h, step_prefix=step_prefix + 1
         )
 
         proj_vecs = self._build_projection_vectors(positions_bohr, diff_grad)
@@ -908,7 +968,18 @@ class GaussianMECPJob(GaussianJob):
         }
 
         self._write_seam_check_log(result, h, step_prefix)
+        self._remove_checkpoint_set("check")
         return result
+
+    def _remove_checkpoint_set(self, checkpoint_tag):
+        """Remove successful verification checkpoints, preserving MECP ones."""
+        for state in ("A", "B"):
+            checkpoint_key = (checkpoint_tag, state)
+            checkpoint_file = self._state_checkpoint_files.pop(
+                checkpoint_key, None
+            )
+            if checkpoint_file and os.path.isfile(checkpoint_file):
+                os.remove(checkpoint_file)
 
     def _run_seam_minimum_check(self, positions_bohr):
         """Called at the end of ``_run()`` when ``verify_seam_minimum`` is set."""
@@ -931,7 +1002,7 @@ class GaussianMECPJob(GaussianJob):
             f.write("CHEMSMART MECP seam-minimum verification\n")
             f.write(
                 f"label={self.label} hess_step={h:.2e} Bohr "
-                f"step_prefix={step_prefix}\n"
+                f"check_step_start={step_prefix}\n"
             )
             f.write(
                 f"energy_diff={result['energy_diff']:+.6e} Hartree "

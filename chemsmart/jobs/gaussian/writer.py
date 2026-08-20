@@ -147,9 +147,15 @@ class GaussianInputWriter(InputWriter):
             f (file): Open file object to write to.
         """
         logger.debug("Writing Gaussian header.")
+        oldchkfile = getattr(self.job, "oldchkfile", None)
+        chk_name = os.path.basename(self.job.chkfile)
+        if oldchkfile and os.path.basename(oldchkfile) != chk_name:
+            oldchk_name = os.path.basename(oldchkfile)
+            logger.debug(f"Reading previous chk file: {oldchk_name}")
+            f.write(f"%oldchk={oldchk_name}\n")
         if self.settings.chk:
-            logger.debug(f"Writing chk file: {self.job.label}.chk")
-            f.write(f"%chk={self.job.label}.chk\n")
+            logger.debug(f"Writing chk file: {chk_name}")
+            f.write(f"%chk={chk_name}\n")
 
         # Set default values if jobrunner resources are not specified
         num_cores = self.jobrunner.num_cores if not None else 12

@@ -222,7 +222,7 @@ class GaussianJobRunner(JobRunner):
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_chkfile = job.label + ".chk"
+        job_chkfile = os.path.basename(job.chkfile)
         scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
         self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 
@@ -265,6 +265,14 @@ class GaussianJobRunner(JobRunner):
 
         input_writer = GaussianInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
+
+        oldchkfile = getattr(job, "oldchkfile", None)
+        if oldchkfile and self.scratch and self.running_directory:
+            oldchk_target = os.path.join(
+                self.running_directory, os.path.basename(oldchkfile)
+            )
+            if os.path.abspath(oldchkfile) != os.path.abspath(oldchk_target):
+                copy(oldchkfile, oldchk_target)
 
     def _get_command(self, job):
         """
@@ -356,6 +364,14 @@ class GaussianJobRunner(JobRunner):
                             f"File {file} cannot be copied to job folder "
                             f"{job.folder}: {e}"
                         )
+            if os.path.isfile(self.job_chkfile):
+                checkpoint_target = os.path.join(
+                    job.folder, os.path.basename(self.job_chkfile)
+                )
+                if os.path.abspath(self.job_chkfile) != os.path.abspath(
+                    checkpoint_target
+                ):
+                    copy(self.job_chkfile, checkpoint_target)
 
 
 class FakeGaussianJobRunner(GaussianJobRunner):
@@ -458,7 +474,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_chkfile = job.label + ".chk"
+        job_chkfile = os.path.basename(job.chkfile)
         scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
         self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 

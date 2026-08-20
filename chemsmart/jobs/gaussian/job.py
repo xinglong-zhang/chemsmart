@@ -138,7 +138,7 @@ class GaussianJob(Job):
         Returns:
             str: Full path to the Gaussian checkpoint file.
         """
-        chkfile = self.label + ".chk"
+        chkfile = getattr(self, "checkpoint_filename", self.label + ".chk")
         return os.path.join(self.folder, chkfile)
 
     @property
