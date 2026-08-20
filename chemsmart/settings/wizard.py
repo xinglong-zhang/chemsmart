@@ -162,23 +162,45 @@ def render_server_block(choices: ServerChoicesV1, *, host: HostFactsV1) -> str:
     return "\n".join(lines)
 
 
-def splice_server_block(existing_text: str, server_block: str) -> str:
-    """Replace the top-level SERVER block, preserving every other byte.
+def extract_top_level_block(text: str, key: str) -> str:
+    """The ``key:`` block of a YAML text, comments-with-it, or ""."""
 
-    A record starts at the column-0 ``SERVER:`` line and ends before the
-    next column-0 key; comment lines immediately above the old SERVER
-    block are treated as part of it (they described the old block).
+    lines = text.splitlines(keepends=True)
+    start = None
+    for index, line in enumerate(lines):
+        if line.startswith(f"{key}:"):
+            start = index
+            break
+    if start is None:
+        return ""
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        line = lines[index]
+        if line[:1] not in ("", " ", "\t", "\n", "\r", "#"):
+            end = index
+            break
+    return "".join(lines[start:end])
+
+
+def splice_top_level_block(
+    existing_text: str, key: str, block: str
+) -> str:
+    """Replace one top-level block, preserving every other byte.
+
+    A record starts at the column-0 ``key:`` line and ends before the
+    next column-0 key; comment lines immediately above the old block are
+    treated as part of it (they described the old block).
     """
 
     lines = existing_text.splitlines(keepends=True)
     start = None
     for index, line in enumerate(lines):
-        if line.startswith("SERVER:"):
+        if line.startswith(f"{key}:"):
             start = index
             break
     if start is None:
         separator = "" if existing_text.startswith(("\n", "")) else "\n"
-        return server_block + separator + existing_text
+        return block + separator + existing_text
     # Absorb the contiguous comment lines directly above the old block.
     first = start
     while first > 0 and lines[first - 1].lstrip().startswith("#"):
@@ -195,7 +217,11 @@ def splice_server_block(existing_text: str, server_block: str) -> str:
             # Comments directly above the next block belong to it.
             end = index
             break
-    return "".join(lines[:first]) + server_block + "".join(lines[end:])
+    return "".join(lines[:first]) + block + "".join(lines[end:])
+
+
+def splice_server_block(existing_text: str, server_block: str) -> str:
+    return splice_top_level_block(existing_text, "SERVER", server_block)
 
 
 def backup_path_for(path: Path) -> Path:
@@ -232,7 +258,170 @@ def write_server_yaml(
     return backup
 
 
+@dataclass(frozen=True)
+class CheckResultV1:
+    name: str
+    status: str  # ok | warn | fail | skipped
+    detail: str = ""
+
+
+def run_verification(
+    choices: ServerChoicesV1,
+    *,
+    runner=None,
+    which=None,
+) -> tuple[CheckResultV1, ...]:
+    """The aiida-style setup checks, tabulated and non-fatal.
+
+    Adapted from `verdi computer test` (aiida-core, MIT): clean shell
+    output, scheduler responsiveness, identity, a byte-compared scratch
+    round trip, login-shell cost, plus submit-binary presence.
+    """
+
+    import getpass
+    import os
+    import subprocess
+    import time as time_module
+
+    runner = subprocess.run if runner is None else runner
+    which = shutil.which if which is None else which
+
+    def run(command):
+        try:
+            return runner(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except Exception as exc:  # noqa: BLE001 - reported, never raised
+            class _Failed:
+                returncode = 127
+                stdout = ""
+                stderr = str(exc)
+
+            return _Failed()
+
+    checks: list[CheckResultV1] = []
+
+    probe = run(["bash", "-lc", "echo -n"])
+    if probe.returncode == 0 and not probe.stdout and not probe.stderr:
+        checks.append(CheckResultV1("clean login shell", "ok"))
+    else:
+        spurious = (probe.stdout + probe.stderr).strip()[:120]
+        checks.append(
+            CheckResultV1(
+                "clean login shell",
+                "fail",
+                "the login shell prints output that can corrupt parsed "
+                f"scheduler replies: {spurious!r}",
+            )
+        )
+
+    if choices.scheduler == "SLURM":
+        probe = run(["sinfo", "--version"])
+    elif choices.scheduler == "PBS":
+        probe = run(["qstat", "-Q"])
+    else:
+        probe = None
+    if probe is None:
+        checks.append(
+            CheckResultV1(
+                "scheduler responds", "skipped", "local execution only"
+            )
+        )
+    elif probe.returncode == 0:
+        checks.append(CheckResultV1("scheduler responds", "ok"))
+    else:
+        checks.append(
+            CheckResultV1(
+                "scheduler responds",
+                "fail",
+                f"exit {probe.returncode}: {probe.stderr.strip()[:120]}",
+            )
+        )
+
+    try:
+        identity = getpass.getuser()
+        checks.append(CheckResultV1("identity", "ok", identity))
+    except Exception:  # noqa: BLE001
+        checks.append(CheckResultV1("identity", "fail", "no user name"))
+
+    if choices.scratch_dir:
+        try:
+            scratch = Path(choices.scratch_dir).expanduser()
+            scratch.mkdir(parents=True, exist_ok=True)
+            token = f"chemsmart-wizard-{os.getpid()}-{time_module.time()}"
+            probe_file = scratch / f".{token}"
+            payload = token.encode("utf-8")
+            probe_file.write_bytes(payload)
+            read_back = probe_file.read_bytes()
+            probe_file.unlink()
+            if read_back == payload:
+                checks.append(
+                    CheckResultV1("scratch round trip", "ok", str(scratch))
+                )
+            else:
+                checks.append(
+                    CheckResultV1(
+                        "scratch round trip",
+                        "fail",
+                        "read bytes differ from written bytes",
+                    )
+                )
+        except OSError as exc:
+            checks.append(
+                CheckResultV1("scratch round trip", "fail", str(exc)[:120])
+            )
+    else:
+        checks.append(
+            CheckResultV1(
+                "scratch round trip", "skipped", "no scratch configured"
+            )
+        )
+
+    def timed(command):
+        started = time_module.monotonic()
+        for _ in range(3):
+            run(command)
+        return (time_module.monotonic() - started) / 3
+
+    login = timed(["bash", "-lc", "true"])
+    plain = timed(["bash", "-c", "true"])
+    if login > 2 * plain + 0.1:
+        checks.append(
+            CheckResultV1(
+                "login-shell cost",
+                "warn",
+                f"login shell {login:.2f}s vs plain {plain:.2f}s -- heavy "
+                "startup files slow every submitted job",
+            )
+        )
+    else:
+        checks.append(CheckResultV1("login-shell cost", "ok"))
+
+    if choices.submit_command:
+        first = choices.submit_command.split()[0]
+        present = Path(first).exists() or bool(which(first))
+        checks.append(
+            CheckResultV1(
+                "submit command present",
+                "ok" if present else "fail",
+                choices.submit_command,
+            )
+        )
+    else:
+        checks.append(
+            CheckResultV1(
+                "submit command present", "skipped", "local execution only"
+            )
+        )
+    return tuple(checks)
+
+
 __all__ = [
+    "CheckResultV1",
     "SUBMITTABLE_SCHEDULERS",
     "ServerChoicesV1",
     "backup_path_for",
@@ -240,7 +429,10 @@ __all__ = [
     "default_hours",
     "default_mem_gb",
     "derive_choices",
+    "extract_top_level_block",
+    "run_verification",
     "render_server_block",
     "splice_server_block",
+    "splice_top_level_block",
     "write_server_yaml",
 ]

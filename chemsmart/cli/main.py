@@ -16,6 +16,7 @@ from .agent import agent
 from .run import run
 from .sub import sub
 from .update import update
+from .wizard import wizard
 
 
 @click.group(cls=MyGroup)
@@ -71,6 +72,7 @@ entry_point.add_command(sub)
 entry_point.add_command(config)
 entry_point.add_command(update)
 entry_point.add_command(agent)
+entry_point.add_command(wizard)
 
 
 def main():  # pragma: no cover
