@@ -1,11 +1,11 @@
 """The executor supplies the caller, never the science.
 
 Measured across repeated live sessions: seventeen ``agent plan`` sessions
-rejected 42 of 868 tool calls (4.8%); the one ``agent run`` session rejected 20
-of 69 (29%) -- twelve execution attempts and eight re-plans *inside* an
-execution session -- and completed no nodes. ``agent run`` is
-``run_live_agent_session(execution_enabled=True)``: the same planning loop with
-one extra tool, asked to re-derive a plan it was already handed.
+rejected 42 of 868 tool calls (4.8%); the one execution-enabled session
+rejected 20 of 69 (29%) -- twelve execution attempts and eight re-plans
+*inside* an execution session -- and completed no nodes. That mode was
+``run_live_agent_session(execution_enabled=True)``: the same planning loop
+with one extra tool, asked to re-derive a plan it was already handed.
 
 These gates pin the division of labour that replaces it. They are deliberately
 about what the executor may *not* do.

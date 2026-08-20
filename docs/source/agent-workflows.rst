@@ -124,10 +124,10 @@ but cannot start a chemistry engine:
      --secret-file /secure/path/provider.env \
      --workspace /absolute/path/task-workspace
 
-``chemsmart agent run`` has the same preview-only authority.  Both commands may
-create and validate project YAML, compile live Click commands, inspect generated
-artifacts, and execute fake previews.  Neither command accepts a model-created
-execution grant.
+``chemsmart agent plan`` may create and validate project YAML, compile live
+Click commands, inspect generated artifacts, and execute fake previews.  It
+never accepts a model-created execution grant; real execution belongs to the
+approval chain below.
 
 Approved execution in the terminal interface
 ============================================
@@ -274,10 +274,10 @@ run can be read for its reason and not for its numbers.
 Re-running an approved workflow
 ===============================
 
-``chemsmart agent replay`` re-presents a stored execution review so the same
+``chemsmart agent review`` re-presents a stored execution review so the same
 workflow can be decided on again::
 
-   chemsmart agent replay \
+   chemsmart agent review \
      --review-file review.json \
      --workspace /path/to/workspace
 
@@ -372,7 +372,7 @@ existing-result analysis does not require it.
 
 A typed analysis chain planned with a workflow travels verbatim in the review
 packet and the approval bundle, and the single approval covers it.  After
-every approved calculation node validates, ``agent execute`` runs the chain
+every approved calculation node validates, ``agent run`` runs the chain
 provider-free -- extraction, thermochemistry, expressions, validation
 verdicts, and claim rendering -- and writes ``analysis/
 completed-analysis-report.md`` into the run directory.  A failed validation

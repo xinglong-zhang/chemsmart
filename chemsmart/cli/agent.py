@@ -81,7 +81,13 @@ def _read_task(task: str | None, task_file: Path | None) -> str:
 
 @click.group(name="agent", cls=MyGroup)
 def agent():
-    """Plan or run computational chemistry through typed ChemSmart tools."""
+    """Operate the ChemSmart Agent pipeline: plan, review, run, or tui.
+
+    ``plan`` creates and safely previews a workflow, ``review`` re-presents a
+    stored review for the one human decision, ``run`` executes an approved
+    bundle provider-free, and ``tui`` is the interactive terminal over the
+    same chain.
+    """
 
 
 @agent.command("plan")
@@ -142,172 +148,7 @@ def plan(
     click.echo(result.public_summary_json())
 
 
-@agent.command("run")
-@_task_options
-@click.option(
-    "--approval-file",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default=None,
-    help=(
-        "Legacy option retained only to fail closed; approvals are consumed "
-        "by 'chemsmart agent execute'."
-    ),
-)
-@click.option(
-    "--execution-envelope",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default=None,
-    help=(
-        "Science-free resource/program bounds for planning, safe preview, "
-        "and an inert exact review packet. It grants no execution authority."
-    ),
-)
-@click.option(
-    "--review-file",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Write the inert exact execution review packet to this JSON file.",
-)
-def run(
-    task,
-    task_file,
-    provider,
-    provider_config,
-    secret_file,
-    workspace,
-    analysis_completion_file,
-    identity_manifest,
-    approval_file,
-    execution_envelope,
-    review_file,
-):
-    """Plan and safely preview; real execution is a separate approved step."""
-
-    from chemsmart.agent.live_session import run_live_agent_session
-    from chemsmart.agent.identity import load_approved_molecular_input_manifest
-
-    if approval_file is not None:
-        raise click.UsageError(
-            "--approval-file cannot grant authority to a provider session; "
-            "use 'chemsmart agent execute --approval-file ...'"
-        )
-
-    approved_inputs = (
-        load_approved_molecular_input_manifest(
-            identity_manifest, workspace=workspace
-        )
-        if identity_manifest is not None
-        else ()
-    )
-
-    result = run_live_agent_session(
-        task=_read_task(task, task_file),
-        provider=provider.lower() if provider else None,
-        provider_config_file=provider_config,
-        secret_file=secret_file,
-        workspace=workspace,
-        execution_enabled=False,
-        approval_file=None,
-        execution_envelope_file=execution_envelope,
-        analysis_completion_file=analysis_completion_file,
-        approved_molecular_inputs=approved_inputs,
-        review_file=review_file.resolve() if review_file is not None else None,
-    )
-    click.echo(result.public_summary_json())
-
-
-@agent.command("approve", hidden=True)
-@click.option(
-    "--review-file",
-    required=True,
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Inert workflow execution review produced by agent plan or run.",
-)
-@click.option(
-    "--reviewed-sha256",
-    required=True,
-    help="The full review digest the human inspected and is resolving.",
-)
-@click.option(
-    "--decision",
-    required=True,
-    type=click.Choice(
-        ("approve", "deny", "revise", "quit"), case_sensitive=False
-    ),
-    help="One exact human resolution; there are no session or prefix grants.",
-)
-@click.option(
-    "--actor", required=True, help="Human actor recorded with the decision."
-)
-@click.option(
-    "--approval-id",
-    default=None,
-    help="Optional public approval ID; otherwise it is derived from the digest.",
-)
-@click.option(
-    "--output",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Required for approve: exact one-shot approval bundle JSON.",
-)
-@click.option(
-    "--decision-log",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Append-only decision event stream; defaults beside the review file.",
-)
-def approve(
-    review_file,
-    reviewed_sha256,
-    decision,
-    actor,
-    approval_id,
-    output,
-    decision_log,
-):
-    """Legacy file-based approval compatibility command."""
-
-    from chemsmart.agent._contracts import ContractError
-    from chemsmart.agent.live_session import resolve_workflow_execution_review
-
-    normalized = decision.lower()
-    if normalized == "approve" and output is None:
-        raise click.UsageError("--output is required when --decision=approve")
-    if normalized != "approve" and output is not None:
-        raise click.UsageError(
-            "--output is valid only when --decision=approve"
-        )
-    try:
-        resolution, bundle = resolve_workflow_execution_review(
-            review_file=review_file,
-            reviewed_sha256=reviewed_sha256,
-            decision=normalized,
-            actor=actor,
-            output_file=output.resolve() if output is not None else None,
-            decision_log=(
-                decision_log.resolve() if decision_log is not None else None
-            ),
-            approval_id=str(approval_id or ""),
-        )
-    except ContractError as exc:
-        raise click.ClickException(str(exc)) from exc
-    click.echo(
-        json.dumps(
-            {
-                "decision": resolution.decision,
-                "review_sha256": resolution.review_sha256,
-                "resolution_sha256": resolution.resolution_sha256,
-                "approval_id": resolution.approval_id,
-                "bundle_sha256": bundle.bundle_sha256 if bundle else "",
-                "one_shot": bool(bundle),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
-
-
-@agent.command("replay")
+@agent.command("review")
 @click.option(
     "--review-file",
     required=True,
@@ -341,19 +182,15 @@ def approve(
     default=None,
     help="Optional: refuse unless the review targets this exact task.",
 )
-def replay(
+def review(
     review_file, workspace, decision, actor, approval_id, task_spec_sha256
 ):
-    """Re-present a stored workflow for a fresh decision, then run it.
+    """Re-present a stored workflow execution review for one human decision.
 
-    Re-running approved work needed a distinct approval id *and* a distinct
-    decision log, on two hidden legacy commands, or the second decision
-    collided with the first and no bundle was written at all. The science was
-    reproducible; deciding on it twice was not.
-
-    This does not reuse a spent approval and does not weaken the one-shot rule.
-    It re-displays the identical plan and takes the current human decision the
-    approval chain requires.
+    Without ``--decision`` this only displays the stored review. With one, it
+    records the fresh human resolution under its own approval id and decision
+    log, and an approval writes a one-shot bundle for ``chemsmart agent run``.
+    A spent approval is never reused; deciding again is a new decision.
     """
 
     from chemsmart.agent._contracts import ContractError
@@ -424,8 +261,9 @@ def replay(
             "bundle_sha256": bundle.bundle_sha256 if bundle else "",
             "bundle_file": str(scope / "bundle.json") if bundle else "",
             "next": (
-                f"chemsmart agent execute --approval-file {scope}/bundle.json"
+                f"chemsmart agent run --approval-file {scope}/bundle.json"
                 f" --workspace {Path(workspace).resolve()}"
+                f" --run-directory {scope}/run"
                 if bundle
                 else ""
             ),
@@ -522,7 +360,7 @@ def tui(
         raise click.ClickException(str(exc)) from exc
 
 
-@agent.command("execute", hidden=True)
+@agent.command("run")
 @click.option(
     "--approval-file",
     required=True,
@@ -547,8 +385,8 @@ def tui(
     default="",
     help="Task specification digest the approval was frozen against.",
 )
-def execute(approval_file, workspace, run_directory, task_spec_sha256):
-    """Legacy file-based execution compatibility command.
+def run(approval_file, workspace, run_directory, task_spec_sha256):
+    """Execute an approved workflow bundle provider-free.
 
     Every scientific choice -- program, project YAML, method, node graph,
     charge and multiplicity -- was made when the plan was written and is

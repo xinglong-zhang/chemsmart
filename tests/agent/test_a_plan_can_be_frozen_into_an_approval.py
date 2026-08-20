@@ -1,6 +1,6 @@
 """A plan must be freezable, or the documented approval flow is circular.
 
-`agent plan` then `agent run --approval-file` is the documented flow, and it
+`agent plan`, `agent review`, then `agent run --approval-file` is the documented flow, and it
 could not be walked. Wiring the frozen approval into the session composition
 was only the outer half; the inner half is that nobody could *build* the frozen
 body from a plan at all.

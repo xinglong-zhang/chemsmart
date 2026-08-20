@@ -1,6 +1,6 @@
 """Every healthy live xTB run failed validation: the summary read sidecars.
 
-The first real xTB execution through `agent execute` -- three normally
+The first real xTB execution through `agent run` -- three normally
 terminated single points -- came back with
 `xtb.native_failure.incomplete_output` on every node. The failure
 summarizer selected artifacts of kind "program_output", which for xTB are

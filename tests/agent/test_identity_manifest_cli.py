@@ -186,7 +186,7 @@ def test_agent_run_loads_identity_manifest_into_existing_session_plumbing(
     result = CliRunner().invoke(
         agent,
         [
-            "run",
+            "plan",
             "--task",
             "compare the two approved states",
             "--secret-file",

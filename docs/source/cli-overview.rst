@@ -14,11 +14,12 @@ CHEMSMART offers two main execution modes:
 -  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
 
-The provider-neutral ``chemsmart agent`` command plans through these same
-project loaders and Click commands. ``agent plan`` and ``agent run`` are
-preview-only; ``agent tui`` adds the visible human review and one explicit
-``/approve`` action for release-qualified real execution. See
-:doc:`agent-workflows`.
+The provider-neutral ``chemsmart agent`` command operates through these same
+project loaders and Click commands as a pipeline: ``agent plan`` is
+preview-only, ``agent review`` records the one human decision on a stored
+review, ``agent run`` executes an approved bundle provider-free, and
+``agent tui`` is the interactive terminal with the visible human review and
+one explicit ``/approve`` action. See :doc:`agent-workflows`.
 
 The basic command structure is:
 

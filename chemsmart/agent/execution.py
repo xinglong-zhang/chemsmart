@@ -942,7 +942,7 @@ def build_workflow_execution_approval(
 def workflow_execution_approval_json(
     approval: WorkflowExecutionApprovalV1,
 ) -> str:
-    """Return the exact private JSON envelope accepted by ``agent run``."""
+    """Return the exact private JSON envelope accepted by ``agent plan``."""
 
     return canonical_json({"workflow_approval": approval}) + "\n"
 
@@ -4626,7 +4626,7 @@ def build_workflow_review_resolution(
 
 @dataclass(frozen=True)
 class WorkflowExecutionApprovalBundleV1:
-    """Compound, one-shot input consumed only by ``agent execute``."""
+    """Compound, one-shot input consumed only by ``agent run``."""
 
     schema_version: str
     review_sha256: str

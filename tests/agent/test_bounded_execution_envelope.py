@@ -203,7 +203,7 @@ def _cli_args(tmp_path: Path) -> list[str]:
     secret = tmp_path / "secret.env"
     secret.write_text("KEY=value\n", encoding="utf-8")
     return [
-        "run",
+        "plan",
         "--task",
         "preview this calculation",
         "--secret-file",
@@ -213,9 +213,7 @@ def _cli_args(tmp_path: Path) -> list[str]:
     ]
 
 
-def test_agent_run_without_authorization_remains_preview_only(
-    tmp_path, monkeypatch
-):
+def test_agent_plan_remains_preview_only(tmp_path, monkeypatch):
     captured = {}
 
     def fake_run(**kwargs):
@@ -233,23 +231,18 @@ def test_agent_run_without_authorization_remains_preview_only(
     assert captured["execution_envelope_file"] is None
 
 
-def test_agent_run_rejects_approval_and_envelope_together(tmp_path):
-    approval = tmp_path / "approval.json"
-    approval.write_text("{}", encoding="utf-8")
-    args = _cli_args(tmp_path) + [
-        "--approval-file",
-        str(approval),
-        "--execution-envelope",
-        str(_write_envelope(tmp_path)),
-    ]
+def test_agent_plan_has_no_approval_channel(tmp_path, monkeypatch):
+    """A planning command must not even own an approval option."""
 
-    result = CliRunner().invoke(agent, args)
+    called = []
 
-    assert result.exit_code == 2
-    assert "cannot grant authority" in result.output
+    def fake_run(**kwargs):  # pragma: no cover - must never run
+        called.append(kwargs)
+        return _Result()
 
+    import chemsmart.agent.live_session as live_session
 
-def test_existing_approval_path_is_not_forwarded_to_provider(tmp_path, monkeypatch):
+    monkeypatch.setattr(live_session, "run_live_agent_session", fake_run)
     approval = tmp_path / "approval.json"
     approval.write_text("{}", encoding="utf-8")
 
@@ -259,7 +252,40 @@ def test_existing_approval_path_is_not_forwarded_to_provider(tmp_path, monkeypat
     )
 
     assert result.exit_code == 2, result.output
-    assert "cannot grant authority" in result.output
+    assert "--approval-file" in result.output
+    assert called == []
+
+
+def test_agent_run_is_the_executor_and_fails_closed_on_plan_arguments(
+    tmp_path,
+):
+    """A stale script calling the old plan-shaped `agent run` dies loudly.
+
+    The name `run` now belongs to the provider-free executor, which requires
+    an approval bundle and understands no planning options; an old invocation
+    must exit with a usage error before anything is planned or launched.
+    """
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    secret = tmp_path / "secret.env"
+    secret.write_text("KEY=value\n", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        agent,
+        [
+            "run",
+            "--task",
+            "preview this calculation",
+            "--secret-file",
+            str(secret),
+            "--workspace",
+            str(workspace),
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "--task" in result.output
 
 
 def test_envelope_path_is_forwarded_as_bounded_execution(

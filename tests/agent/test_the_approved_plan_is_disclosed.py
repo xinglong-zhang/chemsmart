@@ -1,6 +1,6 @@
 """A session required to reproduce an approved plan must be shown it.
 
-`agent run` refuses to execute unless the session's own plan hashes to the
+an execution-enabled session refuses to execute unless its own plan hashes to the
 approved `plan_sha256`:
 
     planned workflow differs from frozen execution approval

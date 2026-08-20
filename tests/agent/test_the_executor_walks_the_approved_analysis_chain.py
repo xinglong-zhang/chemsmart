@@ -1,7 +1,7 @@
 """The approved analysis chain executes provider-free after the engines.
 
 Through four audited benchmark executions the subject's planned analysis
-chains never ran: `agent execute` stopped at engine-complete, and the
+chains never ran: `agent run` stopped at engine-complete, and the
 reviewing scientist extracted every number outside the product. The
 executor now walks the digest-bound chain the same /approve covered,
 dispatching the session's own analysis tools with host-computed arguments

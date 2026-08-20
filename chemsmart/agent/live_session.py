@@ -1,15 +1,15 @@
 """Plan-first live ChemSmart Agent sessions.
 
-This module is the small composition root behind ``chemsmart agent plan`` and
-``chemsmart agent run``.  It binds a provider session to exact, pre-existing
-XYZ artifacts, the live Click schema, observed program conformance, and a
-private Runtime V2 event stream.  It never generates coordinates, engine
-inputs, shell commands, or scientific readiness decisions.
+This module is the small composition root behind ``chemsmart agent plan``
+and the terminal interface.  It binds a provider session to exact,
+pre-existing XYZ artifacts, the live Click schema, observed program
+conformance, and a private Runtime V2 event stream.  It never generates
+coordinates, engine inputs, shell commands, or scientific readiness
+decisions.
 
-The execution profile is deliberately progressive.  Until the tool host has
-an approval-bound execution composition API, ``agent run`` uses the complete
-planning/preview path and reports ``waiting_for_approval`` rather than
-pretending that an engine was invoked.
+A planning session ends at ``waiting_for_approval``.  Real execution is the
+provider-free ``chemsmart agent run`` over a one-shot approval bundle, or the
+single ``/approve`` action inside the terminal interface.
 """
 
 from __future__ import annotations
@@ -431,7 +431,7 @@ def run_live_agent_session(
     if approval_file is not None:
         raise ContractError(
             "live provider sessions cannot consume approvals; use the "
-            "model-free 'chemsmart agent execute' command"
+            "model-free 'chemsmart agent run' command"
         )
     bounded_envelope = (
         load_bounded_execution_envelope(execution_envelope_file)

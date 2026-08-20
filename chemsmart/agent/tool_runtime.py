@@ -9391,7 +9391,7 @@ class CommandCompiledToolHostV1:
                 # sidecars, which never contain the "finished run" sentinel.
                 # Summarizing over those called every healthy live run an
                 # incomplete_output failure -- observed on the first real
-                # xtb execution through agent execute, where all three
+                # xtb execution through agent run, where all three
                 # normally terminated single points failed validation.
                 xtb_logs = tuple(
                     artifact
