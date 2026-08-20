@@ -2164,6 +2164,81 @@ def _handoff_consumer_fields(
     }
 
 
+def _finalize_geometry_handoff(
+    *,
+    workspace: Path,
+    producer_edge: ProducerEdgeRuleV1,
+    producer_receipt: ProgramExecutionReceiptV1,
+    result_artifact: TrustedArtifactRefV1,
+    geometry_artifact_id: str,
+    symbols,
+    positions,
+    charge,
+    multiplicity,
+    comment_label: str,
+    consumer_fields,
+) -> tuple[TrustedArtifactRefV1, "OptimizedGeometryHandoffV1"]:
+    """Write the exact-once handoff XYZ and build its receipt.
+
+    One builder for every program family so identical inputs always yield
+    identical bytes and receipt digests; charge and multiplicity are
+    normalised to plain int before entering the canonical body.
+    """
+
+    charge = int(charge)
+    multiplicity = int(multiplicity)
+    normalized_id = require_identifier(geometry_artifact_id, "artifact_id")
+    target = _target_below(
+        workspace,
+        "artifacts",
+        (
+            f"{producer_edge.producer_node_id}--"
+            f"{producer_edge.consumer_node_id}.xyz"
+        ),
+    )
+    comment = (
+        f"ChemSmart validated {comment_label} handoff; "
+        f"charge={charge}; multiplicity={multiplicity}; "
+        f"source_sha256={result_artifact.sha256}"
+    )
+    lines = [str(len(symbols)), comment]
+    for symbol, (x, y, z) in zip(symbols, positions):
+        lines.append(f"{symbol:<3} {x:.17g} {y:.17g} {z:.17g}")
+    _write_exact_once(target, ("\n".join(lines) + "\n").encode("utf-8"))
+    geometry_artifact = TrustedArtifactRefV1(
+        artifact_id=normalized_id,
+        kind="geometry_xyz",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    positions_sha256 = canonical_sha256(
+        {"symbols": symbols, "positions_angstrom": positions}
+    )
+    body = {
+        "schema_version": "chemsmart.optimized-geometry-handoff.v1",
+        "producer_node_id": producer_edge.producer_node_id,
+        "consumer_node_id": producer_edge.consumer_node_id,
+        "producer_edge_sha256": producer_edge.edge_sha256,
+        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
+        "result_artifact_id": result_artifact.artifact_id,
+        "result_artifact_sha256": result_artifact.sha256,
+        "geometry_artifact_id": geometry_artifact.artifact_id,
+        "geometry_artifact_sha256": geometry_artifact.sha256,
+        "atom_count": len(symbols),
+        "symbols": symbols,
+        "positions_sha256": positions_sha256,
+        "charge": charge,
+        "multiplicity": multiplicity,
+        "status": "validated_handoff",
+        **consumer_fields,
+    }
+    return geometry_artifact, OptimizedGeometryHandoffV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
 def handoff_optimized_pyscf_geometry(
     *,
     producer_receipt: ProgramExecutionReceiptV1,
@@ -2245,57 +2320,18 @@ def handoff_optimized_pyscf_geometry(
         consumer_multiplicity=consumer_multiplicity,
     )
 
-    normalized_id = require_identifier(geometry_artifact_id, "artifact_id")
-    workspace = _absolute_workspace(approved_workspace)
-    target = _target_below(
-        workspace,
-        "artifacts",
-        (
-            f"{producer_edge.producer_node_id}--"
-            f"{producer_edge.consumer_node_id}.xyz"
-        ),
-    )
-    comment = (
-        "ChemSmart validated PySCF OPT handoff; "
-        f"charge={charge}; multiplicity={multiplicity}; "
-        f"source_sha256={result_artifact.sha256}"
-    )
-    lines = [str(len(symbols)), comment]
-    for symbol, (x, y, z) in zip(symbols, positions):
-        lines.append(f"{symbol:<3} {x:.17g} {y:.17g} {z:.17g}")
-    payload = ("\n".join(lines) + "\n").encode("utf-8")
-    _write_exact_once(target, payload)
-    geometry_artifact = TrustedArtifactRefV1(
-        artifact_id=normalized_id,
-        kind="geometry_xyz",
-        sha256=file_sha256(target),
-        size_bytes=target.stat().st_size,
-        path=str(target),
-        cli_value=str(target),
-    )
-    positions_sha256 = canonical_sha256(
-        {"symbols": symbols, "positions_angstrom": positions}
-    )
-    body = {
-        "schema_version": "chemsmart.optimized-geometry-handoff.v1",
-        "producer_node_id": producer_edge.producer_node_id,
-        "consumer_node_id": producer_edge.consumer_node_id,
-        "producer_edge_sha256": producer_edge.edge_sha256,
-        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
-        "result_artifact_id": result_artifact.artifact_id,
-        "result_artifact_sha256": result_artifact.sha256,
-        "geometry_artifact_id": geometry_artifact.artifact_id,
-        "geometry_artifact_sha256": geometry_artifact.sha256,
-        "atom_count": len(symbols),
-        "symbols": symbols,
-        "positions_sha256": positions_sha256,
-        "charge": charge,
-        "multiplicity": multiplicity,
-        "status": "validated_handoff",
-        **consumer_fields,
-    }
-    return geometry_artifact, OptimizedGeometryHandoffV1(
-        **body, receipt_sha256=canonical_sha256(body)
+    return _finalize_geometry_handoff(
+        workspace=_absolute_workspace(approved_workspace),
+        producer_edge=producer_edge,
+        producer_receipt=producer_receipt,
+        result_artifact=result_artifact,
+        geometry_artifact_id=geometry_artifact_id,
+        symbols=symbols,
+        positions=positions,
+        charge=charge,
+        multiplicity=multiplicity,
+        comment_label="PySCF OPT",
+        consumer_fields=consumer_fields,
     )
 
 
@@ -2394,56 +2430,18 @@ def handoff_optimized_xtb_geometry(
         consumer_charge=consumer_charge,
         consumer_multiplicity=consumer_multiplicity,
     )
-    normalized_id = require_identifier(geometry_artifact_id, "artifact_id")
-    workspace = _absolute_workspace(approved_workspace)
-    target = _target_below(
-        workspace,
-        "artifacts",
-        (
-            f"{producer_edge.producer_node_id}--"
-            f"{producer_edge.consumer_node_id}.xyz"
-        ),
-    )
-    comment = (
-        "ChemSmart validated xTB OPT handoff; "
-        f"charge={charge}; multiplicity={multiplicity}; "
-        f"source_sha256={result_artifact.sha256}"
-    )
-    lines = [str(len(symbols)), comment]
-    for symbol, (x, y, z) in zip(symbols, positions):
-        lines.append(f"{symbol:<3} {x:.17g} {y:.17g} {z:.17g}")
-    _write_exact_once(target, ("\n".join(lines) + "\n").encode("utf-8"))
-    geometry_artifact = TrustedArtifactRefV1(
-        artifact_id=normalized_id,
-        kind="geometry_xyz",
-        sha256=file_sha256(target),
-        size_bytes=target.stat().st_size,
-        path=str(target),
-        cli_value=str(target),
-    )
-    positions_sha256 = canonical_sha256(
-        {"symbols": symbols, "positions_angstrom": positions}
-    )
-    body = {
-        "schema_version": "chemsmart.optimized-geometry-handoff.v1",
-        "producer_node_id": producer_edge.producer_node_id,
-        "consumer_node_id": producer_edge.consumer_node_id,
-        "producer_edge_sha256": producer_edge.edge_sha256,
-        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
-        "result_artifact_id": result_artifact.artifact_id,
-        "result_artifact_sha256": result_artifact.sha256,
-        "geometry_artifact_id": geometry_artifact.artifact_id,
-        "geometry_artifact_sha256": geometry_artifact.sha256,
-        "atom_count": len(symbols),
-        "symbols": symbols,
-        "positions_sha256": positions_sha256,
-        "charge": charge,
-        "multiplicity": multiplicity,
-        "status": "validated_handoff",
-        **consumer_fields,
-    }
-    return geometry_artifact, OptimizedGeometryHandoffV1(
-        **body, receipt_sha256=canonical_sha256(body)
+    return _finalize_geometry_handoff(
+        workspace=_absolute_workspace(approved_workspace),
+        producer_edge=producer_edge,
+        producer_receipt=producer_receipt,
+        result_artifact=result_artifact,
+        geometry_artifact_id=geometry_artifact_id,
+        symbols=symbols,
+        positions=positions,
+        charge=charge,
+        multiplicity=multiplicity,
+        comment_label="xTB OPT",
+        consumer_fields=consumer_fields,
     )
 
 
@@ -2566,56 +2564,18 @@ def handoff_optimized_native_geometry(
             "optimized final positions must be finite Nx3 values"
         )
 
-    normalized_id = require_identifier(geometry_artifact_id, "artifact_id")
-    workspace = _absolute_workspace(approved_workspace)
-    target = _target_below(
-        workspace,
-        "artifacts",
-        (
-            f"{producer_edge.producer_node_id}--"
-            f"{producer_edge.consumer_node_id}.xyz"
-        ),
-    )
-    comment = (
-        f"ChemSmart validated {normalized_program} {jobtype.upper()} handoff; "
-        f"charge={charge}; multiplicity={multiplicity}; "
-        f"source_sha256={result_artifact.sha256}"
-    )
-    lines = [str(len(symbols)), comment]
-    for symbol, (x, y, z) in zip(symbols, positions):
-        lines.append(f"{symbol:<3} {x:.17g} {y:.17g} {z:.17g}")
-    _write_exact_once(target, ("\n".join(lines) + "\n").encode("utf-8"))
-    geometry_artifact = TrustedArtifactRefV1(
-        artifact_id=normalized_id,
-        kind="geometry_xyz",
-        sha256=file_sha256(target),
-        size_bytes=target.stat().st_size,
-        path=str(target),
-        cli_value=str(target),
-    )
-    positions_sha256 = canonical_sha256(
-        {"symbols": symbols, "positions_angstrom": positions}
-    )
-    body = {
-        "schema_version": "chemsmart.optimized-geometry-handoff.v1",
-        "producer_node_id": producer_edge.producer_node_id,
-        "consumer_node_id": producer_edge.consumer_node_id,
-        "producer_edge_sha256": producer_edge.edge_sha256,
-        "producer_execution_receipt_sha256": producer_receipt.receipt_sha256,
-        "result_artifact_id": result_artifact.artifact_id,
-        "result_artifact_sha256": result_artifact.sha256,
-        "geometry_artifact_id": geometry_artifact.artifact_id,
-        "geometry_artifact_sha256": geometry_artifact.sha256,
-        "atom_count": len(symbols),
-        "symbols": symbols,
-        "positions_sha256": positions_sha256,
-        "charge": int(charge),
-        "multiplicity": int(multiplicity),
-        "status": "validated_handoff",
-        **consumer_fields,
-    }
-    return geometry_artifact, OptimizedGeometryHandoffV1(
-        **body, receipt_sha256=canonical_sha256(body)
+    return _finalize_geometry_handoff(
+        workspace=_absolute_workspace(approved_workspace),
+        producer_edge=producer_edge,
+        producer_receipt=producer_receipt,
+        result_artifact=result_artifact,
+        geometry_artifact_id=geometry_artifact_id,
+        symbols=symbols,
+        positions=positions,
+        charge=charge,
+        multiplicity=multiplicity,
+        comment_label=f"{normalized_program} {jobtype.upper()}",
+        consumer_fields=consumer_fields,
     )
 
 
