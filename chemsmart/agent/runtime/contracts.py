@@ -45,6 +45,7 @@ class TerminalState(str, Enum):
     COMPLETE = "complete"
     FAILED = "failed"
     BLOCKED = "blocked"
+    CANCELLED = "cancelled"
     WAITING_APPROVAL = "waiting_for_approval"
 
 

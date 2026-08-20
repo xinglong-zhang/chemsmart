@@ -58,6 +58,7 @@ class ToolLoopResultV1:
             "planned",
             "failed",
             "blocked",
+            "cancelled",
             "waiting_for_approval",
         }:
             raise ContractError("invalid tool-loop terminal state")
@@ -175,6 +176,7 @@ class ToolLoopRunner:
         envelope: TaskEnvelopeV1,
         request_context: RequestContextProvenanceV1,
         provider_budget: ProviderNetworkBudgetV1,
+        should_stop: Callable[[], bool] | None = None,
     ) -> ToolLoopResultV1:
         self._validate_run_contract(
             envelope=envelope,
@@ -233,6 +235,18 @@ class ToolLoopRunner:
         consecutive_provider_failures = 0
         total_provider_failures = 0
         while True:
+            if should_stop is not None and should_stop():
+                # The human withdrew the planning request.  Cancellation lands
+                # only between provider turns, so every turn that happened is
+                # fully accounted and the session terminates as an observed,
+                # well-formed run rather than a broken one.
+                terminal_state = "cancelled"
+                final_text = (
+                    "planning cancelled by the human at a provider-turn "
+                    "boundary; no further provider request was made"
+                )
+                terminal_reason = "human cancelled planning"
+                break
             elapsed = self.clock() - start
             remaining_wall_time = (
                 provider_budget.task_wall_time_seconds - elapsed

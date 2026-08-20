@@ -27,7 +27,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from chemsmart.agent._contracts import (
     AuxiliaryArtifactBindingV1,
@@ -343,6 +343,7 @@ class LiveAgentSessionResultV1:
             "planned",
             "failed",
             "blocked",
+            "cancelled",
             "waiting_for_approval",
         }:
             raise ContractError("invalid live session terminal state")
@@ -385,6 +386,8 @@ def run_live_agent_session(
     ) = None,
     dependency_public_records: Mapping[str, Mapping[str, Any]] | None = None,
     review_file: str | Path | None = None,
+    on_run_directory: Callable[[Path], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> LiveAgentSessionResultV1:
     """Run one agent.yaml-selected session over exact workspace artifacts.
 
@@ -555,6 +558,11 @@ def run_live_agent_session(
     event_store = RuntimeEventStore(
         run_directory / "events.jsonl", session_id=session_id
     )
+    if on_run_directory is not None:
+        # A view-only announcement: an embedding interface may tail the
+        # append-only event stream from the moment it exists.  It grants no
+        # authority and changes no session behavior.
+        on_run_directory(run_directory)
     preview_server_path = _ensure_preview_server(
         run_directory,
         resources=(
@@ -771,6 +779,7 @@ def run_live_agent_session(
         envelope=envelope,
         request_context=request_context,
         provider_budget=provider_budget,
+        should_stop=should_stop,
     )
 
     execution_review_record: dict[str, Any] = {}
@@ -805,6 +814,10 @@ def run_live_agent_session(
         bounded_envelope is not None
         and latest_calculation_plan is not None
         and not execution_ineligible_nodes
+        # A cancelled session must never mint pending authority: the human
+        # withdrew the request, so no review packet is built and the result
+        # keeps its cancelled state.
+        and loop_result.terminal_state != "cancelled"
         # A planned but unmaterialised workflow is a session that stopped
         # early, not a broken contract.  Report it as the preview-only run it
         # is rather than losing the transcript to an unhandled refusal.

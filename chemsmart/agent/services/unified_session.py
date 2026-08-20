@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
+from typing import Any, Callable
 
 from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.request_context import (
@@ -46,6 +46,7 @@ class UnifiedSessionRunner:
         envelope: TaskEnvelopeV1,
         request_context: RequestContextProvenanceV1,
         provider_budget: ProviderNetworkBudgetV1,
+        should_stop: Callable[[], bool] | None = None,
     ) -> ToolLoopResultV1:
         if not messages or not all(
             isinstance(item, dict) and item.get("role") in {
@@ -106,6 +107,7 @@ class UnifiedSessionRunner:
                     envelope=envelope,
                     request_context=request_context,
                     provider_budget=provider_budget,
+                    should_stop=should_stop,
                 )
             finally:
                 session.close()

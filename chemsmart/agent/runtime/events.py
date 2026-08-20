@@ -273,6 +273,7 @@ def _validate_payload(
         "planned",
         "failed",
         "blocked",
+        "cancelled",
         "waiting_for_approval",
     }:
         raise ContractError("terminal event requires an explicit terminal state")
