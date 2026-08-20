@@ -21,7 +21,9 @@ from __future__ import annotations
 
 from chemsmart.io.native_failure import summarize_orca_native_failure
 
-_REFUSED_SCAN = "tests/data/ORCATests/outputs/hooh_scan_constraint_refusal_excerpt.out"
+_REFUSED_SCAN = (
+    "tests/data/ORCATests/outputs/hooh_scan_constraint_refusal_excerpt.out"
+)
 _COMPLETED = "tests/data/ORCATests/outputs/CO2.out"
 
 

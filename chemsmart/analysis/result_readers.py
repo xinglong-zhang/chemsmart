@@ -700,8 +700,7 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
                 float(point["energy"]) for point in output.scan_profile
             ],
             "scan_point_indices": lambda output: [
-                float(record["index"])
-                for record in output.scan_point_records
+                float(record["index"]) for record in output.scan_point_records
             ],
             "absorption_wavelengths": lambda output: [
                 float(item) for item in output.absorption_wavelengths

@@ -204,9 +204,9 @@ High-accuracy single point calculation on QM/MM geometry:
 
    chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hx CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
 
-******************************
+*******************************
  Gaussian QM/MM YAML Reference
-******************************
+*******************************
 
 The following project settings configure Gaussian ONIOM calculations.
 
@@ -425,12 +425,11 @@ Common Issues and Solutions
 ===========================
 
 **Settings validation errors**
-   Compare the project YAML and the effective command options. Regenerate the
-   input after correcting a mismatched layer or setting.
+   Compare the project YAML and the effective command options. Regenerate the input after correcting a mismatched layer
+   or setting.
 
 **Link Atom Optimization**
-   If the QM/MM interface is problematic, adjust scale factors or reconsider
-   layer boundaries.
+   If the QM/MM interface is problematic, adjust scale factors or reconsider layer boundaries.
 
 **Force Field Compatibility**
    Ensure your system has the required force field files.

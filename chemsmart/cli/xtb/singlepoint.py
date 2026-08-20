@@ -18,8 +18,10 @@ logger = logging.getLogger(__name__)
 def sp(ctx, skip_completed, **kwargs):
     """Prepare an xTB single-point calculation."""
     require_xtb_filename(ctx)
-    settings = ctx.obj["project_settings"].sp_settings().merge(
-        ctx.obj["job_settings"], keywords=ctx.obj["keywords"]
+    settings = (
+        ctx.obj["project_settings"]
+        .sp_settings()
+        .merge(ctx.obj["job_settings"], keywords=ctx.obj["keywords"])
     )
     settings.validate(expected_jobtype="sp")
 

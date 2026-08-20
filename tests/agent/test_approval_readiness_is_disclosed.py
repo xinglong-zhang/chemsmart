@@ -60,9 +60,7 @@ def test_the_prompt_preserves_bounded_causal_future_nodes():
 
     from chemsmart.agent import live_session
 
-    prompt = live_session._system_prompt(
-        {}, bounded_review_requested=True
-    )
+    prompt = live_session._system_prompt({}, bounded_review_requested=True)
     for phrase in (
         "When the task names a program, plan that program",
         "cannot preview green",

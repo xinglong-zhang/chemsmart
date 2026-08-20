@@ -451,9 +451,7 @@ class YamlPySCFProjectSettingsBuilder:
                     f"{', '.join(differing)}."
                 )
 
-        selected_name = (
-            jobtype if jobtype in candidates else source_names[0]
-        )
+        selected_name = jobtype if jobtype in candidates else source_names[0]
         selected_settings, _, canonical_raw = candidates[selected_name]
         explicit_fields = frozenset().union(
             *(item[1] for item in candidates.values())

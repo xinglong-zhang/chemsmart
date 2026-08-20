@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -15,20 +15,20 @@ from chemsmart.agent.execution import (
     approve_workflow_execution_review,
     build_execution_resource_spec,
     build_workflow_approval_request,
-    build_workflow_execution_review,
     build_workflow_execution_node_review,
+    build_workflow_execution_review,
     build_workflow_review_resolution,
-    execution_server_profile_sha256,
     execution_path_placeholder,
+    execution_server_profile_sha256,
     project_real_execution_argv,
     workflow_execution_approval_bundle_json,
     workflow_execution_review_json,
 )
+from chemsmart.agent.execution_envelope import BoundedExecutionEnvelopeV1
 from chemsmart.agent.executor import (
     ApprovedWorkflowExecutor,
     _provider_secret_environment_labels,
 )
-from chemsmart.agent.execution_envelope import BoundedExecutionEnvelopeV1
 from chemsmart.agent.live_session import (
     claim_workflow_execution_approval_bundle,
     load_workflow_execution_approval_bundle,
@@ -306,7 +306,9 @@ def test_v1_packets_without_non_executable_field_remain_loadable(tmp_path):
     assert load_workflow_execution_approval_bundle(bundle_path) == bundle
 
 
-def test_non_executable_partition_round_trips_through_review_and_bundle(tmp_path):
+def test_non_executable_partition_round_trips_through_review_and_bundle(
+    tmp_path,
+):
     review = _mixed_review(tmp_path)
     review_path = tmp_path / "mixed-review.json"
     review_path.write_text(
@@ -328,15 +330,9 @@ def test_non_executable_partition_round_trips_through_review_and_bundle(tmp_path
 
     loaded_bundle = load_workflow_execution_approval_bundle(bundle_path)
 
-    assert loaded_review.non_executable_node_ids == (
-        "irc-non-executable",
-    )
-    assert loaded_bundle.non_executable_node_ids == (
-        "irc-non-executable",
-    )
-    assert loaded_bundle.frozen_workflow_approval.approved_node_ids == (
-        "sp",
-    )
+    assert loaded_review.non_executable_node_ids == ("irc-non-executable",)
+    assert loaded_bundle.non_executable_node_ids == ("irc-non-executable",)
+    assert loaded_bundle.frozen_workflow_approval.approved_node_ids == ("sp",)
 
 
 def test_changed_review_digest_cannot_be_approved(tmp_path):
@@ -370,7 +366,9 @@ def test_nonapproval_resolutions_never_grant_authority(tmp_path, decision):
 def test_approved_bundle_round_trips_and_is_consumed_once(tmp_path):
     review = _review(tmp_path)
     review_path = tmp_path / "review.json"
-    review_path.write_text(workflow_execution_review_json(review), encoding="utf-8")
+    review_path.write_text(
+        workflow_execution_review_json(review), encoding="utf-8"
+    )
     bundle_path = tmp_path / "approval.json"
 
     resolution, bundle = resolve_workflow_execution_review(
@@ -420,8 +418,16 @@ def test_tampered_bundle_fails_closed_before_execution(tmp_path):
 def test_path_roles_are_digest_bound_and_cannot_be_swapped(tmp_path):
     project = str(tmp_path / "project.yaml")
     geometry = str(tmp_path / "water.xyz")
-    argv = ("chemsmart", "run", "pyscf", "--project", project,
-            "--filename", geometry, "sp")
+    argv = (
+        "chemsmart",
+        "run",
+        "pyscf",
+        "--project",
+        project,
+        "--filename",
+        geometry,
+        "sp",
+    )
 
     projected = project_real_execution_argv(
         argv,
@@ -454,8 +460,12 @@ def test_post_review_command_or_identity_mutation_is_rejected(tmp_path):
     node = _review(tmp_path).node_reviews[0]
 
     with pytest.raises(ContractError, match="argv review digest"):
-        replace(node, real_execution_argv=(*node.real_execution_argv, "--changed"))
-    with pytest.raises(ContractError, match="molecular identity review digest"):
+        replace(
+            node, real_execution_argv=(*node.real_execution_argv, "--changed")
+        )
+    with pytest.raises(
+        ContractError, match="molecular identity review digest"
+    ):
         replace(
             node,
             molecular_identity={**node.molecular_identity, "charge": 1},
@@ -484,6 +494,7 @@ def test_launch_is_compared_before_claim_and_again_before_reuse(
         calls.append(("claim", Path(workspace).name))
 
     from pathlib import Path
+
     from chemsmart.agent import live_session
 
     monkeypatch.setattr(

@@ -8,9 +8,9 @@ embedding a task answer or paper-specific formula.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -20,7 +20,6 @@ from chemsmart.agent._contracts import (
     require_identifier,
     require_sha256,
 )
-
 
 ANALYSIS_COMPLETION_STAGES = frozenset(
     {
@@ -90,9 +89,7 @@ class AnalysisExpressionSourceRequirementV1:
                 "expression source stage must be quantity_extraction or "
                 "thermochemistry"
             )
-        if self.artifact_sha256s != tuple(
-            sorted(set(self.artifact_sha256s))
-        ):
+        if self.artifact_sha256s != tuple(sorted(set(self.artifact_sha256s))):
             raise ContractError(
                 "expression source artifact hashes must be sorted and unique"
             )
@@ -169,7 +166,9 @@ class AnalysisClaimRequirementV1:
             raise ContractError("unsupported analysis claim source kind")
         require_identifier(self.quantity_id, "claim_quantity_id")
         if not self.display_unit:
-            raise ContractError("analysis claim display unit must not be empty")
+            raise ContractError(
+                "analysis claim display unit must not be empty"
+            )
         if self.source_artifact_sha256s != tuple(
             sorted(set(self.source_artifact_sha256s))
         ):
@@ -223,29 +222,34 @@ class AnalysisCompletionPolicyV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.analysis-completion-policy.v1":
-            raise ContractError("unsupported analysis completion policy schema")
+            raise ContractError(
+                "unsupported analysis completion policy schema"
+            )
         require_identifier(self.policy_id, "policy_id")
         require_sha256(self.task_spec_sha256, "task_spec_sha256")
         if self.target_artifact_sha256s != tuple(
             sorted(set(self.target_artifact_sha256s))
         ):
-            raise ContractError("target artifact hashes must be sorted and unique")
-        if (
-            not self.target_artifact_sha256s
-            and {
-                "quantity_extraction",
-                "thermochemistry",
-            }.intersection(self.required_stages)
-        ):
+            raise ContractError(
+                "target artifact hashes must be sorted and unique"
+            )
+        if not self.target_artifact_sha256s and {
+            "quantity_extraction",
+            "thermochemistry",
+        }.intersection(self.required_stages):
             raise ContractError(
                 "artifact analysis stages require target artifact hashes"
             )
         for digest in self.target_artifact_sha256s:
             require_sha256(digest, "target_artifact_sha256")
         if not self.required_stages:
-            raise ContractError("analysis completion requires at least one stage")
+            raise ContractError(
+                "analysis completion requires at least one stage"
+            )
         if self.required_stages != tuple(sorted(set(self.required_stages))):
-            raise ContractError("required analysis stages must be sorted and unique")
+            raise ContractError(
+                "required analysis stages must be sorted and unique"
+            )
         unknown = set(self.required_stages).difference(
             ANALYSIS_COMPLETION_STAGES
         )
@@ -273,7 +277,8 @@ class AnalysisCompletionPolicyV1:
                 "extraction selectors require the quantity_extraction stage"
             )
         expression_ids = tuple(
-            requirement.expression_id for requirement in self.required_expressions
+            requirement.expression_id
+            for requirement in self.required_expressions
         )
         if expression_ids != tuple(sorted(set(expression_ids))):
             raise ContractError(
@@ -285,14 +290,24 @@ class AnalysisCompletionPolicyV1:
             raise ContractError(
                 "expression requirements require the quantity_expression stage"
             )
-        claim_ids = tuple(requirement.claim_id for requirement in self.required_claims)
+        claim_ids = tuple(
+            requirement.claim_id for requirement in self.required_claims
+        )
         if claim_ids != tuple(sorted(set(claim_ids))):
-            raise ContractError("analysis claim requirements must be sorted and unique")
-        if self.required_claims and "analysis_claims" not in self.required_stages:
+            raise ContractError(
+                "analysis claim requirements must be sorted and unique"
+            )
+        if (
+            self.required_claims
+            and "analysis_claims" not in self.required_stages
+        ):
             raise ContractError(
                 "claim requirements require the analysis_claims stage"
             )
-        if "analysis_claims" in self.required_stages and not self.required_claims:
+        if (
+            "analysis_claims" in self.required_stages
+            and not self.required_claims
+        ):
             raise ContractError(
                 "analysis_claims requires named claim requirements"
             )
@@ -360,9 +375,9 @@ class AnalysisCompletionPolicyV1:
                 or float(value) <= 0.0
             ):
                 raise ContractError(f"{label} must be finite and positive")
-        if (self.temperature_k is not None or self.pressure_atm is not None) and (
-            "thermochemistry" not in self.required_stages
-        ):
+        if (
+            self.temperature_k is not None or self.pressure_atm is not None
+        ) and ("thermochemistry" not in self.required_stages):
             raise ContractError(
                 "thermochemistry conditions require the thermochemistry stage"
             )
@@ -419,7 +434,9 @@ class AnalysisCompletionReceiptV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.analysis-completion-receipt.v1":
-            raise ContractError("unsupported analysis completion receipt schema")
+            raise ContractError(
+                "unsupported analysis completion receipt schema"
+            )
         require_sha256(self.policy_sha256, "policy_sha256")
         require_sha256(self.task_spec_sha256, "task_spec_sha256")
         if not self.source_receipt_sha256s:
@@ -465,9 +482,7 @@ def build_analysis_completion_receipt(
         "schema_version": "chemsmart.analysis-completion-receipt.v1",
         "policy_sha256": policy.policy_sha256,
         "task_spec_sha256": policy.task_spec_sha256,
-        "source_receipt_sha256s": tuple(
-            sorted(set(source_receipt_sha256s))
-        ),
+        "source_receipt_sha256s": tuple(sorted(set(source_receipt_sha256s))),
         "status": "passed",
         "findings": (),
     }
@@ -510,7 +525,9 @@ def load_analysis_completion_policy(
     try:
         values = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ContractError("analysis completion policy is not valid JSON") from exc
+        raise ContractError(
+            "analysis completion policy is not valid JSON"
+        ) from exc
     if not isinstance(values, Mapping):
         raise ContractError("analysis completion policy must be a JSON object")
     allowed = {
@@ -537,11 +554,11 @@ def load_analysis_completion_policy(
     if values.get("schema_version") != (
         "chemsmart.analysis-completion-policy-spec.v1"
     ):
-        raise ContractError("unsupported analysis completion policy input schema")
+        raise ContractError(
+            "unsupported analysis completion policy input schema"
+        )
     raw_stages = values.get("required_stages", ())
-    raw_quantity_ids = values.get(
-        "required_thermochemistry_quantity_ids", ()
-    )
+    raw_quantity_ids = values.get("required_thermochemistry_quantity_ids", ())
     raw_selectors = values.get("required_extraction_selectors", ())
     raw_expressions = values.get("required_expressions", ())
     raw_claims = values.get("required_claims", ())
@@ -570,16 +587,20 @@ def load_analysis_completion_policy(
         raise ContractError("required_conditions must be an array")
     expression_requirements = []
     for item in raw_expressions:
-        if not isinstance(item, Mapping) or not {
-            "expression_id",
-            "required_output_ids",
-        }.issubset(item) or set(item).difference(
-            {
+        if (
+            not isinstance(item, Mapping)
+            or not {
                 "expression_id",
                 "required_output_ids",
-                "required_sources",
-                "semantic_signature_sha256",
-            }
+            }.issubset(item)
+            or set(item).difference(
+                {
+                    "expression_id",
+                    "required_output_ids",
+                    "required_sources",
+                    "semantic_signature_sha256",
+                }
+            )
         ):
             raise ContractError(
                 "each required expression needs expression_id and "
@@ -647,7 +668,9 @@ def load_analysis_completion_policy(
             AnalysisExpressionRequirementV1(
                 expression_id=str(item["expression_id"]).strip().lower(),
                 required_output_ids=tuple(
-                    sorted({str(value).strip().lower() for value in output_ids})
+                    sorted(
+                        {str(value).strip().lower() for value in output_ids}
+                    )
                 ),
                 required_sources=tuple(
                     sorted(
@@ -661,7 +684,9 @@ def load_analysis_completion_policy(
                 ),
                 semantic_signature_sha256=str(
                     item.get("semantic_signature_sha256") or ""
-                ).strip().lower(),
+                )
+                .strip()
+                .lower(),
             )
         )
     claim_requirements = []
@@ -680,7 +705,9 @@ def load_analysis_completion_policy(
         if (
             not isinstance(item, Mapping)
             or not required_claim_fields.issubset(item)
-            or set(item).difference(required_claim_fields | optional_claim_fields)
+            or set(item).difference(
+                required_claim_fields | optional_claim_fields
+            )
         ):
             raise ContractError(
                 "each required claim needs claim_id, source_kind, quantity_id, "
@@ -709,10 +736,12 @@ def load_analysis_completion_policy(
                 ),
                 source_expression_id=str(
                     item.get("source_expression_id") or ""
-                ).strip().lower(),
-                source_selector=str(
-                    item.get("source_selector") or ""
-                ).strip().lower(),
+                )
+                .strip()
+                .lower(),
+                source_selector=str(item.get("source_selector") or "")
+                .strip()
+                .lower(),
             )
         )
     condition_requirements = []
@@ -740,12 +769,12 @@ def load_analysis_completion_policy(
     if not isinstance(raw_artifacts, list) or not all(
         isinstance(item, str) for item in raw_artifacts
     ):
-        raise ContractError("target_artifact_sha256s must be an array of strings")
+        raise ContractError(
+            "target_artifact_sha256s must be an array of strings"
+        )
     raw_minimum = values.get("minimum_expression_receipts", 0)
     if not isinstance(raw_minimum, int) or isinstance(raw_minimum, bool):
-        raise ContractError(
-            "minimum_expression_receipts must be an integer"
-        )
+        raise ContractError("minimum_expression_receipts must be an integer")
     raw_binding = values.get("require_decision_evidence_binding", False)
     if not isinstance(raw_binding, bool):
         raise ContractError(
@@ -761,26 +790,18 @@ def load_analysis_completion_policy(
             sorted({str(item).strip().lower() for item in raw_artifacts})
         ),
         "required_stages": tuple(
-            sorted(
-                {
-                    str(item).strip().lower()
-                    for item in raw_stages
-                }
-            )
+            sorted({str(item).strip().lower() for item in raw_stages})
         ),
         "required_thermochemistry_quantity_ids": tuple(
-            sorted(
-                {
-                    str(item).strip().lower()
-                    for item in raw_quantity_ids
-                }
-            )
+            sorted({str(item).strip().lower() for item in raw_quantity_ids})
         ),
         "required_extraction_selectors": tuple(
             sorted({str(item).strip().lower() for item in raw_selectors})
         ),
         "required_expressions": tuple(
-            sorted(expression_requirements, key=lambda item: item.expression_id)
+            sorted(
+                expression_requirements, key=lambda item: item.expression_id
+            )
         ),
         "required_claims": tuple(
             sorted(claim_requirements, key=lambda item: item.claim_id)

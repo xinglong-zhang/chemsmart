@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from importlib import metadata
 import time
+from importlib import metadata
 from typing import Any, Mapping
 
 from rich.text import Text
@@ -94,7 +94,9 @@ def dag_rows(nodes: Mapping[str, Mapping[str, Any]]) -> Text:
     for node_id, node in nodes.items():
         glyph, style = state_glyph(str(node.get("state") or "queued"))
         text.append(f" {glyph} ", style=style)
-        text.append(node_id, style="bold" if node.get("kind") == "calc" else "")
+        text.append(
+            node_id, style="bold" if node.get("kind") == "calc" else ""
+        )
         label = str(node.get("label") or "")
         if label:
             text.append(f" · {label}", style="dim")
@@ -120,7 +122,10 @@ class JobsPanel(Static):
     """What is really running now: node, command, elapsed wall-clock."""
 
     def refresh_from(
-        self, nodes: Mapping[str, Mapping[str, Any]], *, now: float | None = None
+        self,
+        nodes: Mapping[str, Mapping[str, Any]],
+        *,
+        now: float | None = None,
     ) -> None:
         now = time.monotonic() if now is None else now
         text = Text()

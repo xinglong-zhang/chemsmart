@@ -1219,9 +1219,7 @@ class ORCAJobSettings(MolecularJobSettings):
                     "Please specify one method!"
                 )
         if self.ab_initio is not None:
-            if _uses_orca_ri_mp2(
-                self.ab_initio, self.ri_approximation
-            ):
+            if _uses_orca_ri_mp2(self.ab_initio, self.ri_approximation):
                 level_of_theory += "RI-MP2"
             else:
                 level_of_theory += f"{self.ab_initio}"
@@ -2202,14 +2200,14 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             elif key == "inithess":
                 f.write(f"  {key} {value}\n")
                 if value.lower() == "read":  # if initial hessian is to be read
-                    assert self.hess_filename is not None, (
-                        "No Hessian file is given!"
-                    )
-                    assert os.path.exists(self.hess_filename), (
-                        f"Hessian file {self.hess_filename} is not found!"
-                    )
+                    assert (
+                        self.hess_filename is not None
+                    ), "No Hessian file is given!"
+                    assert os.path.exists(
+                        self.hess_filename
+                    ), f"Hessian file {self.hess_filename} is not found!"
                     f.write(
-                        '  Hess_Filename '
+                        "  Hess_Filename "
                         f'"{os.path.basename(self.hess_filename)}"'
                         "  # Hessian file\n"
                     )
@@ -2220,9 +2218,9 @@ class ORCAIRCJobSettings(ORCAJobSettings):
             elif key == "monitor_internals":
                 if str(value).lower() == "true":
                     f.write(f"  {key}\n")
-                    assert self.internal_modred is not None, (
-                        'No internal modred is specified for IRC job "monitor_intervals" option!'
-                    )
+                    assert (
+                        self.internal_modred is not None
+                    ), 'No internal modred is specified for IRC job "monitor_intervals" option!'
                     prepend_string_list = (
                         get_prepend_string_list_from_modred_free_format(
                             self.internal_modred, program="orca"
@@ -2623,20 +2621,20 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             ), f"Multiplicity should not be specified for {jobtype} job!"
             self.multiplicity = 0  # avoid conflicts from parent class
             if self.conv_charges is False:
-                assert self.low_level_method is not None, (
-                    "Force field file containing convergence charges is not provided!"
-                )
+                assert (
+                    self.low_level_method is not None
+                ), "Force field file containing convergence charges is not provided!"
             if jobtype == "MOL-CRYSTAL-QMMM":
-                assert self.n_unit_cell_atoms, (
-                    f"The number of atoms per molecular subunit for {jobtype} job is not provided!"
-                )
+                assert (
+                    self.n_unit_cell_atoms
+                ), f"The number of atoms per molecular subunit for {jobtype} job is not provided!"
             else:
-                assert self.ecp_layer_ecp, (
-                    f"cECPs used for the boundary region for {jobtype} job must be specified! "
-                )
-                assert self.n_unit_cell_atoms is None, (
-                    "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
-                )
+                assert (
+                    self.ecp_layer_ecp
+                ), f"cECPs used for the boundary region for {jobtype} job must be specified! "
+                assert (
+                    self.n_unit_cell_atoms is None
+                ), "The number of atoms per molecular subunit is only applicable to MOL-CRYSTAL-QMMM!"
 
     def _get_level_of_theory_string(self):
         """
@@ -2738,9 +2736,9 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             return h_bond_length
         elif isinstance(self.high_level_h_bond_length, str):
             # if the user provided a file with the d0_X-H values
-            assert os.path.exists(self.high_level_h_bond_length), (
-                f"File {self.high_level_h_bond_length} does not exist!"
-            )
+            assert os.path.exists(
+                self.high_level_h_bond_length
+            ), f"File {self.high_level_h_bond_length} does not exist!"
             return f'H_Dist_FileName "{self.high_level_h_bond_length}"'
 
     def _get_embedding_type(self):
@@ -2978,9 +2976,9 @@ class ORCAQMMMJobSettings(ORCAJobSettings):
             "QM/QM2/MM",
             "IONIC-CRYSTAL-QMMM",
         ]:
-            assert self.low_level_method is not None, (
-                f"Force field file missing for {self.jobtype} job!"
-            )
+            assert (
+                self.low_level_method is not None
+            ), f"Force field file missing for {self.jobtype} job!"
             full_qm_block += f'ORCAFFFilename "{self.low_level_method}"\n'
 
         # Fixed atoms options

@@ -17,8 +17,8 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
-import math
 import logging
+import math
 import os
 import re
 import shutil
@@ -27,7 +27,12 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
+
+if TYPE_CHECKING:
+    from chemsmart.agent.scientific_toolchain import (
+        ScientificToolchainPlanV1,
+    )
 
 from chemsmart.agent._contracts import (
     AuxiliaryArtifactBindingV1,
@@ -75,10 +80,10 @@ from chemsmart.agent.execution import (
     WorkflowApprovalRequestV1,
     WorkflowEnvironmentBindingV1,
     WorkflowExecutionApprovalBundleV1,
-    WorkflowExecutionReviewV1,
-    WorkflowExecutionNodeReviewV1,
-    WorkflowReviewResolutionV1,
     WorkflowExecutionApprovalV1,
+    WorkflowExecutionNodeReviewV1,
+    WorkflowExecutionReviewV1,
+    WorkflowReviewResolutionV1,
     workflow_execution_approval_bundle_json,
     workflow_execution_review_json,
 )
@@ -87,8 +92,8 @@ from chemsmart.agent.execution_envelope import (
     load_bounded_execution_envelope,
 )
 from chemsmart.agent.identity import (
-    ApprovedMolecularInputV1,
     ApprovedMolecularIdentityV1,
+    ApprovedMolecularInputV1,
     validate_identity_for_geometry,
 )
 from chemsmart.agent.knowledge_packs import (
@@ -139,6 +144,8 @@ from chemsmart.analysis.result_quantities import (
 
 _SESSION_WALL_TIME_SECONDS = 90 * 60
 _MAX_TOOL_CALLS = 256
+
+
 def _declared_pyscf_interpreter() -> Path | None:
     """Return the interpreter the server YAML declares for PySCF, if any.
 
@@ -447,7 +454,9 @@ def run_live_agent_session(
             "live provider sessions are planning and safe-preview only"
         )
     if review_file is not None and bounded_envelope is None:
-        raise ContractError("an execution review requires --execution-envelope")
+        raise ContractError(
+            "an execution review requires --execution-envelope"
+        )
     workspace_path = _validated_workspace(workspace)
     observations = _scan_xyz_artifacts(workspace_path)
     result_observations = _scan_result_artifacts(workspace_path)
@@ -491,9 +500,7 @@ def run_live_agent_session(
         else None
     )
     analysis_only_session = bool(
-        not observations
-        and result_observations
-        and not execution_enabled
+        not observations and result_observations and not execution_enabled
     )
     session_id = _session_id(task_spec_sha256)
     run_directory = _private_run_directory(workspace_path, session_id)
@@ -789,9 +796,7 @@ def run_live_agent_session(
     # ChemSmart result readers and typed analysis DAG are sufficient when the
     # scientific plan contains no calculation nodes.
     calculation_plans = tuple(
-        plan
-        for plan in host.scientific_workflow_plans.values()
-        if plan.nodes
+        plan for plan in host.scientific_workflow_plans.values() if plan.nodes
     )
     latest_calculation_plan = (
         calculation_plans[-1] if calculation_plans else None
@@ -956,6 +961,7 @@ def _provider_public_record(
         else "runtime_immutable_defaults"
     )
     return record
+
 
 def cross_program_skill_ids() -> tuple[str, ...]:
     """Skills every program pack carries, and which therefore belong to none.
@@ -2076,9 +2082,11 @@ def _combine_program_conformance(
     verifier_status = (
         "failed"
         if any(item.verifier_status == "failed" for item in rows)
-        else "passed"
-        if all(item.verifier_status == "passed" for item in rows)
-        else "not_observed"
+        else (
+            "passed"
+            if all(item.verifier_status == "passed" for item in rows)
+            else "not_observed"
+        )
     )
 
     return build_program_component_conformance_receipt(
@@ -2625,9 +2633,7 @@ def _public_context(
         "execution_requested": bool(execution_requested),
         "execution_tool_available": bool(execution_available),
         "execution_review_requested": bool(execution_review_requested),
-        "bounded_execution_envelope": dict(
-            bounded_execution_record or {}
-        ),
+        "bounded_execution_envelope": dict(bounded_execution_record or {}),
         "authority": (
             "Use artifact IDs and typed tool fields only. The host owns paths, "
             "CLI argv, project materialization, validation, approval, and execution."
@@ -2705,20 +2711,22 @@ def _system_prompt(
         "producer nodes before their consumers and use only validated returned "
         "handoffs. Continue parsing and postprocessing in this same conversation."
         if bounded_execution
-        else "Execution is exposed only as execute_approved_program_node(node_id). "
-        "Use the exact approved_workflow node IDs and listed order, and stop on "
-        "any red result. When an approved producer edge exists, execute its "
-        "producer first; after validation, consume the returned produced_handoffs "
-        "artifact and scientific identity before compiling, previewing, "
-        "preflighting, and executing that edge's consumer. "
-        "Reuse the listed approved project artifact rather than promoting a new "
-        "copy. Treat the execution receipt's deterministic validators as the live "
-        "result gate; do not call inspect_calculation_artifact for newly executed "
-        "nodes because this composition has no separate legacy settings/run IDs."
-        if execution_available
         else (
-            "Execution is not exposed. Finish with a useful planned or "
-            "previewed state."
+            "Execution is exposed only as execute_approved_program_node(node_id). "
+            "Use the exact approved_workflow node IDs and listed order, and stop on "
+            "any red result. When an approved producer edge exists, execute its "
+            "producer first; after validation, consume the returned produced_handoffs "
+            "artifact and scientific identity before compiling, previewing, "
+            "preflighting, and executing that edge's consumer. "
+            "Reuse the listed approved project artifact rather than promoting a new "
+            "copy. Treat the execution receipt's deterministic validators as the live "
+            "result gate; do not call inspect_calculation_artifact for newly executed "
+            "nodes because this composition has no separate legacy settings/run IDs."
+            if execution_available
+            else (
+                "Execution is not exposed. Finish with a useful planned or "
+                "previewed state."
+            )
         )
     )
     approval_readiness_sentence = (
@@ -3127,9 +3135,13 @@ def _execution_composition_inputs(
         frozen = bundle.frozen_workflow_approval
         resources = bundle.execution_resources
         if Path(approval.workspace).resolve() != workspace:
-            raise ContractError("execution approval bundle targets another workspace")
+            raise ContractError(
+                "execution approval bundle targets another workspace"
+            )
         if task_spec_sha256 and approval.task_spec_sha256 != task_spec_sha256:
-            raise ContractError("execution approval bundle targets another task spec")
+            raise ContractError(
+                "execution approval bundle targets another task spec"
+            )
         envelope = _parse_bounded_execution_envelope_record(
             bundle.execution_envelope,
             resources=resources,
@@ -3542,7 +3554,9 @@ def _parse_scientific_toolchain_plan(
     if value is None:
         return None
     if not isinstance(value, Mapping):
-        raise ContractError("scientific toolchain plan must be an object or null")
+        raise ContractError(
+            "scientific toolchain plan must be an object or null"
+        )
     from chemsmart.agent.scientific_toolchain import (
         AnalysisInputIntentV1,
         AnalysisNodeIntentV1,
@@ -3596,9 +3610,7 @@ def _parse_scientific_toolchain_plan(
             raw[key] = tuple(raw.get(key, ()))
         raw["calculation_observables"] = tuple(
             (str(node_id), tuple(observables))
-            for node_id, observables in raw.get(
-                "calculation_observables", ()
-            )
+            for node_id, observables in raw.get("calculation_observables", ())
         )
         return ScientificToolchainPlanV1(**raw)
     except ContractError:
@@ -3615,7 +3627,9 @@ def _parse_stationary_point_policy(
     if value is None:
         return None
     if not isinstance(value, Mapping):
-        raise ContractError("stationary-point policy must be an object or null")
+        raise ContractError(
+            "stationary-point policy must be an object or null"
+        )
     try:
         return StationaryPointValidationPolicyV1(**dict(value))
     except (KeyError, TypeError, ValueError) as exc:
@@ -3656,7 +3670,9 @@ def _parse_bounded_execution_envelope_record(
             allowed_program_engines=allowlist,
             resources=parsed_resources,
             episode_wall_time_seconds=int(raw["episode_wall_time_seconds"]),
-            postprocess_reserve_seconds=int(raw["postprocess_reserve_seconds"]),
+            postprocess_reserve_seconds=int(
+                raw["postprocess_reserve_seconds"]
+            ),
             max_engine_calls=int(raw["max_engine_calls"]),
             scratch_root=str(raw["scratch_root"]),
         )
@@ -3667,11 +3683,15 @@ def _parse_bounded_execution_envelope_record(
             "execution envelope record does not match the v1 schema"
         ) from exc
     if canonical_data(parsed) != canonical_data(raw):
-        raise ContractError("execution envelope record contains unknown fields")
+        raise ContractError(
+            "execution envelope record contains unknown fields"
+        )
     return parsed
 
 
-def _read_exact_json_document(path: str | Path, *, label: str) -> Mapping[str, Any]:
+def _read_exact_json_document(
+    path: str | Path, *, label: str
+) -> Mapping[str, Any]:
     source = Path(path)
     if not source.is_file() or source.is_symlink():
         raise ContractError(f"{label} must be a current regular file")
@@ -3703,7 +3723,9 @@ def load_workflow_execution_review(
             isinstance(item, Mapping)
             for item in (request, plan, materialized, resources)
         ):
-            raise ContractError("execution review has incomplete typed records")
+            raise ContractError(
+                "execution review has incomplete typed records"
+            )
         raw["request"] = _parse_workflow_approval_request(request)
         raw["scientific_plan"] = _parse_scientific_workflow_plan(plan)
         raw["materialized_workflow"] = _parse_materialized_workflow(
@@ -3757,7 +3779,9 @@ def load_workflow_execution_approval_bundle(
     try:
         document = source.read_bytes()
     except OSError as exc:
-        raise ContractError("execution approval bundle cannot be read") from exc
+        raise ContractError(
+            "execution approval bundle cannot be read"
+        ) from exc
     if expected_file_sha256 and (
         hashlib.sha256(document).hexdigest()
         != str(expected_file_sha256).strip().lower()
@@ -3775,7 +3799,9 @@ def load_workflow_execution_approval_bundle(
         raise ContractError("execution approval bundle root must be an object")
     raw_value = payload.get("workflow_execution_approval_bundle", payload)
     if not isinstance(raw_value, Mapping):
-        raise ContractError("workflow execution approval bundle must be an object")
+        raise ContractError(
+            "workflow execution approval bundle must be an object"
+        )
     raw = dict(raw_value)
     try:
         for field in (
@@ -3848,7 +3874,9 @@ def write_workflow_execution_review(
         raise ContractError("execution review output path must be absolute")
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.parent.is_symlink():
-        raise ContractError("execution review output parent cannot be a symlink")
+        raise ContractError(
+            "execution review output parent cannot be a symlink"
+        )
     _write_private_exact(
         target,
         workflow_execution_review_json(review).encode("utf-8"),
@@ -3867,7 +3895,9 @@ def write_workflow_execution_approval_bundle(
         raise ContractError("execution approval output path must be absolute")
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.parent.is_symlink():
-        raise ContractError("execution approval output parent cannot be a symlink")
+        raise ContractError(
+            "execution approval output parent cannot be a symlink"
+        )
     _write_private_exact(
         target,
         workflow_execution_approval_bundle_json(bundle).encode("utf-8"),
@@ -3884,7 +3914,9 @@ def resolve_workflow_execution_review(
     output_file: str | Path | None = None,
     decision_log: str | Path | None = None,
     approval_id: str = "",
-) -> tuple[WorkflowReviewResolutionV1, WorkflowExecutionApprovalBundleV1 | None]:
+) -> tuple[
+    WorkflowReviewResolutionV1, WorkflowExecutionApprovalBundleV1 | None
+]:
     """Human-only library entry point shared by CLI and TUI.
 
     The caller must supply the complete digest displayed to the human.  This
@@ -3910,8 +3942,7 @@ def resolve_workflow_execution_review(
     if normalized != "approve" and output_file is not None:
         raise ContractError("a non-approval decision cannot create a bundle")
     chosen_approval_id = (
-        str(approval_id).strip()
-        or "approval-" + review.review_sha256[:16]
+        str(approval_id).strip() or "approval-" + review.review_sha256[:16]
     )
     resolution_id = (
         "resolution-" + review.review_sha256[:16] + "-" + normalized

@@ -22,8 +22,10 @@ from chemsmart.agent.execution import (
     handoff_optimized_xtb_geometry,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
-from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
-from chemsmart.agent.tool_runtime import _CommandContext
+from chemsmart.agent.tool_runtime import (
+    CommandCompiledToolHostV1,
+    _CommandContext,
+)
 from chemsmart.agent.workflows import (
     ArtifactInputIntentV1,
     ArtifactOutputIntentV1,

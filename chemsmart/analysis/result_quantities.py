@@ -1548,9 +1548,7 @@ def derive_result_thermochemistry(
                     evidence_ref=evidence_ref,
                 ),
                 _thermo_quantity(
-                    quantity_id=(
-                        "quasi_harmonic_thermal_gibbs_correction"
-                    ),
+                    quantity_id=("quasi_harmonic_thermal_gibbs_correction"),
                     value=quasi_harmonic_gibbs - engine.electronic_energy,
                     source_unit="J mol^-1",
                     normalized_unit="hartree",

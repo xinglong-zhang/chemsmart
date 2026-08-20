@@ -132,7 +132,9 @@ def inspect_generated_artifact(
         "artifact_id": artifact.artifact_id,
         "artifact_sha256": artifact_sha256,
         "project_artifact_id": (
-            project_artifact.artifact_id if project_artifact is not None else ""
+            project_artifact.artifact_id
+            if project_artifact is not None
+            else ""
         ),
         "project_sha256": (
             project_artifact.sha256 if project_artifact is not None else ""
@@ -183,7 +185,9 @@ def _validate_pyscf_expected_receipt(
             + ", ".join(missing)
         )
     if project_artifact is None:
-        raise ContractError("PySCF result verification requires project binding")
+        raise ContractError(
+            "PySCF result verification requires project binding"
+        )
     if expected.get("project_yaml_digest") != project_artifact.sha256:
         raise ContractError("PySCF expected receipt uses another project")
 

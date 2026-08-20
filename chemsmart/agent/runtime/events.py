@@ -276,8 +276,13 @@ def _validate_payload(
         "cancelled",
         "waiting_for_approval",
     }:
-        raise ContractError("terminal event requires an explicit terminal state")
-    if kind == RUNTIME_TERMINATED and payload.get("terminal_state") == "complete":
+        raise ContractError(
+            "terminal event requires an explicit terminal state"
+        )
+    if (
+        kind == RUNTIME_TERMINATED
+        and payload.get("terminal_state") == "complete"
+    ):
         required = tuple(payload.get("required_receipt_sha256s") or ())
         green = tuple(payload.get("green_receipt_sha256s") or ())
         gate = str(payload.get("completion_gate_sha256") or "")
@@ -290,8 +295,13 @@ def _validate_payload(
                 "complete terminal event requires every gate to be green"
             )
         if len(gate) != 64:
-            raise ContractError("complete terminal event requires host gate digest")
-    if kind == RUNTIME_TERMINATED and payload.get("terminal_state") == "planned":
+            raise ContractError(
+                "complete terminal event requires host gate digest"
+            )
+    if (
+        kind == RUNTIME_TERMINATED
+        and payload.get("terminal_state") == "planned"
+    ):
         require_sha256(
             str(payload.get("plan_receipt_sha256") or ""),
             "plan_receipt_sha256",
@@ -466,11 +476,14 @@ def _validate_typed_receipt_payload(
             payload.get("program_validation_status") != "valid"
             or _nonnegative_int(payload, "critical_finding_count") != 0
         ):
-            raise ContractError("previewed event requires green program validation")
+            raise ContractError(
+                "previewed event requires green program validation"
+            )
     if kind == VALIDATOR_OBSERVED:
-        if payload.get("status") == "valid" and _nonnegative_int(
-            payload, "critical_finding_count"
-        ) != 0:
+        if (
+            payload.get("status") == "valid"
+            and _nonnegative_int(payload, "critical_finding_count") != 0
+        ):
             raise ContractError("valid validator event cannot carry findings")
     if kind == RESULT_VERIFIED and "record" in payload:
         record = payload.get("record")
@@ -486,9 +499,7 @@ def _validate_typed_receipt_payload(
             payload.get("receipt_sha256") or ""
         ):
             raise ContractError("result verification record digest mismatch")
-        finding_count = _nonnegative_int(
-            payload, "critical_finding_count"
-        )
+        finding_count = _nonnegative_int(payload, "critical_finding_count")
         if payload.get("status") == "valid" and finding_count != 0:
             raise ContractError(
                 "valid result verification cannot carry findings"
@@ -501,7 +512,9 @@ def _validate_typed_receipt_payload(
                 "safe_preview_receipt_sha256",
             )
             if critical_count:
-                raise ContractError("previewed preflight cannot carry findings")
+                raise ContractError(
+                    "previewed preflight cannot carry findings"
+                )
     if kind in {
         ANALYSIS_COMPLETION_EVALUATED,
         ANALYSIS_CLAIMS_RECORDED,
@@ -515,8 +528,12 @@ def _validate_typed_receipt_payload(
     }:
         record = payload.get("record")
         if not isinstance(record, Mapping):
-            raise ContractError(f"{kind} requires an embedded canonical record")
-        if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
+            raise ContractError(
+                f"{kind} requires an embedded canonical record"
+            )
+        if canonical_sha256(record) != str(
+            payload.get("receipt_sha256") or ""
+        ):
             raise ContractError(f"{kind} record digest mismatch")
     if kind == SCIENTIFIC_VALIDATION_EVALUATED:
         record = payload["record"]
@@ -583,7 +600,9 @@ def _validate_typed_receipt_payload(
                 != str(payload.get("policy_sha256") or "")
                 or canonical_sha256(policy_body) != embedded_policy_sha256
             ):
-                raise ContractError("analysis completion policy digest mismatch")
+                raise ContractError(
+                    "analysis completion policy digest mismatch"
+                )
         source_receipts = tuple(payload.get("source_receipt_sha256s") or ())
         if not source_receipts or source_receipts != tuple(
             sorted(set(source_receipts))
@@ -602,7 +621,9 @@ def _validate_typed_receipt_payload(
     if kind == ANALYSIS_CLAIMS_RECORDED:
         record = payload["record"]
         claims = tuple(record.get("claims") or ())
-        if not claims or not all(isinstance(claim, Mapping) for claim in claims):
+        if not claims or not all(
+            isinstance(claim, Mapping) for claim in claims
+        ):
             raise ContractError("analysis claim record requires typed claims")
         record_sources = tuple(
             sorted(
@@ -616,8 +637,7 @@ def _validate_typed_receipt_payload(
             sorted(str(claim.get("claim_id") or "") for claim in claims)
         )
         if (
-            record.get("task_spec_sha256")
-            != payload.get("task_spec_sha256")
+            record.get("task_spec_sha256") != payload.get("task_spec_sha256")
             or record.get("status") != payload.get("status")
             or record_sources
             != tuple(payload.get("source_receipt_sha256s") or ())
@@ -630,18 +650,26 @@ def _validate_typed_receipt_payload(
         if not source_receipts or source_receipts != tuple(
             sorted(set(source_receipts))
         ):
-            raise ContractError("analysis claims require sorted source receipts")
+            raise ContractError(
+                "analysis claims require sorted source receipts"
+            )
         for digest in source_receipts:
             require_sha256(str(digest), "analysis claim source receipt")
-    if kind in {
-        RESULT_QUANTITIES_EXTRACTED,
-        THERMOCHEMISTRY_DERIVED,
-        QUANTITY_EXPRESSION_EVALUATED,
-    } and "record" in payload:
+    if (
+        kind
+        in {
+            RESULT_QUANTITIES_EXTRACTED,
+            THERMOCHEMISTRY_DERIVED,
+            QUANTITY_EXPRESSION_EVALUATED,
+        }
+        and "record" in payload
+    ):
         record = payload.get("record")
         if not isinstance(record, Mapping):
             raise ContractError(f"{kind} record must be canonical")
-        if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
+        if canonical_sha256(record) != str(
+            payload.get("receipt_sha256") or ""
+        ):
             raise ContractError(f"{kind} record digest mismatch")
         if record.get("status") != payload.get("status"):
             raise ContractError(f"{kind} status differs from its record")
@@ -660,7 +688,9 @@ def _validate_typed_receipt_payload(
         record = payload.get("record")
         if not isinstance(record, Mapping):
             raise ContractError("scientific decision record must be canonical")
-        if canonical_sha256(record) != str(payload.get("receipt_sha256") or ""):
+        if canonical_sha256(record) != str(
+            payload.get("receipt_sha256") or ""
+        ):
             raise ContractError("scientific decision record digest mismatch")
         if record.get("decision_id") != payload.get("decision_id"):
             raise ContractError(
@@ -718,13 +748,19 @@ def _validate_canonical_execution_record(
         "run_state_record",
     }
     if not required_records.issubset(payload):
-        raise ContractError("launch reservation lacks canonical frontier records")
-    reservation = workflow_node_launch_reservation_from_record(payload["record"])
+        raise ContractError(
+            "launch reservation lacks canonical frontier records"
+        )
+    reservation = workflow_node_launch_reservation_from_record(
+        payload["record"]
+    )
     if canonical_sha256(payload["record"]) != str(
         payload.get("receipt_sha256") or ""
     ):
         raise ContractError("launch reservation event digest mismatch")
-    plan = scientific_workflow_plan_from_record(payload["scientific_plan_record"])
+    plan = scientific_workflow_plan_from_record(
+        payload["scientific_plan_record"]
+    )
     materialized = materialized_workflow_from_record(
         payload["materialized_workflow_record"]
     )
@@ -750,7 +786,11 @@ def _validate_canonical_execution_record(
     if not run_state.approval_consumed or run_state.state != "running":
         raise ContractError("launch reservation requires a running run state")
     node_state = next(
-        (item for item in run_state.nodes if item.node_id == reservation.node_id),
+        (
+            item
+            for item in run_state.nodes
+            if item.node_id == reservation.node_id
+        ),
         None,
     )
     if (

@@ -64,9 +64,7 @@ def test_dag_rows_show_every_status_with_minimal_glyphs():
 
 
 def test_the_mermaid_artifact_projects_the_reviewed_plan():
-    calc = SimpleNamespace(
-        node_id="opt-water", stage="opt", program="xtb"
-    )
+    calc = SimpleNamespace(node_id="opt-water", stage="opt", program="xtb")
     consumer = SimpleNamespace(node_id="sp-water", stage="sp", program="xtb")
     review = SimpleNamespace(
         scientific_plan=SimpleNamespace(
@@ -90,9 +88,7 @@ def test_the_mermaid_artifact_projects_the_reviewed_plan():
                     node_id="extract-e",
                     analysis_kind="result_extraction",
                     dependencies=("sp-water",),
-                    inputs=(
-                        SimpleNamespace(producer_node_id="sp-water"),
-                    ),
+                    inputs=(SimpleNamespace(producer_node_id="sp-water"),),
                 ),
             )
         ),

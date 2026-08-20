@@ -20,7 +20,6 @@ import re
 import pytest
 
 from chemsmart.agent._contracts import ContractError
-
 from chemsmart.agent.tool_specs import (
     IDENTIFIER_ARGUMENTS,
     OPTIONAL_IDENTIFIER_ARGUMENTS,
@@ -53,7 +52,10 @@ def _identifier_schemas(surface):
 
 @pytest.mark.parametrize(
     "build",
-    [build_command_compiled_tool_surface, build_approved_execution_tool_surface],
+    [
+        build_command_compiled_tool_surface,
+        build_approved_execution_tool_surface,
+    ],
 )
 def test_every_identifier_argument_declares_its_rule(build):
     loose = [
@@ -201,7 +203,9 @@ def test_a_producer_fed_input_passes_the_schema_it_previously_failed():
     schema = definition["parameters"]["properties"]["calculation_nodes"][
         "items"
     ]["properties"]["inputs"]["items"]["properties"]["artifact_id"]
-    _validate_json_value("calculation_nodes[1].inputs[0].artifact_id", "", schema)
+    _validate_json_value(
+        "calculation_nodes[1].inputs[0].artifact_id", "", schema
+    )
     _validate_json_value(
         "calculation_nodes[0].inputs[0].artifact_id", "start.xyz", schema
     )

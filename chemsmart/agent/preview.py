@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
+
 import click
 from click.testing import CliRunner
 
@@ -121,16 +122,16 @@ def execute_safe_preview(
     input_artifact: TrustedArtifactRefV1,
     project_artifact: TrustedArtifactRefV1 | None,
     expectation: ProgramPreviewExpectationV1,
-    auxiliary_input_artifacts: Mapping[str, TrustedArtifactRefV1] | None = None,
+    auxiliary_input_artifacts: (
+        Mapping[str, TrustedArtifactRefV1] | None
+    ) = None,
     root: click.Command | None = None,
     runner: CliRunner | None = None,
 ) -> SafePreviewReceiptV1:
     """Execute one compiler-owned safe preview and observe actual artifacts."""
 
     auxiliary_input_artifacts = dict(auxiliary_input_artifacts or {})
-    auxiliary_bindings = _auxiliary_input_bindings(
-        auxiliary_input_artifacts
-    )
+    auxiliary_bindings = _auxiliary_input_bindings(auxiliary_input_artifacts)
     _validate_preview_bindings(
         invocation,
         input_artifact=input_artifact,

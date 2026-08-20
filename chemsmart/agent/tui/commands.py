@@ -184,7 +184,9 @@ def render_help() -> str:
         "Commands:",
     ]
     width = max(
-        len(spec.usage or spec.slash) + 2 + sum(len(a) + 2 for a in spec.aliases)
+        len(spec.usage or spec.slash)
+        + 2
+        + sum(len(a) + 2 for a in spec.aliases)
         for spec in COMMANDS
     )
     for spec in COMMANDS:

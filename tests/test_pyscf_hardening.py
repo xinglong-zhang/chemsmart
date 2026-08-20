@@ -28,11 +28,11 @@ from chemsmart.jobs.pyscf.environment import (
 )
 from chemsmart.jobs.pyscf.job import PySCFJob
 from chemsmart.jobs.pyscf.runner import (
+    _PREVIEW_DEFERRED_RULES,
     FakePySCFJobRunner,
     PySCFJobRunner,
     PySCFPreflightError,
     PySCFResultValidationError,
-    _PREVIEW_DEFERRED_RULES,
     _receipt_file_sha256,
     _run_receipt_state,
 )
@@ -123,7 +123,9 @@ def test_fake_td_defers_only_preview_capability_rule(tmp_path):
     with (
         patch.object(runner, "_assign_variables"),
         patch.object(runner, "_set_receipt_paths"),
-        patch.object(runner, "_current_input_artifact_binding", return_value=None),
+        patch.object(
+            runner, "_current_input_artifact_binding", return_value=None
+        ),
         patch.object(runner, "_quarantine_stale_targets"),
     ):
         runner._prerun(job)
@@ -131,9 +133,7 @@ def test_fake_td_defers_only_preview_capability_rule(tmp_path):
     receipt = json.loads(
         (tmp_path / "td.environment.json").read_text(encoding="utf-8")
     )
-    assert receipt["deferred_rule_ids"] == [
-        "pyscf.td.preview_only_capability"
-    ]
+    assert receipt["deferred_rule_ids"] == ["pyscf.td.preview_only_capability"]
     assert [item["rule_id"] for item in receipt["preflight_findings"]] == [
         "pyscf.td.preview_only_capability"
     ]
@@ -141,20 +141,26 @@ def test_fake_td_defers_only_preview_capability_rule(tmp_path):
 
 
 def test_real_td_blocks_before_input_or_engine_launch(tmp_path):
-    runner = _prepare_preflight_runner(object.__new__(PySCFJobRunner), tmp_path)
+    runner = _prepare_preflight_runner(
+        object.__new__(PySCFJobRunner), tmp_path
+    )
     job = _td_preview_job()
 
     with (
         patch.object(runner, "_assign_variables"),
         patch.object(runner, "_set_receipt_paths"),
-        patch.object(runner, "_current_input_artifact_binding", return_value=None),
+        patch.object(
+            runner, "_current_input_artifact_binding", return_value=None
+        ),
         patch.object(runner, "_quarantine_stale_targets"),
         patch.object(runner, "_update_os_environ", return_value={}),
         patch.object(
             PySCFJobRunner,
             "executable",
             new_callable=PropertyMock,
-            return_value=SimpleNamespace(get_executable=lambda: sys.executable),
+            return_value=SimpleNamespace(
+                get_executable=lambda: sys.executable
+            ),
         ),
         patch(
             "chemsmart.jobs.pyscf.runner.probe_compute_environment",
@@ -260,9 +266,7 @@ def test_fake_result_is_explicitly_not_evaluated_and_has_no_fake_chemistry(
     }
 
     runner._write_fake_results(SimpleNamespace())
-    _spec, _provenance, status, results = read_pyscf_h5(
-        runner.job_resultsfile
-    )
+    _spec, _provenance, status, results = read_pyscf_h5(runner.job_resultsfile)
 
     assert status["evaluation_state"] == "not_evaluated_preview"
     assert status["normal_termination"] is False
@@ -897,9 +901,7 @@ def test_validated_state_is_invalidated_by_current_geometry_change(tmp_path):
         },
     )
 
-    with patch(
-        "chemsmart.jobs.pyscf.job.verify_provenance", return_value=[]
-    ):
+    with patch("chemsmart.jobs.pyscf.job.verify_provenance", return_value=[]):
         assert job.is_validated() is True
         job.molecule.positions[1][2] = 0.75
         assert job.is_validated() is False
@@ -958,9 +960,7 @@ def test_validated_state_is_invalidated_by_source_hdf5_substitution(tmp_path):
         },
     )
 
-    with patch(
-        "chemsmart.jobs.pyscf.job.verify_provenance", return_value=[]
-    ):
+    with patch("chemsmart.jobs.pyscf.job.verify_provenance", return_value=[]):
         assert job.is_validated() is True
         source_results.write_bytes(
             source_results.read_bytes() + b"substituted"
@@ -1115,9 +1115,7 @@ def test_spin_diagnostic_unavailability_uses_existing_required_property_gate():
         }
     }
     optional = SimpleNamespace(required_properties=(), kwargs={})
-    required = SimpleNamespace(
-        required_properties=("spin_square",), kwargs={}
-    )
+    required = SimpleNamespace(required_properties=("spin_square",), kwargs={})
 
     optional_findings = PySCFJobRunner._property_findings(optional, status)
     required_findings = PySCFJobRunner._property_findings(required, status)
@@ -1126,7 +1124,9 @@ def test_spin_diagnostic_unavailability_uses_existing_required_property_gate():
     assert required_findings[0]["required"] is True
 
 
-def test_postrun_environment_reloads_receipt_and_rehashes_interpreter(tmp_path):
+def test_postrun_environment_reloads_receipt_and_rehashes_interpreter(
+    tmp_path,
+):
     interpreter = tmp_path / "python"
     interpreter.write_bytes(b"pinned interpreter bytes")
     receipt_path = tmp_path / "job.environment.json"
@@ -1198,6 +1198,5 @@ def test_postrun_environment_rejects_libxc_runtime_mismatch(tmp_path):
     findings = runner._runtime_environment_findings(provenance)
 
     assert any(
-        finding["field"] == "provenance.libxc_version"
-        for finding in findings
+        finding["field"] == "provenance.libxc_version" for finding in findings
     )

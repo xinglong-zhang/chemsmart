@@ -111,7 +111,9 @@ def test_malformed_tool_json_is_rejected_before_dispatch():
         messages=[{"role": "user", "content": "Inspect capability."}],
         config=_config(),
     )
-    with pytest.raises(DeepSeekProtocolError, match="invalid JSON") as observed:
+    with pytest.raises(
+        DeepSeekProtocolError, match="invalid JSON"
+    ) as observed:
         session.turn(tools=[])
     error = observed.value
     assert error.failing_field == (
@@ -129,14 +131,18 @@ def test_malformed_tool_json_is_rejected_before_dispatch():
 
 
 def test_unknown_tool_is_absent_from_host_dispatch(tmp_path):
-    store = RuntimeEventStore(tmp_path / "events" / "runtime.jsonl", session_id="s1")
+    store = RuntimeEventStore(
+        tmp_path / "events" / "runtime.jsonl", session_id="s1"
+    )
     host = CommandCompiledToolHostV1(event_store=store)
     with pytest.raises(ContractError, match="not exposed"):
         host.dispatch(turn_id="t1", tool_name="run_local", arguments={})
 
 
 def test_terminal_complete_rejects_red_preflight(tmp_path):
-    store = RuntimeEventStore(tmp_path / "events" / "runtime.jsonl", session_id="s1")
+    store = RuntimeEventStore(
+        tmp_path / "events" / "runtime.jsonl", session_id="s1"
+    )
     receipt = "a" * 64
     store.append(
         turn_id="t1",

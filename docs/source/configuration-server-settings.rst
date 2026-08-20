@@ -2,10 +2,8 @@
  Server Settings
 #################
 
-For one headless Ubuntu example, start with
-:doc:`installation-ubuntu-cpu-server` and then use this page as the complete
-field reference. Never copy example paths, accounts, modules or MPI settings
-without checking the actual target host.
+For one headless Ubuntu example, start with :doc:`installation-ubuntu-cpu-server` and then use this page as the complete
+field reference. Never copy example paths, accounts, modules or MPI settings without checking the actual target host.
 
 Configure server-specific settings for your HPC cluster or local machine. Server configuration files are YAML files
 stored in the ``~/.chemsmart/server/`` directory that define how CHEMSMART submits and executes computational chemistry
@@ -28,9 +26,8 @@ server configuration needed to generate submission scripts. CHEMSMART provides s
 -  ``local.yaml`` - For local workstations without a job scheduler
 -  ``small.yaml`` - Example for SLURM with specific resource limits
 
-``chemsmart wizard --server`` writes this file from live host analysis
-and is the recommended route; the template flow below is the manual
-alternative. To use a template, copy it to your ``~/.chemsmart/server/`` directory and customize it:
+``chemsmart wizard --server`` writes this file from live host analysis and is the recommended route; the template flow
+below is the manual alternative. To use a template, copy it to your ``~/.chemsmart/server/`` directory and customize it:
 
 .. code:: bash
 
@@ -327,8 +324,8 @@ SCRATCH
 **Description:** Default scratch mode for Gaussian when the user omits both ``--scratch`` and ``--no-scratch`` on the
 CLI (see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
 When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
-absent or ``null``, CHEMSMART uses the Gaussian default (``True``)—that is **not** the same as omitting
-the CLI flags; CLI omission triggers the lookup of this key in the first place.
+absent or ``null``, CHEMSMART uses the Gaussian default (``True``)—that is **not** the same as omitting the CLI flags;
+CLI omission triggers the lookup of this key in the first place.
 
 **Example:**
 
@@ -788,9 +785,8 @@ Complete example for a local workstation without a job scheduler:
 Scratch Behavior
 ================
 
-CHEMSMART resolves whether to run in scratch from the CLI, the program
-``SCRATCH`` key in server YAML, and the program default. When scratch mode is
-enabled, the scratch **directory path** is resolved separately.
+CHEMSMART resolves whether to run in scratch from the CLI, the program ``SCRATCH`` key in server YAML, and the program
+default. When scratch mode is enabled, the scratch **directory path** is resolved separately.
 
 Scratch mode (on/off)
 ---------------------
@@ -798,8 +794,7 @@ Scratch mode (on/off)
 CLI (``chemsmart run`` / ``chemsmart sub``)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-When both ``--scratch`` and ``--no-scratch`` are omitted, CHEMSMART resolves
-scratch mode before execution:
+When both ``--scratch`` and ``--no-scratch`` are omitted, CHEMSMART resolves scratch mode before execution:
 
 #. Explicit ``--scratch`` or ``--no-scratch`` wins.
 #. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).

@@ -40,9 +40,7 @@ joule_per_mol_to_eV = units.J / units.mol
 joule_per_mol_to_kcal_per_mol = (units.J / units.mol) / (
     units.kcal / units.mol
 )
-joule_per_mol_to_kJ_per_mol = (units.J / units.mol) / (
-    units.kJ / units.mol
-)
+joule_per_mol_to_kJ_per_mol = (units.J / units.mol) / (units.kJ / units.mol)
 joule_per_mol_to_hartree = (units.J / units.mol) / units.Hartree
 
 au_to_debye = 2.54174623

@@ -12,7 +12,6 @@ from pathlib import Path
 
 from chemsmart.agent.tui.monitor import (
     EventTailerV1,
-    execution_signal,
     planning_feed_update,
 )
 
@@ -29,7 +28,9 @@ def test_a_torn_tail_waits_and_is_delivered_whole(tmp_path: Path):
 
     assert tailer.poll() == ()  # not yet created
 
-    whole = _line("tool_started", {"tool": "preview_command", "request_id": "c1"})
+    whole = _line(
+        "tool_started", {"tool": "preview_command", "request_id": "c1"}
+    )
     stream.write_bytes(whole[:20])  # writer mid-line
     assert tailer.poll() == ()
 
@@ -47,7 +48,9 @@ def test_a_malformed_line_becomes_a_gap_not_a_crash(tmp_path: Path):
     stream.write_bytes(
         _line("tool_started", {"tool": "compile_command", "request_id": "c1"})
         + b"{this is not json}\n"
-        + _line("tool_succeeded", {"tool": "compile_command", "request_id": "c1"})
+        + _line(
+            "tool_succeeded", {"tool": "compile_command", "request_id": "c1"}
+        )
     )
     tailer = EventTailerV1(stream)
     events = tailer.poll()

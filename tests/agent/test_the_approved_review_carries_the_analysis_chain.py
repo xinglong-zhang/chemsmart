@@ -11,9 +11,6 @@ calculation-only packet keeps its historical bytes.
 
 from __future__ import annotations
 
-import json
-
-from chemsmart.agent._contracts import canonical_data
 from chemsmart.agent.execution import (
     approve_workflow_execution_review,
     build_workflow_execution_review,
@@ -36,7 +33,6 @@ from chemsmart.agent.workflows import (
     ArtifactOutputIntentV1,
     CommandNodeIntentV1,
 )
-
 from tests.agent.test_exact_execution_approval_chain import _review
 
 

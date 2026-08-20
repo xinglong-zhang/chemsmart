@@ -57,9 +57,7 @@ def _plan_args(inputs):
                         "producer_output_id": "o",
                     }
                 ],
-                "selectors": [
-                    {"quantity_id": "energy", "selector": "energy"}
-                ],
+                "selectors": [{"quantity_id": "energy", "selector": "energy"}],
                 "outputs": [
                     {
                         "output_id": "energy",
@@ -128,9 +126,9 @@ def test_a_workflow_that_anchors_nothing_is_told_so(tmp_path):
     )
     args = _plan_args([])
     args["calculation_nodes"][0]["support_state"] = "blocked_unsupported"
-    args["calculation_nodes"][0]["blocked_reason"] = (
-        "no complex geometry exists in this workspace"
-    )
+    args["calculation_nodes"][0][
+        "blocked_reason"
+    ] = "no complex geometry exists in this workspace"
 
     with pytest.raises(ContractError) as refusal:
         host.dispatch(

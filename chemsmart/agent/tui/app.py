@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import shlex
 import threading
 import time
+from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from rich.markdown import Markdown
@@ -13,8 +14,6 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
-from functools import partial
-
 from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -28,8 +27,10 @@ if TYPE_CHECKING:
     from chemsmart.agent.live_session import LiveAgentSessionResultV1
 
 from chemsmart.agent._contracts import ContractError
+from chemsmart.agent.voice import human_state
 
 from . import commands as command_registry
+from . import resume as resume_module
 from .controller import AgentTuiController, AgentTuiPhase
 from .mermaid import render_workflow_mermaid
 from .monitor import (
@@ -39,22 +40,19 @@ from .monitor import (
     planning_row_key,
 )
 from .panels import (
+    SPECTRUM_COLORS,
     DagPanel,
     JobsPanel,
-    SPECTRUM_COLORS,
     phase_chip,
     spectrum_rule,
     wordmark,
 )
-from .report import looks_like_host_report, render_report_for_humans
-from . import resume as resume_module
 from .presentation import human_cli_operation, session_evidence_blocks
+from .report import looks_like_host_report, render_report_for_humans
 from .review import render_review_blocks, resolve_project_yaml_texts
 from .runs import list_runs
 from .theme import CHEMSMART_THEME
 from .transcript import ToolRow, TranscriptView
-from chemsmart.agent.voice import human_state
-
 
 #: The one styling rule: running = text, finished = muted, failed = error.
 _ROW_STYLE = {
@@ -113,7 +111,10 @@ class ChemSmartAgentApp(App[None]):
     BINDINGS = [
         Binding("ctrl+c", "safe_quit", "Quit", priority=True),
         Binding(
-            "escape", "interrupt_planning", "Cancel planning", priority=True,
+            "escape",
+            "interrupt_planning",
+            "Cancel planning",
+            priority=True,
             show=False,
         ),
         Binding("pageup", "scroll_transcript_up", "Scroll up", show=False),
@@ -291,15 +292,19 @@ class ChemSmartAgentApp(App[None]):
         prepared = self.controller.prepared_execution
         table.add_row(
             "workflow",
-            prepared.scientific_plan.workflow_id
-            if prepared is not None
-            else "not awaiting approval",
+            (
+                prepared.scientific_plan.workflow_id
+                if prepared is not None
+                else "not awaiting approval"
+            ),
         )
         table.add_row(
             "authority",
-            "human /approve required"
-            if prepared is not None
-            else "none pending",
+            (
+                "human /approve required"
+                if prepared is not None
+                else "none pending"
+            ),
         )
         self._write(table)
 
@@ -482,9 +487,7 @@ class ChemSmartAgentApp(App[None]):
         for planned in review.scientific_plan.nodes:
             item = review_by_id.get(planned.node_id)
             if item is not None:
-                formula = str(
-                    item.molecular_identity.get("formula") or ""
-                )
+                formula = str(item.molecular_identity.get("formula") or "")
                 label = f"{item.program} {item.stage}"
                 if formula:
                     label += f" · {formula}"
@@ -599,7 +602,8 @@ class ChemSmartAgentApp(App[None]):
                     str(index),
                     row.workflow_id or row.name,
                     row.kind,
-                    row.state + (" · /report " + str(index) if row.report_path else ""),
+                    row.state
+                    + (" · /report " + str(index) if row.report_path else ""),
                 )
             self._write(runs_table)
         if story.story is not None and story.story.final_prose:
@@ -612,7 +616,9 @@ class ChemSmartAgentApp(App[None]):
                     )
                 )
             else:
-                self._write(Panel(Markdown(prose), title="Agent (previous session)"))
+                self._write(
+                    Panel(Markdown(prose), title="Agent (previous session)")
+                )
         pending = story.pending
         if pending is None:
             self._sync_phase(
@@ -713,7 +719,9 @@ class ChemSmartAgentApp(App[None]):
         from chemsmart.agent.skills import available_skill_ids
 
         if len(tail) != 1:
-            self._usage("/skill takes exactly one skill id; /skills lists them")
+            self._usage(
+                "/skill takes exactly one skill id; /skills lists them"
+            )
             return
         skill_id = tail[0]
         known = tuple(available_skill_ids())
@@ -739,16 +747,11 @@ class ChemSmartAgentApp(App[None]):
 
     def _export_transcript(self, tail: list[str]) -> None:
         transcript = self.query_one("#transcript", TranscriptView)
-        target = (
-            self.controller.config.workspace
-            / time.strftime("chemsmart-transcript-%Y%m%d-%H%M%S.txt")
+        target = self.controller.config.workspace / time.strftime(
+            "chemsmart-transcript-%Y%m%d-%H%M%S.txt"
         )
-        target.write_text(
-            transcript.recorder.export_text(), encoding="utf-8"
-        )
-        self._write(
-            Panel(f"Transcript saved to {target}", title="Export")
-        )
+        target.write_text(transcript.recorder.export_text(), encoding="utf-8")
+        self._write(Panel(f"Transcript saved to {target}", title="Export"))
 
     def _toggle_dag(self, tail: list[str]) -> None:
         dag = self.query_one("#dag-panel", DagPanel)
@@ -890,9 +893,7 @@ class ChemSmartAgentApp(App[None]):
                     )
                 )
             else:
-                self._write(
-                    Panel(Markdown(result.final_text), title="Agent")
-                )
+                self._write(Panel(Markdown(result.final_text), title="Agent"))
         if self.controller.phase is AgentTuiPhase.REQUEST_REVIEWED:
             prepared = self.controller.prepared_execution
             if prepared is None:  # pragma: no cover - phase owns the object
@@ -939,7 +940,11 @@ class ChemSmartAgentApp(App[None]):
                 node.program,
                 node.jobtype,
                 node.state,
-                "validated" if node.validated else node.failure or "not validated",
+                (
+                    "validated"
+                    if node.validated
+                    else node.failure or "not validated"
+                ),
             )
         self._write(table)
         self._write(
@@ -1005,8 +1010,7 @@ class ChemSmartAgentApp(App[None]):
             else "Execution finished; "
         )
         self._sync_phase(
-            hint
-            + "interpretation and the recorded decision remain a session "
+            hint + "interpretation and the recorded decision remain a session "
             "act; enter a new request when ready"
         )
 
@@ -1032,7 +1036,9 @@ class ChemSmartAgentApp(App[None]):
                 border_style="red",
             )
         )
-        self._sync_phase("Operation stopped; no unreviewed engine launch occurred")
+        self._sync_phase(
+            "Operation stopped; no unreviewed engine launch occurred"
+        )
 
     def _usage(self, message: str) -> None:
         self._write(
@@ -1078,8 +1084,7 @@ class ChemSmartAgentApp(App[None]):
         """
 
         if not (
-            self._busy
-            and self.controller.phase is AgentTuiPhase.PLANNING
+            self._busy and self.controller.phase is AgentTuiPhase.PLANNING
         ):
             self._disarm_interrupt()
             return

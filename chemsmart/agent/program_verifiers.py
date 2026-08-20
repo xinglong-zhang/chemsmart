@@ -590,7 +590,9 @@ def _validate_xtb_preview(expectation, paths):
             "size"
         ) != generated_xyz.stat().st_size or input_record.get(
             "sha256"
-        ) != file_sha256(generated_xyz):
+        ) != file_sha256(
+            generated_xyz
+        ):
             findings.append(
                 _mismatch(
                     "input_artifact",

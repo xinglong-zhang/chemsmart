@@ -29,9 +29,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--state-manifold",
-    type=click.Choice(
-        ("singlet", "singlet_triplet"), case_sensitive=False
-    ),
+    type=click.Choice(("singlet", "singlet_triplet"), case_sensitive=False),
     default=None,
     help=(
         "Closed-shell singlets, or singlets together with spin-adapted "
@@ -87,8 +85,7 @@ def td(
             "ORCA td requires project or CLI values for " + ", ".join(missing)
         )
     if settings.state_manifold in {"singlet", "singlet_triplet"} and (
-        settings.multiplicity is not None
-        and int(settings.multiplicity) != 1
+        settings.multiplicity is not None and int(settings.multiplicity) != 1
     ):
         raise click.UsageError(
             "ORCA closed-shell singlet TD roots require multiplicity 1"

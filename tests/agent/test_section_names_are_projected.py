@@ -15,12 +15,16 @@ shape as other observed loader defects.
 import pytest
 
 from chemsmart.agent.capabilities import load_program_capabilities
-from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
-from chemsmart.settings.capabilities import AGENT_PROGRAMS
+from chemsmart.settings.capabilities import (
+    AGENT_PROGRAMS,
+    PROGRAM_CAPABILITIES,
+)
 
 
 def _agent_records():
-    return {item.program: item for item in load_program_capabilities().programs}
+    return {
+        item.program: item for item in load_program_capabilities().programs
+    }
 
 
 @pytest.mark.parametrize("program", sorted(AGENT_PROGRAMS))

@@ -53,8 +53,7 @@ def test_orca_vpt2_yaml_input_and_result_round_trip(tmp_path):
     assert observed.scf_convergence == "extreme"
 
     output_path = tmp_path / "water_vpt2.out"
-    output_path.write_text(
-        """Fundamental transitions [1/cm]
+    output_path.write_text("""Fundamental transitions [1/cm]
 -----------------------------------------
 Mode     w(harm)      v(fund)      Diff
 -----------------------------------------
@@ -70,8 +69,7 @@ Anharmonic correction:          -73.729
 Ro-vibrational correction:        3.448
 ---------------------------------------
 Total:                         5002.005
-"""
-    )
+""")
     output = ORCAOutput(str(output_path))
     reader = reader_for("orca")
     assert reader.read(output, "vpt2_harmonic_frequencies") == (

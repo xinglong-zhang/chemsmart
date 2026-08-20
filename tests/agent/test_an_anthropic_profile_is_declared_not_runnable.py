@@ -59,8 +59,7 @@ def test_an_inactive_anthropic_block_never_blocks_the_active_profile(
 ):
     path = tmp_path / "agent.yaml"
     path.write_text(
-        _YAML.replace("active: anthropic", "active: openai")
-        + """\
+        _YAML.replace("active: anthropic", "active: openai") + """\
   openai:
     type: openai
     api_key_env: OPENAI_API_KEY

@@ -10,6 +10,46 @@ from chemsmart.agent._contracts import (
     canonical_data,
     canonical_sha256,
 )
+from chemsmart.agent.runtime.events import (
+    ANALYSIS_CLAIMS_RECORDED,
+    ANALYSIS_COMPLETION_EVALUATED,
+    CAPABILITY_QUERIED,
+    COMMAND_COMPILED,
+    COMMAND_INSPECTED,
+    ENGINE_BOUND,
+    ENVIRONMENT_QUERIED,
+    EXECUTION_BUNDLE_CONSUMED,
+    OPTIMIZED_GEOMETRY_HANDED_OFF,
+    PERMISSION_RESOLVED,
+    PROGRAM_BOUND,
+    PROGRAM_EXECUTED,
+    PROGRAM_PREFLIGHTED,
+    PROJECT_PROMOTED,
+    PROJECT_VALIDATED,
+    PROVIDER_TURN_OBSERVED,
+    QUANTITY_EXPRESSION_EVALUATED,
+    RESULT_QUANTITIES_EXTRACTED,
+    RESULT_VERIFIED,
+    RUNTIME_TERMINATED,
+    SAFE_PREVIEWED,
+    SCIENTIFIC_DECISION_RECORDED,
+    SCIENTIFIC_VALIDATION_EVALUATED,
+    SCIENTIFIC_WORKFLOW_MATERIALIZED,
+    SUBSTITUTION_ASSESSED,
+    TASK_DEPENDENCY_CONTEXT_SELECTED,
+    THERMOCHEMISTRY_DERIVED,
+    TOOL_WAITING,
+    TOOL_WOKE,
+    VALIDATOR_OBSERVED,
+    WORKFLOW_APPROVAL_CONSUMED,
+    WORKFLOW_DATA_EDGE_BOUND,
+    WORKFLOW_EXECUTION_STARTED,
+    WORKFLOW_LAUNCH_RESERVED,
+    WORKFLOW_NODE_STATE_CHANGED,
+    WORKFLOW_PLANNED,
+    WORKFLOW_REVIEW_RESOLVED,
+    RuntimeEvent,
+)
 from chemsmart.agent.runtime.records import (
     frozen_workflow_approval_from_record,
     materialized_workflow_from_record,
@@ -19,46 +59,6 @@ from chemsmart.agent.runtime.records import (
     validated_data_edge_binding_from_record,
     workflow_node_launch_reservation_from_record,
     workflow_run_state_from_record,
-)
-from chemsmart.agent.runtime.events import (
-    ANALYSIS_CLAIMS_RECORDED,
-    ANALYSIS_COMPLETION_EVALUATED,
-    CAPABILITY_QUERIED,
-    COMMAND_COMPILED,
-    COMMAND_INSPECTED,
-    ENGINE_BOUND,
-    ENVIRONMENT_QUERIED,
-    OPTIMIZED_GEOMETRY_HANDED_OFF,
-    PERMISSION_RESOLVED,
-    PROGRAM_BOUND,
-    PROGRAM_EXECUTED,
-    PROGRAM_PREFLIGHTED,
-    PROJECT_VALIDATED,
-    PROJECT_PROMOTED,
-    PROVIDER_TURN_OBSERVED,
-    RESULT_VERIFIED,
-    RESULT_QUANTITIES_EXTRACTED,
-    THERMOCHEMISTRY_DERIVED,
-    TASK_DEPENDENCY_CONTEXT_SELECTED,
-    QUANTITY_EXPRESSION_EVALUATED,
-    SCIENTIFIC_VALIDATION_EVALUATED,
-    SCIENTIFIC_DECISION_RECORDED,
-    SCIENTIFIC_WORKFLOW_MATERIALIZED,
-    WORKFLOW_REVIEW_RESOLVED,
-    EXECUTION_BUNDLE_CONSUMED,
-    RUNTIME_TERMINATED,
-    SAFE_PREVIEWED,
-    SUBSTITUTION_ASSESSED,
-    VALIDATOR_OBSERVED,
-    WORKFLOW_PLANNED,
-    WORKFLOW_APPROVAL_CONSUMED,
-    WORKFLOW_EXECUTION_STARTED,
-    WORKFLOW_LAUNCH_RESERVED,
-    WORKFLOW_DATA_EDGE_BOUND,
-    WORKFLOW_NODE_STATE_CHANGED,
-    TOOL_WAITING,
-    TOOL_WOKE,
-    RuntimeEvent,
 )
 
 
@@ -96,25 +96,41 @@ class RuntimeState:
     analysis_completion_receipts: list[str] = field(default_factory=list)
     dependency_context_receipts: list[str] = field(default_factory=list)
     execution_receipts: list[str] = field(default_factory=list)
-    optimized_geometry_handoff_receipts: list[str] = field(default_factory=list)
+    optimized_geometry_handoff_receipts: list[str] = field(
+        default_factory=list
+    )
     permission_receipts: list[str] = field(default_factory=list)
     legacy_permission_events: int = 0
     provider_turn_receipts: list[str] = field(default_factory=list)
     api_attempt_receipts: list[str] = field(default_factory=list)
     materialized_workflow_receipts: list[str] = field(default_factory=list)
-    workflow_review_resolution_receipts: list[str] = field(default_factory=list)
-    execution_bundle_consumption_receipts: list[str] = field(default_factory=list)
+    workflow_review_resolution_receipts: list[str] = field(
+        default_factory=list
+    )
+    execution_bundle_consumption_receipts: list[str] = field(
+        default_factory=list
+    )
     consumed_execution_bundle_sha256s: list[str] = field(default_factory=list)
     consumed_execution_approval_ids: list[str] = field(default_factory=list)
     workflow_approval_receipts: list[str] = field(default_factory=list)
     workflow_execution_start_receipts: list[str] = field(default_factory=list)
-    workflow_launch_reservation_receipts: list[str] = field(default_factory=list)
-    workflow_data_edge_binding_receipts: list[str] = field(default_factory=list)
+    workflow_launch_reservation_receipts: list[str] = field(
+        default_factory=list
+    )
+    workflow_data_edge_binding_receipts: list[str] = field(
+        default_factory=list
+    )
     workflow_node_state_receipts: list[str] = field(default_factory=list)
     consumed_workflow_approval_ids: list[str] = field(default_factory=list)
-    scientific_workflow_plan_records: dict[str, dict] = field(default_factory=dict)
-    materialized_workflow_records: dict[str, dict] = field(default_factory=dict)
-    frozen_workflow_approval_records: dict[str, dict] = field(default_factory=dict)
+    scientific_workflow_plan_records: dict[str, dict] = field(
+        default_factory=dict
+    )
+    materialized_workflow_records: dict[str, dict] = field(
+        default_factory=dict
+    )
+    frozen_workflow_approval_records: dict[str, dict] = field(
+        default_factory=dict
+    )
     workflow_launch_reservation_records: dict[str, dict] = field(
         default_factory=dict
     )
@@ -127,7 +143,9 @@ class RuntimeState:
     validated_data_edge_binding_records: dict[str, dict] = field(
         default_factory=dict
     )
-    legacy_incomplete_execution_node_ids: list[str] = field(default_factory=list)
+    legacy_incomplete_execution_node_ids: list[str] = field(
+        default_factory=list
+    )
     workflow_run_records: dict[str, dict] = field(default_factory=dict)
     unknown_event_kinds: list[str] = field(default_factory=list)
     seen_idempotency_keys: dict[str, str] = field(default_factory=dict)
@@ -158,13 +176,22 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         raise ContractError("runtime event sequence is not contiguous")
     if not state.latest_sequence and event.sequence != 1:
         raise ContractError("runtime replay must begin at sequence 1")
-    if state.latest_event_hash and event.previous_hash != state.latest_event_hash:
+    if (
+        state.latest_event_hash
+        and event.previous_hash != state.latest_event_hash
+    ):
         raise ContractError("runtime event hash chain is broken")
     idempotency_identity = canonical_sha256(
         {"kind": event.kind, "payload": event.payload}
     )
-    if event.idempotency_key and event.idempotency_key in state.seen_idempotency_keys:
-        if state.seen_idempotency_keys[event.idempotency_key] != idempotency_identity:
+    if (
+        event.idempotency_key
+        and event.idempotency_key in state.seen_idempotency_keys
+    ):
+        if (
+            state.seen_idempotency_keys[event.idempotency_key]
+            != idempotency_identity
+        ):
             raise ContractError(
                 "idempotency key was reused with a different action payload"
             )
@@ -232,11 +259,13 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
             plan_record = event.payload.get("scientific_plan_record")
             if isinstance(plan_record, dict) and plan_record:
                 plan = scientific_workflow_plan_from_record(plan_record)
-                state.scientific_workflow_plan_records[
-                    plan.plan_sha256
-                ] = canonical_data(plan)
+                state.scientific_workflow_plan_records[plan.plan_sha256] = (
+                    canonical_data(plan)
+                )
         elif event.kind == SCIENTIFIC_WORKFLOW_MATERIALIZED:
-            workflow = materialized_workflow_from_record(event.payload["record"])
+            workflow = materialized_workflow_from_record(
+                event.payload["record"]
+            )
             state.materialized_workflow_records[
                 workflow.materialized_sha256
             ] = canonical_data(workflow)
@@ -255,7 +284,10 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
                 approval.approval_sha256
             ] = canonical_data(approval)
             approval_id = str(event.payload.get("approval_id") or "")
-            if approval_id and approval_id not in state.consumed_workflow_approval_ids:
+            if (
+                approval_id
+                and approval_id not in state.consumed_workflow_approval_ids
+            ):
                 state.consumed_workflow_approval_ids.append(approval_id)
         elif event.kind == WORKFLOW_LAUNCH_RESERVED:
             reservation = workflow_node_launch_reservation_from_record(
@@ -276,9 +308,9 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
             run_state = workflow_run_state_from_record(
                 event.payload["run_state_record"]
             )
-            state.scientific_workflow_plan_records[
-                plan.plan_sha256
-            ] = canonical_data(plan)
+            state.scientific_workflow_plan_records[plan.plan_sha256] = (
+                canonical_data(plan)
+            )
             state.materialized_workflow_records[
                 materialized.materialized_sha256
             ] = canonical_data(materialized)
@@ -294,7 +326,10 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
             state.workflow_run_records[run_state.run_id] = canonical_data(
                 run_state
             )
-            if approval.approval_id not in state.consumed_workflow_approval_ids:
+            if (
+                approval.approval_id
+                not in state.consumed_workflow_approval_ids
+            ):
                 state.consumed_workflow_approval_ids.append(
                     approval.approval_id
                 )
@@ -362,7 +397,11 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
         request_id = str(event.payload.get("request_id") or "")
         state.active_waits.pop(request_id, None)
         state.completed_waits.append(dict(event.payload))
-    elif event.kind in {"tool_succeeded", "tool_failed", "tool_request_rejected"}:
+    elif event.kind in {
+        "tool_succeeded",
+        "tool_failed",
+        "tool_request_rejected",
+    }:
         request_id = str(event.payload.get("request_id") or "")
         state.active_tool_calls.pop(request_id, None)
         if event.kind == "tool_succeeded":
@@ -400,17 +439,23 @@ def reduce_event(state: RuntimeState, event: RuntimeEvent) -> RuntimeState:
             str(event.payload.get("rule_id") or "runtime.shadow.tool_exposure")
         )
     elif event.kind in {"turn_completed", "turn_blocked"}:
-        state.phase = "complete" if event.kind == "turn_completed" else "blocked"
+        state.phase = (
+            "complete" if event.kind == "turn_completed" else "blocked"
+        )
         if event.kind == "turn_completed":
             state.unresolved_slots = []
             state.pending_approval = ""
         else:
-            state.blocked_reason = str(event.payload.get("reason") or "blocked")
+            state.blocked_reason = str(
+                event.payload.get("reason") or "blocked"
+            )
     else:
         state.unknown_event_kinds.append(event.kind)
 
     if event.idempotency_key:
-        state.seen_idempotency_keys[event.idempotency_key] = idempotency_identity
+        state.seen_idempotency_keys[event.idempotency_key] = (
+            idempotency_identity
+        )
     state.latest_sequence = event.sequence
     state.latest_event_hash = event.event_hash
     return state

@@ -27,16 +27,13 @@ from chemsmart.agent.live_session import (
     replay_approval_id,
     resolve_workflow_execution_review,
 )
-
 from tests.agent.test_exact_execution_approval_chain import _review
 
 
 def _stored_review(tmp_path):
     review = _review(tmp_path)
     path = tmp_path / "review.json"
-    path.write_text(
-        workflow_execution_review_json(review), encoding="utf-8"
-    )
+    path.write_text(workflow_execution_review_json(review), encoding="utf-8")
     return review, path
 
 
@@ -101,7 +98,7 @@ def test_the_spent_approval_stays_spent(tmp_path):
 
 
 def test_the_preview_names_the_identity_already_burned(tmp_path):
-    """"Already consumed" becomes an instruction instead of a dead end."""
+    """ "Already consumed" becomes an instruction instead of a dead end."""
 
     review, review_path = _stored_review(tmp_path)
     workspace = review.request.workspace

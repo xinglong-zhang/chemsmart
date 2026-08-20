@@ -32,15 +32,15 @@ from chemsmart.agent._contracts import (
     canonical_json,
     canonical_sha256,
     file_sha256,
-    require_identifier,
     require_auxiliary_artifact_bindings,
+    require_identifier,
     require_sha256,
 )
-from chemsmart.agent.scientific_toolchain import ScientificToolchainPlanV1
 from chemsmart.agent.projects import (
     ProjectRenderReceiptV1,
     ProjectValidationReceiptV1,
 )
+from chemsmart.agent.scientific_toolchain import ScientificToolchainPlanV1
 from chemsmart.agent.workflows import (
     PREVIEW_RESOURCE_SHA256,
     MaterializedWorkflowV1,
@@ -447,9 +447,7 @@ def compose_trusted_molecular_arrangement(
     from chemsmart.utils.periodictable import covalent_radii
 
     if fragment_a.kind != "geometry_xyz" or fragment_b.kind != "geometry_xyz":
-        raise ContractError(
-            "composition consumes two geometry_xyz artifacts"
-        )
+        raise ContractError("composition consumes two geometry_xyz artifacts")
     distance = float(distance_angstrom)
     if not 0.5 <= distance <= 10.0:
         raise ContractError(
@@ -504,9 +502,7 @@ def compose_trusted_molecular_arrangement(
         )
     positions_a = array_a[:, 1:4]
     positions_b = placed[:, 1:4]
-    achieved = float(
-        np.linalg.norm(positions_b[link_b] - positions_a[link_a])
-    )
+    achieved = float(np.linalg.norm(positions_b[link_b] - positions_a[link_a]))
     pair_distances = np.linalg.norm(
         positions_b[:, np.newaxis, :] - positions_a[np.newaxis, :, :],
         axis=2,
@@ -519,11 +515,14 @@ def compose_trusted_molecular_arrangement(
         symbols=list(symbols),
         positions=np.vstack((positions_a, positions_b)),
     )
-    lines = [str(len(symbols)), (
-        "ChemSmart composed arrangement; fragment A atoms first; "
-        f"contact {fragment_a_atom}(A)-{fragment_b_atom}(B) at "
-        f"{achieved:.4f} angstrom; electronic state deliberately unbound"
-    )]
+    lines = [
+        str(len(symbols)),
+        (
+            "ChemSmart composed arrangement; fragment A atoms first; "
+            f"contact {fragment_a_atom}(A)-{fragment_b_atom}(B) at "
+            f"{achieved:.4f} angstrom; electronic state deliberately unbound"
+        ),
+    ]
     for symbol, position in zip(symbols, composed.positions):
         lines.append(
             f"{symbol:<3} {position[0]:.10f} {position[1]:.10f} "
@@ -1258,8 +1257,9 @@ def build_program_execution_invocation(
     handoff: OptimizedGeometryHandoffV1 | None = None,
     environment_identity_sha256: str = "",
     invocation_identity_sha256: str = "",
-    auxiliary_input_artifacts: Mapping[str, TrustedArtifactRefV1]
-    | None = None,
+    auxiliary_input_artifacts: (
+        Mapping[str, TrustedArtifactRefV1] | None
+    ) = None,
     auxiliary_handoffs: Mapping[str, ORCAHessianHandoffV1] | None = None,
 ) -> ProgramExecutionInvocationV1:
     """Resolve a ``node_id`` to an exact invocation using host bindings.
@@ -1329,7 +1329,9 @@ def build_program_execution_invocation(
                 == (node.charge, node.multiplicity)
             )
         if not future_auxiliary_ok:
-            raise ContractError("auxiliary inputs differ from workflow approval")
+            raise ContractError(
+                "auxiliary inputs differ from workflow approval"
+            )
     if resources.resource_sha256 != approval.resource_sha256:
         raise ContractError("resources differ from workflow approval")
     if project_artifact.sha256 != node.project_artifact_sha256:
@@ -2617,7 +2619,9 @@ def _nonempty_section_lines(
     return [line.strip() for line in values if line.strip()]
 
 
-def _parse_orca_hessian(path: Path, *, symmetry_atol: float = 1e-10) -> _ParsedORCAHessian:
+def _parse_orca_hessian(
+    path: Path, *, symmetry_atol: float = 1e-10
+) -> _ParsedORCAHessian:
     """Parse the native Hessian, atoms and frequency blocks fail-closed."""
 
     sections = _orca_hessian_sections(path)
@@ -2632,7 +2636,9 @@ def _parse_orca_hessian(path: Path, *, symmetry_atol: float = 1e-10) -> _ParsedO
     cursor = 1
     try:
         while cursor < len(hessian_lines):
-            columns = tuple(int(value) for value in hessian_lines[cursor].split())
+            columns = tuple(
+                int(value) for value in hessian_lines[cursor].split()
+            )
             cursor += 1
             if not columns or any(
                 column < 0 or column >= dimension for column in columns
@@ -2666,7 +2672,10 @@ def _parse_orca_hessian(path: Path, *, symmetry_atol: float = 1e-10) -> _ParsedO
         frequency_count = int(frequency_lines[0])
         atom_rows = tuple(line.split() for line in atom_lines[1:])
         frequency_rows = tuple(line.split() for line in frequency_lines[1:])
-        if len(atom_rows) != atom_count or len(frequency_rows) != frequency_count:
+        if (
+            len(atom_rows) != atom_count
+            or len(frequency_rows) != frequency_count
+        ):
             raise ValueError
         symbols = tuple(row[0] for row in atom_rows)
         positions_bohr = np.asarray(
@@ -2674,15 +2683,20 @@ def _parse_orca_hessian(path: Path, *, symmetry_atol: float = 1e-10) -> _ParsedO
             dtype=float,
         )
         frequencies = tuple(float(row[1]) for row in frequency_rows)
-        if any(int(row[0]) != index for index, row in enumerate(frequency_rows)):
+        if any(
+            int(row[0]) != index for index, row in enumerate(frequency_rows)
+        ):
             raise ValueError
     except (IndexError, TypeError, ValueError) as exc:
-        raise ContractError("ORCA Hessian atoms or frequencies are malformed") from exc
+        raise ContractError(
+            "ORCA Hessian atoms or frequencies are malformed"
+        ) from exc
     if dimension != 3 * atom_count or frequency_count != dimension:
         raise ContractError("ORCA Hessian blocks do not have finite 3N shape")
-    if positions_bohr.shape != (atom_count, 3) or not np.isfinite(
-        positions_bohr
-    ).all():
+    if (
+        positions_bohr.shape != (atom_count, 3)
+        or not np.isfinite(positions_bohr).all()
+    ):
         raise ContractError("ORCA Hessian atom coordinates are non-finite")
     if not all(math.isfinite(value) for value in frequencies):
         raise ContractError("ORCA Hessian frequencies are non-finite")
@@ -2773,10 +2787,13 @@ def handoff_final_orca_ts_hessian(
             int(expected_multiplicity),
         ):
             raise ContractError("ORCA TS state differs from approval")
-        final_symbols = tuple(str(value) for value in output.molecule.chemical_symbols)
+        final_symbols = tuple(
+            str(value) for value in output.molecule.chemical_symbols
+        )
         final_positions = np.asarray(output.molecule.positions, dtype=float)
         final_frequencies = tuple(
-            float(value) for value in (output.all_vibrational_frequencies or ())
+            float(value)
+            for value in (output.all_vibrational_frequencies or ())
         )
     except ContractError:
         raise
@@ -2806,8 +2823,11 @@ def handoff_final_orca_ts_hessian(
             parsed = _parse_orca_hessian(path)
         except ContractError:
             continue
-        if parsed.symbols != final_symbols or not _same_orca_geometry_up_to_rotation(
-            parsed.positions_bohr, final_positions
+        if (
+            parsed.symbols != final_symbols
+            or not _same_orca_geometry_up_to_rotation(
+                parsed.positions_bohr, final_positions
+            )
         ):
             continue
         if len(parsed.frequencies_cm1) != len(final_frequencies) or any(
@@ -3004,9 +3024,7 @@ def handoff_validated_orca_producer_hessian(
             "ORCA producer Hessian receipt differs from producer edge"
         )
     if producer_edge.selection_rule != "validated_producer_orca_hessian":
-        raise ContractError(
-            "unsupported ORCA producer Hessian selection rule"
-        )
+        raise ContractError("unsupported ORCA producer Hessian selection rule")
     if producer_edge.artifact_kind != "orca_hessian":
         raise ContractError(
             "ORCA producer Hessian edge has the wrong artifact class"
@@ -3032,9 +3050,7 @@ def handoff_validated_orca_producer_hessian(
             int(expected_charge),
             int(expected_multiplicity),
         ):
-            raise ContractError(
-                "ORCA producer state differs from approval"
-            )
+            raise ContractError("ORCA producer state differs from approval")
         final_symbols = tuple(
             str(value) for value in output.molecule.chemical_symbols
         )
@@ -3372,11 +3388,7 @@ def is_validated_optimized_geometry_edge(
     if edge.edge_kind != "data" or edge.artifact_class != "geometry_xyz":
         return False
     source = next(
-        (
-            node
-            for node in plan.nodes
-            if node.node_id == edge.source_node_id
-        ),
+        (node for node in plan.nodes if node.node_id == edge.source_node_id),
         None,
     )
     return bool(
@@ -3922,9 +3934,7 @@ def execution_server_profile_sha256(
         {
             "schema_version": "chemsmart.execution-server-profile.v1",
             "resource_sha256": resources.resource_sha256,
-            "scratch_root_sha256": canonical_sha256(
-                {"scratch_root": scratch}
-            ),
+            "scratch_root_sha256": canonical_sha256({"scratch_root": scratch}),
         }
     )
 
@@ -3945,7 +3955,9 @@ def _path_free_review_value(value: Any, *, field_name: str = "") -> Any:
     if isinstance(value, Mapping):
         return {
             str(key): _path_free_review_value(item, field_name=str(key))
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            for key, item in sorted(
+                value.items(), key=lambda pair: str(pair[0])
+            )
         }
     if isinstance(value, (list, tuple)):
         return tuple(
@@ -3964,7 +3976,9 @@ def path_free_review_record(value: Mapping[str, Any]) -> dict[str, Any]:
     """Create the canonical path-free public projection of a reviewed record."""
 
     projected = _path_free_review_value(value)
-    if not isinstance(projected, dict):  # pragma: no cover - Mapping narrows this
+    if not isinstance(
+        projected, dict
+    ):  # pragma: no cover - Mapping narrows this
         raise ContractError("review record must project to an object")
     return projected
 
@@ -3976,9 +3990,7 @@ def normalized_project_settings_review(
 
     projected = path_free_review_record(dict(settings))
     text = canonical_json(projected)
-    return text, canonical_sha256(
-        {"normalized_project_settings_text": text}
-    )
+    return text, canonical_sha256({"normalized_project_settings_text": text})
 
 
 def environment_review_summary(receipt: Any) -> dict[str, Any]:
@@ -4002,8 +4014,7 @@ def environment_review_summary(receipt: Any) -> dict[str, Any]:
             receipt, "compute_evidence_sha256", ""
         ),
         "dependency_versions": tuple(
-            tuple(item)
-            for item in getattr(receipt, "dependency_versions", ())
+            tuple(item) for item in getattr(receipt, "dependency_versions", ())
         ),
         "solver_evidence": tuple(
             tuple(item) for item in getattr(receipt, "solver_evidence", ())
@@ -4037,7 +4048,9 @@ def build_real_execution_argv(
     try:
         program_index = argv.index(program, 2)
     except ValueError as exc:
-        raise ContractError("compiled argv does not contain its program") from exc
+        raise ContractError(
+            "compiled argv does not contain its program"
+        ) from exc
     root = [
         sys.executable,
         "-m",
@@ -4047,9 +4060,7 @@ def build_real_execution_argv(
         "--delete-scratch",
     ]
     root.append(
-        "--no-scratch"
-        if resources.scratch_policy == "none"
-        else "--scratch"
+        "--no-scratch" if resources.scratch_policy == "none" else "--scratch"
     )
     root.extend(("--num-cores", str(resources.cores)))
     root.extend(("--num-gpus", str(resources.gpu_count)))
@@ -4101,7 +4112,9 @@ def _require_path_free_review_value(value: Any, field_name: str) -> None:
         for item in value:
             _require_path_free_review_value(item, field_name)
     elif isinstance(value, str) and _looks_absolute_path(value):
-        raise ContractError(f"{field_name} cannot expose an absolute host path")
+        raise ContractError(
+            f"{field_name} cannot expose an absolute host path"
+        )
 
 
 @dataclass(frozen=True)
@@ -4130,7 +4143,10 @@ class WorkflowExecutionNodeReviewV1:
     projection_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.workflow-execution-node-review.v1":
+        if (
+            self.schema_version
+            != "chemsmart.workflow-execution-node-review.v1"
+        ):
             raise ContractError("unsupported workflow node review schema")
         for name, value in (
             ("node_id", self.node_id),
@@ -4143,10 +4159,14 @@ class WorkflowExecutionNodeReviewV1:
             self, "molecular_identity", canonical_data(self.molecular_identity)
         )
         object.__setattr__(
-            self, "execution_resources", canonical_data(self.execution_resources)
+            self,
+            "execution_resources",
+            canonical_data(self.execution_resources),
         )
         object.__setattr__(
-            self, "environment_summary", canonical_data(self.environment_summary)
+            self,
+            "environment_summary",
+            canonical_data(self.environment_summary),
         )
         object.__setattr__(
             self, "real_execution_argv", tuple(self.real_execution_argv)
@@ -4155,7 +4175,10 @@ class WorkflowExecutionNodeReviewV1:
             ("molecular_identity_sha256", self.molecular_identity_sha256),
             ("project_artifact_sha256", self.project_artifact_sha256),
             ("project_settings_sha256", self.project_settings_sha256),
-            ("project_settings_text_sha256", self.project_settings_text_sha256),
+            (
+                "project_settings_text_sha256",
+                self.project_settings_text_sha256,
+            ),
             ("real_execution_argv_sha256", self.real_execution_argv_sha256),
             ("resource_sha256", self.resource_sha256),
             ("server_profile_sha256", self.server_profile_sha256),
@@ -4188,10 +4211,13 @@ class WorkflowExecutionNodeReviewV1:
             raise ContractError(
                 "project settings review must be canonical JSON"
             ) from exc
-        if not isinstance(parsed_settings, Mapping) or canonical_json(
-            parsed_settings
-        ) != self.project_settings_text:
-            raise ContractError("project settings review must be a canonical object")
+        if (
+            not isinstance(parsed_settings, Mapping)
+            or canonical_json(parsed_settings) != self.project_settings_text
+        ):
+            raise ContractError(
+                "project settings review must be a canonical object"
+            )
         _require_path_free_review_value(
             parsed_settings, "project_settings_text"
         )
@@ -4326,23 +4352,47 @@ class WorkflowExecutionReviewV1:
             raise ContractError("review request belongs to another workflow")
         if self.request.workflow_sha256 != self.scientific_plan.plan_sha256:
             raise ContractError("review request differs from scientific plan")
-        if self.request.task_spec_sha256 != self.scientific_plan.task_spec_sha256:
-            raise ContractError("review request differs from task specification")
-        if self.materialized_workflow.workflow_id != self.scientific_plan.workflow_id:
-            raise ContractError("review materialization belongs to another workflow")
-        if self.materialized_workflow.plan_sha256 != self.scientific_plan.plan_sha256:
-            raise ContractError("review materialization differs from scientific plan")
+        if (
+            self.request.task_spec_sha256
+            != self.scientific_plan.task_spec_sha256
+        ):
+            raise ContractError(
+                "review request differs from task specification"
+            )
+        if (
+            self.materialized_workflow.workflow_id
+            != self.scientific_plan.workflow_id
+        ):
+            raise ContractError(
+                "review materialization belongs to another workflow"
+            )
+        if (
+            self.materialized_workflow.plan_sha256
+            != self.scientific_plan.plan_sha256
+        ):
+            raise ContractError(
+                "review materialization differs from scientific plan"
+            )
         if self.materialized_workflow.task_spec_sha256 != (
             self.scientific_plan.task_spec_sha256
         ):
-            raise ContractError("review materialization differs from task specification")
-        if self.request.resource_sha256 != self.execution_resources.resource_sha256:
-            raise ContractError("review request differs from execution resources")
+            raise ContractError(
+                "review materialization differs from task specification"
+            )
+        if (
+            self.request.resource_sha256
+            != self.execution_resources.resource_sha256
+        ):
+            raise ContractError(
+                "review request differs from execution resources"
+            )
         if self.materialized_workflow.resource_sha256 not in {
             PREVIEW_RESOURCE_SHA256,
             self.execution_resources.resource_sha256,
         }:
-            raise ContractError("review materialization differs from resources")
+            raise ContractError(
+                "review materialization differs from resources"
+            )
         planned_by_id = {
             node.node_id: node for node in self.scientific_plan.nodes
         }
@@ -4352,7 +4402,9 @@ class WorkflowExecutionReviewV1:
                 "non-executable node ids must be sorted and unique"
             )
         if not set(non_executable).issubset(planned_by_id):
-            raise ContractError("a non-executable node must belong to the plan")
+            raise ContractError(
+                "a non-executable node must belong to the plan"
+            )
         for node_id in non_executable:
             if planned_by_id[node_id].support_state != "blocked_unsupported":
                 raise ContractError(
@@ -4360,7 +4412,9 @@ class WorkflowExecutionReviewV1:
                 )
         executed_ids = set(planned_by_id) - set(non_executable)
         if not executed_ids:
-            raise ContractError("an execution review requires an executable node")
+            raise ContractError(
+                "an execution review requires an executable node"
+            )
         for edge in self.scientific_plan.edges:
             if (
                 edge.source_node_id in set(non_executable)
@@ -4375,7 +4429,9 @@ class WorkflowExecutionReviewV1:
                 "review environment bindings must be sorted and node-unique"
             )
         if set(node_ids) != executed_ids:
-            raise ContractError("review environments must cover every executed node")
+            raise ContractError(
+                "review environments must cover every executed node"
+            )
         review_node_ids = tuple(item.node_id for item in self.node_reviews)
         if review_node_ids != tuple(sorted(set(review_node_ids))):
             raise ContractError("node reviews must be sorted and node-unique")
@@ -4400,8 +4456,7 @@ class WorkflowExecutionReviewV1:
             ):
                 raise ContractError("node review differs from scientific plan")
             if (
-                item.project_artifact_sha256
-                != binding.project_artifact_sha256
+                item.project_artifact_sha256 != binding.project_artifact_sha256
                 or item.project_settings_sha256 != binding.settings_sha256
                 or item.resource_sha256
                 != self.execution_resources.resource_sha256
@@ -4413,7 +4468,9 @@ class WorkflowExecutionReviewV1:
                 or item.environment_identity_sha256
                 != environment.environment_identity_sha256
             ):
-                raise ContractError("node review differs from environment binding")
+                raise ContractError(
+                    "node review differs from environment binding"
+                )
             if (
                 item.environment_summary.get("program") != item.program
                 or item.environment_summary.get("engine") != item.engine
@@ -4454,8 +4511,13 @@ class WorkflowExecutionReviewV1:
             if self.stationary_point_policy.task_spec_sha256 != (
                 self.scientific_plan.task_spec_sha256
             ):
-                raise ContractError("stationary-point policy belongs to another task")
-            if self.stationary_point_policy.hessian_node_id not in executed_ids:
+                raise ContractError(
+                    "stationary-point policy belongs to another task"
+                )
+            if (
+                self.stationary_point_policy.hessian_node_id
+                not in executed_ids
+            ):
                 raise ContractError(
                     "execution stationary-point policy requires an executable "
                     "Hessian node"
@@ -4537,7 +4599,9 @@ class WorkflowReviewResolutionV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.workflow-review-resolution.v1":
-            raise ContractError("unsupported workflow review resolution schema")
+            raise ContractError(
+                "unsupported workflow review resolution schema"
+            )
         require_identifier(self.resolution_id, "resolution_id")
         require_sha256(self.review_sha256, "review_sha256")
         if self.decision not in {"approve", "deny", "revise", "quit"}:
@@ -4547,9 +4611,13 @@ class WorkflowReviewResolutionV1:
         if self.decision == "approve":
             require_identifier(self.approval_id, "approval_id")
             if not self.one_shot:
-                raise ContractError("workflow execution approval must be one-shot")
+                raise ContractError(
+                    "workflow execution approval must be one-shot"
+                )
         elif self.approval_id or self.one_shot:
-            raise ContractError("a non-approval decision cannot grant authority")
+            raise ContractError(
+                "a non-approval decision cannot grant authority"
+            )
         if self.resolution_sha256 != canonical_sha256(self._body()):
             raise ContractError("workflow review resolution digest mismatch")
 
@@ -4611,7 +4679,10 @@ class WorkflowExecutionApprovalBundleV1:
     scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.workflow-execution-approval-bundle.v1":
+        if (
+            self.schema_version
+            != "chemsmart.workflow-execution-approval-bundle.v1"
+        ):
             raise ContractError("unsupported execution approval bundle schema")
         object.__setattr__(
             self,
@@ -4629,9 +4700,13 @@ class WorkflowExecutionApprovalBundleV1:
         )
         object.__setattr__(self, "node_reviews", tuple(self.node_reviews))
         if self.resolution.decision != "approve":
-            raise ContractError("execution bundle requires an approve resolution")
+            raise ContractError(
+                "execution bundle requires an approve resolution"
+            )
         if self.resolution.review_sha256 != self.review_sha256:
-            raise ContractError("execution bundle resolution targets another review")
+            raise ContractError(
+                "execution bundle resolution targets another review"
+            )
         if self.resolution.approval_id != self.workflow_approval.approval_id:
             raise ContractError("execution bundle approval IDs differ")
         frozen = self.frozen_workflow_approval
@@ -4641,22 +4716,34 @@ class WorkflowExecutionApprovalBundleV1:
         if frozen.workflow_id != approval.workflow_id:
             raise ContractError("frozen and workflow approvals differ")
         if frozen.plan_sha256 != self.approved_scientific_plan.plan_sha256:
-            raise ContractError("execution bundle plan differs from frozen approval")
+            raise ContractError(
+                "execution bundle plan differs from frozen approval"
+            )
         if frozen.materialized_workflow_sha256 != (
             self.approved_materialized_workflow.materialized_sha256
         ):
             raise ContractError(
                 "execution bundle materialization differs from frozen approval"
             )
-        if approval.resource_sha256 != self.execution_resources.resource_sha256:
-            raise ContractError("execution bundle resources differ from approval")
+        if (
+            approval.resource_sha256
+            != self.execution_resources.resource_sha256
+        ):
+            raise ContractError(
+                "execution bundle resources differ from approval"
+            )
         identities = tuple(sorted(set(self.approved_environment_identities)))
-        if identities != self.approved_environment_identities or not identities:
+        if (
+            identities != self.approved_environment_identities
+            or not identities
+        ):
             raise ContractError(
                 "approved environment identities must be sorted, unique, and nonempty"
             )
         if identities != frozen.environment_identity_sha256s:
-            raise ContractError("execution bundle environments differ from approval")
+            raise ContractError(
+                "execution bundle environments differ from approval"
+            )
         planned_by_id = {
             item.node_id: item for item in self.approved_scientific_plan.nodes
         }
@@ -4671,7 +4758,9 @@ class WorkflowExecutionApprovalBundleV1:
             )
         executed_ids = set(planned_by_id) - set(non_executable)
         if not executed_ids:
-            raise ContractError("an execution bundle requires an executable node")
+            raise ContractError(
+                "an execution bundle requires an executable node"
+            )
         for node_id in non_executable:
             if planned_by_id[node_id].support_state != "blocked_unsupported":
                 raise ContractError(
@@ -4735,7 +4824,10 @@ class WorkflowExecutionApprovalBundleV1:
             )
         if self.scientific_toolchain_plan is not None:
             toolchain = self.scientific_toolchain_plan
-            if toolchain.workflow_id != self.approved_scientific_plan.workflow_id:
+            if (
+                toolchain.workflow_id
+                != self.approved_scientific_plan.workflow_id
+            ):
                 raise ContractError(
                     "bundle toolchain plan belongs to another workflow"
                 )
@@ -4745,7 +4837,8 @@ class WorkflowExecutionApprovalBundleV1:
                 )
         if (
             self.stationary_point_policy is not None
-            and self.stationary_point_policy.hessian_node_id not in executed_ids
+            and self.stationary_point_policy.hessian_node_id
+            not in executed_ids
         ):
             raise ContractError(
                 "execution stationary-point policy requires an executable "
@@ -4756,17 +4849,16 @@ class WorkflowExecutionApprovalBundleV1:
             raise ContractError("execution bundle node reviews must be unique")
         if set(node_ids) != executed_ids:
             raise ContractError("execution bundle node reviews are incomplete")
-        binding_by_id = {
-            item.node_id: item for item in approval.node_bindings
-        }
+        binding_by_id = {item.node_id: item for item in approval.node_bindings}
         if set(binding_by_id) != executed_ids:
-            raise ContractError("execution bundle node bindings are incomplete")
+            raise ContractError(
+                "execution bundle node bindings are incomplete"
+            )
         for item in self.node_reviews:
             binding = binding_by_id[item.node_id]
             planned = planned_by_id[item.node_id]
             if (
-                item.project_artifact_sha256
-                != binding.project_artifact_sha256
+                item.project_artifact_sha256 != binding.project_artifact_sha256
                 or item.project_settings_sha256 != binding.settings_sha256
                 or item.resource_sha256
                 != self.execution_resources.resource_sha256
@@ -4789,22 +4881,30 @@ class WorkflowExecutionApprovalBundleV1:
                 item.environment_summary.get("program") != item.program
                 or item.environment_summary.get("engine") != item.engine
             ):
-                raise ContractError("execution bundle environment summary differs")
+                raise ContractError(
+                    "execution bundle environment summary differs"
+                )
             coordinate = molecular.get("coordinate_identity")
             if not isinstance(coordinate, Mapping):
-                raise ContractError("execution bundle lacks coordinate identity")
+                raise ContractError(
+                    "execution bundle lacks coordinate identity"
+                )
             if binding.input_mode == "initial" and (
                 coordinate.get("kind") != "exact-input-artifact"
                 or coordinate.get("geometry_artifact_sha256")
                 != binding.initial_artifact_sha256
             ):
-                raise ContractError("execution bundle initial geometry differs")
+                raise ContractError(
+                    "execution bundle initial geometry differs"
+                )
             if binding.input_mode == "producer" and (
                 coordinate.get("kind") != "validated-producer-output"
                 or coordinate.get("producer_edge_sha256")
                 != binding.producer_edge_sha256
             ):
-                raise ContractError("execution bundle producer geometry differs")
+                raise ContractError(
+                    "execution bundle producer geometry differs"
+                )
         expected_server_profile = execution_server_profile_sha256(
             resources=self.execution_resources,
             scratch_root=str(self.execution_envelope.get("scratch_root", "")),
@@ -4815,9 +4915,13 @@ class WorkflowExecutionApprovalBundleV1:
         ):
             raise ContractError("execution bundle server profile differs")
         if not self.one_shot or self.status != "approved":
-            raise ContractError("execution bundle must be approved and one-shot")
+            raise ContractError(
+                "execution bundle must be approved and one-shot"
+            )
         if self.bundle_sha256 != canonical_sha256(self._body()):
-            raise ContractError("workflow execution approval bundle digest mismatch")
+            raise ContractError(
+                "workflow execution approval bundle digest mismatch"
+            )
 
     def _body(self) -> dict[str, Any]:
         body = {
@@ -4836,7 +4940,9 @@ class WorkflowExecutionApprovalBundleV1:
     def node_review(self, node_id: str) -> WorkflowExecutionNodeReviewV1:
         """Return the exact human-reviewed projection for one workflow node."""
 
-        matches = tuple(item for item in self.node_reviews if item.node_id == node_id)
+        matches = tuple(
+            item for item in self.node_reviews if item.node_id == node_id
+        )
         if len(matches) != 1:
             raise ContractError("execution bundle has no unique node review")
         return matches[0]
@@ -4938,7 +5044,9 @@ def workflow_execution_review_json(review: WorkflowExecutionReviewV1) -> str:
 def workflow_execution_approval_bundle_json(
     bundle: WorkflowExecutionApprovalBundleV1,
 ) -> str:
-    return canonical_json({"workflow_execution_approval_bundle": bundle}) + "\n"
+    return (
+        canonical_json({"workflow_execution_approval_bundle": bundle}) + "\n"
+    )
 
 
 @dataclass(frozen=True)
@@ -5529,7 +5637,9 @@ def transition_workflow_node(
             plan.workflow_id != run_state.workflow_id
             or plan.plan_sha256 != run_state.plan_sha256
         ):
-            raise ContractError("workflow transition plan differs from run state")
+            raise ContractError(
+                "workflow transition plan differs from run state"
+            )
     if new_state == "validated":
         if result_validation_receipt is None:
             raise ContractError(
@@ -5675,10 +5785,7 @@ def _block_failed_descendants(
                 continue
             rules = tuple(
                 sorted(
-                    "workflow.dependency."
-                    + by_id[source].state
-                    + "."
-                    + source
+                    "workflow.dependency." + by_id[source].state + "." + source
                     for source in failed_sources
                 )
             )

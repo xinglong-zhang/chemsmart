@@ -10,22 +10,25 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 from typing import Iterable
 
 from click.testing import CliRunner
 
-from chemsmart.agent._contracts import ContractError, canonical_sha256, file_sha256
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_sha256,
+    file_sha256,
+)
 from chemsmart.agent.capabilities import (
     ProgramComponentConformanceReceiptV1,
     TrustedComputeEnvironmentReceiptV1,
     build_program_component_conformance_receipt,
     build_trusted_compute_environment_receipt,
 )
-from chemsmart.agent.commands import native_coordinate_options
 from chemsmart.agent.cli_schema import LiveClickSchemaV1
-
+from chemsmart.agent.commands import native_coordinate_options
 
 _PYTHON_PROBE = r"""
 import importlib
@@ -75,16 +78,22 @@ def probe_python_compute_environment(
     try:
         observed = json.loads(completed.stdout.strip().splitlines()[-1])
     except (IndexError, json.JSONDecodeError) as exc:
-        raise ContractError("PySCF compute environment probe was malformed") from exc
+        raise ContractError(
+            "PySCF compute environment probe was malformed"
+        ) from exc
     if Path(observed.get("interpreter", "")).resolve() != executable:
-        raise ContractError("PySCF compute interpreter identity changed during probe")
+        raise ContractError(
+            "PySCF compute interpreter identity changed during probe"
+        )
     versions = {
         str(name).lower(): str(value)
         for name, value in dict(observed.get("versions") or {}).items()
     }
     required = {"pyscf", "numpy", "h5py"}
     if not required.issubset(versions):
-        raise ContractError("PySCF compute environment lacks required packages")
+        raise ContractError(
+            "PySCF compute environment lacks required packages"
+        )
     gpu_evidence = {
         "device_available": False,
         "gpu4pyscf_distribution": "gpu4pyscf" in versions,
@@ -147,9 +156,13 @@ def bootstrap_program_conformance(
         or (project is not None and not project.is_file())
         or (server is not None and not server.is_file())
     ):
-        raise ContractError("conformance fixtures must be existing regular files")
+        raise ContractError(
+            "conformance fixtures must be existing regular files"
+        )
     if (charge is None) != (multiplicity is None):
-        raise ContractError("charge and multiplicity must be supplied together")
+        raise ContractError(
+            "charge and multiplicity must be supplied together"
+        )
     observations = []
     covered = []
     runner = CliRunner()
@@ -231,19 +244,38 @@ def bootstrap_program_conformance(
                     {
                         "target": target,
                         "argv_shape": tuple(
-                            "<input>" if value == str(input_path)
-                            else "<project>" if project is not None and value == str(project)
-                            else "<server>" if server is not None and value == str(server)
-                            else value
+                            (
+                                "<input>"
+                                if value == str(input_path)
+                                else (
+                                    "<project>"
+                                    if project is not None
+                                    and value == str(project)
+                                    else (
+                                        "<server>"
+                                        if server is not None
+                                        and value == str(server)
+                                        else value
+                                    )
+                                )
+                            )
                             for value in argv
                         ),
                         "exit_code": int(result.exit_code),
-                        "exception": type(result.exception).__name__ if result.exception else "",
+                        "exception": (
+                            type(result.exception).__name__
+                            if result.exception
+                            else ""
+                        ),
                     }
                 )
                 stage_green = stage_green and result.exit_code == 0
         observations.append(
-            {"jobtype": jobtype, "schema_green": schema_green, "paths": tuple(stage_rows)}
+            {
+                "jobtype": jobtype,
+                "schema_green": schema_green,
+                "paths": tuple(stage_rows),
+            }
         )
         if stage_green:
             covered.append(jobtype)
@@ -258,7 +290,9 @@ def bootstrap_program_conformance(
         "observations": tuple(observations),
     }
     fixture_sha = canonical_sha256(fixture)
-    passed = bool(covered) and len(covered) == len(tuple(sorted(set(jobtypes))))
+    passed = bool(covered) and len(covered) == len(
+        tuple(sorted(set(jobtypes)))
+    )
     status = "passed" if passed else "failed"
     compiler_sha = canonical_sha256(
         {"schema": live_schema.schema_sha256, "paths": tuple(observations)}

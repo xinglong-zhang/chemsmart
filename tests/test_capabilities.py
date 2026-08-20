@@ -10,8 +10,8 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.subcommands import PROGRAM_COMMAND_MODULES
 from chemsmart.cli.xtb import xtb
 from chemsmart.settings.capabilities import (
-    AGENT_PROGRAM_PREVIEW_ENGINES,
     AGENT_PROGRAM_JOBTYPES,
+    AGENT_PROGRAM_PREVIEW_ENGINES,
     AGENT_PROGRAMS,
     COMPUTATIONAL_PROGRAMS,
     ENGINE_CAPABILITIES,
@@ -78,9 +78,10 @@ def _click_jobtypes(command: click.Command) -> tuple[str, ...]:
 
 def test_registry_agrees_with_live_click_leaf_inventory():
     assert frozenset(PROGRAM_COMMANDS) == KNOWN_PROGRAMS
-    assert set(PROGRAM_COMMAND_MODULES).intersection(
-        KNOWN_PROGRAMS
-    ) == KNOWN_PROGRAMS
+    assert (
+        set(PROGRAM_COMMAND_MODULES).intersection(KNOWN_PROGRAMS)
+        == KNOWN_PROGRAMS
+    )
 
     live_jobtypes = {
         name: _click_jobtypes(command)
@@ -118,9 +119,7 @@ def test_derived_views_are_exact_registry_projections():
     assert PROGRAM_JOBTYPES is PROGRAM_CLI_JOBTYPES
     assert PROGRAM_ENGINES is PROGRAM_EXECUTION_ENGINES
     assert PROJECT_OWNED_PARAMETERS is PROGRAM_PROJECT_OWNED_CLI_PARAMETERS
-    assert AGENT_PROGRAMS == frozenset(
-        {"gaussian", "orca", "pyscf", "xtb"}
-    )
+    assert AGENT_PROGRAMS == frozenset({"gaussian", "orca", "pyscf", "xtb"})
     assert AGENT_PROGRAM_PREVIEW_ENGINES["pyscf"] == ("cpu", "gpu")
     assert AGENT_PROGRAM_JOBTYPES["pyscf"] == ("hess", "opt", "sp", "td")
     assert dict(PROGRAM_JOBTYPES) == {

@@ -81,9 +81,9 @@ def test_the_probe_argv_reaches_the_callback(jobtype, fixtures):
     with CliRunner().isolated_filesystem():
         result = CliRunner().invoke(entry_point, argv)
 
-    assert result.exit_code == 0, (
-        f"{jobtype} did not reach a clean fake preview: {result.exception}"
-    )
+    assert (
+        result.exit_code == 0
+    ), f"{jobtype} did not reach a clean fake preview: {result.exception}"
 
 
 @pytest.mark.parametrize("jobtype", ("scan", "modred"))
@@ -97,9 +97,9 @@ def test_every_rendered_option_exists_on_the_live_command(jobtype):
         for name in native_coordinate_options(
             program, _CONFORMANCE_COORDINATES[jobtype]
         ):
-            assert command.option(name) is not None, (
-                f"{program} {jobtype} has no option named {name!r}"
-            )
+            assert (
+                command.option(name) is not None
+            ), f"{program} {jobtype} has no option named {name!r}"
 
 
 def test_the_probe_coordinate_is_legal_for_the_fixture_geometry():

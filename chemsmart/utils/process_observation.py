@@ -12,7 +12,6 @@ accepts or evaluates shell text.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import hashlib
 import json
 import math
@@ -22,8 +21,8 @@ import signal
 import subprocess
 import threading
 import time
+from dataclasses import asdict, dataclass
 from typing import Any
-
 
 PROCESS_OBSERVATION_SCHEMA_VERSION = "chemsmart.process-observation.v1"
 
@@ -77,7 +76,10 @@ class ProcessObservationV1:
             "memory_limit_exceeded_ambiguous",
         }:
             raise ValueError("unsupported process observation state")
-        if not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+        if (
+            not math.isfinite(self.timeout_seconds)
+            or self.timeout_seconds <= 0
+        ):
             raise ValueError("timeout_seconds must be finite and positive")
         if self.memory_limit_mb is not None and (
             not math.isfinite(self.memory_limit_mb)
@@ -170,9 +172,7 @@ def _process_table() -> dict[int, _ProcessRow] | None:
     return rows
 
 
-def _descendant_ids(
-    table: dict[int, _ProcessRow], root_pid: int
-) -> set[int]:
+def _descendant_ids(table: dict[int, _ProcessRow], root_pid: int) -> set[int]:
     descendants = {root_pid}
     changed = True
     while changed:
@@ -379,9 +379,7 @@ def launch_failure_observation(
     finding = "process.launch_failed"
     if error_type:
         finding += "." + "".join(
-            character.lower()
-            if character.isalnum()
-            else "-"
+            character.lower() if character.isalnum() else "-"
             for character in error_type
         ).strip("-")
     return _build_observation(

@@ -58,9 +58,7 @@ def test_the_field_that_disagreed_is_recorded_with_both_values():
 
 def test_a_long_value_is_truncated_rather_than_echoed():
     recorded = _public_validator_findings(
-        _Validator(
-            (_Finding("r", "route", "x" * 5000, "y" * 5000),)
-        )
+        _Validator((_Finding("r", "route", "x" * 5000, "y" * 5000),))
     )
     assert len(recorded[0]["expected"]) <= _FINDING_VALUE_CHARS
     assert recorded[0]["expected"].endswith("...")

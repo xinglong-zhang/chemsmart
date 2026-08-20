@@ -107,9 +107,12 @@ def test_the_binding_round_trips_through_its_own_mapping():
     original = _binding(internal_coordinates=_COORDINATES)
     body = _approved_node_binding_body(original)
     revived = ApprovedNodeBindingV1(
-        **{**body, "internal_coordinates": json.loads(
-            json.dumps(body["internal_coordinates"])
-        )}
+        **{
+            **body,
+            "internal_coordinates": json.loads(
+                json.dumps(body["internal_coordinates"])
+            ),
+        }
     )
 
     assert revived.internal_coordinates["scan"]["atoms"] == [3, 1, 2, 4]

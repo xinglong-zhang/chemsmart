@@ -138,9 +138,7 @@ class PySCFJob(Job):
         self.backup_file(self.outputfile, folder=folder, **kwargs)
         self.backup_file(self.resultsfile, folder=folder, **kwargs)
         self.backup_file(self.errfile, folder=folder, **kwargs)
-        self.backup_file(
-            self.environment_receiptfile, folder=folder, **kwargs
-        )
+        self.backup_file(self.environment_receiptfile, folder=folder, **kwargs)
         self.backup_file(self.input_receiptfile, folder=folder, **kwargs)
         self.backup_file(self.run_receiptfile, folder=folder, **kwargs)
 
@@ -210,21 +208,21 @@ class PySCFJob(Job):
             run_nonce = run_receipt.get("run_nonce")
             if not run_id or not run_nonce:
                 return False
-            if input_receipt.get("run_id") != run_id or input_receipt.get(
-                "run_nonce"
-            ) != run_nonce:
+            if (
+                input_receipt.get("run_id") != run_id
+                or input_receipt.get("run_nonce") != run_nonce
+            ):
                 return False
-            if environment_receipt.get(
-                "run_id"
-            ) != run_id or environment_receipt.get("run_nonce") != run_nonce:
+            if (
+                environment_receipt.get("run_id") != run_id
+                or environment_receipt.get("run_nonce") != run_nonce
+            ):
                 return False
             if not os.path.isfile(self.inputfile) or not os.path.isfile(
                 self.resultsfile
             ):
                 return False
-            if run_receipt.get("script_sha256") != sha256_file(
-                self.inputfile
-            ):
+            if run_receipt.get("script_sha256") != sha256_file(self.inputfile):
                 return False
             if run_receipt.get("result_sha256") != sha256_file(
                 self.resultsfile
@@ -238,9 +236,10 @@ class PySCFJob(Job):
                 "environment_receipt_sha256"
             ) != environment_receipt.get("receipt_sha256"):
                 return False
-            if run_receipt.get(
-                "input_geometry_sha256"
-            ) != self._current_geometry_sha256():
+            if (
+                run_receipt.get("input_geometry_sha256")
+                != self._current_geometry_sha256()
+            ):
                 return False
             try:
                 input_artifact = pyscf_source_artifact_binding(self.molecule)
@@ -255,17 +254,20 @@ class PySCFJob(Job):
             observed_artifact_sha256 = (
                 input_artifact["sha256"] if input_artifact else None
             )
-            if run_receipt.get(
-                "input_artifact_kind"
-            ) != observed_artifact_kind:
+            if (
+                run_receipt.get("input_artifact_kind")
+                != observed_artifact_kind
+            ):
                 return False
-            if run_receipt.get(
-                "input_artifact_path"
-            ) != observed_artifact_path:
+            if (
+                run_receipt.get("input_artifact_path")
+                != observed_artifact_path
+            ):
                 return False
-            if run_receipt.get(
-                "input_artifact_sha256"
-            ) != observed_artifact_sha256:
+            if (
+                run_receipt.get("input_artifact_sha256")
+                != observed_artifact_sha256
+            ):
                 return False
 
             expected = {
@@ -284,9 +286,7 @@ class PySCFJob(Job):
                 "requested_settings_sha256": run_receipt.get(
                     "requested_settings_sha256"
                 ),
-                "project_yaml_digest": run_receipt.get(
-                    "project_yaml_sha256"
-                ),
+                "project_yaml_digest": run_receipt.get("project_yaml_sha256"),
                 "require_applied_settings_sha256": True,
                 "require_engine_complete": True,
             }

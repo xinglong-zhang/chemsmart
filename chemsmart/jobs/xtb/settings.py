@@ -200,14 +200,18 @@ class XTBJobSettings:
         if expected_jobtype is not None:
             expected = self._normalized_text(expected_jobtype)
             if expected not in self.JOBTYPES:
-                raise ValueError(f"Unknown expected xTB jobtype: {expected!r}.")
+                raise ValueError(
+                    f"Unknown expected xTB jobtype: {expected!r}."
+                )
             if self.jobtype != expected:
                 raise ValueError(
                     "xTB settings/job mismatch: "
                     f"settings declare {self.jobtype!r}, job requires {expected!r}."
                 )
         if isinstance(self.charge, bool) or not isinstance(self.charge, int):
-            raise TypeError("xTB charge must be an integer (bool is not valid).")
+            raise TypeError(
+                "xTB charge must be an integer (bool is not valid)."
+            )
         if (
             isinstance(self.multiplicity, bool)
             or not isinstance(self.multiplicity, int)
@@ -289,7 +293,10 @@ class XTBJobSettings:
                     rule_id="xtb.solvent.numeric_model_unsupported",
                     evidence="xTB-6.7.1:native-cli-contract",
                 )
-            if not math.isfinite(numeric_identifier) or numeric_identifier <= 0:
+            if (
+                not math.isfinite(numeric_identifier)
+                or numeric_identifier <= 0
+            ):
                 raise ValueError(
                     "An xTB COSMO dielectric identifier must be finite and positive."
                 )
@@ -330,9 +337,7 @@ class XTBJobSettings:
         else:  # guarded by SOLVENT_MODELS above
             allowed = frozenset()
 
-        status = (
-            "confirmed_supported" if identifier in allowed else "unknown"
-        )
+        status = "confirmed_supported" if identifier in allowed else "unknown"
         rule_id = (
             "xtb.solvent.pinned_pair_supported"
             if status == "confirmed_supported"
@@ -423,8 +428,7 @@ class XTBJobSettings:
             unknown_keywords = sorted(set(requested) - self.FIELDS)
             if unknown_keywords:
                 raise ValueError(
-                    "Unknown xTB merge key(s): "
-                    + ", ".join(unknown_keywords)
+                    "Unknown xTB merge key(s): " + ", ".join(unknown_keywords)
                 )
             selected = {
                 key: other_dict[key]

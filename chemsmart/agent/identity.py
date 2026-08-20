@@ -8,10 +8,10 @@ remain explicit task facts bound through :class:`ScientificIdentityBindingV1`.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
-from pathlib import Path
 import re
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import yaml
@@ -24,7 +24,6 @@ from chemsmart.agent._contracts import (
     require_identifier,
     require_sha256,
 )
-
 
 _SYMBOL = re.compile(r"^[A-Z][a-z]?$")
 _UNITS = frozenset({"angstrom", "bohr"})

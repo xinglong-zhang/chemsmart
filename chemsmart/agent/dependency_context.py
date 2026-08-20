@@ -29,7 +29,6 @@ from chemsmart.agent.workflows import (
     ScientificWorkflowPlanV2,
 )
 
-
 CONTEXT_MODES = (
     "dependency_projected",
     "ordered_predecessors",
@@ -75,7 +74,10 @@ class TaskDependencyContextPolicyV2:
     policy_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.task-dependency-context-policy.v2":
+        if (
+            self.schema_version
+            != "chemsmart.task-dependency-context-policy.v2"
+        ):
             raise ContractError("unsupported task dependency context policy")
         require_identifier(self.policy_id, "policy_id")
         if self.mode not in CONTEXT_MODES:
@@ -98,7 +100,9 @@ class TaskDependencyContextPolicyV2:
             "max_public_bytes": self.max_public_bytes,
         }
         if self.policy_sha256 != canonical_sha256(body):
-            raise ContractError("task dependency context policy digest mismatch")
+            raise ContractError(
+                "task dependency context policy digest mismatch"
+            )
 
 
 def build_task_dependency_context_policy(
@@ -160,7 +164,9 @@ class PredecessorEvidenceRefV1:
             "size_bytes": self.size_bytes,
         }
         if self.evidence_ref_sha256 != canonical_sha256(body):
-            raise ContractError("predecessor evidence reference digest mismatch")
+            raise ContractError(
+                "predecessor evidence reference digest mismatch"
+            )
 
 
 def build_predecessor_evidence_ref(
@@ -292,7 +298,10 @@ class TaskDependencyContextV2:
             raise ContractError("unsupported task dependency context mode")
         for name, node_ids in (
             ("direct_predecessor_node_ids", self.direct_predecessor_node_ids),
-            ("transitive_ancestor_node_ids", self.transitive_ancestor_node_ids),
+            (
+                "transitive_ancestor_node_ids",
+                self.transitive_ancestor_node_ids,
+            ),
             ("included_node_ids", self.included_node_ids),
             ("excluded_node_ids", self.excluded_node_ids),
             ("non_dependency_node_ids", self.non_dependency_node_ids),
@@ -301,7 +310,9 @@ class TaskDependencyContextV2:
         included = set(self.included_node_ids)
         excluded = set(self.excluded_node_ids)
         if self.target_node_id not in included:
-            raise ContractError("dependency context must include its target node")
+            raise ContractError(
+                "dependency context must include its target node"
+            )
         if included.intersection(excluded):
             raise ContractError("included and excluded context nodes overlap")
         ancestors = set(self.direct_predecessor_node_ids).union(
@@ -321,30 +332,47 @@ class TaskDependencyContextV2:
             or self.non_dependency_node_ids
             or self.selected_edges
         ):
-            raise ContractError("target-only context cannot expose predecessors")
-        if self.mode == "dependency_projected" and self.non_dependency_node_ids:
+            raise ContractError(
+                "target-only context cannot expose predecessors"
+            )
+        if (
+            self.mode == "dependency_projected"
+            and self.non_dependency_node_ids
+        ):
             raise ContractError(
                 "dependency-projected context cannot include unrelated nodes"
             )
         edge_ids = tuple(edge.edge_id for edge in self.selected_edges)
         if edge_ids != tuple(sorted(set(edge_ids))):
-            raise ContractError("selected context edges must be sorted and unique")
+            raise ContractError(
+                "selected context edges must be sorted and unique"
+            )
         positions = {
-            node_id: index for index, node_id in enumerate(self.included_node_ids)
+            node_id: index
+            for index, node_id in enumerate(self.included_node_ids)
         }
         for edge in self.selected_edges:
             if (
                 edge.source_node_id not in included
                 or edge.target_node_id not in included
             ):
-                raise ContractError("selected edge leaves the included context")
-            if positions[edge.source_node_id] >= positions[edge.target_node_id]:
-                raise ContractError("included context must be topologically ordered")
+                raise ContractError(
+                    "selected edge leaves the included context"
+                )
+            if (
+                positions[edge.source_node_id]
+                >= positions[edge.target_node_id]
+            ):
+                raise ContractError(
+                    "included context must be topologically ordered"
+                )
         evidence_digests = tuple(
             evidence.evidence_ref_sha256 for evidence in self.evidence_refs
         )
         if evidence_digests != tuple(sorted(set(evidence_digests))):
-            raise ContractError("context evidence refs must be sorted and unique")
+            raise ContractError(
+                "context evidence refs must be sorted and unique"
+            )
         record_digests = tuple(
             evidence.record_sha256 for evidence in self.evidence_refs
         )
@@ -352,7 +380,9 @@ class TaskDependencyContextV2:
             raise ContractError("context cannot repeat a public record")
         for evidence in self.evidence_refs:
             if evidence.node_id and evidence.node_id not in included:
-                raise ContractError("context evidence belongs to an excluded node")
+                raise ContractError(
+                    "context evidence belongs to an excluded node"
+                )
         body = {
             "schema_version": self.schema_version,
             "workflow_id": self.workflow_id,
@@ -428,7 +458,9 @@ class ContextSelectionReceiptV1:
         if set(self.included_evidence_ref_sha256s).intersection(
             exclusion_digests
         ):
-            raise ContractError("included and excluded context evidence overlap")
+            raise ContractError(
+                "included and excluded context evidence overlap"
+            )
         if self.selected_public_bytes < 0:
             raise ContractError("selected_public_bytes must be non-negative")
         if self.status not in {"blocked_context_budget", "selected"}:
@@ -436,10 +468,14 @@ class ContextSelectionReceiptV1:
         if self.status == "selected":
             require_sha256(self.context_sha256, "context_sha256")
             if self.reason:
-                raise ContractError("selected context cannot carry a block reason")
+                raise ContractError(
+                    "selected context cannot carry a block reason"
+                )
         else:
             if self.context_sha256:
-                raise ContractError("blocked context cannot claim a context digest")
+                raise ContractError(
+                    "blocked context cannot claim a context digest"
+                )
             if not self.reason.strip():
                 raise ContractError("blocked context must state a reason")
             if self.included_evidence_ref_sha256s:
@@ -506,11 +542,14 @@ def build_dependency_context_public_projection(
         ),
     }
 
+
 def _plan_graph(
     plan: ScientificWorkflowPlanV2,
 ) -> tuple[tuple[str, ...], dict[str, set[str]]]:
     if not isinstance(plan, ScientificWorkflowPlanV2):
-        raise ContractError("dependency context requires ScientificWorkflowPlanV2")
+        raise ContractError(
+            "dependency context requires ScientificWorkflowPlanV2"
+        )
     node_ids = tuple(node.node_id for node in plan.nodes)
     parents = {node_id: set() for node_id in node_ids}
     for edge in plan.edges:
@@ -618,7 +657,9 @@ def select_task_dependency_context(
         )
     )
 
-    refs = tuple(sorted(evidence_refs, key=lambda item: item.evidence_ref_sha256))
+    refs = tuple(
+        sorted(evidence_refs, key=lambda item: item.evidence_ref_sha256)
+    )
     ref_digests = tuple(item.evidence_ref_sha256 for item in refs)
     if len(ref_digests) != len(set(ref_digests)):
         raise ContractError("predecessor evidence references must be unique")
@@ -737,8 +778,6 @@ def select_task_dependency_context(
         **receipt_body, receipt_sha256=canonical_sha256(receipt_body)
     )
     return context, receipt
-
-
 
 
 __all__ = [

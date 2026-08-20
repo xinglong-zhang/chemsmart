@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import getpass
+import threading
+import uuid
 from dataclasses import dataclass
 from enum import Enum
-import getpass
 from pathlib import Path
-import threading
 from typing import TYPE_CHECKING, Callable
-import uuid
 
 from chemsmart.agent._contracts import ContractError
 
@@ -196,9 +196,7 @@ class AgentTuiController:
             / f"{review.review_sha256[:16]}.json"
         )
 
-    def _ensure_review_copy(
-        self, review: WorkflowExecutionReviewV1
-    ) -> Path:
+    def _ensure_review_copy(self, review: WorkflowExecutionReviewV1) -> Path:
         from chemsmart.agent.live_session import (
             write_workflow_execution_review,
         )

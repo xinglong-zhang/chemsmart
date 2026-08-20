@@ -211,11 +211,9 @@ def frozen_workflow_approval_from_record(
             "frozen materialized preview",
         )
         if "auxiliary_input_bindings" in preview:
-            preview["auxiliary_input_bindings"] = (
-                _auxiliary_artifact_bindings(
-                    preview["auxiliary_input_bindings"],
-                    "frozen preview auxiliary inputs",
-                )
+            preview["auxiliary_input_bindings"] = _auxiliary_artifact_bindings(
+                preview["auxiliary_input_bindings"],
+                "frozen preview auxiliary inputs",
             )
         previews.append(
             _construct(

@@ -7,12 +7,11 @@ not choose science, re-plan, or widen approval.
 from __future__ import annotations
 
 import json
-
+import os
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import os
 from pathlib import Path
-import shutil
 from typing import Any, Mapping
 
 from chemsmart.agent._contracts import (
@@ -22,17 +21,15 @@ from chemsmart.agent._contracts import (
     canonical_sha256,
     file_sha256,
 )
-from chemsmart.agent.capabilities import load_program_capabilities
 from chemsmart.agent.api_access import (
     DEFAULT_KEY_LABELS,
     PROVIDER_KEY_LABEL_TOKENS,
     normalize_key_label,
 )
+from chemsmart.agent.capabilities import load_program_capabilities
 from chemsmart.agent.cli_schema import build_live_click_schema
 from chemsmart.agent.execution import (
     WorkflowExecutionApprovalBundleV1,
-    WorkflowExecutionReviewV1,
-    approve_workflow_execution_review,
     build_workflow_run_state,
     derive_ready_node_ids,
     transition_workflow_node,
@@ -256,6 +253,7 @@ def _engine_lines_for(receipt: Any, host: Any) -> tuple[str, ...]:
         observations = getattr(validation, "observations", None) or {}
     except (ContractError, AttributeError):
         return ()
+
     # Programs record the summary at different depths: ORCA puts it on the
     # per-program observation, Gaussian on each per-artifact row beneath it.
     # Search one level into nested collections rather than requiring every
@@ -327,10 +325,9 @@ def _execution_failure_summary(receipt: Any, host: Any = None) -> str:
     if engine_lines:
         # Attributed, so nothing downstream mistakes the engine's words for a
         # host claim about readiness, validity, or what to do next.
-        parts.append(
-            "engine reported (verbatim): " + " | ".join(engine_lines)
-        )
+        parts.append("engine reported (verbatim): " + " | ".join(engine_lines))
     return "; ".join(parts)
+
 
 class ApprovedWorkflowExecutor:
     """Walk an approved DAG, dispatching host tools with host-computed args."""
@@ -412,9 +409,7 @@ class ApprovedWorkflowExecutor:
 
     def _input_artifact_id(self, binding: Any) -> str:
         if binding.input_mode == "initial":
-            artifact = self.initial_artifacts.get(
-                binding.initial_artifact_id
-            )
+            artifact = self.initial_artifacts.get(binding.initial_artifact_id)
             if artifact is None:
                 raise ContractError(
                     f"approved initial artifact {binding.initial_artifact_id!r} "
@@ -517,9 +512,7 @@ class ApprovedWorkflowExecutor:
                 capability_receipt_sha256=capability_sha256,
                 program_binding_sha256=program_binding_sha256,
                 engine_binding_sha256=engine_binding_sha256,
-                geometry_artifact_sha256=(
-                    input_artifact.sha256
-                ),
+                geometry_artifact_sha256=(input_artifact.sha256),
                 scientific_identity_sha256=scientific_identity_sha256,
                 charge=binding.charge,
                 multiplicity=binding.multiplicity,
@@ -583,7 +576,9 @@ class ApprovedWorkflowExecutor:
 
     def _run_analysis_phase(
         self, toolchain: Any
-    ) -> tuple[tuple["ExecutedAnalysisNodeV1", ...], str, tuple[str, ...], str]:
+    ) -> tuple[
+        tuple["ExecutedAnalysisNodeV1", ...], str, tuple[str, ...], str
+    ]:
         """Walk the approved analysis chain with host-computed arguments.
 
         No provider exists in this process.  Every argument is derived from
@@ -594,14 +589,13 @@ class ApprovedWorkflowExecutor:
         with the failure named.
         """
 
+        from chemsmart.agent.runtime.events import EventKind
+        from chemsmart.agent.scientific_toolchain import (
+            RegisteredResultInputIntentV1,
+        )
         from chemsmart.analysis.result_quantities import (
             canonical_thermochemistry_quantity,
         )
-        from chemsmart.agent.scientific_toolchain import (
-            AnalysisInputIntentV1,
-            RegisteredResultInputIntentV1,
-        )
-        from chemsmart.agent.runtime.events import EventKind
 
         program_by_kind = {
             "pyscf_hdf5": "pyscf",
@@ -632,6 +626,7 @@ class ApprovedWorkflowExecutor:
             )
 
             return typed_result_artifact_kind(program)
+
         settled: dict[str, ExecutedAnalysisNodeV1] = {}
         #: (producer node, output id) -> (receipt digest, receipt quantity id)
         outputs: dict[tuple[str, str], tuple[str, str]] = {}
@@ -703,9 +698,7 @@ class ApprovedWorkflowExecutor:
                 sources: list[Any] = []
                 for item in node.inputs:
                     if isinstance(item, RegisteredResultInputIntentV1):
-                        sources.append(
-                            self.host.artifacts[item.artifact_id]
-                        )
+                        sources.append(self.host.artifacts[item.artifact_id])
                     elif item.producer_node_id in calculation_ids:
                         sources.append(
                             _producer_artifact(item.producer_node_id)
@@ -749,9 +742,7 @@ class ApprovedWorkflowExecutor:
                 sources = []
                 for item in node.inputs:
                     if isinstance(item, RegisteredResultInputIntentV1):
-                        sources.append(
-                            self.host.artifacts[item.artifact_id]
-                        )
+                        sources.append(self.host.artifacts[item.artifact_id])
                     elif item.producer_node_id in calculation_ids:
                         sources.append(
                             _producer_artifact(item.producer_node_id)
@@ -773,15 +764,11 @@ class ApprovedWorkflowExecutor:
                     "frequency_scale_factor": node.frequency_scale_factor,
                 }
                 if node.concentration_mol_l is not None:
-                    arguments["concentration_mol_l"] = (
-                        node.concentration_mol_l
-                    )
+                    arguments["concentration_mol_l"] = node.concentration_mol_l
                 if node.entropy_cutoff_cm1 is not None:
                     arguments["entropy_cutoff_cm1"] = node.entropy_cutoff_cm1
                 if node.enthalpy_cutoff_cm1 is not None:
-                    arguments["enthalpy_cutoff_cm1"] = (
-                        node.enthalpy_cutoff_cm1
-                    )
+                    arguments["enthalpy_cutoff_cm1"] = node.enthalpy_cutoff_cm1
                 receipt = self._call("derive_thermochemistry", **arguments)
                 digest = _field(receipt, "receipt_sha256")
                 for output in node.outputs:
@@ -993,9 +980,7 @@ class ApprovedWorkflowExecutor:
                     "report_sha256": canonical_sha256(report),
                     "toolchain_plan_sha256": toolchain.plan_sha256,
                 },
-                idempotency_key=(
-                    "analysis-report:" + toolchain.plan_sha256
-                ),
+                idempotency_key=("analysis-report:" + toolchain.plan_sha256),
             )
         return (
             tuple(settled[node_id] for node_id in sorted(settled)),
@@ -1203,13 +1188,11 @@ def _execution_inputs_from_bundle(
         scratch_root=scratch_root,
     )
     path_value = os.environ.get("PATH", "")
-    xtb_executable = os.environ.get("CHEMSMART_XTB_EXECUTABLE") or shutil.which(
-        "xtb"
-    )
+    xtb_executable = os.environ.get(
+        "CHEMSMART_XTB_EXECUTABLE"
+    ) or shutil.which("xtb")
     executable_directory = (
-        str(Path(xtb_executable).expanduser().parent)
-        if xtb_executable
-        else ""
+        str(Path(xtb_executable).expanduser().parent) if xtb_executable else ""
     )
     environment = {
         "PATH": (

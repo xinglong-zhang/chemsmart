@@ -176,9 +176,9 @@ def test_tools_needing_an_unbound_registry_keep_their_handlers():
         "_inspect_calculation_artifact",
         "_assess_program_candidate",
     ):
-        assert handler in source, (
-            f"{handler} must survive so re-exposing it is a surface change"
-        )
+        assert (
+            handler in source
+        ), f"{handler} must survive so re-exposing it is a surface change"
 
 
 def test_the_handler_and_contract_are_kept_so_re_enabling_is_one_change():
@@ -187,6 +187,6 @@ def test_the_handler_and_contract_are_kept_so_re_enabling_is_one_change():
     from chemsmart.agent.commands import CommandCounterexampleV1
 
     assert CommandCounterexampleV1 is not None
-    assert "repair_command" in inspect.getsource(tool_runtime), (
-        "the runtime handler must survive so re-exposing is a surface change"
-    )
+    assert "repair_command" in inspect.getsource(
+        tool_runtime
+    ), "the runtime handler must survive so re-exposing is a surface change"

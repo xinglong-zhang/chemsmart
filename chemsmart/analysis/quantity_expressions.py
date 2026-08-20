@@ -1929,8 +1929,7 @@ def _node_value(
             )
             inputs = inputs[:-1]
         elif (
-            len(inputs) >= expected + 1
-            and inputs[-2].dimension == TEMPERATURE
+            len(inputs) >= expected + 1 and inputs[-2].dimension == TEMPERATURE
         ):
             raise QuantityExpressionError(
                 "per-state degeneracies must be dimensionless; the trailing "
@@ -1964,7 +1963,9 @@ def _node_value(
         else:
             energy_inputs = inputs[:-1]
         if any(item.dimension != ENERGY for item in energy_inputs):
-            raise QuantityExpressionError(f"{operation} weights states by energy")
+            raise QuantityExpressionError(
+                f"{operation} weights states by energy"
+            )
         if len(energy_inputs) == 1:
             energies = _numeric(energy_inputs[0]).reshape(-1)
         else:

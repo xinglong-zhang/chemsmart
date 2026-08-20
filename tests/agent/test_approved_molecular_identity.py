@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from chemsmart.agent._contracts import ContractError, canonical_sha256, file_sha256
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_sha256,
+    file_sha256,
+)
 from chemsmart.agent.identity import (
     build_approved_molecular_identity,
     validate_identity_for_geometry,
@@ -45,7 +49,10 @@ def test_approved_identity_binds_names_but_not_electronic_state(tmp_path):
     assert record["electronic_state_status"] == (
         "not_established_by_identity_record"
     )
-    assert record["evidence_ref"] == f"molecular_identity:{identity.identity_sha256}"
+    assert (
+        record["evidence_ref"]
+        == f"molecular_identity:{identity.identity_sha256}"
+    )
 
 
 def test_approved_identity_rejects_geometry_or_atom_order_substitution():
@@ -92,7 +99,9 @@ def test_multiple_state_geometries_keep_distinct_approved_identities(tmp_path):
     )
 
     records = _validated_identity_records(observations, identities)
-    task_sha256 = _task_spec_sha256("compare spin states", observations, identities)
+    task_sha256 = _task_spec_sha256(
+        "compare spin states", observations, identities
+    )
 
     assert tuple(record["identity_id"] for record in records) == (
         "fe-aquo-high-spin",
@@ -102,7 +111,9 @@ def test_multiple_state_geometries_keep_distinct_approved_identities(tmp_path):
     assert len(task_sha256) == 64
 
 
-def test_host_rejects_identity_reference_absent_from_approved_registry(tmp_path):
+def test_host_rejects_identity_reference_absent_from_approved_registry(
+    tmp_path,
+):
     task_sha256 = canonical_sha256("identity-task")
     identity = _identity("a" * 64)
     arguments = {

@@ -8,8 +8,8 @@ typed quantities produced by upstream ChemSmart analysis receipts.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 import numpy as np
@@ -129,7 +129,9 @@ class ScientificValidationReceiptV1:
                 "validation rule results must be sorted and unique"
             )
         output_ids = tuple(item.quantity_id for item in self.outputs)
-        if len(output_ids) != 1 or output_ids != tuple(sorted(set(output_ids))):
+        if len(output_ids) != 1 or output_ids != tuple(
+            sorted(set(output_ids))
+        ):
             raise ContractError(
                 "scientific validation requires one typed verdict output"
             )
@@ -146,11 +148,15 @@ class ScientificValidationReceiptV1:
         ):
             raise ContractError("validation aggregate verdict is inconsistent")
         if self.status != "evaluated":
-            raise ContractError("scientific validation status must be evaluated")
+            raise ContractError(
+                "scientific validation status must be evaluated"
+            )
         if self.receipt_sha256 != canonical_sha256(
             scientific_validation_receipt_body(self)
         ):
-            raise ContractError("scientific validation receipt digest mismatch")
+            raise ContractError(
+                "scientific validation receipt digest mismatch"
+            )
 
 
 def scientific_validation_receipt_body(
@@ -206,9 +212,7 @@ def evaluate_planned_scientific_validation(
     workflow_id: str,
     plan_sha256: str,
     node: AnalysisNodeIntentV1,
-    inputs: Mapping[
-        str, tuple[str, QuantityValueV1]
-    ],
+    inputs: Mapping[str, tuple[str, QuantityValueV1]],
 ) -> ScientificValidationReceiptV1:
     """Evaluate every rule sealed into one planned validation node."""
 
@@ -274,7 +278,9 @@ def evaluate_planned_scientific_validation(
     )
 
 
-def _evaluate_rule(*, rule: Any, inputs: Mapping[str, tuple[str, QuantityValueV1]]):
+def _evaluate_rule(
+    *, rule: Any, inputs: Mapping[str, tuple[str, QuantityValueV1]]
+):
     quantities = tuple(inputs[input_id][1] for input_id in rule.input_ids)
     predicate = rule.predicate
 
@@ -293,7 +299,9 @@ def _evaluate_rule(*, rule: Any, inputs: Mapping[str, tuple[str, QuantityValueV1
         passed = True
     elif predicate == "all_equal":
         if len({tuple(quantity.dimension) for quantity in quantities}) != 1:
-            raise ContractError("all_equal inputs have incompatible dimensions")
+            raise ContractError(
+                "all_equal inputs have incompatible dimensions"
+            )
         flattened = tuple(
             value
             for quantity in quantities
@@ -328,7 +336,9 @@ def _evaluate_rule(*, rule: Any, inputs: Mapping[str, tuple[str, QuantityValueV1
         )
         matrix = np.asarray(converted, dtype=float)
         if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
-            raise ContractError("symmetric_within input must be a square matrix")
+            raise ContractError(
+                "symmetric_within input must be a square matrix"
+            )
         observed = float(np.max(np.abs(matrix - matrix.T)))
         passed = observed <= float(rule.threshold)
     else:  # pragma: no cover - the planning contract owns this vocabulary
@@ -361,7 +371,9 @@ def _numeric_values(
         )
         array = np.asarray(value, dtype=float)
     except (TypeError, ValueError) as exc:
-        raise ContractError("scientific validation input is not numerical") from exc
+        raise ContractError(
+            "scientific validation input is not numerical"
+        ) from exc
     if array.size == 0 or not np.all(np.isfinite(array)):
         raise ContractError(
             "scientific validation input must be finite and non-empty"

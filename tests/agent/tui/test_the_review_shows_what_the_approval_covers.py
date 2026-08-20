@@ -9,9 +9,8 @@ review says so explicitly instead of staying silent.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import re
+from types import SimpleNamespace
 
 import pytest
 
@@ -95,9 +94,7 @@ def test_the_analysis_chain_is_displayed_with_the_workflow():
                         producer_output_id="result-freq",
                     ),
                 ),
-                outputs=(
-                    SimpleNamespace(output_id="gibbs", unit="hartree"),
-                ),
+                outputs=(SimpleNamespace(output_id="gibbs", unit="hartree"),),
                 temperature_k=298.15,
                 pressure_atm=1.0,
                 support_state="planned",
@@ -112,9 +109,7 @@ def test_the_analysis_chain_is_displayed_with_the_workflow():
                         producer_output_id="gibbs",
                     ),
                 ),
-                outputs=(
-                    SimpleNamespace(output_id="ok", unit="1"),
-                ),
+                outputs=(SimpleNamespace(output_id="ok", unit="1"),),
                 temperature_k=None,
                 pressure_atm=None,
                 support_state="blocked_unsupported",

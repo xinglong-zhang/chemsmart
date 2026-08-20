@@ -5,13 +5,11 @@
 This page documents the CLI options available for all ORCA jobs. Use ``chemsmart sub orca --help`` for the complete
 list.
 
-The current Agent release can plan and safely preview ORCA ``sp``, ``opt``,
-``ts``, ``irc``, ``td``, ``neb``, ``scan``, and ``modred`` workflows.
-Release-qualified CPU execution covers single-points,
-optimization/frequency, transition-state, excited-state, relaxed coordinate
-scans, and serial producer-to-consumer DAGs. ``irc``, ``neb``, and
-constrained optimisation still require qualification on the selected target
-before being described as a completed Agent execution path.
+The current Agent release can plan and safely preview ORCA ``sp``, ``opt``, ``ts``, ``irc``, ``td``, ``neb``, ``scan``,
+and ``modred`` workflows. Release-qualified CPU execution covers single-points, optimization/frequency,
+transition-state, excited-state, relaxed coordinate scans, and serial producer-to-consumer DAGs. ``irc``, ``neb``, and
+constrained optimisation still require qualification on the selected target before being described as a completed Agent
+execution path.
 
 *************************
  Basic Command Structure
@@ -142,10 +140,10 @@ Method and Basis Set Options
       -  Extrapolation basis set
 
 Project-controlled correlated-method settings
-==============================================
+=============================================
 
-Several ORCA controls belong in project YAML even when they have no shared CLI
-flag.  This keeps the electronic-structure rationale visible and reusable:
+Several ORCA controls belong in project YAML even when they have no shared CLI flag. This keeps the electronic-structure
+rationale visible and reusable:
 
 .. code:: yaml
 
@@ -160,21 +158,17 @@ flag.  This keeps the electronic-structure rationale visible and reusable:
      scf_tol: TightSCF
      freq: false
 
-``reference`` accepts ``rhf``, ``rohf``, or ``uhf``;
-``ri_approximation`` accepts ``none``, ``ri``, ``rijcosx``, or ``rijk``; and
-``frozen_core`` accepts ``fc_electrons``, ``fc_ewin``, or ``fc_none``.
-``frozen_core_electrons`` is meaningful only with ``fc_electrons``.
-``mdci_cutoff`` accepts ``loose``, ``normal``, or ``tight`` for local
-correlation methods.
+``reference`` accepts ``rhf``, ``rohf``, or ``uhf``; ``ri_approximation`` accepts ``none``, ``ri``, ``rijcosx``, or
+``rijk``; and ``frozen_core`` accepts ``fc_electrons``, ``fc_ewin``, or ``fc_none``. ``frozen_core_electrons`` is
+meaningful only with ``fc_electrons``. ``mdci_cutoff`` accepts ``loose``, ``normal``, or ``tight`` for local correlation
+methods.
 
-For MP2, ``ri_approximation: ri`` together with a matching ``/C`` auxiliary
-basis materializes as ORCA ``RI-MP2``. ChemSmart does not also emit bare
-``RI``: that keyword controls RI-J in the reference SCF and would require a
-separate exchange treatment and Coulomb/exchange fitting basis.
+For MP2, ``ri_approximation: ri`` together with a matching ``/C`` auxiliary basis materializes as ORCA ``RI-MP2``.
+ChemSmart does not also emit bare ``RI``: that keyword controls RI-J in the reference SCF and would require a separate
+exchange treatment and Coulomb/exchange fitting basis.
 
-A bare ORCA project does not request frequencies. Set ``freq: true`` explicitly
-when an optimization or fixed-geometry calculation must produce vibrational
-evidence. ChemSmart then treats those frequencies as outputs of that same node
+A bare ORCA project does not request frequencies. Set ``freq: true`` explicitly when an optimization or fixed-geometry
+calculation must produce vibrational evidence. ChemSmart then treats those frequencies as outputs of that same node
 rather than scheduling a duplicate Hessian automatically.
 
 SCF and Grid Options

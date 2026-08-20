@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 _REPORT_RELATIVE = Path("analysis") / "completed-analysis-report.md"

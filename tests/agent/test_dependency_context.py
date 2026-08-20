@@ -204,9 +204,7 @@ def test_ordered_predecessors_include_prior_sibling_not_descendant():
     )
     assert context.excluded_node_ids == ("report",)
     assert context.non_dependency_node_ids == ("irrelevant-sibling",)
-    assert "c-opt-sibling" in {
-        edge.edge_id for edge in context.selected_edges
-    }
+    assert "c-opt-sibling" in {edge.edge_id for edge in context.selected_edges}
     assert "sibling-result" in {
         item.record_id for item in context.evidence_refs
     }
@@ -247,9 +245,9 @@ def test_context_budget_blocks_instead_of_truncating_required_evidence():
     assert receipt.context_sha256 == ""
     assert receipt.included_evidence_ref_sha256s == ()
     assert "policy permits 1" in receipt.reason
-    assert {
-        item.reason for item in receipt.exclusions
-    }.issuperset({"context_budget_exceeded"})
+    assert {item.reason for item in receipt.exclusions}.issuperset(
+        {"context_budget_exceeded"}
+    )
 
 
 def test_unknown_node_evidence_fails_closed():
@@ -262,8 +260,6 @@ def test_unknown_node_evidence_fails_closed():
     )
     with pytest.raises(ContractError, match="unknown node"):
         _select("dependency_projected", evidence=(*_evidence(), unknown))
-
-
 
 
 def _payload_context():

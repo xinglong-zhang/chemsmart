@@ -39,16 +39,19 @@ def test_the_estimate_counts_the_tool_schema_too():
 
     bare = _request([{"role": "user", "content": "hi"}])
     with_tools = _request(
-        [{"role": "user", "content": "hi"}], tools=[{"function": {"x": "y" * 5000}}]
+        [{"role": "user", "content": "hi"}],
+        tools=[{"function": {"x": "y" * 5000}}],
     )
-    assert estimate_request_input_tokens(with_tools) > estimate_request_input_tokens(
-        bare
-    ) + 1000
+    assert (
+        estimate_request_input_tokens(with_tools)
+        > estimate_request_input_tokens(bare) + 1000
+    )
 
 
 def test_the_estimate_is_conservative_rather_than_optimistic():
     """Overestimating refuses a working request; underestimating pays for a
-    doomed one.  The ratio must not be so high that ordinary text is refused."""
+    doomed one.  The ratio must not be so high that ordinary text is refused.
+    """
 
     text = "The optimized geometry has three equivalent N-H bonds. " * 200
     estimate = estimate_request_input_tokens(

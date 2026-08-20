@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from click.testing import CliRunner
 import pytest
 import yaml
+from click.testing import CliRunner
 
 from chemsmart.agent._contracts import (
     ContractError,

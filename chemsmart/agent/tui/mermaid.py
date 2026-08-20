@@ -28,12 +28,8 @@ def render_workflow_mermaid(review: "WorkflowExecutionReviewV1") -> str:
         label = f"{node.node_id}<br/>{node.program} {node.stage}"
         shape = f'{_identifier(node.node_id)}["{label}"]'
         lines.append(f"    {shape}")
-        if node.node_id in deferred or (
-            node.node_id not in reviewed
-        ):
-            lines.append(
-                f"    class {_identifier(node.node_id)} deferred"
-            )
+        if node.node_id in deferred or (node.node_id not in reviewed):
+            lines.append(f"    class {_identifier(node.node_id)} deferred")
     for edge in review.scientific_plan.edges:
         arrow = f"-->|{edge.artifact_class}|" if edge.artifact_class else "-->"
         lines.append(

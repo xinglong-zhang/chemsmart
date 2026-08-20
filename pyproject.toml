@@ -113,6 +113,10 @@ target-version = ["py310"]
 
 [tool.isort]
 profile = "black"
+# The black profile defaults to 88; `make fmt` runs black at 79, so an
+# import between the two widths would be rewrapped forever by whichever
+# tool ran last and `make fmt` could never converge.
+line_length = 79
 
 [tool.pytest.ini_options]
 minversion = "6.0"

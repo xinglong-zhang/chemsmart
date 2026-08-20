@@ -9,7 +9,6 @@ from chemsmart.io.native_failure import (
     summarize_orca_native_failure,
 )
 
-
 _FIXTURES = Path("tests/data/agent/native_failures")
 
 

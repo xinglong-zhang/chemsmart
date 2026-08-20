@@ -3,6 +3,7 @@
 import logging
 
 from chemsmart.utils.cli import create_sp_label
+
 logger = logging.getLogger(__name__)
 
 
@@ -76,9 +77,7 @@ def build_pyscf_jobs(ctx, job_class, settings, skip_completed, kwargs):
     molecules = ctx.obj["molecules"]
     molecule_indices = ctx.obj["molecule_indices"]
     label = ctx.obj["label"]
-    explicit_state_fields = ctx.obj.get(
-        "explicit_state_fields", frozenset()
-    )
+    explicit_state_fields = ctx.obj.get("explicit_state_fields", frozenset())
 
     def settings_for_molecule(molecule):
         """Resolve source state unless project or CLI explicitly replaced it."""

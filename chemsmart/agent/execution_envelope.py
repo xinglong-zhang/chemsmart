@@ -9,8 +9,8 @@ them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -135,9 +135,7 @@ class BoundedExecutionEnvelopeV1:
         ):
             raise ContractError("allowed programs must be unique")
         if self.resources.execution_target != "run":
-            raise ContractError(
-                "bounded local execution requires target run"
-            )
+            raise ContractError("bounded local execution requires target run")
         if self.resources.scratch_policy != "server":
             raise ContractError(
                 "bounded execution requires the server scratch policy"

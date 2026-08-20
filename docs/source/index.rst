@@ -6,16 +6,14 @@
    :width: 400
    :align: center
 
-CHEMSMART is the canonical command-line and project-YAML hub for automating
-computational-chemistry workflows across Gaussian, ORCA, PySCF, xTB, and
-related tools. It centralizes scientific configuration, backend input
-generation, local or scheduled execution, and result inspection so users and
-agents can operate supported programs through one transparent interface.
+CHEMSMART is the canonical command-line and project-YAML hub for automating computational-chemistry workflows across
+Gaussian, ORCA, PySCF, xTB, and related tools. It centralizes scientific configuration, backend input generation, local
+or scheduled execution, and result inspection so users and agents can operate supported programs through one transparent
+interface.
 
-The provider-neutral ``chemsmart agent`` pipeline -- ``plan``, ``review``,
-``run``, and the ``tui`` terminal -- uses the same project loaders and command
-compiler. Models propose typed scientific intent; CHEMSMART owns executable
-commands, approvals, execution state, and deterministic validation.
+The provider-neutral ``chemsmart agent`` pipeline -- ``plan``, ``review``, ``run``, and the ``tui`` terminal -- uses the
+same project loaders and command compiler. Models propose typed scientific intent; CHEMSMART owns executable commands,
+approvals, execution state, and deterministic validation.
 
 .. toctree::
    :maxdepth: 2

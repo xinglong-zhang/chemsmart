@@ -9,12 +9,13 @@ fresh human decision through the ordinary durable approval chain.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from .runs import RunSummaryV1, list_runs
 from chemsmart.agent.voice import human_state
+
+from .runs import RunSummaryV1, list_runs
 
 _PRIVATE = ".chemsmart-agent"
 
@@ -192,7 +193,7 @@ def _workflow_id_of(summary: RunSummaryV1) -> str:
     except (OSError, json.JSONDecodeError):
         return ""
     prefix = "execute-"
-    return session_id[len(prefix):] if session_id.startswith(prefix) else ""
+    return session_id[len(prefix) :] if session_id.startswith(prefix) else ""
 
 
 def run_rows(workspace: Path) -> tuple[RunRowV1, ...]:

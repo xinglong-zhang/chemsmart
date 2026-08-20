@@ -15,8 +15,8 @@ from chemsmart.agent.projects import (
 )
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
+from chemsmart.settings.gaussian import GaussianProjectSettings
 
 
 def test_loader_case_normalization_is_not_reported_as_scientific_override():

@@ -64,9 +64,9 @@ def test_waiting_on_a_scan_names_the_producer_and_the_reason():
 def test_the_advice_offers_the_two_routes_that_actually_exist():
     """Retain it as declared intent, or plan it once a structure is chosen."""
 
-    action = _undeferrable_producer_finding(
-        [_waiting("scan", False)]
-    )["next_action"]
+    action = _undeferrable_producer_finding([_waiting("scan", False)])[
+        "next_action"
+    ]
 
     assert "non-executable intent" in action
     assert "chosen" in action

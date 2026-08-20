@@ -452,9 +452,7 @@ class JobRunner(RegistryMixin):
 
         previous_handler = None
         try:
-            previous_handler = signal.signal(
-                signal.SIGTERM, _terminate_child
-            )
+            previous_handler = signal.signal(signal.SIGTERM, _terminate_child)
         except ValueError:
             # Not the main thread; keep the default delivery.
             previous_handler = None

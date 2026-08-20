@@ -53,7 +53,9 @@ def looks_like_host_report(text: str) -> bool:
 
 
 def _cells(line: str) -> list[str]:
-    return [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+    return [
+        cell.strip().strip("`") for cell in line.strip().strip("|").split("|")
+    ]
 
 
 def _is_separator(line: str) -> bool:
@@ -61,7 +63,9 @@ def _is_separator(line: str) -> bool:
     return bool(stripped) and set(stripped) <= {"|", "-", ":", " "}
 
 
-def _read_table(lines: list[str], index: int) -> tuple[list[str], list[list[str]], int]:
+def _read_table(
+    lines: list[str], index: int
+) -> tuple[list[str], list[list[str]], int]:
     headers = _cells(lines[index])
     index += 1
     if index < len(lines) and _is_separator(lines[index]):
@@ -73,14 +77,21 @@ def _read_table(lines: list[str], index: int) -> tuple[list[str], list[list[str]
     return headers, rows, index
 
 
-def _table(title: str, headers: list[str], rows: list[list[str]], *, drop: set[int]) -> Table:
+def _table(
+    title: str, headers: list[str], rows: list[list[str]], *, drop: set[int]
+) -> Table:
     table = Table(title=title)
     kept = [i for i in range(len(headers)) if i not in drop]
     for position, i in enumerate(kept):
         table.add_column(
             headers[i],
             style="bold cyan" if position == 0 else "",
-            justify="right" if headers[i].lower() in {"value", "temperature (k)", "pressure (atm)"} else "left",
+            justify=(
+                "right"
+                if headers[i].lower()
+                in {"value", "temperature (k)", "pressure (atm)"}
+                else "left"
+            ),
         )
     for row in rows:
         table.add_row(*[row[i] if i < len(row) else "" for i in kept])
@@ -103,7 +114,10 @@ def render_report_for_humans(markdown_text: str) -> Group:
     while index < len(lines):
         line = lines[index]
         stripped = line.strip()
-        if stripped == HOST_REPORT_TITLE.lstrip("# ").strip() or stripped == HOST_REPORT_TITLE:
+        if (
+            stripped == HOST_REPORT_TITLE.lstrip("# ").strip()
+            or stripped == HOST_REPORT_TITLE
+        ):
             flush()
             blocks.append(Text("Analysis results", style="bold"))
             index += 1
@@ -116,35 +130,49 @@ def render_report_for_humans(markdown_text: str) -> Group:
             blocks.append(Text(_NO_DECISION_HUMAN, style="italic"))
             # The host wraps this sentence over several lines; consume them.
             index += 1
-            while index < len(lines) and lines[index].strip() and not lines[index].startswith("#"):
+            while (
+                index < len(lines)
+                and lines[index].strip()
+                and not lines[index].startswith("#")
+            ):
                 index += 1
             continue
         if stripped == CONDITIONS_HEADING:
             flush()
             index += 1
-            while index < len(lines) and not lines[index].strip().startswith("|"):
+            while index < len(lines) and not lines[index].strip().startswith(
+                "|"
+            ):
                 index += 1
             headers, rows, index = _read_table(lines, index)
             drop: set[int] = set()
             if EVIDENCE_COLUMN in headers:
                 evidence = headers.index(EVIDENCE_COLUMN)
                 cells = [row[evidence] for row in rows if evidence < len(row)]
-                if cells and all(re.fullmatch(r"[0-9a-f]{64}", cell) for cell in cells):
+                if cells and all(
+                    re.fullmatch(r"[0-9a-f]{64}", cell) for cell in cells
+                ):
                     drop = {evidence}
             blocks.append(_table("Conditions", headers, rows, drop=drop))
             continue
         if stripped == THERMO_CONDITIONS_HEADING:
             flush()
             index += 1
-            while index < len(lines) and not lines[index].strip().startswith("|"):
+            while index < len(lines) and not lines[index].strip().startswith(
+                "|"
+            ):
                 index += 1
             headers, rows, index = _read_table(lines, index)
-            blocks.append(_table("Thermochemical conditions", headers, rows, drop=set()))
+            blocks.append(
+                _table("Thermochemical conditions", headers, rows, drop=set())
+            )
             continue
         if stripped == CLAIMS_HEADING:
             flush()
             index += 1
-            while index < len(lines) and not lines[index].strip().startswith("|"):
+            while index < len(lines) and not lines[index].strip().startswith(
+                "|"
+            ):
                 index += 1
             headers, rows, index = _read_table(lines, index)
             drop = (
@@ -163,7 +191,9 @@ def render_report_for_humans(markdown_text: str) -> Group:
                 if lines[index].strip():
                     bullets.append(lines[index])
                 index += 1
-            blocks.append(Markdown(f"**{section[0]}**\n\n" + "\n".join(bullets)))
+            blocks.append(
+                Markdown(f"**{section[0]}**\n\n" + "\n".join(bullets))
+            )
             continue
         passthrough.append(line)
         index += 1

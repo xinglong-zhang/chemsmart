@@ -18,8 +18,10 @@ logger = logging.getLogger(__name__)
 def hess(ctx, skip_completed, **kwargs):
     """Prepare an xTB Hessian/frequency calculation."""
     require_xtb_filename(ctx)
-    settings = ctx.obj["project_settings"].hess_settings().merge(
-        ctx.obj["job_settings"], keywords=ctx.obj["keywords"]
+    settings = (
+        ctx.obj["project_settings"]
+        .hess_settings()
+        .merge(ctx.obj["job_settings"], keywords=ctx.obj["keywords"])
     )
     settings.validate(expected_jobtype="hess")
 

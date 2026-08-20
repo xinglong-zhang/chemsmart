@@ -65,7 +65,11 @@ def _bind(host, **arguments):
     payload = host.dispatch(
         turn_id="t1",
         tool_name="bind_scan_point_geometry",
-        arguments={"artifact_id": "scan-result", "program": "orca", **arguments},
+        arguments={
+            "artifact_id": "scan-result",
+            "program": "orca",
+            **arguments,
+        },
     )
     assert payload["status"] == "ok"
     return payload["result"]
@@ -162,7 +166,9 @@ def test_a_result_with_no_surface_is_refused_by_name(tmp_path):
 def test_the_indices_reach_the_typed_extraction_layer():
     """The model chooses from evidence, so the indices must be selectable."""
 
-    from chemsmart.agent.postprocessing import extract_trusted_result_quantities
+    from chemsmart.agent.postprocessing import (
+        extract_trusted_result_quantities,
+    )
     from chemsmart.analysis.result_quantities import QuantitySelectorV1
 
     receipt = extract_trusted_result_quantities(

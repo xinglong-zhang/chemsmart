@@ -647,9 +647,9 @@ class GaussianFileMixin(FileMixin):
         for raw_line in modred_list_of_string:
             line = raw_line[2:-2]
             line_elems = line.split()
-            assert all(line_elem.isdigit() for line_elem in line_elems), (
-                f"modred coordinates should be integers, but is {line_elems} instead."
-            )
+            assert all(
+                line_elem.isdigit() for line_elem in line_elems
+            ), f"modred coordinates should be integers, but is {line_elems} instead."
             each_modred_list = [int(line_elem) for line_elem in line_elems]
             modred.append(each_modred_list)
         return modred
@@ -684,9 +684,7 @@ class GaussianFileMixin(FileMixin):
             each_coords_list = coords_string.split()
             assert all(
                 line_elem.isdigit() for line_elem in each_coords_list
-            ), (
-                f"modred coordinates should be integers, but is {line_elems[0]} instead."
-            )
+            ), f"modred coordinates should be integers, but is {line_elems[0]} instead."
             each_modred_list = [
                 int(line_elem) for line_elem in each_coords_list
             ]

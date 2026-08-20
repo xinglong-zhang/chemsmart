@@ -571,8 +571,8 @@ Updated CLI options after refactoring from "medium" to "intermediate" naming:
  ORCA Multiscale YAML Reference
 ********************************
 
-The following project settings configure ORCA multiscale calculations. Use
-``intermediate`` consistently for the QM2 layer.
+The following project settings configure ORCA multiscale calculations. Use ``intermediate`` consistently for the QM2
+layer.
 
 Core Configuration Parameters
 =============================
@@ -803,20 +803,17 @@ Common Issues and Solutions
 ===========================
 
 **Settings validation errors**
-   Compare the project YAML and effective command options. Regenerate the
-   input after correcting a mismatched layer or setting.
+   Compare the project YAML and effective command options. Regenerate the input after correcting a mismatched layer or
+   setting.
 
 **QM/MM Interface Optimization**
-   If the QM/MM interface is problematic, adjust custom bond lengths or
-   reconsider atom partitioning.
+   If the QM/MM interface is problematic, adjust custom bond lengths or reconsider atom partitioning.
 
 **Force Field and Method Compatibility**
-   Ensure your system has required force field files and that QM methods are
-   compatible.
+   Ensure your system has required force field files and that QM methods are compatible.
 
 **Crystal QM/MM Setup**
-   For crystal calculations, ensure proper unit cell definition and charge
-   convergence settings.
+   For crystal calculations, ensure proper unit cell definition and charge convergence settings.
 
 **Performance Optimization**
    -  Use appropriate basis sets for each layer (larger for QM, smaller for QM2)

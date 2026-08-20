@@ -1,18 +1,17 @@
-import re
 import logging
+import re
 
 from chemsmart.io.orca import (
-    ORCA_ALL_BASIS_SETS_LOWER,
-    ORCA_ALL_SOLVENT_MODELS,
     ORCA_ALL_AB_INITIO,
     ORCA_ALL_AUXILIARY_BASIS_SETS,
-    ORCA_ALL_BASIS_SETS,
+    ORCA_ALL_BASIS_SETS_LOWER,
     ORCA_ALL_DISPERSION_CORRECTIONS,
     ORCA_ALL_EXTRAPOLATION_BASIS_SETS,
     ORCA_ALL_FUNCTIONALS,
     ORCA_ALL_JOB_TYPES,
     ORCA_ALL_QM2_BUILT_IN_METHODS,
     ORCA_ALL_SCF_ALGORITHMS,
+    ORCA_ALL_SOLVENT_MODELS,
     ORCA_SCF_CONVERGENCE,
     is_orca_neb_joboption,
     normalize_orca_neb_joboption,
@@ -84,9 +83,7 @@ class ORCARoute:
         """
         for route_keyword in self.route_keywords:
             density_fitted_method = (
-                route_keyword[3:]
-                if route_keyword.startswith("ri-")
-                else None
+                route_keyword[3:] if route_keyword.startswith("ri-") else None
             )
             if route_keyword in {"rimp2", "mp2ri"}:
                 return "mp2"
@@ -115,7 +112,10 @@ class ORCARoute:
 
         recognized = {
             *ORCA_SEMIEMPIRICAL_ALIASES,
-            *(value.casefold() for value in ORCA_SEMIEMPIRICAL_ALIASES.values()),
+            *(
+                value.casefold()
+                for value in ORCA_SEMIEMPIRICAL_ALIASES.values()
+            ),
         }
         for route_keyword in self.route_keywords:
             if route_keyword.casefold() in recognized:
@@ -275,8 +275,7 @@ class ORCARoute:
         from chemsmart.jobs.orca.settings import ORCA_RI_KEYWORDS
 
         by_keyword = {
-            keyword.lower(): name
-            for name, keyword in ORCA_RI_KEYWORDS.items()
+            keyword.lower(): name for name, keyword in ORCA_RI_KEYWORDS.items()
         }
         for route_keyword in self.route_keywords:
             match = by_keyword.get(route_keyword.lower())

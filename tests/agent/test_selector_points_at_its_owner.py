@@ -47,9 +47,9 @@ def test_the_redirect_table_never_shadows_a_real_selector():
     """A quantity that is selectable must not be redirected elsewhere."""
 
     overlap = sorted(set(QUANTITIES_FROM_ANOTHER_TOOL) & SUPPORTED_SELECTORS)
-    assert not overlap, (
-        f"{overlap} are selectable here and would be wrongly redirected"
-    )
+    assert (
+        not overlap
+    ), f"{overlap} are selectable here and would be wrongly redirected"
 
 
 def test_every_redirect_target_is_a_tool_the_model_can_call():
@@ -60,9 +60,9 @@ def test_every_redirect_target_is_a_tool_the_model_can_call():
         for item in build_command_compiled_tool_surface().tool_definitions
     }
     missing = sorted(set(QUANTITIES_FROM_ANOTHER_TOOL.values()) - exposed)
-    assert not missing, (
-        f"the refusal points at {missing}, which the model cannot call"
-    )
+    assert (
+        not missing
+    ), f"the refusal points at {missing}, which the model cannot call"
 
 
 def test_the_redirected_quantities_are_the_ones_that_tool_returns():

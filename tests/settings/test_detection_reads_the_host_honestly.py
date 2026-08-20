@@ -26,9 +26,9 @@ def _runner(responses):
 def test_a_responding_sinfo_is_slurm_with_named_evidence():
     detection = detect_scheduler(
         env={},
-        which=lambda name: f"/usr/bin/{name}"
-        if name in {"sbatch", "sinfo"}
-        else None,
+        which=lambda name: (
+            f"/usr/bin/{name}" if name in {"sbatch", "sinfo"} else None
+        ),
         runner=_runner({"sinfo --version": (0, "slurm 26.05.2\n")}),
     )
     assert detection.scheduler == "SLURM"
@@ -38,9 +38,9 @@ def test_a_responding_sinfo_is_slurm_with_named_evidence():
 def test_an_installed_but_dead_slurm_is_not_claimed():
     detection = detect_scheduler(
         env={},
-        which=lambda name: f"/usr/bin/{name}"
-        if name in {"sbatch", "sinfo"}
-        else None,
+        which=lambda name: (
+            f"/usr/bin/{name}" if name in {"sbatch", "sinfo"} else None
+        ),
         runner=_runner({"sinfo --version": (1, "")}),
     )
     assert detection.scheduler is None
@@ -59,9 +59,9 @@ def test_qsub_with_sge_root_is_sge_not_pbs():
 def test_qsub_with_pbsnodes_is_pbs():
     detection = detect_scheduler(
         env={},
-        which=lambda name: f"/usr/bin/{name}"
-        if name in {"qsub", "pbsnodes"}
-        else None,
+        which=lambda name: (
+            f"/usr/bin/{name}" if name in {"qsub", "pbsnodes"} else None
+        ),
         runner=_runner({"qstat --version": (0, "pbs_version = 2024.1\n")}),
     )
     assert detection.scheduler == "PBS"
@@ -69,7 +69,9 @@ def test_qsub_with_pbsnodes_is_pbs():
 
 
 def test_a_bare_host_is_local_with_the_reason_stated():
-    detection = detect_scheduler(env={}, which=lambda _n: None, runner=_runner({}))
+    detection = detect_scheduler(
+        env={}, which=lambda _n: None, runner=_runner({})
+    )
     assert detection.scheduler is None
     assert any("local execution only" in item for item in detection.evidence)
 

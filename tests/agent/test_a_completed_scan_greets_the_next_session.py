@@ -43,9 +43,7 @@ def _workspace(tmp_path, *sources):
 
 
 def test_a_completed_scan_is_registered_for_the_next_session(tmp_path):
-    observations = _scan_orca_result_artifacts(
-        _workspace(tmp_path, _SCAN)
-    )
+    observations = _scan_orca_result_artifacts(_workspace(tmp_path, _SCAN))
 
     assert [item.jobtype for item in observations] == ["scan"]
     scan = observations[0]

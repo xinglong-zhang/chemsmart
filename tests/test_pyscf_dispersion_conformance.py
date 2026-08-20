@@ -124,9 +124,7 @@ def test_preflight_fails_closed_for_unbound_dispersion_evidence(
 
 
 def test_preflight_accepts_exact_supported_dispersion_evidence():
-    findings = preflight(
-        _settings(), _water(), _environment(_conformance())
-    )
+    findings = preflight(_settings(), _water(), _environment(_conformance()))
 
     assert not [
         finding for finding in findings if finding.field == "dispersion"

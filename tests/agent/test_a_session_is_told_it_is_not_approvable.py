@@ -80,9 +80,7 @@ def test_an_approvable_workflow_reports_nothing(tmp_path):
     assert host.unapproved_workflow_summary() is None
 
 
-@pytest.mark.parametrize(
-    "method", ("unapproved_workflow_summary",)
-)
+@pytest.mark.parametrize("method", ("unapproved_workflow_summary",))
 def test_the_loop_host_protocol_is_declared_by_the_real_host(method):
     """The loop calls this at every stop, so the host must actually have it."""
 

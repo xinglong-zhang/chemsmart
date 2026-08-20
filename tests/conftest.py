@@ -68,10 +68,9 @@ def make_thermochemistry_mock():
             result = Thermochemistry.cleaned_frequencies.fget(mock)
             assert result == [100.0, 100.0]
     """
-    from chemsmart.analysis.thermochemistry import Thermochemistry
-
     from chemsmart.analysis.thermochemistry import (
         NEAR_ZERO_FREQUENCY_TOLERANCE_CM,
+        Thermochemistry,
     )
 
     def _factory(

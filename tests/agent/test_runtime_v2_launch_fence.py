@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from chemsmart.agent._contracts import ContractError, canonical_data, canonical_sha256
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_data,
+    canonical_sha256,
+)
 from chemsmart.agent.execution import (
     ProgramExecutionInvocationV1,
     build_execution_resource_spec,
@@ -136,7 +140,9 @@ def test_launch_reservation_is_one_atomic_full_frontier_event(tmp_path):
         tmp_path / "events" / "runtime.jsonl", session_id="water-session"
     )
 
-    result, plan, materialized, approval, invocation = _reserve(store, tmp_path)
+    result, plan, materialized, approval, invocation = _reserve(
+        store, tmp_path
+    )
 
     assert result.status == "reserved"
     events = store.read_events()
@@ -248,9 +254,7 @@ def test_legacy_two_event_start_is_inspectable_but_cannot_launch(tmp_path):
         tmp_path / "events" / "runtime.jsonl", session_id="water-session"
     )
     plan, materialized, approval, invocation = _frontier(tmp_path)
-    store.record_materialized_workflow(
-        turn_id="turn-1", workflow=materialized
-    )
+    store.record_materialized_workflow(turn_id="turn-1", workflow=materialized)
     store.consume_and_start_workflow(
         turn_id="turn-1",
         plan=plan,

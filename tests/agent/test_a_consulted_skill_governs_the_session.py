@@ -22,8 +22,8 @@ import pytest
 
 from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
-from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.agent.skills import resolve_skill
+from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 
 _SKILL = "method-adequacy"
 

@@ -63,9 +63,7 @@ def test_started_rows_settle_in_place_as_their_calls_finish(tmp_path: Path):
                         {
                             "tool": "preview_command",
                             "request_id": "c1",
-                            "canonical_result": {
-                                "result": {"node_id": "sp1"}
-                            },
+                            "canonical_result": {"result": {"node_id": "sp1"}},
                         },
                     )
                 )

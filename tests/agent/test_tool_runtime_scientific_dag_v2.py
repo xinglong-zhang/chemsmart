@@ -6,10 +6,10 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from chemsmart.agent.execution import derive_ready_node_ids
 from chemsmart.agent._contracts import ContractError, canonical_sha256
-from chemsmart.agent.runtime.event_store import RuntimeEventStore
+from chemsmart.agent.execution import derive_ready_node_ids
 from chemsmart.agent.projects import ProjectValidationReceiptV1
+from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import (
     CommandCompiledToolHostV1,
     _project_v1_execution_run_state,
@@ -89,9 +89,7 @@ def test_rejected_replan_cannot_displace_the_latest_observed_workflow(
         arguments=accepted_arguments,
     )["result"]
     accepted_draft_sha256 = accepted["workflow_draft"]["draft_sha256"]
-    accepted_plan_sha256 = accepted["scientific_workflow_plan"][
-        "plan_sha256"
-    ]
+    accepted_plan_sha256 = accepted["scientific_workflow_plan"]["plan_sha256"]
     frozen_approval = SimpleNamespace(plan_sha256=accepted_plan_sha256)
     host.frozen_workflow_approval = frozen_approval
 
@@ -296,9 +294,10 @@ def test_validated_project_repair_can_rebind_without_rewriting_analysis_dag(
             **body, receipt_sha256=canonical_sha256(body)
         )
         host.project_validations[receipt.receipt_sha256] = receipt
-    assert host._project_workflow_binding_observation(replacement_id)[
-        "status"
-    ] == "unbound"
+    assert (
+        host._project_workflow_binding_observation(replacement_id)["status"]
+        == "unbound"
+    )
 
     revised = host.dispatch(
         turn_id="turn-1",

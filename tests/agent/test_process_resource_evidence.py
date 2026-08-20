@@ -1,9 +1,9 @@
 """Focused checks for agent-bound process resource evidence."""
 
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -48,9 +48,10 @@ def test_live_evaluation_binds_resource_observation_without_false_finding():
         process_observation=observation,
     )
 
-    assert evaluation.observations["process_observation"][
-        "receipt_sha256"
-    ] == observation.receipt_sha256
+    assert (
+        evaluation.observations["process_observation"]["receipt_sha256"]
+        == observation.receipt_sha256
+    )
     assert not any(
         finding.startswith("execution.process.")
         for finding in evaluation.findings
@@ -72,9 +73,12 @@ def test_launch_failure_is_a_deterministic_execution_finding():
 def test_resource_receipt_is_an_immutable_execution_output(tmp_path):
     observation = _completed_observation()
     path = tmp_path / "execution-resource.receipt.json"
-    payload = json.dumps(
-        observation.as_dict(), sort_keys=True, separators=(",", ":")
-    ) + "\n"
+    payload = (
+        json.dumps(
+            observation.as_dict(), sort_keys=True, separators=(",", ":")
+        )
+        + "\n"
+    )
     _write_host_execution_artifact(path, payload)
     host = object.__new__(CommandCompiledToolHostV1)
     host.artifacts = {}

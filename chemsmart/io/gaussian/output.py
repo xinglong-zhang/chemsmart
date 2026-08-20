@@ -644,13 +644,7 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Helper to drop the first item across all arrays (when present)
         def drop_first():
-            nonlocal \
-                orientations, \
-                orientations_pbc, \
-                energies, \
-                forces, \
-                rot_consts, \
-                point_groups
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             if orientations:
                 orientations = orientations[1:]
             if orientations_pbc:
@@ -668,13 +662,7 @@ class Gaussian16Output(GaussianFileMixin):
 
         # Helper to keep only the last frame across all arrays
         def keep_last_only():
-            nonlocal \
-                orientations, \
-                orientations_pbc, \
-                energies, \
-                forces, \
-                rot_consts, \
-                point_groups
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             orientations = orientations[-1:] if orientations else []
             orientations_pbc = (
                 orientations_pbc[-1:] if orientations_pbc else []
@@ -691,13 +679,7 @@ class Gaussian16Output(GaussianFileMixin):
         # Right-trim auxiliaries to the number of
         # orientations (no data loss in orientations)
         def align_lengths_to_orientations():
-            nonlocal \
-                orientations, \
-                orientations_pbc, \
-                energies, \
-                forces, \
-                rot_consts, \
-                point_groups
+            nonlocal orientations, orientations_pbc, energies, forces, rot_consts, point_groups
             n = len(orientations)
             if orientations_pbc and len(orientations_pbc) > n:
                 orientations_pbc = orientations_pbc[:n]
@@ -3121,9 +3103,9 @@ class Gaussian16OutputWithPBC(Gaussian16Output):
             if "Periodicity:" in line:
                 pbc_conditions = line.split("Periodicity:")[-1]
                 pbc_conditions = pbc_conditions.split()
-                assert len(pbc_conditions) == 3, (
-                    "Periodicity given for 3 dimensions."
-                )
+                assert (
+                    len(pbc_conditions) == 3
+                ), "Periodicity given for 3 dimensions."
                 return np.array(
                     [
                         int(pbc_conditions[0]),

@@ -52,8 +52,10 @@ def _bind_cpu_only_runner(ctx):
             "--num-gpus request must be 0."
         )
     setattr(jobrunner, "xtb_gpu_request_explicit", explicit)
-    if not explicit and isinstance(requested, int) and not isinstance(
-        requested, bool
+    if (
+        not explicit
+        and isinstance(requested, int)
+        and not isinstance(requested, bool)
     ):
         # Generic runners inherit the server inventory.  That inventory is
         # not an xTB resource request, so normalize this program node to CPU.

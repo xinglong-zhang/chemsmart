@@ -35,9 +35,7 @@ class RunScript:
         cli_args: Command line arguments to pass to the job.
     """
 
-    def __init__(
-        self, filename, cli_args, batch=False, execution_cwd=None
-    ):
+    def __init__(self, filename, cli_args, batch=False, execution_cwd=None):
         """
         Initialize the run script generator.
 
@@ -454,9 +452,7 @@ class Submitter(RegistryMixin):
             self.submit_folder, self.submit_script
         )
         with open(submit_script_path, "w") as f:
-            logger.debug(
-                f"Writing submission script to: {submit_script_path}"
-            )
+            logger.debug(f"Writing submission script to: {submit_script_path}")
             self._write_bash_header(f)
             self._write_scheduler_options(f)
             self._write_program_specifics(f)

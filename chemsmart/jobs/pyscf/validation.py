@@ -122,9 +122,7 @@ RULE_RESULT_GEOMETRY = "pyscf.result.geometry_invalid"
 RULE_RESULT_SHAPE = "pyscf.result.shape_invalid"
 RULE_RESULT_NONFINITE = "pyscf.result.nonfinite"
 RULE_RESULT_HESSIAN = "pyscf.result.hessian_invalid"
-RULE_RESULT_HESSIAN_CONSISTENCY = (
-    "pyscf.result.hessian_frequency_inconsistent"
-)
+RULE_RESULT_HESSIAN_CONSISTENCY = "pyscf.result.hessian_frequency_inconsistent"
 RULE_RESULT_HESSIAN_CONSISTENCY_UNVERIFIED = (
     "pyscf.result.hessian_consistency_unverified"
 )
@@ -136,9 +134,7 @@ RULE_RESULT_SPIN_DIAGNOSTIC = "pyscf.result.spin_diagnostic_invalid"
 RULE_RESULT_CONTRACT = "pyscf.result.contract_incomplete"
 RULE_RESULT_REFERENCE = "pyscf.result.reference_family_mismatch"
 
-FREQUENCY_VALIDATION_SCHEMA_VERSION = (
-    "chemsmart.pyscf-frequency-validation.v1"
-)
+FREQUENCY_VALIDATION_SCHEMA_VERSION = "chemsmart.pyscf-frequency-validation.v1"
 RESULT_VALIDATION_SCHEMA_VERSION = "chemsmart.pyscf-result-validation.v1"
 # Geometry optimizers do not preserve exact collinearity at machine precision.
 # A relative transverse spread of 1e-4 is still a conservative linear-rotor
@@ -177,9 +173,7 @@ def _linearity_metrics(coordinates):
     centered = values - values.mean(axis=0)
     singular_values = np.linalg.svd(centered, compute_uv=False)
     scale = float(singular_values[0]) if singular_values.size else 0.0
-    second = (
-        float(singular_values[1]) if singular_values.size > 1 else 0.0
-    )
+    second = float(singular_values[1]) if singular_values.size > 1 else 0.0
     if not math.isfinite(scale) or scale <= 0.0:
         return scale, second, None
     return (
@@ -623,9 +617,7 @@ def _verify_materializations(spec, provenance=None):
                 )
             )
         expected = {
-            "schema_version": (
-                "chemsmart.pyscf-solvent-materialization.v1"
-            ),
+            "schema_version": ("chemsmart.pyscf-solvent-materialization.v1"),
             "field": "solvent_eps",
             "source": "pyscf.solvent.smd.solvent_db",
             "source_key": spec.get("solvent_id"),
@@ -877,9 +869,7 @@ def _functional_materialization_validation(spec, provenance):
             "schema_version": None,
             "environment_bound": False,
         }, ()
-    schema_version = (
-        record.get("schema_version")
-    )
+    schema_version = record.get("schema_version")
     if schema_version == "chemsmart.pyscf-functional-definition.v3":
         environment_bound = bool(
             record.get("pyscf_version") == provenance.get("pyscf_version")
@@ -1081,9 +1071,7 @@ def _spin_diagnostic_validation(
         effective_multiplicity
     )
     expected_effective = (
-        math.sqrt(1.0 + 4.0 * max(spin_square, 0.0))
-        if values_finite
-        else None
+        math.sqrt(1.0 + 4.0 * max(spin_square, 0.0)) if values_finite else None
     )
     if (
         not values_finite
@@ -1130,7 +1118,10 @@ def _spin_diagnostic_validation(
         )
         else "deviation_observed_without_universal_threshold"
     )
-    if observation["interpretation"] != "numerically_matches_target_eigenvalue":
+    if (
+        observation["interpretation"]
+        != "numerically_matches_target_eigenvalue"
+    ):
         advisories.append(
             _result_advisory(
                 "pyscf.spin_diagnostic.deviation_observed",
@@ -1357,9 +1348,7 @@ def frequency_validation_receipt(
                     "convention": (
                         "real wavenumber strictly below the negative cutoff"
                     ),
-                    "imaginary_mode_cutoff_cm1": (
-                        imaginary_mode_cutoff_cm1
-                    ),
+                    "imaginary_mode_cutoff_cm1": (imaginary_mode_cutoff_cm1),
                 },
                 observed={
                     "imaginary_mode_count": imaginary_count,
@@ -1397,7 +1386,9 @@ def _result_contract_validation(spec, status):
 
     observed = spec.get("result_contract_version")
     observation = {
-        "state": "current" if observed == RESULT_CONTRACT_VERSION else "legacy",
+        "state": (
+            "current" if observed == RESULT_CONTRACT_VERSION else "legacy"
+        ),
         "observed_version": observed,
         "current_version": RESULT_CONTRACT_VERSION,
         "new_execution_admissible": observed == RESULT_CONTRACT_VERSION,
@@ -1536,8 +1527,7 @@ def _runtime_reference_family(runtime):
     mro = runtime.get("mean_field_mro")
     mro = (
         tuple(str(value) for value in mro)
-        if isinstance(mro, Collection)
-        and not isinstance(mro, (str, bytes))
+        if isinstance(mro, Collection) and not isinstance(mro, (str, bytes))
         else ()
     )
     if not isinstance(mean_field_class, str) or not mean_field_class:
@@ -1922,8 +1912,7 @@ def validate_pyscf_result(
                         )
                     )
             expected_aggregate = bool(
-                optimizer_converged is True
-                and final_scf_converged is True
+                optimizer_converged is True and final_scf_converged is True
             )
             if type(converged) is not bool or converged != expected_aggregate:
                 findings.append(
@@ -1985,9 +1974,15 @@ def validate_pyscf_result(
         and not isinstance(observed_multiplicity, bool)
         and isinstance(observed_multiplicity, Integral)
     )
-    if not state_types_valid or tuple(
-        int(value) for value in observed_state if isinstance(value, Integral)
-    ) != expected_state:
+    if (
+        not state_types_valid
+        or tuple(
+            int(value)
+            for value in observed_state
+            if isinstance(value, Integral)
+        )
+        != expected_state
+    ):
         findings.append(
             _result_finding(
                 RULE_RESULT_STATE,
@@ -2174,9 +2169,7 @@ def validate_pyscf_result(
         results,
         status,
         multiplicity=int(expected_multiplicity),
-        representation=electronic_state_observation[
-            "orbital_representation"
-        ],
+        representation=electronic_state_observation["orbital_representation"],
         require_current=current_result_contract,
     )
     findings.extend(spin_findings)
@@ -2226,8 +2219,7 @@ def validate_pyscf_result(
             )
             matrix_scale = float(np.max(np.abs(matrix)))
             raw_limit = float(
-                _HESSIAN_SYMMETRY_ATOL
-                + _HESSIAN_SYMMETRY_RTOL * matrix_scale
+                _HESSIAN_SYMMETRY_ATOL + _HESSIAN_SYMMETRY_RTOL * matrix_scale
             )
             raw_admissible = bool(
                 isinstance(raw_antisymmetry, (int, float))
@@ -2235,15 +2227,15 @@ def validate_pyscf_result(
                 and np.isfinite(raw_antisymmetry)
                 and 0.0 <= float(raw_antisymmetry) <= raw_limit
             )
-            hessian_observation[
-                "raw_max_abs_antisymmetry_eh_per_bohr2"
-            ] = raw_antisymmetry
-            hessian_observation[
-                "raw_antisymmetry_limit_eh_per_bohr2"
-            ] = raw_limit
-            hessian_observation[
-                "raw_symmetrization_admissible"
-            ] = raw_admissible
+            hessian_observation["raw_max_abs_antisymmetry_eh_per_bohr2"] = (
+                raw_antisymmetry
+            )
+            hessian_observation["raw_antisymmetry_limit_eh_per_bohr2"] = (
+                raw_limit
+            )
+            hessian_observation["raw_symmetrization_admissible"] = (
+                raw_admissible
+            )
             if not raw_admissible:
                 findings.append(
                     _result_finding(
@@ -2282,12 +2274,8 @@ def validate_pyscf_result(
             symbols=observed_symbols,
             positions=results.get("positions"),
             frequencies=results.get("vibrational_frequencies"),
-            expected_imaginary_modes=policy[
-                "expected_imaginary_mode_count"
-            ],
-            imaginary_mode_cutoff_cm1=policy[
-                "imaginary_mode_cutoff_cm1"
-            ],
+            expected_imaginary_modes=policy["expected_imaginary_mode_count"],
+            imaginary_mode_cutoff_cm1=policy["imaginary_mode_cutoff_cm1"],
         )
         findings.extend(frequency["findings"])
         expected_modes = frequency.get("expected_mode_count")
@@ -2355,12 +2343,16 @@ def validate_pyscf_result(
     validation_state = (
         "failed"
         if findings
-        else "qualified_legacy"
-        if legacy_evidence
-        else "unclassified"
-        if jobtype == "hess"
-        and policy["classification_state"] != "classified"
-        else "validated"
+        else (
+            "qualified_legacy"
+            if legacy_evidence
+            else (
+                "unclassified"
+                if jobtype == "hess"
+                and policy["classification_state"] != "classified"
+                else "validated"
+            )
+        )
     )
     return {
         "schema_version": RESULT_VALIDATION_SCHEMA_VERSION,
@@ -2395,9 +2387,7 @@ def _normalize_result_jobtype(value):
     return normal
 
 
-def _result_verification_settings(
-    *, settings, jobtype, charge, multiplicity
-):
+def _result_verification_settings(*, settings, jobtype, charge, multiplicity):
     if isinstance(settings, Mapping):
         resolved = dict(settings)
         resolved.setdefault("jobtype", jobtype)
@@ -2585,7 +2575,13 @@ def _validate_hessian_frequency_consistency(
             symbols=symbols,
             positions=positions,
         )
-    except (ArithmeticError, KeyError, TypeError, ValueError, np.linalg.LinAlgError) as exc:
+    except (
+        ArithmeticError,
+        KeyError,
+        TypeError,
+        ValueError,
+        np.linalg.LinAlgError,
+    ) as exc:
         observation["failure"] = type(exc).__name__
         return observation, [
             _result_finding(
@@ -2667,9 +2663,7 @@ def _independent_mass_weighted_frequencies(*, matrix, symbols, positions):
         vectors.append((square_root_masses[:, None] * axis).reshape(-1))
     for axis in np.eye(3):
         rotation = np.cross(centered, axis)
-        vectors.append(
-            (square_root_masses[:, None] * rotation).reshape(-1)
-        )
+        vectors.append((square_root_masses[:, None] * rotation).reshape(-1))
     tr_matrix = np.column_stack(vectors)
     left, _, _ = np.linalg.svd(tr_matrix, full_matrices=True)
     if len(symbols) == 1:
@@ -2693,9 +2687,11 @@ def _independent_mass_weighted_frequencies(*, matrix, symbols, positions):
         / (2.0 * math.pi * _LIGHT_SPEED_M_S)
         * 1.0e-2
     )
-    frequencies = np.sign(force_constants) * np.sqrt(
-        np.abs(force_constants)
-    ) * conversion
+    frequencies = (
+        np.sign(force_constants)
+        * np.sqrt(np.abs(force_constants))
+        * conversion
+    )
     return frequencies.astype(float, copy=False), tr_rank
 
 
@@ -3079,9 +3075,7 @@ def _verify_bound_receipt(spec, provenance, expected_receipt):
                 )
 
     spec_applied = spec.get("applied_settings_sha256", _MISSING)
-    provenance_applied = provenance.get(
-        "applied_settings_sha256", _MISSING
-    )
+    provenance_applied = provenance.get("applied_settings_sha256", _MISSING)
     require_applied = bool(
         expected_receipt.get("require_applied_settings_sha256", False)
     )
@@ -3144,9 +3138,7 @@ def _verify_bound_receipt(spec, provenance, expected_receipt):
         )
 
         fields = applied_pyscf_spec_fields(spec)
-        applied_payload = {
-            field: spec.get(field) for field in fields
-        }
+        applied_payload = {field: spec.get(field) for field in fields}
         observed_digest = PySCFScriptWriter.settings_digest(applied_payload)
         if observed_digest != spec_applied:
             violations.append(
@@ -3332,9 +3324,10 @@ def _check_setting_values(settings, _molecule, _environment):
                     evidence_ref="settings:dispersion",
                 )
             )
-        if _member(settings, "solvent_model", None) is not None or _member(
-            settings, "solvent_id", None
-        ) is not None:
+        if (
+            _member(settings, "solvent_model", None) is not None
+            or _member(settings, "solvent_id", None) is not None
+        ):
             violations.append(
                 PySCFViolation(
                     rule_id=RULE_INVALID_SETTING,
@@ -3404,7 +3397,9 @@ def _check_setting_values(settings, _molecule, _environment):
             )
         )
     for field in ("scf_maxiter", "opt_maxsteps"):
-        value = _member(settings, field, 100 if field == "opt_maxsteps" else None)
+        value = _member(
+            settings, field, 100 if field == "opt_maxsteps" else None
+        )
         if value is not None and (
             isinstance(value, bool)
             or not isinstance(value, Integral)

@@ -83,9 +83,7 @@ def test_bootstrap_verifier_is_explicitly_unobserved(tmp_path):
     registry = load_program_capabilities()
     schema = build_live_click_schema()
     xyz = tmp_path / "h2.xyz"
-    xyz.write_text(
-        "2\nH2\nH 0 0 0\nH 0 0 0.74\n", encoding="utf-8"
-    )
+    xyz.write_text("2\nH2\nH 0 0 0\nH 0 0 0.74\n", encoding="utf-8")
     server = tmp_path / "preview-server.yaml"
     server.write_text(_preview_server_profile(), encoding="utf-8")
     receipt = bootstrap_program_conformance(

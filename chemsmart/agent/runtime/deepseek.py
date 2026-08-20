@@ -8,13 +8,13 @@ while every public/persistable projection removes private reasoning fields.
 
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass, field
-from http.client import HTTPException, IncompleteRead
 import json
 import re
 import ssl
 import time
+from copy import deepcopy
+from dataclasses import dataclass, field
+from http.client import HTTPException, IncompleteRead
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -33,7 +33,6 @@ from chemsmart.agent.runtime.transport import (
     open_bounded_https_response,
     read_bounded_response_body,
 )
-
 
 DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash"
 DEEPSEEK_OFFICIAL_ENDPOINT = "https://api.deepseek.com"
@@ -328,7 +327,9 @@ class ProviderCapabilitiesV1:
             max_output_tokens=self.max_output_tokens,
         )
         if self.private_reasoning_persisted:
-            raise ContractError("private provider reasoning cannot be persisted")
+            raise ContractError(
+                "private provider reasoning cannot be persisted"
+            )
 
 
 @dataclass(frozen=True)
@@ -360,7 +361,9 @@ class DeepSeekV4FlashConfigV1:
             max_output_tokens=self.max_output_tokens,
         )
         if not _is_official_endpoint(self.endpoint):
-            raise ContractError("thinking continuation requires official DeepSeek")
+            raise ContractError(
+                "thinking continuation requires official DeepSeek"
+            )
         if self.thinking_mode != "enabled":
             raise ContractError("DeepSeek V4 tool sessions require thinking")
         if self.reasoning_effort not in {"high", "max"}:
@@ -392,7 +395,9 @@ class ProviderTurnReceiptV1:
         if self.schema_version != "chemsmart.provider-turn-receipt.v1":
             raise ContractError("unsupported provider turn receipt schema")
         if self.private_reasoning_persisted:
-            raise ContractError("private provider reasoning cannot be persisted")
+            raise ContractError(
+                "private provider reasoning cannot be persisted"
+            )
         expected = canonical_sha256(
             {
                 "schema_version": self.schema_version,
@@ -530,33 +535,36 @@ class DeepSeekV4ToolSession:
         self._seen_tool_call_ids.update(tool_call_ids)
         return public_provider_response(payload), receipt
 
-    def append_tool_results(
-        self, results: list[dict[str, Any]]
-    ) -> None:
+    def append_tool_results(self, results: list[dict[str, Any]]) -> None:
         """Append OpenAI-shaped tool results after the preserved assistant."""
 
-        observed_ids = tuple(str(item.get("tool_call_id") or "") for item in results)
+        observed_ids = tuple(
+            str(item.get("tool_call_id") or "") for item in results
+        )
         if tuple(sorted(observed_ids)) != tuple(
             sorted(self._outstanding_tool_call_ids)
         ):
-            raise ContractError("tool results must exactly match outstanding calls")
+            raise ContractError(
+                "tool results must exactly match outstanding calls"
+            )
         if len(observed_ids) != len(set(observed_ids)):
             raise ContractError("tool results contain duplicate call IDs")
         for result in results:
             if result.get("role") != "tool" or not result.get("tool_call_id"):
-                raise ContractError("tool results require role and tool_call_id")
+                raise ContractError(
+                    "tool results require role and tool_call_id"
+                )
             if not isinstance(result.get("content"), str):
-                raise ContractError("tool result content must be a JSON string")
+                raise ContractError(
+                    "tool result content must be a JSON string"
+                )
             self._history.append(deepcopy(result))
         self._outstanding_tool_call_ids = ()
 
     def public_history(self) -> list[dict[str, Any]]:
         """Return the only history shape permitted in events or artifacts."""
 
-        return [
-            _public_message(message)
-            for message in self._history
-        ]
+        return [_public_message(message) for message in self._history]
 
     def close(self) -> None:
         """Discard provider-private continuation state deterministically."""
@@ -592,9 +600,7 @@ def _public_message(message: Mapping[str, Any]) -> dict[str, Any]:
     return sanitized if isinstance(sanitized, dict) else {}
 
 
-def _is_tool_function_path(
-    path: tuple[Any, ...], context: str
-) -> bool:
+def _is_tool_function_path(path: tuple[Any, ...], context: str) -> bool:
     direct_message = (
         context == "assistant_message"
         and len(path) == 3
@@ -642,18 +648,14 @@ def _public_payload_at_path(
                 # text can change the action or make a later call undecodable.
                 result[key] = item
                 continue
-            public = _public_payload_at_path(
-                item, (*path, key), context
-            )
+            public = _public_payload_at_path(item, (*path, key), context)
             if public is not None:
                 result[key] = public
         return result
     if isinstance(value, list):
         result = []
         for index, item in enumerate(value):
-            public = _public_payload_at_path(
-                item, (*path, index), context
-            )
+            public = _public_payload_at_path(item, (*path, index), context)
             if public is not None:
                 result.append(public)
         return result
@@ -794,9 +796,7 @@ def _turn_receipt(
         ),
         "private_reasoning_persisted": False,
     }
-    return ProviderTurnReceiptV1(
-        **body, receipt_sha256=canonical_sha256(body)
-    )
+    return ProviderTurnReceiptV1(**body, receipt_sha256=canonical_sha256(body))
 
 
 def _is_official_endpoint(endpoint: str) -> bool:

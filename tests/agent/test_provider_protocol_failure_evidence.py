@@ -5,8 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from chemsmart.agent._contracts import canonical_json, canonical_sha256
-from chemsmart.agent._contracts import ContractError
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_json,
+    canonical_sha256,
+)
 from chemsmart.agent.loop import ToolLoopRunner, _execution_wake_reason
 from chemsmart.agent.request_context import (
     ProviderNetworkBudgetV1,
@@ -22,8 +25,10 @@ from chemsmart.agent.runtime.contracts import (
     TaskEnvelopeV1,
     TaskPhase,
 )
-from chemsmart.agent.runtime.deepseek import public_provider_response
-from chemsmart.agent.runtime.deepseek import DeepSeekTransportError
+from chemsmart.agent.runtime.deepseek import (
+    DeepSeekTransportError,
+    public_provider_response,
+)
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
 
@@ -459,7 +464,9 @@ def test_public_decode_failure_cannot_dispatch_an_earlier_call(
         ] = "{"
         return public
 
-    monkeypatch.setattr(deepseek, "public_provider_response", _corrupt_second_call)
+    monkeypatch.setattr(
+        deepseek, "public_provider_response", _corrupt_second_call
+    )
     config = Qwen38MaxConfigV1()
     session = Qwen38MaxToolSession(
         transport=lambda _payload: response,
@@ -629,9 +636,10 @@ def test_approved_engine_execution_parks_provider_and_wakes_with_durable_evidenc
 def test_approved_program_tool_wake_reason_is_evidence_based(
     result, observation, expected
 ):
-    assert _execution_wake_reason(
-        result=result, process_observation=observation
-    ) == expected
+    assert (
+        _execution_wake_reason(result=result, process_observation=observation)
+        == expected
+    )
 
 
 def test_approved_program_dispatch_rejection_still_closes_wait_event(tmp_path):
@@ -720,7 +728,9 @@ def test_execution_wait_admission_failure_is_canonical_and_terminal(tmp_path):
             raise ContractError("bounded execution window is exhausted")
 
         def dispatch(self, **_kwargs):  # pragma: no cover - must not launch
-            raise AssertionError("dispatch must not follow failed wait admission")
+            raise AssertionError(
+                "dispatch must not follow failed wait admission"
+            )
 
     responses = iter(
         (
@@ -798,10 +808,15 @@ def test_execution_wait_admission_failure_is_canonical_and_terminal(tmp_path):
     assert not any(event.kind == "tool_woke" for event in events)
     assert events[-1].kind == EventKind.RUNTIME_TERMINATED.value
     assert store.state().active_waits == {}
-    assert "private continuation" not in (tmp_path / "events" / "runtime.jsonl").read_text()
+    assert (
+        "private continuation"
+        not in (tmp_path / "events" / "runtime.jsonl").read_text()
+    )
 
 
-def test_provider_deadline_failure_terminalizes_inside_episode_reserve(tmp_path):
+def test_provider_deadline_failure_terminalizes_inside_episode_reserve(
+    tmp_path,
+):
     class DeadlineTransport:
         def __init__(self):
             self.effective = 300.0
@@ -872,9 +887,7 @@ def test_raw_reset_is_sanitized_and_terminalizes_runtime(
     def reset_open(*_args, **_kwargs):
         raise ConnectionResetError("raw peer authorization secret")
 
-    monkeypatch.setattr(
-        alibaba, "open_bounded_https_response", reset_open
-    )
+    monkeypatch.setattr(alibaba, "open_bounded_https_response", reset_open)
     config = Qwen38MaxConfigV1()
     session = Qwen38MaxToolSession(
         transport=AlibabaTokenPlanHttpsTransport(api_key="sk-sp-test"),

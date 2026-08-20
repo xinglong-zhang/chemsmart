@@ -62,9 +62,7 @@ IDENTITY_EVIDENCE_WORDS: dict[str, str] = {
     "composed-from-approved-parents": (
         "built from two approved parent structures"
     ),
-    "composed-task-bound": (
-        "built from two task-bound parent structures"
-    ),
+    "composed-task-bound": ("built from two task-bound parent structures"),
 }
 
 

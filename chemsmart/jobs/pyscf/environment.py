@@ -18,7 +18,6 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-
 ENVIRONMENT_RECEIPT_SCHEMA_VERSION = "chemsmart.pyscf-environment.v1"
 _PROBE_MARKER = "CHEMSMART_PYSCF_ENVIRONMENT="
 
@@ -51,7 +50,9 @@ def write_json_receipt(path, payload):
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.is_symlink():
-        raise ValueError(f"Refusing symlink receipt destination: {destination}")
+        raise ValueError(
+            f"Refusing symlink receipt destination: {destination}"
+        )
     descriptor, temporary_name = tempfile.mkstemp(
         dir=destination.parent,
         prefix=f".{destination.name}.",
@@ -213,9 +214,10 @@ def environment_blockers(receipt, *, engine):
                 }
             )
     pyscf_detail = dependencies.get("pyscf") or {}
-    if pyscf_detail.get("available") is True and pyscf_detail.get(
-        "version"
-    ) != "2.14.0":
+    if (
+        pyscf_detail.get("available") is True
+        and pyscf_detail.get("version") != "2.14.0"
+    ):
         blockers.append(
             {
                 "rule_id": "pyscf.environment.version_mismatch",
@@ -256,10 +258,7 @@ def environment_blockers(receipt, *, engine):
         )
     aux_basis = request.get("aux_basis")
     aux_basis_available = receipt.get("aux_basis_available") or {}
-    if (
-        aux_basis
-        and aux_basis_available.get(str(aux_basis)) is not True
-    ):
+    if aux_basis and aux_basis_available.get(str(aux_basis)) is not True:
         blockers.append(
             {
                 "rule_id": "pyscf.environment.aux_basis_unavailable",
@@ -273,10 +272,7 @@ def environment_blockers(receipt, *, engine):
         )
     functional = request.get("functional")
     functional_available = receipt.get("functional_available") or {}
-    if (
-        functional
-        and functional_available.get(str(functional)) is not True
-    ):
+    if functional and functional_available.get(str(functional)) is not True:
         blockers.append(
             {
                 "rule_id": "pyscf.environment.functional_unavailable",

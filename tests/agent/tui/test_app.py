@@ -42,9 +42,7 @@ def _transcript_text(app: ChemSmartAgentApp) -> str:
     console = Console(record=True, width=200)
     for renderable in transcript.recorder.entries:
         console.print(renderable)
-    return " ".join(
-        console.export_text().replace("│", " ").split()
-    )
+    return " ".join(console.export_text().replace("│", " ").split())
 
 
 async def _submit(app, pilot, text: str) -> None:

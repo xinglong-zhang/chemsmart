@@ -2,20 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
 from chemsmart.agent._contracts import ContractError, canonical_sha256
 from chemsmart.agent.api_access import require_provider_key_label
-from chemsmart.agent.runtime.deepseek import (
-    DEEPSEEK_OFFICIAL_ENDPOINT,
-    DeepSeekV4FlashConfigV1,
-)
 from chemsmart.agent.providers import (
     PROVIDERS,
     declaration_for_endpoint,
+)
+from chemsmart.agent.runtime.deepseek import (
+    DeepSeekV4FlashConfigV1,
 )
 from chemsmart.agent.runtime.transport import ProviderTurnDeadlinesV1
 from chemsmart.io.yaml import YAMLFile
@@ -376,9 +375,7 @@ def _build_profile(
                 inter_event_seconds=float(
                     raw_deadlines["inter_event_seconds"]
                 ),
-                absolute_seconds=float(
-                    raw_deadlines["absolute_turn_seconds"]
-                ),
+                absolute_seconds=float(raw_deadlines["absolute_turn_seconds"]),
             )
         except (TypeError, ValueError) as exc:
             raise ContractError(

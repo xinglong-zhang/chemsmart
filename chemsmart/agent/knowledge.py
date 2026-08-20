@@ -16,7 +16,6 @@ from chemsmart.agent.capabilities import (
     CapabilityQueryStatus,
 )
 
-
 __all__ = [
     "ProgramSubstitutionReceiptV1",
 ]
@@ -42,7 +41,9 @@ class ProgramSubstitutionReceiptV1:
         if self.schema_version != "chemsmart.program-substitution-receipt.v1":
             raise ContractError("unsupported program substitution schema")
         if self.readiness_authority:
-            raise ContractError("substitution assessment cannot establish readiness")
+            raise ContractError(
+                "substitution assessment cannot establish readiness"
+            )
         if self.decision not in {
             "exact",
             "approved",
@@ -51,13 +52,13 @@ class ProgramSubstitutionReceiptV1:
         }:
             raise ContractError("invalid program substitution decision")
         if self.decision == "approved" and not self.approval_ref:
-            raise ContractError("program substitution requires explicit approval")
+            raise ContractError(
+                "program substitution requires explicit approval"
+            )
         body = {
             "schema_version": self.schema_version,
             "proposal_sha256": self.proposal_sha256,
-            "substitution_request_sha256": (
-                self.substitution_request_sha256
-            ),
+            "substitution_request_sha256": (self.substitution_request_sha256),
             "capability_receipt_sha256": self.capability_receipt_sha256,
             "requested_program": self.requested_program,
             "selected_program": self.selected_program,
@@ -70,7 +71,6 @@ class ProgramSubstitutionReceiptV1:
         }
         if self.receipt_sha256 != canonical_sha256(body):
             raise ContractError("program substitution receipt digest mismatch")
-
 
 
 _PYSCF_TRANSFER_JOB_FAMILIES = frozenset(
@@ -125,7 +125,10 @@ class FunctionalEquivalenceReceiptV1:
     receipt_sha256: str
 
     def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.functional-equivalence-receipt.v1":
+        if (
+            self.schema_version
+            != "chemsmart.functional-equivalence-receipt.v1"
+        ):
             raise ContractError("unsupported functional equivalence schema")
         require_identifier(self.requested_program, "requested_program")
         require_identifier(self.selected_program, "selected_program")
@@ -134,7 +137,9 @@ class FunctionalEquivalenceReceiptV1:
         if self.claim_evidence_receipt_sha256s != tuple(
             sorted(set(self.claim_evidence_receipt_sha256s))
         ):
-            raise ContractError("equivalence evidence must be sorted and unique")
+            raise ContractError(
+                "equivalence evidence must be sorted and unique"
+            )
         for digest in self.claim_evidence_receipt_sha256s:
             require_sha256(digest, "claim evidence receipt")
         if self.status not in {"verified", "rejected"}:
@@ -150,7 +155,9 @@ class FunctionalEquivalenceReceiptV1:
             "status": self.status,
         }
         if self.receipt_sha256 != canonical_sha256(body):
-            raise ContractError("functional equivalence receipt digest mismatch")
+            raise ContractError(
+                "functional equivalence receipt digest mismatch"
+            )
 
 
 @dataclass(frozen=True)
@@ -288,9 +295,7 @@ def build_program_substitution_request(
         ),
         "requires_post_hf": bool(requires_post_hf),
         "requires_double_hybrid": bool(requires_double_hybrid),
-        "functional_semantics_confirmed": bool(
-            functional_semantics_confirmed
-        ),
+        "functional_semantics_confirmed": bool(functional_semantics_confirmed),
         "source_claim_sha256s": tuple(sorted(set(source_claim_sha256s))),
     }
     return ProgramSubstitutionRequestV1(
@@ -347,7 +352,9 @@ def assess_typed_program_substitution(
             request.method_family == "dft"
             and not request.functional_semantics_confirmed
         ):
-            failures.append("program.substitution.functional_semantics_unknown")
+            failures.append(
+                "program.substitution.functional_semantics_unknown"
+            )
         if not request.source_claim_sha256s:
             failures.append("program.substitution.source_evidence_missing")
 

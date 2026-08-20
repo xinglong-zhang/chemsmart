@@ -18,7 +18,9 @@ from .facts import DetectionV1
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
-def _run(command: list[str], runner: Runner) -> "subprocess.CompletedProcess[str]":
+def _run(
+    command: list[str], runner: Runner
+) -> "subprocess.CompletedProcess[str]":
     return runner(
         command, capture_output=True, text=True, timeout=20, check=False
     )
@@ -40,9 +42,7 @@ def detect_scheduler(
     if which("sbatch") and which("sinfo"):
         probe = _run(["sinfo", "--version"], runner)
         if probe.returncode == 0:
-            evidence.append(
-                f"sinfo responds: {probe.stdout.strip() or 'ok'}"
-            )
+            evidence.append(f"sinfo responds: {probe.stdout.strip() or 'ok'}")
             return DetectionV1("SLURM", tuple(evidence))
         evidence.append(
             "sbatch/sinfo installed but sinfo exited "

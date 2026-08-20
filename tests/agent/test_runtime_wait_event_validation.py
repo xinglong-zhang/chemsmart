@@ -13,7 +13,6 @@ from chemsmart.agent.runtime.events import (
     RuntimeEvent,
 )
 
-
 _MISSING = object()
 _WAITING_PAYLOAD = {
     "request_id": "execute-one",

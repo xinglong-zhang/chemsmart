@@ -1,13 +1,13 @@
 """Deterministic, chemistry-free checks for bounded process execution."""
 
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
 import textwrap
 import threading
 import time
+from pathlib import Path
 
 import pytest
 

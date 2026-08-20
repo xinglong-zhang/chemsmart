@@ -16,10 +16,8 @@ from chemsmart.agent.execution import (
     workflow_execution_review_json,
 )
 from chemsmart.agent.live_session import (
-    load_workflow_execution_approval_bundle,
     load_workflow_execution_review,
 )
-
 from tests.agent.test_exact_execution_approval_chain import _review
 
 
@@ -45,6 +43,5 @@ def test_a_chainless_packet_has_no_chain_key_and_round_trips(tmp_path):
     )
     assert bundle.scientific_toolchain_plan is None
     assert (
-        bundle.frozen_workflow_approval.scientific_toolchain_plan_sha256
-        == ""
+        bundle.frozen_workflow_approval.scientific_toolchain_plan_sha256 == ""
     )

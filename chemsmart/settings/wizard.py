@@ -9,10 +9,10 @@ node's own core count.
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-import shutil
 
 from chemsmart.settings.probe import (
     HostFactsV1,
@@ -52,9 +52,7 @@ def default_hours(queue: QueueFactsV1 | None) -> int:
     return max(1, min(queue.max_time_seconds // 3600 or 1, 24))
 
 
-def default_mem_gb(
-    queue: QueueFactsV1 | None, host: HostFactsV1
-) -> int:
+def default_mem_gb(queue: QueueFactsV1 | None, host: HostFactsV1) -> int:
     """floor(0.9 x advertised kB / 1024^2); queue first, host fallback.
 
     The 10% headroom keeps the job request under the node's advertised
@@ -87,8 +85,7 @@ def derive_choices(
     scratch_dir: str | None,
 ) -> ServerChoicesV1:
     submittable = (
-        scheduler is not None
-        and scheduler.scheduler in SUBMITTABLE_SCHEDULERS
+        scheduler is not None and scheduler.scheduler in SUBMITTABLE_SCHEDULERS
     )
     gpus = 0
     if queue is not None and queue.gres.startswith("gpu"):
@@ -128,10 +125,10 @@ def derive_choices(
         num_gpus=gpus,
         num_threads=cores,
         submit_command=(
-            scheduler.submit_path or None if submittable else None
-        )
-        if scheduler is not None
-        else None,
+            (scheduler.submit_path or None if submittable else None)
+            if scheduler is not None
+            else None
+        ),
         scratch_dir=scratch_dir,
         provenance=tuple(provenance),
     )
@@ -252,9 +249,7 @@ def extract_top_level_block(text: str, key: str) -> str:
     return "".join(lines[start:end])
 
 
-def splice_top_level_block(
-    existing_text: str, key: str, block: str
-) -> str:
+def splice_top_level_block(existing_text: str, key: str, block: str) -> str:
     """Replace one top-level block, preserving every other byte.
 
     A record starts at the column-0 ``key:`` line and ends before the
@@ -281,9 +276,11 @@ def splice_top_level_block(
         if line[:1] not in ("", " ", "\t", "\n", "\r", "#"):
             end = index
             break
-        if line.lstrip().startswith("#") and index + 1 < len(lines) and lines[
-            index + 1
-        ][:1] not in ("", " ", "\t", "\n", "\r", "#"):
+        if (
+            line.lstrip().startswith("#")
+            and index + 1 < len(lines)
+            and lines[index + 1][:1] not in ("", " ", "\t", "\n", "\r", "#")
+        ):
             # Comments directly above the next block belong to it.
             end = index
             break
@@ -366,6 +363,7 @@ def run_verification(
                 check=False,
             )
         except Exception as exc:  # noqa: BLE001 - reported, never raised
+
             class _Failed:
                 returncode = 127
                 stdout = ""

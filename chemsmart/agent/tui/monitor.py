@@ -10,10 +10,12 @@ rather than a crash.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
+
+from chemsmart.agent.voice import human_turn_blocked
 
 from .humanize import (
     HumanizedRowV1,
@@ -21,7 +23,6 @@ from .humanize import (
     humanize_tool_settled,
     humanize_tool_started,
 )
-from chemsmart.agent.voice import human_turn_blocked
 
 
 @dataclass

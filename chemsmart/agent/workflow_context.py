@@ -24,7 +24,6 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from chemsmart.agent._contracts import ContractError, require_identifier
 
-
 #: ``completed`` -- this exact approved node already has a validated result.
 #: ``ready`` -- every input exists, so this node can be materialized now.
 #: ``waiting`` -- an upstream producer has not yet produced its artifact.
@@ -110,12 +109,8 @@ def _input_is_satisfied(
     artifact_id = str(getattr(item, "artifact_id", "") or "")
     if artifact_id:
         return artifact_id in materialized
-    producer_node_id = str(
-        getattr(item, "producer_node_id", "") or ""
-    )
-    producer_output_id = str(
-        getattr(item, "producer_output_id", "") or ""
-    )
+    producer_node_id = str(getattr(item, "producer_node_id", "") or "")
+    producer_output_id = str(getattr(item, "producer_output_id", "") or "")
     if not producer_node_id or not producer_output_id:
         return False
     return (
@@ -131,9 +126,7 @@ def project_workflow_context(
     workflow_id: str,
     nodes: Sequence[Any],
     materialized_artifact_ids: Mapping[str, Any] | Iterable[str] = (),
-    materialized_producer_inputs: Iterable[
-        tuple[str, str, str, str]
-    ] = (),
+    materialized_producer_inputs: Iterable[tuple[str, str, str, str]] = (),
     completed_node_ids: Iterable[str] = (),
     blocked_reasons: Mapping[str, str] | None = None,
 ) -> WorkflowContextProjectionV1:
@@ -223,9 +216,7 @@ def project_workflow_context(
                     if item.producer_node_id
                 }.union(
                     dependency
-                    for dependency in (
-                        getattr(node, "dependencies", ()) or ()
-                    )
+                    for dependency in (getattr(node, "dependencies", ()) or ())
                     if dependency not in completed_node_ids
                     and dependency not in satisfied_data_producers
                 )
@@ -252,7 +243,10 @@ def project_workflow_context(
             )
             waiting_labels = (
                 *producer_outputs,
-                *(dependency + " completion" for dependency in control_dependencies),
+                *(
+                    dependency + " completion"
+                    for dependency in control_dependencies
+                ),
             )
             reason = "waiting for " + ", ".join(waiting_labels)
         elif unsatisfied:

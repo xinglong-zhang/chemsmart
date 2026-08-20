@@ -1,36 +1,35 @@
-Installation on an HPC Cluster
-##############################
+################################
+ Installation on an HPC Cluster
+################################
 
-CHEMSMART uses the same project YAML and program commands for local execution
-and scheduler submission. Install the controller on a login or workflow node,
-then describe each compute environment in a server YAML file.
+CHEMSMART uses the same project YAML and program commands for local execution and scheduler submission. Install the
+controller on a login or workflow node, then describe each compute environment in a server YAML file.
 
-For a standalone Ubuntu CPU machine, the example in
-:doc:`installation-ubuntu-cpu-server` can be adapted to the target host. This
-page covers scheduler-specific configuration after the controller and
-chemistry programs are available.
+For a standalone Ubuntu CPU machine, the example in :doc:`installation-ubuntu-cpu-server` can be adapted to the target
+host. This page covers scheduler-specific configuration after the controller and chemistry programs are available.
 
-Prerequisites
-=============
+***************
+ Prerequisites
+***************
 
 Confirm with the cluster administrator:
 
-- scheduler type and submission command;
-- account or project name, partition or queue, and wall-time limits;
-- available CPU, GPU, memory, scratch and filesystem policy;
-- environment modules for Gaussian, ORCA, MPI, xTB, NCIPLOT or Python;
-- whether outbound network access is allowed from login and compute nodes; and
-- where persistent program results may be stored.
+-  scheduler type and submission command;
+-  account or project name, partition or queue, and wall-time limits;
+-  available CPU, GPU, memory, scratch and filesystem policy;
+-  environment modules for Gaussian, ORCA, MPI, xTB, NCIPLOT or Python;
+-  whether outbound network access is allowed from login and compute nodes; and
+-  where persistent program results may be stored.
 
 Do not copy local workstation paths or module names into cluster configuration.
 
-Controller installation
-=======================
+*************************
+ Controller installation
+*************************
 
-Follow :doc:`installation-linux-macos` using a user-owned Conda environment.
-On a fresh cluster clone:
+Follow :doc:`installation-linux-macos` using a user-owned Conda environment. On a fresh cluster clone:
 
-.. code-block:: bash
+.. code:: bash
 
    git clone https://github.com/Hongjiseung-ROK/chemsmart.git
    cd chemsmart
@@ -39,23 +38,23 @@ On a fresh cluster clone:
    make install
    make configure
 
-If compute nodes cannot access the internet, build the environment and package
-cache on an allowed node or use the cluster's supported offline installation
-workflow.
+If compute nodes cannot access the internet, build the environment and package cache on an allowed node or use the
+cluster's supported offline installation workflow.
 
-Scheduler configuration
-=======================
+*************************
+ Scheduler configuration
+*************************
 
-Run the wizard on a login node; it detects the scheduler, reads the queues
-and their limits from the scheduler itself, and writes the server file with
-verification::
+Run the wizard on a login node; it detects the scheduler, reads the queues and their limits from the scheduler itself,
+and writes the server file with verification:
+
+.. code::
 
    chemsmart wizard --server
 
-To hand-maintain the file instead, create a named file under
-``~/.chemsmart/server``. Example SLURM shape:
+To hand-maintain the file instead, create a named file under ``~/.chemsmart/server``. Example SLURM shape:
 
-.. code-block:: yaml
+.. code:: yaml
 
    SERVER:
      SCHEDULER: SLURM
@@ -83,26 +82,23 @@ To hand-maintain the file instead, create a named file under
        export PATH=/opt/openmpi/bin:$PATH
        export LD_LIBRARY_PATH=/opt/openmpi/lib:$LD_LIBRARY_PATH
 
-Replace every value with cluster facts. For PBS/Torque or LSF, use the matching
-``SCHEDULER`` and submission command. See
-:doc:`configuration-server-settings` for all fields.
+Replace every value with cluster facts. For PBS/Torque or LSF, use the matching ``SCHEDULER`` and submission command.
+See :doc:`configuration-server-settings` for all fields.
 
-Submission qualification
-========================
+**************************
+ Submission qualification
+**************************
 
 Generate the script without submitting:
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart sub --test --fake -s my_cluster orca \
      -p test -f examples/xtb/water.xyz sp
 
-Inspect modules, environment activation, scratch path, core count, memory,
-wall time, account and generated CHEMSMART command. Then submit one small
-single-point calculation and verify scheduler exit state, program normal
-termination, parsed quantity and result location before qualifying advanced
-workflows.
+Inspect modules, environment activation, scratch path, core count, memory, wall time, account and generated CHEMSMART
+command. Then submit one small single-point calculation and verify scheduler exit state, program normal termination,
+parsed quantity and result location before qualifying advanced workflows.
 
-Never use an agent plan or a successful script render as evidence that a
-cluster job ran. Scheduler submission, engine completion and scientific
-validation are separate observations.
+Never use an agent plan or a successful script render as evidence that a cluster job ran. Scheduler submission, engine
+completion and scientific validation are separate observations.

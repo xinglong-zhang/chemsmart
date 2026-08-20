@@ -113,9 +113,7 @@ def test_an_invalid_profile_is_rolled_back(tmp_path, monkeypatch):
 
     assert result.exit_code != 0
     assert "rolled back" in result.output
-    assert (
-        agent_dir / "agent.yaml"
-    ).read_text(encoding="utf-8") == original
+    assert (agent_dir / "agent.yaml").read_text(encoding="utf-8") == original
 
 
 def test_the_api_env_migration_carries_unknown_labels_verbatim(

@@ -118,7 +118,5 @@ def declaration_for_endpoint(endpoint: str) -> ProviderDeclarationV1 | None:
 
 def runnable_provider_names() -> frozenset[str]:
     return frozenset(
-        name
-        for name, declaration in PROVIDERS.items()
-        if declaration.runnable
+        name for name, declaration in PROVIDERS.items() if declaration.runnable
     )

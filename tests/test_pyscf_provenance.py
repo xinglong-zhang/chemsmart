@@ -166,9 +166,10 @@ def test_spin_diagnostic_datasets_have_explicit_dimensionless_units(tmp_path):
 
     with h5py.File(path, "r") as handle:
         assert handle["results/spin_square"].attrs["unit"] == "dimensionless"
-        assert handle[
-            "results/spin_square_effective_multiplicity"
-        ].attrs["unit"] == "dimensionless"
+        assert (
+            handle["results/spin_square_effective_multiplicity"].attrs["unit"]
+            == "dimensionless"
+        )
 
 
 def test_generated_standalone_encoder_writes_same_v2_contract(tmp_path):

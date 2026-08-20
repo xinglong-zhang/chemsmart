@@ -162,6 +162,7 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
     assert approved.status is CapabilityQueryStatus.SUPPORTED
     assert unapproved_pair.status is CapabilityQueryStatus.UNSUPPORTED_JOBTYPE
 
+
 def test_live_registry_projects_loader_bounded_parameter_domains():
     from chemsmart.agent.capabilities import load_program_capabilities
 
@@ -281,9 +282,7 @@ def test_pyscf_program_receipt_adapter_verifies_source_hash():
 
     assert adapted.compute_interpreter_sha256 == "b" * 64
     assert ("pyscf", "2.14.0") in adapted.dependency_versions
-    assert ("libxc_distribution", "0.4.2") in (
-        adapted.dependency_versions
-    )
+    assert ("libxc_distribution", "0.4.2") in (adapted.dependency_versions)
     assert ("libxc_runtime", "7.0.0") in adapted.dependency_versions
     assert not any(
         name == "libxc" for name, _version in adapted.dependency_versions

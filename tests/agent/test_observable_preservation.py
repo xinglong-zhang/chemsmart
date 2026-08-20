@@ -71,7 +71,9 @@ def test_a_blocked_node_still_carries_the_observable():
 
 
 def test_declaring_an_observable_changes_the_plan_identity():
-    plain = _plan((_node("energy", produces_observables=("relative-energy",)),))
+    plain = _plan(
+        (_node("energy", produces_observables=("relative-energy",)),)
+    )
     declared = _plan(
         (_node("energy", produces_observables=("relative-energy",)),),
         required_observables=("relative-energy",),
@@ -98,7 +100,9 @@ def test_replanning_that_drops_a_stage_is_refused():
     )
     runtime.scientific_plans[first.workflow_id] = first
 
-    shrunk = _plan((_node("energy", produces_observables=("relative-energy",)),))
+    shrunk = _plan(
+        (_node("energy", produces_observables=("relative-energy",)),)
+    )
     with pytest.raises(ContractError, match="removed workflow stage"):
         runtime._refuse_observable_regression(shrunk)
 

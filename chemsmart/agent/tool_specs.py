@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from chemsmart.agent._contracts import ContractError, canonical_sha256
-from chemsmart.agent.skills import skills_enabled
 from chemsmart.agent.capabilities import (
     ProgramCapabilityRegistryV1,
     load_program_capabilities,
 )
+from chemsmart.agent.skills import skills_enabled
 from chemsmart.analysis.quantity_expressions import OPERATION_DESCRIPTIONS
 from chemsmart.analysis.result_quantities import SUPPORTED_SELECTORS
 from chemsmart.analysis.result_readers import (
@@ -294,16 +294,12 @@ def build_command_compiled_tool_surface(
                 "fragment_a_atom": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": (
-                        "1-based contact atom within fragment A."
-                    ),
+                    "description": ("1-based contact atom within fragment A."),
                 },
                 "fragment_b_atom": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": (
-                        "1-based contact atom within fragment B."
-                    ),
+                    "description": ("1-based contact atom within fragment B."),
                 },
                 "distance_angstrom": {
                     "type": "number",
@@ -1354,9 +1350,11 @@ def _describe_tool_definitions(
         properties = parameters.get("properties")
         if isinstance(properties, dict):
             parameters["properties"] = {
-                name: _describe(name, _walk_constrain(name, schema))
-                if isinstance(schema, dict)
-                else schema
+                name: (
+                    _describe(name, _walk_constrain(name, schema))
+                    if isinstance(schema, dict)
+                    else schema
+                )
                 for name, schema in properties.items()
             }
             function["parameters"] = parameters
@@ -1377,9 +1375,11 @@ def _walk_constrain(name: str, schema: dict) -> dict:
     properties = updated.get("properties")
     if isinstance(properties, dict):
         updated["properties"] = {
-            key: _describe(key, _walk_constrain(key, value))
-            if isinstance(value, dict)
-            else value
+            key: (
+                _describe(key, _walk_constrain(key, value))
+                if isinstance(value, dict)
+                else value
+            )
             for key, value in properties.items()
         }
     items = updated.get("items")

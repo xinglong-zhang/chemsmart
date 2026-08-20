@@ -79,9 +79,7 @@ def test_an_unsubmittable_scheduler_is_written_as_local_with_the_reason():
     assert choices.scheduler is None
     assert choices.submit_command is None
     assert choices.num_cores == 12  # host fallback for local runs
-    assert any(
-        "not release-qualified" in note for note in choices.provenance
-    )
+    assert any("not release-qualified" in note for note in choices.provenance)
 
 
 def test_the_rendered_block_parses_and_states_its_provenance():
@@ -114,13 +112,13 @@ def test_splice_replaces_server_and_preserves_programs_byte_for_byte():
     block = render_server_block(_choices(), host=_HOST)
     merged = splice_server_block(_EXISTING, block)
 
-    program_tail = _EXISTING[_EXISTING.index("GAUSSIAN:"):]
+    program_tail = _EXISTING[_EXISTING.index("GAUSSIAN:") :]
     assert merged.endswith(program_tail)
     assert "NUM_CORES: 6" in merged
     assert "NUM_CORES: 4" not in merged
-    assert "# my own note above the server block" not in merged, (
-        "comments describing the OLD server block go with it"
-    )
+    assert (
+        "# my own note above the server block" not in merged
+    ), "comments describing the OLD server block go with it"
     assert "# licensed install" in merged
 
 

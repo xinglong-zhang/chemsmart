@@ -154,7 +154,8 @@ def test_loader_application_does_not_misreport_native_spelling_as_override():
     ),
 )
 def test_custom_link_route_recognizes_generic_and_native_basis_aliases(
-    settings_basis, link_route,
+    settings_basis,
+    link_route,
 ):
     settings = GaussianLinkJobSettings(
         functional="B3LYP",

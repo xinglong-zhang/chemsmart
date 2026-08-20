@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 from typing import Any
 
 from chemsmart.agent._contracts import (
@@ -75,13 +75,17 @@ class AnalysisClaimRecordV1:
         if claim_ids != tuple(sorted(set(claim_ids))):
             raise ContractError("analysis claims must be sorted and unique")
         if self.status != "recorded":
-            raise ContractError("analysis claim record status must be recorded")
+            raise ContractError(
+                "analysis claim record status must be recorded"
+            )
         body = analysis_claim_record_body(self)
         if self.receipt_sha256 != canonical_sha256(body):
             raise ContractError("analysis claim record digest mismatch")
 
 
-def analysis_claim_record_body(record: AnalysisClaimRecordV1) -> dict[str, Any]:
+def analysis_claim_record_body(
+    record: AnalysisClaimRecordV1,
+) -> dict[str, Any]:
     return {
         "schema_version": record.schema_version,
         "task_spec_sha256": record.task_spec_sha256,
@@ -101,9 +105,7 @@ def build_analysis_claim_record(
         "claims": tuple(sorted(claims, key=lambda claim: claim.claim_id)),
         "status": "recorded",
     }
-    return AnalysisClaimRecordV1(
-        **body, receipt_sha256=canonical_sha256(body)
-    )
+    return AnalysisClaimRecordV1(**body, receipt_sha256=canonical_sha256(body))
 
 
 def analysis_claim_record_from_record(
@@ -118,9 +120,7 @@ def analysis_claim_record_from_record(
         claim["dimension"] = tuple(claim.get("dimension") or ())
         claims.append(AnalysisReportedQuantityV1(**claim))
     values["claims"] = tuple(claims)
-    return AnalysisClaimRecordV1(
-        **values, receipt_sha256=receipt_sha256
-    )
+    return AnalysisClaimRecordV1(**values, receipt_sha256=receipt_sha256)
 
 
 def _require_finite_payload(value: Any, field: str) -> None:

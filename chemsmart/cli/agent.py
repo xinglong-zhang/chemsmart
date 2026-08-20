@@ -189,8 +189,8 @@ def plan(
 ):
     """Create and safely preview a command-compiled research workflow."""
 
-    from chemsmart.agent.live_session import run_live_agent_session
     from chemsmart.agent.identity import load_approved_molecular_input_manifest
+    from chemsmart.agent.live_session import run_live_agent_session
 
     approved_inputs = (
         load_approved_molecular_input_manifest(
@@ -302,8 +302,7 @@ def review(
     summary = {
         key: value
         for key, value in report.items()
-        if key
-        not in {"canonical_review", "review_sha256", "task_spec_sha256"}
+        if key not in {"canonical_review", "review_sha256", "task_spec_sha256"}
     }
     for key in ("approved_artifacts_present", "missing_approved_artifacts"):
         summary[key] = [
@@ -312,8 +311,8 @@ def review(
     if not normalized:
         summary["decision"] = "not taken; pass --decision to decide"
         click.echo(
-        json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False)
-    )
+            json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False)
+        )
         return
 
     if report["missing_approved_artifacts"]:
@@ -329,9 +328,7 @@ def review(
             "again rather than deciding on a run that must fail."
         )
     chosen = str(approval_id or "").strip() or replay_approval_id()
-    scope = (
-        Path(workspace).resolve() / ".chemsmart-agent" / "replays" / chosen
-    )
+    scope = Path(workspace).resolve() / ".chemsmart-agent" / "replays" / chosen
     scope.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         resolution, bundle = resolve_workflow_execution_review(

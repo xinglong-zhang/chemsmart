@@ -36,10 +36,7 @@ WAVENUMBER_TO_KJ_PER_MOL = 1.1962656362961932e-2
 #: Transition-state crossover temperature per spectroscopic wavenumber.
 #: ``T_c = h*c*|nu_tilde| / (2*pi*k_B)`` for ``nu_tilde`` in cm^-1.
 TRANSITION_STATE_CROSSOVER_K_CM = (
-    ase_units._hplanck
-    * ase_units._c
-    * 100.0
-    / (2.0 * math.pi * ase_units._k)
+    ase_units._hplanck * ase_units._c * 100.0 / (2.0 * math.pi * ase_units._k)
 )
 
 ENERGY_UNIT_FACTORS = {

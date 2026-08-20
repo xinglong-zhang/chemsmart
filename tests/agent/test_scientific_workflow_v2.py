@@ -15,19 +15,19 @@ from chemsmart.agent.execution import (
     derive_ready_node_ids,
     transition_workflow_node,
 )
-from chemsmart.agent.tool_runtime import (
-    _validate_stationary_point_policy_binding,
-)
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.runtime.reducer import RuntimeState
+from chemsmart.agent.tool_runtime import (
+    _validate_stationary_point_policy_binding,
+)
 from chemsmart.agent.workflows import (
     ArtifactOutputIntentV1,
     CommandNodeIntentV1,
+    MaterializedNodeV1,
     ScientificWorkflowEdgeV2,
     ScientificWorkflowNodeV2,
     StationaryPointValidationPolicyV1,
-    MaterializedNodeV1,
     build_materialized_workflow,
     build_scientific_workflow_plan,
 )
@@ -160,12 +160,16 @@ def _approval(plan):
     materialized = _materialized(
         plan, resource_sha256=resources.resource_sha256
     )
-    return resources, materialized, build_frozen_workflow_approval(
-        approval_id="water-approval",
-        plan=plan,
-        materialized_workflow=materialized,
-        resources=resources,
-        environment_identity_sha256s=("f" * 64,),
+    return (
+        resources,
+        materialized,
+        build_frozen_workflow_approval(
+            approval_id="water-approval",
+            plan=plan,
+            materialized_workflow=materialized,
+            resources=resources,
+            environment_identity_sha256s=("f" * 64,),
+        ),
     )
 
 
@@ -281,7 +285,6 @@ def test_failed_branch_blocks_only_descendants_and_keeps_sibling_runnable():
     assert derive_ready_node_ids(plan, run) == ()
 
 
-
 def test_stationary_point_policy_freezes_expected_mode_count():
     body = {
         "schema_version": "chemsmart.stationary-point-policy.v1",
@@ -353,15 +356,15 @@ def test_stationary_point_policy_binds_exact_plan_task_and_hessian_node():
         )
 
 
-def test_event_store_consumes_approval_once_and_replays_node_frontier(tmp_path):
+def test_event_store_consumes_approval_once_and_replays_node_frontier(
+    tmp_path,
+):
     plan = _water_plan()
     _, materialized, approval = _approval(plan)
     store = RuntimeEventStore(
         tmp_path / "events" / "runtime.jsonl", session_id="water-session"
     )
-    store.record_materialized_workflow(
-        turn_id="turn-1", workflow=materialized
-    )
+    store.record_materialized_workflow(turn_id="turn-1", workflow=materialized)
     _, started_event, started = store.consume_and_start_workflow(
         turn_id="turn-1",
         plan=plan,

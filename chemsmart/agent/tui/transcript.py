@@ -10,12 +10,11 @@ widget trimming, so `/export` always has the full transcript.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import io
+from dataclasses import dataclass, field
 from typing import Any
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.text import Text
 from textual.containers import VerticalScroll
 from textual.widgets import Static

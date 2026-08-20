@@ -89,9 +89,7 @@ def test_the_arrangement_lands_in_the_workspace_with_lineage(tmp_path):
     assert composed_path.exists()
     assert composition["atom_count"] == 7
     assert composition["formula"] == "H5NO"
-    assert abs(
-        composition["achieved_contact_distance_angstrom"] - 2.8
-    ) < 0.05
+    assert abs(composition["achieved_contact_distance_angstrom"] - 2.8) < 0.05
     assert composition["min_interfragment_distance_angstrom"] > 0.5
     assert composition["fragment_a_artifact_id"] == "geometry-water"
     assert composition["fragment_b_artifact_id"] == "geometry-ammonia"

@@ -147,9 +147,10 @@ def test_a_fixture_carries_only_project_owned_keys(declared_server):
         ).values():
             assert set(settings) <= allowed
 
-    assert live_session._conformance_project_sections("gaussian")["td"][
-        "states"
-    ] == "singlets"
+    assert (
+        live_session._conformance_project_sections("gaussian")["td"]["states"]
+        == "singlets"
+    )
     assert live_session._conformance_project_sections("orca")["td"] == {
         "basis": "def2-SVP",
         "functional": "B3LYP",

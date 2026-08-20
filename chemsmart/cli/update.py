@@ -8,8 +8,6 @@ import click
 import tomlkit
 import yaml
 
-from chemsmart.utils.logger import create_logger
-
 logger = logging.getLogger(__name__)
 
 

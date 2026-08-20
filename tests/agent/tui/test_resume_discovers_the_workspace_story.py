@@ -19,8 +19,9 @@ from chemsmart.agent.tui.resume import (  # noqa: E402
     read_session_story,
     run_rows,
 )
-
-from tests.agent.test_exact_execution_approval_chain import _review  # noqa: E402
+from tests.agent.test_exact_execution_approval_chain import (  # noqa: E402
+    _review,
+)
 
 
 def _line(kind: str, payload: dict, session_id: str = "s") -> str:

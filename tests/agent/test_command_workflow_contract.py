@@ -44,7 +44,9 @@ def test_workflow_requires_exact_topological_producer_output_binding():
             ),
         ),
         outputs=(
-            ArtifactOutputV1("optimized_geometry", "geometry.optimized", "geometry_xyz"),
+            ArtifactOutputV1(
+                "optimized_geometry", "geometry.optimized", "geometry_xyz"
+            ),
         ),
     )
     second = _node(
@@ -61,7 +63,9 @@ def test_workflow_requires_exact_topological_producer_output_binding():
                 "",
             ),
         ),
-        outputs=(ArtifactOutputV1("energy", "result.energy", "result_record"),),
+        outputs=(
+            ArtifactOutputV1("energy", "result.energy", "result_record"),
+        ),
     )
     workflow = build_command_workflow_spec(
         workflow_id="workflow.one",

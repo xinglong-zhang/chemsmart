@@ -23,8 +23,9 @@ from rich.text import Text
 if TYPE_CHECKING:
     from chemsmart.agent.execution import WorkflowExecutionReviewV1
 
-from .presentation import _canonical_tool_results, human_cli_operation
 from chemsmart.agent.voice import human_identity_evidence, human_state
+
+from .presentation import _canonical_tool_results, human_cli_operation
 
 
 def _walk_render_records(value: Any) -> Iterable[Mapping[str, Any]]:
@@ -115,10 +116,7 @@ def _overview_table(review: "WorkflowExecutionReviewV1") -> Table:
             molecule = planned.project_role
             program_engine = f"{planned.program} / {planned.engine}"
             stage = planned.stage
-            if (
-                planned.charge is not None
-                and planned.multiplicity is not None
-            ):
+            if planned.charge is not None and planned.multiplicity is not None:
                 molecular_state = f"{planned.charge} / {planned.multiplicity}"
             else:
                 source_ids = tuple(
@@ -301,9 +299,7 @@ def _analysis_chain_renderable(review: "WorkflowExecutionReviewV1") -> Any:
 
 
 def _decision_panel(review: "WorkflowExecutionReviewV1") -> Panel:
-    executable_text = ", ".join(
-        item.node_id for item in review.node_reviews
-    )
+    executable_text = ", ".join(item.node_id for item in review.node_reviews)
     deferred = set(review.non_executable_node_ids)
     decision = (
         "Review the molecule/state, settings, CLI operations, DAG, "

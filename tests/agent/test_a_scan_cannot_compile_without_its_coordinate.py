@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import pytest
 
-from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.commands import native_coordinate_options
 
 _SCAN = {

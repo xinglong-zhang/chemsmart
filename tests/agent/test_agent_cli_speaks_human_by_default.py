@@ -7,7 +7,6 @@ stdout of plan/review/run never shows a bare 64-hex value.
 from __future__ import annotations
 
 import re
-from types import SimpleNamespace
 
 from click.testing import CliRunner
 

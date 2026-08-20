@@ -291,9 +291,7 @@ def test_hessian_config_binds_exact_upstream_hdf5_hash(pyscf_output):
 
     assert config["input_artifact_kind"] == "pyscf_hdf5"
     assert config["input_artifact_sha256"] == sha256_file(output.resultsfile)
-    assert spec["input_artifact_sha256"] == config[
-        "input_artifact_sha256"
-    ]
+    assert spec["input_artifact_sha256"] == config["input_artifact_sha256"]
 
 
 def test_database_provenance_hashes_hdf5_not_human_log(pyscf_output):

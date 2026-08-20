@@ -35,9 +35,7 @@ def test_with_no_recorded_workflow_the_refusal_says_plan_again(tmp_path):
             tool_name="amend_scientific_workflow",
             arguments={
                 "workflow_id": "dcca-dmso-abs",
-                "support_repairs": [
-                    {"node_id": "x", "blocked_reason": ""}
-                ],
+                "support_repairs": [{"node_id": "x", "blocked_reason": ""}],
             },
         )
 
@@ -62,9 +60,7 @@ def test_a_wrong_id_is_shown_beside_the_recorded_ones(tmp_path):
             tool_name="amend_scientific_workflow",
             arguments={
                 "workflow_id": "acetone-vertical",
-                "support_repairs": [
-                    {"node_id": "x", "blocked_reason": ""}
-                ],
+                "support_repairs": [{"node_id": "x", "blocked_reason": ""}],
             },
         )
 

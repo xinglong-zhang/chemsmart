@@ -263,12 +263,8 @@ def test_the_chain_executes_completes_and_renders(tmp_path):
     assert "final-energy" in report
     assert "Scientific decision: not recorded" in report
 
-    kinds = [
-        event.kind for event in executor.host.event_store.read_events()
-    ]
-    assert kinds.count(
-        EventKind.WORKFLOW_ANALYSIS_NODE_SETTLED.value
-    ) == 4
+    kinds = [event.kind for event in executor.host.event_store.read_events()]
+    assert kinds.count(EventKind.WORKFLOW_ANALYSIS_NODE_SETTLED.value) == 4
     assert EventKind.WORKFLOW_ANALYSIS_REPORT_RENDERED.value in kinds
 
 

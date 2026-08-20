@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from datetime import datetime, timezone
 import json
 import logging
 import math
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
@@ -24,18 +24,17 @@ from chemsmart.agent._contracts import (
     require_identifier,
     require_sha256,
 )
-from chemsmart.agent.analysis_completion import (
-    AnalysisIncompleteError,
-    AnalysisCompletionReceiptV1,
-    AnalysisCompletionPolicyV1,
-    build_analysis_completion_receipt,
-)
 from chemsmart.agent.analysis_claims import (
     AnalysisReportedQuantityV1,
     analysis_claim_record_from_record,
     build_analysis_claim_record,
 )
-from chemsmart.agent.skills import resolve_skill
+from chemsmart.agent.analysis_completion import (
+    AnalysisCompletionPolicyV1,
+    AnalysisCompletionReceiptV1,
+    AnalysisIncompleteError,
+    build_analysis_completion_receipt,
+)
 from chemsmart.agent.capabilities import (
     CapabilityQueryReceiptV1,
     CapabilityQueryV1,
@@ -62,6 +61,109 @@ from chemsmart.agent.cli_schema import (
     LiveClickSchemaV1,
     build_live_click_schema,
 )
+from chemsmart.agent.commands import (
+    CanonicalCommandInvocationV1,
+    CommandCounterexampleV1,
+    CommandInspectionReceiptV1,
+    CommandProposalV1,
+    ScientificIdentityBindingV1,
+    build_scientific_identity_binding,
+    compile_command,
+    inspect_command,
+    native_coordinate_options,
+)
+from chemsmart.agent.dependency_context import (
+    ContextSelectionReceiptV1,
+    TaskDependencyContextV2,
+)
+from chemsmart.agent.execution import (
+    DEFERRABLE_GEOMETRY_PRODUCER_STAGES,
+    ApprovedNodeBindingV1,
+    ExecutionResourceSpecV1,
+    FrozenWorkflowApprovalV1,
+    MolecularCompositionReceiptV1,
+    OptimizedGeometryHandoffV1,
+    ORCAHessianHandoffV1,
+    ProgramExecutionReceiptV1,
+    ProgramResultValidationReceiptV1,
+    ProjectArtifactPromotionV1,
+    ScientificDecisionRecordV1,
+    WorkflowEnvironmentBindingV1,
+    WorkflowExecutionApprovalV1,
+    WorkflowExecutionNodeReviewV1,
+    WorkflowExecutionReviewV1,
+    WorkflowNodeRunStateV1,
+    WorkflowRunStateV1,
+    bind_project_promotion_validation,
+    build_frozen_workflow_approval,
+    build_producer_edge_rule,
+    build_program_execution_invocation,
+    build_program_execution_receipt,
+    build_program_result_validation_receipt,
+    build_real_execution_argv,
+    build_scientific_decision_record,
+    build_validated_data_edge_binding,
+    build_workflow_approval_request,
+    build_workflow_execution_approval,
+    build_workflow_execution_node_review,
+    build_workflow_execution_review,
+    compose_trusted_molecular_arrangement,
+    derive_ready_node_ids,
+    environment_review_summary,
+    execution_path_placeholder,
+    execution_server_profile_sha256,
+    handoff_final_orca_ts_hessian,
+    handoff_optimized_native_geometry,
+    handoff_optimized_pyscf_geometry,
+    handoff_optimized_xtb_geometry,
+    handoff_validated_orca_producer_hessian,
+    invocation_identity_sha256,
+    is_validated_optimized_geometry_edge,
+    is_validated_orca_ts_hessian_edge,
+    is_validated_producer_orca_hessian_edge,
+    project_real_execution_argv,
+    promote_project_candidate,
+)
+from chemsmart.agent.execution_envelope import BoundedExecutionEnvelopeV1
+from chemsmart.agent.identity import ApprovedMolecularIdentityV1
+from chemsmart.agent.inspection import (
+    GeneratedArtifactInspectionReceiptV1,
+    inspect_generated_artifact,
+)
+from chemsmart.agent.knowledge import (
+    FunctionalEquivalenceReceiptV1,
+    ProgramSubstitutionApprovalV1,
+    ProgramSubstitutionReceiptV1,
+    ScientificClaimEvidenceV1,
+    assess_typed_program_substitution,
+    build_program_substitution_request,
+)
+from chemsmart.agent.postprocessing import (
+    derive_trusted_thermochemistry,
+    evaluate_typed_quantity_expression,
+    extract_trusted_result_quantities,
+)
+from chemsmart.agent.preflight import (
+    ProgramNodePreflightReceiptV1,
+    ProgramValidatorReceiptV1,
+    build_program_node_preflight_request,
+    evaluate_program_node_preflight,
+    validator_receipt_from_safe_preview,
+)
+from chemsmart.agent.preview import SafePreviewReceiptV1, execute_safe_preview
+from chemsmart.agent.program_verifiers import build_preview_expectation
+from chemsmart.agent.projects import (
+    ProjectDocumentV1,
+    ProjectRenderReceiptV1,
+    ProjectValidationReceiptV1,
+    PySCFFunctionalResolutionReceiptV1,
+    project_document,
+    project_scientific_materializations,
+    project_section_application_observation,
+    read_project_yaml,
+    render_project_yaml,
+    validate_project_yaml,
+)
 from chemsmart.agent.report_format import (
     CLAIM_RECORD_LABEL,
     CLAIMS_HEADING,
@@ -74,105 +176,6 @@ from chemsmart.agent.report_format import (
     SOURCE_RECEIPT_COLUMN,
     THERMO_CONDITIONS_HEADING,
     TOOLCHAIN_PLAN_LABEL,
-)
-from chemsmart.agent.commands import (
-    CanonicalCommandInvocationV1,
-    CommandCounterexampleV1,
-    CommandInspectionReceiptV1,
-    CommandProposalV1,
-    ScientificIdentityBindingV1,
-    build_scientific_identity_binding,
-    compile_command,
-    inspect_command,
-    native_coordinate_options,
-)
-from chemsmart.agent.inspection import (
-    GeneratedArtifactInspectionReceiptV1,
-    inspect_generated_artifact,
-)
-from chemsmart.agent.identity import ApprovedMolecularIdentityV1
-from chemsmart.agent.execution import (
-    ApprovedNodeBindingV1,
-    ExecutionResourceSpecV1,
-    FrozenWorkflowApprovalV1,
-    ORCAHessianHandoffV1,
-    OptimizedGeometryHandoffV1,
-    ProgramExecutionReceiptV1,
-    ProgramResultValidationReceiptV1,
-    ProjectArtifactPromotionV1,
-    ScientificDecisionRecordV1,
-    WorkflowExecutionApprovalV1,
-    WorkflowExecutionReviewV1,
-    WorkflowExecutionNodeReviewV1,
-    WorkflowEnvironmentBindingV1,
-    WorkflowNodeRunStateV1,
-    WorkflowRunStateV1,
-    bind_project_promotion_validation,
-    build_frozen_workflow_approval,
-    build_producer_edge_rule,
-    build_program_execution_invocation,
-    build_program_execution_receipt,
-    build_program_result_validation_receipt,
-    build_scientific_decision_record,
-    build_validated_data_edge_binding,
-    build_workflow_execution_approval,
-    build_workflow_approval_request,
-    build_workflow_execution_review,
-    build_workflow_execution_node_review,
-    build_real_execution_argv,
-    derive_ready_node_ids,
-    environment_review_summary,
-    execution_server_profile_sha256,
-    handoff_optimized_native_geometry,
-    handoff_optimized_pyscf_geometry,
-    handoff_optimized_xtb_geometry,
-    compose_trusted_molecular_arrangement,
-    MolecularCompositionReceiptV1,
-    handoff_final_orca_ts_hessian,
-    handoff_validated_orca_producer_hessian,
-    invocation_identity_sha256,
-    is_validated_orca_ts_hessian_edge,
-    is_validated_producer_orca_hessian_edge,
-    DEFERRABLE_GEOMETRY_PRODUCER_STAGES,
-    is_validated_optimized_geometry_edge,
-    promote_project_candidate,
-    execution_path_placeholder,
-    project_real_execution_argv,
-)
-from chemsmart.agent.execution_envelope import BoundedExecutionEnvelopeV1
-from chemsmart.agent.knowledge import (
-    FunctionalEquivalenceReceiptV1,
-    ProgramSubstitutionReceiptV1,
-    ProgramSubstitutionApprovalV1,
-    ScientificClaimEvidenceV1,
-    assess_typed_program_substitution,
-    build_program_substitution_request,
-)
-from chemsmart.agent.preflight import (
-    ProgramNodePreflightReceiptV1,
-    ProgramValidatorReceiptV1,
-    build_program_node_preflight_request,
-    evaluate_program_node_preflight,
-    validator_receipt_from_safe_preview,
-)
-from chemsmart.agent.postprocessing import (
-    derive_trusted_thermochemistry,
-    evaluate_typed_quantity_expression,
-    extract_trusted_result_quantities,
-)
-from chemsmart.agent.preview import SafePreviewReceiptV1, execute_safe_preview
-from chemsmart.agent.program_verifiers import build_preview_expectation
-from chemsmart.agent.projects import (
-    ProjectDocumentV1,
-    ProjectRenderReceiptV1,
-    ProjectValidationReceiptV1,
-    PySCFFunctionalResolutionReceiptV1,
-    project_document,
-    project_section_application_observation,
-    project_scientific_materializations,
-    read_project_yaml,
-    render_project_yaml,
-    validate_project_yaml,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
@@ -192,36 +195,15 @@ from chemsmart.agent.scientific_validation import (
     evaluate_planned_scientific_validation,
     scientific_validation_receipt_from_record,
 )
+from chemsmart.agent.skills import resolve_skill
 from chemsmart.agent.tool_specs import (
     REGISTRY_PRODUCERS,
     AgentToolSurfaceV1,
     build_approved_execution_tool_surface,
     build_command_compiled_tool_surface,
 )
-from chemsmart.analysis.quantity_expressions import (
-    QuantityExpressionNodeV1,
-    QuantityExpressionRequestV1,
-    convert_normalized_value,
-    normalize_numeric_value,
-    quantity_expression_receipt_from_record,
-)
-from chemsmart.analysis.result_readers import reader_for
-from chemsmart.analysis.result_quantities import (
-    QuantityExtractionReceiptV1,
-    QuantitySelectorV1,
-    QuantityValueV1,
-    ThermochemistryReceiptV1,
-    canonical_thermochemistry_quantity,
-    make_quantity_value,
-    quantity_extraction_receipt_from_record,
-    thermochemistry_receipt_from_record,
-)
 from chemsmart.agent.workflow_context import (
     project_workflow_context,
-)
-from chemsmart.agent.dependency_context import (
-    ContextSelectionReceiptV1,
-    TaskDependencyContextV2,
 )
 from chemsmart.agent.workflows import (
     AGGREGATE_NODE_PROGRAM,
@@ -239,6 +221,24 @@ from chemsmart.agent.workflows import (
     build_materialized_workflow,
     build_scientific_workflow_plan,
 )
+from chemsmart.analysis.quantity_expressions import (
+    QuantityExpressionNodeV1,
+    QuantityExpressionRequestV1,
+    convert_normalized_value,
+    normalize_numeric_value,
+    quantity_expression_receipt_from_record,
+)
+from chemsmart.analysis.result_quantities import (
+    QuantityExtractionReceiptV1,
+    QuantitySelectorV1,
+    QuantityValueV1,
+    ThermochemistryReceiptV1,
+    canonical_thermochemistry_quantity,
+    make_quantity_value,
+    quantity_extraction_receipt_from_record,
+    thermochemistry_receipt_from_record,
+)
+from chemsmart.analysis.result_readers import reader_for
 from chemsmart.utils.process_observation import (
     ProcessObservationV1,
     ProcessSignalGuard,
@@ -246,9 +246,8 @@ from chemsmart.utils.process_observation import (
     observe_process,
 )
 
-
-
 logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class _CommandContext:
@@ -546,9 +545,9 @@ def _pyscf_environment_evidence(
     """Compare different environment receipt types by stable semantics."""
 
     findings: list[str] = []
-    candidates: list[
-        tuple[TrustedArtifactRefV1, Mapping[str, Any] | None]
-    ] = []
+    candidates: list[tuple[TrustedArtifactRefV1, Mapping[str, Any] | None]] = (
+        []
+    )
     for artifact in output_artifacts:
         if artifact.kind != "json":
             continue
@@ -1151,9 +1150,7 @@ class CommandCompiledToolHostV1:
         )
         self.preview_server = str(preview_server)
         self.execution_server = str(execution_server)
-        self.execution_server_file_sha256 = str(
-            execution_server_file_sha256
-        )
+        self.execution_server_file_sha256 = str(execution_server_file_sha256)
         if self.execution_server_file_sha256:
             require_sha256(
                 self.execution_server_file_sha256,
@@ -1427,15 +1424,15 @@ class CommandCompiledToolHostV1:
         self._scientific_toolchain_command_results: dict[
             str, dict[str, Any]
         ] = {}
-        self._latest_program_workflows: dict[
-            str, _ResolvedProgramWorkflow
-        ] = {}
+        self._latest_program_workflows: dict[str, _ResolvedProgramWorkflow] = (
+            {}
+        )
         #: Last accepted scientific plan per workflow, so a later repair can be
         #: checked against the question and not only against its own findings.
         self.scientific_plans: dict[str, Any] = {}
-        self.scientific_workflow_plans: dict[
-            str, ScientificWorkflowPlanV2
-        ] = {}
+        self.scientific_workflow_plans: dict[str, ScientificWorkflowPlanV2] = (
+            {}
+        )
         self.materialized_workflows: dict[str, MaterializedWorkflowV1] = {}
         if materialized_workflow is not None:
             self.materialized_workflows[
@@ -2633,11 +2630,11 @@ class CommandCompiledToolHostV1:
                 node_kind=raw_node.get("node_kind", "program_call"),
                 charge=raw_node.get("charge"),
                 multiplicity=raw_node.get("multiplicity"),
-                internal_coordinates=canonical_data(
-                    raw_node.get("internal_coordinates")
-                )
-                if raw_node.get("internal_coordinates")
-                else None,
+                internal_coordinates=(
+                    canonical_data(raw_node.get("internal_coordinates"))
+                    if raw_node.get("internal_coordinates")
+                    else None
+                ),
             )
             if node.node_kind == "aggregate":
                 # ChemSmart performs the arithmetic, so there is no program
@@ -2885,9 +2882,7 @@ class CommandCompiledToolHostV1:
                     entropy_cutoff_cm1=raw_node.get("entropy_cutoff_cm1"),
                     enthalpy_cutoff_cm1=raw_node.get("enthalpy_cutoff_cm1"),
                     alpha=raw_node.get("alpha", 4),
-                    use_weighted_mass=raw_node.get(
-                        "use_weighted_mass", False
-                    ),
+                    use_weighted_mass=raw_node.get("use_weighted_mass", False),
                     frequency_scale_factor=raw_node.get(
                         "frequency_scale_factor", 1.0
                     ),
@@ -2944,10 +2939,13 @@ class CommandCompiledToolHostV1:
             and command_result.get("scientific_workflow_plan") is None
         ):
             findings = tuple(command_result.get("findings") or ())
-            named = "; ".join(
-                f"{item.get('node_id')}: {item.get('rule_id')}"
-                for item in findings
-            ) or "no finding was recorded"
+            named = (
+                "; ".join(
+                    f"{item.get('node_id')}: {item.get('rule_id')}"
+                    for item in findings
+                )
+                or "no finding was recorded"
+            )
             # A live session that had blocked every stage (as instructed) and
             # bound two identities (as instructed) was still refused twice,
             # because the general sentence below was already satisfied
@@ -3411,66 +3409,66 @@ class CommandCompiledToolHostV1:
             current_result
             if not replacements and not support_repairs
             else self._plan_command_workflow(
-            turn_id,
-            {
-                "workflow_id": current_draft.workflow_id,
-                "task_spec_id": current_draft.task_spec_id,
-                "nodes": tuple(
-                    {
-                        "node_id": node.node_id,
-                        "node_kind": node.node_kind,
-                        "program": node.program,
-                        "jobtype": node.jobtype,
-                        "project_role": node.project_role,
-                        **(
-                            {
-                                "charge": node.charge,
-                                "multiplicity": node.multiplicity,
-                            }
-                            if node.charge is not None
-                            else {}
-                        ),
-                        # Every per-node scientific fact has to be listed
-                        # here by hand, and anything forgotten is dropped
-                        # silently. A scan whose project role was amended
-                        # came back out of this rebuild with no driven
-                        # coordinate at all -- still typed `scan`, compiled
-                        # without --coordinates, and therefore a plain
-                        # optimisation wearing a scan's name. Changing a
-                        # project must not change the chemistry.
-                        **(
-                            {
-                                "internal_coordinates": (
-                                    node.internal_coordinates
-                                )
-                            }
-                            if node.internal_coordinates is not None
-                            else {}
-                        ),
-                        "dependencies": node.dependencies,
-                        "inputs": tuple(
-                            {
-                                "binding_id": item.binding_id,
-                                "artifact_id": item.artifact_id,
-                                "artifact_class": item.artifact_class,
-                                "producer_node_id": item.producer_node_id,
-                                "producer_output_id": item.producer_output_id,
-                            }
-                            for item in node.inputs
-                        ),
-                        "expected_outputs": tuple(
-                            {
-                                "output_id": item.output_id,
-                                "artifact_class": item.artifact_class,
-                            }
-                            for item in node.expected_outputs
-                        ),
-                        "unresolved_fields": node.unresolved_fields,
-                    }
-                    for node in revised_nodes
-                ),
-            },
-            node_annotations=annotations,
+                turn_id,
+                {
+                    "workflow_id": current_draft.workflow_id,
+                    "task_spec_id": current_draft.task_spec_id,
+                    "nodes": tuple(
+                        {
+                            "node_id": node.node_id,
+                            "node_kind": node.node_kind,
+                            "program": node.program,
+                            "jobtype": node.jobtype,
+                            "project_role": node.project_role,
+                            **(
+                                {
+                                    "charge": node.charge,
+                                    "multiplicity": node.multiplicity,
+                                }
+                                if node.charge is not None
+                                else {}
+                            ),
+                            # Every per-node scientific fact has to be listed
+                            # here by hand, and anything forgotten is dropped
+                            # silently. A scan whose project role was amended
+                            # came back out of this rebuild with no driven
+                            # coordinate at all -- still typed `scan`, compiled
+                            # without --coordinates, and therefore a plain
+                            # optimisation wearing a scan's name. Changing a
+                            # project must not change the chemistry.
+                            **(
+                                {
+                                    "internal_coordinates": (
+                                        node.internal_coordinates
+                                    )
+                                }
+                                if node.internal_coordinates is not None
+                                else {}
+                            ),
+                            "dependencies": node.dependencies,
+                            "inputs": tuple(
+                                {
+                                    "binding_id": item.binding_id,
+                                    "artifact_id": item.artifact_id,
+                                    "artifact_class": item.artifact_class,
+                                    "producer_node_id": item.producer_node_id,
+                                    "producer_output_id": item.producer_output_id,
+                                }
+                                for item in node.inputs
+                            ),
+                            "expected_outputs": tuple(
+                                {
+                                    "output_id": item.output_id,
+                                    "artifact_class": item.artifact_class,
+                                }
+                                for item in node.expected_outputs
+                            ),
+                            "unresolved_fields": node.unresolved_fields,
+                        }
+                        for node in revised_nodes
+                    ),
+                },
+                node_annotations=annotations,
             )
         )
         draft = command_result["workflow_draft"]
@@ -3681,7 +3679,9 @@ class CommandCompiledToolHostV1:
                 getattr(receipt, "validated", False)
             )
 
-        def _dependency_receipts(node: AnalysisNodeIntentV1) -> dict[str, set[str]]:
+        def _dependency_receipts(
+            node: AnalysisNodeIntentV1,
+        ) -> dict[str, set[str]]:
             # A dependency on a calculation node used to route through
             # ``matched`` like an analysis dependency, and calculation nodes
             # are never in ``matched`` -- so no producer-fed analysis node
@@ -3722,7 +3722,9 @@ class CommandCompiledToolHostV1:
                 )
             return artifact_ids
 
-        def _decision_evidence(decision: ScientificDecisionRecordV1) -> set[str]:
+        def _decision_evidence(
+            decision: ScientificDecisionRecordV1,
+        ) -> set[str]:
             evidence: set[str] = set()
             for reference in decision.evidence_refs:
                 parsed = _postprocessing_evidence_reference(reference)
@@ -3847,9 +3849,7 @@ class CommandCompiledToolHostV1:
                         receipt.artifact_id
                         for dependency_receipts in dependencies.values()
                         for digest in dependency_receipts
-                        if (
-                            receipt := self.quantity_extractions.get(digest)
-                        )
+                        if (receipt := self.quantity_extractions.get(digest))
                         is not None
                     }
                     source_artifact_ids.update(
@@ -3908,7 +3908,10 @@ class CommandCompiledToolHostV1:
                         if dimension is None:
                             compatible = False
                             break
-                        if tuple(quantities[quantity_kind].dimension) != dimension:
+                        if (
+                            tuple(quantities[quantity_kind].dimension)
+                            != dimension
+                        ):
                             compatible = False
                             break
                     if compatible:
@@ -3922,8 +3925,7 @@ class CommandCompiledToolHostV1:
                 planned_output_operations = {
                     str(expression.get("operation") or "")
                     for expression in node.expression_nodes
-                    if str(expression.get("node_id") or "")
-                    in required_outputs
+                    if str(expression.get("node_id") or "") in required_outputs
                 }
                 planned_dimensions: set[tuple[int, ...]] = set()
                 for output in node.outputs:
@@ -4023,12 +4025,9 @@ class CommandCompiledToolHostV1:
                         item
                         for item in node.inputs
                         if isinstance(item, AnalysisInputIntentV1)
-                        and (
-                            producer := nodes.get(item.producer_node_id)
-                        )
+                        and (producer := nodes.get(item.producer_node_id))
                         is not None
-                        and producer.analysis_kind
-                        == "scientific_validation"
+                        and producer.analysis_kind == "scientific_validation"
                     )
                     if any(
                         not any(
@@ -4050,9 +4049,7 @@ class CommandCompiledToolHostV1:
                                     claim_sources
                                     | evidence
                                     | {decision.record_sha256}
-                                ).intersection(
-                                    dependency_receipts
-                                )
+                                ).intersection(dependency_receipts)
                             )
                             for dependency_receipts in dependencies.values()
                         ):
@@ -4064,7 +4061,9 @@ class CommandCompiledToolHostV1:
                             )
                 if candidates:
                     matched[node_id] = tuple(
-                        sorted({digest for pair in candidates for digest in pair})
+                        sorted(
+                            {digest for pair in candidates for digest in pair}
+                        )
                     )
         return matched
 
@@ -4772,9 +4771,7 @@ class CommandCompiledToolHostV1:
             support_state = (
                 "blocked_unsupported"
                 if declared_support == "blocked_unsupported"
-                else "unresolved_future"
-                if unresolved
-                else "resolvable"
+                else "unresolved_future" if unresolved else "resolvable"
             )
             blocked_reason = (
                 str(annotation.get("blocked_reason") or "")
@@ -5035,9 +5032,7 @@ class CommandCompiledToolHostV1:
             if self.bounded_execution_envelope is not None
             else frozenset()
         )
-        planned_ids = {
-            node.node_id for node in getattr(plan, "nodes", ())
-        }
+        planned_ids = {node.node_id for node in getattr(plan, "nodes", ())}
         executable_ids = planned_ids - non_executable_ids
         for node in getattr(plan, "nodes", ()):
             node_id = node.node_id
@@ -5093,9 +5088,7 @@ class CommandCompiledToolHostV1:
                 if node["deferred_admissible"]
             ),
             "non_executable_node_ids": tuple(
-                node["node_id"]
-                for node in nodes
-                if node["non_executable"]
+                node["node_id"] for node in nodes if node["non_executable"]
             ),
             "workflow_blocked_reason": (
                 "the workflow has no release-executable stage to review"
@@ -5474,11 +5467,9 @@ class CommandCompiledToolHostV1:
                 candidate_plan = self._current_execution_plan_for_node(
                     values["node_id"]
                 )
-                current_invocation, _context = (
-                    self._plan_invocation_for_node(
-                        plan=candidate_plan,
-                        node_id=values["node_id"],
-                    )
+                current_invocation, _context = self._plan_invocation_for_node(
+                    plan=candidate_plan,
+                    node_id=values["node_id"],
                 )
                 if (
                     current_invocation.invocation_sha256
@@ -5490,9 +5481,7 @@ class CommandCompiledToolHostV1:
                     )
                 invocation_plan_sha256 = candidate_plan.plan_sha256
         if invocation_plan_sha256:
-            plan = self.scientific_workflow_plans.get(
-                invocation_plan_sha256
-            )
+            plan = self.scientific_workflow_plans.get(invocation_plan_sha256)
             if plan is None:
                 raise ContractError(
                     "prepared invocation has no registered scientific plan"
@@ -5516,7 +5505,10 @@ class CommandCompiledToolHostV1:
                     durable_run,
                     frontier.data_edge_bindings,
                 )
-                if observed.state != "pending" or values["node_id"] not in ready:
+                if (
+                    observed.state != "pending"
+                    or values["node_id"] not in ready
+                ):
                     raise ContractError(
                         "prepared node is not runnable in the current durable "
                         "workflow frontier"
@@ -5817,9 +5809,7 @@ class CommandCompiledToolHostV1:
             output_producers[output_id]
             for output_id in plan.required_output_ids
         }
-        analysis_nodes = {
-            node.node_id: node for node in plan.analysis_nodes
-        }
+        analysis_nodes = {node.node_id: node for node in plan.analysis_nodes}
         missing_required = {
             node_id for node_id in required_producers if node_id not in matched
         }
@@ -6067,9 +6057,9 @@ class CommandCompiledToolHostV1:
                 receipt = sorted(
                     preferred, key=lambda item: item.receipt_sha256
                 )[-1]
-                stage_receipts["quantity_extraction"][artifact_sha256] = (
-                    receipt.receipt_sha256
-                )
+                stage_receipts["quantity_extraction"][
+                    artifact_sha256
+                ] = receipt.receipt_sha256
                 selected.append(receipt.receipt_sha256)
                 evidence_receipts.append(receipt.receipt_sha256)
 
@@ -6118,9 +6108,9 @@ class CommandCompiledToolHostV1:
                 receipt = sorted(
                     preferred, key=lambda item: item.receipt_sha256
                 )[-1]
-                stage_receipts["thermochemistry"][artifact_sha256] = (
-                    receipt.receipt_sha256
-                )
+                stage_receipts["thermochemistry"][
+                    artifact_sha256
+                ] = receipt.receipt_sha256
                 selected.append(receipt.receipt_sha256)
                 evidence_receipts.append(receipt.receipt_sha256)
 
@@ -6500,9 +6490,7 @@ class CommandCompiledToolHostV1:
                 )
             )
             for node_id, temperature, pressure in conditions:
-                lines.append(
-                    f"| {node_id} | `{temperature}` | `{pressure}` |"
-                )
+                lines.append(f"| {node_id} | `{temperature}` | `{pressure}` |")
         if claims is not None:
             lines.extend(
                 (
@@ -6704,12 +6692,9 @@ class CommandCompiledToolHostV1:
                     {item.environment_receipt_sha256 for item in future_rules},
                 )
             else:
-                approved = (
-                    execution_invocation.environment_identity_sha256
-                    in (
-                        set(
-                            self.frozen_workflow_approval.environment_identity_sha256s
-                        )
+                approved = execution_invocation.environment_identity_sha256 in (
+                    set(
+                        self.frozen_workflow_approval.environment_identity_sha256s
                     )
                 )
             if not approved:
@@ -6954,9 +6939,7 @@ class CommandCompiledToolHostV1:
             execution_state = (
                 "failed"
                 if process_observation.state != "exited"
-                else "engine_complete"
-                if engine_complete
-                else "failed"
+                else "engine_complete" if engine_complete else "failed"
             )
         else:
             engine_complete = wrapper_exit_status == 0
@@ -7028,8 +7011,7 @@ class CommandCompiledToolHostV1:
                         if edge.producer_node_id == node_id
                     ),
                     key=lambda item: (
-                        item.selection_rule
-                        != "validated_optimized_geometry",
+                        item.selection_rule != "validated_optimized_geometry",
                         item.consumer_node_id,
                     ),
                 )
@@ -7100,9 +7082,7 @@ class CommandCompiledToolHostV1:
                     )
                     self.artifacts[artifact.artifact_id] = artifact
                     self.hessian_handoffs[edge.consumer_node_id] = observed
-                elif (
-                    edge.selection_rule == "validated_producer_orca_hessian"
-                ):
+                elif edge.selection_rule == "validated_producer_orca_hessian":
                     if context.proposal.program != "orca":
                         raise ContractError(
                             "a producer ORCA Hessian handoff requires an "
@@ -7239,7 +7219,9 @@ class CommandCompiledToolHostV1:
                         multiplicity=consumer_multiplicity,
                     )
                     self.artifacts[artifact.artifact_id] = artifact
-                    self.scientific_identities[identity.binding_sha256] = identity
+                    self.scientific_identities[identity.binding_sha256] = (
+                        identity
+                    )
                     self.handoffs[edge.consumer_node_id] = observed
                 scientific_edge = next(
                     (
@@ -7487,8 +7469,7 @@ class CommandCompiledToolHostV1:
         for node_id in non_executable:
             if node_id in declared:
                 reasons[node_id] = (
-                    declared[node_id]
-                    or "declared non-executable intent"
+                    declared[node_id] or "declared non-executable intent"
                 )
             else:
                 sources = sorted(
@@ -7611,10 +7592,14 @@ class CommandCompiledToolHostV1:
                 "execution review requires an explicit resource envelope"
             )
         if resources.resource_sha256 != envelope.resources.resource_sha256:
-            raise ContractError("review resources differ from execution envelope")
+            raise ContractError(
+                "review resources differ from execution envelope"
+            )
         plans = tuple(self.scientific_workflow_plans.values())
         if not plans:
-            raise ContractError("execution review requires a scientific workflow")
+            raise ContractError(
+                "execution review requires a scientific workflow"
+            )
         plan = plans[-1]
         if plan.task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError("review workflow belongs to another task")
@@ -7707,8 +7692,7 @@ class CommandCompiledToolHostV1:
             if edge.selection_rule == "validated_optimized_geometry"
         )
         edge_by_target = {
-            edge.consumer_node_id: edge
-            for edge in geometry_edges
+            edge.consumer_node_id: edge for edge in geometry_edges
         }
         if (
             len(edge_by_target) != len(geometry_edges)
@@ -7815,8 +7799,10 @@ class CommandCompiledToolHostV1:
                     "differs from its task-bound molecular input"
                 )
             if edge is None:
-                invocation, invocation_context = self._plan_invocation_for_node(
-                    plan=plan, node_id=planned_node.node_id
+                invocation, invocation_context = (
+                    self._plan_invocation_for_node(
+                        plan=plan, node_id=planned_node.node_id
+                    )
                 )
                 review_input_sha256 = context.input_artifact.sha256
                 input_binding = (
@@ -8041,10 +8027,14 @@ class CommandCompiledToolHostV1:
                     multiplicity=target_multiplicity,
                     input_mode="producer" if edge is not None else "initial",
                     initial_artifact_id=(
-                        "" if edge is not None else context.input_artifact.artifact_id
+                        ""
+                        if edge is not None
+                        else context.input_artifact.artifact_id
                     ),
                     initial_artifact_sha256=(
-                        "" if edge is not None else context.input_artifact.sha256
+                        ""
+                        if edge is not None
+                        else context.input_artifact.sha256
                     ),
                     scientific_identity_sha256=(
                         ""
@@ -8067,7 +8057,8 @@ class CommandCompiledToolHostV1:
             )
         if unbindable:
             detail = "; ".join(
-                f"{node_id}: {reason}" for node_id, reason in sorted(unbindable)
+                f"{node_id}: {reason}"
+                for node_id, reason in sorted(unbindable)
             )
             raise ContractError(
                 "these workflow nodes have no unique project, capability and "
@@ -8083,8 +8074,7 @@ class CommandCompiledToolHostV1:
                 "review"
             )
         review_request_id = (
-            str(request_id).strip()
-            or "review-" + plan.plan_sha256[:16]
+            str(request_id).strip() or "review-" + plan.plan_sha256[:16]
         )
         request = build_workflow_approval_request(
             request_id=review_request_id,
@@ -8263,8 +8253,7 @@ class CommandCompiledToolHostV1:
             if edge.selection_rule == "validated_optimized_geometry"
         )
         edge_by_target = {
-            edge.consumer_node_id: edge
-            for edge in geometry_edges
+            edge.consumer_node_id: edge for edge in geometry_edges
         }
         if (
             len(edge_by_target) != len(geometry_edges)
@@ -8479,7 +8468,8 @@ class CommandCompiledToolHostV1:
             None,
         )
         producer_inputs = tuple(
-            item for item in (node.inputs if node is not None else ())
+            item
+            for item in (node.inputs if node is not None else ())
             if item.producer_node_id
         )
         geometry_inputs = tuple(
@@ -8670,18 +8660,13 @@ class CommandCompiledToolHostV1:
     ) -> tuple[CanonicalCommandInvocationV1, _CommandContext]:
         invocations = getattr(self, "invocations", {})
         contexts = getattr(self, "_command_contexts", {})
-        plan_bindings = getattr(
-            self, "_invocation_workflow_plan_sha256s", {}
-        )
+        plan_bindings = getattr(self, "_invocation_workflow_plan_sha256s", {})
         for invocation in reversed(tuple(invocations.values())):
             context = contexts[invocation.invocation_sha256]
-            if (
-                context.proposal.node_id == node_id
-                and (
-                    not plan_sha256
-                    or plan_bindings.get(invocation.invocation_sha256)
-                    == plan_sha256
-                )
+            if context.proposal.node_id == node_id and (
+                not plan_sha256
+                or plan_bindings.get(invocation.invocation_sha256)
+                == plan_sha256
             ):
                 return invocation, context
         message = "node has no compiled command invocation"
@@ -8765,16 +8750,27 @@ class CommandCompiledToolHostV1:
             context.proposal.jobtype,
         ):
             raise ContractError("program command differs from human review")
-        if self.execution_resources is None or canonical_data(
-            self.execution_resources
-        ) != review.execution_resources:
+        if (
+            self.execution_resources is None
+            or canonical_data(self.execution_resources)
+            != review.execution_resources
+        ):
             raise ContractError("execution resources differ from human review")
-        if context.project_artifact is None or context.project_validation is None:
-            raise ContractError("reviewed execution requires a validated project")
+        if (
+            context.project_artifact is None
+            or context.project_validation is None
+        ):
+            raise ContractError(
+                "reviewed execution requires a validated project"
+            )
         reviewed_settings = json.loads(review.project_settings_text)
         effective_settings = dict(context.project_validation.settings)
-        if canonical_data(effective_settings) != canonical_data(reviewed_settings):
-            raise ContractError("effective project settings differ from human review")
+        if canonical_data(effective_settings) != canonical_data(
+            reviewed_settings
+        ):
+            raise ContractError(
+                "effective project settings differ from human review"
+            )
         current_environment = self.environments.get(
             context.engine_binding.environment_receipt_sha256
         )
@@ -8783,14 +8779,18 @@ class CommandCompiledToolHostV1:
             or environment_review_summary(current_environment)
             != review.environment_summary
         ):
-            raise ContractError("execution environment facts differ from human review")
+            raise ContractError(
+                "execution environment facts differ from human review"
+            )
         molecular = review.molecular_identity
-        if (
-            context.scientific_identity.charge != molecular.get("charge")
-            or context.scientific_identity.multiplicity
-            != molecular.get("multiplicity")
+        if context.scientific_identity.charge != molecular.get(
+            "charge"
+        ) or context.scientific_identity.multiplicity != molecular.get(
+            "multiplicity"
         ):
-            raise ContractError("molecular electronic state differs from human review")
+            raise ContractError(
+                "molecular electronic state differs from human review"
+            )
         coordinate = molecular.get("coordinate_identity")
         if not isinstance(coordinate, Mapping):
             raise ContractError("human review lacks coordinate identity")
@@ -8802,17 +8802,23 @@ class CommandCompiledToolHostV1:
             context.project_artifact.cli_value: (
                 "project-yaml",
                 context.project_artifact.sha256,
-            )
+            ),
         }
         if coordinate.get("kind") == "exact-input-artifact":
-            expected_input = str(coordinate.get("geometry_artifact_sha256", ""))
+            expected_input = str(
+                coordinate.get("geometry_artifact_sha256", "")
+            )
             if context.input_artifact.sha256 != expected_input:
-                raise ContractError("molecular input bytes differ from human review")
+                raise ContractError(
+                    "molecular input bytes differ from human review"
+                )
             if (
                 molecular.get("scientific_identity_sha256")
                 != context.scientific_identity.binding_sha256
             ):
-                raise ContractError("molecular identity differs from human review")
+                raise ContractError(
+                    "molecular identity differs from human review"
+                )
             input_role = "molecular-input"
             input_digest = expected_input
         elif coordinate.get("kind") == "validated-producer-output":
@@ -8822,9 +8828,13 @@ class CommandCompiledToolHostV1:
                 binding.input_mode != "producer"
                 or binding.producer_edge_sha256 != input_digest
             ):
-                raise ContractError("producer geometry edge differs from human review")
+                raise ContractError(
+                    "producer geometry edge differs from human review"
+                )
             if self.handoffs.get(node_id) is None:
-                raise ContractError("producer geometry lacks validated handoff")
+                raise ContractError(
+                    "producer geometry lacks validated handoff"
+                )
             input_role = "producer-geometry"
         else:
             raise ContractError("unknown reviewed coordinate identity")
@@ -8834,10 +8844,7 @@ class CommandCompiledToolHostV1:
         )
         if self.execution_server:
             server_path = Path(self.execution_server)
-            if (
-                not server_path.is_file()
-                or server_path.is_symlink()
-            ):
+            if not server_path.is_file() or server_path.is_symlink():
                 raise ContractError("execution server profile is unavailable")
             path_bindings[self.execution_server] = (
                 "server-profile",
@@ -8847,7 +8854,9 @@ class CommandCompiledToolHostV1:
         for binding in invocation.auxiliary_input_bindings:
             artifact = auxiliary_by_name.get(binding.parameter_name)
             if artifact is None or artifact.sha256 != binding.artifact_sha256:
-                raise ContractError("auxiliary input differs from human review")
+                raise ContractError(
+                    "auxiliary input differs from human review"
+                )
             path_bindings[artifact.cli_value] = (
                 "auxiliary-" + binding.parameter_name,
                 binding.artifact_sha256,
@@ -9268,8 +9277,7 @@ class CommandCompiledToolHostV1:
                     consequential_imaginary_modes = tuple(
                         float(value)
                         for value in frequencies
-                        if math.isfinite(float(value))
-                        and float(value) < -20.0
+                        if math.isfinite(float(value)) and float(value) < -20.0
                     )
                     orca_observation.update(
                         {
@@ -9344,12 +9352,19 @@ class CommandCompiledToolHostV1:
                     )
                     if requested_frequency_analysis and not frequencies:
                         findings.append("orca.result.frequencies_missing")
-                    elif requested_frequency_analysis and not finite_frequencies:
+                    elif (
+                        requested_frequency_analysis and not finite_frequencies
+                    ):
                         findings.append("orca.result.frequencies_invalid")
                     if jobtype == "ts":
                         if not finite_frequencies:
-                            if "orca.result.frequencies_invalid" not in findings:
-                                findings.append("orca.result.frequencies_invalid")
+                            if (
+                                "orca.result.frequencies_invalid"
+                                not in findings
+                            ):
+                                findings.append(
+                                    "orca.result.frequencies_invalid"
+                                )
                         elif len(consequential_imaginary_modes) != 1:
                             findings.append(
                                 "orca.result.ts_imaginary_mode_count"
@@ -9442,8 +9457,7 @@ class CommandCompiledToolHostV1:
                             )
                         )
                         findings.append(
-                            "xtb.native_failure."
-                            + failure_summary.error_class
+                            "xtb.native_failure." + failure_summary.error_class
                         )
         elif program == "gaussian":
             if exit_status != 0:
@@ -10066,7 +10080,9 @@ class CommandCompiledToolHostV1:
             plan = resolved.scientific_toolchain_plan
             task_spec_sha256 = resolved.draft.task_spec_id
         if plan is None:
-            raise ContractError("workflow has no scientific analysis toolchain")
+            raise ContractError(
+                "workflow has no scientific analysis toolchain"
+            )
         nodes = tuple(
             node for node in plan.analysis_nodes if node.node_id == node_id
         )
@@ -10089,17 +10105,16 @@ class CommandCompiledToolHostV1:
             if isinstance(item, AnalysisInputIntentV1)
         }
         supplied = tuple(values["inputs"])
-        supplied_ids = tuple(sorted(str(item["input_id"]) for item in supplied))
-        if (
-            len(supplied_ids) != len(set(supplied_ids))
-            or supplied_ids != tuple(sorted(input_intents))
-        ):
+        supplied_ids = tuple(
+            sorted(str(item["input_id"]) for item in supplied)
+        )
+        if len(supplied_ids) != len(
+            set(supplied_ids)
+        ) or supplied_ids != tuple(sorted(input_intents)):
             raise ContractError(
                 "scientific validation requires exactly its planned inputs"
             )
-        producer_nodes = {
-            item.node_id: item for item in plan.analysis_nodes
-        }
+        producer_nodes = {item.node_id: item for item in plan.analysis_nodes}
         bound_inputs: dict[str, tuple[str, QuantityValueV1]] = {}
         for item in supplied:
             input_id = str(item["input_id"])
@@ -10170,10 +10185,12 @@ class CommandCompiledToolHostV1:
                 candidate.quantity_id
                 for candidate in getattr(
                     source_receipt,
-                    "outputs"
-                    if source_kind
-                    in {"quantity_expression", "scientific_validation"}
-                    else "quantities",
+                    (
+                        "outputs"
+                        if source_kind
+                        in {"quantity_expression", "scientific_validation"}
+                        else "quantities"
+                    ),
                 )
             }
             if (
@@ -10217,9 +10234,7 @@ class CommandCompiledToolHostV1:
                 "workflow_id": receipt.workflow_id,
                 "plan_sha256": receipt.plan_sha256,
                 "node_id": receipt.node_id,
-                "source_receipt_sha256s": (
-                    receipt.source_receipt_sha256s
-                ),
+                "source_receipt_sha256s": (receipt.source_receipt_sha256s),
                 "all_rules_passed": receipt.all_rules_passed,
                 "status": receipt.status,
                 "record": record,
@@ -10910,9 +10925,7 @@ def _remaining_node_unresolved_fields(
     resolved_input_markers: set[str] = set()
     for item in getattr(node, "inputs", ()) or ():
         producer_node_id = str(getattr(item, "producer_node_id", "") or "")
-        producer_output_id = str(
-            getattr(item, "producer_output_id", "") or ""
-        )
+        producer_output_id = str(getattr(item, "producer_output_id", "") or "")
         if not producer_node_id or not producer_output_id:
             continue
         key = (

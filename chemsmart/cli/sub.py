@@ -349,4 +349,3 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)
-

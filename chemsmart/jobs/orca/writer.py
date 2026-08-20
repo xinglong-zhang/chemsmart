@@ -139,7 +139,9 @@ class ORCAInputWriter(InputWriter):
             isinstance(self.job.settings, ORCAIRCJobSettings)
             and str(self.job.settings.inithess or "").casefold() == "read"
         ):
-            source = os.path.abspath(str(self.job.settings.hess_filename or ""))
+            source = os.path.abspath(
+                str(self.job.settings.hess_filename or "")
+            )
             if not os.path.isfile(source):
                 raise FileNotFoundError(
                     f"ORCA IRC Hessian does not exist: {source}"
@@ -951,7 +953,7 @@ class ORCAInputWriter(InputWriter):
                         self.settings.hess_filename
                     ), f"Hessian file {self.settings.hess_filename} is not found!"
                     f.write(
-                        '  Hess_Filename '
+                        "  Hess_Filename "
                         f'"{os.path.basename(self.settings.hess_filename)}"'
                         "  # Hessian file\n"
                     )

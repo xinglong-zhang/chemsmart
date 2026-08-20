@@ -222,19 +222,17 @@ For full details on organometallic complex support and its restrictions, see :do
 *********************
 
 CHEMSMART Database Files (.db)
-===============================
+==============================
 
-CHEMSMART ``.db`` files are produced by the database workflow, typically with
-``chemsmart run database assemble`` (see :doc:`database-assemble`). When a
-CHEMSMART database is used as molecular input, CHEMSMART first selects the
-requested record, molecule, or structure, then passes the selected geometry,
-charge, and multiplicity to a supported calculation or visualization command
-(see :doc:`database-workflow`).
+CHEMSMART ``.db`` files are produced by the database workflow, typically with ``chemsmart run database assemble`` (see
+:doc:`database-assemble`). When a CHEMSMART database is used as molecular input, CHEMSMART first selects the requested
+record, molecule, or structure, then passes the selected geometry, charge, and multiplicity to a supported calculation
+or visualization command (see :doc:`database-workflow`).
 
 .. tip::
 
-   Use ``chemsmart run database query -f chemsmart.db`` to list available
-   record indices and IDs before selecting structures from a database.
+   Use ``chemsmart run database query -f chemsmart.db`` to list available record indices and IDs before selecting
+   structures from a database.
 
 .. code:: bash
 
@@ -436,5 +434,4 @@ For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilit
 -  :doc:`database-workflow`
 -  :doc:`cli-overview`
 
-For the scientific design and citation, see the CHEMSMART preprint:
-https://arxiv.org/abs/2508.20042
+For the scientific design and citation, see the CHEMSMART preprint: https://arxiv.org/abs/2508.20042

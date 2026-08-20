@@ -6,8 +6,10 @@ import pytest
 
 from chemsmart.jobs.pyscf.opt import PySCFOptJob
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
-from chemsmart.settings.pyscf import PySCFProjectSettings
-from chemsmart.settings.pyscf import materialize_canonical_project_sections
+from chemsmart.settings.pyscf import (
+    PySCFProjectSettings,
+    materialize_canonical_project_sections,
+)
 
 
 def _project(tmp_path, body):

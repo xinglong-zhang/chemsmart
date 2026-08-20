@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from http.client import BadStatusLine
 import socket
 import ssl
 import threading
 import time
+from contextlib import contextmanager
+from http.client import BadStatusLine
 from urllib.error import HTTPError
 from urllib.request import Request
 
@@ -55,7 +55,9 @@ def test_response_header_drip_cannot_reset_monotonic_absolute_cap(monkeypatch):
             peer.close()
             peer_closed.set()
 
-    worker = threading.Thread(target=drip_headers, name="synthetic-header-peer")
+    worker = threading.Thread(
+        target=drip_headers, name="synthetic-header-peer"
+    )
     worker.start()
     deadline = ProviderTurnDeadline(
         ProviderTurnDeadlinesV1(
@@ -160,9 +162,7 @@ def test_resolved_tcp_addresses_share_one_monotonic_connect_cap(monkeypatch):
     assert elapsed < 0.13
     assert len(created) == 2
     assert created[1].timeout < created[0].timeout
-    assert all(
-        item.bound_address == ("127.0.0.1", 0) for item in created
-    )
+    assert all(item.bound_address == ("127.0.0.1", 0) for item in created)
     assert all(item.closed and item.close_calls == 1 for item in created)
     assert connection.sock is None
 
@@ -221,9 +221,7 @@ def test_tls_handshake_wait_is_bounded_without_a_worker_thread():
     started = time.monotonic()
     try:
         with pytest.raises(ProviderDeadlineExceeded) as observed:
-            _perform_bounded_tls_handshake(
-                NeverCompletesHandshake(), deadline
-            )
+            _perform_bounded_tls_handshake(NeverCompletesHandshake(), deadline)
     finally:
         client.close()
         peer.close()
@@ -231,8 +229,7 @@ def test_tls_handshake_wait_is_bounded_without_a_worker_thread():
     assert observed.value.phase == "connect"
     assert time.monotonic() - started < 0.25
     assert not any(
-        thread.name.startswith("provider")
-        for thread in threading.enumerate()
+        thread.name.startswith("provider") for thread in threading.enumerate()
     )
 
 

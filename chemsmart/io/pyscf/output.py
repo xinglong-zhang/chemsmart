@@ -201,8 +201,7 @@ def pyscf_source_artifact_binding(molecule):
             np.asarray(molecule_positions, dtype=float),
         )
         and spec.get("charge") == getattr(molecule, "charge", None)
-        and spec.get("multiplicity")
-        == getattr(molecule, "multiplicity", None)
+        and spec.get("multiplicity") == getattr(molecule, "multiplicity", None)
     )
     if not geometry_matches:
         raise PySCFArtifactBindingError(
@@ -534,13 +533,17 @@ class PySCFOutput(FileMixin):
     def excitation_energies(self):
         """Return vertical excitation energies in Hartree, if present."""
         values = self.results.get("excitation_energies")
-        return [float(value) for value in values] if values is not None else None
+        return (
+            [float(value) for value in values] if values is not None else None
+        )
 
     @cached_property
     def oscillator_strengths(self):
         """Return dimensionless oscillator strengths, if present."""
         values = self.results.get("oscillator_strengths")
-        return [float(value) for value in values] if values is not None else None
+        return (
+            [float(value) for value in values] if values is not None else None
+        )
 
     @cached_property
     def _eigenvalues(self):

@@ -297,9 +297,7 @@ def test_registered_program_result_is_authoritative_thermochemistry_root(
     inspected = host.dispatch(
         turn_id="turn-thermochemistry",
         tool_name="inspect_workflow_frontier",
-        arguments={
-            "workflow_id": "workflow-registered-thermochemistry"
-        },
+        arguments={"workflow_id": "workflow-registered-thermochemistry"},
     )["result"]
     assert inspected["workflow_frontier"]["completed_node_ids"] == [
         "derive-thermochemistry"

@@ -10,8 +10,8 @@ from chemsmart.agent._contracts import (
     ContractError,
     canonical_data,
     canonical_sha256,
-    require_identifier,
     require_auxiliary_artifact_bindings,
+    require_identifier,
     require_sha256,
 )
 
@@ -927,7 +927,6 @@ def _derive_complexity_factors(
     return tuple(sorted(factors))
 
 
-
 @dataclass(frozen=True)
 class MaterializedNodeV1:
     """Host-grounded receipts for one scientific stage."""
@@ -1139,6 +1138,7 @@ def build_materialized_workflow(
         **body, materialized_sha256=canonical_sha256(digest_body)
     )
 
+
 @dataclass(frozen=True)
 class StationaryPointValidationPolicyV1:
     schema_version: str
@@ -1180,7 +1180,6 @@ class StationaryPointValidationPolicyV1:
         }
         if self.policy_sha256 != canonical_sha256(body):
             raise ContractError("stationary point policy digest mismatch")
-
 
 
 __all__ = [

@@ -14,12 +14,10 @@ CHEMSMART offers two main execution modes:
 -  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
 
-The provider-neutral ``chemsmart agent`` command operates through these same
-project loaders and Click commands as a pipeline: ``agent plan`` is
-preview-only, ``agent review`` records the one human decision on a stored
-review, ``agent run`` executes an approved bundle provider-free, and
-``agent tui`` is the interactive terminal with the visible human review and
-one explicit ``/approve`` action. See :doc:`agent-workflows`.
+The provider-neutral ``chemsmart agent`` command operates through these same project loaders and Click commands as a
+pipeline: ``agent plan`` is preview-only, ``agent review`` records the one human decision on a stored review, ``agent
+run`` executes an approved bundle provider-free, and ``agent tui`` is the interactive terminal with the visible human
+review and one explicit ``/approve`` action. See :doc:`agent-workflows`.
 
 The basic command structure is:
 
@@ -176,16 +174,13 @@ These options are only available with ``chemsmart sub``:
  Available Commands
 ********************
 
-Use ``chemsmart run --help`` and ``chemsmart sub --help`` as the live command
-inventory. Both families register Gaussian, ORCA, PySCF, xTB, NCIPLOT,
-molecular/PyMOL operations, pKa and thermochemistry analysis, molecular
-databases, structure grouping, and ITERATE workflows. Program-specific pages
-describe the available leaves and project settings.
+Use ``chemsmart run --help`` and ``chemsmart sub --help`` as the live command inventory. Both families register
+Gaussian, ORCA, PySCF, xTB, NCIPLOT, molecular/PyMOL operations, pKa and thermochemistry analysis, molecular databases,
+structure grouping, and ITERATE workflows. Program-specific pages describe the available leaves and project settings.
 
-Top-level ``chemsmart agent`` exposes public ``plan``, preview-only ``run``,
-and interactive ``tui`` commands. In the TUI, the human reviews the displayed
-YAML/CLI DAG and enters ``/approve`` once for a real release-qualified run. No
-hash or approval-file token is part of that human interface.
+Top-level ``chemsmart agent`` exposes public ``plan``, preview-only ``run``, and interactive ``tui`` commands. In the
+TUI, the human reviews the displayed YAML/CLI DAG and enters ``/approve`` once for a real release-qualified run. No hash
+or approval-file token is part of that human interface.
 
 ************
  Next Steps

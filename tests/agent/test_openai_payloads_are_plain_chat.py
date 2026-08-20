@@ -96,10 +96,9 @@ def test_a_canned_turn_round_trips_through_the_shared_machinery():
     )
     public, receipt = session.turn(tools=[])
 
-    assert (
-        public["choices"][0]["message"]["content"] == "The plan stands."
-    )
+    assert public["choices"][0]["message"]["content"] == "The plan stands."
     assert receipt.observed_model == "gpt-5.2"
-    assert json.loads(json.dumps(session.public_history()))[-1][
-        "content"
-    ] == "The plan stands."
+    assert (
+        json.loads(json.dumps(session.public_history()))[-1]["content"]
+        == "The plan stands."
+    )

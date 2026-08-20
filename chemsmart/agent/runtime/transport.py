@@ -10,8 +10,6 @@ owned socket and no blocked worker can outlive the attempt.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from dataclasses import dataclass
 import errno
 import http.client
 import io
@@ -20,6 +18,8 @@ import select
 import socket
 import ssl
 import time
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -45,7 +45,9 @@ class ProviderTurnDeadlinesV1:
             self.absolute_seconds,
         )
         if any(not math.isfinite(value) or value <= 0 for value in values):
-            raise ContractError("provider turn deadlines must be finite and positive")
+            raise ContractError(
+                "provider turn deadlines must be finite and positive"
+            )
         if any(value > self.absolute_seconds for value in values[:-1]):
             raise ContractError(
                 "provider connect and event deadlines cannot exceed the absolute turn deadline"
@@ -108,7 +110,9 @@ class ProviderTurnDeadline:
             else min(policy.absolute_seconds, float(turn_limit_seconds))
         )
         if not math.isfinite(limit) or limit <= 0:
-            raise ContractError("provider turn allowance must be finite and positive")
+            raise ContractError(
+                "provider turn allowance must be finite and positive"
+            )
         self.policy = policy
         self.clock = clock
         self.started_at = clock()
@@ -130,9 +134,8 @@ class ProviderTurnDeadline:
     def connect_timeout_seconds(self) -> float:
         return self._remaining_for(
             "connect",
-            self.started_at + min(
-                self.policy.connect_seconds, self.absolute_seconds
-            ),
+            self.started_at
+            + min(self.policy.connect_seconds, self.absolute_seconds),
         )
 
     def before_response_io(self) -> float:
@@ -167,10 +170,14 @@ class ProviderTurnDeadline:
             raise ContractError("provider response was not marked connected")
         if self.last_event_at is None:
             phase = "first_event"
-            phase_deadline = self.connected_at + self.policy.first_event_seconds
+            phase_deadline = (
+                self.connected_at + self.policy.first_event_seconds
+            )
         else:
             phase = "inter_event"
-            phase_deadline = self.last_event_at + self.policy.inter_event_seconds
+            phase_deadline = (
+                self.last_event_at + self.policy.inter_event_seconds
+            )
         timeout = self._remaining_for(phase, phase_deadline, now=now)
         _set_response_socket_timeout(response, timeout)
         return timeout
@@ -291,7 +298,12 @@ def open_bounded_https_response(
         # DeepSeek gives this stable no-retry classification; Alibaba maps it
         # through its generic HTTPException boundary.
         raise
-    except (http.client.HTTPException, ssl.SSLError, ConnectionError, OSError) as exc:
+    except (
+        http.client.HTTPException,
+        ssl.SSLError,
+        ConnectionError,
+        OSError,
+    ) as exc:
         raise URLError(OSError("provider transport failed")) from exc
     finally:
         if response is not None:
@@ -317,11 +329,13 @@ class _MonotonicHTTPSConnection(http.client.HTTPSConnection):
             timeout=deadline.connect_timeout_seconds,
             source_address=source_address,
         )
-        self.response_class = lambda sock, *args, **kwargs: _DeadlineHTTPResponse(
-            sock,
-            *args,
-            deadline=self._deadline,
-            **kwargs,
+        self.response_class = (
+            lambda sock, *args, **kwargs: _DeadlineHTTPResponse(
+                sock,
+                *args,
+                deadline=self._deadline,
+                **kwargs,
+            )
         )
 
     def connect(self) -> None:
@@ -446,7 +460,9 @@ class _DeadlineSocketProxy:
             return self._sock.makefile(mode, buffering, **kwargs)
         raw = self._sock.makefile("rb", buffering=0)
         bounded = _DeadlineRawIO(raw, self._deadline)
-        buffer_size = io.DEFAULT_BUFFER_SIZE if buffering in {-1, 0} else buffering
+        buffer_size = (
+            io.DEFAULT_BUFFER_SIZE if buffering in {-1, 0} else buffering
+        )
         return io.BufferedReader(bounded, buffer_size=buffer_size)
 
     def __getattr__(self, name: str) -> Any:
@@ -532,9 +548,7 @@ def _wait_bounded(
     timeout = deadline.before_response_io()
     readers = [sock] if readable else []
     writers = [] if readable else [sock]
-    ready_read, ready_write, _ = select.select(
-        readers, writers, [], timeout
-    )
+    ready_read, ready_write, _ = select.select(readers, writers, [], timeout)
     if not ready_read and not ready_write:
         # Recompute so the raised phase reflects the actual limiting clock.
         deadline.before_response_io()

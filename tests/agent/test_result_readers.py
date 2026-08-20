@@ -458,7 +458,9 @@ def test_extraction_refuses_an_artifact_of_the_wrong_kind():
 
 def test_an_unregistered_program_is_refused_by_name():
     artifact = _artifact(_GAUSSIAN_LOG, "gaussian")
-    with pytest.raises(Exception, match="no typed result reader is registered"):
+    with pytest.raises(
+        Exception, match="no typed result reader is registered"
+    ):
         extract_trusted_result_quantities(
             artifact=artifact,
             program="nciplot",

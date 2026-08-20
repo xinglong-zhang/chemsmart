@@ -11,11 +11,6 @@ These tests pin that the frontier states the branching it already knows.
 
 import pytest
 
-from chemsmart.agent.workflows import (
-    ArtifactInputIntentV1,
-    ArtifactOutputIntentV1,
-    CommandNodeIntentV1,
-)
 from chemsmart.agent.scientific_toolchain import (
     AnalysisInputIntentV1,
     AnalysisNodeIntentV1,
@@ -23,6 +18,11 @@ from chemsmart.agent.scientific_toolchain import (
     AnalysisSelectorIntentV1,
     build_scientific_toolchain_plan,
     project_scientific_toolchain_frontier,
+)
+from chemsmart.agent.workflows import (
+    ArtifactInputIntentV1,
+    ArtifactOutputIntentV1,
+    CommandNodeIntentV1,
 )
 
 
@@ -143,7 +143,11 @@ def frontier():
         _extraction("extract-qz", "sp-qz", "e_qz"),
         _limit(
             "cbs",
-            (("extract-dz", "e_dz"), ("extract-tz", "e_tz"), ("extract-qz", "e_qz")),
+            (
+                ("extract-dz", "e_dz"),
+                ("extract-tz", "e_tz"),
+                ("extract-qz", "e_qz"),
+            ),
         ),
     )
     return project_scientific_toolchain_frontier(
@@ -153,7 +157,9 @@ def frontier():
 
 
 def _node(frontier, node_id):
-    return next(item for item in frontier["nodes"] if item["node_id"] == node_id)
+    return next(
+        item for item in frontier["nodes"] if item["node_id"] == node_id
+    )
 
 
 def test_a_waiting_node_names_the_producer_output_it_needs(frontier):
@@ -278,8 +284,15 @@ def test_a_blocked_upstream_node_names_which_parent_is_blocked():
 def test_the_frontier_is_derived_never_asserted_by_the_model(frontier):
     """Every edge reported here came from the submitted plan."""
 
-    submitted = {"sp-dz", "sp-qz", "sp-tz", "extract-dz", "extract-qz",
-                 "extract-tz", "cbs"}
+    submitted = {
+        "sp-dz",
+        "sp-qz",
+        "sp-tz",
+        "extract-dz",
+        "extract-qz",
+        "extract-tz",
+        "cbs",
+    }
     for item in frontier["nodes"]:
         assert set(item.get("waiting_on", ())) <= submitted
         assert set(item["feeds"]) <= submitted

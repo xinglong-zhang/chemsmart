@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-from click.testing import CliRunner
-import sys
-
 import pytest
 import yaml
+from click.testing import CliRunner
 
 from chemsmart.agent._contracts import (
     ContractError,
@@ -38,8 +37,8 @@ from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import (
     CommandCompiledToolHostV1,
     _CommandContext,
-    _remaining_node_unresolved_fields,
     _program_process_environment,
+    _remaining_node_unresolved_fields,
 )
 from chemsmart.agent.tool_specs import build_approved_execution_tool_surface
 from chemsmart.agent.workflows import (
@@ -930,13 +929,9 @@ def test_bounded_materialization_ignores_non_executable_root_stage():
     assert readiness["approvable"] is True
     assert readiness["blocking_node_ids"] == ()
     assert readiness["deferred_node_ids"] == ()
-    assert readiness["non_executable_node_ids"] == (
-        "irc-non-executable",
-    )
+    assert readiness["non_executable_node_ids"] == ("irc-non-executable",)
     states = {node["node_id"]: node for node in readiness["nodes"]}
-    assert states["irc-non-executable"]["approval_state"] == (
-        "non_executable"
-    )
+    assert states["irc-non-executable"]["approval_state"] == ("non_executable")
     assert states["irc-non-executable"]["blocks_approval"] is False
 
 
@@ -977,9 +972,7 @@ def test_all_non_executable_plan_is_preview_only_not_approvable():
 
     assert readiness["approvable"] is False
     assert readiness["blocking_node_ids"] == ()
-    assert readiness["non_executable_node_ids"] == (
-        "irc-non-executable",
-    )
+    assert readiness["non_executable_node_ids"] == ("irc-non-executable",)
     assert readiness["workflow_blocked_reason"]
     assert "no release-executable stage" in reason
 
@@ -1050,9 +1043,7 @@ def test_unbound_recovery_invocation_is_frozen_to_one_workflow_plan():
         edges=(),
     )
     invocation = SimpleNamespace(invocation_sha256="c" * 64)
-    context = SimpleNamespace(
-        proposal=SimpleNamespace(node_id="sp-optimized")
-    )
+    context = SimpleNamespace(proposal=SimpleNamespace(node_id="sp-optimized"))
     host = object.__new__(CommandCompiledToolHostV1)
     host.invocations = {invocation.invocation_sha256: invocation}
     host._command_contexts = {invocation.invocation_sha256: context}
@@ -1064,9 +1055,10 @@ def test_unbound_recovery_invocation_is_frozen_to_one_workflow_plan():
     )
 
     assert observed is invocation
-    assert host._invocation_workflow_plan_sha256s[
-        invocation.invocation_sha256
-    ] == first.plan_sha256
+    assert (
+        host._invocation_workflow_plan_sha256s[invocation.invocation_sha256]
+        == first.plan_sha256
+    )
     with pytest.raises(ContractError, match="another scientific workflow"):
         host._plan_invocation_for_node(
             plan=second,
@@ -1120,7 +1112,9 @@ def test_current_missing_identity_is_not_misattributed_to_an_older_data_edge():
     current_draft.workflow_id = "current-missing-identity"
     host.workflow_drafts = {"current": current_draft}
 
-    with pytest.raises(ContractError, match="no task-bound scientific identity"):
+    with pytest.raises(
+        ContractError, match="no task-bound scientific identity"
+    ):
         host._current_execution_plan_for_node("shared-node")
 
 
@@ -1372,9 +1366,8 @@ def test_bounded_server_profile_preserves_program_environment_and_timeout(
     assert "openmpi/bin" in observed["ORCA"]["ENVARS"]
     assert "LD_LIBRARY_PATH" in observed["ORCA"]["ENVARS"]
     assert "export g16root=/opt/g16" in observed["GAUSSIAN"]["ENVARS"]
-    assert (
-        f"export GAUSS_SCRDIR={tmp_path / 'scratch'}"
-        in (observed["GAUSSIAN"]["ENVARS"])
+    assert f"export GAUSS_SCRDIR={tmp_path / 'scratch'}" in (
+        observed["GAUSSIAN"]["ENVARS"]
     )
 
 

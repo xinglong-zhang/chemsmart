@@ -2,8 +2,8 @@ from .hess import XTBHessJob
 from .job import XTBJob
 from .opt import XTBOptJob
 from .runner import FakeXTBJobRunner, XTBJobRunner
-from .singlepoint import XTBSinglePointJob
 from .settings import XTBSolventCapabilityV1
+from .singlepoint import XTBSinglePointJob
 from .validation import (
     XTBEnvironmentError,
     XTBResultValidationError,

@@ -31,8 +31,10 @@ def opt(ctx, skip_completed, optimization_level, **kwargs):
         job_settings.optimization_level = optimization_level.lower()
         keywords.append("optimization_level")
 
-    settings = ctx.obj["project_settings"].opt_settings().merge(
-        job_settings, keywords=tuple(keywords)
+    settings = (
+        ctx.obj["project_settings"]
+        .opt_settings()
+        .merge(job_settings, keywords=tuple(keywords))
     )
     settings.validate(expected_jobtype="opt")
 

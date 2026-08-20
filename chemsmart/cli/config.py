@@ -839,11 +839,10 @@ def scratch(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/scratch", folder)
 
 
-
-
 # ---------------------------------------------------------------------------
 # Agent-layer setup: `chemsmart config agent`
 # ---------------------------------------------------------------------------
+
 
 #: Provider identity, endpoints, effort menus, and hints all derive from
 #: the one registry; "" in an effort menu means "omit from the payload",
@@ -1021,13 +1020,9 @@ def agent_config(
             f"{[e or '(omit)' for e in efforts]}"
         )
     if context_tokens is None:
-        context_tokens = click.prompt(
-            "Context window in tokens", type=int
-        )
+        context_tokens = click.prompt("Context window in tokens", type=int)
     if max_output_tokens is None:
-        max_output_tokens = click.prompt(
-            "Maximum output tokens", type=int
-        )
+        max_output_tokens = click.prompt("Maximum output tokens", type=int)
 
     label = _agent_key_label(provider)
     key_value = ""

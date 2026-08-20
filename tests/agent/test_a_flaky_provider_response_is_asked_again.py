@@ -19,7 +19,6 @@ from chemsmart.agent.runtime.alibaba import (
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
-
 from tests.agent.test_provider_protocol_failure_evidence import (
     _DispatchSpyHost,
     _run_contracts,

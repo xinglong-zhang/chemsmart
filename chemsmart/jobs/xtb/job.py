@@ -177,8 +177,8 @@ class XTBJob(Job):
         if value is None:
             return rewritten
         try:
-            insert_at = len(rewritten) - 1 - rewritten[::-1].index(
-                insert_before
+            insert_at = (
+                len(rewritten) - 1 - rewritten[::-1].index(insert_before)
             )
         except ValueError as exc:
             raise ValueError(
@@ -236,9 +236,7 @@ class XTBJob(Job):
         self.backup_file(self.xyzfile, folder=folder, **kwargs)
         self.backup_file(self.outputfile, folder=folder, **kwargs)
         self.backup_file(self.errfile, folder=folder, **kwargs)
-        self.backup_file(
-            self.environment_receiptfile, folder=folder, **kwargs
-        )
+        self.backup_file(self.environment_receiptfile, folder=folder, **kwargs)
         self.backup_file(self.result_receiptfile, folder=folder, **kwargs)
 
     def _job_is_complete(self):

@@ -103,7 +103,9 @@ def fake_capability_registry():
 @pytest.fixture
 def fake_support_overlay(fake_capability_registry, fake_click_schema):
     receipts = []
-    for ordinal, capability in enumerate(fake_capability_registry.programs, start=1):
+    for ordinal, capability in enumerate(
+        fake_capability_registry.programs, start=1
+    ):
         base = ordinal * 5
         receipts.append(
             build_program_component_conformance_receipt(

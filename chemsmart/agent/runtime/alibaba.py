@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass, field
 import json
 import time
+from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping
 from urllib.parse import urlsplit
 
@@ -20,13 +20,13 @@ from chemsmart.agent.provider_config import (
 from chemsmart.agent.runtime.deepseek import (
     DeepSeekHttpsTransport,
     DeepSeekProtocolError,
-    DeepSeekTransportError,
     DeepSeekV4ToolSession,
     ProviderCapabilitiesV1,
     _require_explicit_model_id,
     _validate_token_limits,
 )
 from chemsmart.agent.runtime.transport import (
+    ProviderTurnDeadline,
     ProviderTurnDeadlinesV1,
     iter_bounded_response_lines,
     open_bounded_https_response,
@@ -231,7 +231,9 @@ def _assemble_sse_response(
         if not line or line.startswith(":"):
             continue
         if not line.startswith("data:"):
-            raise DeepSeekProtocolError("Alibaba stream contains a non-SSE event")
+            raise DeepSeekProtocolError(
+                "Alibaba stream contains a non-SSE event"
+            )
         data = line[5:].strip()
         if data == "[DONE]":
             if deadline is not None:
@@ -239,7 +241,9 @@ def _assemble_sse_response(
             break
         chunk = json.loads(data)
         if not isinstance(chunk, Mapping):
-            raise DeepSeekProtocolError("Alibaba stream chunk must be an object")
+            raise DeepSeekProtocolError(
+                "Alibaba stream chunk must be an object"
+            )
         if deadline is not None:
             deadline.event_observed()
         saw_event = True
@@ -249,14 +253,20 @@ def _assemble_sse_response(
             usage = deepcopy(dict(chunk["usage"]))
         choices = chunk.get("choices") or []
         if not isinstance(choices, list):
-            raise DeepSeekProtocolError("Alibaba stream choices must be a list")
+            raise DeepSeekProtocolError(
+                "Alibaba stream choices must be a list"
+            )
         for choice in choices:
             if not isinstance(choice, Mapping):
-                raise DeepSeekProtocolError("Alibaba stream choice must be an object")
+                raise DeepSeekProtocolError(
+                    "Alibaba stream choice must be an object"
+                )
             finish_reason = str(choice.get("finish_reason") or finish_reason)
             delta = choice.get("delta") or {}
             if not isinstance(delta, Mapping):
-                raise DeepSeekProtocolError("Alibaba stream delta must be an object")
+                raise DeepSeekProtocolError(
+                    "Alibaba stream delta must be an object"
+                )
             role = str(delta.get("role") or role)
             if delta.get("content"):
                 content_parts.append(str(delta["content"]))
@@ -277,7 +287,9 @@ def _assemble_sse_response(
     if reasoning_parts or tool_calls:
         message["reasoning_content"] = "".join(reasoning_parts)
     if tool_calls:
-        message["tool_calls"] = [tool_calls[index] for index in sorted(tool_calls)]
+        message["tool_calls"] = [
+            tool_calls[index] for index in sorted(tool_calls)
+        ]
     return {
         "id": response_id,
         "model": observed_model,
@@ -293,7 +305,9 @@ def _merge_tool_call_deltas(
         raise DeepSeekProtocolError("Alibaba tool-call delta must be a list")
     for raw in raw_calls:
         if not isinstance(raw, Mapping):
-            raise DeepSeekProtocolError("Alibaba tool-call fragment must be an object")
+            raise DeepSeekProtocolError(
+                "Alibaba tool-call fragment must be an object"
+            )
         raw_index = raw.get("index", 0)
         if (
             isinstance(raw_index, bool)
@@ -302,9 +316,7 @@ def _merge_tool_call_deltas(
         ):
             raise DeepSeekProtocolError(
                 "Alibaba tool-call index must be a non-negative integer",
-                failing_field=(
-                    "choices[*].delta.tool_calls[*].index"
-                ),
+                failing_field=("choices[*].delta.tool_calls[*].index"),
             )
         index = raw_index
         target = assembled.setdefault(
@@ -321,7 +333,9 @@ def _merge_tool_call_deltas(
             target["type"] = str(raw["type"])
         function = raw.get("function") or {}
         if not isinstance(function, Mapping):
-            raise DeepSeekProtocolError("Alibaba tool function must be an object")
+            raise DeepSeekProtocolError(
+                "Alibaba tool function must be an object"
+            )
         if function.get("name"):
             target["function"]["name"] += str(function["name"])
         if function.get("arguments"):

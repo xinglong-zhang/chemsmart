@@ -159,14 +159,12 @@ class XTBFolder(BaseFolder):
         main_output = self._xtb_out()
         if main_output is not None:
             main_stem = os.path.splitext(os.path.basename(main_output))[0]
-            if not main_stem.startswith(
-                self.XTB_GENERATED_GEOMETRY_PREFIXES
-            ):
+            if not main_stem.startswith(self.XTB_GENERATED_GEOMETRY_PREFIXES):
                 for ext in self.PARSEABLE_GEOMETRY_EXTENSIONS:
-                    candidate = os.path.join(
-                        self.folder, f"{main_stem}{ext}"
-                    )
-                    if os.path.isfile(candidate) and os.path.getsize(candidate):
+                    candidate = os.path.join(self.folder, f"{main_stem}{ext}")
+                    if os.path.isfile(candidate) and os.path.getsize(
+                        candidate
+                    ):
                         logger.debug(f"Found input geometry file: {candidate}")
                         return candidate
         # Try parseable formats first

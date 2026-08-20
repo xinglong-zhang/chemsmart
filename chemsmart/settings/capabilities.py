@@ -296,7 +296,15 @@ def _normalized_domain(values) -> tuple[str, ...]:
     trusting.
     """
 
-    return tuple(sorted({str(value).strip().lower() for value in values if str(value).strip()}))
+    return tuple(
+        sorted(
+            {
+                str(value).strip().lower()
+                for value in values
+                if str(value).strip()
+            }
+        )
+    )
 
 
 def orca_method_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
@@ -453,10 +461,14 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 ),
             ),
             project_section_names=loader_project_section_names("gaussian"),
-            project_parameter_domains=tuple(sorted((
-                ("states", ("50-50", "singlets", "triplets")),
-                *gaussian_method_domains(),
-            ))),
+            project_parameter_domains=tuple(
+                sorted(
+                    (
+                        ("states", ("50-50", "singlets", "triplets")),
+                        *gaussian_method_domains(),
+                    )
+                )
+            ),
         ),
         "nciplot": ProgramCapability(
             program="nciplot",
@@ -529,48 +541,58 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             # method vocabulary (orca_method_domains) and sorted, because the
             # contract requires domain names in order and the method names --
             # functional, basis, aux_basis, solvent_* -- interleave with them.
-            project_parameter_domains=tuple(sorted((
-                *orca_method_domains(),
-                (
-                    "ab_initio",
+            project_parameter_domains=tuple(
+                sorted(
                     (
-                        "ccsd(t)",
-                        "dlpno-ccsd",
-                        "dlpno-ccsd(t)",
-                        "hf",
-                        "mp2",
-                        "rhf",
-                        "uhf",
-                    ),
-                ),
-                (
-                    "defgrid",
-                    (
-                        "defgrid1",
-                        "defgrid2",
-                        "defgrid3",
-                        "grid1",
-                        "grid2",
-                        "grid3",
-                        "grid4",
-                        "grid5",
-                        "grid6",
-                        "grid7",
-                    ),
-                ),
-                ("direction", ("backward", "both", "down", "forward")),
-                ("dispersion", ("d2", "d3bj", "d3zero", "d4")),
-                ("frozen_core", ("fc_electrons", "fc_ewin", "fc_none")),
-                ("mdci_cutoff", ("loose", "normal", "tight")),
-                ("reference", ("rhf", "rohf", "uhf")),
-                ("relativistic", ("dkh", "dkh2", "zora")),
-                ("response_method", ("tda", "tddft")),
-                ("ri_approximation", ("none", "ri", "rijcosx", "rijk")),
-                (
-                    "state_manifold",
-                    ("singlet", "singlet_triplet"),
-                ),
-            ))),
+                        *orca_method_domains(),
+                        (
+                            "ab_initio",
+                            (
+                                "ccsd(t)",
+                                "dlpno-ccsd",
+                                "dlpno-ccsd(t)",
+                                "hf",
+                                "mp2",
+                                "rhf",
+                                "uhf",
+                            ),
+                        ),
+                        (
+                            "defgrid",
+                            (
+                                "defgrid1",
+                                "defgrid2",
+                                "defgrid3",
+                                "grid1",
+                                "grid2",
+                                "grid3",
+                                "grid4",
+                                "grid5",
+                                "grid6",
+                                "grid7",
+                            ),
+                        ),
+                        ("direction", ("backward", "both", "down", "forward")),
+                        ("dispersion", ("d2", "d3bj", "d3zero", "d4")),
+                        (
+                            "frozen_core",
+                            ("fc_electrons", "fc_ewin", "fc_none"),
+                        ),
+                        ("mdci_cutoff", ("loose", "normal", "tight")),
+                        ("reference", ("rhf", "rohf", "uhf")),
+                        ("relativistic", ("dkh", "dkh2", "zora")),
+                        ("response_method", ("tda", "tddft")),
+                        (
+                            "ri_approximation",
+                            ("none", "ri", "rijcosx", "rijk"),
+                        ),
+                        (
+                            "state_manifold",
+                            ("singlet", "singlet_triplet"),
+                        ),
+                    )
+                )
+            ),
         ),
         "pyscf": ProgramCapability(
             program="pyscf",
@@ -665,8 +687,7 @@ EXECUTABLE_PROGRAMS = KNOWN_PROGRAMS
 AGENT_PROGRAMS = frozenset(
     name
     for name, capability in PROGRAM_CAPABILITIES.items()
-    if capability.agent_enabled
-    and capability.resolved_engine_job_capabilities
+    if capability.agent_enabled and capability.resolved_engine_job_capabilities
 )
 PROJECT_PROGRAMS = frozenset(
     name

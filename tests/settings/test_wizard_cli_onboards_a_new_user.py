@@ -8,8 +8,6 @@ local downgrade for unqualified schedulers, and --yes non-interactivity.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import yaml
 from click.testing import CliRunner
 
@@ -50,12 +48,8 @@ _SLURM = SchedulerFactsV1(
 
 
 def _wire(monkeypatch, tmp_path, *, detection, scheduler):
-    monkeypatch.setattr(
-        wizard_module, "gather_host_facts", lambda: _HOST
-    )
-    monkeypatch.setattr(
-        wizard_module, "detect_scheduler", lambda: detection
-    )
+    monkeypatch.setattr(wizard_module, "gather_host_facts", lambda: _HOST)
+    monkeypatch.setattr(wizard_module, "detect_scheduler", lambda: detection)
     monkeypatch.setattr(
         wizard_module, "_probe_scheduler", lambda _d: scheduler
     )

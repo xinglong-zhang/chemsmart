@@ -9,8 +9,8 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCAJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
-from chemsmart.settings.orca import ORCAProjectSettings
 from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
+from chemsmart.settings.orca import ORCAProjectSettings
 
 
 def test_orca_irc_project_materializes_and_round_trips_direction(tmp_path):

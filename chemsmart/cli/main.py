@@ -11,8 +11,8 @@ import click
 from chemsmart import __version__
 from chemsmart.utils.cli import MyGroup
 
-from .config import config
 from .agent import agent
+from .config import config
 from .run import run
 from .sub import sub
 from .update import update

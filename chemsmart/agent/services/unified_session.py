@@ -6,12 +6,12 @@ from dataclasses import replace
 from typing import Any, Callable
 
 from chemsmart.agent._contracts import ContractError
+from chemsmart.agent.api_access import SecretLease
+from chemsmart.agent.loop import ToolLoopResultV1, ToolLoopRunner
 from chemsmart.agent.request_context import (
     ProviderNetworkBudgetV1,
     RequestContextProvenanceV1,
 )
-from chemsmart.agent.api_access import SecretLease
-from chemsmart.agent.loop import ToolLoopResultV1, ToolLoopRunner
 from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
 from chemsmart.agent.runtime.deepseek import (
     DeepSeekHttpsTransport,
@@ -49,7 +49,9 @@ class UnifiedSessionRunner:
         should_stop: Callable[[], bool] | None = None,
     ) -> ToolLoopResultV1:
         if not messages or not all(
-            isinstance(item, dict) and item.get("role") in {
+            isinstance(item, dict)
+            and item.get("role")
+            in {
                 "system",
                 "user",
                 "assistant",

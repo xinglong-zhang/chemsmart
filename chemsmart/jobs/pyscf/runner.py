@@ -479,9 +479,7 @@ class PySCFJobRunner(JobRunner):
                 {
                     "source": source,
                     "source_sha256": source_sha256,
-                    "quarantined_to": os.path.relpath(
-                        destination, job.folder
-                    ),
+                    "quarantined_to": os.path.relpath(destination, job.folder),
                 }
             )
         self._quarantined_targets = quarantined
@@ -624,16 +622,10 @@ class PySCFJobRunner(JobRunner):
                 "script_path": os.path.basename(self.job_inputfile),
                 "script_sha256": sha256_file(self.job_inputfile),
                 "config_sha256": canonical_sha256(config),
-                "input_geometry_sha256": config[
-                    "input_geometry_sha256"
-                ],
+                "input_geometry_sha256": config["input_geometry_sha256"],
                 "input_artifact_kind": config.get("input_artifact_kind"),
-                "input_artifact_path": (
-                    binding["path"] if binding else None
-                ),
-                "input_artifact_sha256": config.get(
-                    "input_artifact_sha256"
-                ),
+                "input_artifact_path": (binding["path"] if binding else None),
+                "input_artifact_sha256": config.get("input_artifact_sha256"),
                 "project_yaml_sha256": config.get("project_yaml_digest"),
                 "requested_settings_sha256": config[
                     "requested_settings_sha256"
@@ -806,18 +798,14 @@ class PySCFJobRunner(JobRunner):
             "input_geometry_sha256": self._input_receipt[
                 "input_geometry_sha256"
             ],
-            "input_artifact_kind": self._input_receipt[
-                "input_artifact_kind"
-            ],
+            "input_artifact_kind": self._input_receipt["input_artifact_kind"],
             "input_artifact_sha256": self._input_receipt[
                 "input_artifact_sha256"
             ],
             "requested_settings_sha256": self._input_receipt[
                 "requested_settings_sha256"
             ],
-            "project_yaml_digest": self._input_receipt[
-                "project_yaml_sha256"
-            ],
+            "project_yaml_digest": self._input_receipt["project_yaml_sha256"],
             "require_applied_settings_sha256": not self.FAKE,
             "require_engine_complete": not self.FAKE,
         }
@@ -844,9 +832,11 @@ class PySCFJobRunner(JobRunner):
             (
                 "script_sha256",
                 expected["script_sha256"],
-                sha256_file(job.inputfile)
-                if os.path.isfile(job.inputfile)
-                else None,
+                (
+                    sha256_file(job.inputfile)
+                    if os.path.isfile(job.inputfile)
+                    else None
+                ),
                 f"file:{os.path.basename(job.inputfile)}",
             ),
             (
@@ -898,9 +888,12 @@ class PySCFJobRunner(JobRunner):
                 "molecule:source_artifact",
             ),
         )
-        for field, expected_value, observed_value, evidence_ref in (
-            artifact_checks
-        ):
+        for (
+            field,
+            expected_value,
+            observed_value,
+            evidence_ref,
+        ) in artifact_checks:
             if expected_value != observed_value:
                 findings.append(
                     {
@@ -1071,26 +1064,18 @@ class PySCFJobRunner(JobRunner):
                 "process_observation": process_observation,
                 "engine_complete": engine_complete,
                 "scientifically_validated": state == "validated",
-                "scientific_validation_state": result_validation.get(
-                    "state"
-                ),
+                "scientific_validation_state": result_validation.get("state"),
                 "script_sha256": expected["script_sha256"],
-                "input_receipt_sha256": expected[
-                    "input_receipt_sha256"
-                ],
+                "input_receipt_sha256": expected["input_receipt_sha256"],
                 "environment_receipt_sha256": expected[
                     "environment_receipt_sha256"
                 ],
-                "input_geometry_sha256": expected[
-                    "input_geometry_sha256"
-                ],
+                "input_geometry_sha256": expected["input_geometry_sha256"],
                 "input_artifact_kind": expected["input_artifact_kind"],
                 "input_artifact_path": self._input_receipt[
                     "input_artifact_path"
                 ],
-                "input_artifact_sha256": expected[
-                    "input_artifact_sha256"
-                ],
+                "input_artifact_sha256": expected["input_artifact_sha256"],
                 "project_yaml_sha256": expected["project_yaml_digest"],
                 "requested_settings_sha256": expected[
                     "requested_settings_sha256"
@@ -1179,9 +1164,7 @@ class PySCFJobRunner(JobRunner):
             runtime = provenance.get("runtime") or {}
             compare(
                 "provenance.gpu4pyscf_version",
-                (receipt.get("gpu4pyscf_distribution") or {}).get(
-                    "version"
-                ),
+                (receipt.get("gpu4pyscf_distribution") or {}).get("version"),
                 provenance.get("gpu4pyscf_version"),
                 "h5:/provenance/gpu4pyscf_version",
             )
@@ -1222,7 +1205,9 @@ class PySCFJobRunner(JobRunner):
             or getattr(job, "kwargs", {}).get("required_properties", ())
         )
         findings = []
-        properties = status.get("properties", {}) if isinstance(status, dict) else {}
+        properties = (
+            status.get("properties", {}) if isinstance(status, dict) else {}
+        )
         for name in sorted(properties):
             detail = properties[name]
             if not isinstance(detail, dict) or detail.get("status") == "ok":
@@ -1231,7 +1216,9 @@ class PySCFJobRunner(JobRunner):
                 {
                     "rule_id": "pyscf.property.unavailable",
                     "field": f"properties.{name}",
-                    "expected": "available" if name in required else "optional",
+                    "expected": (
+                        "available" if name in required else "optional"
+                    ),
                     "observed": detail,
                     "required": name in required,
                     "evidence_ref": f"h5:/status/properties/{name}",
@@ -1352,20 +1339,14 @@ class FakePySCFJobRunner(PySCFJobRunner):
             "engine": config["engine"],
             "num_threads": config["num_threads"],
             "settings_digest": config["settings_digest"],
-            "requested_settings_sha256": config[
-                "requested_settings_sha256"
-            ],
+            "requested_settings_sha256": config["requested_settings_sha256"],
             "applied_settings_sha256": None,
-            "input_geometry_sha256": config[
-                "input_geometry_sha256"
-            ],
+            "input_geometry_sha256": config["input_geometry_sha256"],
             "input_artifact_kind": config.get("input_artifact_kind"),
             "input_artifact_sha256": config.get("input_artifact_sha256"),
             "project_yaml_digest": config.get("project_yaml_digest"),
             "script_sha256": self._input_receipt["script_sha256"],
-            "input_receipt_sha256": self._input_receipt[
-                "receipt_sha256"
-            ],
+            "input_receipt_sha256": self._input_receipt["receipt_sha256"],
             "environment_receipt_sha256": self._environment_receipt[
                 "receipt_sha256"
             ],

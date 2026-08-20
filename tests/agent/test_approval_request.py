@@ -17,10 +17,10 @@ import pytest
 from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.execution import (
     ApprovedNodeBindingV1,
-    build_producer_edge_rule,
     WorkflowApprovalRequestV1,
     approve_workflow_request,
     build_execution_resource_spec,
+    build_producer_edge_rule,
     build_workflow_approval_request,
     workflow_approval_request_json,
     workflow_execution_approval_json,

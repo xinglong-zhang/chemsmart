@@ -15,8 +15,8 @@ from chemsmart.agent._contracts import (
     TrustedArtifactRefV1,
     canonical_sha256,
     file_sha256,
-    require_identifier,
     require_auxiliary_artifact_bindings,
+    require_identifier,
     require_sha256,
 )
 from chemsmart.agent.capabilities import (
@@ -352,9 +352,7 @@ def native_coordinate_options(
             values["step_size"] = f"{(stop - start) / intervals}"
             values["num_steps"] = f"{intervals}"
         else:
-            raise ContractError(
-                f"{program} declares no coordinate scan idiom"
-            )
+            raise ContractError(f"{program} declares no coordinate scan idiom")
 
     for entry in constrained:
         coordinates.append(_coordinate_atoms(entry))

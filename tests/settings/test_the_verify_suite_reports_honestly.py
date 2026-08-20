@@ -21,9 +21,7 @@ def _choices(tmp_path, scheduler="SLURM"):
         num_cores=6,
         num_gpus=0,
         num_threads=6,
-        submit_command="/opt/slurm/current/bin/sbatch"
-        if scheduler
-        else None,
+        submit_command="/opt/slurm/current/bin/sbatch" if scheduler else None,
         scratch_dir=str(tmp_path / "scratch"),
     )
 

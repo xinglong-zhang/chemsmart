@@ -741,9 +741,9 @@ def gaussian(
                     record_id=record_id,
                 )
 
-            assert molecules is not None, (
-                f"Could not obtain molecule from database {filename}!"
-            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from database {filename}!"
             logger.debug(
                 f"Obtained database molecule {molecules} from {filename}"
             )
@@ -751,18 +751,18 @@ def gaussian(
             molecules = Molecule.from_filepath(
                 filepath=filename, index=":", return_list=True
             )
-            assert molecules is not None, (
-                f"Could not obtain molecule from {filename}!"
-            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filename}!"
             logger.debug(
                 f"Obtained {len(molecules)} molecule {molecules} from {filename}"
             )
 
     if pubchem and not is_pka_table_input:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
-        assert molecules is not None, (
-            f"Could not obtain molecule from PubChem {pubchem}!"
-        )
+        assert (
+            molecules is not None
+        ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
     # update labels

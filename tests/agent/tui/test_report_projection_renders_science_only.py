@@ -8,7 +8,6 @@ through instead of being dropped.
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
@@ -110,7 +109,9 @@ def test_a_human_evidence_column_survives():
 
 
 def test_unknown_sections_pass_through_with_digests_elided():
-    md = _TOOLCHAIN_MD + "\n## A future section\n\nkeep me `" + "9" * 64 + "`\n"
+    md = (
+        _TOOLCHAIN_MD + "\n## A future section\n\nkeep me `" + "9" * 64 + "`\n"
+    )
     text = _flatten(md)
 
     assert "A future section" in text

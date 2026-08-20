@@ -59,7 +59,9 @@ def test_the_control_task_names_no_activation_term():
 def test_a_chemistry_task_that_names_no_program_still_sees_the_skills():
     _, documents = activated_skill_documents(_NAMES_NO_PROGRAM)
 
-    assert {doc.skill_id for doc in documents} == set(cross_program_skill_ids())
+    assert {doc.skill_id for doc in documents} == set(
+        cross_program_skill_ids()
+    )
     assert documents, "the model would be told to choose from an empty list"
 
 
@@ -94,7 +96,9 @@ def test_program_specific_activation_still_discriminates():
         request=_NAMES_NO_PROGRAM, program="orca", engine="cpu"
     )
     named = activate_program_knowledge(
-        request="Run this in ORCA with CPCM water", program="orca", engine="cpu"
+        request="Run this in ORCA with CPCM water",
+        program="orca",
+        engine="cpu",
     )
 
     assert silent.activated_pack_sha256s == ()

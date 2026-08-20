@@ -84,9 +84,7 @@ def test_sigterm_stops_the_child_and_still_runs_postrun():
     runner = _RecordingRunner()
     # Deliver the signal the way a scheduler does: from outside the run call,
     # while the child is alive.
-    timer = threading.Timer(
-        0.5, lambda: os.kill(os.getpid(), signal.SIGTERM)
-    )
+    timer = threading.Timer(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
     timer.start()
     try:
         with pytest.raises(subprocess.CalledProcessError) as failure:
@@ -104,9 +102,7 @@ def test_sigterm_stops_the_child_and_still_runs_postrun():
 def test_the_previous_handler_is_restored_afterwards():
     original = signal.getsignal(signal.SIGTERM)
     runner = _RecordingRunner()
-    timer = threading.Timer(
-        0.3, lambda: os.kill(os.getpid(), signal.SIGTERM)
-    )
+    timer = threading.Timer(0.3, lambda: os.kill(os.getpid(), signal.SIGTERM))
     timer.start()
     try:
         with pytest.raises(subprocess.CalledProcessError):

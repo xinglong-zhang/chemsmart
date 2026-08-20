@@ -157,9 +157,9 @@ class TestEnergyConversion:
         native_hartree = -0.4000000000000000
         public_ev = native_hartree * units.Hartree
 
-        assert energy_conversion(
-            "eV", "hartree", public_ev
-        ) == pytest.approx(native_hartree, abs=1e-15)
+        assert energy_conversion("eV", "hartree", public_ev) == pytest.approx(
+            native_hartree, abs=1e-15
+        )
         assert energy_conversion(
             "hartree", "eV", native_hartree
         ) == pytest.approx(public_ev, abs=5e-15)

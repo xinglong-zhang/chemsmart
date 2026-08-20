@@ -127,15 +127,11 @@ def test_required_project_command_and_node_preflight_bind_all_scientific_state(
         live_schema=fake_click_schema,
         overlay=fake_support_overlay,
     )
-    project_receipt = validate_project_yaml(
-        project, capability=capability
-    )
+    project_receipt = validate_project_yaml(project, capability=capability)
     environment = query_environment(
         capability,
         targets=(
-            EnvironmentTargetV1(
-                "demo", "cpu", "executable", "demo-bin"
-            ),
+            EnvironmentTargetV1("demo", "cpu", "executable", "demo-bin"),
         ),
         which=lambda _name: "/opt/demo/bin/demo-bin",
     )

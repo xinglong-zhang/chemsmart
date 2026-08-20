@@ -40,8 +40,7 @@ def test_key_tables_and_endpoints_derive_from_the_registry():
     assert OPENAI_OFFICIAL_ENDPOINT is PROVIDERS["openai"].endpoint
     assert ANTHROPIC_OFFICIAL_ENDPOINT is PROVIDERS["anthropic"].endpoint
     assert (
-        ALIBABA_TOKEN_PLAN_ENDPOINT
-        is PROVIDERS["alibaba-token-plan"].endpoint
+        ALIBABA_TOKEN_PLAN_ENDPOINT is PROVIDERS["alibaba-token-plan"].endpoint
     )
     assert declaration_for_endpoint("https://api.example.com") is None
 

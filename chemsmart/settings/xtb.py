@@ -282,8 +282,10 @@ class YamlXTBProjectSettingsBuilder:
         return settings, explicit_fields
 
     def _parse_project_name(self):
-        return os.path.basename(self.filename).removesuffix(".yaml").removesuffix(
-            ".yml"
+        return (
+            os.path.basename(self.filename)
+            .removesuffix(".yaml")
+            .removesuffix(".yml")
         )
 
 

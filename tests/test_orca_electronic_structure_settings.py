@@ -9,9 +9,9 @@ import io
 
 import pytest
 
+from chemsmart.io.orca.route import ORCARoute
 from chemsmart.jobs.orca.settings import ORCAJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
-from chemsmart.io.orca.route import ORCARoute
 from chemsmart.settings.orca import ORCAProjectSettings
 
 
@@ -95,7 +95,10 @@ def test_scf_block_opens_for_a_reference_without_convergence_settings():
 
 def test_blocks_are_absent_when_nothing_is_requested():
     settings = ORCAJobSettings(
-        jobtype="sp", functional="bp86", basis="def2-svp", charge=0,
+        jobtype="sp",
+        functional="bp86",
+        basis="def2-svp",
+        charge=0,
         multiplicity=1,
     )
     rendered = _blocks(settings)
@@ -106,16 +109,24 @@ def test_blocks_are_absent_when_nothing_is_requested():
 def test_restricted_closed_shell_reference_is_refused_for_an_open_shell():
     with pytest.raises(ValueError, match="cannot represent multiplicity"):
         ORCAJobSettings(
-            jobtype="sp", functional="bp86", basis="def2-svp",
-            reference="rhf", charge=0, multiplicity=3,
+            jobtype="sp",
+            functional="bp86",
+            basis="def2-svp",
+            reference="rhf",
+            charge=0,
+            multiplicity=3,
         )
 
 
 def test_relativistic_hamiltonian_requires_a_recontracted_basis():
     with pytest.raises(ValueError, match="recontracted basis"):
         ORCAJobSettings(
-            jobtype="sp", functional="bp86", basis="def2-TZVPP",
-            relativistic="dkh2", charge=0, multiplicity=1,
+            jobtype="sp",
+            functional="bp86",
+            basis="def2-TZVPP",
+            relativistic="dkh2",
+            charge=0,
+            multiplicity=1,
         )
 
 
@@ -124,8 +135,12 @@ def test_relativistic_hamiltonian_requires_a_recontracted_basis():
 )
 def test_recognised_relativistic_basis_families_are_accepted(basis):
     settings = ORCAJobSettings(
-        jobtype="sp", functional="bp86", basis=basis, relativistic="dkh2",
-        charge=0, multiplicity=1,
+        jobtype="sp",
+        functional="bp86",
+        basis=basis,
+        relativistic="dkh2",
+        charge=0,
+        multiplicity=1,
     )
     assert "DKH2" in settings.route_string
 
@@ -133,8 +148,12 @@ def test_recognised_relativistic_basis_families_are_accepted(basis):
 def test_frozen_core_electron_count_requires_the_matching_policy():
     with pytest.raises(ValueError, match="fc_electrons"):
         ORCAJobSettings(
-            jobtype="sp", functional="bp86", basis="def2-svp",
-            frozen_core_electrons=10, charge=0, multiplicity=1,
+            jobtype="sp",
+            functional="bp86",
+            basis="def2-svp",
+            frozen_core_electrons=10,
+            charge=0,
+            multiplicity=1,
         )
 
 
@@ -152,8 +171,12 @@ def test_unknown_keyword_values_are_refused_not_passed_through(field, value):
 
     with pytest.raises(ValueError, match="Unsupported"):
         ORCAJobSettings(
-            jobtype="sp", functional="bp86", basis="def2-svp", charge=0,
-            multiplicity=1, **{field: value},
+            jobtype="sp",
+            functional="bp86",
+            basis="def2-svp",
+            charge=0,
+            multiplicity=1,
+            **{field: value},
         )
 
 
@@ -234,9 +257,7 @@ def test_dlpno_auxc_compatibility_comes_from_exact_registered_pairing():
         ("def2-TZVP", "AutoAux", "autoaux"),
     ],
 )
-def test_dlpno_correlation_auxiliary_basis_round_trips(
-    basis, aux_basis, role
-):
+def test_dlpno_correlation_auxiliary_basis_round_trips(basis, aux_basis, role):
     settings = ORCAJobSettings(
         jobtype="sp",
         ab_initio="DLPNO-CCSD(T1)",

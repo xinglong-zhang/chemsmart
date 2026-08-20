@@ -210,7 +210,10 @@ def test_expression_engine_exposes_general_two_point_cbs_components():
         QuantityExpressionRequestV1,
         evaluate_quantity_expression,
     )
-    from chemsmart.analysis.result_quantities import ENERGY, make_quantity_value
+    from chemsmart.analysis.result_quantities import (
+        ENERGY,
+        make_quantity_value,
+    )
 
     values = {
         "scf_tz": -75.98,
@@ -289,7 +292,10 @@ def test_expression_engine_exposes_inverse_power_scf_cbs_without_relabeling_it()
         QuantityExpressionRequestV1,
         evaluate_quantity_expression,
     )
-    from chemsmart.analysis.result_quantities import ENERGY, make_quantity_value
+    from chemsmart.analysis.result_quantities import (
+        ENERGY,
+        make_quantity_value,
+    )
 
     values = {"scf_qz": -76.01, "scf_5z": -76.025}
     inputs = tuple(
@@ -334,10 +340,14 @@ def test_expression_engine_exposes_inverse_power_scf_cbs_without_relabeling_it()
 
 
 def test_two_point_cbs_contract_rejects_hidden_default_exponents():
-    from chemsmart.analysis.quantity_expressions import QuantityExpressionNodeV1
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionNodeV1,
+    )
     from chemsmart.analysis.result_quantities import QuantityContractError
 
-    with pytest.raises(QuantityContractError, match="positive explicit exponent"):
+    with pytest.raises(
+        QuantityContractError, match="positive explicit exponent"
+    ):
         QuantityExpressionNodeV1(
             node_id="cbs",
             operation="correlation_inverse_power_cbs_limit",

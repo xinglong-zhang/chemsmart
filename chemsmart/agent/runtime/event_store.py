@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 import hashlib
 import json
 import os
-from pathlib import Path
 import stat
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, TextIO
 
 try:  # POSIX advisory locking.
@@ -25,28 +25,24 @@ from chemsmart.agent._contracts import (
     canonical_data,
     canonical_sha256,
 )
-from chemsmart.agent.permissions import (
-    ApprovalResolutionV1,
-    PermissionReceiptV1,
-    PermissionRequestV1,
-    evaluate_permission,
-)
 from chemsmart.agent.execution import (
-    WorkflowExecutionApprovalBundleV1,
-    WorkflowReviewResolutionV1,
     FrozenWorkflowApprovalV1,
     ProgramExecutionInvocationV1,
     ProgramExecutionReceiptV1,
     ProgramResultValidationReceiptV1,
     ValidatedDataEdgeBindingV1,
+    WorkflowExecutionApprovalBundleV1,
+    WorkflowReviewResolutionV1,
     WorkflowRunStateV1,
     build_workflow_run_state,
     derive_ready_node_ids,
     transition_workflow_node,
 )
-from chemsmart.agent.workflows import (
-    MaterializedWorkflowV1,
-    ScientificWorkflowPlanV2,
+from chemsmart.agent.permissions import (
+    ApprovalResolutionV1,
+    PermissionReceiptV1,
+    PermissionRequestV1,
+    evaluate_permission,
 )
 from chemsmart.agent.runtime.events import (
     ANALYSIS_CLAIMS_RECORDED,
@@ -56,31 +52,31 @@ from chemsmart.agent.runtime.events import (
     COMMAND_INSPECTED,
     ENGINE_BOUND,
     ENVIRONMENT_QUERIED,
+    EXECUTION_BUNDLE_CONSUMED,
     OPTIMIZED_GEOMETRY_HANDED_OFF,
     PERMISSION_RESOLVED,
     PROGRAM_BOUND,
     PROGRAM_EXECUTED,
     PROGRAM_PREFLIGHTED,
-    PROJECT_VALIDATED,
     PROJECT_PROMOTED,
-    RESULT_VERIFIED,
+    PROJECT_VALIDATED,
+    QUANTITY_EXPRESSION_EVALUATED,
     RESULT_QUANTITIES_EXTRACTED,
-    SCIENTIFIC_DECISION_RECORDED,
-    SCIENTIFIC_WORKFLOW_MATERIALIZED,
-    WORKFLOW_REVIEW_RESOLVED,
-    EXECUTION_BUNDLE_CONSUMED,
+    RESULT_VERIFIED,
     RUNTIME_TERMINATED,
     SAFE_PREVIEWED,
+    SCIENTIFIC_DECISION_RECORDED,
+    SCIENTIFIC_VALIDATION_EVALUATED,
+    SCIENTIFIC_WORKFLOW_MATERIALIZED,
     SUBSTITUTION_ASSESSED,
     THERMOCHEMISTRY_DERIVED,
-    QUANTITY_EXPRESSION_EVALUATED,
-    SCIENTIFIC_VALIDATION_EVALUATED,
     VALIDATOR_OBSERVED,
     WORKFLOW_APPROVAL_CONSUMED,
+    WORKFLOW_DATA_EDGE_BOUND,
     WORKFLOW_EXECUTION_STARTED,
     WORKFLOW_LAUNCH_RESERVED,
-    WORKFLOW_DATA_EDGE_BOUND,
     WORKFLOW_NODE_STATE_CHANGED,
+    WORKFLOW_REVIEW_RESOLVED,
     RuntimeEvent,
 )
 from chemsmart.agent.runtime.records import (
@@ -92,6 +88,10 @@ from chemsmart.agent.runtime.records import (
     workflow_run_state_from_record,
 )
 from chemsmart.agent.runtime.reducer import RuntimeState, replay_events
+from chemsmart.agent.workflows import (
+    MaterializedWorkflowV1,
+    ScientificWorkflowPlanV2,
+)
 
 
 class RuntimeEventStore:
@@ -132,9 +132,9 @@ class RuntimeEventStore:
         idempotency_key: str = "",
     ) -> RuntimeEvent:
         normalized_kind = str(getattr(kind, "value", kind))
-        if normalized_kind == RUNTIME_TERMINATED and (
-            payload or {}
-        ).get("terminal_state") in {"complete", "planned"}:
+        if normalized_kind == RUNTIME_TERMINATED and (payload or {}).get(
+            "terminal_state"
+        ) in {"complete", "planned"}:
             raise ContractError(
                 "host-derived termination must pass RuntimeEventStore.terminate"
             )
@@ -181,7 +181,10 @@ class RuntimeEventStore:
                 kind=PERMISSION_RESOLVED,
                 payload=payload,
                 idempotency_key=(
-                    "approval:" + approval.approval_id + ":" + request.request_sha256
+                    "approval:"
+                    + approval.approval_id
+                    + ":"
+                    + request.request_sha256
                 ),
                 existing_events=events,
             )
@@ -254,7 +257,9 @@ class RuntimeEventStore:
                 or bundle.workflow_approval.approval_id
                 in state.consumed_execution_approval_ids
             ):
-                raise ContractError("execution approval bundle has already been consumed")
+                raise ContractError(
+                    "execution approval bundle has already been consumed"
+                )
             record = {
                 "schema_version": "chemsmart.execution-bundle-consumption.v1",
                 "bundle_sha256": bundle.bundle_sha256,
@@ -304,7 +309,9 @@ class RuntimeEventStore:
             events = self._read_locked(handle)
             state = replay_events(events)
             if approval.approval_id in state.consumed_workflow_approval_ids:
-                raise ContractError("workflow approval has already been consumed")
+                raise ContractError(
+                    "workflow approval has already been consumed"
+                )
             normalized_run_id = str(run_id).strip().lower()
             if not normalized_run_id:
                 raise ContractError("run_id must not be empty")
@@ -340,9 +347,7 @@ class RuntimeEventStore:
                     "status": "consumed",
                     "record": approval_record,
                 },
-                idempotency_key=(
-                    "workflow-approval:" + approval.approval_id
-                ),
+                idempotency_key=("workflow-approval:" + approval.approval_id),
                 existing_events=events,
             )
             run_record = canonical_data(started)
@@ -439,7 +444,9 @@ class RuntimeEventStore:
                     execution_receipt=receipt,
                     run_state=frontier.run_state,
                 )
-            prior_reservation = frontier.reservation_for_node(invocation.node_id)
+            prior_reservation = frontier.reservation_for_node(
+                invocation.node_id
+            )
             if prior_reservation is not None:
                 raise ContractError(
                     "launch reservation remains unresolved; relaunch is forbidden"
@@ -457,14 +464,19 @@ class RuntimeEventStore:
                 ),
                 (frontier.approval, approval, "frozen approval"),
             ):
-                if persisted is not None and canonical_data(persisted) != canonical_data(
-                    supplied
-                ):
-                    raise ContractError(f"persisted {label} differs from launch")
+                if persisted is not None and canonical_data(
+                    persisted
+                ) != canonical_data(supplied):
+                    raise ContractError(
+                        f"persisted {label} differs from launch"
+                    )
 
             consumes_approval = frontier.run_state is None
             if consumes_approval:
-                if approval.approval_id in state.consumed_workflow_approval_ids:
+                if (
+                    approval.approval_id
+                    in state.consumed_workflow_approval_ids
+                ):
                     raise ContractError(
                         "workflow approval has already been consumed"
                     )
@@ -488,7 +500,9 @@ class RuntimeEventStore:
             if invocation.node_id not in derive_ready_node_ids(
                 plan, current, frontier.data_edge_bindings
             ):
-                raise ContractError("node is not ready in the replayed workflow")
+                raise ContractError(
+                    "node is not ready in the replayed workflow"
+                )
             started = transition_workflow_node(
                 current,
                 node_id=invocation.node_id,
@@ -556,7 +570,9 @@ class RuntimeEventStore:
             state = replay_events(events)
             record = state.workflow_run_records.get(binding.run_id)
             if record is None:
-                raise ContractError("data edge binding requires a workflow run")
+                raise ContractError(
+                    "data edge binding requires a workflow run"
+                )
             run_state = workflow_run_state_from_record(record)
             source = next(
                 (
@@ -567,7 +583,9 @@ class RuntimeEventStore:
                 None,
             )
             if source is None or source.state != "validated":
-                raise ContractError("data edge producer is not durably validated")
+                raise ContractError(
+                    "data edge producer is not durably validated"
+                )
             if (
                 source.execution_receipt_sha256
                 != binding.producer_execution_receipt_sha256
@@ -587,7 +605,9 @@ class RuntimeEventStore:
                 run_id=binding.run_id,
             )
             if frontier.plan is None or frontier.approval is None:
-                raise ContractError("data edge binding lacks a replayed frontier")
+                raise ContractError(
+                    "data edge binding lacks a replayed frontier"
+                )
             edge = next(
                 (
                     item
@@ -597,7 +617,9 @@ class RuntimeEventStore:
                 None,
             )
             if edge is None:
-                raise ContractError("data edge binding is absent from the plan")
+                raise ContractError(
+                    "data edge binding is absent from the plan"
+                )
             rules = tuple(
                 item
                 for item in frontier.approval.producer_edge_rules
@@ -613,7 +635,9 @@ class RuntimeEventStore:
             )
             if existing:
                 if existing != (binding,):
-                    raise ContractError("data edge binding conflicts with replay")
+                    raise ContractError(
+                        "data edge binding conflicts with replay"
+                    )
                 return next(
                     event
                     for event in events
@@ -737,7 +761,9 @@ class RuntimeEventStore:
                 if node_id not in derive_ready_node_ids(
                     transition_plan, current, frontier.data_edge_bindings
                 ):
-                    raise ContractError("node is not ready in the scientific DAG")
+                    raise ContractError(
+                        "node is not ready in the scientific DAG"
+                    )
             if new_state == "validated":
                 if result_validation_receipt is None:
                     raise ContractError(
@@ -838,8 +864,7 @@ class RuntimeEventStore:
                     and state.analysis_completion_receipts[-1] in required
                 )
                 if not (
-                    latest_preflight_is_required
-                    or latest_analysis_is_required
+                    latest_preflight_is_required or latest_analysis_is_required
                 ):
                     raise ContractError(
                         "completion requires the latest command preflight or "
@@ -851,7 +876,9 @@ class RuntimeEventStore:
                         "turn_id": turn_id,
                         "required_receipt_sha256s": required,
                         "green_receipt_sha256s": green,
-                        "previous_hash": events[-1].event_hash if events else "",
+                        "previous_hash": (
+                            events[-1].event_hash if events else ""
+                        ),
                     }
                 )
                 payload.update(
@@ -908,9 +935,7 @@ class RuntimeEventStore:
         ).encode("utf-8")
         artifact_sha256 = hashlib.sha256(encoded).hexdigest()
         suffix = canonical_sha256({"turn_id": str(turn_id)})[:16]
-        destination = self.path.with_name(
-            f"public-transcript-{suffix}.json"
-        )
+        destination = self.path.with_name(f"public-transcript-{suffix}.json")
         temporary = destination.with_name(
             "." + destination.name + f".tmp-{os.getpid()}"
         )
@@ -957,7 +982,9 @@ class RuntimeEventStore:
         try:
             os.chmod(self.path.parent, 0o700)
         except OSError as exc:
-            raise ContractError("event-store parent cannot be made private") from exc
+            raise ContractError(
+                "event-store parent cannot be made private"
+            ) from exc
 
     @contextmanager
     def _locked_handle(self, *, exclusive: bool) -> Iterator[TextIO]:
@@ -982,7 +1009,12 @@ class RuntimeEventStore:
             try:
                 raw = json.loads(line)
                 events.append(RuntimeEvent.from_dict(raw))
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
                 raise ContractError(
                     f"invalid runtime event at JSONL line {line_number}"
                 ) from exc
@@ -1056,7 +1088,9 @@ def _secure_open_text(path: Path) -> TextIO:
     try:
         descriptor = os.open(path, flags, 0o600)
     except OSError as exc:
-        raise ContractError("runtime event file cannot be opened securely") from exc
+        raise ContractError(
+            "runtime event file cannot be opened securely"
+        ) from exc
     try:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
@@ -1074,7 +1108,9 @@ def _acquire_lock(handle: TextIO, *, exclusive: bool) -> None:
         _fcntl.flock(handle.fileno(), operation)
         return
     if _msvcrt is None:  # pragma: no cover - unsupported platform
-        raise ContractError("no portable file-lock implementation is available")
+        raise ContractError(
+            "no portable file-lock implementation is available"
+        )
     handle.seek(0, os.SEEK_END)
     if handle.tell() == 0:
         handle.write("\0")
@@ -1095,7 +1131,9 @@ def _release_lock(handle: TextIO) -> None:
 
 
 def _receipt_is_green(
-    events: tuple[RuntimeEvent, ...], digest: str, _seen: frozenset[str] = frozenset()
+    events: tuple[RuntimeEvent, ...],
+    digest: str,
+    _seen: frozenset[str] = frozenset(),
 ) -> bool:
     if digest in _seen:
         return False
@@ -1162,9 +1200,7 @@ def _receipt_is_green(
             value.get("status") == "evaluated"
             and source_receipts
             and all(
-                _receipt_is_green(
-                    events, source, _seen | frozenset({digest})
-                )
+                _receipt_is_green(events, source, _seen | frozenset({digest}))
                 for source in source_receipts
             )
         )
@@ -1175,16 +1211,12 @@ def _receipt_is_green(
             and _finding_count(value) == 0
             and source_receipts
             and all(
-                _receipt_is_green(
-                    events, source, _seen | frozenset({digest})
-                )
+                _receipt_is_green(events, source, _seen | frozenset({digest}))
                 for source in source_receipts
             )
         )
     if event.kind == ANALYSIS_COMPLETION_EVALUATED:
-        source_receipts = tuple(
-            value.get("source_receipt_sha256s") or ()
-        )
+        source_receipts = tuple(value.get("source_receipt_sha256s") or ())
         return bool(
             value.get("status") == "passed"
             and _finding_count(value) == 0
@@ -1223,7 +1255,9 @@ def _receipt_is_green(
 
 def _finding_count(payload: Mapping[str, Any]) -> int:
     value = payload.get("critical_finding_count")
-    return value if isinstance(value, int) and not isinstance(value, bool) else -1
+    return (
+        value if isinstance(value, int) and not isinstance(value, bool) else -1
+    )
 
 
 def _observed_receipts(state: RuntimeState) -> set[str]:
@@ -1261,7 +1295,9 @@ def _observed_receipts(state: RuntimeState) -> set[str]:
         state.workflow_data_edge_binding_receipts,
         state.workflow_node_state_receipts,
     )
-    return {digest for collection in collections for digest in collection if digest}
+    return {
+        digest for collection in collections for digest in collection if digest
+    }
 
 
 def _workflow_run_state_from_record(

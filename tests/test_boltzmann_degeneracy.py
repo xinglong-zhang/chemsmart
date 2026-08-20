@@ -64,9 +64,7 @@ def test_the_ensemble_path_now_takes_degeneracies():
         BoltzmannAverageThermochemistry,
     )
 
-    signature = inspect.signature(
-        BoltzmannAverageThermochemistry.__init__
-    )
+    signature = inspect.signature(BoltzmannAverageThermochemistry.__init__)
     assert "degeneracies" in signature.parameters
 
 
@@ -82,13 +80,11 @@ def test_the_ensemble_path_uses_the_shared_weighting():
 
     from chemsmart.analysis import thermochemistry
 
-    source = inspect.getsource(
-        thermochemistry.BoltzmannAverageThermochemistry
-    )
+    source = inspect.getsource(thermochemistry.BoltzmannAverageThermochemistry)
     assert "boltzmann_populations(" in source
-    assert "partition_function" not in source, (
-        "the hand-rolled partition function must be gone, not shadowed"
-    )
+    assert (
+        "partition_function" not in source
+    ), "the hand-rolled partition function must be gone, not shadowed"
 
 
 def test_the_default_is_unchanged():

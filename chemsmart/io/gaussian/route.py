@@ -101,8 +101,7 @@ def split_gaussian_functional_dispersion_shorthand(functional):
             lowered_without = without_shorthand.lower()
             if any(
                 lowered_without.endswith(f"-{other_suffix}")
-                for other_suffix, _other_dispersion
-                in _FUNCTIONAL_SUFFIX_DISPERSION
+                for other_suffix, _other_dispersion in _FUNCTIONAL_SUFFIX_DISPERSION
             ):
                 raise ValueError(
                     "Multiple Gaussian functional dispersion shorthands "

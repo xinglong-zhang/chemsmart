@@ -30,8 +30,9 @@ from chemsmart.agent.tui.controller import (  # noqa: E402
     AgentTuiController,
     AgentTuiPhase,
 )
-
-from tests.agent.test_exact_execution_approval_chain import _review  # noqa: E402
+from tests.agent.test_exact_execution_approval_chain import (  # noqa: E402
+    _review,
+)
 
 
 def _controller(workspace: Path) -> AgentTuiController:
@@ -46,7 +47,6 @@ def _controller(workspace: Path) -> AgentTuiController:
 def _claiming_stub(monkeypatch, workspace: Path, record: dict):
     """Stand in for the engine walk but keep the durable claim real."""
 
-    import chemsmart.agent.tui.controller as controller_module
     from chemsmart.agent import executor
 
     def fake_execute(*, approval_file, workspace, run_directory, **_kw):

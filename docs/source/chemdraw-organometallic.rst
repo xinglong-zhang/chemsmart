@@ -43,18 +43,16 @@ Organometallic complexes present several challenges when read from ChemDraw file
 -  ChemDraw can store aromatic ligands (e.g. Cp, benzene) as **separate fragments** that need to be combined with the
    metal fragment before 3D coordinates can be generated.
 
-CHEMSMART handles these cases automatically, but difficult organometallic
-complexes with unusual ligands can remain ambiguous in a two-dimensional
-ChemDraw representation. Always inspect the generated three-dimensional
-starting geometry and electronic state before a calculation.
+CHEMSMART handles these cases automatically, but difficult organometallic complexes with unusual ligands can remain
+ambiguous in a two-dimensional ChemDraw representation. Always inspect the generated three-dimensional starting geometry
+and electronic state before a calculation.
 
 *********************************
  Supported Organometallic Inputs
 *********************************
 
-The following organometallic drawing patterns have dedicated handling. Other
-patterns may still be read, but should be treated as general initial-geometry
-conversion rather than as a documented hapticity reconstruction:
+The following organometallic drawing patterns have dedicated handling. Other patterns may still be read, but should be
+treated as general initial-geometry conversion rather than as a documented hapticity reconstruction:
 
 -  Transition-metal complexes with **η5-cyclopentadienyl (Cp)** ligands, including **Cp\***
    (pentamethylcyclopentadienyl)
@@ -173,8 +171,8 @@ CHEMSMART applies the following pipeline when reading ChemDraw files containing 
  Extracting Ring-Ligand Structures
 ***********************************
 
-The sections below show concrete ways to extract and use three-dimensional
-starting structures from ChemDraw files containing ring ligands.
+The sections below show concrete ways to extract and use three-dimensional starting structures from ChemDraw files
+containing ring ligands.
 
 Titanocene Dimethyl (TiCp₂Me₂)
 ==============================

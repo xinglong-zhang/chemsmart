@@ -89,8 +89,8 @@ What ``make configure`` does on Anaconda / Miniconda PowerShell:
 
       A **``Set-Alias``** declaration (rather than a bare ``$env:PATH`` addition) is used because PowerShell resolves
       aliases **before** external commands in PATH. The alias therefore selects ``chemsmart.exe`` (which pip places in
-      the conda ``Scripts/`` directory) instead of a same-named script elsewhere on PATH.
-      This avoids the Windows *"Open with"* popup.
+      the conda ``Scripts/`` directory) instead of a same-named script elsewhere on PATH. This avoids the Windows *"Open
+      with"* popup.
 
       If you previously ran ``make configure`` and your profile contained old ``$env:PATH`` or ``function chemsmart``
       entries, re-running ``make configure`` will automatically remove the old block and write the new ``Set-Alias``

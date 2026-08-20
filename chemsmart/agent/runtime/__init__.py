@@ -1,5 +1,6 @@
 """Public Runtime V2 contracts for the v3.1.4 command-compiled agent."""
 
+from chemsmart.agent.execution import ValidatedDataEdgeBindingV1
 from chemsmart.agent.runtime.contracts import (
     ProviderStateRefV1,
     ResourceBudgetV1,
@@ -9,7 +10,6 @@ from chemsmart.agent.runtime.contracts import (
     TerminalState,
 )
 from chemsmart.agent.runtime.events import RuntimeEvent
-from chemsmart.agent.execution import ValidatedDataEdgeBindingV1
 from chemsmart.agent.runtime.records import (
     LaunchFenceResultV1,
     ReconstructedWorkflowFrontierV1,

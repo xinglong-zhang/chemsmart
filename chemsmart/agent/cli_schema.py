@@ -52,7 +52,9 @@ class LiveClickSchemaV1:
             raise ContractError("unsupported live Click schema version")
         paths = tuple(item.path for item in self.commands)
         if paths != tuple(sorted(set(paths))):
-            raise ContractError("Click command paths must be sorted and unique")
+            raise ContractError(
+                "Click command paths must be sorted and unique"
+            )
         expected = canonical_sha256(
             {
                 "schema_version": self.schema_version,
@@ -72,7 +74,9 @@ class LiveClickSchemaV1:
         return self.command(path) is not None
 
 
-def build_live_click_schema(root: click.Command | None = None) -> LiveClickSchemaV1:
+def build_live_click_schema(
+    root: click.Command | None = None,
+) -> LiveClickSchemaV1:
     """Walk Click command objects without invoking callbacks or engines."""
 
     if root is None:
@@ -87,7 +91,9 @@ def build_live_click_schema(root: click.Command | None = None) -> LiveClickSchem
             if not isinstance(parameter, click.Option):
                 continue
             long_flags = tuple(
-                sorted(flag for flag in parameter.opts if flag.startswith("--"))
+                sorted(
+                    flag for flag in parameter.opts if flag.startswith("--")
+                )
             )
             secondary = tuple(sorted(parameter.secondary_opts))
             preferred = (
@@ -119,7 +125,9 @@ def build_live_click_schema(root: click.Command | None = None) -> LiveClickSchem
                 child_names=tuple(sorted(str(name) for name in children)),
             )
         )
-        for name, child in sorted(children.items(), key=lambda item: str(item[0])):
+        for name, child in sorted(
+            children.items(), key=lambda item: str(item[0])
+        ):
             walk(child, path + (str(name),))
 
     walk(root, ())
@@ -128,9 +136,7 @@ def build_live_click_schema(root: click.Command | None = None) -> LiveClickSchem
         "schema_version": "chemsmart.live-click-schema.v1",
         "commands": ordered,
     }
-    return LiveClickSchemaV1(
-        **body, schema_sha256=canonical_sha256(body)
-    )
+    return LiveClickSchemaV1(**body, schema_sha256=canonical_sha256(body))
 
 
 __all__ = [

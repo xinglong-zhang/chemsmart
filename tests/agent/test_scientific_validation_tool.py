@@ -5,7 +5,6 @@ import pytest
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 
-
 TASK_SPEC_SHA256 = "a" * 64
 
 
@@ -142,7 +141,9 @@ def _decision(host, *, receipts):
             "assumptions": ["The typed count is the planned observable."],
             "method_rationale": "Evaluate the predeclared count predicate.",
             "alternatives": ["Report the failed predicate when it is false."],
-            "uncertainties": ["This mechanical fixture contains no chemistry."],
+            "uncertainties": [
+                "This mechanical fixture contains no chemistry."
+            ],
             "diagnostics": ["Inspect the host-owned validation verdict."],
             "stage_order": ["derive-count", "validate-count", "render-claims"],
             "evidence_refs": [],

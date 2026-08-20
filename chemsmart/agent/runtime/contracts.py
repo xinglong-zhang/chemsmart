@@ -60,12 +60,17 @@ class ResourceBudgetV1:
     hpc_calls: int = 0
 
     def __post_init__(self) -> None:
-        if min(
-            self.max_input_tokens_per_request,
-            self.max_output_tokens_per_request,
-            self.max_tool_calls,
-        ) < 1:
-            raise ContractError("token, tool, and wall-time budgets must be positive")
+        if (
+            min(
+                self.max_input_tokens_per_request,
+                self.max_output_tokens_per_request,
+                self.max_tool_calls,
+            )
+            < 1
+        ):
+            raise ContractError(
+                "token, tool, and wall-time budgets must be positive"
+            )
         if self.wall_time_seconds <= 0:
             raise ContractError("wall_time_seconds must be positive")
         if self.max_cost_usd is not None and self.max_cost_usd < 0:
@@ -122,7 +127,9 @@ class ProviderStateRefV1:
         if self.schema_version != "chemsmart.provider-state-ref.v1":
             raise ContractError("unsupported provider state ref schema")
         if self.evidentiary:
-            raise ContractError("provider continuation state is non-evidentiary")
+            raise ContractError(
+                "provider continuation state is non-evidentiary"
+            )
 
 
 __all__ = [

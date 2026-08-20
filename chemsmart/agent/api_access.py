@@ -5,11 +5,10 @@ from __future__ import annotations
 import os
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TypeVar
 
-from chemsmart.agent._contracts import ContractError, canonical_sha256
+from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.providers import PROVIDERS
 
 _LABEL = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -31,8 +30,7 @@ _INSTRUMENT_KEY_LABEL_TOKENS = {
 
 DEFAULT_KEY_LABELS = {
     **{
-        name: declaration.key_labels
-        for name, declaration in PROVIDERS.items()
+        name: declaration.key_labels for name, declaration in PROVIDERS.items()
     },
     **_INSTRUMENT_KEY_LABELS,
 }

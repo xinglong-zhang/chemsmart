@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 from chemsmart.agent._contracts import canonical_json
@@ -20,6 +20,7 @@ def human_cli_operation(argv: Iterable[str]) -> str:
     return " ".join(
         _RECEIPT_PLACEHOLDER.sub(r"<\g<role>>", token) for token in argv
     )
+
 
 if TYPE_CHECKING:
     from chemsmart.agent.live_session import LiveAgentSessionResultV1

@@ -7,11 +7,11 @@ import pytest
 import yaml
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
 from chemsmart.jobs.pyscf.settings import (
     PySCFJobSettings,
     describe_functional_resolution,
 )
+from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
 from chemsmart.settings.pyscf import PySCFProjectSettings
 
 
@@ -291,7 +291,10 @@ class TestPySCFJobSettings:
             label="water_neutral",
         )
 
-        assert (inherited.settings.charge, inherited.settings.multiplicity) == (
+        assert (
+            inherited.settings.charge,
+            inherited.settings.multiplicity,
+        ) == (
             -1,
             2,
         )
@@ -348,7 +351,9 @@ class TestPySCFProjectSettings:
 
         assert project.opt_settings().functional == "b3lyp"
 
-    def test_gas_solv_migration_input_resolves_to_stage_settings(self, tmp_path):
+    def test_gas_solv_migration_input_resolves_to_stage_settings(
+        self, tmp_path
+    ):
         path = tmp_path / "migration.yaml"
         path.write_text(
             yaml.safe_dump(
@@ -457,9 +462,10 @@ class TestPySCFProjectSettings:
         project = PySCFProjectSettings.from_project(path)
 
         assert project.PROJECT_NAME == "exact-project"
-        assert project.sp_settings().project_yaml_digest == hashlib.sha256(
-            path.read_bytes()
-        ).hexdigest()
+        assert (
+            project.sp_settings().project_yaml_digest
+            == hashlib.sha256(path.read_bytes()).hexdigest()
+        )
 
     def test_missing_named_project_fails_closed(self, tmp_path, monkeypatch):
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(tmp_path))

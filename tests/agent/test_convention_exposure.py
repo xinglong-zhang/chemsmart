@@ -96,7 +96,7 @@ def test_the_exclusion_list_does_not_outlive_what_it_excludes():
 
 
 def test_an_exclusion_that_claims_another_name_must_point_at_a_real_one():
-    """"Exposed as X" is the commonest reason and the easiest to get wrong."""
+    """ "Exposed as X" is the commonest reason and the easiest to get wrong."""
 
     for name, reason in _NOT_MODEL_SELECTABLE.items():
         assert reason.strip(), name
@@ -109,13 +109,14 @@ def test_an_exclusion_that_claims_another_name_must_point_at_a_real_one():
 
 
 def test_the_operation_classes_partition_the_vocabulary():
-    plumbing = set(OPERATION_DESCRIPTIONS) - CONVENTION_OPERATIONS - (
-        ARITHMETIC_OPERATIONS
+    plumbing = (
+        set(OPERATION_DESCRIPTIONS)
+        - CONVENTION_OPERATIONS
+        - (ARITHMETIC_OPERATIONS)
     )
     assert CONVENTION_OPERATIONS & ARITHMETIC_OPERATIONS == set()
-    assert (
-        CONVENTION_OPERATIONS | ARITHMETIC_OPERATIONS | plumbing
-        == set(OPERATION_DESCRIPTIONS)
+    assert CONVENTION_OPERATIONS | ARITHMETIC_OPERATIONS | plumbing == set(
+        OPERATION_DESCRIPTIONS
     )
 
 
@@ -226,9 +227,7 @@ def test_mismatched_values_and_states_are_refused_with_both_counts():
             ),
             (
                 _quantity("v", (1.0, 2.0), "angstrom", (0, 1, 0, 0, 0, 0)),
-                _quantity(
-                    "g", (0.0, _KCAL, 2 * _KCAL), "hartree", ENERGY
-                ),
+                _quantity("g", (0.0, _KCAL, 2 * _KCAL), "hartree", ENERGY),
                 _quantity("t", 298.15, "K", TEMPERATURE),
             ),
             "avg",
@@ -436,12 +435,30 @@ def test_a_torsion_is_owned_like_the_other_internal_coordinates():
 def test_the_torsion_is_signed_and_the_sign_follows_the_bonded_order():
     """An unsigned torsion cannot tell a P from an M helix."""
 
-    plus = _dihedral(
-        [(1.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 1.0)]
-    ).outputs[0].source_value
-    minus = _dihedral(
-        [(1.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, -1.0)]
-    ).outputs[0].source_value
+    plus = (
+        _dihedral(
+            [
+                (1.0, 1.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 1.0),
+            ]
+        )
+        .outputs[0]
+        .source_value
+    )
+    minus = (
+        _dihedral(
+            [
+                (1.0, 1.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, -1.0),
+            ]
+        )
+        .outputs[0]
+        .source_value
+    )
     assert plus == pytest.approx(-minus, abs=1e-9)
     assert abs(plus) == pytest.approx(45.0, abs=1e-6)
 
@@ -451,11 +468,23 @@ def test_a_degenerate_torsion_is_refused_rather_than_returning_a_number():
 
     with pytest.raises(QuantityExpressionError, match="collinear"):
         _dihedral(
-            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (3.0, 0.0, 0.0)]
+            [
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (2.0, 0.0, 0.0),
+                (3.0, 0.0, 0.0),
+            ]
         )
-    with pytest.raises(QuantityExpressionError, match="central atoms coincide"):
+    with pytest.raises(
+        QuantityExpressionError, match="central atoms coincide"
+    ):
         _dihedral(
-            [(1.0, 1.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 1.0)]
+            [
+                (1.0, 1.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 1.0),
+            ]
         )
 
 

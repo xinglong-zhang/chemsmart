@@ -436,9 +436,7 @@ class PySCFScriptWriter:
             "solvent_id": solvent_id,
             "solvent_eps": eps,
             "solvent_lebedev_order": (
-                29
-                if settings.engine == "gpu" and call is not None
-                else None
+                29 if settings.engine == "gpu" and call is not None else None
             ),
             "opt_solver": (
                 settings.opt_solver if "opt" in job.stages else None
@@ -484,9 +482,7 @@ class PySCFScriptWriter:
         }
         td_materialization = pyscf_td_response_materialization(settings)
         if td_materialization is not None:
-            config["materializations"]["td_response_plan"] = (
-                td_materialization
-            )
+            config["materializations"]["td_response_plan"] = td_materialization
         geometry_payload = {
             "symbols": config["symbols"],
             "positions": config["positions"],
@@ -494,9 +490,7 @@ class PySCFScriptWriter:
             "charge": config["charge"],
             "multiplicity": config["multiplicity"],
         }
-        config["input_geometry_sha256"] = self._json_digest(
-            geometry_payload
-        )
+        config["input_geometry_sha256"] = self._json_digest(geometry_payload)
         requested = self.settings_digest(config)
         config["requested_settings_sha256"] = requested
         config["applied_settings_sha256"] = None
@@ -1333,6 +1327,4 @@ if __name__ == "__main__":
 _SKELETON = _SKELETON.replace(
     "__CHEMSMART_APPLIED_SPEC_FIELDS__", repr(APPLIED_SPEC_FIELDS)
 )
-_SKELETON = _SKELETON.replace(
-    "__CHEMSMART_RESULT_UNITS__", repr(RESULT_UNITS)
-)
+_SKELETON = _SKELETON.replace("__CHEMSMART_RESULT_UNITS__", repr(RESULT_UNITS))

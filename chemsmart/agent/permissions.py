@@ -129,7 +129,10 @@ class ApprovalResolutionV1:
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.approval-resolution.v1":
             raise ContractError("unsupported approval resolution schema")
-        if self.decision is PermissionDecision.ALLOW_ONCE and not self.one_shot:
+        if (
+            self.decision is PermissionDecision.ALLOW_ONCE
+            and not self.one_shot
+        ):
             raise ContractError("material approval must be one-shot")
         body = {
             "schema_version": self.schema_version,
@@ -203,10 +206,7 @@ def evaluate_permission(
         "decision": decision,
         "reason": reason,
     }
-    return PermissionReceiptV1(
-        **body, receipt_sha256=canonical_sha256(body)
-    )
-
+    return PermissionReceiptV1(**body, receipt_sha256=canonical_sha256(body))
 
 
 __all__ = [

@@ -19,8 +19,8 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.xtb.hess import XTBHessJob
 from chemsmart.jobs.xtb.opt import XTBOptJob
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
-from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
 from chemsmart.jobs.xtb.settings import XTBJobSettings
+from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
 from chemsmart.jobs.xtb.validation import (
     _openblas_openmp_warning_count,
     audit_xtb_result_receipt,
@@ -38,7 +38,9 @@ from chemsmart.settings.submitters import RunScript, SLURMSubmitter
 from chemsmart.settings.xtb import XTBProjectSettings
 
 
-def test_openblas_openmp_warning_amplification_is_counted_from_stderr(tmp_path):
+def test_openblas_openmp_warning_amplification_is_counted_from_stderr(
+    tmp_path,
+):
     stderr = tmp_path / "xtb.err"
     warning = (
         "OpenBLAS Warning: Detect OpenMP Loop and this application may hang."
@@ -279,9 +281,7 @@ def test_xtb_executable_prefers_configured_folder(tmp_path):
     binary = tmp_path / "xtb"
     binary.write_text("placeholder")
     binary.chmod(0o700)
-    executable = XTBExecutable(
-        executable_folder=str(tmp_path), local_run=True
-    )
+    executable = XTBExecutable(executable_folder=str(tmp_path), local_run=True)
     assert executable.get_executable() == str(binary)
 
 
@@ -314,9 +314,7 @@ class TestXTBSettingsContract:
 
     def test_unknown_merge_key_is_rejected(self):
         with pytest.raises(ValueError, match="Unknown xTB merge"):
-            XTBJobSettings.default().merge(
-                {"charg": -1}, keywords=("charg",)
-            )
+            XTBJobSettings.default().merge({"charg": -1}, keywords=("charg",))
 
     @pytest.mark.parametrize("charge", [True, 0.0, "0"])
     def test_non_integer_charge_is_rejected(self, charge):
@@ -414,9 +412,10 @@ class TestXTBSettingsContract:
         ],
     )
     def test_exact_sp_opt_hess_argv(self, jobtype, expected):
-        assert XTBJobRunner._settings_args(
-            XTBJobSettings(jobtype=jobtype)
-        ) == expected
+        assert (
+            XTBJobRunner._settings_args(XTBJobSettings(jobtype=jobtype))
+            == expected
+        )
 
     def test_gfnff_has_dedicated_flag(self):
         settings = XTBJobSettings(jobtype="sp", gfn_version="gfnff")
@@ -519,7 +518,9 @@ class TestXTBProjectSchema:
         self, tmp_path, payload
     ):
         path = self._write(tmp_path, payload)
-        with pytest.raises(ValueError, match="charge and multiplicity together"):
+        with pytest.raises(
+            ValueError, match="charge and multiplicity together"
+        ):
             XTBProjectSettings.from_project(path)
 
     @pytest.mark.parametrize("section", ["sp", "hess"])
@@ -768,9 +769,7 @@ class TestXTBRunnerSafety:
         assert runner.detected_server_num_gpus == 1
         assert runner.num_gpus == 0
 
-    def test_job_boundary_rejects_gpu_runner(
-        self, tmp_path, monkeypatch
-    ):
+    def test_job_boundary_rejects_gpu_runner(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         water = Molecule(
             symbols=["O", "H", "H"],
@@ -920,14 +919,18 @@ class TestXTBSubmissionReconstruction:
             NUM_GPUS=0,
         )
         submitter = SLURMSubmitter(job=job, server=server)
-        submitter._write_runscript(["xtb", "--filename", job.source_filename, "sp"])
+        submitter._write_runscript(
+            ["xtb", "--filename", job.source_filename, "sp"]
+        )
         script = Path(job.folder) / submitter.run_script
         contents = script.read_text()
         assert script.is_file()
         assert f"os.chdir({str(tmp_path.resolve())!r})" in contents
         assert "except subprocess.CalledProcessError" in contents
 
-    def test_runscript_maps_child_failure_to_exact_process_exit(self, tmp_path):
+    def test_runscript_maps_child_failure_to_exact_process_exit(
+        self, tmp_path
+    ):
         script = tmp_path / "run.py"
         RunScript(script, ["xtb", "sp"], execution_cwd=tmp_path).write()
         contents = script.read_text()
@@ -998,9 +1001,7 @@ class TestXTBPreviewAndValidationReceipts:
         assert receipt["observed_version"] == "6.7.1"
         assert len(receipt["executable_sha256"]) == 64
 
-    def test_environment_receipt_rejects_other_xtb_version(
-        self, tmp_path
-    ):
+    def test_environment_receipt_rejects_other_xtb_version(self, tmp_path):
         binary = tmp_path / "xtb"
         binary.write_text("binary bytes")
         binary.chmod(0o700)
@@ -1060,9 +1061,9 @@ class TestXTBPreviewAndValidationReceipts:
         assert receipt["status"] == "available"
         assert receipt["execution_ready"] is False
         assert receipt["preflight_state"] == "needs_clarification"
-        assert {item["rule_id"] for item in receipt["scientific_findings"]} == {
-            "xtb.solvent.capability_unknown"
-        }
+        assert {
+            item["rule_id"] for item in receipt["scientific_findings"]
+        } == {"xtb.solvent.capability_unknown"}
 
     def test_environment_receipt_rejects_omp_core_mismatch(self, tmp_path):
         binary = tmp_path / "xtb"
@@ -1082,7 +1083,13 @@ class TestXTBPreviewAndValidationReceipts:
         }
 
     @pytest.mark.parametrize(
-        ("fixture_name", "job_cls", "jobtype", "settings_kwargs", "source_name"),
+        (
+            "fixture_name",
+            "job_cls",
+            "jobtype",
+            "settings_kwargs",
+            "source_name",
+        ),
         [
             (
                 "p_benzyne_sp_alpb_toluene",
@@ -1178,8 +1185,8 @@ class TestXTBPreviewAndValidationReceipts:
         command = [str(binary), job.inputfile]
         command.extend(XTBJobRunner._settings_args(settings))
         provenance = dict(job.declared_provenance_binding)
-        provenance["execution_input_artifact"] = (
-            bind_xtb_execution_input(job.inputfile)
+        provenance["execution_input_artifact"] = bind_xtb_execution_input(
+            job.inputfile
         )
         receipt = validate_xtb_result(
             job=job,
@@ -1227,8 +1234,7 @@ class TestXTBPreviewAndValidationReceipts:
             finding = next(
                 item
                 for item in warned["warnings"]
-                if item["rule_id"]
-                == "xtb.environment.openblas_openmp_warning"
+                if item["rule_id"] == "xtb.environment.openblas_openmp_warning"
             )
             assert warned["ready"] is True
             assert warned["validation_state"] == "validated"

@@ -21,7 +21,10 @@ import numpy as np
 
 try:
     from pymol import cmd  # type: ignore
-except ModuleNotFoundError:  # Importable metadata; execution still fails closed.
+except (
+    ModuleNotFoundError
+):  # Importable metadata; execution still fails closed.
+
     class _UnavailablePyMOLCommand:
         def extend(self, *_args, **_kwargs):
             return None

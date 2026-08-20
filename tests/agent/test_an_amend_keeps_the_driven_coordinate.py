@@ -122,10 +122,12 @@ def _rebind(host):
         "turn-1",
         {
             "workflow_id": "hooh-torsion",
-            "replacements": ({
-                "node_id": "orca-scan-hooh",
-                "project_role": "scan-project-v2",
-            },),
+            "replacements": (
+                {
+                    "node_id": "orca-scan-hooh",
+                    "project_role": "scan-project-v2",
+                },
+            ),
             "analysis_repairs": (),
         },
     )
@@ -171,14 +173,13 @@ def test_a_node_that_drives_nothing_stays_absent(host_and_capture):
     """The field must not appear as None on an ordinary optimisation."""
 
     host, captured = host_and_capture
+    from dataclasses import replace as _replace
+
     from chemsmart.agent.scientific_toolchain import (
         build_scientific_toolchain_plan,
     )
-    from dataclasses import replace as _replace
 
-    plain = _replace(
-        _scan_node(), jobtype="opt", internal_coordinates=None
-    )
+    plain = _replace(_scan_node(), jobtype="opt", internal_coordinates=None)
 
     class _PlainDraft(_Draft):
         nodes = (plain,)

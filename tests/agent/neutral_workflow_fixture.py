@@ -12,7 +12,6 @@ from chemsmart.agent._contracts import (
     canonical_sha256,
     file_sha256,
 )
-from chemsmart.agent.commands import build_scientific_identity_binding
 from chemsmart.agent.capabilities import (
     CapabilityQueryV1,
     build_command_compiled_preview_overlay,
@@ -20,6 +19,7 @@ from chemsmart.agent.capabilities import (
     query_capability,
 )
 from chemsmart.agent.cli_schema import build_live_click_schema
+from chemsmart.agent.commands import build_scientific_identity_binding
 
 
 @dataclass(frozen=True)
@@ -82,9 +82,7 @@ def build_neutral_workflow_fixture(root: Path) -> NeutralWorkflowFixtureV1:
     )
     capabilities = tuple(
         query_capability(
-            CapabilityQueryV1(
-                program="pyscf", jobtype=jobtype, engine="cpu"
-            ),
+            CapabilityQueryV1(program="pyscf", jobtype=jobtype, engine="cpu"),
             registry=registry,
             overlay=overlay,
             live_schema=live_schema,

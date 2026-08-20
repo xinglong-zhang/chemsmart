@@ -248,9 +248,9 @@ def test_a_persisted_receipt_rehydrates_its_attribution():
         for key, value in asdict(receipt).items()
         if key != "receipt_sha256"
     }
-    assert record["output_dependencies"][0]["model_authored_constants"], (
-        "the persisted form must carry the attribution, not only the object"
-    )
+    assert record["output_dependencies"][0][
+        "model_authored_constants"
+    ], "the persisted form must carry the attribution, not only the object"
     rehydrated = quantity_expression_receipt_from_record(
         record, receipt_sha256=receipt.receipt_sha256
     )
@@ -261,9 +261,7 @@ def test_a_persisted_receipt_rehydrates_its_attribution():
 
 def test_an_unknown_constant_role_is_refused_by_name():
     with pytest.raises(QuantityContractError, match="unsupported"):
-        ModelAuthoredConstantV1(
-            node_id="cbs", role="vibes", value="5.34"
-        )
+        ModelAuthoredConstantV1(node_id="cbs", role="vibes", value="5.34")
 
 
 def test_constants_must_arrive_sorted_and_deduplicated():
@@ -308,7 +306,9 @@ def test_the_profile_separates_toolkit_computation_from_model_assembly():
                     node_id="p33", operation="multiply", input_ids=("e3", "e3")
                 ),
                 QuantityExpressionNodeV1(
-                    node_id="num", operation="subtract", input_ids=("p24", "p33")
+                    node_id="num",
+                    operation="subtract",
+                    input_ids=("p24", "p33"),
                 ),
                 QuantityExpressionNodeV1(
                     node_id="s24", operation="add", input_ids=("e2", "e4")
@@ -320,10 +320,14 @@ def test_the_profile_separates_toolkit_computation_from_model_assembly():
                     scale_factor=2,
                 ),
                 QuantityExpressionNodeV1(
-                    node_id="den", operation="subtract", input_ids=("s24", "t3")
+                    node_id="den",
+                    operation="subtract",
+                    input_ids=("s24", "t3"),
                 ),
                 QuantityExpressionNodeV1(
-                    node_id="limit", operation="divide", input_ids=("num", "den")
+                    node_id="limit",
+                    operation="divide",
+                    input_ids=("num", "den"),
                 ),
             ),
             output_node_ids=("limit",),

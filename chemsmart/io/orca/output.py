@@ -142,7 +142,8 @@ class ORCAOutput(ORCAFileMixin):
             if match is None:
                 continue
             atoms = tuple(
-                int(item) for item in match.group(2).replace(" ", "").split(",")
+                int(item)
+                for item in match.group(2).replace(" ", "").split(",")
             )
             return {
                 "kind": match.group(1).lower(),
@@ -386,7 +387,9 @@ class ORCAOutput(ORCAFileMixin):
                     # x, y, z) and join with double spaces
                     coord_line = "  ".join(line.split()[-4:])
                     coordinates_block_lines_list.append(coord_line)
-                elif coordinates_block_lines_list:  # Stop if we hit a non-matching line after collecting coords
+                elif (
+                    coordinates_block_lines_list
+                ):  # Stop if we hit a non-matching line after collecting coords
                     break
 
         # Return CoordinateBlock instance
@@ -1393,7 +1396,9 @@ class ORCAOutput(ORCAFileMixin):
                 self.last_structure
             )  # for job that does not terminate normally
         except (ValueError, IndexError):
-            return self._get_molecule_from_sp_output_file()  # no structure can be created from output thus use input structure
+            return (
+                self._get_molecule_from_sp_output_file()
+            )  # no structure can be created from output thus use input structure
 
     @cached_property
     def last_structure(self):
@@ -1430,9 +1435,9 @@ class ORCAOutput(ORCAFileMixin):
                     -1
                 ]  # the lines here have all been converted to lower case
                 xyz_filepath = os.path.join(self.folder, xyz_file)
-                assert os.path.exists(xyz_filepath), (
-                    f".xyz file read from {xyz_filepath} does not exist!"
-                )
+                assert os.path.exists(
+                    xyz_filepath
+                ), f".xyz file read from {xyz_filepath} does not exist!"
                 if os.path.exists(xyz_filepath):
                     molecule = Molecule.from_filepath(filepath=xyz_filepath)
                     break

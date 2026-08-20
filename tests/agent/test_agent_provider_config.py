@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from chemsmart.agent._contracts import ContractError
-from chemsmart.agent._contracts import canonical_sha256
+from chemsmart.agent._contracts import ContractError, canonical_sha256
 from chemsmart.agent.provider_config import (
     AgentProviderProfileV1,
     load_agent_provider_selection,
@@ -60,7 +59,9 @@ providers:
 
 
 def test_agent_yaml_selects_explicit_model_and_limits(tmp_path):
-    selection = load_agent_provider_selection(_write_config(tmp_path / "agent.yaml"))
+    selection = load_agent_provider_selection(
+        _write_config(tmp_path / "agent.yaml")
+    )
 
     assert selection.active_profile.profile_name == "alibaba-token-plan"
     assert selection.active_profile.provider == "alibaba-token-plan"
@@ -194,9 +195,7 @@ def test_agent_yaml_rejects_invalid_explicit_token_limits(
         else "max_output_tokens: 262144"
     )
     path.write_text(
-        path.read_text(encoding="utf-8").replace(
-            original, replacement, 1
-        ),
+        path.read_text(encoding="utf-8").replace(original, replacement, 1),
         encoding="utf-8",
     )
 
@@ -210,7 +209,9 @@ def test_agent_yaml_requires_model_and_both_token_limits(tmp_path):
         ("    context_tokens: 1000000\n", "positive context_tokens"),
         ("    max_output_tokens: 262144\n", "positive max_output_tokens"),
     ):
-        path = _write_config(tmp_path / (omitted_line.strip().split(":")[0] + ".yaml"))
+        path = _write_config(
+            tmp_path / (omitted_line.strip().split(":")[0] + ".yaml")
+        )
         path.write_text(
             path.read_text(encoding="utf-8").replace(omitted_line, "", 1),
             encoding="utf-8",
@@ -280,7 +281,9 @@ def test_agent_yaml_binds_explicit_provider_turn_deadlines(tmp_path):
         "inter_event_seconds": 90.0,
         "absolute_turn_seconds": 300.0,
     }
-    assert profile.runtime_config().turn_deadlines == profile.transport_deadlines
+    assert (
+        profile.runtime_config().turn_deadlines == profile.transport_deadlines
+    )
 
 
 def test_agent_yaml_rejects_partial_provider_turn_deadlines(tmp_path):

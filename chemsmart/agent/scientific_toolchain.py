@@ -18,8 +18,8 @@ from chemsmart.agent._contracts import (
     canonical_sha256,
     require_identifier,
 )
-from chemsmart.agent.workflows import CommandNodeIntentV1
 from chemsmart.agent.postprocessing import typed_result_artifact_kind
+from chemsmart.agent.workflows import CommandNodeIntentV1
 from chemsmart.analysis.quantity_expressions import (
     QuantityExpressionError,
     normalize_numeric_value,
@@ -195,9 +195,7 @@ class AnalysisNodeIntentV1:
     node_id: str
     analysis_kind: str
     dependencies: tuple[str, ...]
-    inputs: tuple[
-        AnalysisInputIntentV1 | RegisteredResultInputIntentV1, ...
-    ]
+    inputs: tuple[AnalysisInputIntentV1 | RegisteredResultInputIntentV1, ...]
     selectors: tuple[AnalysisSelectorIntentV1, ...]
     outputs: tuple[AnalysisOutputIntentV1, ...]
     expression_nodes: tuple[dict[str, object], ...]
@@ -229,7 +227,9 @@ class AnalysisNodeIntentV1:
         object.__setattr__(self, "inputs", tuple(self.inputs))
         object.__setattr__(self, "selectors", tuple(self.selectors))
         object.__setattr__(self, "outputs", tuple(self.outputs))
-        object.__setattr__(self, "validation_rules", tuple(self.validation_rules))
+        object.__setattr__(
+            self, "validation_rules", tuple(self.validation_rules)
+        )
         object.__setattr__(
             self,
             "expression_nodes",
@@ -335,7 +335,10 @@ class AnalysisNodeIntentV1:
             raise ScientificToolchainContractError(
                 "selectors apply only to result extraction"
             )
-        if self.analysis_kind != "scientific_validation" and self.validation_rules:
+        if (
+            self.analysis_kind != "scientific_validation"
+            and self.validation_rules
+        ):
             raise ScientificToolchainContractError(
                 "validation_rules apply only to scientific_validation"
             )
@@ -626,9 +629,9 @@ def build_scientific_toolchain_plan(
                     )
                 except ContractError as exc:
                     raise ScientificToolchainContractError(str(exc)) from exc
-                declared_artifact_class = calculation_output_classes[
-                    producer
-                ][item.producer_output_id]
+                declared_artifact_class = calculation_output_classes[producer][
+                    item.producer_output_id
+                ]
                 if declared_artifact_class != required_artifact_class:
                     raise ScientificToolchainContractError(
                         f"analysis node {node.node_id!r} "

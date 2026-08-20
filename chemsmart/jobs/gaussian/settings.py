@@ -20,8 +20,8 @@ from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.io.gaussian.route import (
     normalize_gaussian_dispersion,
-    split_gaussian_functional_dispersion_shorthand,
     split_gaussian_dispersion_tokens,
+    split_gaussian_functional_dispersion_shorthand,
 )
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
@@ -2313,10 +2313,8 @@ class GaussianLinkJobSettings(GaussianJobSettings):
                         "Error: Basis set is required for ab initio methods."
                     )
                 native_basis = gaussian_native_basis_token(self.basis)
-                link_route_string = (
-                    _canonicalize_gaussian_route_basis_aliases(
-                        self.link_route
-                    )
+                link_route_string = _canonicalize_gaussian_route_basis_aliases(
+                    self.link_route
                 )
             elif self.functional is not None and self.ab_initio is None:
                 method = self.functional
@@ -2325,10 +2323,8 @@ class GaussianLinkJobSettings(GaussianJobSettings):
                         "Error: Basis set is required for DFT methods."
                     )
                 native_basis = gaussian_native_basis_token(self.basis)
-                link_route_string = (
-                    _canonicalize_gaussian_route_basis_aliases(
-                        self.link_route
-                    )
+                link_route_string = _canonicalize_gaussian_route_basis_aliases(
+                    self.link_route
                 )
             elif self.ab_initio is not None and self.functional is not None:
                 raise ValueError(
@@ -2337,12 +2333,13 @@ class GaussianLinkJobSettings(GaussianJobSettings):
                 )
             else:
                 raise ValueError("Error: No computational method provided.")
-            if not _gaussian_route_contains_token(
-                link_route_string, method
-            ):
+            if not _gaussian_route_contains_token(link_route_string, method):
                 link_route_string += f" {method}"
-            if native_basis is not None and not _gaussian_route_contains_token(
-                link_route_string, native_basis
+            if (
+                native_basis is not None
+                and not _gaussian_route_contains_token(
+                    link_route_string, native_basis
+                )
             ):
                 link_route_string += f" {native_basis}"
             if "geom=check" not in link_route_string:
@@ -2497,9 +2494,9 @@ class GaussianTDDFTJobSettings(GaussianJobSettings):
             eqsolv = ""
         else:
             eqsolv_options = ["eqsolv", "noneqsolv"]
-            assert self.eqsolv.lower() in eqsolv_options, (
-                f"Possible equilibrium solvation options are: {eqsolv_options}!"
-            )
+            assert (
+                self.eqsolv.lower() in eqsolv_options
+            ), f"Possible equilibrium solvation options are: {eqsolv_options}!"
             eqsolv = f",{self.eqsolv}"
 
         route_string += f" TD({self.states},nstates={self.nstates},root={self.root}{eqsolv})"
@@ -2983,9 +2980,9 @@ class GaussianQMMMJobSettings(GaussianJobSettings):
         Mod=Model system, and second character
         is one of: H, M and L for the High, Medium and Low levels).
         """
-        assert self.charge_total is not None and self.mult_total is not None, (
-            "Charge and multiplicity for the real system must be specified!"
-        )
+        assert (
+            self.charge_total is not None and self.mult_total is not None
+        ), "Charge and multiplicity for the real system must be specified!"
         real_low_charge = self.charge_total
         real_low_multiplicity = self.mult_total
         int_med_charge = self.charge_intermediate

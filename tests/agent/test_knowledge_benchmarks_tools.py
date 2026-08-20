@@ -16,7 +16,9 @@ def test_program_knowledge_pack_is_advisory_and_triggered():
         engine="gpu",
     )
     gpu_pack = next(
-        item for item in BUILTIN_PROGRAM_PACKS if item.pack_id == "gpu4pyscf-advisory"
+        item
+        for item in BUILTIN_PROGRAM_PACKS
+        if item.pack_id == "gpu4pyscf-advisory"
     )
 
     assert gpu_pack.readiness_authority is False
@@ -28,9 +30,7 @@ def test_model_tool_surface_uses_registry_programs_and_has_no_execution_tools(
     fake_capability_registry,
 ):
     surface = build_command_compiled_tool_surface(fake_capability_registry)
-    names = {
-        item["function"]["name"] for item in surface.tool_definitions
-    }
+    names = {item["function"]["name"] for item in surface.tool_definitions}
     blob = str(surface.tool_definitions)
 
     assert "synthesize_command" in names
@@ -64,7 +64,8 @@ def test_model_tool_surface_uses_registry_programs_and_has_no_execution_tools(
         for item in surface.tool_definitions
         if item["function"]["name"] == "plan_command_workflow"
     )
-    assert "never a project YAML or result" in bind_identity["function"][
-        "description"
-    ]
+    assert (
+        "never a project YAML or result"
+        in bind_identity["function"]["description"]
+    )
     assert "called again" in plan_workflow["function"]["description"]

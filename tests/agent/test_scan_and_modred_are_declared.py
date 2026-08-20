@@ -39,9 +39,7 @@ def _pairs(program):
 
 @pytest.mark.parametrize("program", ("orca", "gaussian"))
 @pytest.mark.parametrize("jobtype", ("scan", "modred"))
-def test_the_family_is_previewable_through_the_live_registry(
-    program, jobtype
-):
+def test_the_family_is_previewable_through_the_live_registry(program, jobtype):
     capability = _pairs(program).get(jobtype)
 
     assert capability is not None, (
@@ -60,9 +58,7 @@ _QUALIFIED = {("orca", "scan")}
 
 @pytest.mark.parametrize("program", ("orca", "gaussian"))
 @pytest.mark.parametrize("jobtype", ("scan", "modred"))
-def test_execution_is_claimed_only_where_a_run_qualified_it(
-    program, jobtype
-):
+def test_execution_is_claimed_only_where_a_run_qualified_it(program, jobtype):
     """The declaration must not quietly promise a run nobody has made.
 
     Adding a pair to `_QUALIFIED` is the deliberate act of claiming that

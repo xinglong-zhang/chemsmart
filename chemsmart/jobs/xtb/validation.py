@@ -15,7 +15,6 @@ from pathlib import Path
 
 import numpy as np
 
-
 XTB_REQUIRED_VERSION = "6.7.1"
 XTB_ENVIRONMENT_SCHEMA_VERSION = "chemsmart.xtb-environment.v1"
 XTB_PREVIEW_SCHEMA_VERSION = "chemsmart.xtb-preview.v1"
@@ -74,7 +73,9 @@ def write_json_receipt(path, payload):
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.is_symlink():
-        raise ValueError(f"Refusing symlink receipt destination: {destination}")
+        raise ValueError(
+            f"Refusing symlink receipt destination: {destination}"
+        )
     descriptor, temporary_name = tempfile.mkstemp(
         dir=destination.parent,
         prefix=f".{destination.name}.",
@@ -341,10 +342,7 @@ def _audit_xtb_execution_input_binding(record, *, receipt_parent, artifacts):
 
 
 def _settings_payload(settings):
-    return {
-        name: getattr(settings, name)
-        for name in sorted(settings.FIELDS)
-    }
+    return {name: getattr(settings, name) for name in sorted(settings.FIELDS)}
 
 
 def _molecule_payload(molecule):
@@ -374,14 +372,20 @@ def probe_xtb_environment(
     environment_findings = []
     scientific_findings = []
     requested = os.path.expanduser(str(executable or "").strip())
-    candidate = requested if os.path.isabs(requested) else shutil.which(requested)
+    candidate = (
+        requested if os.path.isabs(requested) else shutil.which(requested)
+    )
     resolved = None
     if candidate:
         try:
             resolved = Path(candidate).resolve(strict=True)
         except OSError:
             resolved = None
-    if resolved is None or not resolved.is_file() or not os.access(resolved, os.X_OK):
+    if (
+        resolved is None
+        or not resolved.is_file()
+        or not os.access(resolved, os.X_OK)
+    ):
         environment_findings.append(
             _finding(
                 "xtb.environment.executable_unavailable",
@@ -392,7 +396,11 @@ def probe_xtb_environment(
             )
         )
 
-    if isinstance(num_cores, bool) or not isinstance(num_cores, int) or num_cores < 1:
+    if (
+        isinstance(num_cores, bool)
+        or not isinstance(num_cores, int)
+        or num_cores < 1
+    ):
         environment_findings.append(
             _finding(
                 "xtb.resources.cores_invalid",
@@ -609,9 +617,7 @@ def _route_settings(
 ):
     return {
         "jobtype": route.jobtype,
-        "gfn_version": (
-            route.gfn_version if method is _MISSING else method
-        ),
+        "gfn_version": (route.gfn_version if method is _MISSING else method),
         "charge": route.charge if charge is _MISSING else charge,
         "multiplicity": (
             multiplicity
@@ -634,8 +640,7 @@ def _expected_mode_count(molecule):
     singular_values = np.linalg.svd(centered, compute_uv=False)
     scale = max(float(singular_values[0]), 1.0)
     linear = bool(
-        len(singular_values) < 2
-        or float(singular_values[1]) <= 1.0e-8 * scale
+        len(singular_values) < 2 or float(singular_values[1]) <= 1.0e-8 * scale
     )
     return 3 * count - (5 if linear else 6)
 
@@ -693,9 +698,7 @@ def validate_xtb_result(
                 "declared_path"
             ]
         ),
-        observed=(
-            None if len(command) < 2 else os.path.abspath(command[1])
-        ),
+        observed=(None if len(command) < 2 else os.path.abspath(command[1])),
         evidence_ref="command:argv/1",
     )
     for field in ("jobtype", "gfn_version", "charge", "multiplicity"):
@@ -781,7 +784,9 @@ def validate_xtb_result(
         observed=returncode,
         evidence_ref="process:returncode",
     )
-    if not environment_receipt or not environment_receipt.get("execution_ready"):
+    if not environment_receipt or not environment_receipt.get(
+        "execution_ready"
+    ):
         findings.append(
             _finding(
                 "xtb.result.environment_unbound",
@@ -1001,7 +1006,9 @@ def validate_xtb_result(
                 findings,
                 evidence_ref="artifact:optimized_geometry",
             )
-            observed_symbols = None if optimized is None else list(optimized.symbols)
+            observed_symbols = (
+                None if optimized is None else list(optimized.symbols)
+            )
             _compare(
                 findings,
                 rule_id="xtb.result.optimized_geometry_missing",
@@ -1183,9 +1190,8 @@ def load_validated_result_receipt(job):
         return None
     if not environment or environment.get("execution_ready") is not True:
         return None
-    if (
-        result.get("environment_receipt_sha256")
-        != environment.get("receipt_sha256")
+    if result.get("environment_receipt_sha256") != environment.get(
+        "receipt_sha256"
     ):
         return None
     for name, record in (result.get("artifacts") or {}).items():
@@ -1268,9 +1274,7 @@ def audit_xtb_result_receipt(
         return observation, ("xtb.result.receipt_not_object",)
 
     receipt_body = dict(result)
-    observed_receipt_sha256 = str(
-        receipt_body.pop("receipt_sha256", "")
-    )
+    observed_receipt_sha256 = str(receipt_body.pop("receipt_sha256", ""))
     if observed_receipt_sha256 != canonical_sha256(receipt_body):
         rule_ids.append("xtb.result.receipt_digest_mismatch")
 
@@ -1395,9 +1399,7 @@ def audit_xtb_result_receipt(
     if not isinstance(molecule, Mapping):
         rule_ids.append("xtb.result.requested_molecule_missing")
         molecule = {}
-    elif result.get("requested_molecule_sha256") != canonical_sha256(
-        molecule
-    ):
+    elif result.get("requested_molecule_sha256") != canonical_sha256(molecule):
         rule_ids.append("xtb.result.requested_molecule_digest_mismatch")
     if (molecule.get("charge"), molecule.get("multiplicity")) != (
         expected_charge,
@@ -1481,9 +1483,7 @@ def audit_xtb_result_receipt(
         declared = Path(record["declared_path"])
         original_path_present = declared.exists() or declared.is_symlink()
         if audit_mode == "archive" and not original_path_present:
-            provenance_limitations.append(
-                f"{role}_original_path_unavailable"
-            )
+            provenance_limitations.append(f"{role}_original_path_unavailable")
             continue
         for finding in verify_xtb_provenance_binding({role: record}):
             rule_ids.append(str(finding.get("rule_id")))
@@ -1534,8 +1534,7 @@ def audit_xtb_result_receipt(
         ):
             rule_ids.append("xtb.result.environment_receipt_mismatch")
         if (
-            environment.get("schema_version")
-            != XTB_ENVIRONMENT_SCHEMA_VERSION
+            environment.get("schema_version") != XTB_ENVIRONMENT_SCHEMA_VERSION
             or environment.get("status") != "available"
             or environment.get("preflight_state") != "ready"
             or environment.get("execution_ready") is not True

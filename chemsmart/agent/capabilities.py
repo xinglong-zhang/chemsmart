@@ -8,9 +8,9 @@ program, job type, engine, or project capability.
 
 from __future__ import annotations
 
-import shutil
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -473,7 +473,9 @@ class JobResultSelectorCoverageV1:
             raise ContractError("result parser_id must not be empty")
         _require_sorted_unique(self.selectors, "result selectors")
         if self.coverage_semantics != "parser_supported_when_emitted":
-            raise ContractError("unsupported result selector coverage semantics")
+            raise ContractError(
+                "unsupported result selector coverage semantics"
+            )
 
 
 @dataclass(frozen=True)
@@ -520,10 +522,7 @@ class CapabilityQueryReceiptV1:
                 self.effective_engine_job_pairs
             )
         if self.job_result_selector_coverage is not None:
-            if (
-                self.job_result_selector_coverage.jobtype
-                != self.query.jobtype
-            ):
+            if self.job_result_selector_coverage.jobtype != self.query.jobtype:
                 raise ContractError(
                     "job-result selector coverage must bind the queried jobtype"
                 )

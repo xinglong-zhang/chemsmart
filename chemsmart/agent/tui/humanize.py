@@ -214,7 +214,9 @@ def _expression(record: Mapping[str, Any]) -> str:
                 value = first.get("value")
                 unit = first.get("unit") or unit
     if value is not None:
-        return f"evaluated {quantity or 'expression'} = {value} {unit}".rstrip()
+        return (
+            f"evaluated {quantity or 'expression'} = {value} {unit}".rstrip()
+        )
     return f"evaluated {quantity or 'expression'}"
 
 
@@ -226,7 +228,9 @@ def _validation(record: Mapping[str, Any]) -> str:
         verdict = "passed"
     elif verdict in (False, 0, "false", "False", "failed"):
         verdict = "failed"
-    label = record.get("validation_id") or record.get("rule_id") or "validation"
+    label = (
+        record.get("validation_id") or record.get("rule_id") or "validation"
+    )
     return f"validation {label}: {verdict}"
 
 
@@ -241,38 +245,104 @@ def _decision(record: Mapping[str, Any]) -> str:
 
 
 def _skill(record: Mapping[str, Any]) -> str:
-    return f"consulted skill '{record.get('skill_id') or ''}'".replace(" ''", "")
+    return f"consulted skill '{record.get('skill_id') or ''}'".replace(
+        " ''", ""
+    )
 
 
 _REGISTRY: dict[str, tuple[str, str, Summarizer]] = {
-    "inspect_program_capability": ("⚛", "checking program capability", _capability),
-    "inspect_program_environment": ("⚛", "probing program environment", _environment),
-    "assess_program_candidate": ("⚛", "assessing program candidate", _capability),
+    "inspect_program_capability": (
+        "⚛",
+        "checking program capability",
+        _capability,
+    ),
+    "inspect_program_environment": (
+        "⚛",
+        "probing program environment",
+        _environment,
+    ),
+    "assess_program_candidate": (
+        "⚛",
+        "assessing program candidate",
+        _capability,
+    ),
     "consult_domain_skill": ("→", "consulting a domain skill", _skill),
     "render_project_yaml": ("←", "rendering project YAML", _project_yaml),
     "promote_project_yaml": ("←", "promoting project YAML", _project_yaml),
     "read_project_yaml": ("→", "reading project YAML", _project_yaml),
     "validate_project_yaml": ("✱", "validating project YAML", _validate_yaml),
     "bind_scientific_identity": ("⚛", "binding molecular identity", _identity),
-    "compose_molecular_arrangement": ("⚛", "composing a molecular arrangement", _compose),
-    "plan_command_workflow": ("✱", "planning the command workflow", _plan_workflow),
-    "plan_scientific_workflow": ("✱", "planning the scientific workflow", _plan_workflow),
-    "amend_scientific_workflow": ("✱", "amending the scientific workflow", _plan_workflow),
-    "inspect_workflow_frontier": ("✱", "inspecting the workflow frontier", _frontier),
+    "compose_molecular_arrangement": (
+        "⚛",
+        "composing a molecular arrangement",
+        _compose,
+    ),
+    "plan_command_workflow": (
+        "✱",
+        "planning the command workflow",
+        _plan_workflow,
+    ),
+    "plan_scientific_workflow": (
+        "✱",
+        "planning the scientific workflow",
+        _plan_workflow,
+    ),
+    "amend_scientific_workflow": (
+        "✱",
+        "amending the scientific workflow",
+        _plan_workflow,
+    ),
+    "inspect_workflow_frontier": (
+        "✱",
+        "inspecting the workflow frontier",
+        _frontier,
+    ),
     "prepare_program_node": ("⚛", "preparing a program node", _prepared_node),
     "synthesize_command": ("←", "synthesizing the command", _command),
     "compile_command": ("←", "compiling the command", _command),
-    "inspect_compiled_command": ("→", "inspecting the compiled command", _command),
+    "inspect_compiled_command": (
+        "→",
+        "inspecting the compiled command",
+        _command,
+    ),
     "preview_command": ("✱", "running the safe preview", _preview),
     "preflight_program_node": ("✱", "preflighting the node", _preflight),
-    "inspect_calculation_artifact": ("→", "inspecting a calculation artifact", _artifact_inspect),
-    "extract_result_quantities": ("→", "extracting typed quantities", _extraction),
-    "derive_thermochemistry": ("Σ", "deriving thermochemistry", _thermochemistry),
-    "evaluate_quantity_expression": ("Σ", "evaluating a quantity expression", _expression),
-    "evaluate_scientific_validation": ("✱", "evaluating a validation rule", _validation),
+    "inspect_calculation_artifact": (
+        "→",
+        "inspecting a calculation artifact",
+        _artifact_inspect,
+    ),
+    "extract_result_quantities": (
+        "→",
+        "extracting typed quantities",
+        _extraction,
+    ),
+    "derive_thermochemistry": (
+        "Σ",
+        "deriving thermochemistry",
+        _thermochemistry,
+    ),
+    "evaluate_quantity_expression": (
+        "Σ",
+        "evaluating a quantity expression",
+        _expression,
+    ),
+    "evaluate_scientific_validation": (
+        "✱",
+        "evaluating a validation rule",
+        _validation,
+    ),
     "record_analysis_claims": ("←", "recording analysis claims", _claims),
-    "record_scientific_decision": ("←", "recording the scientific decision", _decision),
-    "execute_approved_program_node": ("$", "running the approved engine node", _prepared_node),
+    "record_scientific_decision": (
+        "←",
+        "recording the scientific decision",
+        _decision,
+    ),
+    "execute_approved_program_node": (
+        "$",
+        "running the approved engine node",
+        _prepared_node,
+    ),
 }
 
 _GENERIC_ICON = "⚙"

@@ -113,9 +113,7 @@ def test_the_probe_facts_are_in_the_domains():
     from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
 
     orca = dict(PROGRAM_CAPABILITIES["orca"].project_parameter_domains)
-    gaussian = dict(
-        PROGRAM_CAPABILITIES["gaussian"].project_parameter_domains
-    )
+    gaussian = dict(PROGRAM_CAPABILITIES["gaussian"].project_parameter_domains)
 
     assert "mn15" not in orca["functional"]
     assert "mn15" in gaussian["functional"]

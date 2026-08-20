@@ -7,7 +7,6 @@ that execution-only template during ``chemsmart --help``.
 
 from __future__ import annotations
 
-
 SCIENTIFIC_STYLE_COMMAND_NAMES = (
     "glossy",
     "comic",
@@ -33,7 +32,9 @@ PYMOL_STYLE_TEMPLATES = {
     "pymol": "zhang_group_pymol_style.py",
     "cylview": "zhang_group_pymol_style.py",
     "cylview_flat": "zhang_group_pymol_style.py",
-    **dict.fromkeys(SCIENTIFIC_STYLE_COMMAND_NAMES, _SCIENTIFIC_STYLE_TEMPLATE),
+    **dict.fromkeys(
+        SCIENTIFIC_STYLE_COMMAND_NAMES, _SCIENTIFIC_STYLE_TEMPLATE
+    ),
 }
 
 

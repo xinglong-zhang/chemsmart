@@ -335,14 +335,12 @@ def test_unified_runner_selects_registered_qwen_adapter(tmp_path, monkeypatch):
             observed["loop_run"] = kwargs
             return "normal-session-result"
 
-    monkeypatch.setattr(alibaba, "AlibabaTokenPlanHttpsTransport", FakeTransport)
     monkeypatch.setattr(
-        alibaba, "AlibabaTokenPlanToolSession", FakeSession
+        alibaba, "AlibabaTokenPlanHttpsTransport", FakeTransport
     )
+    monkeypatch.setattr(alibaba, "AlibabaTokenPlanToolSession", FakeSession)
     monkeypatch.setattr(unified, "ToolLoopRunner", FakeLoop)
-    lease = load_secret_lease(
-        provider="alibaba-token-plan", path=secret_file
-    )
+    lease = load_secret_lease(provider="alibaba-token-plan", path=secret_file)
     runner = UnifiedSessionRunner(
         host=object(),
         event_store=object(),
@@ -515,7 +513,9 @@ def test_connect_timeout_is_classified_without_starting_a_worker(monkeypatch):
     monkeypatch.setattr(alibaba, "open_bounded_https_response", _timeout)
     transport = AlibabaTokenPlanHttpsTransport(api_key="sk-sp-test")
 
-    with pytest.raises(DeepSeekTransportError, match="connect_timeout") as error:
+    with pytest.raises(
+        DeepSeekTransportError, match="connect_timeout"
+    ) as error:
         transport({"model": "deepseek-v4-flash-0731", "messages": []})
 
     assert error.value.timeout_phase == "connect"
@@ -526,13 +526,17 @@ def test_sse_inter_event_deadline_ignores_comments_after_data(monkeypatch):
     import chemsmart.agent.runtime.alibaba as alibaba
 
     clock = _Clock()
-    first = b"data: " + json.dumps(
-        {
-            "id": "partial",
-            "model": "deepseek-v4-flash-0731",
-            "choices": [],
-        }
-    ).encode("utf-8") + b"\n"
+    first = (
+        b"data: "
+        + json.dumps(
+            {
+                "id": "partial",
+                "model": "deepseek-v4-flash-0731",
+                "choices": [],
+            }
+        ).encode("utf-8")
+        + b"\n"
+    )
     response = _DripResponse(
         clock,
         [first, b": heartbeat\n", b": heartbeat\n", b": heartbeat\n"],

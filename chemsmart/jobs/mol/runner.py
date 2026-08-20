@@ -24,8 +24,14 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol.style_registry import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
     PYMOL_STYLE_TEMPLATES,
+)
+from chemsmart.jobs.mol.style_registry import (
     PYMOL_VISUALIZE_STYLE_CLI_CHOICES as PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
+)
+from chemsmart.jobs.mol.style_registry import (
     is_pymol_derived_style as is_pymol_derived_style,
+)
+from chemsmart.jobs.mol.style_registry import (
     normalize_pymol_style,
 )
 from chemsmart.jobs.runner import JobRunner

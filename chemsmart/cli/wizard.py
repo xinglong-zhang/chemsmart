@@ -28,8 +28,8 @@ from chemsmart.settings.wizard import (
     SUBMITTABLE_SCHEDULERS,
     ServerChoicesV1,
     derive_choices,
-    extract_top_level_block,
     extract_extra_commands,
+    extract_top_level_block,
     render_server_block,
     run_verification,
     splice_top_level_block,
@@ -81,9 +81,7 @@ def _choose_queue(
     usable = [queue for queue in scheduler.queues if queue.available]
     if not usable:
         usable = list(scheduler.queues)
-    default = next(
-        (queue for queue in usable if queue.is_default), usable[0]
-    )
+    default = next((queue for queue in usable if queue.is_default), usable[0])
     if assume_yes or len(usable) == 1:
         return default
     names = [queue.name for queue in usable]
@@ -206,9 +204,9 @@ def _offer_usersettings(*, assume_yes: bool) -> None:
     )
     payload = {}
     if settings_path.exists():
-        payload = yaml.safe_load(
-            settings_path.read_text(encoding="utf-8")
-        ) or {}
+        payload = (
+            yaml.safe_load(settings_path.read_text(encoding="utf-8")) or {}
+        )
     if project:
         payload["PROJECT"] = project
     if email:
@@ -224,9 +222,12 @@ def _print_verification(choices: ServerChoicesV1) -> int:
     click.echo("\nVerification:")
     failures = 0
     for check in run_verification(choices):
-        mark = {"ok": "ok  ", "warn": "warn", "fail": "FAIL", "skipped": "skip"}[
-            check.status
-        ]
+        mark = {
+            "ok": "ok  ",
+            "warn": "warn",
+            "fail": "FAIL",
+            "skipped": "skip",
+        }[check.status]
         detail = f" — {check.detail}" if check.detail else ""
         click.echo(f"  [{mark}] {check.name}{detail}")
         if check.status == "fail":
@@ -304,9 +305,7 @@ def wizard(server_only, assume_yes, no_verify):
             "is not release-qualified for it; writing a local-run "
             "configuration that records the detected facts."
         )
-    choices = _confirm_choices(
-        derived, queue, host, assume_yes=assume_yes
-    )
+    choices = _confirm_choices(derived, queue, host, assume_yes=assume_yes)
 
     name = choices.scheduler or "local"
     target = _user_server_dir() / f"{name}.yaml"
@@ -328,9 +327,7 @@ def wizard(server_only, assume_yes, no_verify):
     if backup is not None:
         click.echo(f"Backed up the previous file to {backup}")
     click.echo(f"Wrote {target}")
-    _offer_program_overwrites(
-        target, template_text, assume_yes=assume_yes
-    )
+    _offer_program_overwrites(target, template_text, assume_yes=assume_yes)
     from chemsmart.cli.config import ensure_program_blocks
 
     ensure_program_blocks(target.parent)

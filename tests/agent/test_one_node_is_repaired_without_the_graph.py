@@ -119,7 +119,10 @@ def test_a_unit_repair_lands_on_its_node_and_leaves_the_rest_alone(
     result = _amend(
         host,
         analysis_repairs=[
-            {"node_id": "extract-b", "outputs": [{"output_id": "e-b", "unit": "1"}]}
+            {
+                "node_id": "extract-b",
+                "outputs": [{"output_id": "e-b", "unit": "1"}],
+            }
         ],
     )
 
@@ -358,7 +361,9 @@ def host_with_chain():
     nodes = (
         _extraction_node("extract-a", output_id="e-a"),
         _consumer_node(
-            "expr-a", producer="extract-a", producer_output="e-a",
+            "expr-a",
+            producer="extract-a",
+            producer_output="e-a",
             output_id="abs-a",
         ),
     )

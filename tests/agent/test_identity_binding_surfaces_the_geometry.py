@@ -12,10 +12,10 @@ measurement route, while the binding record itself stays digest-frozen.
 
 from __future__ import annotations
 
+from chemsmart.agent._contracts import TrustedArtifactRefV1, file_sha256
 from chemsmart.agent.commands import build_scientific_identity_binding
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
-from chemsmart.agent._contracts import TrustedArtifactRefV1, file_sha256
 
 _WATER = "3\nwater\nO 0.0 0.0 0.117\nH 0.0 0.757 -0.467\nH 0.0 -0.757 -0.467\n"
 

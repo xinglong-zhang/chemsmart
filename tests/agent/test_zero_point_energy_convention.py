@@ -33,9 +33,9 @@ from chemsmart.analysis.quantity_expressions import (
     _OPERATIONS,
     CONVENTION_OPERATIONS,
     OPERATION_DESCRIPTIONS,
-    _unit_spec,
     QuantityExpressionNodeV1,
     QuantityExpressionRequestV1,
+    _unit_spec,
     evaluate_quantity_expression,
 )
 from chemsmart.analysis.result_quantities import (

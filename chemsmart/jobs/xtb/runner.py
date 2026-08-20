@@ -290,7 +290,9 @@ class XTBJobRunner(JobRunner):
         if not isinstance(command, list) or not all(
             isinstance(part, str) for part in command
         ):
-            raise TypeError("xTB commands must be a list of string argv items.")
+            raise TypeError(
+                "xTB commands must be a list of string argv items."
+            )
         logger.info(
             f"Executing xTB argv {command!r}; output={self.job_outputfile}; "
             f"stderr={self.job_errfile}"
@@ -320,20 +322,14 @@ class XTBJobRunner(JobRunner):
     def _postrun_cleanup(self, job):
         """Preserve stderr evidence; optionally remove validated scratch."""
 
-        if (
-            job.is_complete()
-            and self.scratch
-            and self.delete_scratch
-        ):
+        if job.is_complete() and self.scratch and self.delete_scratch:
             self._delete_scratch_directory()
 
     def run(self, job, **kwargs):
         """Execute xTB and require exit, environment, and result evidence."""
 
         provenance_binding = dict(job.declared_provenance_binding)
-        provenance_findings = verify_xtb_provenance_binding(
-            provenance_binding
-        )
+        provenance_findings = verify_xtb_provenance_binding(provenance_binding)
         if provenance_findings:
             raise XTBResultValidationError(provenance_findings)
         self._prerun(job=job)
@@ -426,7 +422,9 @@ class FakeXTBJobRunner(XTBJobRunner):
         preview_dir = self._prepare_job_workspace(job, preview=True)
         self.running_directory = str(preview_dir)
         self.job_xyzfile = os.path.join(preview_dir, f"{job.label}.xyz")
-        self.job_outputfile = os.path.join(preview_dir, "preview-transcript.txt")
+        self.job_outputfile = os.path.join(
+            preview_dir, "preview-transcript.txt"
+        )
         self.job_errfile = os.path.join(preview_dir, "preview-stderr.txt")
         self._write_input(job=job)
         command = ["xtb", self.job_xyzfile]

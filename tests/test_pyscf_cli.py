@@ -23,8 +23,7 @@ _JOB_CLASS = {
 def test_only_library_backends_may_omit_exefolder(tmp_path):
     server_yaml = Path(tmp_path) / "server.yaml"
     server_yaml.write_text(
-        "GAUSSIAN:\n  LOCAL_RUN: true\n"
-        "PYSCF:\n  LOCAL_RUN: true\n",
+        "GAUSSIAN:\n  LOCAL_RUN: true\n" "PYSCF:\n  LOCAL_RUN: true\n",
         encoding="utf-8",
     )
 
@@ -402,9 +401,7 @@ def test_leaf_selects_matching_project_settings(
     assert settings.project_yaml_digest is not None
 
 
-@pytest.mark.parametrize(
-    "partial_override", (("-c", "0"), ("-m", "1"))
-)
+@pytest.mark.parametrize("partial_override", (("-c", "0"), ("-m", "1")))
 def test_cli_rejects_partial_electronic_state_override(
     single_molecule_xyz_file, partial_override
 ):
@@ -431,9 +428,7 @@ def test_cli_rejects_partial_electronic_state_override(
 def test_sub_reconstruction_preserves_pyscf_run_settings(
     monkeypatch, single_molecule_xyz_file
 ):
-    fake_server = Server(
-        name="dummy", NUM_CORES=2, NUM_GPUS=0, MEM_GB=4
-    )
+    fake_server = Server(name="dummy", NUM_CORES=2, NUM_GPUS=0, MEM_GB=4)
     captured = {}
 
     def capture_submit(job, test=False, cli_args=None, **_kwargs):
@@ -485,9 +480,7 @@ def test_sub_reconstruction_preserves_pyscf_run_settings(
     def capture_run_job(job, _jobrunner):
         captured["reconstructed_job"] = job
 
-    monkeypatch.setattr(
-        "chemsmart.cli.run._run_single_job", capture_run_job
-    )
+    monkeypatch.setattr("chemsmart.cli.run._run_single_job", capture_run_job)
     run_result = CliRunner().invoke(run, captured["cli_args"])
 
     assert run_result.exit_code == 0, run_result.output

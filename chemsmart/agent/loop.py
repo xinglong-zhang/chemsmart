@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import time
+from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
 from chemsmart.agent._contracts import (
     ContractError,
     canonical_data,
-    canonical_sha256,
     canonical_json,
+    canonical_sha256,
 )
+from chemsmart.agent.analysis_completion import AnalysisIncompleteError
 from chemsmart.agent.request_context import (
     ProviderAttemptReceiptV1,
     ProviderNetworkBudgetV1,
     RequestContextProvenanceV1,
     build_provider_attempt_receipt,
 )
-from chemsmart.agent.analysis_completion import AnalysisIncompleteError
 from chemsmart.agent.runtime.contracts import TaskEnvelopeV1
 from chemsmart.agent.runtime.deepseek import (
     DeepSeekProtocolError,
@@ -83,9 +83,7 @@ class ToolLoopResultV1:
                 self.public_transcript_artifact_sha256
             ),
             "provider_receipt_sha256s": self.provider_receipt_sha256s,
-            "api_attempt_receipt_sha256s": (
-                self.api_attempt_receipt_sha256s
-            ),
+            "api_attempt_receipt_sha256s": (self.api_attempt_receipt_sha256s),
             "successful_tool_calls": self.successful_tool_calls,
             "failed_tool_calls": self.failed_tool_calls,
             "event_stream_head_sha256": self.event_stream_head_sha256,
@@ -266,9 +264,7 @@ class ToolLoopRunner:
                 final_text = "provider wall-time reserve reached"
                 terminal_reason = final_text
                 break
-            timeout_setter = getattr(
-                session, "set_turn_timeout_seconds", None
-            )
+            timeout_setter = getattr(session, "set_turn_timeout_seconds", None)
             if timeout_setter is not None:
                 timeout_setter(provider_turn_allowance)
             transport_ordinal += 1
@@ -277,9 +273,7 @@ class ToolLoopRunner:
             )
             # Provider-private reasoning continuation must not influence any
             # persisted evidence, including request digests.
-            request_sha256 = canonical_sha256(
-                public_provider_request(request)
-            )
+            request_sha256 = canonical_sha256(public_provider_request(request))
             context_limit = min(
                 envelope.budget.max_input_tokens_per_request,
                 provider_budget.max_input_tokens_per_request,
@@ -382,9 +376,7 @@ class ToolLoopRunner:
                 request_sha256=request_sha256,
                 response_sha256=canonical_sha256(response),
                 status="succeeded",
-                latency_ms=max(
-                    0, int((self.clock() - attempt_start) * 1000)
-                ),
+                latency_ms=max(0, int((self.clock() - attempt_start) * 1000)),
                 input_tokens=provider_receipt.input_tokens,
                 output_tokens=provider_receipt.output_tokens,
                 reasoning_tokens=provider_receipt.reasoning_tokens,
@@ -432,7 +424,9 @@ class ToolLoopRunner:
             ):
                 budget_findings.append("budget.provider_input_tokens_exceeded")
             if provider_receipt.output_tokens > approved_output_limit:
-                budget_findings.append("budget.provider_output_tokens_exceeded")
+                budget_findings.append(
+                    "budget.provider_output_tokens_exceeded"
+                )
             if budget_findings:
                 self.event_store.append(
                     turn_id=envelope.turn_id,
@@ -472,9 +466,7 @@ class ToolLoopRunner:
                     kind=EventKind.TURN_BLOCKED.value,
                     payload={
                         "reason": "public provider tool envelope failed atomic decoding",
-                        "rule_ids": (
-                            "provider.public_tool_envelope_invalid",
-                        ),
+                        "rule_ids": ("provider.public_tool_envelope_invalid",),
                     },
                     idempotency_key=(
                         "public-tool-envelope-invalid:"
@@ -495,8 +487,10 @@ class ToolLoopRunner:
                                 turn_id=envelope.turn_id
                             )
                         )
-                        final_text = self.host.render_completed_analysis_report(
-                            completion_required[0]
+                        final_text = (
+                            self.host.render_completed_analysis_report(
+                                completion_required[0]
+                            )
                         )
                         terminal_state = "complete"
                         terminal_reason = (
@@ -564,9 +558,7 @@ class ToolLoopRunner:
                             )
                         except ContractError:
                             terminal_state = "blocked"
-                            terminal_reason = (
-                                "model stopped before a workflow or readiness gate"
-                            )
+                            terminal_reason = "model stopped before a workflow or readiness gate"
                 break
             if successful_tools + failed_tools + len(decoded_tool_calls) > (
                 envelope.budget.max_tool_calls
@@ -656,7 +648,9 @@ class ToolLoopRunner:
                     }
                     tool_event_key = "tool-failed:" + call_id
                 if wait_emitted and wait_started is not None:
-                    process_observation = _execution_process_observation(result)
+                    process_observation = _execution_process_observation(
+                        result
+                    )
                     wake_reason = _execution_wake_reason(
                         result=result,
                         process_observation=process_observation,
@@ -728,7 +722,9 @@ class ToolLoopRunner:
             "final_text": final_text,
             "public_transcript": public_transcript,
             "public_transcript_sha256": canonical_sha256(public_transcript),
-            "public_transcript_artifact_id": transcript_artifact["artifact_id"],
+            "public_transcript_artifact_id": transcript_artifact[
+                "artifact_id"
+            ],
             "public_transcript_artifact_sha256": transcript_artifact[
                 "artifact_sha256"
             ],
@@ -742,9 +738,7 @@ class ToolLoopRunner:
             "failed_tool_calls": failed_tools,
             "event_stream_head_sha256": state.latest_event_hash,
         }
-        return ToolLoopResultV1(
-            **body, result_sha256=canonical_sha256(body)
-        )
+        return ToolLoopResultV1(**body, result_sha256=canonical_sha256(body))
 
     def _validate_run_contract(
         self,
@@ -755,7 +749,9 @@ class ToolLoopRunner:
         provider: str,
     ) -> None:
         if envelope.session_id != self.event_store.session_id:
-            raise ContractError("task envelope belongs to another event stream")
+            raise ContractError(
+                "task envelope belongs to another event stream"
+            )
         if envelope.tool_schema_sha256 != self.host.surface.tool_schema_sha256:
             raise ContractError("task envelope uses another tool schema")
         if (
@@ -765,10 +761,7 @@ class ToolLoopRunner:
             raise ContractError("request context uses another tool schema")
         if request_context.prompt_sha256 != envelope.request_sha256:
             raise ContractError("request context uses another prompt")
-        if (
-            request_context.task_spec_sha256
-            not in self.host.task_spec_sha256s
-        ):
+        if request_context.task_spec_sha256 not in self.host.task_spec_sha256s:
             raise ContractError("request context uses another task")
         if (
             request_context.provider_budget_sha256
@@ -819,9 +812,7 @@ class ToolLoopRunner:
         }
         if protocol_observation is not None:
             payload["response_sha256"] = attempt.response_sha256
-            payload["protocol_failure"] = canonical_data(
-                protocol_observation
-            )
+            payload["protocol_failure"] = canonical_data(protocol_observation)
         if transport_observation is not None:
             payload["transport_failure"] = canonical_data(
                 transport_observation
@@ -857,9 +848,11 @@ class ToolLoopRunner:
             "turn_deadline_exceeded": "timeout",
         }.get(
             str(error_class),
-            "protocol_failed"
-            if isinstance(error, DeepSeekProtocolError)
-            else "transport_failed",
+            (
+                "protocol_failed"
+                if isinstance(error, DeepSeekProtocolError)
+                else "transport_failed"
+            ),
         )
         response_sha256 = (
             error.response_envelope_sha256
@@ -1015,9 +1008,7 @@ def _contains_private_reasoning_at_path(
         )
     if isinstance(value, (tuple, list)):
         return any(
-            _contains_private_reasoning_at_path(
-                item, (*path, index), context
-            )
+            _contains_private_reasoning_at_path(item, (*path, index), context)
             for index, item in enumerate(value)
         )
     if isinstance(value, str):
@@ -1025,9 +1016,7 @@ def _contains_private_reasoning_at_path(
     return False
 
 
-def _is_public_tool_function_path(
-    path: tuple[Any, ...], context: str
-) -> bool:
+def _is_public_tool_function_path(path: tuple[Any, ...], context: str) -> bool:
     return (
         context == "assistant_message"
         and len(path) == 3

@@ -17,6 +17,12 @@ from chemsmart.agent._contracts import (
     canonical_sha256,
     file_sha256,
 )
+from chemsmart.agent.capabilities import (
+    EnvironmentCapabilityReceiptV1,
+    EnvironmentStatus,
+    ProgramEnvironmentQueryV1,
+    consume_pyscf_compute_environment_receipt,
+)
 from chemsmart.agent.execution import (
     ApprovedNodeBindingV1,
     _typed_result_validation_findings,
@@ -25,26 +31,20 @@ from chemsmart.agent.execution import (
     build_program_execution_invocation,
     build_program_execution_receipt,
     build_program_result_validation_receipt,
-    handoff_optimized_pyscf_geometry,
     build_workflow_execution_approval,
+    handoff_optimized_pyscf_geometry,
     workflow_execution_approval_json,
-)
-from chemsmart.agent.capabilities import (
-    EnvironmentCapabilityReceiptV1,
-    EnvironmentStatus,
-    ProgramEnvironmentQueryV1,
-    consume_pyscf_compute_environment_receipt,
 )
 from chemsmart.agent.live_session import _scan_xyz_artifacts, _system_prompt
 from chemsmart.agent.runtime.events import EventKind, RuntimeEvent
 from chemsmart.agent.tool_runtime import (
     CommandCompiledToolHostV1,
-    _PySCFEngineObservation,
     _inspect_pyscf_engine_observation,
-    _pyscf_environment_evidence,
     _prepare_execution_node_workspace,
-    _staged_auxiliary_input_findings,
+    _pyscf_environment_evidence,
+    _PySCFEngineObservation,
     _runner_defers_hessian_classification,
+    _staged_auxiliary_input_findings,
     _validate_stationary_point_policy_binding,
 )
 from chemsmart.agent.workflows import StationaryPointValidationPolicyV1
@@ -117,9 +117,7 @@ def _test_approval(tmp_path, *, node_timeout_seconds=600):
         ),
         encoding="utf-8",
     )
-    resources = _test_resources(
-        node_timeout_seconds=node_timeout_seconds
-    )
+    resources = _test_resources(node_timeout_seconds=node_timeout_seconds)
     edge = build_producer_edge_rule(
         producer_node_id="opt-initial",
         consumer_node_id="hess-optimized",
@@ -206,9 +204,10 @@ def test_generic_approval_binds_order_and_optimized_handoff(tmp_path):
 def test_generic_approval_accepts_operator_selected_timeout(tmp_path):
     approval = _test_approval(tmp_path, node_timeout_seconds=5400)
 
-    assert approval.resource_sha256 == _test_resources(
-        node_timeout_seconds=5400
-    ).resource_sha256
+    assert (
+        approval.resource_sha256
+        == _test_resources(node_timeout_seconds=5400).resource_sha256
+    )
 
 
 def test_execution_host_rejects_legacy_v1_approval_before_invocation_lookup(
@@ -257,14 +256,12 @@ def test_preexisting_node_outputs_block_a_second_launch(tmp_path):
 def test_auxiliary_input_is_bound_from_approval_through_execution(tmp_path):
     reactant_path = tmp_path / "reactant.xyz"
     reactant_path.write_text(
-        "3\nreactant\nO 0.0 0.0 0.1\n"
-        "H -0.8 0.0 -0.5\nH 0.8 0.0 -0.5\n",
+        "3\nreactant\nO 0.0 0.0 0.1\n" "H -0.8 0.0 -0.5\nH 0.8 0.0 -0.5\n",
         encoding="utf-8",
     )
     product_path = tmp_path / "product.xyz"
     product_path.write_text(
-        "3\nproduct\nO 0.0 0.0 0.2\n"
-        "H -0.8 0.0 -0.4\nH 0.8 0.0 -0.4\n",
+        "3\nproduct\nO 0.0 0.0 0.2\n" "H -0.8 0.0 -0.4\nH 0.8 0.0 -0.4\n",
         encoding="utf-8",
     )
     product = _artifact(
@@ -336,10 +333,13 @@ def test_auxiliary_input_is_bound_from_approval_through_execution(tmp_path):
     staged.mkdir(parents=True)
     staged_product = staged / product_path.name
     staged_product.write_bytes(product_path.read_bytes())
-    assert _staged_auxiliary_input_findings(
-        node_workspace=staged,
-        job_artifact_options=(("ending_xyzfile", product),),
-    ) == ()
+    assert (
+        _staged_auxiliary_input_findings(
+            node_workspace=staged,
+            job_artifact_options=(("ending_xyzfile", product),),
+        )
+        == ()
+    )
 
     product_path.write_text("changed", encoding="utf-8")
     with pytest.raises(ContractError, match="auxiliary input"):
@@ -461,9 +461,9 @@ def test_validated_opt_handoff_materializes_exact_final_geometry(tmp_path):
     assert handoff.status == "validated_handoff"
     assert handoff.symbols == ("O", "H", "H")
     assert geometry.sha256 == file_sha256(geometry.path)
-    assert "source_sha256=" + result.sha256 in Path(
-        geometry.path
-    ).read_text(encoding="utf-8")
+    assert "source_sha256=" + result.sha256 in Path(geometry.path).read_text(
+        encoding="utf-8"
+    )
 
 
 def test_execution_receipt_separates_wrapper_and_child_status(tmp_path):
@@ -706,46 +706,61 @@ def test_agent_admits_complete_unclassified_hessian_for_downstream_analysis():
     policy = _minimum_stationary_point_policy()
     run_receipt = _unclassified_hessian_run_receipt()
 
-    assert _runner_defers_hessian_classification(
-        run_receipt=run_receipt,
-        jobtype="hess",
-        hessian_node_id="hess-optimized",
-        engine_complete=True,
-        stationary_point_policy=None,
-        approved_stationary_point_policy_sha256="",
-    ) is True
-    assert _runner_defers_hessian_classification(
-        run_receipt=run_receipt,
-        jobtype="hess",
-        hessian_node_id="hess-optimized",
-        engine_complete=True,
-        stationary_point_policy=policy,
-        approved_stationary_point_policy_sha256=policy.policy_sha256,
-    ) is True
-    assert _runner_defers_hessian_classification(
-        run_receipt=run_receipt,
-        jobtype="hess",
-        hessian_node_id="hess-optimized",
-        engine_complete=True,
-        stationary_point_policy=policy,
-        approved_stationary_point_policy_sha256="b" * 64,
-    ) is False
-    assert _runner_defers_hessian_classification(
-        run_receipt=run_receipt,
-        jobtype="hess",
-        hessian_node_id="another-hessian",
-        engine_complete=True,
-        stationary_point_policy=policy,
-        approved_stationary_point_policy_sha256=policy.policy_sha256,
-    ) is False
-    assert _runner_defers_hessian_classification(
-        run_receipt=run_receipt,
-        jobtype="sp",
-        hessian_node_id="hess-optimized",
-        engine_complete=True,
-        stationary_point_policy=policy,
-        approved_stationary_point_policy_sha256=policy.policy_sha256,
-    ) is False
+    assert (
+        _runner_defers_hessian_classification(
+            run_receipt=run_receipt,
+            jobtype="hess",
+            hessian_node_id="hess-optimized",
+            engine_complete=True,
+            stationary_point_policy=None,
+            approved_stationary_point_policy_sha256="",
+        )
+        is True
+    )
+    assert (
+        _runner_defers_hessian_classification(
+            run_receipt=run_receipt,
+            jobtype="hess",
+            hessian_node_id="hess-optimized",
+            engine_complete=True,
+            stationary_point_policy=policy,
+            approved_stationary_point_policy_sha256=policy.policy_sha256,
+        )
+        is True
+    )
+    assert (
+        _runner_defers_hessian_classification(
+            run_receipt=run_receipt,
+            jobtype="hess",
+            hessian_node_id="hess-optimized",
+            engine_complete=True,
+            stationary_point_policy=policy,
+            approved_stationary_point_policy_sha256="b" * 64,
+        )
+        is False
+    )
+    assert (
+        _runner_defers_hessian_classification(
+            run_receipt=run_receipt,
+            jobtype="hess",
+            hessian_node_id="another-hessian",
+            engine_complete=True,
+            stationary_point_policy=policy,
+            approved_stationary_point_policy_sha256=policy.policy_sha256,
+        )
+        is False
+    )
+    assert (
+        _runner_defers_hessian_classification(
+            run_receipt=run_receipt,
+            jobtype="sp",
+            hessian_node_id="hess-optimized",
+            engine_complete=True,
+            stationary_point_policy=policy,
+            approved_stationary_point_policy_sha256=policy.policy_sha256,
+        )
+        is False
+    )
 
 
 def test_agent_rejects_incomplete_unclassified_runner_receipt_even_with_policy():
@@ -756,14 +771,17 @@ def test_agent_rejects_incomplete_unclassified_runner_receipt_even_with_policy()
         "state": "validated",
     }
 
-    assert _runner_defers_hessian_classification(
-        run_receipt=run_receipt,
-        jobtype="hess",
-        hessian_node_id="hess-optimized",
-        engine_complete=True,
-        stationary_point_policy=policy,
-        approved_stationary_point_policy_sha256=policy.policy_sha256,
-    ) is False
+    assert (
+        _runner_defers_hessian_classification(
+            run_receipt=run_receipt,
+            jobtype="hess",
+            hessian_node_id="hess-optimized",
+            engine_complete=True,
+            stationary_point_policy=policy,
+            approved_stationary_point_policy_sha256=policy.policy_sha256,
+        )
+        is False
+    )
 
 
 def test_parent_policy_validator_promotes_exact_unclassified_hessian_handoff(
@@ -1157,9 +1175,7 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
         "input_geometry_sha256": spec["input_geometry_sha256"],
         "input_artifact_kind": spec["input_artifact_kind"],
         "input_artifact_sha256": spec["input_artifact_sha256"],
-        "requested_settings_sha256": spec[
-            "requested_settings_sha256"
-        ],
+        "requested_settings_sha256": spec["requested_settings_sha256"],
         "applied_settings_sha256": spec["applied_settings_sha256"],
         "project_yaml_digest": project.sha256,
         "settings_digest": spec["settings_digest"],
@@ -1186,9 +1202,7 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
             ]
         ),
         "atomic_numbers": np.asarray([8, 1, 1]),
-        "mo_energy": np.asarray(
-            [-20.0, -1.0, -0.8, -0.6, -0.4, 0.5]
-        ),
+        "mo_energy": np.asarray([-20.0, -1.0, -0.8, -0.6, -0.4, 0.5]),
         "mo_occ": np.asarray([2.0, 2.0, 2.0, 2.0, 2.0, 0.0]),
         "spin_square": np.asarray(0.0),
         "spin_square_effective_multiplicity": np.asarray(1.0),
@@ -1230,26 +1244,20 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
             "state": "validated",
             "fake": False,
             "child_returncode": 0,
-                "engine_complete": True,
-                "scientifically_validated": True,
-                "scientific_validation_state": "unclassified",
-                "run_id": spec["run_id"],
+            "engine_complete": True,
+            "scientifically_validated": True,
+            "scientific_validation_state": "unclassified",
+            "run_id": spec["run_id"],
             "run_nonce": spec["run_nonce"],
             "script_sha256": bound_provenance["script_sha256"],
-            "input_receipt_sha256": bound_provenance[
-                "input_receipt_sha256"
-            ],
+            "input_receipt_sha256": bound_provenance["input_receipt_sha256"],
             "environment_receipt_sha256": "b" * 64,
             "input_geometry_sha256": spec["input_geometry_sha256"],
-                "input_artifact_kind": spec["input_artifact_kind"],
-                "project_yaml_sha256": project.sha256,
-                "input_artifact_sha256": spec["input_artifact_sha256"],
-            "requested_settings_sha256": spec[
-                "requested_settings_sha256"
-            ],
-            "applied_settings_sha256": spec[
-                "applied_settings_sha256"
-            ],
+            "input_artifact_kind": spec["input_artifact_kind"],
+            "project_yaml_sha256": project.sha256,
+            "input_artifact_sha256": spec["input_artifact_sha256"],
+            "requested_settings_sha256": spec["requested_settings_sha256"],
+            "applied_settings_sha256": spec["applied_settings_sha256"],
             "result_sha256": result.sha256,
             "findings": [],
         },
@@ -1261,16 +1269,14 @@ def test_nonzero_wrapper_still_inspects_digest_bound_pyscf_result(
     )
     outputs = (result, run_artifact)
 
-    engine = _inspect_pyscf_engine_observation(
-        outputs, launch_ambiguous=False
-    )
+    engine = _inspect_pyscf_engine_observation(outputs, launch_ambiguous=False)
     evaluation = CommandCompiledToolHostV1._evaluate_execution_outputs(
         program="pyscf",
         jobtype="sp",
-            charge=0,
-            multiplicity=1,
-            expected_input_artifact=initial,
-            expected_project_artifact=project,
+        charge=0,
+        multiplicity=1,
+        expected_input_artifact=initial,
+        expected_project_artifact=project,
         output_artifacts=outputs,
         exit_status=17,
         expected_environment_receipt_sha256="b" * 64,
@@ -1482,17 +1488,19 @@ def test_orca_neb_execution_requires_path_and_ts_convergence(
         assert evaluation.findings == ()
     else:
         assert expected_finding in evaluation.findings
-    assert evaluation.observations["orca"]["neb_converged"] is (
-        neb_converged
-    )
+    assert evaluation.observations["orca"]["neb_converged"] is (neb_converged)
     assert evaluation.observations["orca"]["ts_converged"] is ts_converged
 
 
 def test_live_prompt_preserves_typed_edges_and_evidence_bounded_alternatives():
     prompt = _system_prompt(None)
 
-    assert "do not convert a presentation sequence into a control edge" in prompt
-    assert "SP(initial geometry) and OPT(initial geometry) are siblings" in prompt
+    assert (
+        "do not convert a presentation sequence into a control edge" in prompt
+    )
+    assert (
+        "SP(initial geometry) and OPT(initial geometry) are siblings" in prompt
+    )
     assert "Bind scientific identity only to a geometry_xyz" in prompt
     assert "a workflow_draft alone is not the typed scientific DAG" in prompt
     assert "loader-supported, preview-conformant" in prompt

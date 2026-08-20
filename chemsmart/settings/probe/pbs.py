@@ -47,7 +47,7 @@ def _stanzas(stdout: str, header: str) -> list[tuple[str, dict[str, str]]]:
         if is_header(raw):
             if name:
                 records.append((name, fields))
-            name = raw[len(header):].strip() if header else raw.strip()
+            name = raw[len(header) :].strip() if header else raw.strip()
             fields = {}
             last_key = ""
             continue

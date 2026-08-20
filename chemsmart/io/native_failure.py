@@ -25,11 +25,10 @@ is usually the thing a reader needs to see.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from itertools import chain
-import re
 from typing import Iterable
-
 
 _SCHEMA_VERSION = "chemsmart.native-failure-summary.v1"
 _MAX_DIAGNOSTICS = 3
@@ -205,14 +204,19 @@ _XTB_RULES = (
     (
         "input_syntax",
         (
-            re.compile(r"\bcould not read\b.*\b(?:file|input|geometry)\b", re.I),
+            re.compile(
+                r"\bcould not read\b.*\b(?:file|input|geometry)\b", re.I
+            ),
             re.compile(r"\bunknown\b.*\b(?:argument|option|keyword)\b", re.I),
         ),
     ),
     (
         "method_unavailable",
         (
-            re.compile(r"\bparameter(?:s|isation|ization)?\b.*\bnot\b.*\bavailable\b", re.I),
+            re.compile(
+                r"\bparameter(?:s|isation|ization)?\b.*\bnot\b.*\bavailable\b",
+                re.I,
+            ),
             re.compile(r"\bno parameters\b.*\belement\b", re.I),
         ),
     ),
@@ -367,9 +371,7 @@ def _summarize(
         (candidate for candidate, _patterns in rules if matches[candidate]),
         "native_runtime" if explicit_error else "incomplete_output",
     )
-    diagnostic_candidates = list(
-        _CANONICAL_DIAGNOSTICS[program][error_class]
-    )
+    diagnostic_candidates = list(_CANONICAL_DIAGNOSTICS[program][error_class])
     diagnostics: list[str] = []
     for line in diagnostic_candidates:
         _append_bounded(diagnostics, line)

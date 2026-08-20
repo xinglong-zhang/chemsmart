@@ -142,9 +142,6 @@ def process_pipeline(ctx, *args, **kwargs):
         raise ValueError(f"Invalid job type: {type(job)}.")
 
 
-
-
-
 if __name__ == "__main__":
     obj: dict[str, str] = {}
     try:

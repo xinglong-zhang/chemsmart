@@ -7,11 +7,9 @@
    :align: center
 
 CHEMSMART is a Python-based toolkit for the automatic creation of input files, submission scripts, and analysis of
-quantum chemistry simulation jobs. It is designed as a canonical hub for
-controlling multiple computational-chemistry programs through one command-line
-interface and validated project YAML files. Scientific settings remain visible
-and reusable while CHEMSMART translates them into each backend's generated
-artifacts.
+quantum chemistry simulation jobs. It is designed as a canonical hub for controlling multiple computational-chemistry
+programs through one command-line interface and validated project YAML files. Scientific settings remain visible and
+reusable while CHEMSMART translates them into each backend's generated artifacts.
 
 It uses the same submission command regardless of the queueing system (SLURM, Torque, or PBS) used by any High
 Performance Computing (HPC) cluster.
@@ -19,33 +17,28 @@ Performance Computing (HPC) cluster.
 Users can customize their own HPC server settings and project settings to run different jobs without modifying the
 source code.
 
-For a headless Linux target-host example, begin with
-:doc:`installation-ubuntu-cpu-server`. Linux, macOS and HPC hosts must each be
-validated from their observed program installations and resource settings.
-For model-driven research using the same CLI and project layer, see
-:doc:`agent-workflows`.
+For a headless Linux target-host example, begin with :doc:`installation-ubuntu-cpu-server`. Linux, macOS and HPC hosts
+must each be validated from their observed program installations and resource settings. For model-driven research using
+the same CLI and project layer, see :doc:`agent-workflows`.
 
 ******************************
  Provider-neutral agent usage
 ******************************
 
-The agent surface uses the same project loaders and CLI compiler as direct
-CHEMSMART commands. A model proposes typed scientific intent rather than
-authoring backend-native input or shell commands.
+The agent surface uses the same project loaders and CLI compiler as direct CHEMSMART commands. A model proposes typed
+scientific intent rather than authoring backend-native input or shell commands.
 
-``chemsmart agent plan`` creates a project-backed workflow and safe previews
-without invoking a chemistry engine. Real execution begins only after a human
-reviews and approves the exact workflow packet. The provider-free executor then
-runs the approved DAG without asking a model to reinterpret it.
+``chemsmart agent plan`` creates a project-backed workflow and safe previews without invoking a chemistry engine. Real
+execution begins only after a human reviews and approves the exact workflow packet. The provider-free executor then runs
+the approved DAG without asking a model to reinterpret it.
 
-.. code-block:: bash
+.. code:: bash
 
    chemsmart agent plan --provider PROFILE --task-file research-task.txt \
      --workspace ./agent-workspace
 
-Use :doc:`agent-workflows` for review, approval, deterministic execution, and
-provider configuration. CHEMSMART, not the model, resolves project artifacts,
-canonical commands, environment availability, approvals, terminal state, and
+Use :doc:`agent-workflows` for review, approval, deterministic execution, and provider configuration. CHEMSMART, not the
+model, resolves project artifacts, canonical commands, environment availability, approvals, terminal state, and
 validation.
 
 **********

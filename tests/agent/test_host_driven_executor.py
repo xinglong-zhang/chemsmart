@@ -19,9 +19,9 @@ import pytest
 from chemsmart.agent import executor as executor_module
 from chemsmart.agent._contracts import canonical_sha256
 from chemsmart.agent.execution import (
+    argv_shape,
     build_workflow_run_state,
     derive_ready_node_ids,
-    argv_shape,
     invocation_identity_sha256,
 )
 from chemsmart.agent.workflows import (

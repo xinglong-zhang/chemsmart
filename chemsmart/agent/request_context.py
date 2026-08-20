@@ -28,15 +28,24 @@ class ProviderNetworkBudgetV1:
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.provider-network-budget.v1":
             raise ContractError("unsupported provider network budget schema")
-        if not self.allowed_provider.strip() or not self.endpoint_origin.strip():
+        if (
+            not self.allowed_provider.strip()
+            or not self.endpoint_origin.strip()
+        ):
             raise ContractError("provider budget identity must not be empty")
         if not 1 <= self.max_concurrency <= 4:
             raise ContractError("provider concurrency must be within [1, 4]")
-        if min(
-            self.max_input_tokens_per_request,
-            self.max_output_tokens_per_request,
-        ) < 1 or self.task_wall_time_seconds <= 0:
-            raise ContractError("provider token and wall-time bounds are required")
+        if (
+            min(
+                self.max_input_tokens_per_request,
+                self.max_output_tokens_per_request,
+            )
+            < 1
+            or self.task_wall_time_seconds <= 0
+        ):
+            raise ContractError(
+                "provider token and wall-time bounds are required"
+            )
         body = {
             "schema_version": self.schema_version,
             "allowed_provider": self.allowed_provider,
@@ -64,7 +73,9 @@ class RequestContextProvenanceV1:
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.request-context-provenance.v1":
-            raise ContractError("unsupported request context provenance schema")
+            raise ContractError(
+                "unsupported request context provenance schema"
+            )
         for name, digest in (
             ("task_spec_sha256", self.task_spec_sha256),
             ("prompt_sha256", self.prompt_sha256),
@@ -110,7 +121,11 @@ class ProviderAttemptReceiptV1:
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.provider-attempt-receipt.v1":
             raise ContractError("unsupported provider attempt receipt schema")
-        if not self.attempt_id or not self.provider or not self.endpoint_origin:
+        if (
+            not self.attempt_id
+            or not self.provider
+            or not self.endpoint_origin
+        ):
             raise ContractError("provider attempt identity must not be empty")
         for name, digest in (
             ("request_context_sha256", self.request_context_sha256),
@@ -130,14 +145,19 @@ class ProviderAttemptReceiptV1:
             "protocol_failed",
         }:
             raise ContractError("invalid provider attempt status")
-        if min(
-            self.latency_ms,
-            self.input_tokens,
-            self.output_tokens,
-            self.reasoning_tokens,
-            self.retry_ordinal,
-        ) < 0:
-            raise ContractError("provider attempt counters must be non-negative")
+        if (
+            min(
+                self.latency_ms,
+                self.input_tokens,
+                self.output_tokens,
+                self.reasoning_tokens,
+                self.retry_ordinal,
+            )
+            < 0
+        ):
+            raise ContractError(
+                "provider attempt counters must be non-negative"
+            )
         body = {
             key: value
             for key, value in self.__dict__.items()

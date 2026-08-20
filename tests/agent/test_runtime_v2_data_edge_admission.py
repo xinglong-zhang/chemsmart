@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from chemsmart.agent._contracts import ContractError, canonical_data, canonical_sha256
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_data,
+    canonical_sha256,
+)
 from chemsmart.agent.execution import (
     FrozenWorkflowApprovalV1,
     OptimizedGeometryHandoffV1,
@@ -18,7 +22,9 @@ from chemsmart.agent.execution import (
     derive_ready_node_ids,
     transition_workflow_node,
 )
-from chemsmart.agent.runtime.records import frozen_workflow_approval_from_record
+from chemsmart.agent.runtime.records import (
+    frozen_workflow_approval_from_record,
+)
 from chemsmart.agent.workflows import (
     MaterializedNodeV1,
     ScientificWorkflowEdgeV2,
@@ -99,9 +105,7 @@ def _frontier(*, state: str = "previewed", producer_stage: str = "opt"):
 
 
 def _approval(*, producer_stage: str = "opt"):
-    plan, resources, materialized = _frontier(
-        producer_stage=producer_stage
-    )
+    plan, resources, materialized = _frontier(producer_stage=producer_stage)
     approval = build_frozen_workflow_approval(
         approval_id="water-approval",
         plan=plan,
@@ -113,7 +117,8 @@ def _approval(*, producer_stage: str = "opt"):
 
 
 def _result_validation_receipt(
-    *, state: str = "valid",
+    *,
+    state: str = "valid",
 ) -> ProgramResultValidationReceiptV1:
     findings = (
         ()
@@ -140,7 +145,9 @@ def _result_validation_receipt(
         "environment_validation_sha256": "",
         "stationary_point_policy_sha256": "",
         "output_artifacts": (),
-        "observations": {"state": "validated" if state == "valid" else "failed"},
+        "observations": {
+            "state": "validated" if state == "valid" else "failed"
+        },
         "findings": findings,
         "state": state,
     }
@@ -237,9 +244,9 @@ def test_frozen_approval_records_preview_and_exact_future_selection_rule():
     _, _, approval = _approval()
 
     assert approval.execution_admissible is True
-    assert approval.materialized_preview_bindings[0].preflight_receipt_sha256 == (
-        "2" * 64
-    )
+    assert approval.materialized_preview_bindings[
+        0
+    ].preflight_receipt_sha256 == ("2" * 64)
     rule = approval.producer_edge_rules[0]
     assert rule.selection_rule == "validated_optimized_geometry"
     assert rule.environment_receipt_sha256 == "f" * 64

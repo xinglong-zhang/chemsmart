@@ -154,8 +154,6 @@ def test_the_registry_carries_no_entry_no_surface_uses():
     used = set(_WITHHELD)
     for build in _SURFACES:
         for item in build().tool_definitions:
-            _property_names(
-                item["function"].get("parameters") or {}, used
-            )
+            _property_names(item["function"].get("parameters") or {}, used)
     stale = sorted(set(ARGUMENT_DESCRIPTIONS) - used)
     assert not stale, f"described but never exposed: {stale}"

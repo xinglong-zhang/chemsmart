@@ -142,7 +142,9 @@ def test_a_summary_without_a_host_still_reports_what_it_can():
 
 
 def test_a_successful_node_reports_no_failure():
-    assert _execution_failure_summary(_Receipt(execution_state="validated")) == ""
+    assert (
+        _execution_failure_summary(_Receipt(execution_state="validated")) == ""
+    )
 
 
 def test_xtb_failures_are_classified_and_quoted():
@@ -227,9 +229,9 @@ def test_xtb_native_failure_has_a_production_producer():
     from chemsmart.agent import tool_runtime
 
     source = inspect.getsource(tool_runtime)
-    assert "summarize_xtb_native_failure" in source, (
-        "xTB is release-qualified; its failure summary needs a real caller"
-    )
-    assert 'xtb_observation["native_failure"]' in source, (
-        "the summary must land where _engine_lines_for can find it"
-    )
+    assert (
+        "summarize_xtb_native_failure" in source
+    ), "xTB is release-qualified; its failure summary needs a real caller"
+    assert (
+        'xtb_observation["native_failure"]' in source
+    ), "the summary must land where _engine_lines_for can find it"
