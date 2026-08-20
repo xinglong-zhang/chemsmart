@@ -344,6 +344,9 @@ class TestConfig:
         """_update_windows_env should write chemsmart paths into the registry."""
         cfg = Config()
         fake_pkg_path = str(tmp_path / "chemsmart")
+        # The registry write only happens for a source checkout.
+        Path(fake_pkg_path).mkdir()
+        (Path(fake_pkg_path) / "pyproject.toml").write_text("[project]\n")
 
         mock_key = MagicMock()
         # Simulate empty existing PATH and PYTHONPATH
@@ -819,3 +822,34 @@ class TestConfigurePathsInteractively:
             cfg.configure_paths_interactively()
 
         mock_update.assert_not_called()
+
+
+class TestWheelInstallGuard:
+    """A wheel install must not export site-packages into shell state."""
+
+    def _config_rooted_at(self, root):
+        cfg = Config()
+        patcher = patch.object(
+            type(cfg),
+            "chemsmart_package_path",
+            new_callable=lambda: property(lambda self: str(root)),
+        )
+        return cfg, patcher
+
+    def test_source_checkout_exports_paths(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        (tmp_path / "pyproject.toml").write_text("[project]\n")
+        cfg, patcher = self._config_rooted_at(tmp_path)
+        with patcher:
+            assert cfg.is_source_checkout
+            assert any("PYTHONPATH" in line for line in cfg.env_vars)
+
+    def test_wheel_install_writes_no_exports(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SHELL", "/bin/bash")
+        cfg, patcher = self._config_rooted_at(tmp_path)  # no pyproject.toml
+        with patcher:
+            assert not cfg.is_source_checkout
+            assert cfg.env_vars == []
+            assert cfg.ps_env_vars == [
+                "Set-Alias -Name chemsmart -Value chemsmart.exe"
+            ]

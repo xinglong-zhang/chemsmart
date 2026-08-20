@@ -90,6 +90,18 @@ class Config:
         logger.debug(f"chemsmart package path: {chemsmart_path}")
         return chemsmart_path
 
+    @property
+    def is_source_checkout(self):
+        """True when chemsmart runs from a source tree, not a wheel.
+
+        For a wheel install the resolved root is site-packages; exporting
+        it on PATH adds directories with no executables, and exporting it
+        on PYTHONPATH shadows every other environment's packages in every
+        shell and scheduler job. Only a source checkout gets shell
+        exports.
+        """
+        return (Path(self.chemsmart_package_path) / "pyproject.toml").is_file()
+
     # ------------------------------------------------------------------ #
     # 2. Conda detection                                                    #
     # ------------------------------------------------------------------ #
@@ -181,6 +193,12 @@ class Config:
         """
         if platform.system() == "Windows" and not os.environ.get("SHELL"):
             return []
+        if not self.is_source_checkout:
+            logger.info(
+                "Installed from a wheel; the 'chemsmart' entry point is "
+                "already on PATH, so no shell exports are written."
+            )
+            return []
 
         return [
             f'export PATH="{self.chemsmart_package_path}:$PATH"',
@@ -261,6 +279,10 @@ class Config:
               environment's ``Scripts/`` directory after a successful
               ``pip install``.
         """
+        if not self.is_source_checkout:
+            # A wheel install needs only the alias; exporting
+            # site-packages on PYTHONPATH shadows other environments.
+            return ["Set-Alias -Name chemsmart -Value chemsmart.exe"]
         pkg_path = str(self.chemsmart_package_path)
         return [
             f'$env:PYTHONPATH = "{pkg_path};$env:PYTHONPATH"',
@@ -291,6 +313,12 @@ class Config:
         POSIX shell (Git Bash) nor an active PowerShell session.
         Delegates to :func:`chemsmart.utils.io.update_windows_env`.
         """
+        if not self.is_source_checkout:
+            logger.info(
+                "Installed from a wheel; the 'chemsmart' entry point is "
+                "already on PATH, so no registry paths are written."
+            )
+            return
         pkg_path = str(self.chemsmart_package_path)
         paths_to_add = [
             pkg_path,
