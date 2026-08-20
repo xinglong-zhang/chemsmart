@@ -39,7 +39,11 @@ def _tool_response(*, call_id="call-1", arguments="{}", content=None):
 
 
 def _config():
-    return DeepSeekV4FlashConfigV1(model="deepseek-v4-flash")
+    return DeepSeekV4FlashConfigV1(
+        model="deepseek-v4-flash",
+        context_tokens=131072,
+        max_output_tokens=8192,
+    )
 
 
 def test_null_content_is_normalized_only_for_private_tool_continuation():

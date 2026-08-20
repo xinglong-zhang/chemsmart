@@ -118,8 +118,8 @@ def test_agent_yaml_profile_override_selects_one_explicit_attempt(tmp_path):
 def test_deepseek_adapter_uses_the_explicit_profile_model(tmp_path):
     path = _write_config(tmp_path / "agent.yaml")
     content = path.read_text(encoding="utf-8").replace(
-        "model: deepseek-v4-flash\n    base_url: https://api.deepseek.com",
-        "model: deepseek-reasoner\n    base_url: https://api.deepseek.com",
+        "model: deepseek-v4-flash\n",
+        "model: deepseek-reasoner\n",
     )
     path.write_text(content, encoding="utf-8")
 

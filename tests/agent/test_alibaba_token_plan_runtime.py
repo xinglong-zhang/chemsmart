@@ -29,7 +29,7 @@ def _sse(*chunks):
     return io.BytesIO(b"".join(lines))
 
 
-def test_qwen_payload_uses_xhigh_and_omits_conflicting_limits():
+def test_qwen_payload_uses_xhigh_and_an_explicit_output_limit():
     session = Qwen38MaxToolSession(
         transport=lambda payload: payload,
         messages=[{"role": "user", "content": "Plan."}],
@@ -42,9 +42,9 @@ def test_qwen_payload_uses_xhigh_and_omits_conflicting_limits():
     assert payload["preserve_thinking"] is True
     assert payload["stream"] is True
     assert payload["stream_options"] == {"include_usage": True}
+    assert payload["max_tokens"] == 262_144
     assert "thinking_budget" not in payload
     assert "thinking" not in payload
-    assert "max_tokens" not in payload
     assert "max_completion_tokens" not in payload
 
 
@@ -54,6 +54,8 @@ def test_token_plan_payload_uses_profile_selected_deepseek_model():
         messages=[{"role": "user", "content": "Plan."}],
         config=AlibabaTokenPlanConfigV1(
             model="deepseek-v4-flash-0731",
+            context_tokens=1_000_000,
+            max_output_tokens=262_144,
             reasoning_effort="max",
         ),
     )

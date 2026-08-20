@@ -17,19 +17,27 @@ from chemsmart.agent.live_session import _preview_server_profile
 from chemsmart.settings.capabilities import PROGRAM_CAPABILITIES
 
 
-def test_v1_agent_programs_exclude_human_only_programs_and_gpu_engine():
+def test_v1_agent_programs_exclude_human_only_programs_and_gpu_execution():
     records = {
         item.program: item for item in load_program_capabilities().programs
     }
 
     assert set(records) == {"gaussian", "orca", "pyscf", "xtb"}
-    assert records["pyscf"].engines == ("cpu",)
-    assert "gpu" in PROGRAM_CAPABILITIES["pyscf"].engines
+    assert records["pyscf"].engines == ("cpu", "gpu")
+    assert not [
+        pair
+        for record in records.values()
+        for pair in record.execution_engine_job_pairs
+        if pair[0] == "gpu"
+    ]
     assert "nciplot" in PROGRAM_CAPABILITIES
     assert records["gaussian"].execution_engine_job_pairs == ()
     assert records["orca"].execution_engine_job_pairs == (
         ("cpu", "opt"),
+        ("cpu", "scan"),
         ("cpu", "sp"),
+        ("cpu", "td"),
+        ("cpu", "ts"),
     )
     assert records["pyscf"].execution_engine_job_pairs == (
         ("cpu", "hess"),

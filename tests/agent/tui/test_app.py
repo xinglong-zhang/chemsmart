@@ -50,12 +50,16 @@ def test_tui_launches_and_exposes_explicit_approval_chain(tmp_path: Path):
 
 
 def test_approval_surface_displays_deferred_stage_and_reason(tmp_path: Path):
+    secret = tmp_path / "unused.env"
+    secret.write_text("PROVIDER_KEY=not-used\n", encoding="utf-8")
+    envelope = tmp_path / "unused.json"
+    envelope.write_text("{}\n", encoding="utf-8")
     app = ChemSmartAgentApp(
         AgentTuiController(
             AgentSessionConfigV1(
                 workspace=tmp_path,
-                secret_file=tmp_path / "unused.env",
-                execution_envelope_file=tmp_path / "unused.json",
+                secret_file=secret,
+                execution_envelope_file=envelope,
                 review_file=tmp_path / "review.json",
             )
         ),
@@ -113,7 +117,11 @@ def test_approval_surface_displays_deferred_stage_and_reason(tmp_path: Path):
         console.print(item)
     transcript = console.export_text()
 
-    assert "irc" in transcript
-    assert "Deferred" in transcript
-    assert "IRC execution is not release-qualified" in transcript
-    assert "Deferred stages remain unapproved and will not launch: irc" in transcript
+    flattened = " ".join(transcript.replace("\u2502", " ").split())
+    assert "irc" in flattened
+    assert "Deferred" in flattened
+    assert "IRC execution is not release-qualified" in flattened
+    assert (
+        "Deferred stages remain unapproved and will not launch: irc"
+        in flattened
+    )
