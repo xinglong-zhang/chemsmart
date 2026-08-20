@@ -32,7 +32,7 @@ class AgentTuiPhase(str, Enum):
 @dataclass(frozen=True)
 class AgentSessionConfigV1:
     workspace: Path
-    secret_file: Path
+    secret_file: Path | None = None
     provider: str | None = None
     provider_config_file: Path | None = None
     execution_envelope_file: Path | None = None
@@ -42,13 +42,15 @@ class AgentSessionConfigV1:
 
     def __post_init__(self) -> None:
         workspace = self.workspace.expanduser().resolve()
-        secret = self.secret_file.expanduser().resolve()
         if not workspace.is_dir() or workspace.is_symlink():
             raise ContractError("TUI workspace must be a current directory")
-        if not secret.is_file() or secret.is_symlink():
-            raise ContractError(
-                "TUI secret file must be a current regular file"
-            )
+        secret = self.secret_file
+        if secret is not None:
+            secret = secret.expanduser().resolve()
+            if not secret.is_file() or secret.is_symlink():
+                raise ContractError(
+                    "TUI secret file must be a current regular file"
+                )
         review = self.review_file
         envelope = self.execution_envelope_file
         if envelope is None and review is not None:

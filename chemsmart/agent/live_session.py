@@ -371,7 +371,7 @@ def run_live_agent_session(
     task: str,
     provider: str | None,
     provider_config_file: str | Path | None = None,
-    secret_file: str | Path,
+    secret_file: str | Path | None = None,
     workspace: str | Path,
     execution_enabled: bool,
     approval_file: str | Path | None,

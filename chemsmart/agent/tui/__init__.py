@@ -8,7 +8,7 @@ from pathlib import Path
 def launch_tui(
     *,
     workspace: str | Path,
-    secret_file: str | Path,
+    secret_file: str | Path | None = None,
     provider: str | None = None,
     provider_config_file: str | Path | None = None,
     execution_envelope_file: str | Path | None = None,
@@ -38,7 +38,7 @@ def launch_tui(
 
     config = AgentSessionConfigV1(
         workspace=Path(workspace),
-        secret_file=Path(secret_file),
+        secret_file=Path(secret_file) if secret_file is not None else None,
         provider=provider,
         provider_config_file=(
             Path(provider_config_file)

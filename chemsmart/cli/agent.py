@@ -35,12 +35,6 @@ def _task_options(function):
             help="Provider YAML; defaults to ~/.chemsmart/agent/agent.yaml.",
         ),
         click.option(
-            "--secret-file",
-            type=click.Path(exists=True, dir_okay=False, path_type=Path),
-            required=True,
-            help="Secret assignment file parsed as data; it is never sourced.",
-        ),
-        click.option(
             "--workspace",
             type=click.Path(exists=True, file_okay=False, path_type=Path),
             required=True,
@@ -89,11 +83,12 @@ def _human_artifact(entry: str) -> str:
 
 def _resolved_session_paths(
     workspace: Path | None,
-    secret_file: Path | None,
     execution_envelope: Path | None,
     identity_manifest: Path | None,
-) -> tuple[Path, Path, Path | None, Path | None, tuple[str, ...]]:
+) -> tuple[Path, Path | None, Path | None, tuple[str, ...]]:
     """Fill the interactive defaults, announcing every discovery."""
+
+    from chemsmart.agent.api_access import default_agent_keys_path
 
     notes: list[str] = []
     if workspace is None:
@@ -101,19 +96,17 @@ def _resolved_session_paths(
         notes.append(
             f"Using the current directory as the workspace: {workspace}"
         )
-    if secret_file is None:
-        default_secret = Path.home() / ".chemsmart" / "agent" / "api.env"
-        if default_secret.is_file():
-            secret_file = default_secret
-            notes.append(
-                "Using the credential assignment at "
-                "~/.chemsmart/agent/api.env"
-            )
-        else:
-            raise click.UsageError(
-                "--secret-file is required; no default exists at "
-                "~/.chemsmart/agent/api.env"
-            )
+    keys_store = default_agent_keys_path()
+    if keys_store.is_file():
+        notes.append(
+            f"Credentials resolve from the managed key store {keys_store} "
+            "(an exported environment variable overrides it)"
+        )
+    else:
+        notes.append(
+            "No stored credentials yet -- export the provider key or run "
+            "'chemsmart config agent'"
+        )
     if execution_envelope is None:
         candidate = workspace / "execution-envelope.yaml"
         if candidate.is_file():
@@ -130,7 +123,7 @@ def _resolved_session_paths(
                 "Using molecular identities from identity-manifest.yaml "
                 "(discovered in the workspace)"
             )
-    return workspace, secret_file, execution_envelope, identity_manifest, tuple(notes)
+    return workspace, execution_envelope, identity_manifest, tuple(notes)
 
 
 def _read_task(task: str | None, task_file: Path | None) -> str:
@@ -187,7 +180,6 @@ def plan(
     task_file,
     provider,
     provider_config,
-    secret_file,
     workspace,
     analysis_completion_file,
     identity_manifest,
@@ -212,7 +204,6 @@ def plan(
         task=_read_task(task, task_file),
         provider=provider.lower() if provider else None,
         provider_config_file=provider_config,
-        secret_file=secret_file,
         workspace=workspace,
         execution_enabled=False,
         approval_file=None,
@@ -392,13 +383,6 @@ def review(
     help="Provider YAML; defaults to ~/.chemsmart/agent/agent.yaml.",
 )
 @click.option(
-    "--secret-file",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default=None,
-    help="Secret assignment file parsed as data; defaults to "
-    "~/.chemsmart/agent/api.env when that file exists.",
-)
-@click.option(
     "--execution-envelope",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
@@ -440,7 +424,6 @@ def review(
 def tui(
     provider,
     provider_config,
-    secret_file,
     execution_envelope,
     review_file,
     workspace,
@@ -452,15 +435,14 @@ def tui(
 
     from chemsmart.agent.tui import launch_tui
 
-    workspace, secret_file, execution_envelope, identity_manifest, notes = (
+    workspace, execution_envelope, identity_manifest, notes = (
         _resolved_session_paths(
-            workspace, secret_file, execution_envelope, identity_manifest
+            workspace, execution_envelope, identity_manifest
         )
     )
     try:
         launch_tui(
             workspace=workspace,
-            secret_file=secret_file,
             execution_envelope_file=execution_envelope,
             review_file=review_file,
             provider=provider.lower() if provider else None,
@@ -486,13 +468,6 @@ def tui(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
     help="Provider YAML; defaults to ~/.chemsmart/agent/agent.yaml.",
-)
-@click.option(
-    "--secret-file",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default=None,
-    help="Secret assignment file parsed as data; defaults to "
-    "~/.chemsmart/agent/api.env when that file exists.",
 )
 @click.option(
     "--execution-envelope",
@@ -527,7 +502,6 @@ def tui(
 def resume(
     provider,
     provider_config,
-    secret_file,
     execution_envelope,
     workspace,
     analysis_completion_file,
@@ -538,15 +512,14 @@ def resume(
 
     from chemsmart.agent.tui import launch_tui
 
-    workspace, secret_file, execution_envelope, identity_manifest, notes = (
+    workspace, execution_envelope, identity_manifest, notes = (
         _resolved_session_paths(
-            workspace, secret_file, execution_envelope, identity_manifest
+            workspace, execution_envelope, identity_manifest
         )
     )
     try:
         launch_tui(
             workspace=workspace,
-            secret_file=secret_file,
             execution_envelope_file=execution_envelope,
             review_file=None,
             provider=provider.lower() if provider else None,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -15,11 +16,13 @@ _T = TypeVar("_T")
 
 DEFAULT_KEY_LABELS = {
     "alibaba-token-plan": ("ALIBABA_TOKEN_PLAN_KEY",),
+    "anthropic": ("ANTHROPIC_API_KEY",),
     "deepseek": (
         "DEEPSEEK-api-key",
         "DEEPSEEK_API_KEY",
         "DEEPSEEK-API-KEY",
     ),
+    "openai": ("OPENAI_API_KEY",),
     "elsevier": ("ELSEVIER_API_KEY", "ELSIVIER_api_key"),
     "serpapi": ("SERPAPI_API_KEY", "SerpApi_api_key"),
     "tavily": ("TAVILY_API_KEY", "Tavily_api_key"),
@@ -30,7 +33,9 @@ DEFAULT_KEY_LABELS = {
 #: copy in the profile loader would be free to disagree with this one.
 PROVIDER_KEY_LABEL_TOKENS = {
     "alibaba-token-plan": "ALIBABA",
+    "anthropic": "ANTHROPIC",
     "deepseek": "DEEPSEEK",
+    "openai": "OPENAI",
     "elsevier": "ELS",
     "serpapi": "SERPAPI",
     "tavily": "TAVILY",
@@ -164,10 +169,31 @@ def parse_secret_file(path: str | Path) -> dict[str, str]:
     return result
 
 
+def default_agent_keys_path() -> Path:
+    """The managed key store `chemsmart config agent` writes."""
+
+    explicit = os.environ.get("CHEMSMART_AGENT_KEYS", "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    return Path.home() / ".chemsmart" / "agent" / "keys.env"
+
+
+def _environment_values(labels: tuple[str, ...]) -> dict[str, str]:
+    """Exported credentials matching the candidate labels, exact or folded."""
+
+    wanted = {normalize_key_label(label): label for label in labels}
+    found: dict[str, str] = {}
+    for name, value in os.environ.items():
+        label = wanted.get(normalize_key_label(name))
+        if label is not None and value.strip():
+            found[label] = value.strip()
+    return found
+
+
 def load_secret_lease(
     *,
     provider: str,
-    path: str | Path,
+    path: str | Path | None = None,
     label: str | None = None,
     ttl_seconds: float = 60.0,
     clock: Callable[[], float] = time.monotonic,
@@ -197,7 +223,22 @@ def load_secret_lease(
     )
     if not labels:
         raise ContractError("provider has no approved secret labels")
-    values = parse_secret_file(path)
+    if path is not None:
+        values = parse_secret_file(path)
+    else:
+        # No file was named: an exported environment variable wins, then
+        # the managed key store `chemsmart config agent` maintains.
+        values = _environment_values(tuple(labels))
+        if not values:
+            store = default_agent_keys_path()
+            if store.is_file():
+                values = parse_secret_file(store)
+        if not values:
+            raise ContractError(
+                f"no credential found for provider {provider!r}: export "
+                f"{labels[0]} in your shell, or store it with "
+                "'chemsmart config agent'"
+            )
     normalized = {}
     for file_label, value in values.items():
         normalized_label = _normalize_label(file_label)

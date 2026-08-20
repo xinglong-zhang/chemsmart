@@ -212,8 +212,6 @@ def _cli_args(tmp_path: Path) -> list[str]:
         "plan",
         "--task",
         "preview this calculation",
-        "--secret-file",
-        str(secret),
         "--workspace",
         str(workspace),
     ]
@@ -283,8 +281,6 @@ def test_agent_run_is_the_executor_and_fails_closed_on_plan_arguments(
             "run",
             "--task",
             "preview this calculation",
-            "--secret-file",
-            str(secret),
             "--workspace",
             str(workspace),
         ],

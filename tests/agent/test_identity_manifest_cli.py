@@ -195,8 +195,6 @@ def test_agent_run_loads_identity_manifest_into_existing_session_plumbing(
             "plan",
             "--task",
             "compare the two approved states",
-            "--secret-file",
-            str(secret),
             "--workspace",
             str(workspace),
             "--identity-manifest",

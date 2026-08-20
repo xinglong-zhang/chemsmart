@@ -30,8 +30,6 @@ class _Result:
 def _invoke_plan(tmp_path, monkeypatch, extra=()):
     workspace = tmp_path / "workspace"
     workspace.mkdir(exist_ok=True)
-    secret = tmp_path / "secret.env"
-    secret.write_text("KEY=value\n", encoding="utf-8")
 
     import chemsmart.agent.live_session as live_session
 
@@ -44,8 +42,6 @@ def _invoke_plan(tmp_path, monkeypatch, extra=()):
             "plan",
             "--task",
             "preview this calculation",
-            "--secret-file",
-            str(secret),
             "--workspace",
             str(workspace),
             *extra,
@@ -120,13 +116,14 @@ def test_review_summary_names_artifacts_and_drops_digests(
 def test_the_minimal_invocation_fills_and_announces_defaults(
     tmp_path, monkeypatch
 ):
-    """cwd workspace, home secret, discovered envelope+manifest — spoken."""
+    """cwd workspace, managed keys, discovered envelope+manifest — spoken."""
 
     home = tmp_path / "home"
     (home / ".chemsmart" / "agent").mkdir(parents=True)
-    secret = home / ".chemsmart" / "agent" / "api.env"
-    secret.write_text("KEY=value\n", encoding="utf-8")
+    keys = home / ".chemsmart" / "agent" / "keys.env"
+    keys.write_text("OPENAI_API_KEY=not-used\n", encoding="utf-8")
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CHEMSMART_AGENT_KEYS", raising=False)
 
     workspace = tmp_path / "task"
     workspace.mkdir()
@@ -152,7 +149,7 @@ def test_the_minimal_invocation_fills_and_announces_defaults(
 
     assert result.exit_code == 0, result.output
     assert captured["workspace"] == workspace
-    assert captured["secret_file"] == secret
+    assert "secret_file" not in captured
     assert captured["execution_envelope_file"] == (
         workspace / "execution-envelope.yaml"
     )
@@ -161,32 +158,44 @@ def test_the_minimal_invocation_fills_and_announces_defaults(
     )
     notes = " ".join(captured["discovery_notes"])
     assert "current directory as the workspace" in notes
-    assert "~/.chemsmart/agent/api.env" in notes
+    assert "managed key store" in notes
+    assert "keys.env" in notes
     assert "execution-envelope.yaml" in notes
     assert "identity-manifest.yaml" in notes
 
 
-def test_a_missing_default_secret_is_a_usage_error(tmp_path, monkeypatch):
+def test_missing_credentials_are_announced_not_fatal(tmp_path, monkeypatch):
+    """Launch proceeds; the note says how to store a key."""
+
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CHEMSMART_AGENT_KEYS", raising=False)
     workspace = tmp_path / "task"
     workspace.mkdir()
     monkeypatch.chdir(workspace)
 
+    captured = {}
+
+    import chemsmart.agent.tui as tui_package
+
+    monkeypatch.setattr(
+        tui_package, "launch_tui", lambda **kwargs: captured.update(kwargs)
+    )
+
     result = CliRunner().invoke(agent, ["tui"])
 
-    assert result.exit_code == 2
-    assert "--secret-file is required" in result.output
+    assert result.exit_code == 0, result.output
+    notes = " ".join(captured["discovery_notes"])
+    assert "No stored credentials yet" in notes
+    assert "chemsmart config agent" in notes
 
 
 def test_bare_agent_opens_the_terminal(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".chemsmart" / "agent").mkdir(parents=True)
-    (home / ".chemsmart" / "agent" / "api.env").write_text(
-        "KEY=value\n", encoding="utf-8"
-    )
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("CHEMSMART_AGENT_KEYS", raising=False)
     workspace = tmp_path / "task"
     workspace.mkdir()
     monkeypatch.chdir(workspace)
