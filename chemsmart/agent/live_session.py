@@ -2012,10 +2012,10 @@ def _conformance_engines(program: str) -> tuple[str, ...]:
     """Return the v1 agent preview engines ChemSmart declares."""
 
     from chemsmart.settings.capabilities import (
-        AGENT_PROGRAM_EXECUTION_ENGINES,
+        AGENT_PROGRAM_PREVIEW_ENGINES,
     )
 
-    return tuple(AGENT_PROGRAM_EXECUTION_ENGINES.get(program, ()))
+    return tuple(AGENT_PROGRAM_PREVIEW_ENGINES.get(program, ()))
 
 
 def _conformance_programs() -> tuple[str, ...]:

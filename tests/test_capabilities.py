@@ -10,7 +10,7 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.subcommands import PROGRAM_COMMAND_MODULES
 from chemsmart.cli.xtb import xtb
 from chemsmart.settings.capabilities import (
-    AGENT_PROGRAM_EXECUTION_ENGINES,
+    AGENT_PROGRAM_PREVIEW_ENGINES,
     AGENT_PROGRAM_JOBTYPES,
     AGENT_PROGRAMS,
     COMPUTATIONAL_PROGRAMS,
@@ -121,7 +121,7 @@ def test_derived_views_are_exact_registry_projections():
     assert AGENT_PROGRAMS == frozenset(
         {"gaussian", "orca", "pyscf", "xtb"}
     )
-    assert AGENT_PROGRAM_EXECUTION_ENGINES["pyscf"] == ("cpu",)
+    assert AGENT_PROGRAM_PREVIEW_ENGINES["pyscf"] == ("cpu", "gpu")
     assert AGENT_PROGRAM_JOBTYPES["pyscf"] == ("hess", "opt", "sp", "td")
     assert dict(PROGRAM_JOBTYPES) == {
         name: capability.jobtypes
@@ -227,7 +227,9 @@ def test_pyscf_agent_matrix_is_cpu_only_and_keeps_td_preview_only():
 
     assert ("cpu", "td") in preview_pairs
     assert ("cpu", "td") not in execution_pairs
-    assert not any(engine == "gpu" for engine, _jobtype in preview_pairs)
+    # GPU4PySCF is a declared preview surface (charter); execution is not.
+    assert any(engine == "gpu" for engine, _jobtype in preview_pairs)
+    assert not any(engine == "gpu" for engine, _jobtype in execution_pairs)
     assert {
         ("cpu", "sp"),
         ("cpu", "opt"),

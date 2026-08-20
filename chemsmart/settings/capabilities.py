@@ -702,7 +702,7 @@ PROGRAM_EXECUTION_ENGINES: Mapping[str, tuple[str, ...]] = MappingProxyType(
         for name, capability in PROGRAM_CAPABILITIES.items()
     }
 )
-AGENT_PROGRAM_EXECUTION_ENGINES: Mapping[str, tuple[str, ...]] = (
+AGENT_PROGRAM_PREVIEW_ENGINES: Mapping[str, tuple[str, ...]] = (
     MappingProxyType(
         {
             name: tuple(
@@ -793,7 +793,7 @@ def project_owns_parameter(program: str | None, parameter: str) -> bool:
 
 
 __all__ = [
-    "AGENT_PROGRAM_EXECUTION_ENGINES",
+    "AGENT_PROGRAM_PREVIEW_ENGINES",
     "AGENT_PROGRAM_JOBTYPES",
     "AGENT_PROGRAMS",
     "COMPUTATIONAL_PROGRAMS",
