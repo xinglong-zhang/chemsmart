@@ -112,6 +112,7 @@ def test_the_registry_knows_the_full_production_surface():
         "/deny",
         "/revise",
         "/status",
+        "/resume",
         "/capabilities",
         "/skills",
         "/skill",

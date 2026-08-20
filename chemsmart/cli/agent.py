@@ -416,6 +416,85 @@ def tui(
         raise click.ClickException(str(exc)) from exc
 
 
+@agent.command("resume")
+@click.option(
+    "--provider",
+    type=str,
+    default=None,
+    help="Named agent.yaml profile; defaults to its active profile.",
+)
+@click.option(
+    "--provider-config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Provider YAML; defaults to ~/.chemsmart/agent/agent.yaml.",
+)
+@click.option(
+    "--secret-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Secret assignment file parsed as data; it is never sourced.",
+)
+@click.option(
+    "--execution-envelope",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Optional local resource/program bounds for an execution review.",
+)
+@click.option(
+    "--workspace",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+    help="The workspace whose previous session should be restored.",
+)
+@click.option(
+    "--analysis-completion-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Host-owned JSON policy for receipt-based numerical analysis.",
+)
+@click.option(
+    "--identity-manifest",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="User-approved molecular identity and geometry bindings.",
+)
+@click.option(
+    "--plain",
+    is_flag=True,
+    help="Use an inline, no-mouse terminal mode for SSH and simple terminals.",
+)
+def resume(
+    provider,
+    provider_config,
+    secret_file,
+    execution_envelope,
+    workspace,
+    analysis_completion_file,
+    identity_manifest,
+    plain,
+):
+    """Reopen a workspace: its story, its runs, and any pending review."""
+
+    from chemsmart.agent.tui import launch_tui
+
+    try:
+        launch_tui(
+            workspace=workspace,
+            secret_file=secret_file,
+            execution_envelope_file=execution_envelope,
+            review_file=None,
+            provider=provider.lower() if provider else None,
+            provider_config_file=provider_config,
+            identity_manifest=identity_manifest,
+            analysis_completion_file=analysis_completion_file,
+            plain=plain,
+            resume=True,
+        )
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
 @agent.command("run")
 @click.option(
     "--approval-file",

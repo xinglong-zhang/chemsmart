@@ -40,6 +40,7 @@ from .monitor import (
 )
 from .panels import DagPanel, JobsPanel, phase_chip, wordmark
 from .report import looks_like_host_report, render_report_for_humans
+from . import resume as resume_module
 from .presentation import human_cli_operation, session_evidence_blocks
 from .review import render_review_blocks, resolve_project_yaml_texts
 from .runs import list_runs
@@ -117,11 +118,18 @@ class ChemSmartAgentApp(App[None]):
     ]
 
     def __init__(
-        self, controller: AgentTuiController, *, plain: bool = False
+        self,
+        controller: AgentTuiController,
+        *,
+        plain: bool = False,
+        resume: bool = False,
+        discovery_notes: tuple[str, ...] = (),
     ) -> None:
         super().__init__()
         self.controller = controller
         self.plain = plain
+        self.resume_requested = resume
+        self.discovery_notes = tuple(discovery_notes)
         self._busy = False
         self._tail_rows: dict[str, ToolRow] = {}
         self._tail_stop = threading.Event()
@@ -166,9 +174,22 @@ class ChemSmartAgentApp(App[None]):
                 "and the human enters /approve."
             )
         )
+        for note in self.discovery_notes:
+            self._write(Text(note, style="dim"))
         self._sync_phase("Ready for a scientific request")
         self.controller.on_run_directory = self._announce_run_directory
         self.query_one("#composer", Input).focus()
+        workspace = self.controller.config.workspace
+        if self.resume_requested:
+            self._resume([])
+        elif resume_module.has_history(workspace):
+            self._write(
+                Text(
+                    "Previous work exists in this workspace — /resume "
+                    "restores it.",
+                    style="dim",
+                )
+            )
 
     @on(Input.Submitted, "#composer")
     def submit(self, event: Input.Submitted) -> None:
@@ -231,6 +252,7 @@ class ChemSmartAgentApp(App[None]):
             "approve": self._approve,
             "deny": self._deny,
             "revise": self._revise,
+            "resume": self._resume,
             "skills": self._show_skills,
             "skill": self._tag_skill,
             "export": self._export_transcript,
@@ -530,6 +552,131 @@ class ChemSmartAgentApp(App[None]):
         dag = self.query_one("#dag-panel", DagPanel)
         if dag.display:
             dag.refresh_from(self._workflow_nodes)
+
+    def _resume(self, tail: list[str]) -> None:
+        if self._busy:
+            self.notify(
+                "Wait for the current host operation to finish first",
+                severity="warning",
+            )
+            return
+        workspace = self.controller.config.workspace
+        story = resume_module.workspace_story(workspace)
+        greeting = Table(
+            title="Resumed workspace", show_header=False, box=None
+        )
+        greeting.add_column("Field", style="bold cyan")
+        greeting.add_column("Value")
+        greeting.add_row("workspace", str(workspace))
+        if story.story is not None:
+            greeting.add_row("last task", story.story.task or "(not recorded)")
+            greeting.add_row("ended", story.story.ended)
+        else:
+            greeting.add_row("last task", "no planning session found")
+        self._write(Panel(greeting, title="Resume"))
+        if story.runs:
+            runs_table = Table(title="Runs in this workspace (newest first)")
+            runs_table.add_column("#", style="bold cyan")
+            runs_table.add_column("Workflow")
+            runs_table.add_column("Kind")
+            runs_table.add_column("State")
+            for index, row in enumerate(story.runs, start=1):
+                runs_table.add_row(
+                    str(index),
+                    row.workflow_id or row.name,
+                    row.kind,
+                    row.state + (" · /report " + str(index) if row.report_path else ""),
+                )
+            self._write(runs_table)
+        if story.story is not None and story.story.final_prose:
+            prose = story.story.final_prose
+            if looks_like_host_report(prose):
+                self._write(
+                    Panel(
+                        render_report_for_humans(prose),
+                        title="Analysis results",
+                    )
+                )
+            else:
+                self._write(Panel(Markdown(prose), title="Agent (previous session)"))
+        pending = story.pending
+        if pending is None:
+            self._sync_phase(
+                "Workspace restored; enter a new scientific request"
+            )
+            return
+        if pending.status == "approved_unexecuted":
+            self._write(
+                Panel(
+                    "A review in this workspace was approved but its run "
+                    "never started. The recorded approval is one-shot and "
+                    "still unconsumed; launch it exactly as approved:\n\n"
+                    f"{pending.recovery}",
+                    title="Approved, not yet run",
+                    border_style="yellow",
+                )
+            )
+            self._sync_phase("Workspace restored; the approved run awaits")
+            return
+        self._restore_pending_review(pending)
+
+    def _restore_pending_review(self, pending) -> None:
+        from chemsmart.agent.live_session import (
+            inspect_workflow_execution_replay,
+            load_workflow_execution_review,
+        )
+
+        workspace = self.controller.config.workspace
+        try:
+            report = inspect_workflow_execution_replay(
+                review_file=pending.path,
+                workspace=workspace,
+            )
+        except ContractError as exc:
+            self._write(
+                Panel(
+                    f"A stored review exists but cannot be re-presented: "
+                    f"{exc}",
+                    title="Pending review",
+                    border_style="yellow",
+                )
+            )
+            return
+        if report["missing_approved_artifacts"]:
+            missing = ", ".join(
+                str(item).split(":")[0]
+                for item in report["missing_approved_artifacts"]
+            )
+            self._write(
+                Panel(
+                    "A reviewed workflow is pending, but files it was "
+                    f"approved against are no longer in place ({missing}). "
+                    "No decision is offered on a run that must fail; plan "
+                    "the request again.",
+                    title="Pending review cannot be offered",
+                    border_style="yellow",
+                )
+            )
+            return
+        try:
+            review = load_workflow_execution_review(pending.path)
+            self.controller.restore_prepared_execution(review)
+        except ContractError as exc:
+            self._operation_failed("Resume", exc)
+            return
+        self._write(
+            Panel(
+                "The previous session prepared this workflow and no decision "
+                "was recorded. It is re-presented below for one fresh "
+                "decision.",
+                title="Pending review restored",
+                border_style="yellow",
+            )
+        )
+        self._present_request(review)
+        self._sync_phase(
+            "Review shown; /approve runs once, /revise or /deny declines"
+        )
 
     def _show_skills(self, tail: list[str]) -> None:
         from chemsmart.agent.skills import available_skill_ids

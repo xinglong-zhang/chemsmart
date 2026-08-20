@@ -16,6 +16,8 @@ def launch_tui(
     identity_manifest: str | Path | None = None,
     analysis_completion_file: str | Path | None = None,
     plain: bool = False,
+    resume: bool = False,
+    discovery_notes: tuple[str, ...] = (),
 ) -> None:
     """Launch the optional Textual application.
 
@@ -62,7 +64,12 @@ def launch_tui(
             else None
         ),
     )
-    app = ChemSmartAgentApp(AgentTuiController(config), plain=plain)
+    app = ChemSmartAgentApp(
+        AgentTuiController(config),
+        plain=plain,
+        resume=resume,
+        discovery_notes=tuple(discovery_notes),
+    )
     kwargs = {}
     if plain:
         app.animation_level = "none"

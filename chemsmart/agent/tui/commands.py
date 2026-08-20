@@ -69,6 +69,12 @@ COMMANDS: tuple[CommandSpecV1, ...] = (
         category="session",
     ),
     CommandSpecV1(
+        name="resume",
+        slash="/resume",
+        title="Restore this workspace's previous session and any pending review",
+        category="session",
+    ),
+    CommandSpecV1(
         name="skills",
         slash="/skills",
         title="List the domain skills the session can consult",
