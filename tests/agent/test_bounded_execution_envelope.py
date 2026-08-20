@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from click.testing import CliRunner
+import sys
+
 import pytest
 import yaml
 
@@ -128,7 +130,9 @@ def test_bounded_execution_cleans_only_runner_validated_successful_scratch(
 
     argv = host._real_execution_argv(invocation)
 
-    assert argv[:4] == (
+    assert argv[:6] == (
+        sys.executable,
+        "-m",
         "chemsmart",
         "run",
         "--no-fake",
@@ -614,7 +618,7 @@ def test_future_node_context_joins_same_engine_stages_by_capability(
                 edge_kind="data",
                 artifact_class="geometry_xyz",
                 producer_output_id="optimized-geometry",
-                consumer_input_id="geometry",
+                consumer_input_id="filename",
             ),
         ),
     )
@@ -659,6 +663,7 @@ def test_future_node_context_joins_same_engine_stages_by_capability(
     producer_engine = SimpleNamespace(
         program=program,
         selected_engine="cpu",
+        state="resolved",
         execution_ready=True,
         capability_receipt_sha256=producer_capability.receipt_sha256,
         program_binding_sha256="5" * 64,
@@ -667,6 +672,7 @@ def test_future_node_context_joins_same_engine_stages_by_capability(
     consumer_engine = SimpleNamespace(
         program=program,
         selected_engine="cpu",
+        state="resolved",
         execution_ready=True,
         capability_receipt_sha256=consumer_capability.receipt_sha256,
         program_binding_sha256="7" * 64,
@@ -675,6 +681,7 @@ def test_future_node_context_joins_same_engine_stages_by_capability(
     alternate_engine = SimpleNamespace(
         program=program,
         selected_engine="gpu",
+        state="resolved",
         execution_ready=True,
         capability_receipt_sha256=alternate_capability.receipt_sha256,
         program_binding_sha256="9" * 64,
@@ -688,7 +695,14 @@ def test_future_node_context_joins_same_engine_stages_by_capability(
                 SimpleNamespace(
                     node_id=f"{consumer_stage}-optimized",
                     project_role=project.artifact_id,
-                    inputs=(SimpleNamespace(producer_node_id="opt-initial"),),
+                    inputs=(
+                        SimpleNamespace(
+                            binding_id="filename",
+                            artifact_class="geometry_xyz",
+                            producer_node_id="opt-initial",
+                            producer_output_id="optimized-geometry",
+                        ),
+                    ),
                 ),
             ),
         )
@@ -1157,8 +1171,8 @@ def test_synthesized_future_invocation_binds_at_preflight_for_execution():
         program_binding_sha256=program_binding.binding_sha256,
         program="orca",
         selected_engine="cpu",
-        execution_ready=True,
         state="resolved",
+        execution_ready=True,
     )
     inspection = SimpleNamespace(receipt_sha256="3" * 64, status="valid")
     identity = SimpleNamespace(

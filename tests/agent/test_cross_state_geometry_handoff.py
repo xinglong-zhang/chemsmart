@@ -438,7 +438,7 @@ def test_future_bounded_node_context_uses_explicit_target_state(tmp_path):
                 edge_kind="data",
                 artifact_class="geometry_xyz",
                 producer_output_id="optimized-geometry",
-                consumer_input_id="geometry",
+                consumer_input_id="filename",
             ),
         ),
     )
@@ -459,6 +459,7 @@ def test_future_bounded_node_context_uses_explicit_target_state(tmp_path):
     engine = SimpleNamespace(
         program="pyscf",
         selected_engine="cpu",
+        state="resolved",
         execution_ready=True,
         capability_receipt_sha256=capability.receipt_sha256,
         program_binding_sha256="3" * 64,
@@ -482,7 +483,14 @@ def test_future_bounded_node_context_uses_explicit_target_state(tmp_path):
                 SimpleNamespace(
                     node_id="sp-anion-at-neutral-geometry",
                     project_role=project.artifact_id,
-                    inputs=(SimpleNamespace(producer_node_id="opt-neutral"),),
+                    inputs=(
+                        SimpleNamespace(
+                            binding_id="filename",
+                            artifact_class="geometry_xyz",
+                            producer_node_id="opt-neutral",
+                            producer_output_id="optimized-geometry",
+                        ),
+                    ),
                 ),
             ),
         )
