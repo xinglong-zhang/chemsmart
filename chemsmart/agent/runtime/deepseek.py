@@ -161,13 +161,27 @@ class DeepSeekTransportError(RuntimeError):
 
 
 class DeepSeekHttpsTransport:
-    """Minimal official HTTPS transport owned by one credential lease."""
+    """Minimal official HTTPS transport owned by one credential lease.
+
+    Provider adapters subclass this and override only the class attributes
+    and the two hooks (`_endpoint_is_registered`, `_api_key_is_leased`)
+    plus `_read_response`; the deadline discipline, header construction,
+    and sanitized failure ladder stay in one place.
+    """
 
     _ENDPOINT_ERROR = "DeepSeek transport requires the official endpoint"
+    _KEY_ERROR = "provider transport requires a leased credential"
+    _TIMEOUT_ERROR = "DeepSeek timeout must be positive"
+    _CLOSED_ERROR = "DeepSeek credential lease is closed"
+    _ACCEPT = "application/json"
 
     @staticmethod
     def _endpoint_is_registered(endpoint: str) -> bool:
         return _is_official_endpoint(endpoint)
+
+    @staticmethod
+    def _api_key_is_leased(api_key: str) -> bool:
+        return bool(api_key)
 
     def __init__(
         self,
@@ -180,13 +194,13 @@ class DeepSeekHttpsTransport:
     ) -> None:
         if not self._endpoint_is_registered(endpoint):
             raise ContractError(self._ENDPOINT_ERROR)
-        if not api_key:
-            raise ContractError("provider transport requires a leased credential")
+        if not self._api_key_is_leased(api_key):
+            raise ContractError(self._KEY_ERROR)
         policy = turn_deadlines or ProviderTurnDeadlinesV1()
         if timeout_seconds is not None:
             value = float(timeout_seconds)
             if value <= 0:
-                raise ContractError("DeepSeek timeout must be positive")
+                raise ContractError(self._TIMEOUT_ERROR)
             policy = ProviderTurnDeadlinesV1(
                 connect_seconds=min(policy.connect_seconds, value),
                 first_event_seconds=min(policy.first_event_seconds, value),
@@ -206,7 +220,7 @@ class DeepSeekHttpsTransport:
 
         value = float(timeout_seconds)
         if value <= 0:
-            raise ContractError("DeepSeek timeout must be positive")
+            raise ContractError(self._TIMEOUT_ERROR)
         self._next_turn_timeout_seconds = min(
             value, self.turn_deadlines.absolute_seconds
         )
@@ -214,9 +228,27 @@ class DeepSeekHttpsTransport:
     def public_deadline_record(self) -> dict[str, float]:
         return dict(self._last_deadline_record)
 
+    def _open_response(self, request, *, deadline):
+        """Resolve the bounded opener in the adapter's own module.
+
+        Each adapter module owns its opener name so a focused test can
+        substitute an in-memory transport for exactly one provider.
+        """
+
+        return open_bounded_https_response(request, deadline=deadline)
+
+    def _read_response(
+        self, response, *, deadline, payload: dict[str, Any]
+    ) -> Mapping[str, Any]:
+        raw = read_bounded_response_body(response, deadline=deadline)
+        decoded = json.loads(raw.decode("utf-8"))
+        if not isinstance(decoded, Mapping):
+            raise DeepSeekTransportError("invalid_response_shape")
+        return decoded
+
     def __call__(self, payload: dict[str, Any]) -> Mapping[str, Any]:
         if self._closed or not self._api_key:
-            raise ContractError("DeepSeek credential lease is closed")
+            raise ContractError(self._CLOSED_ERROR)
         encoded = json.dumps(
             payload, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
@@ -227,7 +259,7 @@ class DeepSeekHttpsTransport:
             headers={
                 "Authorization": "Bearer " + self._api_key,
                 "Content-Type": "application/json",
-                "Accept": "application/json",
+                "Accept": self._ACCEPT,
                 "User-Agent": "chemsmart-agent/1",
             },
         )
@@ -239,15 +271,13 @@ class DeepSeekHttpsTransport:
         self._next_turn_timeout_seconds = None
         self._last_deadline_record = deadline.public_record()
         try:
-            with open_bounded_https_response(
-                request, deadline=deadline
-            ) as response:
+            with self._open_response(request, deadline=deadline) as response:
                 if deadline.connected_at is None:
                     # Focused in-memory transports may inject an already-open
                     # response; the production opener marks this itself.
                     deadline.response_acquired()
-                raw = read_bounded_response_body(
-                    response, deadline=deadline
+                return self._read_response(
+                    response, deadline=deadline, payload=payload
                 )
         except ProviderDeadlineExceeded as exc:
             raise _deadline_transport_error(exc) from None
@@ -271,13 +301,8 @@ class DeepSeekHttpsTransport:
             raise DeepSeekTransportError("transport") from None
         except (HTTPException, ssl.SSLError, ConnectionError, OSError):
             raise DeepSeekTransportError("transport") from None
-        try:
-            decoded = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise DeepSeekTransportError("invalid_json") from exc
-        if not isinstance(decoded, Mapping):
-            raise DeepSeekTransportError("invalid_response_shape")
-        return decoded
 
     def close(self) -> None:
         self._api_key = ""
@@ -798,11 +823,19 @@ def _is_official_endpoint(endpoint: str) -> bool:
 
 
 def _http_error_class(status: int) -> str:
+    """One status classification for every registered provider transport."""
+
+    if status == 400:
+        return "request_invalid"
     if status == 401:
         return "credential_invalid"
     if status == 402:
         return "quota_exhausted"
+    if status == 404:
+        return "model_unavailable"
     if status == 429:
+        # Never read an untrusted error body here: a peer could drip it past
+        # the turn cap, and provider text must not enter Runtime evidence.
         return "rate_limited"
     if 500 <= status < 600:
         return "provider_5xx"

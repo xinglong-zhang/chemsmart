@@ -4,14 +4,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from http.client import HTTPException
 import json
-import ssl
 import time
 from typing import Any, Callable, Mapping
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request
 
 from chemsmart.agent._contracts import ContractError
 from chemsmart.agent.provider_config import (
@@ -22,19 +18,16 @@ from chemsmart.agent.provider_config import (
     ALIBABA_TOKEN_PLAN_PROVIDER,
 )
 from chemsmart.agent.runtime.deepseek import (
+    DeepSeekHttpsTransport,
     DeepSeekProtocolError,
     DeepSeekTransportError,
     DeepSeekV4ToolSession,
     ProviderCapabilitiesV1,
-    _deadline_transport_error,
     _require_explicit_model_id,
     _validate_token_limits,
 )
 from chemsmart.agent.runtime.transport import (
-    ProviderDeadlineExceeded,
-    ProviderTurnDeadline,
     ProviderTurnDeadlinesV1,
-    is_socket_timeout,
     iter_bounded_response_lines,
     open_bounded_https_response,
 )
@@ -101,8 +94,27 @@ class Qwen38MaxConfigV1(AlibabaTokenPlanConfigV1):
             raise ContractError("Qwen 3.8 Max reasoning effort must be xhigh")
 
 
-class AlibabaTokenPlanHttpsTransport:
-    """Streaming Token Plan transport with sanitized failure classes."""
+class AlibabaTokenPlanHttpsTransport(DeepSeekHttpsTransport):
+    """Streaming Token Plan transport with sanitized failure classes.
+
+    Only the endpoint registration, the Token Plan lease shape, the SSE
+    Accept header, and the streamed-body assembly differ from the base
+    transport; the deadline discipline and failure ladder are inherited.
+    """
+
+    _ENDPOINT_ERROR = "Alibaba transport requires the Token Plan endpoint"
+    _KEY_ERROR = "Alibaba transport requires a Token Plan lease"
+    _TIMEOUT_ERROR = "Alibaba timeout must be positive"
+    _CLOSED_ERROR = "Alibaba credential lease is closed"
+    _ACCEPT = "text/event-stream"
+
+    @staticmethod
+    def _endpoint_is_registered(endpoint: str) -> bool:
+        return _is_token_plan_endpoint(endpoint)
+
+    @staticmethod
+    def _api_key_is_leased(api_key: str) -> bool:
+        return api_key.startswith("sk-sp-")
 
     def __init__(
         self,
@@ -113,102 +125,23 @@ class AlibabaTokenPlanHttpsTransport:
         turn_deadlines: ProviderTurnDeadlinesV1 | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        if not _is_token_plan_endpoint(endpoint):
-            raise ContractError("Alibaba transport requires the Token Plan endpoint")
-        if not api_key.startswith("sk-sp-"):
-            raise ContractError("Alibaba transport requires a Token Plan lease")
-        policy = turn_deadlines or ProviderTurnDeadlinesV1()
-        if timeout_seconds is not None:
-            value = float(timeout_seconds)
-            if value <= 0:
-                raise ContractError("Alibaba timeout must be positive")
-            policy = ProviderTurnDeadlinesV1(
-                connect_seconds=min(policy.connect_seconds, value),
-                first_event_seconds=min(policy.first_event_seconds, value),
-                inter_event_seconds=min(policy.inter_event_seconds, value),
-                absolute_seconds=min(policy.absolute_seconds, value),
-            )
-        self.endpoint = endpoint.rstrip("/")
-        self.turn_deadlines = policy
-        self._clock = clock
-        self._next_turn_timeout_seconds: float | None = None
-        self._last_deadline_record = policy.public_record()
-        self._api_key = api_key
-        self._closed = False
-
-    def set_timeout_seconds(self, timeout_seconds: float) -> None:
-        """Tighten the next Qwen turn to the remaining task allowance."""
-
-        value = float(timeout_seconds)
-        if value <= 0:
-            raise ContractError("Alibaba timeout must be positive")
-        self._next_turn_timeout_seconds = min(
-            value, self.turn_deadlines.absolute_seconds
+        super().__init__(
+            api_key=api_key,
+            endpoint=endpoint,
+            timeout_seconds=timeout_seconds,
+            turn_deadlines=turn_deadlines,
+            clock=clock,
         )
 
-    def public_deadline_record(self) -> dict[str, float]:
-        return dict(self._last_deadline_record)
+    def _open_response(self, request, *, deadline):
+        return open_bounded_https_response(request, deadline=deadline)
 
-    def __call__(self, payload: dict[str, Any]) -> Mapping[str, Any]:
-        if self._closed or not self._api_key:
-            raise ContractError("Alibaba credential lease is closed")
-        encoded = json.dumps(
-            payload, separators=(",", ":"), ensure_ascii=False
-        ).encode("utf-8")
-        request = Request(
-            self.endpoint + "/chat/completions",
-            data=encoded,
-            method="POST",
-            headers={
-                "Authorization": "Bearer " + self._api_key,
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream",
-                "User-Agent": "chemsmart-agent/1",
-            },
+    def _read_response(self, response, *, deadline, payload):
+        return _assemble_sse_response(
+            response,
+            expected_model=str(payload.get("model") or ""),
+            deadline=deadline,
         )
-        deadline = ProviderTurnDeadline(
-            self.turn_deadlines,
-            turn_limit_seconds=self._next_turn_timeout_seconds,
-            clock=self._clock,
-        )
-        self._next_turn_timeout_seconds = None
-        self._last_deadline_record = deadline.public_record()
-        try:
-            with open_bounded_https_response(
-                request, deadline=deadline
-            ) as response:
-                if deadline.connected_at is None:
-                    # Focused in-memory transports may inject an already-open
-                    # response; the production opener marks this itself.
-                    deadline.response_acquired()
-                return _assemble_sse_response(
-                    response,
-                    expected_model=str(payload.get("model") or ""),
-                    deadline=deadline,
-                )
-        except ProviderDeadlineExceeded as exc:
-            raise _deadline_transport_error(exc) from None
-        except HTTPError as exc:
-            raise DeepSeekTransportError(
-                _http_error_class(exc), http_status=exc.code
-            ) from None
-        except TimeoutError:
-            raise _deadline_transport_error(deadline.timeout_error()) from None
-        except URLError as exc:
-            reason = getattr(exc, "reason", None)
-            if isinstance(reason, BaseException) and is_socket_timeout(reason):
-                raise _deadline_transport_error(
-                    deadline.timeout_error()
-                ) from None
-            raise DeepSeekTransportError("transport") from None
-        except (HTTPException, ssl.SSLError, ConnectionError, OSError):
-            raise DeepSeekTransportError("transport") from None
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise DeepSeekTransportError("invalid_json") from exc
-
-    def close(self) -> None:
-        self._api_key = ""
-        self._closed = True
 
 
 class AlibabaTokenPlanToolSession(DeepSeekV4ToolSession):
@@ -410,22 +343,6 @@ def _is_token_plan_endpoint(endpoint: str) -> bool:
         and not parsed.query
         and not parsed.fragment
     )
-
-
-def _http_error_class(exc: HTTPError) -> str:
-    if exc.code == 400:
-        return "request_invalid"
-    if exc.code == 401:
-        return "credential_invalid"
-    if exc.code == 404:
-        return "model_unavailable"
-    if exc.code == 429:
-        # Never read an untrusted error body here: a peer could drip it past
-        # the turn cap, and provider text must not enter Runtime evidence.
-        return "rate_limited"
-    if 500 <= exc.code < 600:
-        return "provider_5xx"
-    return "http_error"
 
 
 __all__ = [
