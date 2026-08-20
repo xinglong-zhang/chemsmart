@@ -1074,7 +1074,7 @@ def agent_config(
     )
     config_path.chmod(0o600)
 
-    from chemsmart.agent._contracts import ContractError
+    from chemsmart.agent.errors import ContractError
     from chemsmart.agent.provider_config import (
         load_agent_provider_selection,
     )

@@ -215,7 +215,7 @@ def plan(
     if as_json:
         click.echo(result.public_summary_json())
         return
-    from chemsmart.agent.tui.voice import human_state
+    from chemsmart.agent.voice import human_state
 
     lines = [f"outcome: {human_state(result.terminal_state)}"]
     steps = f"{result.successful_tool_calls} steps"
@@ -280,7 +280,7 @@ def review(
     A spent approval is never reused; deciding again is a new decision.
     """
 
-    from chemsmart.agent._contracts import ContractError
+    from chemsmart.agent.errors import ContractError
     from chemsmart.agent.live_session import (
         inspect_workflow_execution_replay,
         replay_approval_id,
@@ -632,7 +632,7 @@ def run(approval_file, workspace, run_directory, task_spec_sha256, as_json):
             )
         )
         return
-    from chemsmart.agent.tui.voice import human_state
+    from chemsmart.agent.voice import human_state
 
     lines = [
         f"workflow: {result.workflow_id}",

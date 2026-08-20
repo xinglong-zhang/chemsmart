@@ -9,7 +9,7 @@ from typing import Any, Mapping
 from rich.text import Text
 from textual.widgets import Static
 
-from .voice import human_state
+from chemsmart.agent.voice import human_state
 
 #: node state -> (glyph, style). Minimal color, one rule: success green,
 #: failure red, running warning, everything waiting or deferred muted.

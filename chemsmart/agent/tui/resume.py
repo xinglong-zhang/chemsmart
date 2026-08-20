@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 from .runs import RunSummaryV1, list_runs
-from .voice import human_state
+from chemsmart.agent.voice import human_state
 
 _PRIVATE = ".chemsmart-agent"
 

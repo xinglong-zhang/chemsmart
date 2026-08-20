@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from chemsmart.agent.execution import WorkflowExecutionReviewV1
 
 from .presentation import _canonical_tool_results, human_cli_operation
-from .voice import human_identity_evidence, human_state
+from chemsmart.agent.voice import human_identity_evidence, human_state
 
 
 def _walk_render_records(value: Any) -> Iterable[Mapping[str, Any]]:

@@ -21,7 +21,7 @@ from .humanize import (
     humanize_tool_settled,
     humanize_tool_started,
 )
-from .voice import human_turn_blocked
+from chemsmart.agent.voice import human_turn_blocked
 
 
 @dataclass

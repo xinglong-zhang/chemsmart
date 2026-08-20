@@ -53,7 +53,7 @@ from .review import render_review_blocks, resolve_project_yaml_texts
 from .runs import list_runs
 from .theme import CHEMSMART_THEME
 from .transcript import ToolRow, TranscriptView
-from .voice import human_state
+from chemsmart.agent.voice import human_state
 
 
 #: The one styling rule: running = text, finished = muted, failed = error.

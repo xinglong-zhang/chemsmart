@@ -25,7 +25,6 @@ from chemsmart.agent.capabilities import (
 )
 from chemsmart.agent.commands import native_coordinate_options
 from chemsmart.agent.cli_schema import LiveClickSchemaV1
-from chemsmart.cli.main import entry_point
 
 
 _PYTHON_PROBE = r"""
@@ -225,6 +224,8 @@ def bootstrap_program_conformance(
                             break
                         argv.extend((option.primary_flag, str(value)))
                 with runner.isolated_filesystem():
+                    from chemsmart.cli.main import entry_point
+
                     result = runner.invoke(entry_point, argv)
                 stage_rows.append(
                     {
