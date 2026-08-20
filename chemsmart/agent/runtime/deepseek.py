@@ -163,6 +163,12 @@ class DeepSeekTransportError(RuntimeError):
 class DeepSeekHttpsTransport:
     """Minimal official HTTPS transport owned by one credential lease."""
 
+    _ENDPOINT_ERROR = "DeepSeek transport requires the official endpoint"
+
+    @staticmethod
+    def _endpoint_is_registered(endpoint: str) -> bool:
+        return _is_official_endpoint(endpoint)
+
     def __init__(
         self,
         *,
@@ -172,10 +178,10 @@ class DeepSeekHttpsTransport:
         turn_deadlines: ProviderTurnDeadlinesV1 | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        if not _is_official_endpoint(endpoint):
-            raise ContractError("DeepSeek transport requires the official endpoint")
+        if not self._endpoint_is_registered(endpoint):
+            raise ContractError(self._ENDPOINT_ERROR)
         if not api_key:
-            raise ContractError("DeepSeek transport requires a leased credential")
+            raise ContractError("provider transport requires a leased credential")
         policy = turn_deadlines or ProviderTurnDeadlinesV1()
         if timeout_seconds is not None:
             value = float(timeout_seconds)

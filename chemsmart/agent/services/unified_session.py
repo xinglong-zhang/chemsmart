@@ -96,6 +96,22 @@ class UnifiedSessionRunner:
                     messages=messages,
                     config=bound_config,
                 )
+            elif bound_config.provider == "openai":
+                from chemsmart.agent.runtime.openai_compat import (
+                    OpenAICompatibleToolSession,
+                    OpenAIHttpsTransport,
+                )
+
+                transport = OpenAIHttpsTransport(
+                    api_key=secret,
+                    endpoint=bound_config.endpoint,
+                    turn_deadlines=turn_deadlines,
+                )
+                session = OpenAICompatibleToolSession(
+                    transport=transport,
+                    messages=messages,
+                    config=bound_config,
+                )
             else:
                 raise ContractError("active provider has no registered runner")
             try:

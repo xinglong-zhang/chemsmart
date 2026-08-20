@@ -21,6 +21,8 @@ ALIBABA_TOKEN_PLAN_ENDPOINT = (
     "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1"
 )
 ALIBABA_TOKEN_PLAN_MODEL = "qwen3.8-max"
+OPENAI_OFFICIAL_ENDPOINT = "https://api.openai.com/v1"
+ANTHROPIC_OFFICIAL_ENDPOINT = "https://api.anthropic.com"
 ALIBABA_TOKEN_PLAN_CONTEXT_TOKENS = 1_000_000
 ALIBABA_TOKEN_PLAN_MAX_OUTPUT_TOKENS = 262_144
 
@@ -128,6 +130,24 @@ class AgentProviderProfileV1:
                 context_tokens=self.context_tokens,
                 max_output_tokens=self.max_output_tokens,
                 turn_deadlines=turn_deadlines,
+            )
+        if self.provider == "openai":
+            from chemsmart.agent.runtime.openai_compat import (
+                OpenAICompatibleConfigV1,
+            )
+
+            return OpenAICompatibleConfigV1(
+                model=self.model,
+                endpoint=self.endpoint,
+                reasoning_effort=self.reasoning_effort,
+                context_tokens=self.context_tokens,
+                max_output_tokens=self.max_output_tokens,
+                turn_deadlines=turn_deadlines,
+            )
+        if self.provider == "anthropic":
+            raise ContractError(
+                "the anthropic adapter is not registered in this release; "
+                "the profile remains valid configuration"
             )
         raise ContractError("provider profile has no runtime adapter")
 
@@ -388,6 +408,23 @@ def _build_profile(
             raise ContractError(
                 "DeepSeek reasoning effort must be high or max"
             )
+    elif endpoint == OPENAI_OFFICIAL_ENDPOINT:
+        provider = "openai"
+        model = _explicit_model(raw_model, provider="OpenAI")
+        require_provider_key_label(api_key_env, provider=provider)
+        reasoning_effort = reasoning_effort or ""
+        if reasoning_effort not in {"", "low", "medium", "high"}:
+            raise ContractError(
+                "OpenAI reasoning effort must be low, medium, high, or "
+                "omitted"
+            )
+    elif endpoint == ANTHROPIC_OFFICIAL_ENDPOINT:
+        # Accepted as configuration; execution refuses in runtime_config
+        # until the anthropic adapter (and its wire protocol) register.
+        provider = "anthropic"
+        model = _explicit_model(raw_model, provider="Anthropic")
+        require_provider_key_label(api_key_env, provider=provider)
+        reasoning_effort = reasoning_effort or ""
     else:
         raise ContractError("agent provider endpoint is not registered")
 

@@ -775,7 +775,7 @@ class ToolLoopRunner:
             != provider_budget.budget_sha256
         ):
             raise ContractError("request context uses another provider budget")
-        if provider not in {"deepseek", "alibaba-token-plan"}:
+        if provider not in {"deepseek", "alibaba-token-plan", "openai"}:
             raise ContractError("active tool loop provider is not registered")
         if provider_budget.allowed_provider != provider:
             raise ContractError("provider budget belongs to another provider")
