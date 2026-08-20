@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 import shlex
+import threading
+import time
 from typing import TYPE_CHECKING, Callable
 
 from rich.markdown import Markdown
@@ -26,10 +29,24 @@ from chemsmart.agent._contracts import ContractError
 
 from . import commands as command_registry
 from .controller import AgentTuiController, AgentTuiPhase
+from .monitor import (
+    EventTailerV1,
+    planning_feed_update,
+    planning_row_key,
+)
 from .panels import phase_chip, wordmark
 from .presentation import session_evidence_blocks
 from .theme import CHEMSMART_THEME
-from .transcript import TranscriptView
+from .transcript import ToolRow, TranscriptView
+
+
+#: The one styling rule: running = text, finished = muted, failed = error.
+_ROW_STYLE = {
+    "running": "",
+    "finished": "dim",
+    "failed": "bold red",
+    "note": "dim",
+}
 
 
 _RECEIPT_PLACEHOLDER = re.compile(
@@ -80,6 +97,9 @@ class ChemSmartAgentApp(App[None]):
         self.controller = controller
         self.plain = plain
         self._busy = False
+        self._tail_rows: dict[str, ToolRow] = {}
+        self._tail_stop = threading.Event()
+        self._live_rows_seen = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-shell"):
@@ -108,6 +128,7 @@ class ChemSmartAgentApp(App[None]):
             )
         )
         self._sync_phase("Ready for a scientific request")
+        self.controller.on_run_directory = self._announce_run_directory
         self.query_one("#composer", Input).focus()
 
     @on(Input.Submitted, "#composer")
@@ -291,8 +312,58 @@ class ChemSmartAgentApp(App[None]):
             return
         self.call_from_thread(self._execution_finished, result)
 
+    # -- live planning feed --------------------------------------------------
+
+    def _announce_run_directory(self, run_directory: Path) -> None:
+        """Called by the live session on the worker thread, exactly once."""
+
+        self.call_from_thread(self._start_planning_tail, Path(run_directory))
+
+    def _start_planning_tail(self, run_directory: Path) -> None:
+        self._tail_stop.clear()
+        self._tail_rows.clear()
+        self._run_event_tail(EventTailerV1(run_directory / "events.jsonl"))
+
+    @work(thread=True, exclusive=True, group="event-tail")
+    def _run_event_tail(self, tailer: EventTailerV1) -> None:
+        while not self._tail_stop.is_set():
+            events = tailer.poll()
+            if events:
+                self.call_from_thread(self._apply_planning_events, events)
+            time.sleep(0.3)
+        events = tailer.poll()
+        if events:
+            self.call_from_thread(self._apply_planning_events, events)
+
+    def _apply_planning_events(self, events) -> None:
+        transcript = self.query_one("#transcript", TranscriptView)
+        for event in events:
+            spec = planning_feed_update(event)
+            if spec is None:
+                continue
+            text = Text(
+                f"{spec.icon} {spec.text}", style=_ROW_STYLE[spec.state]
+            )
+            key = planning_row_key(event)
+            kind = event.get("kind")
+            if kind == "tool_started" and key:
+                self._tail_rows[key] = transcript.add_row(
+                    text, state=spec.state
+                )
+            elif (
+                kind in {"tool_succeeded", "tool_failed"}
+                and key in self._tail_rows
+            ):
+                transcript.settle_row(
+                    self._tail_rows.pop(key), text, state=spec.state
+                )
+            else:
+                transcript.add_row(text, state=spec.state)
+            self._live_rows_seen += 1
+
     def _plan_finished(self, result: LiveAgentSessionResultV1) -> None:
         self._busy = False
+        self._tail_stop.set()
         table = Table(title="Plan and safe-preview result")
         table.add_column("State", style="bold cyan")
         table.add_column("Value")
@@ -302,6 +373,15 @@ class ChemSmartAgentApp(App[None]):
         table.add_row("failed tools", str(result.failed_tool_calls))
         self._write(table)
         for block in session_evidence_blocks(result):
+            if (
+                self._live_rows_seen
+                and block.title != "Canonical project YAML"
+            ):
+                # The live feed already narrated every tool result; repeat
+                # only the scientifically load-bearing project YAML. The
+                # complete canonical payloads remain in the session's
+                # append-only event stream.
+                continue
             self._write(
                 Panel(
                     Syntax(
@@ -559,6 +639,7 @@ class ChemSmartAgentApp(App[None]):
 
     def _operation_failed(self, label: str, exc: Exception) -> None:
         self._busy = False
+        self._tail_stop.set()
         self._write(
             Panel(
                 str(exc) or type(exc).__name__,

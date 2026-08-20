@@ -88,6 +88,12 @@ class TranscriptView(VerticalScroll):
         self._enforce_cap()
         return row
 
+    def settle_row(self, row: ToolRow, text: Text, *, state: str) -> None:
+        """Mutate a mounted row in place and keep the export record true."""
+
+        self.recorder.record(text)
+        row.settle(text, state=state)
+
     def _enforce_cap(self) -> None:
         blocks = [
             child
