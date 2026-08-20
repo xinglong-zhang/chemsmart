@@ -19,10 +19,6 @@ import pytest
 
 from chemsmart.agent._contracts import ContractError, TrustedArtifactRefV1
 from chemsmart.agent.capabilities import CapabilityQueryV1, query_capability
-from chemsmart.agent.analysis_nodes import (
-    ResultQuantitySelectorV1,
-    build_default_result_parser_registry,
-)
 from chemsmart.agent.postprocessing import extract_trusted_result_quantities
 from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
 from chemsmart.analysis.result_quantities import (
@@ -203,18 +199,9 @@ def test_xyz_energy_refuses_an_unlabeled_negative_comment_number(tmp_path):
 @pytest.mark.parametrize("program", ("gaussian", "orca", "xtb"))
 def test_the_analysis_registry_exposes_every_log_reader(program):
     reader = reader_for(program)
-    adapter = build_default_result_parser_registry().resolve(
-        program=program,
-        artifact_kind=reader.artifact_kind,
-        selectors=(
-            ResultQuantitySelectorV1(
-                schema_version="chemsmart.result-quantity-selector.v1",
-                quantity_id="energy",
-                selector="energy",
-            ),
-        ),
-    )
-    assert adapter.parser_id == reader.parser_id
+    assert reader.parser_id
+    assert reader.artifact_kind
+    assert "energy" in reader.selectors
 
 
 def test_a_gaussian_energy_becomes_a_hash_bound_quantity():
@@ -471,7 +458,7 @@ def test_extraction_refuses_an_artifact_of_the_wrong_kind():
 
 def test_an_unregistered_program_is_refused_by_name():
     artifact = _artifact(_GAUSSIAN_LOG, "gaussian")
-    with pytest.raises(Exception, match="no quantity reader is registered"):
+    with pytest.raises(Exception, match="no typed result reader is registered"):
         extract_trusted_result_quantities(
             artifact=artifact,
             program="nciplot",

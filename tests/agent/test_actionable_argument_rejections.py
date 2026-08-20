@@ -353,7 +353,6 @@ def test_a_blank_unit_names_the_output_and_the_value_to_use():
     "1".
     """
 
-    from chemsmart.agent.analysis_nodes import AnalysisContractError
     from chemsmart.agent.scientific_toolchain import (
         ScientificToolchainContractError,
     )
@@ -367,25 +366,14 @@ def test_a_blank_unit_names_the_output_and_the_value_to_use():
 
     assert _count_expression_intent("1").outputs[0].unit == "1"
 
-    # The other plane must answer the same mistake the same way. Both now read
-    # one contract-level constant, so this asserts a shared object rather than
-    # two copies that happen to be equal today.
-    from chemsmart.agent import analysis_nodes, scientific_toolchain
+    # The hint is a contract-level constant, so the message asserts the shared
+    # object rather than a copy that happens to be equal today.
+    from chemsmart.agent import scientific_toolchain
     from chemsmart.agent._contracts import DIMENSIONLESS_UNIT_HINT
 
-    assert analysis_nodes.DIMENSIONLESS_UNIT_HINT is DIMENSIONLESS_UNIT_HINT
     assert (
         scientific_toolchain.DIMENSIONLESS_UNIT_HINT is DIMENSIONLESS_UNIT_HINT
     )
-
-    from chemsmart.agent.analysis_nodes import AnalysisOutputSpecV1
-
-    with pytest.raises(AnalysisContractError) as other_plane:
-        AnalysisOutputSpecV1(
-            quantity_id="n_imaginary", unit="", dimension=(0,) * 6
-        )
-    assert DIMENSIONLESS_UNIT_HINT in str(other_plane.value)
-    assert AnalysisContractError is not None
 
 
 def test_an_unsupported_count_unit_is_rejected_before_plan_sealing():

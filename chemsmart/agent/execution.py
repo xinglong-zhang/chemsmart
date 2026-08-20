@@ -663,178 +663,6 @@ def bind_project_promotion_validation(
 
 
 @dataclass(frozen=True)
-class ProgramConformanceProbeV1:
-    """Observed live plumbing; never an execution-readiness assertion."""
-
-    schema_version: str
-    probe_id: str
-    program: str
-    engine: str
-    registry_sha256: str
-    live_cli_schema_sha256: str
-    covered_jobtypes: tuple[str, ...]
-    loader_status: str
-    environment_status: str
-    preview_status: str
-    project_validation_receipt_sha256s: tuple[str, ...]
-    environment_receipt_sha256: str
-    preview_receipt_sha256s: tuple[str, ...]
-    findings: tuple[str, ...]
-    status: str
-    receipt_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.program-conformance-probe.v1":
-            raise ContractError("unsupported program conformance schema")
-        require_identifier(self.probe_id, "probe_id")
-        require_identifier(self.program, "program")
-        require_identifier(self.engine, "engine")
-        require_sha256(self.registry_sha256, "registry_sha256")
-        require_sha256(self.live_cli_schema_sha256, "live_cli_schema_sha256")
-        _require_sorted_unique(self.covered_jobtypes, "covered_jobtypes")
-        for jobtype in self.covered_jobtypes:
-            require_identifier(jobtype, "covered_jobtype")
-        allowed_component_statuses = {
-            "passed",
-            "failed",
-            "not_required",
-            "not_observed",
-            "available",
-            "missing",
-        }
-        for value in (
-            self.loader_status,
-            self.environment_status,
-            self.preview_status,
-        ):
-            if value not in allowed_component_statuses:
-                raise ContractError("invalid conformance component status")
-        for name, digests in (
-            (
-                "project_validation_receipt_sha256s",
-                self.project_validation_receipt_sha256s,
-            ),
-            ("preview_receipt_sha256s", self.preview_receipt_sha256s),
-        ):
-            _require_sorted_unique(digests, name)
-            for digest in digests:
-                require_sha256(digest, name)
-        if self.environment_receipt_sha256:
-            require_sha256(
-                self.environment_receipt_sha256,
-                "environment_receipt_sha256",
-            )
-        if self.loader_status == "passed" and not (
-            self.project_validation_receipt_sha256s
-        ):
-            raise ContractError(
-                "passed loader probe requires validation evidence"
-            )
-        if self.environment_status == "available" and not (
-            self.environment_receipt_sha256
-        ):
-            raise ContractError(
-                "available environment requires an observation"
-            )
-        if (
-            self.preview_status == "passed"
-            and not self.preview_receipt_sha256s
-        ):
-            raise ContractError(
-                "passed preview probe requires preview evidence"
-            )
-        if self.status not in {
-            "available_for_preflight",
-            "preview_only",
-            "blocked",
-            "incomplete",
-        }:
-            raise ContractError("invalid program conformance result")
-        _require_nonempty_rows(self.findings, "findings")
-        body = {
-            "schema_version": self.schema_version,
-            "probe_id": self.probe_id,
-            "program": self.program,
-            "engine": self.engine,
-            "registry_sha256": self.registry_sha256,
-            "live_cli_schema_sha256": self.live_cli_schema_sha256,
-            "covered_jobtypes": self.covered_jobtypes,
-            "loader_status": self.loader_status,
-            "environment_status": self.environment_status,
-            "preview_status": self.preview_status,
-            "project_validation_receipt_sha256s": (
-                self.project_validation_receipt_sha256s
-            ),
-            "environment_receipt_sha256": self.environment_receipt_sha256,
-            "preview_receipt_sha256s": self.preview_receipt_sha256s,
-            "findings": self.findings,
-            "status": self.status,
-        }
-        if self.receipt_sha256 != canonical_sha256(body):
-            raise ContractError("program conformance receipt digest mismatch")
-
-
-def build_program_conformance_probe(
-    *,
-    probe_id: str,
-    program: str,
-    engine: str,
-    registry_sha256: str,
-    live_cli_schema_sha256: str,
-    covered_jobtypes: Sequence[str],
-    loader_status: str,
-    environment_status: str,
-    preview_status: str,
-    project_validation_receipt_sha256s: Sequence[str] = (),
-    environment_receipt_sha256: str = "",
-    preview_receipt_sha256s: Sequence[str] = (),
-    findings: Sequence[str] = (),
-) -> ProgramConformanceProbeV1:
-    """Summarize live observations without claiming node readiness."""
-
-    component_values = (loader_status, environment_status, preview_status)
-    if "failed" in component_values or environment_status == "missing":
-        status = "blocked"
-    elif (
-        loader_status in {"passed", "not_required"}
-        and preview_status == "passed"
-        and environment_status == "available"
-    ):
-        status = "available_for_preflight"
-    elif (
-        loader_status in {"passed", "not_required"}
-        and preview_status == "passed"
-    ):
-        status = "preview_only"
-    else:
-        status = "incomplete"
-    body = {
-        "schema_version": "chemsmart.program-conformance-probe.v1",
-        "probe_id": require_identifier(probe_id, "probe_id"),
-        "program": require_identifier(program, "program"),
-        "engine": require_identifier(engine, "engine"),
-        "registry_sha256": require_sha256(registry_sha256, "registry_sha256"),
-        "live_cli_schema_sha256": require_sha256(
-            live_cli_schema_sha256, "live_cli_schema_sha256"
-        ),
-        "covered_jobtypes": tuple(sorted(set(covered_jobtypes))),
-        "loader_status": str(loader_status),
-        "environment_status": str(environment_status),
-        "preview_status": str(preview_status),
-        "project_validation_receipt_sha256s": tuple(
-            sorted(set(project_validation_receipt_sha256s))
-        ),
-        "environment_receipt_sha256": str(environment_receipt_sha256),
-        "preview_receipt_sha256s": tuple(sorted(set(preview_receipt_sha256s))),
-        "findings": tuple(str(item).strip() for item in findings),
-        "status": status,
-    }
-    return ProgramConformanceProbeV1(
-        **body, receipt_sha256=canonical_sha256(body)
-    )
-
-
-@dataclass(frozen=True)
 class ProducerEdgeRuleV1:
     """Approval rule for selecting a future producer artifact."""
 
@@ -5916,7 +5744,6 @@ __all__ = [
     "ORCAHessianHandoffV1",
     "OptimizedGeometryHandoffV1",
     "ProducerEdgeRuleV1",
-    "ProgramConformanceProbeV1",
     "ProgramExecutionInvocationV1",
     "ProgramExecutionReceiptV1",
     "ProgramResultValidationReceiptV1",
@@ -5944,7 +5771,6 @@ __all__ = [
     "build_workflow_execution_node_review",
     "build_workflow_review_resolution",
     "workflow_approval_request_json",
-    "build_program_conformance_probe",
     "build_program_execution_invocation",
     "build_program_execution_receipt",
     "build_program_result_validation_receipt",
