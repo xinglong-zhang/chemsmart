@@ -7,11 +7,14 @@ name = "chemsmart"
 version = "3.1.4"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
-requires-python = "~=3.10"
+requires-python = ">=3.10,<3.13"  # numpy 1.x has no cp313 wheels
 authors = [{ name = "xinglong-zhang", email = "xinglong.zhang@cuhk.edu.hk" }]
 license = { file = "LICENSE" }
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -19,7 +22,6 @@ dependencies = [
     "basis_set_exchange==0.11",
     "click==8.1.8",
     "dictdiffer==0.9.0",
-    "filelock",
     # Controller-side PySCF result inspection and fake previews use HDF5.
     # The PySCF/GPU4PySCF compute stack remains in its own environment.
     "h5py>=3.10,<4",
@@ -38,11 +40,6 @@ dependencies = [
     "matplotlib>=3.10.1",
     "scikit-learn>=1.6.1",
     "spyrmsd>=0.8.0",
-    "lockfile>=0.12.2",
-    "contextlib2>=21.6.0",
-    "pillow>=12.1.1",
-    "ipython>=8.12.3",
-    "image>=1.5.33",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +69,8 @@ docs = [
 ]
 agent-tui = [
     "textual>=8.2,<9",
+    # The TUI imports rich directly; do not rely on it as a transitive.
+    "rich>=13.7",
 ]
 
 [project.urls]
@@ -80,6 +79,9 @@ homepage = "https://github.com/Hongjiseung-ROK/chemsmart/"
 
 [project.scripts]
 chemsmart = "chemsmart.cli.main:main"
+
+[tool.setuptools]
+include-package-data = true
 
 [tool.setuptools.packages.find]
 exclude = [".github", "tests", "tests.*"]
@@ -91,6 +93,9 @@ exclude = [".github", "tests", "tests.*"]
     "settings/templates/.chemsmart/**",
     "agent/tui/*.tcss",
 ]
+# PyMOL style templates live in a non-package data directory; without
+# this pattern a clean wheel drops them and every style copy fails.
+"chemsmart.jobs.mol" = ["templates/*.py"]
 
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]
