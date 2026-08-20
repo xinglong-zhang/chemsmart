@@ -812,6 +812,296 @@ def scratch(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/scratch", folder)
 
 
+
+
+# ---------------------------------------------------------------------------
+# Agent-layer setup: `chemsmart config agent`
+# ---------------------------------------------------------------------------
+
+_AGENT_PROVIDERS = ("openai", "anthropic", "alibaba-token-plan", "deepseek")
+
+#: Effort vocabularies are adapter-owned; "" means "omit from the payload".
+_AGENT_EFFORTS = {
+    "openai": ("", "low", "medium", "high"),
+    "anthropic": ("", "low", "medium", "high"),
+    "alibaba-token-plan": ("high", "max", "xhigh"),
+    "deepseek": ("high", "max"),
+}
+
+#: Help text only -- the model prompt has NO preselection (charter rule).
+_AGENT_MODEL_HINTS = {
+    "openai": "the exact model id from your OpenAI account",
+    "anthropic": "the exact model id from your Anthropic account",
+    "alibaba-token-plan": "the exact catalog id your Token Plan serves",
+    "deepseek": "the exact model id from your DeepSeek account",
+}
+
+
+def _agent_paths():
+    from chemsmart.agent.api_access import default_agent_keys_path
+    from chemsmart.agent.provider_config import default_agent_config_path
+
+    return default_agent_config_path(), default_agent_keys_path()
+
+
+def _agent_endpoint(provider):
+    from chemsmart.agent.provider_config import (
+        ALIBABA_TOKEN_PLAN_ENDPOINT,
+        ANTHROPIC_OFFICIAL_ENDPOINT,
+        DEEPSEEK_OFFICIAL_ENDPOINT,
+        OPENAI_OFFICIAL_ENDPOINT,
+    )
+
+    return {
+        "openai": OPENAI_OFFICIAL_ENDPOINT,
+        "anthropic": ANTHROPIC_OFFICIAL_ENDPOINT,
+        "alibaba-token-plan": ALIBABA_TOKEN_PLAN_ENDPOINT,
+        "deepseek": DEEPSEEK_OFFICIAL_ENDPOINT,
+    }[provider]
+
+
+def _agent_key_label(provider):
+    from chemsmart.agent.api_access import DEFAULT_KEY_LABELS
+
+    return DEFAULT_KEY_LABELS[provider][0]
+
+
+def _upsert_key(keys_path, label, value):
+    """Store one credential, preserving every other entry verbatim."""
+
+    lines = []
+    if keys_path.exists():
+        lines = keys_path.read_text(encoding="utf-8").splitlines()
+    from chemsmart.agent.api_access import normalize_key_label
+
+    replaced = False
+    fresh = []
+    for line in lines:
+        bare = line.strip()
+        if bare and not bare.startswith("#") and "=" in bare:
+            existing = bare.split("=", 1)[0].strip()
+            if normalize_key_label(existing) == normalize_key_label(label):
+                fresh.append(f"{label}={value}")
+                replaced = True
+                continue
+        fresh.append(line)
+    if not replaced:
+        fresh.append(f"{label}={value}")
+    keys_path.parent.mkdir(parents=True, exist_ok=True)
+    keys_path.parent.chmod(0o700)
+    keys_path.write_text("\n".join(fresh) + "\n", encoding="utf-8")
+    keys_path.chmod(0o600)
+
+
+def _offer_api_env_migration(keys_path):
+    """Import a legacy api.env into the managed store, labels verbatim."""
+
+    legacy = keys_path.parent / "api.env"
+    if not legacy.is_file() or keys_path.exists():
+        return
+    if not click.confirm(
+        f"Import existing credentials from {legacy} into the managed "
+        "store? (the file itself is left untouched)",
+        default=True,
+    ):
+        return
+    from chemsmart.agent.api_access import parse_secret_file
+
+    imported = 0
+    for label, value in parse_secret_file(legacy).items():
+        _upsert_key(keys_path, label, value)
+        imported += 1
+    click.echo(f"  · imported {imported} credential label(s) into {keys_path}")
+
+
+@config.command("agent")
+@click.option(
+    "--provider",
+    type=click.Choice(_AGENT_PROVIDERS),
+    default=None,
+    help="Provider for the profile; prompted when omitted.",
+)
+@click.option("--model", default=None, help="Exact model id (no default).")
+@click.option(
+    "--reasoning-effort",
+    default=None,
+    help="Reasoning effort from the provider's vocabulary; empty omits it.",
+)
+@click.option("--context-tokens", type=int, default=None)
+@click.option("--max-output-tokens", type=int, default=None)
+@click.option(
+    "--profile-name",
+    default=None,
+    help="Profile key in agent.yaml; defaults to the provider name.",
+)
+@click.option(
+    "--set-active/--no-set-active",
+    default=True,
+    help="Make this profile the active selection.",
+)
+@click.option(
+    "--api-key-stdin",
+    is_flag=True,
+    help="Read the API key from stdin instead of a hidden prompt.",
+)
+@click.option(
+    "--skip-key",
+    is_flag=True,
+    help="Do not store a credential now (export it or store it later).",
+)
+def agent_config(
+    provider,
+    model,
+    reasoning_effort,
+    context_tokens,
+    max_output_tokens,
+    profile_name,
+    set_active,
+    api_key_stdin,
+    skip_key,
+):
+    """Set up the agent layer: provider, model, effort, and credential.
+
+    Writes ~/.chemsmart/agent/agent.yaml (validated by the live loader) and
+    stores the credential in the managed key store; the key never appears
+    in agent.yaml and is never echoed.
+    """
+
+    import sys
+
+    import yaml as yaml_module
+
+    config_path, keys_path = _agent_paths()
+
+    existing = {}
+    if config_path.is_file():
+        existing = (
+            yaml_module.safe_load(config_path.read_text(encoding="utf-8"))
+            or {}
+        )
+        profiles = existing.get("providers") or {}
+        if profiles:
+            click.echo("Existing profiles:")
+            active = existing.get("active")
+            for name, block in profiles.items():
+                marker = "*" if name == active else " "
+                model_id = (block or {}).get("model", "?")
+                click.echo(f"  {marker} {name}: {model_id}")
+
+    if provider is None:
+        provider = click.prompt(
+            "Provider", type=click.Choice(_AGENT_PROVIDERS)
+        )
+    if model is None:
+        model = click.prompt(
+            f"Model id ({_AGENT_MODEL_HINTS[provider]})"
+        ).strip()
+    if not model:
+        raise click.BadParameter("a model id is required; there is no default")
+    efforts = _AGENT_EFFORTS[provider]
+    if reasoning_effort is None:
+        shown = [effort or "(omit)" for effort in efforts]
+        chosen = click.prompt(
+            "Reasoning effort",
+            type=click.Choice(shown),
+            default=shown[0],
+        )
+        reasoning_effort = "" if chosen == "(omit)" else chosen
+    elif reasoning_effort not in efforts:
+        raise click.BadParameter(
+            f"reasoning effort for {provider} must be one of "
+            f"{[e or '(omit)' for e in efforts]}"
+        )
+    if context_tokens is None:
+        context_tokens = click.prompt(
+            "Context window in tokens", type=int
+        )
+    if max_output_tokens is None:
+        max_output_tokens = click.prompt(
+            "Maximum output tokens", type=int
+        )
+
+    label = _agent_key_label(provider)
+    key_value = ""
+    if api_key_stdin:
+        key_value = sys.stdin.readline().strip()
+    elif not skip_key:
+        key_value = click.prompt(
+            f"API key for {label} (Enter to skip storing)",
+            default="",
+            show_default=False,
+            hide_input=True,
+        ).strip()
+
+    name = profile_name or provider
+    block = {
+        "type": "openai",
+        "api_key_env": label,
+        "model": model,
+        "context_tokens": context_tokens,
+        "max_output_tokens": max_output_tokens,
+        "base_url": _agent_endpoint(provider),
+    }
+    if reasoning_effort:
+        block["reasoning_effort"] = reasoning_effort
+
+    payload = dict(existing) if existing else {}
+    providers = dict(payload.get("providers") or {})
+    providers[name] = block
+    payload["providers"] = providers
+    if set_active or "active" not in payload:
+        payload["active"] = name
+    payload["fallback"] = []
+
+    backup = None
+    if config_path.exists():
+        from chemsmart.settings.wizard import backup_path_for
+
+        backup = backup_path_for(config_path)
+        shutil.copy2(config_path, backup)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.parent.chmod(0o700)
+    config_path.write_text(
+        yaml_module.safe_dump(payload, sort_keys=False), encoding="utf-8"
+    )
+    config_path.chmod(0o600)
+
+    from chemsmart.agent._contracts import ContractError
+    from chemsmart.agent.provider_config import (
+        load_agent_provider_selection,
+    )
+
+    try:
+        load_agent_provider_selection(config_path, requested_profile=name)
+    except ContractError as exc:
+        if backup is not None:
+            shutil.copy2(backup, config_path)
+        else:
+            config_path.unlink(missing_ok=True)
+        raise click.BadParameter(
+            f"the written profile did not validate and was rolled back: {exc}"
+        ) from exc
+
+    if backup is not None:
+        click.echo(f"Backed up the previous configuration to {backup}")
+    click.echo(f"Wrote {config_path} (active profile: {payload['active']})")
+    if key_value:
+        _upsert_key(keys_path, label, key_value)
+        click.echo(f"Stored the {label} credential in {keys_path}")
+    else:
+        click.echo(
+            f"No credential stored; export {label} in your shell or re-run "
+            "this command to store one."
+        )
+    _offer_api_env_migration(keys_path)
+    if provider == "anthropic":
+        click.echo(
+            "Note: the anthropic profile is valid configuration, and its "
+            "runtime adapter is not registered in this release -- selecting "
+            "it for a session will refuse until the adapter lands."
+        )
+
+
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
