@@ -85,6 +85,7 @@ class AgentTuiController:
         self.config = config
         self.phase = AgentTuiPhase.READY
         self.task = ""
+        self.review_copy_note = ""
         self.plan_result: LiveAgentSessionResultV1 | None = None
         self.prepared_execution: WorkflowExecutionReviewV1 | None = None
         self.execution_result: WorkflowExecutionResultV1 | None = None
@@ -153,6 +154,16 @@ class AgentTuiController:
         self.plan_result = result
         self.prepared_execution = result.prepared_execution
         self.execution_result = None
+        self.review_copy_note = ""
+        if self.prepared_execution is not None:
+            try:
+                self._ensure_review_copy(self.prepared_execution)
+            except Exception as exc:  # noqa: BLE001 - a copy failure is a
+                # note, never a lost planning session.
+                self.review_copy_note = (
+                    "The workspace review copy could not be written "
+                    f"({exc}); resume will not re-present this review."
+                )
         if self.prepared_execution is not None:
             self.phase = AgentTuiPhase.REQUEST_REVIEWED
         elif result.terminal_state in {"complete", "planned"}:
@@ -175,6 +186,50 @@ class AgentTuiController:
             else AgentTuiPhase.READY
         )
 
+    def _review_copy_path(self, review: WorkflowExecutionReviewV1) -> Path:
+        return (
+            self.config.workspace
+            / ".chemsmart-agent"
+            / "reviews"
+            / f"{review.review_sha256[:16]}.json"
+        )
+
+    def _ensure_review_copy(
+        self, review: WorkflowExecutionReviewV1
+    ) -> Path:
+        from chemsmart.agent.live_session import (
+            write_workflow_execution_review,
+        )
+
+        path = self._review_copy_path(review)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not path.exists():
+            write_workflow_execution_review(review, path)
+        return path
+
+    def _decision_scope(self, review: WorkflowExecutionReviewV1) -> Path:
+        # One scope per REVIEW, not per approval id: the deterministic
+        # resolution identity inside a shared decision log is what refuses a
+        # second approve of the same review across process restarts.
+        return (
+            self.config.workspace
+            / ".chemsmart-agent"
+            / "decisions"
+            / review.review_sha256[:16]
+        )
+
+    def restore_prepared_execution(
+        self, review: WorkflowExecutionReviewV1
+    ) -> None:
+        """Re-present a stored review for one fresh human decision."""
+
+        if self.phase in (AgentTuiPhase.PLANNING, AgentTuiPhase.EXECUTING):
+            raise ContractError(
+                "finish the current host operation before restoring a review"
+            )
+        self.prepared_execution = review
+        self.phase = AgentTuiPhase.REQUEST_REVIEWED
+
     def begin_execution(self) -> WorkflowExecutionReviewV1:
         """UI-thread guard: consume the pending authority before any launch.
 
@@ -191,6 +246,24 @@ class AgentTuiController:
                 "finish planning and review the displayed ChemSmart "
                 "workflow first"
             )
+        from chemsmart.agent.live_session import spent_workflow_approval_ids
+
+        decisions = self._decision_scope(prepared) / "decisions.jsonl"
+        already_decided = False
+        if decisions.exists():
+            recorded = decisions.read_text(encoding="utf-8")
+            already_decided = (
+                '"decision":"approve"' in recorded
+                or '"decision": "approve"' in recorded
+            )
+        if already_decided or spent_workflow_approval_ids(
+            self.config.workspace, prepared.review_sha256
+        ):
+            raise ContractError(
+                "this exact reviewed workflow was already approved in this "
+                "workspace; plan it again, or record a deliberate second "
+                "decision with 'chemsmart agent review'"
+            )
         self.execution_id = "tui-" + uuid.uuid4().hex
         self.execution_run_directory = (
             self.config.workspace
@@ -204,19 +277,37 @@ class AgentTuiController:
         return prepared
 
     def execute_begun(self) -> WorkflowExecutionResultV1:
-        """Worker-thread body: run the consumed review provider-free."""
+        """Worker-thread body: decide durably, then run provider-free.
 
-        from chemsmart.agent.executor import execute_prepared_workflow
+        Every TUI approval leaves the same evidence the file pipeline
+        leaves: a decision log, a one-shot bundle, and a workspace
+        consumption ledger -- so the one-shot rule survives a restart.
+        """
+
+        from chemsmart.agent.executor import execute_approved_workflow
+        from chemsmart.agent.live_session import (
+            resolve_workflow_execution_review,
+        )
 
         prepared = self._begun_execution
         if prepared is None or self.execution_run_directory is None:
             raise ContractError("no begun execution to run")
         self._begun_execution = None
         try:
-            result = execute_prepared_workflow(
-                review=prepared,
+            review_copy = self._ensure_review_copy(prepared)
+            scope = self._decision_scope(prepared)
+            scope.mkdir(parents=True, exist_ok=True, mode=0o700)
+            _resolution, _bundle = resolve_workflow_execution_review(
+                review_file=review_copy,
+                reviewed_sha256=prepared.review_sha256,
+                decision="approve",
                 actor=getpass.getuser() or "local-user",
-                execution_id=self.execution_id,
+                output_file=scope / "bundle.json",
+                decision_log=scope / "decisions.jsonl",
+                approval_id=self.execution_id,
+            )
+            result = execute_approved_workflow(
+                approval_file=scope / "bundle.json",
                 workspace=self.config.workspace,
                 run_directory=self.execution_run_directory,
             )

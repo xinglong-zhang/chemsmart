@@ -4047,6 +4047,14 @@ def inspect_workflow_execution_replay(
     }
 
 
+def spent_workflow_approval_ids(
+    workspace: Path, review_sha256: str
+) -> list[str]:
+    """Public name for the consumed-decision scan the replay path uses."""
+
+    return _spent_approval_ids(workspace, review_sha256)
+
+
 def _spent_approval_ids(workspace: Path, review_sha256: str) -> list[str]:
     """Which approval ids for this review have already been burned here.
 

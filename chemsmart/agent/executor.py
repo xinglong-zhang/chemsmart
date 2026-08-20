@@ -1333,37 +1333,6 @@ def _execute_workflow_bundle(
     ).run()
 
 
-def execute_prepared_workflow(
-    *,
-    review: WorkflowExecutionReviewV1,
-    actor: str,
-    execution_id: str,
-    workspace: Path,
-    run_directory: Path,
-) -> WorkflowExecutionResultV1:
-    """Approve the displayed in-memory ChemSmart workflow and run it once.
-
-    The explicit TUI action is the authority.  Internal content digests remain
-    provenance and mutation evidence, but the user does not create, reload or
-    retype an approval artifact.  Atomic node-launch reservation prevents an
-    accidental duplicate within this run.
-    """
-
-    bundle = approve_workflow_execution_review(
-        review,
-        approval_id=str(execution_id),
-        approved_review_sha256=review.review_sha256,
-        actor=str(actor).strip(),
-        resolution_id=str(execution_id) + "-approval",
-    )
-    return _execute_workflow_bundle(
-        bundle=bundle,
-        workspace=workspace,
-        run_directory=run_directory,
-        claim_workspace_bundle=False,
-    )
-
-
 def execute_approved_workflow(
     *,
     approval_file: Path,
@@ -1402,5 +1371,4 @@ __all__ = [
     "PROGRAM_NODE_SEQUENCE",
     "WorkflowExecutionResultV1",
     "execute_approved_workflow",
-    "execute_prepared_workflow",
 ]
