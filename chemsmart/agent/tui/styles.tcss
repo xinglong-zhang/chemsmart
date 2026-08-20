@@ -37,3 +37,7 @@ Screen {
     color: $text-muted;
     background: $surface;
 }
+
+TranscriptView > Static {
+    width: 100%;
+}

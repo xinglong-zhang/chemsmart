@@ -1,4 +1,4 @@
-"""Textual application for plan, review, approval binding, and execution."""
+"""Textual application for plan, review, approval, and execution."""
 
 from __future__ import annotations
 
@@ -15,34 +15,21 @@ from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.widgets import Input, RichLog, Static
+from textual.widgets import Input, Static
 
 if TYPE_CHECKING:
     from chemsmart.agent.execution import WorkflowExecutionReviewV1
     from chemsmart.agent.executor import WorkflowExecutionResultV1
     from chemsmart.agent.live_session import LiveAgentSessionResultV1
 
+from chemsmart.agent._contracts import ContractError
+
+from . import commands as command_registry
 from .controller import AgentTuiController, AgentTuiPhase
+from .panels import phase_chip, wordmark
 from .presentation import session_evidence_blocks
-
-
-_HELP = """\
-Enter a scientific request to create a project-YAML/CLI plan and safe preview.
-
-Commands:
-  /capabilities             show the live Agent program/engine/job surface
-  /approve                  approve the displayed ChemSmart workflow and run
-  /deny                     decline the displayed workflow
-  /revise                   decline it and enter a revised scientific request
-  /status                   show the current task and evidence bindings
-  /help                     show this guide
-  /quit                     exit
-
-The provider/runtime cannot grant itself authority. The single /approve action
-ends planning authority and starts the displayed YAML/CLI DAG through the
-provider-free ChemSmart executor. Internal receipts remain provenance; no hash
-or approval-file token is required from the human.
-"""
+from .theme import CHEMSMART_THEME
+from .transcript import TranscriptView
 
 
 _RECEIPT_PLACEHOLDER = re.compile(
@@ -78,7 +65,12 @@ class ChemSmartAgentApp(App[None]):
     SUB_TITLE = "project YAML · compiled CLI · explicit approval"
     BINDINGS = [
         Binding("ctrl+c", "safe_quit", "Quit", priority=True),
-        Binding("ctrl+l", "refresh", "Refresh", show=False),
+        Binding("pageup", "scroll_transcript_up", "Scroll up", show=False),
+        Binding(
+            "pagedown", "scroll_transcript_down", "Scroll down", show=False
+        ),
+        Binding("ctrl+home", "scroll_transcript_top", "Top", show=False),
+        Binding("ctrl+end", "scroll_transcript_bottom", "Bottom", show=False),
     ]
 
     def __init__(
@@ -91,27 +83,21 @@ class ChemSmartAgentApp(App[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-shell"):
-            yield Static(self._wordmark(), id="wordmark")
+            yield Static(wordmark(), id="wordmark")
             yield Static("", id="phase-bar")
-            yield RichLog(
-                id="transcript",
-                wrap=True,
-                markup=False,
-                highlight=False,
-                max_lines=4000,
-            )
+            yield TranscriptView(id="transcript")
             yield ScientificRequestInput(
                 placeholder=(
                     "Describe a calculation, or type /help for the approval chain"
                 ),
                 id="composer",
             )
-            yield Static(
-                "Enter plan · review YAML/CLI DAG · /approve once to run",
-                id="footer",
-            )
+            yield Static("", id="footer")
 
     def on_mount(self) -> None:
+        self.register_theme(CHEMSMART_THEME)
+        # Plain mode respects the terminal's own ANSI palette wholesale.
+        self.theme = "ansi-dark" if self.plain else "chemsmart"
         self._write(
             Markdown(
                 "## Ready\n\n"
@@ -138,10 +124,15 @@ class ChemSmartAgentApp(App[None]):
         if text.startswith("/"):
             self._dispatch_command(text)
             return
-        self._write(Panel(Text(text), title="Scientific request"))
+        try:
+            normalized = self.controller.begin_planning(text)
+        except ContractError as exc:
+            self._operation_failed("Planning", exc)
+            return
+        self._write(Panel(Text(normalized), title="Scientific request"))
         self._busy = True
         self._sync_phase("Planning through the selected provider")
-        self._run_plan(text)
+        self._run_plan(normalized)
 
     def _dispatch_command(self, text: str) -> None:
         try:
@@ -151,32 +142,38 @@ class ChemSmartAgentApp(App[None]):
             return
         command = arguments[0].lower()
         tail = arguments[1:]
-        handlers: dict[str, Callable[[list[str]], None]] = {
-            "/help": self._show_help,
-            "/status": self._show_status,
-            "/capabilities": self._show_capabilities,
-            "/approve": self._approve,
-            "/deny": self._deny,
-            "/revise": self._revise,
-            "/quit": self._quit,
-            "/exit": self._quit,
-        }
-        handler = handlers.get(command)
-        if handler is None:
-            self._write(Panel(f"Unknown command: {command}", title="Command"))
+        spec = command_registry.command_for(command)
+        if spec is None:
+            nearest = command_registry.suggest(command)
+            message = f"Unknown command: {command}"
+            if nearest:
+                message += f". Did you mean {nearest}?"
+            message += " /help lists every command."
+            self._write(Panel(message, title="Command"))
+            return
+        handler = self._command_handlers()[spec.name]
+        if tail and not spec.takes_argument:
+            self._usage(f"{spec.slash} takes no arguments")
             return
         handler(tail)
 
+    def _command_handlers(self) -> dict[str, Callable[[list[str]], None]]:
+        return {
+            "help": self._show_help,
+            "status": self._show_status,
+            "capabilities": self._show_capabilities,
+            "approve": self._approve,
+            "deny": self._deny,
+            "revise": self._revise,
+            "quit": self._quit,
+        }
+
     def _show_help(self, tail: list[str]) -> None:
-        if tail:
-            self._usage("/help takes no arguments")
-            return
-        self._write(Panel(_HELP.rstrip(), title="Approval chain"))
+        self._write(
+            Panel(command_registry.render_help(), title="Approval chain")
+        )
 
     def _show_status(self, tail: list[str]) -> None:
-        if tail:
-            self._usage("/status takes no arguments")
-            return
         table = Table(title="Current session", show_header=False)
         table.add_column("Field", style="bold cyan")
         table.add_column("Value")
@@ -199,9 +196,6 @@ class ChemSmartAgentApp(App[None]):
         self._write(table)
 
     def _show_capabilities(self, tail: list[str]) -> None:
-        if tail:
-            self._usage("/capabilities takes no arguments")
-            return
         from chemsmart.agent.capabilities import load_program_capabilities
 
         table = Table(title="Live Agent program surface")
@@ -229,8 +223,11 @@ class ChemSmartAgentApp(App[None]):
         )
 
     def _approve(self, tail: list[str]) -> None:
-        if tail:
-            self._usage("/approve takes no arguments")
+        try:
+            self.controller.begin_execution()
+        except ContractError as exc:
+            # The guard speaks before any approval banner can appear.
+            self._operation_failed("Approval", exc)
             return
         self._write(
             Panel(
@@ -247,16 +244,14 @@ class ChemSmartAgentApp(App[None]):
         self._run_execution()
 
     def _deny(self, tail: list[str]) -> None:
-        if tail:
-            self._usage("/deny takes no arguments")
-            return
         self._decline_review("denied")
 
     def _revise(self, tail: list[str]) -> None:
-        if tail:
-            self._usage("/revise takes no arguments")
-            return
         self._decline_review("revision requested")
+        composer = self.query_one("#composer", Input)
+        composer.value = self.controller.task
+        composer.cursor_position = len(composer.value)
+        composer.focus()
 
     def _decline_review(self, decision: str) -> None:
         self.controller.decline()
@@ -270,9 +265,6 @@ class ChemSmartAgentApp(App[None]):
         self._sync_phase("Enter a revised scientific request when ready")
 
     def _quit(self, tail: list[str]) -> None:
-        if tail:
-            self._usage("/quit takes no arguments")
-            return
         if self._busy:
             self.notify(
                 "Wait for the current host operation to finish before exiting",
@@ -284,7 +276,7 @@ class ChemSmartAgentApp(App[None]):
     @work(thread=True, exclusive=True, group="agent-operation")
     def _run_plan(self, task: str) -> None:
         try:
-            result = self.controller.plan(task)
+            result = self.controller.run_planning(task)
         except Exception as exc:
             self.call_from_thread(self._operation_failed, "Planning", exc)
             return
@@ -293,7 +285,7 @@ class ChemSmartAgentApp(App[None]):
     @work(thread=True, exclusive=True, group="agent-operation")
     def _run_execution(self) -> None:
         try:
-            result = self.controller.approve_and_execute()
+            result = self.controller.execute_begun()
         except Exception as exc:
             self.call_from_thread(self._operation_failed, "Execution", exc)
             return
@@ -583,27 +575,28 @@ class ChemSmartAgentApp(App[None]):
 
     def _sync_phase(self, hint: str) -> None:
         phase = self.controller.phase.value
-        self.query_one("#phase-bar", Static).update(
-            Text.assemble(
-                ("● ", "bold cyan"),
-                (phase, "bold"),
-                ("  ·  ", "dim"),
-                (hint, "dim"),
-            )
+        self.query_one("#phase-bar", Static).update(phase_chip(phase, hint))
+        self.query_one("#footer", Static).update(
+            command_registry.footer_hint(phase)
         )
 
     def _write(self, renderable) -> None:
-        self.query_one("#transcript", RichLog).write(renderable)
-
-    def _wordmark(self) -> Text:
-        return Text.assemble(
-            ("CHEMSMART", "bold cyan"),
-            ("  AGENT", "bold"),
-            ("  Runtime V2", "dim"),
-        )
+        self.query_one("#transcript", TranscriptView).add_block(renderable)
 
     def action_safe_quit(self) -> None:
         self._quit([])
+
+    def action_scroll_transcript_up(self) -> None:
+        self.query_one("#transcript", TranscriptView).scroll_page_up()
+
+    def action_scroll_transcript_down(self) -> None:
+        self.query_one("#transcript", TranscriptView).scroll_page_down()
+
+    def action_scroll_transcript_top(self) -> None:
+        self.query_one("#transcript", TranscriptView).scroll_home()
+
+    def action_scroll_transcript_bottom(self) -> None:
+        self.query_one("#transcript", TranscriptView).scroll_end()
 
 
 __all__ = ["ChemSmartAgentApp"]

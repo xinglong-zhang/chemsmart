@@ -1,4 +1,4 @@
-"""A terminal-level smoke observation for the production Textual shell."""
+"""The terminal shell: explicit approval chain, honest guards, live chrome."""
 
 from __future__ import annotations
 
@@ -7,9 +7,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from rich.console import Console
 
 pytest.importorskip("textual")
+
+from rich.console import Console  # noqa: E402
 
 from chemsmart.agent.tui.app import ChemSmartAgentApp  # noqa: E402
 from chemsmart.agent.tui.controller import (  # noqa: E402
@@ -18,12 +19,12 @@ from chemsmart.agent.tui.controller import (  # noqa: E402
 )
 
 
-def test_tui_launches_and_exposes_explicit_approval_chain(tmp_path: Path):
+def _app(tmp_path: Path) -> ChemSmartAgentApp:
     secret = tmp_path / "secret.env"
     secret.write_text("PROVIDER_KEY=not-used\n", encoding="utf-8")
     envelope = tmp_path / "execution-envelope.json"
     envelope.write_text("{}\n", encoding="utf-8")
-    app = ChemSmartAgentApp(
+    return ChemSmartAgentApp(
         AgentTuiController(
             AgentSessionConfigV1(
                 workspace=tmp_path,
@@ -35,16 +36,83 @@ def test_tui_launches_and_exposes_explicit_approval_chain(tmp_path: Path):
         plain=True,
     )
 
+
+def _transcript_text(app: ChemSmartAgentApp) -> str:
+    transcript = app.query_one("#transcript")
+    console = Console(record=True, width=200)
+    for renderable in transcript.recorder.entries:
+        console.print(renderable)
+    return " ".join(
+        console.export_text().replace("│", " ").split()
+    )
+
+
+async def _submit(app, pilot, text: str) -> None:
+    composer = app.query_one("#composer")
+    composer.value = text
+    composer.focus()
+    await pilot.press("enter")
+    await pilot.pause()
+
+
+def test_tui_launches_and_exposes_explicit_approval_chain(tmp_path: Path):
+    app = _app(tmp_path)
+
     async def observe() -> None:
         async with app.run_test(size=(120, 35)) as pilot:
-            composer = app.query_one("#composer")
-            composer.value = "/help"
-            await pilot.press("enter")
-            await pilot.pause()
-
-            transcript = app.query_one("#transcript")
-            assert len(transcript.lines) > 10
+            await _submit(app, pilot, "/help")
+            text = _transcript_text(app)
+            assert "/approve" in text
+            assert "provider-free ChemSmart executor" in text
             assert app.controller.phase.value == "ready"
+
+    asyncio.run(observe())
+
+
+def test_a_mistyped_command_is_answered_with_the_nearest_real_one(
+    tmp_path: Path,
+):
+    app = _app(tmp_path)
+
+    async def observe() -> None:
+        async with app.run_test(size=(120, 35)) as pilot:
+            await _submit(app, pilot, "/aprove")
+            text = _transcript_text(app)
+            assert "Unknown command: /aprove" in text
+            assert "Did you mean /approve?" in text
+
+    asyncio.run(observe())
+
+
+def test_approve_refuses_before_any_banner_when_nothing_is_reviewed(
+    tmp_path: Path,
+):
+    """The guard speaks first; an approval banner over nothing is a lie."""
+
+    app = _app(tmp_path)
+
+    async def observe() -> None:
+        async with app.run_test(size=(120, 35)) as pilot:
+            await _submit(app, pilot, "/approve")
+            text = _transcript_text(app)
+            assert "Approve and run" not in text
+            assert "Approval stopped" in text
+            assert "review the displayed ChemSmart workflow" in text
+
+    asyncio.run(observe())
+
+
+def test_revise_declines_and_hands_the_task_back_for_editing(tmp_path: Path):
+    app = _app(tmp_path)
+
+    async def observe() -> None:
+        async with app.run_test(size=(120, 35)) as pilot:
+            app.controller.task = "optimize the water dimer with xtb"
+            await _submit(app, pilot, "/revise")
+            composer = app.query_one("#composer")
+            assert composer.value == "optimize the water dimer with xtb"
+            text = _transcript_text(app)
+            assert "revision requested" in text
 
     asyncio.run(observe())
 
@@ -117,7 +185,7 @@ def test_approval_surface_displays_deferred_stage_and_reason(tmp_path: Path):
         console.print(item)
     transcript = console.export_text()
 
-    flattened = " ".join(transcript.replace("\u2502", " ").split())
+    flattened = " ".join(transcript.replace("│", " ").split())
     assert "irc" in flattened
     assert "Deferred" in flattened
     assert "IRC execution is not release-qualified" in flattened
