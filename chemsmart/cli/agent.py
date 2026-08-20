@@ -87,6 +87,52 @@ def _human_artifact(entry: str) -> str:
     return _HEX64.sub("…", str(entry))
 
 
+def _resolved_session_paths(
+    workspace: Path | None,
+    secret_file: Path | None,
+    execution_envelope: Path | None,
+    identity_manifest: Path | None,
+) -> tuple[Path, Path, Path | None, Path | None, tuple[str, ...]]:
+    """Fill the interactive defaults, announcing every discovery."""
+
+    notes: list[str] = []
+    if workspace is None:
+        workspace = Path.cwd()
+        notes.append(
+            f"Using the current directory as the workspace: {workspace}"
+        )
+    if secret_file is None:
+        default_secret = Path.home() / ".chemsmart" / "agent" / "api.env"
+        if default_secret.is_file():
+            secret_file = default_secret
+            notes.append(
+                "Using the credential assignment at "
+                "~/.chemsmart/agent/api.env"
+            )
+        else:
+            raise click.UsageError(
+                "--secret-file is required; no default exists at "
+                "~/.chemsmart/agent/api.env"
+            )
+    if execution_envelope is None:
+        candidate = workspace / "execution-envelope.yaml"
+        if candidate.is_file():
+            execution_envelope = candidate
+            notes.append(
+                "Using resource limits from execution-envelope.yaml "
+                "(discovered in the workspace)"
+            )
+    if identity_manifest is None:
+        candidate = workspace / "identity-manifest.yaml"
+        if candidate.is_file():
+            identity_manifest = candidate
+            notes.append(
+                "Using molecular identities from identity-manifest.yaml "
+                "(discovered in the workspace)"
+            )
+    return workspace, secret_file, execution_envelope, identity_manifest, tuple(notes)
+
+
 def _read_task(task: str | None, task_file: Path | None) -> str:
     if (task is None) == (task_file is None):
         raise click.UsageError("provide exactly one of --task or --task-file")
@@ -97,15 +143,19 @@ def _read_task(task: str | None, task_file: Path | None) -> str:
     return value
 
 
-@click.group(name="agent", cls=MyGroup)
-def agent():
+@click.group(name="agent", cls=MyGroup, invoke_without_command=True)
+@click.pass_context
+def agent(ctx):
     """Operate the ChemSmart Agent pipeline: plan, review, run, or tui.
 
     ``plan`` creates and safely previews a workflow, ``review`` re-presents a
     stored review for the one human decision, ``run`` executes an approved
     bundle provider-free, and ``tui`` is the interactive terminal over the
-    same chain.
+    same chain. Bare ``chemsmart agent`` opens the terminal.
     """
+
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(tui)
 
 
 @agent.command("plan")
@@ -344,8 +394,9 @@ def review(
 @click.option(
     "--secret-file",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    required=True,
-    help="Secret assignment file parsed as data; it is never sourced.",
+    default=None,
+    help="Secret assignment file parsed as data; defaults to "
+    "~/.chemsmart/agent/api.env when that file exists.",
 )
 @click.option(
     "--execution-envelope",
@@ -365,8 +416,9 @@ def review(
 @click.option(
     "--workspace",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    required=True,
-    help="Task workspace containing user-approved artifacts.",
+    default=None,
+    help="Task workspace containing user-approved artifacts; defaults to "
+    "the current directory.",
 )
 @click.option(
     "--analysis-completion-file",
@@ -400,6 +452,11 @@ def tui(
 
     from chemsmart.agent.tui import launch_tui
 
+    workspace, secret_file, execution_envelope, identity_manifest, notes = (
+        _resolved_session_paths(
+            workspace, secret_file, execution_envelope, identity_manifest
+        )
+    )
     try:
         launch_tui(
             workspace=workspace,
@@ -411,6 +468,7 @@ def tui(
             identity_manifest=identity_manifest,
             analysis_completion_file=analysis_completion_file,
             plain=plain,
+            discovery_notes=notes,
         )
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
@@ -432,8 +490,9 @@ def tui(
 @click.option(
     "--secret-file",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    required=True,
-    help="Secret assignment file parsed as data; it is never sourced.",
+    default=None,
+    help="Secret assignment file parsed as data; defaults to "
+    "~/.chemsmart/agent/api.env when that file exists.",
 )
 @click.option(
     "--execution-envelope",
@@ -444,8 +503,9 @@ def tui(
 @click.option(
     "--workspace",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
-    required=True,
-    help="The workspace whose previous session should be restored.",
+    default=None,
+    help="The workspace whose previous session should be restored; "
+    "defaults to the current directory.",
 )
 @click.option(
     "--analysis-completion-file",
@@ -478,6 +538,11 @@ def resume(
 
     from chemsmart.agent.tui import launch_tui
 
+    workspace, secret_file, execution_envelope, identity_manifest, notes = (
+        _resolved_session_paths(
+            workspace, secret_file, execution_envelope, identity_manifest
+        )
+    )
     try:
         launch_tui(
             workspace=workspace,
@@ -490,6 +555,7 @@ def resume(
             analysis_completion_file=analysis_completion_file,
             plain=plain,
             resume=True,
+            discovery_notes=notes,
         )
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc

@@ -115,3 +115,92 @@ def test_review_summary_names_artifacts_and_drops_digests(
     assert "review_sha256" not in result.output
     assert "task_spec_sha256" not in result.output
     assert _HEX.search(result.output) is None
+
+
+def test_the_minimal_invocation_fills_and_announces_defaults(
+    tmp_path, monkeypatch
+):
+    """cwd workspace, home secret, discovered envelope+manifest — spoken."""
+
+    home = tmp_path / "home"
+    (home / ".chemsmart" / "agent").mkdir(parents=True)
+    secret = home / ".chemsmart" / "agent" / "api.env"
+    secret.write_text("KEY=value\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    (workspace / "execution-envelope.yaml").write_text(
+        "schema_version: chemsmart.bounded-execution-envelope.v1\n",
+        encoding="utf-8",
+    )
+    (workspace / "identity-manifest.yaml").write_text(
+        "schema_version: chemsmart.approved-molecular-input-manifest.v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace)
+
+    captured = {}
+
+    import chemsmart.agent.tui as tui_package
+
+    monkeypatch.setattr(
+        tui_package, "launch_tui", lambda **kwargs: captured.update(kwargs)
+    )
+
+    result = CliRunner().invoke(agent, ["tui"])
+
+    assert result.exit_code == 0, result.output
+    assert captured["workspace"] == workspace
+    assert captured["secret_file"] == secret
+    assert captured["execution_envelope_file"] == (
+        workspace / "execution-envelope.yaml"
+    )
+    assert captured["identity_manifest"] == (
+        workspace / "identity-manifest.yaml"
+    )
+    notes = " ".join(captured["discovery_notes"])
+    assert "current directory as the workspace" in notes
+    assert "~/.chemsmart/agent/api.env" in notes
+    assert "execution-envelope.yaml" in notes
+    assert "identity-manifest.yaml" in notes
+
+
+def test_a_missing_default_secret_is_a_usage_error(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    result = CliRunner().invoke(agent, ["tui"])
+
+    assert result.exit_code == 2
+    assert "--secret-file is required" in result.output
+
+
+def test_bare_agent_opens_the_terminal(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    (home / ".chemsmart" / "agent").mkdir(parents=True)
+    (home / ".chemsmart" / "agent" / "api.env").write_text(
+        "KEY=value\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("HOME", str(home))
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    captured = {}
+
+    import chemsmart.agent.tui as tui_package
+
+    monkeypatch.setattr(
+        tui_package, "launch_tui", lambda **kwargs: captured.update(kwargs)
+    )
+
+    result = CliRunner().invoke(agent, [])
+
+    assert result.exit_code == 0, result.output
+    assert captured.get("workspace") == workspace
+    assert captured.get("resume", False) is False
