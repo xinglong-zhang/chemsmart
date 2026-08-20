@@ -1,0 +1,133 @@
+name: wizard-hpc
+# Tier 3 of the wizard's verification ladder: the real `chemsmart wizard`
+# probes a REAL scheduler daemon, not a shim. SLURM runs natively on the
+# runner (slurm-wlm + munge, one-node cluster); OpenPBS runs best-effort
+# in a container. Scheduled because real daemons are slow to provision --
+# every push is still covered by the fixture suites and the PATH-shim e2e
+# in the main workflow.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  wizard_against_real_slurm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install a one-node SLURM cluster
+        run: |
+          sudo apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
+            slurm-wlm munge
+          CPUS="$(nproc)"
+          MEM_MB="$(free -m | awk '/^Mem:/{print $2}')"
+          sudo tee /etc/slurm/slurm.conf > /dev/null <<CONF
+          ClusterName=ci
+          SlurmctldHost=localhost
+          AuthType=auth/munge
+          ProctrackType=proctrack/linuxproc
+          SchedulerType=sched/backfill
+          SelectType=select/cons_tres
+          SelectTypeParameters=CR_Core_Memory
+          SlurmdUser=root
+          StateSaveLocation=/var/spool/slurmctld
+          SlurmdSpoolDir=/var/spool/slurmd
+          NodeName=localhost CPUs=$CPUS RealMemory=$MEM_MB State=UNKNOWN
+          PartitionName=compute Nodes=localhost Default=YES \
+          MaxTime=2-00:00:00 State=UP
+          CONF
+          sudo mkdir -p /var/spool/slurmctld /var/spool/slurmd
+          sudo systemctl restart munge
+          sudo systemctl restart slurmctld slurmd
+          for _ in $(seq 30); do
+            sinfo -h && break
+            sleep 2
+          done
+          sinfo
+
+      - name: Install chemsmart with pip
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: The wizard reads the real scheduler
+        run: |
+          export HOME_REAL="$HOME"
+          export HOME="$(mktemp -d)"
+          chemsmart wizard --server --yes | tee wizard.log
+          CFG="$HOME/.chemsmart/server/SLURM.yaml"
+          test -f "$CFG"
+          grep -q "SCHEDULER: SLURM" "$CFG"
+          grep -q "QUEUE_NAME: compute" "$CFG"
+          grep -q "detected SLURM" "$CFG"
+          # The chosen queue, not the login node, is the resource
+          # authority: NUM_CORES must equal the partition's CPU count.
+          CPUS="$(sinfo -h -o %c | head -1)"
+          grep -q "NUM_CORES: $CPUS" "$CFG"
+          grep -q "\[ok  \] scheduler responds" wizard.log
+          grep -q "\[ok  \] submit command present" wizard.log
+
+          # The written file renders a script the real controller accepts
+          # (--test-only validates without executing anything).
+          mkdir -p "$HOME/run" && cd "$HOME/run"
+          printf '3\nwater\nO 0.0 0.0 0.1173\nH 0.0 0.7572 -0.4692\nH 0.0 -0.7572 -0.4692\n' > water.xyz
+          chemsmart sub --test --fake -s SLURM xtb -p test -f water.xyz sp
+          sbatch --test-only water_sp/chemsmart_sub_water_sp.sh
+
+      - name: Upload the written configuration
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wizard-slurm-yaml
+          path: |
+            /home/runner/.chemsmart/server/*.yaml
+            wizard.log
+          if-no-files-found: ignore
+
+  wizard_against_openpbs:
+    # Best-effort until a maintained OpenPBS CI image is pinned; the PBS
+    # parsers stay fixture-verified on every push either way.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Start an OpenPBS container
+        run: |
+          docker run -d --name pbs -h pbs --privileged \
+            openpbs/openpbs:latest /bin/sh -c \
+            "/etc/init.d/pbs start && sleep infinity"
+          sleep 20
+          docker exec pbs bash -lc "qstat -Qf && pbsnodes -a"
+
+      - name: Run the wizard inside the container
+        run: |
+          docker cp . pbs:/chemsmart
+          docker exec pbs bash -lc "
+            set -e
+            command -v python3 >/dev/null
+            python3 -m pip install /chemsmart
+            export HOME=/tmp/wizard-home && mkdir -p \$HOME
+            chemsmart wizard --server --yes
+            test -f \$HOME/.chemsmart/server/PBS.yaml
+            grep -q 'SCHEDULER: PBS' \$HOME/.chemsmart/server/PBS.yaml
+          "

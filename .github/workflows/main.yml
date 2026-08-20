@@ -86,6 +86,28 @@ jobs:
         run: |
           python -m twine check dist/*
 
+      - name: Install the wheel into a bare venv and smoke it
+        shell: bash -l {0}
+        run: |
+          python -m venv /tmp/wheel-smoke
+          /tmp/wheel-smoke/bin/pip install --quiet dist/*.whl
+          /tmp/wheel-smoke/bin/chemsmart --version
+          /tmp/wheel-smoke/bin/chemsmart --help > /dev/null
+          /tmp/wheel-smoke/bin/python - <<'EOF'
+          import importlib.resources as resources
+
+          # The PyMOL style templates must ship in a clean wheel; runner.py
+          # copies them by path and every visualization style fails without
+          # them.
+          templates = resources.files("chemsmart.jobs.mol") / "templates"
+          names = {item.name for item in templates.iterdir()}
+          assert "zhang_group_pymol_style.py" in names, sorted(names)
+
+          # The TUI package must import without textual installed and give
+          # the actionable extra hint when launched.
+          import chemsmart.agent.tui  # noqa: F401
+          EOF
+
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -295,3 +317,44 @@ jobs:
         if: steps.changed-files.outputs.only_changed != 'true'
         shell: bash -l {0}
         run: make test
+
+  pip_install_and_wizard:
+    # The path a new academic user actually takes: plain pip, no conda.
+    # Runs the dependency-clean core suites on every Python the metadata
+    # claims, then the real `chemsmart wizard --server --yes` end to end
+    # against PATH-shim scheduler binaries in an isolated HOME.
+    needs: [pre-commit]
+    if: ${{ success() }}
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install with pip only
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[test,agent-tui]
+
+      - name: Core suites
+        run: |
+          python -m pytest -q -p no:randomly \
+            tests/agent tests/settings tests/test_server.py \
+            tests/test_config.py tests/test_capabilities.py
+
+      - name: Wizard onboarding e2e (PATH-shim scheduler)
+        run: bash .github/scripts/wizard_shim_e2e.sh
