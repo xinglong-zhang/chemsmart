@@ -38,7 +38,14 @@ from .monitor import (
     planning_feed_update,
     planning_row_key,
 )
-from .panels import DagPanel, JobsPanel, phase_chip, wordmark
+from .panels import (
+    DagPanel,
+    JobsPanel,
+    SPECTRUM_COLORS,
+    phase_chip,
+    spectrum_rule,
+    wordmark,
+)
 from .report import looks_like_host_report, render_report_for_humans
 from . import resume as resume_module
 from .presentation import human_cli_operation, session_evidence_blocks
@@ -139,6 +146,8 @@ class ChemSmartAgentApp(App[None]):
         self._last_report_path: Path | None = None
         self._esc_armed = False
         self._esc_disarm_timer = None
+        self._pulse_index = 0
+        self._phase_words = ("ready", "")
         self._pending_skill = ""
         self.exit_summary = {
             "planning_sessions": 0,
@@ -148,7 +157,11 @@ class ChemSmartAgentApp(App[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-shell"):
-            yield Static(wordmark(), id="wordmark")
+            header = Text()
+            header.append_text(wordmark())
+            header.append("\n")
+            header.append_text(spectrum_rule(44, plain=self.plain))
+            yield Static(header, id="wordmark")
             yield Static("", id="phase-bar")
             yield TranscriptView(id="transcript")
             yield DagPanel("", id="dag-panel")
@@ -178,6 +191,7 @@ class ChemSmartAgentApp(App[None]):
             self._write(Text(note, style="dim"))
         self._sync_phase("Ready for a scientific request")
         self.controller.on_run_directory = self._announce_run_directory
+        self.set_interval(1.0, self._pulse_phase_dot)
         self.query_one("#composer", Input).focus()
         workspace = self.controller.config.workspace
         if self.resume_requested:
@@ -818,6 +832,7 @@ class ChemSmartAgentApp(App[None]):
                 )
             )
             return
+        self._write(spectrum_rule(44, plain=self.plain))
         self._write(
             Panel(
                 render_report_for_humans(path.read_text(encoding="utf-8")),
@@ -974,6 +989,7 @@ class ChemSmartAgentApp(App[None]):
             self._last_report_path = report_path
             self.exit_summary["report_paths"].append(str(report_path))
             if report_path.exists():
+                self._write(spectrum_rule(44, plain=self.plain))
                 self._write(
                     Panel(
                         render_report_for_humans(
@@ -1025,9 +1041,27 @@ class ChemSmartAgentApp(App[None]):
 
     def _sync_phase(self, hint: str) -> None:
         phase = self.controller.phase.value
-        self.query_one("#phase-bar", Static).update(phase_chip(phase, hint))
+        self._phase_words = (human_state(phase), hint)
+        self.query_one("#phase-bar", Static).update(
+            phase_chip(self._phase_words[0], hint)
+        )
         self.query_one("#footer", Static).update(
             command_registry.footer_hint(phase)
+        )
+
+    def _pulse_phase_dot(self) -> None:
+        """While busy, the phase dot breathes through the spectrum colors."""
+
+        if not self._busy or self.plain:
+            return
+        self._pulse_index = (self._pulse_index + 1) % len(SPECTRUM_COLORS)
+        words, hint = self._phase_words
+        self.query_one("#phase-bar", Static).update(
+            phase_chip(
+                words,
+                hint,
+                dot_style=f"bold {SPECTRUM_COLORS[self._pulse_index]}",
+            )
         )
 
     def _write(self, renderable) -> None:

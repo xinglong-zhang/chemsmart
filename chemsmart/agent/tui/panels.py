@@ -37,17 +37,42 @@ def product_version() -> str:
         return "dev"
 
 
+#: The logo's vibrational-waveform motif, tiled to width. Exactly two
+#: sanctioned placements: under the wordmark, and before "Analysis results".
+_SPECTRUM_GLYPHS = "▂▄▆█▆▄▂▁"
+SPECTRUM_COLORS = ("#51cf66", "#4dd3e8", "#c2255c", "#ff8fab")
+
+
 def wordmark() -> Text:
     return Text.assemble(
-        ("ChemSmart", "bold cyan"),
-        (" Agent", "bold"),
+        ("CHEM", "bold magenta"),
+        ("SMART", "bold green"),
+        (" Agent", ""),
         (f"  v{product_version()}", "dim"),
     )
 
 
-def phase_chip(phase: str, hint: str) -> Text:
+def spectrum_rule(width: int, *, plain: bool = False) -> Text:
+    """The one signature flourish; a plain dim rule without color."""
+
+    width = max(8, int(width))
+    if plain:
+        return Text("─" * width, style="dim")
+    glyphs = (_SPECTRUM_GLYPHS * (width // len(_SPECTRUM_GLYPHS) + 1))[:width]
+    segment = max(1, width // len(SPECTRUM_COLORS))
+    text = Text()
+    for index, color in enumerate(SPECTRUM_COLORS):
+        start = index * segment
+        end = width if index == len(SPECTRUM_COLORS) - 1 else start + segment
+        if start >= width:
+            break
+        text.append(glyphs[start:end], style=color)
+    return text
+
+
+def phase_chip(phase: str, hint: str, *, dot_style: str = "bold cyan") -> Text:
     return Text.assemble(
-        ("● ", "bold cyan"),
+        ("● ", dot_style),
         (phase, "bold"),
         ("  ·  ", "dim"),
         (hint, "dim"),
@@ -145,10 +170,12 @@ class JobsPanel(Static):
 
 __all__ = [
     "DagPanel",
+    "SPECTRUM_COLORS",
     "JobsPanel",
     "dag_rows",
     "phase_chip",
     "product_version",
+    "spectrum_rule",
     "state_glyph",
     "wordmark",
 ]
