@@ -133,7 +133,59 @@ def _yaml_scalar(value: object) -> str:
     return str(value)
 
 
-def render_server_block(choices: ServerChoicesV1, *, host: HostFactsV1) -> str:
+_EXTRA_COMMANDS_PLACEHOLDER = "# Host commands required before execution."
+
+
+def extract_extra_commands(text: str) -> str | None:
+    """Hand-tuned EXTRA_COMMANDS content of an existing SERVER block.
+
+    Detection refreshes what the host can answer; commands like
+    ``ulimit -s unlimited`` are operational knowledge the host cannot
+    re-derive, so a refresh carries them forward. Returns the dedented
+    content, or None when there is none (or only the template
+    placeholder).
+    """
+
+    block = extract_top_level_block(text, "SERVER")
+    lines = block.splitlines()
+    content: list[str] = []
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("EXTRA_COMMANDS:"):
+            continue
+        value = stripped.removeprefix("EXTRA_COMMANDS:").strip()
+        if value and value not in {"|", "|-", ">"}:
+            content = [value]
+            break
+        key_indent = len(line) - len(line.lstrip())
+        for follower in lines[index + 1 :]:
+            if follower.strip() and (
+                len(follower) - len(follower.lstrip()) <= key_indent
+            ):
+                break
+            content.append(follower)
+        while content and not content[-1].strip():
+            content.pop()
+        if content:
+            pad = min(
+                len(entry) - len(entry.lstrip())
+                for entry in content
+                if entry.strip()
+            )
+            content = [entry[pad:].rstrip() for entry in content]
+        break
+    kept = [entry for entry in content if entry.strip()]
+    if not kept or kept == [_EXTRA_COMMANDS_PLACEHOLDER]:
+        return None
+    return "\n".join(content)
+
+
+def render_server_block(
+    choices: ServerChoicesV1,
+    *,
+    host: HostFactsV1,
+    carried_extra_commands: str | None = None,
+) -> str:
     """The SERVER: block, with its provenance stated as comments."""
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -155,10 +207,16 @@ def render_server_block(choices: ServerChoicesV1, *, host: HostFactsV1) -> str:
         f"    SUBMIT_COMMAND: {_yaml_scalar(choices.submit_command)}",
         f"    SCRATCH_DIR: {_yaml_scalar(choices.scratch_dir)}",
         "    USE_HOSTS: false",
-        "    EXTRA_COMMANDS: |",
-        "        # Host commands required before execution.",
-        "",
     ]
+    if carried_extra_commands is not None:
+        lines.append("    # carried from the previous configuration")
+        lines.append("    EXTRA_COMMANDS: |")
+        for entry in carried_extra_commands.splitlines():
+            lines.append(f"        {entry}".rstrip())
+    else:
+        lines.append("    EXTRA_COMMANDS: |")
+        lines.append(f"        {_EXTRA_COMMANDS_PLACEHOLDER}")
+    lines.append("")
     return "\n".join(lines)
 
 

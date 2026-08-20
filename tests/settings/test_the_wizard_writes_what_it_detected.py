@@ -19,6 +19,7 @@ from chemsmart.settings.probe import (
 )
 from chemsmart.settings.wizard import (
     derive_choices,
+    extract_extra_commands,
     render_server_block,
     splice_server_block,
     write_server_yaml,
@@ -158,3 +159,44 @@ def test_a_new_file_grows_from_the_template(tmp_path: Path):
     merged = target.read_text(encoding="utf-8")
     assert yaml.safe_load(merged)["SERVER"]["SCHEDULER"] == "SLURM"
     assert merged.endswith("XTB:\n    LOCAL_RUN: true\n")
+
+
+def test_hand_tuned_extra_commands_are_carried_through_a_refresh():
+    """`ulimit -s unlimited` is operational knowledge the host cannot
+    re-derive; a refresh must not silently drop it (live-host finding)."""
+
+    previous = (
+        "SERVER:\n"
+        "  SCHEDULER: SLURM\n"
+        "  EXTRA_COMMANDS: |\n"
+        "    ulimit -s unlimited\n"
+        "    module load mkl\n"
+        "\n"
+        "ORCA:\n"
+        "    EXEFOLDER: /opt/chem/orca\n"
+    )
+    carried = extract_extra_commands(previous)
+    assert carried == "ulimit -s unlimited\nmodule load mkl"
+
+    block = render_server_block(
+        _choices(), host=_HOST, carried_extra_commands=carried
+    )
+    payload = yaml.safe_load(block)
+    assert payload["SERVER"]["EXTRA_COMMANDS"] == (
+        "ulimit -s unlimited\nmodule load mkl\n"
+    )
+    assert "# carried from the previous configuration" in block
+
+
+def test_the_placeholder_and_absence_carry_nothing():
+    placeholder = (
+        "SERVER:\n"
+        "    EXTRA_COMMANDS: |\n"
+        "        # Host commands required before execution.\n"
+    )
+    assert extract_extra_commands(placeholder) is None
+    assert extract_extra_commands("SERVER:\n    SCHEDULER: null\n") is None
+    assert extract_extra_commands("") is None
+
+    inline = "SERVER:\n    EXTRA_COMMANDS: ulimit -s unlimited\n"
+    assert extract_extra_commands(inline) == "ulimit -s unlimited"

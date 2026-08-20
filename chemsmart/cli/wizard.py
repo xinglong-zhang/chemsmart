@@ -29,6 +29,7 @@ from chemsmart.settings.wizard import (
     ServerChoicesV1,
     derive_choices,
     extract_top_level_block,
+    extract_extra_commands,
     render_server_block,
     run_verification,
     splice_top_level_block,
@@ -310,7 +311,19 @@ def wizard(server_only, assume_yes, no_verify):
     name = choices.scheduler or "local"
     target = _user_server_dir() / f"{name}.yaml"
     template_text = _template_text()
-    block = render_server_block(choices, host=host)
+    carried = (
+        extract_extra_commands(target.read_text(encoding="utf-8"))
+        if target.exists()
+        else None
+    )
+    if carried is not None:
+        click.echo(
+            "Carrying the previous EXTRA_COMMANDS forward (host commands "
+            "are not detectable)."
+        )
+    block = render_server_block(
+        choices, host=host, carried_extra_commands=carried
+    )
     backup = write_server_yaml(target, block, template_text=template_text)
     if backup is not None:
         click.echo(f"Backed up the previous file to {backup}")
