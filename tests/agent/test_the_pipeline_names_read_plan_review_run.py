@@ -113,12 +113,34 @@ def test_run_is_the_provider_free_executor(tmp_path, monkeypatch):
             str(workspace),
             "--run-directory",
             str(tmp_path / "run"),
+            "--json",
         ],
     )
 
     assert result.exit_code == 0, result.output
     assert calls["approval_file"] == approval
     assert '"provider_calls": 0' in result.output
+
+    human = CliRunner().invoke(
+        agent,
+        [
+            "run",
+            "--approval-file",
+            str(approval),
+            "--workspace",
+            str(workspace),
+            "--run-directory",
+            str(tmp_path / "run"),
+        ],
+    )
+
+    assert human.exit_code == 0, human.output
+    assert "workflow: water-sp" in human.output
+    assert "status: completed" in human.output
+    assert "plan_sha256" not in human.output
+    import re
+
+    assert re.search(r"[0-9a-f]{64}", human.output) is None
 
 
 def test_the_retired_command_names_are_gone_not_aliased():

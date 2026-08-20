@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import click
@@ -69,6 +70,23 @@ def _task_options(function):
     return function
 
 
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+def _human_artifact(entry: str) -> str:
+    """Render 'node:kind:digest16' evidence entries as words."""
+
+    parts = str(entry).split(":")
+    if len(parts) == 3:
+        node, kind, _digest = parts
+        label = {
+            "project": "project settings",
+            "input": "input geometry",
+        }.get(kind, kind)
+        return f"{node} · {label}"
+    return _HEX64.sub("…", str(entry))
+
+
 def _read_task(task: str | None, task_file: Path | None) -> str:
     if (task is None) == (task_file is None):
         raise click.UsageError("provide exactly one of --task or --task-file")
@@ -107,6 +125,13 @@ def agent():
     default=None,
     help="Write the inert exact execution review packet to this JSON file.",
 )
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Print the full machine-readable session record instead of the "
+    "human summary.",
+)
 def plan(
     task,
     task_file,
@@ -118,6 +143,7 @@ def plan(
     identity_manifest,
     execution_envelope,
     review_file,
+    as_json,
 ):
     """Create and safely preview a command-compiled research workflow."""
 
@@ -145,7 +171,27 @@ def plan(
         approved_molecular_inputs=approved_inputs,
         review_file=review_file.resolve() if review_file is not None else None,
     )
-    click.echo(result.public_summary_json())
+    if as_json:
+        click.echo(result.public_summary_json())
+        return
+    from chemsmart.agent.tui.voice import human_state
+
+    lines = [f"outcome: {human_state(result.terminal_state)}"]
+    steps = f"{result.successful_tool_calls} steps"
+    if result.failed_tool_calls:
+        steps += f", {result.failed_tool_calls} refused"
+    lines.append(f"steps: {steps}")
+    if review_file is not None and result.prepared_execution is not None:
+        resolved_review = review_file.resolve()
+        lines.append(f"review written: {resolved_review}")
+        lines.append(
+            "next: chemsmart agent review "
+            f"--review-file {resolved_review} --workspace {workspace}"
+        )
+    click.echo("\n".join(lines))
+    if result.final_text:
+        click.echo("")
+        click.echo(_HEX64.sub("…", result.final_text))
 
 
 @agent.command("review")
@@ -215,21 +261,31 @@ def review(
     summary = {
         key: value
         for key, value in report.items()
-        if key != "canonical_review"
+        if key
+        not in {"canonical_review", "review_sha256", "task_spec_sha256"}
     }
+    for key in ("approved_artifacts_present", "missing_approved_artifacts"):
+        summary[key] = [
+            _human_artifact(item) for item in (summary.get(key) or ())
+        ]
     if not normalized:
         summary["decision"] = "not taken; pass --decision to decide"
-        click.echo(json.dumps(summary, indent=2, sort_keys=True))
+        click.echo(
+        json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False)
+    )
         return
 
     if report["missing_approved_artifacts"]:
         # Resolving inputs would fail before anything is dispatched, so a
         # decision here would be spent on a run that cannot start.
+        missing = ", ".join(
+            _human_artifact(item)
+            for item in report["missing_approved_artifacts"]
+        )
         raise click.ClickException(
-            "these approved bytes are no longer under the workspace, so this "
-            "workflow cannot execute as approved: "
-            f"{report['missing_approved_artifacts']}. Plan it again rather "
-            "than deciding on a run that must fail."
+            "these approved files are no longer under the workspace, so "
+            f"this workflow cannot execute as approved: {missing}. Plan it "
+            "again rather than deciding on a run that must fail."
         )
     chosen = str(approval_id or "").strip() or replay_approval_id()
     scope = (
@@ -257,8 +313,6 @@ def review(
         {
             "decision": resolution.decision,
             "approval_id": resolution.approval_id,
-            "resolution_sha256": resolution.resolution_sha256,
-            "bundle_sha256": bundle.bundle_sha256 if bundle else "",
             "bundle_file": str(scope / "bundle.json") if bundle else "",
             "next": (
                 f"chemsmart agent run --approval-file {scope}/bundle.json"
@@ -269,7 +323,9 @@ def review(
             ),
         }
     )
-    click.echo(json.dumps(summary, indent=2, sort_keys=True))
+    click.echo(
+        json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False)
+    )
 
 
 @agent.command("tui")
@@ -385,7 +441,14 @@ def tui(
     default="",
     help="Task specification digest the approval was frozen against.",
 )
-def run(approval_file, workspace, run_directory, task_spec_sha256):
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Print the full machine-readable execution record instead of the "
+    "human summary.",
+)
+def run(approval_file, workspace, run_directory, task_spec_sha256, as_json):
     """Execute an approved workflow bundle provider-free.
 
     Every scientific choice -- program, project YAML, method, node graph,
@@ -403,52 +466,88 @@ def run(approval_file, workspace, run_directory, task_spec_sha256):
         run_directory=run_directory,
         task_spec_sha256=task_spec_sha256,
     )
-    click.echo(
-        json.dumps(
-            {
-                "workflow_id": result.workflow_id,
-                "plan_sha256": result.plan_sha256,
-                "approval_sha256": result.approval_sha256,
-                "status": result.status,
-                "provider_calls": result.provider_calls,
-                "non_executable_node_ids": result.non_executable_node_ids,
-                "run_directory": result.run_directory,
-                "analysis_status": result.analysis_status,
-                "analysis_report_path": result.analysis_report_path,
-                "analysis_completion_receipt_sha256s": (
-                    result.analysis_completion_receipt_sha256s
-                ),
-                "analysis_nodes": [
-                    {
-                        "node_id": node.node_id,
-                        "analysis_kind": node.analysis_kind,
-                        "state": node.state,
-                        "reason": node.reason,
-                        "receipt_sha256s": node.receipt_sha256s,
-                    }
-                    for node in result.analysis_nodes
-                ],
-                "nodes": [
-                    {
-                        "node_id": node.node_id,
-                        "program": node.program,
-                        "jobtype": node.jobtype,
-                        "state": node.state,
-                        "invocation_identity_sha256": (
-                            node.invocation_identity_sha256
-                        ),
-                        "execution_receipt_sha256": (
-                            node.execution_receipt_sha256
-                        ),
-                        "failure": node.failure,
-                    }
-                    for node in result.nodes
-                ],
-            },
-            indent=2,
-            sort_keys=True,
+    if as_json:
+        click.echo(
+            json.dumps(
+                {
+                    "workflow_id": result.workflow_id,
+                    "plan_sha256": result.plan_sha256,
+                    "approval_sha256": result.approval_sha256,
+                    "status": result.status,
+                    "provider_calls": result.provider_calls,
+                    "non_executable_node_ids": result.non_executable_node_ids,
+                    "run_directory": result.run_directory,
+                    "analysis_status": result.analysis_status,
+                    "analysis_report_path": result.analysis_report_path,
+                    "analysis_completion_receipt_sha256s": (
+                        result.analysis_completion_receipt_sha256s
+                    ),
+                    "analysis_nodes": [
+                        {
+                            "node_id": node.node_id,
+                            "analysis_kind": node.analysis_kind,
+                            "state": node.state,
+                            "reason": node.reason,
+                            "receipt_sha256s": node.receipt_sha256s,
+                        }
+                        for node in result.analysis_nodes
+                    ],
+                    "nodes": [
+                        {
+                            "node_id": node.node_id,
+                            "program": node.program,
+                            "jobtype": node.jobtype,
+                            "state": node.state,
+                            "invocation_identity_sha256": (
+                                node.invocation_identity_sha256
+                            ),
+                            "execution_receipt_sha256": (
+                                node.execution_receipt_sha256
+                            ),
+                            "failure": node.failure,
+                        }
+                        for node in result.nodes
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
         )
-    )
+        return
+    from chemsmart.agent.tui.voice import human_state
+
+    lines = [
+        f"workflow: {result.workflow_id}",
+        f"status: {human_state(result.status)}",
+        "nodes:",
+    ]
+    for node in result.nodes:
+        line = (
+            f"  {node.node_id} · {node.program} {node.jobtype} · "
+            f"{human_state(node.state)}"
+        )
+        if node.failure:
+            line += f" · {_HEX64.sub('…', node.failure)}"
+        lines.append(line)
+    if result.analysis_nodes:
+        lines.append(f"analysis: {human_state(result.analysis_status)}")
+        for node in result.analysis_nodes:
+            line = (
+                f"  {node.node_id} · {node.analysis_kind} · "
+                f"{human_state(node.state)}"
+            )
+            if node.reason:
+                line += f" · {_HEX64.sub('…', node.reason)}"
+            lines.append(line)
+    if result.non_executable_node_ids:
+        lines.append(
+            "not executable in this release: "
+            + ", ".join(result.non_executable_node_ids)
+        )
+    if result.analysis_report_path:
+        lines.append(f"report: {result.analysis_report_path}")
+    lines.append(f"run directory: {result.run_directory}")
+    click.echo("\n".join(lines))
 
 
 __all__ = ["agent"]

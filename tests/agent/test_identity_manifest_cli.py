@@ -21,6 +21,12 @@ from chemsmart.cli.agent import agent
 
 
 class _Result:
+    terminal_state = "planned"
+    successful_tool_calls = 0
+    failed_tool_calls = 0
+    final_text = ""
+    prepared_execution = None
+
     def public_summary_json(self):
         return "{}"
 
