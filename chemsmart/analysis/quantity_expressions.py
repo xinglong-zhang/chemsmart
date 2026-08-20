@@ -1928,6 +1928,14 @@ def _node_value(
                 float(item) for item in _numeric(candidate).reshape(-1)
             )
             inputs = inputs[:-1]
+        elif (
+            len(inputs) >= expected + 1
+            and inputs[-2].dimension == TEMPERATURE
+        ):
+            raise QuantityExpressionError(
+                "per-state degeneracies must be dimensionless; the trailing "
+                f"input to {operation} carries unit '{inputs[-1].unit}'"
+            )
         if wants_values and len(inputs) != expected:
             raise QuantityExpressionError(
                 f"{operation} requires "
