@@ -25,9 +25,10 @@ class TestConfig:
             "in package data."
         )
 
-    def test_chemsmart_dest(self):
+    def test_chemsmart_dest(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
         cfg = Config()
-        assert cfg.chemsmart_dest == Path.home() / ".chemsmart"
+        assert cfg.chemsmart_dest == tmp_path / ".chemsmart"
 
     # ------------------------------------------------------------------
     # shell_config

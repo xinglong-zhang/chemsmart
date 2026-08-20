@@ -30,7 +30,11 @@ export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
         )
         assert server.extra_scheduler_directives == "#PBS -m abe\n"
 
-    def test_gaussian_executable(self, server_yaml_file):
+    def test_gaussian_executable(
+        self, server_yaml_file, tmp_path, monkeypatch
+    ):
+        # Resolve ~ against an isolated home, not the invoking user's.
+        monkeypatch.setenv("HOME", str(tmp_path))
         gaussian_executable = GaussianExecutable.from_servername(
             server_yaml_file
         )
@@ -62,7 +66,8 @@ export g16root=~/programs/g16
 """
         assert gaussian_executable.envars == gassian_envars
 
-    def test_orca_executable(self, server_yaml_file):
+    def test_orca_executable(self, server_yaml_file, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
         orca_executable = ORCAExecutable.from_servername(server_yaml_file)
         assert orca_executable.executable_folder == os.path.expanduser(
             "~/programs/orca_6_0_0"

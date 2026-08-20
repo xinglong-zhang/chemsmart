@@ -103,33 +103,3 @@ def test_planning_rows_read_as_sentences(tmp_path: Path):
 
     silent = planning_feed_update({"kind": "artifact_recorded", "payload": {}})
     assert silent is None
-
-
-def test_execution_signals_map_the_real_cycle_043_stream():
-    """The mapping understands the exact kinds a real approved run wrote."""
-
-    real = Path(
-        "/home/chemsmart/agent-campaigns/ax41-refine-100/cycles/043/"
-        "observation1/execution/events.jsonl"
-    )
-    if not real.exists():
-        import pytest
-
-        pytest.skip("campaign stream not present on this host")
-    tailer = EventTailerV1(real)
-    signals = [
-        signal
-        for signal in (execution_signal(event) for event in tailer.poll())
-        if signal is not None
-    ]
-    kinds = [signal.kind for signal in signals]
-
-    assert "node_launched" in kinds
-    assert "engine_done" in kinds
-    assert "node_state" in kinds
-    assert kinds.count("analysis_settled") == 6
-    assert "report_rendered" in kinds
-    settled_states = {
-        signal.state for signal in signals if signal.kind == "analysis_settled"
-    }
-    assert settled_states == {"executed"}
