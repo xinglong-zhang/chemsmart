@@ -110,8 +110,9 @@ unapproved and unlaunched.
 
 The terminal UI is a view and controller for this chain. It is not a second
 permission engine. Internal receipts and content digests preserve provenance
-and mutation evidence; they are not hashes or approval-file tokens that a human
-must retype in the production TUI.
+and mutation evidence in the durable records; they are not hashes or
+approval-file tokens that a human must retype, and the production TUI does
+not display them.
 
 ## Scientific invariants
 

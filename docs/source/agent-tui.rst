@@ -15,9 +15,17 @@ Install the optional interface dependency alongside ChemSmart::
 
    python -m pip install 'chemsmart[agent-tui]'
 
-The interface is validated on Textual 8.2.  Planning and existing-result
-analysis need a provider profile, its separate secret assignment file, and a
-task workspace::
+The interface is validated on Textual 8.2.  The minimal invocation is two
+commands::
+
+   cd /path/to/task
+   chemsmart agent
+
+The workspace defaults to the current directory; the credential assignment
+defaults to ``~/.chemsmart/agent/api.env`` when that file exists; a
+workspace's ``execution-envelope.yaml`` and ``identity-manifest.yaml`` are
+discovered by convention.  Every default and discovery is announced in the
+startup banner -- nothing is silent.  Each may also be given explicitly::
 
    chemsmart agent tui \
      --provider PROFILE \
@@ -47,9 +55,14 @@ Enter a scientific request at the composer.  From the moment the session's
 append-only event stream exists, the interface tails it and every tool call
 becomes one humanized line: a pending phrase while the call runs, a
 one-sentence summary once it settles (finished lines go muted; a refusal shows
-its public message in red).  The canonical project YAML is repeated at the end
-of the session; the complete canonical payload of every call remains in the
-run's ``events.jsonl``.
+its public message in red).  The project settings are repeated as readable
+YAML at the end of the session; the complete canonical payload of every call
+remains in the run's ``events.jsonl``.
+
+The interface displays no digests.  Content hashes are provenance, preserved
+byte-for-byte in the durable records (event streams, review files, bundles,
+and the report file) and behind the ``--json`` flags of the headless
+commands; a human panel shows molecules, units, conditions, and words.
 
 Planning can be cancelled: the first ``esc`` arms the interrupt (the footer
 says so and disarms after five seconds), the second stops the session at the
@@ -67,18 +80,19 @@ reaches review readiness, the interface displays the complete plan:
 * every planned stage, with any release-unsupported stage marked deferred and
   its reason shown;
 * molecule, charge, and multiplicity for every executable node;
-* the full lineage of a composed molecular arrangement -- both parents with
-  geometry and identity digests, the chosen contact atoms, and the requested
-  versus achieved distance;
+* the full lineage of a composed molecular arrangement -- both parent
+  structures by name, the chosen contact atoms, and the requested versus
+  achieved distance;
 * the typed analysis chain planned with the workflow (per-node kind, inputs,
   outputs, conditions, and blocked reasons) -- or an explicit statement that
   none is planned;
-* effective project settings and the human-readable ChemSmart CLI operation
-  per node;
+* per-node project settings as readable YAML (the canonical fallback when a
+  node's YAML is unresolvable) and the human-readable ChemSmart CLI
+  operation;
 * producer-to-consumer data handoffs, program and engine observations, and
   core, memory, GPU, timeout, and engine-call limits; and
-* the review digest.  ``/raw`` shows the canonical review bytes the panels
-  project.  Nothing is ever retyped by the human.
+* the decision panel.  The full review record is kept in the run evidence;
+  no digest is displayed and nothing is ever retyped by the human.
 
 Review that display and enter ``/approve`` once.  It removes the workflow from
 the pending state, disconnects the provider, writes a mermaid projection of
@@ -105,8 +119,9 @@ Both panels are fed by tailing the run's own append-only ``events.jsonl`` --
 the same evidence stream an audit reads.
 
 When the run finishes, the interface renders the per-node execution table,
-the settled analysis chain, and the completed-analysis report as markdown in
-the transcript.  A typed analysis chain approved with the workflow executes
+the settled analysis chain, and the analysis results -- conditions, claims
+with values and units, and any decision prose -- projected from the report
+file, whose full provenance stays on disk untouched.  A typed analysis chain approved with the workflow executes
 provider-free in the same run; scientific interpretation and the recorded
 decision remain a subsequent explicit session act.
 
@@ -136,12 +151,13 @@ Commands
 ``/dag``
    Toggle the workflow panel (works before approval too).
 
+``/resume``
+   Restore this workspace's previous session and any pending review (see
+   below).
+
 ``/report [n]`` and ``/runs``
    Open the completed-analysis report -- the latest, or run ``n`` from the
    ``/runs`` listing of this workspace's executions and replays.
-
-``/raw``
-   The pending review's canonical JSON and digest.
 
 ``/export``
    Save the transcript to a file in the workspace.
@@ -153,6 +169,22 @@ Commands
 ``ctrl+p`` opens a command palette over the same registry; ``pageup`` /
 ``pagedown`` scroll the transcript; ``ctrl+c`` quits safely.  A mistyped
 slash command answers with the nearest real one.
+
+Resume a workspace
+------------------
+
+``chemsmart agent resume`` (or ``/resume`` in a running terminal) restores a
+workspace from its durable records: the last session's task and how it
+ended, every run with its workflow and report, and the previous session's
+closing prose.  A workflow that was reviewed but never decided is
+re-presented for one fresh decision -- refused with the reason when the
+files it was approved against have moved.  Every terminal approval is
+durable (a decision record, a one-shot bundle, and a consumption ledger in
+the workspace), so re-approving the same reviewed workflow is refused even
+across restarts; ``chemsmart agent review`` records a deliberate second
+decision.  A review that was approved but whose run never started is not
+re-decided: the greeting prints the exact provider-free launch its one-shot
+approval still awaits.
 
 Result analysis
 ---------------

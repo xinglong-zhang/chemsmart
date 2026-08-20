@@ -180,7 +180,7 @@ stages remain unapproved and are not launched.  Use ``/deny`` or ``/revise``
 without launching an engine.  The provider is disconnected before execution.
 
 The human does not retype a hash or create an approval-file token.  Internal
-receipts and content digests remain provenance.  The pending workflow is
+receipts and content digests remain provenance in the durable records; the terminal interface displays none of them, and the headless commands print human summaries by default with ``--json`` for the exact machine payloads.  The pending workflow is
 consumed before launch, so a failed or completed run requires a fresh plan and
 human review before another execution attempt.
 
