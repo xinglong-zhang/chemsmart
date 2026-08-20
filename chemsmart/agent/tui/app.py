@@ -13,9 +13,12 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
+from functools import partial
+
 from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.command import DiscoveryHit, Hit, Provider
 from textual.containers import Vertical
 from textual.widgets import Input, Static
 
@@ -64,8 +67,35 @@ class ScientificRequestInput(Input):
         event.stop()
 
 
+class ChemSmartCommandProvider(Provider):
+    """The ctrl+p palette is a query over the same command registry."""
+
+    async def search(self, query: str):
+        matcher = self.matcher(query)
+        for spec in command_registry.COMMANDS:
+            label = f"{spec.slash}  {spec.title}"
+            score = matcher.match(label)
+            if score > 0:
+                yield Hit(
+                    score,
+                    matcher.highlight(label),
+                    partial(self.app._dispatch_command, spec.slash),
+                    help=spec.category,
+                )
+
+    async def discover(self):
+        for spec in command_registry.COMMANDS:
+            yield DiscoveryHit(
+                f"{spec.slash}  {spec.title}",
+                partial(self.app._dispatch_command, spec.slash),
+                help=spec.category,
+            )
+
+
 class ChemSmartAgentApp(App[None]):
     """Production terminal shell over the current Runtime V2 composition."""
+
+    COMMANDS = {ChemSmartCommandProvider}
 
     CSS_PATH = "styles.tcss"
     TITLE = "ChemSmart Agent"
@@ -99,6 +129,12 @@ class ChemSmartAgentApp(App[None]):
         self._last_report_path: Path | None = None
         self._esc_armed = False
         self._esc_disarm_timer = None
+        self._pending_skill = ""
+        self.exit_summary = {
+            "planning_sessions": 0,
+            "executions": 0,
+            "report_paths": [],
+        }
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-shell"):
@@ -146,6 +182,12 @@ class ChemSmartAgentApp(App[None]):
         if text.startswith("/"):
             self._dispatch_command(text)
             return
+        if self._pending_skill:
+            text = (
+                f"The user tagged domain skill '{self._pending_skill}' -- "
+                "consult it before planning.\n\n" + text
+            )
+            self._pending_skill = ""
         try:
             normalized = self.controller.begin_planning(text)
         except ContractError as exc:
@@ -188,6 +230,9 @@ class ChemSmartAgentApp(App[None]):
             "deny": self._deny,
             "revise": self._revise,
             "raw": self._show_raw_review,
+            "skills": self._show_skills,
+            "skill": self._tag_skill,
+            "export": self._export_transcript,
             "dag": self._toggle_dag,
             "report": self._show_report,
             "runs": self._show_runs,
@@ -485,6 +530,64 @@ class ChemSmartAgentApp(App[None]):
         if dag.display:
             dag.refresh_from(self._workflow_nodes)
 
+    def _show_skills(self, tail: list[str]) -> None:
+        from chemsmart.agent.skills import available_skill_ids
+
+        table = Table(title="Consultable domain skills")
+        table.add_column("Skill", style="bold cyan")
+        for skill_id in available_skill_ids():
+            table.add_row(skill_id)
+        self._write(table)
+        self._write(
+            Text(
+                "/skill <id> tags your next request; the session still "
+                "consults it through its own tool, so the receipt chain is "
+                "preserved.",
+                style="dim",
+            )
+        )
+
+    def _tag_skill(self, tail: list[str]) -> None:
+        from chemsmart.agent.skills import available_skill_ids
+
+        if len(tail) != 1:
+            self._usage("/skill takes exactly one skill id; /skills lists them")
+            return
+        skill_id = tail[0]
+        known = tuple(available_skill_ids())
+        if skill_id not in known:
+            self._write(
+                Panel(
+                    f"Unknown skill '{skill_id}'. Available: "
+                    + ", ".join(known),
+                    title="Skill",
+                    border_style="yellow",
+                )
+            )
+            return
+        self._pending_skill = skill_id
+        self._write(
+            Panel(
+                f"The next scientific request will carry a visible tag "
+                f"asking the session to consult '{skill_id}' before "
+                "planning.",
+                title="Skill tagged",
+            )
+        )
+
+    def _export_transcript(self, tail: list[str]) -> None:
+        transcript = self.query_one("#transcript", TranscriptView)
+        target = (
+            self.controller.config.workspace
+            / time.strftime("chemsmart-transcript-%Y%m%d-%H%M%S.txt")
+        )
+        target.write_text(
+            transcript.recorder.export_text(), encoding="utf-8"
+        )
+        self._write(
+            Panel(f"Transcript saved to {target}", title="Export")
+        )
+
     def _toggle_dag(self, tail: list[str]) -> None:
         dag = self.query_one("#dag-panel", DagPanel)
         if dag.display:
@@ -577,6 +680,7 @@ class ChemSmartAgentApp(App[None]):
     def _plan_finished(self, result: LiveAgentSessionResultV1) -> None:
         self._busy = False
         self._tail_stop.set()
+        self.exit_summary["planning_sessions"] += 1
         table = Table(title="Plan and safe-preview result")
         table.add_column("State", style="bold cyan")
         table.add_column("Value")
@@ -698,9 +802,11 @@ class ChemSmartAgentApp(App[None]):
                     ),
                 )
             )
+        self.exit_summary["executions"] += 1
         if result.analysis_report_path:
             report_path = Path(result.analysis_report_path)
             self._last_report_path = report_path
+            self.exit_summary["report_paths"].append(str(report_path))
             if report_path.exists():
                 self._write(
                     Panel(

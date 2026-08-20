@@ -68,6 +68,15 @@ def launch_tui(
         app.animation_level = "none"
         kwargs = {"inline": True, "inline_no_clear": True, "mouse": False}
     app.run(**kwargs)
+    summary = getattr(app, "exit_summary", None)
+    if summary:
+        line = (
+            f"ChemSmart Agent · {summary['planning_sessions']} planning "
+            f"session(s) · {summary['executions']} execution(s)"
+        )
+        for report in summary["report_paths"]:
+            line += f"\n  report: {report}"
+        print(line)
 
 
 __all__ = ["launch_tui"]

@@ -69,6 +69,26 @@ COMMANDS: tuple[CommandSpecV1, ...] = (
         category="session",
     ),
     CommandSpecV1(
+        name="skills",
+        slash="/skills",
+        title="List the domain skills the session can consult",
+        category="session",
+    ),
+    CommandSpecV1(
+        name="skill",
+        slash="/skill",
+        title="Tag the next request with a domain skill to consult",
+        category="session",
+        usage="/skill <id>",
+        takes_argument=True,
+    ),
+    CommandSpecV1(
+        name="export",
+        slash="/export",
+        title="Save the transcript to a file in the workspace",
+        category="view",
+    ),
+    CommandSpecV1(
         name="dag",
         slash="/dag",
         title="Toggle the workflow panel with every node's status",
