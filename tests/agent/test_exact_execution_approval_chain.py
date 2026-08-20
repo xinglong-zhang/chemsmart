@@ -495,6 +495,7 @@ def test_launch_is_compared_before_claim_and_again_before_reuse(
     executor.execution_bundle = _Bundle()
     executor.host = _Host()
     executor.approval_workspace = tmp_path
+    executor.claim_workspace_bundle = True
     executor._bundle_claimed = False
 
     with pytest.raises(ContractError, match="command mismatch"):
