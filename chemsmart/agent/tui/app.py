@@ -39,6 +39,7 @@ from .monitor import (
     planning_row_key,
 )
 from .panels import DagPanel, JobsPanel, phase_chip, wordmark
+from .report import looks_like_host_report, render_report_for_humans
 from .presentation import human_cli_operation, session_evidence_blocks
 from .review import render_review_blocks, resolve_project_yaml_texts
 from .runs import list_runs
@@ -672,8 +673,8 @@ class ChemSmartAgentApp(App[None]):
             return
         self._write(
             Panel(
-                Markdown(path.read_text(encoding="utf-8")),
-                title=f"Completed analysis · {path}",
+                render_report_for_humans(path.read_text(encoding="utf-8")),
+                title=f"Analysis results · {path}",
             )
         )
 
@@ -719,7 +720,17 @@ class ChemSmartAgentApp(App[None]):
                 )
             )
         if result.final_text:
-            self._write(Panel(Markdown(result.final_text), title="Agent"))
+            if looks_like_host_report(result.final_text):
+                self._write(
+                    Panel(
+                        render_report_for_humans(result.final_text),
+                        title="Analysis results",
+                    )
+                )
+            else:
+                self._write(
+                    Panel(Markdown(result.final_text), title="Agent")
+                )
         if self.controller.phase is AgentTuiPhase.REQUEST_REVIEWED:
             prepared = self.controller.prepared_execution
             if prepared is None:  # pragma: no cover - phase owns the object
@@ -818,8 +829,10 @@ class ChemSmartAgentApp(App[None]):
             if report_path.exists():
                 self._write(
                     Panel(
-                        Markdown(report_path.read_text(encoding="utf-8")),
-                        title=f"Completed analysis · {report_path}",
+                        render_report_for_humans(
+                            report_path.read_text(encoding="utf-8")
+                        ),
+                        title=f"Analysis results · {report_path}",
                     )
                 )
         hint = (
