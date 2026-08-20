@@ -9,16 +9,9 @@ from pathlib import Path
 import click
 import yaml
 
-from chemsmart.utils.io import (
-    update_powershell_profiles,
-    update_shell_config,
-    update_windows_env,
-)
-from chemsmart.utils.logger import create_logger
+from chemsmart.utils.logger import create_logger  # noqa: F401 -- public seam
 
 logger = logging.getLogger(__name__)
-
-create_logger(debug=True, stream=True)
 
 
 class Config:
@@ -203,6 +196,8 @@ class Config:
 
         Delegates to :func:`chemsmart.utils.io.update_shell_config`.
         """
+        from chemsmart.utils.io import update_shell_config
+
         update_shell_config(shell_file, self.env_vars)
 
     # ------------------------------------------------------------------ #
@@ -279,6 +274,8 @@ class Config:
 
         Delegates to :func:`chemsmart.utils.io.update_powershell_profiles`.
         """
+        from chemsmart.utils.io import update_powershell_profiles
+
         update_powershell_profiles(profiles, self.ps_env_vars)
 
     # ------------------------------------------------------------------ #
@@ -300,6 +297,8 @@ class Config:
             str(Path(self.chemsmart_package_path) / "chemsmart" / "cli"),
             str(Path(self.chemsmart_package_path) / "chemsmart" / "scripts"),
         ]
+        from chemsmart.utils.io import update_windows_env
+
         update_windows_env(paths_to_add, pkg_path)
 
     # ------------------------------------------------------------------ #

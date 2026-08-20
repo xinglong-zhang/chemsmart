@@ -7,7 +7,7 @@ from chemsmart.cli.gaussian import gaussian
 from chemsmart.cli.nciplot import nciplot
 from chemsmart.cli.orca import orca
 from chemsmart.cli.pyscf import pyscf
-from chemsmart.cli.subcommands import subcommands
+from chemsmart.cli.subcommands import PROGRAM_COMMAND_MODULES
 from chemsmart.cli.xtb import xtb
 from chemsmart.settings.capabilities import (
     AGENT_PROGRAM_EXECUTION_ENGINES,
@@ -78,7 +78,7 @@ def _click_jobtypes(command: click.Command) -> tuple[str, ...]:
 
 def test_registry_agrees_with_live_click_leaf_inventory():
     assert frozenset(PROGRAM_COMMANDS) == KNOWN_PROGRAMS
-    assert {command.name for command in subcommands}.intersection(
+    assert set(PROGRAM_COMMAND_MODULES).intersection(
         KNOWN_PROGRAMS
     ) == KNOWN_PROGRAMS
 

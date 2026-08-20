@@ -10,9 +10,7 @@ import yaml
 
 from chemsmart.utils.logger import create_logger
 
-# Initialize logger
 logger = logging.getLogger(__name__)
-create_logger(debug=True, stream=True)
 
 
 class Updater:

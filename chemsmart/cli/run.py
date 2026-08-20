@@ -6,9 +6,7 @@ import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
-from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
+from chemsmart.cli.subcommands import LazyProgramGroup
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -30,7 +28,7 @@ else:
     pass
 
 
-@click.group(name="run")
+@click.group(name="run", cls=LazyProgramGroup)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
@@ -57,6 +55,8 @@ def run(
     logger.info("Entering main program")
 
     # Instantiate the jobrunner with CLI options
+    from chemsmart.jobs.runner import JobRunner
+
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
@@ -110,6 +110,8 @@ def process_pipeline(ctx, *args, **kwargs):
     if not args:
         logger.debug("No pipeline output returned. Skipping job execution.")
         return None
+    from chemsmart.jobs.job import Job
+
     job = args[0]
     logger.debug(f"Job to be run: {job}")
 
@@ -140,8 +142,7 @@ def process_pipeline(ctx, *args, **kwargs):
         raise ValueError(f"Invalid job type: {type(job)}.")
 
 
-for subcommand in subcommands:
-    run.add_command(subcommand)
+
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ from .wizard import wizard
 @click.group(cls=MyGroup)
 @click.pass_context
 @click.version_option(version=__version__, prog_name="CHEMSMART")
-@click.option("--verbose", is_flag=True, default=True)
+@click.option("--verbose", is_flag=True, default=False)
 def entry_point(ctx, verbose):
     """
     Main entry point for the chemsmart CLI.

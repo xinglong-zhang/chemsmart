@@ -11,16 +11,14 @@ import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
-from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.runner import JobRunner
-from chemsmart.settings.server import Server
-from chemsmart.utils.cli import CtxObjArguments, MyGroup
+from chemsmart.cli.subcommands import LazyProgramMyGroup
+from chemsmart.utils.cli import CtxObjArguments
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
 
 
-@click.group(name="sub", cls=MyGroup)
+@click.group(name="sub", cls=LazyProgramMyGroup)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
@@ -81,6 +79,9 @@ def sub(
     logger.info("Entering main program")
 
     # Resolve one shared Server instance for both JobRunner and Submitter.
+    from chemsmart.jobs.runner import JobRunner
+    from chemsmart.settings.server import Server
+
     server = (
         Server.current() if server is None else Server.from_servername(server)
     )
@@ -349,6 +350,3 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         job.jobrunner = jobrunner
         _process_single_job(job=job)
 
-
-for subcommand in subcommands:
-    sub.add_command(subcommand)
