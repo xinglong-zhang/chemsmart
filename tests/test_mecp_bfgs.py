@@ -1,10 +1,20 @@
 from io import StringIO
+import os
 from types import SimpleNamespace
 
 import numpy as np
 
 from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
+from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+
+
+def test_first_mecp_step_removes_unavailable_guess_read():
+    remove_read = GaussianMECPJob._without_unavailable_guess_read
+
+    assert remove_read("scf=xqc guess=read nosymm") == "scf=xqc nosymm"
+    assert remove_read("guess=(mix,read) nosymm") == "guess=(mix) nosymm"
+    assert remove_read("scf=xqc nosymm") == "scf=xqc nosymm"
 
 
 def test_gaussian_header_reuses_rolling_checkpoint():
@@ -44,6 +54,20 @@ def test_seam_checkpoint_cleanup_preserves_final_mecp_checkpoints(
         (None, "A"): "mecp_A.chk",
         (None, "B"): "mecp_B.chk",
     }
+
+
+def test_mecp_scratch_jobs_are_grouped_in_steps_folder():
+    runner = object.__new__(GaussianJobRunner)
+    runner._scratch_dir = "/scratch/project"
+    job = SimpleNamespace(
+        label="mecp_step2_A", scratch_parent_folder="mecp_steps"
+    )
+
+    scratch_directory = runner._scratch_job_directory(job)
+
+    assert scratch_directory == os.path.join(
+        "/scratch/project", "mecp_steps", "mecp_step2_A"
+    )
 
 
 def test_inverse_bfgs_update_satisfies_secant_condition():

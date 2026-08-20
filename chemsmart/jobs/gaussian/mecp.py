@@ -7,6 +7,7 @@ Minimum Energy Cross Point calculations using Gaussian.
 
 import logging
 import os
+import re
 from typing import Type
 
 import numpy as np
@@ -42,6 +43,29 @@ class GaussianMECPJob(GaussianJob):
 
     TYPE = "g16mecp"
     MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
+
+    @staticmethod
+    def _without_unavailable_guess_read(route):
+        """Remove ``read`` from a Gaussian guess option for the first step."""
+
+        def strip_parenthesized_read(match):
+            options = [
+                option.strip()
+                for option in match.group(1).split(",")
+                if option.strip().lower() != "read"
+            ]
+            return f"guess=({','.join(options)})" if options else ""
+
+        route = re.sub(
+            r"\bguess\s*=\s*\(([^)]*)\)",
+            strip_parenthesized_read,
+            route,
+            flags=re.IGNORECASE,
+        )
+        route = re.sub(
+            r"\bguess\s*=\s*read\b", "", route, flags=re.IGNORECASE
+        )
+        return " ".join(route.split())
 
     # MECP-specific attribute names that must be stripped when building
     # a GaussianLinkJobSettings for each sub-job (broken-symmetry mode).
@@ -203,12 +227,11 @@ class GaussianMECPJob(GaussianJob):
 
         checkpoint_key = (checkpoint_tag, state)
         oldchkfile = self._state_checkpoint_files.get(checkpoint_key)
-        if oldchkfile and not self.settings.use_link:
+        if not oldchkfile and not self.settings.use_link:
             route = settings.additional_route_parameters or ""
-            if "guess=" not in route.lower():
-                settings.additional_route_parameters = (
-                    f"{route} guess=read".strip()
-                )
+            settings.additional_route_parameters = (
+                self._without_unavailable_guess_read(route)
+            )
 
         if self.settings.use_link:
             from chemsmart.jobs.gaussian.link import GaussianLinkJob
@@ -229,6 +252,7 @@ class GaussianMECPJob(GaussianJob):
                 skip_completed=False,
             )
         job.set_folder(self.steps_folder)
+        job.scratch_parent_folder = f"{self.label}_steps"
         checkpoint_part = f"{checkpoint_tag}_" if checkpoint_tag else ""
         job.checkpoint_filename = (
             f"{self.label}_{checkpoint_part}{state}.chk"

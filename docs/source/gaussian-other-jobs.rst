@@ -329,13 +329,19 @@ inverse Hessian from successive effective-gradient and Cartesian-displacement
 pairs, including negative-curvature updates, and limits the total Cartesian
 step using Harvey's ``STPMX`` rule. Numerically singular updates are skipped.
 
-For non-Link calculations, each state also reads the checkpoint from its own
-previous MECP step. This preserves orbital continuity in the same way as
-``%chk`` with ``guess=read``. Like easyMECP, ChemSmart maintains one rolling
-checkpoint per state (``<label>_A.chk`` and ``<label>_B.chk``) instead of one
-checkpoint per iteration. Iteration ``.com`` and ``.log`` files and the two
-rolling checkpoints are kept in ``<label>_steps``; the report and trajectory
-remain in the main job directory.
+Like easyMECP, ChemSmart maintains one rolling checkpoint per state
+(``<label>_A.chk`` and ``<label>_B.chk``) instead of one checkpoint per
+iteration. It does not add ``guess=read`` automatically: checkpoint orbitals
+are read only when that option is explicitly present in the Gaussian route.
+If the first step requests ``guess=read`` but its checkpoint does not yet
+exist, ``read`` is removed for that first step and retained thereafter.
+Iteration ``.com`` and ``.log`` files and the two rolling checkpoints are kept
+in ``<label>_steps``; the report and trajectory remain in the main job
+directory.
+
+When Gaussian scratch storage is enabled, MECP scratch job directories are
+also grouped below ``<label>_steps`` instead of being created directly in the
+scratch root.
 
 Seam-minimum verification uses a separate pair of temporary rolling
 checkpoints. They are deleted after a successful verification, so the final

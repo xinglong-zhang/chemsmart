@@ -98,6 +98,17 @@ class GaussianJobRunner(JobRunner):
     # of instance attribute so it needs not be set at
     # instance level - set during initialization (__init__).
 
+    def _scratch_job_directory(self, job):
+        """Return the scratch directory, optionally grouped by a job folder."""
+        scratch_parent = getattr(job, "scratch_parent_folder", None)
+        if scratch_parent:
+            return os.path.join(
+                self.scratch_dir,
+                os.path.basename(scratch_parent),
+                job.label,
+            )
+        return os.path.join(self.scratch_dir, job.label)
+
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
     ):
@@ -210,7 +221,7 @@ class GaussianJobRunner(JobRunner):
         Args:
             job: Job object to configure scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = self._scratch_job_directory(job)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -459,7 +470,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         Args:
             job: Job object to configure fake scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = self._scratch_job_directory(job)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
