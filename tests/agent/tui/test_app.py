@@ -176,7 +176,11 @@ def test_approval_surface_displays_deferred_stage_and_reason(tmp_path: Path):
         execution_envelope={"max_engine_calls": 1},
         node_reviews=(executable,),
         non_executable_node_ids=("irc",),
-        scientific_plan=SimpleNamespace(nodes=(executable, deferred), edges=()),
+        scientific_plan=SimpleNamespace(
+            nodes=(executable, deferred), edges=(), plan_sha256="f" * 64
+        ),
+        scientific_toolchain_plan=None,
+        review_sha256="e" * 64,
     )
 
     app._present_request(review)

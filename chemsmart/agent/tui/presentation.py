@@ -4,9 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import re
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 from chemsmart.agent._contracts import canonical_json
+
+_RECEIPT_PLACEHOLDER = re.compile(
+    r"<(?P<role>[a-z0-9-]+):sha256=[0-9a-f]{64}>"
+)
+
+
+def human_cli_operation(argv: Iterable[str]) -> str:
+    """Show ChemSmart input roles without exposing receipt bookkeeping."""
+
+    return " ".join(
+        _RECEIPT_PLACEHOLDER.sub(r"<\g<role>>", token) for token in argv
+    )
 
 if TYPE_CHECKING:
     from chemsmart.agent.live_session import LiveAgentSessionResultV1
@@ -153,4 +166,8 @@ def session_evidence_blocks(
     return tuple(blocks)
 
 
-__all__ = ["EvidenceBlockV1", "session_evidence_blocks"]
+__all__ = [
+    "EvidenceBlockV1",
+    "human_cli_operation",
+    "session_evidence_blocks",
+]

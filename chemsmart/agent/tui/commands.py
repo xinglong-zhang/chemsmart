@@ -69,6 +69,12 @@ COMMANDS: tuple[CommandSpecV1, ...] = (
         category="session",
     ),
     CommandSpecV1(
+        name="raw",
+        slash="/raw",
+        title="Show the pending review's canonical JSON and digest",
+        category="view",
+    ),
+    CommandSpecV1(
         name="help",
         slash="/help",
         title="Show every command and keybinding",

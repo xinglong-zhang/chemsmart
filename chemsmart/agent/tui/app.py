@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 import shlex
 import threading
 import time
@@ -36,6 +35,7 @@ from .monitor import (
 )
 from .panels import phase_chip, wordmark
 from .presentation import session_evidence_blocks
+from .review import render_raw_review, render_review_blocks
 from .theme import CHEMSMART_THEME
 from .transcript import ToolRow, TranscriptView
 
@@ -47,19 +47,6 @@ _ROW_STYLE = {
     "failed": "bold red",
     "note": "dim",
 }
-
-
-_RECEIPT_PLACEHOLDER = re.compile(
-    r"<(?P<role>[a-z0-9-]+):sha256=[0-9a-f]{64}>"
-)
-
-
-def _human_cli_operation(argv: tuple[str, ...]) -> str:
-    """Show ChemSmart input roles without exposing receipt bookkeeping."""
-
-    return " ".join(
-        _RECEIPT_PLACEHOLDER.sub(r"<\g<role>>", token) for token in argv
-    )
 
 
 class ScientificRequestInput(Input):
@@ -186,6 +173,7 @@ class ChemSmartAgentApp(App[None]):
             "approve": self._approve,
             "deny": self._deny,
             "revise": self._revise,
+            "raw": self._show_raw_review,
             "quit": self._quit,
         }
 
@@ -462,180 +450,23 @@ class ChemSmartAgentApp(App[None]):
         )
 
     def _present_request(self, review: WorkflowExecutionReviewV1) -> None:
-        resources = review.execution_resources
-        review_by_id = {item.node_id: item for item in review.node_reviews}
-        deferred = set(review.non_executable_node_ids)
-        overview = Table(title="ChemSmart workflow awaiting human approval")
-        overview.add_column("Node", style="bold cyan")
-        overview.add_column("Program / engine")
-        overview.add_column("Stage")
-        overview.add_column("Molecule")
-        overview.add_column("Charge / multiplicity")
-        overview.add_column("Execution")
-        overview.add_column("Reason")
-        for planned in review.scientific_plan.nodes:
-            item = review_by_id.get(planned.node_id)
-            if item is not None:
-                identity = item.molecular_identity
-                approved_names = identity.get("approved_names") or ()
-                name = str(approved_names[0]) if approved_names else ""
-                formula = str(identity.get("formula") or "unknown formula")
-                atom_order = identity.get("atom_order") or ()
-                atom_summary = "-".join(str(symbol) for symbol in atom_order)
-                molecule = name or formula
-                if atom_summary:
-                    molecule += f" · {atom_summary}"
-                program_engine = f"{item.program} / {item.engine}"
-                stage = item.stage
-                molecular_state = (
-                    f"{identity.get('charge')} / "
-                    f"{identity.get('multiplicity')}"
-                )
-                execution_state = "Executable"
-                reason = "reviewed below"
-            else:
-                molecule = planned.project_role
-                program_engine = f"{planned.program} / {planned.engine}"
-                stage = planned.stage
-                if (
-                    planned.charge is not None
-                    and planned.multiplicity is not None
-                ):
-                    molecular_state = (
-                        f"{planned.charge} / {planned.multiplicity}"
-                    )
-                else:
-                    source_ids = tuple(
-                        edge.source_node_id
-                        for edge in review.scientific_plan.edges
-                        if edge.target_node_id == planned.node_id
-                    )
-                    source_review = next(
-                        (
-                            review_by_id[source_id]
-                            for source_id in source_ids
-                            if source_id in review_by_id
-                        ),
-                        None,
-                    )
-                    if source_review is not None:
-                        source_identity = source_review.molecular_identity
-                        molecular_state = (
-                            f"{source_identity.get('charge')} / "
-                            f"{source_identity.get('multiplicity')} "
-                            f"(from {source_review.node_id})"
-                        )
-                    else:
-                        molecular_state = "not separately reviewed"
-                execution_state = (
-                    "Deferred"
-                    if planned.node_id in deferred
-                    else "Not executable"
-                )
-                reason = planned.blocked_reason or "no reviewed command"
-            overview.add_row(
-                planned.node_id,
-                program_engine,
-                stage,
-                molecule,
-                molecular_state,
-                execution_state,
-                reason,
-            )
-        self._write(overview)
-        environments = Table(title="Observed execution environments")
-        environments.add_column("Node", style="bold cyan")
-        environments.add_column("Status")
-        environments.add_column("Target")
-        environments.add_column("Version")
-        environments.add_column("Observed by")
-        for item in review.node_reviews:
-            summary = item.environment_summary
-            dependencies = {
-                str(name): str(version)
-                for name, version in summary.get("dependency_versions", ())
-            }
-            version = str(summary.get("observed_version") or "")
-            if not version:
-                version = dependencies.get(item.program, "")
-            if not version and dependencies:
-                version = ", ".join(
-                    f"{name} {value}"
-                    for name, value in sorted(dependencies.items())
-                )
-            environments.add_row(
-                item.node_id,
-                str(summary.get("status") or "unknown"),
-                str(summary.get("target_kind") or "unknown"),
-                version or "not reported",
-                str(summary.get("observation_method") or "host probe"),
-            )
-        self._write(environments)
-        self._write(
-            Panel(
-                f"cores: {resources.cores}\n"
-                f"memory: {resources.memory_gb:g} GB\n"
-                f"GPUs: {resources.gpu_count}\n"
-                f"node timeout: {resources.node_timeout_seconds} s\n"
-                f"engine-call limit: "
-                f"{review.execution_envelope.get('max_engine_calls')}",
-                title="Execution bounds",
-            )
-        )
-        if review.scientific_plan.edges:
-            edge_table = Table(title="Scientific data flow")
-            edge_table.add_column("Producer")
-            edge_table.add_column("Artifact")
-            edge_table.add_column("Consumer")
-            for edge in review.scientific_plan.edges:
-                edge_table.add_row(
-                    edge.source_node_id,
-                    edge.artifact_class or edge.edge_kind,
-                    edge.target_node_id,
-                )
-            self._write(edge_table)
-        for item in review.node_reviews:
-            command = _human_cli_operation(item.real_execution_argv)
+        for block in render_review_blocks(review):
+            self._write(block)
+
+    def _show_raw_review(self, tail: list[str]) -> None:
+        review = self.controller.prepared_execution
+        if review is None and self.controller.plan_result is not None:
+            review = self.controller.plan_result.prepared_execution
+        if review is None:
             self._write(
                 Panel(
-                    Syntax(
-                        item.project_settings_text,
-                        "json",
-                        word_wrap=True,
-                        background_color="default",
-                    ),
-                    title=f"{item.node_id} · effective project settings",
+                    "No execution review exists in this session yet; plan a "
+                    "workflow with an execution envelope first.",
+                    title="Raw review",
                 )
             )
-            self._write(
-                Panel(
-                    Text(command),
-                    title=f"{item.node_id} · ChemSmart CLI operation",
-                )
-            )
-        executable_text = ", ".join(
-            item.node_id for item in review.node_reviews
-        )
-        decision = (
-            "Review the molecule/state, settings, CLI operations, DAG, "
-            "observed execution environments and resource bounds above. "
-            "Enter /approve once to execute the reviewed nodes: "
-            f"{executable_text}."
-        )
-        if deferred:
-            decision += (
-                " Deferred stages remain unapproved and will not launch: "
-                + ", ".join(sorted(deferred))
-                + "."
-            )
-        decision += " A changed scientific request must be replanned."
-        self._write(
-            Panel(
-                decision,
-                title="Human decision",
-                border_style="yellow",
-            )
-        )
+            return
+        self._write(render_raw_review(review))
 
     def _operation_failed(self, label: str, exc: Exception) -> None:
         self._busy = False
