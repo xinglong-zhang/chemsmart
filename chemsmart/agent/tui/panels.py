@@ -9,6 +9,8 @@ from typing import Any, Mapping
 from rich.text import Text
 from textual.widgets import Static
 
+from .voice import human_state
+
 #: node state -> (glyph, style). Minimal color, one rule: success green,
 #: failure red, running warning, everything waiting or deferred muted.
 _STATE_GLYPHS: dict[str, tuple[str, str]] = {
@@ -71,7 +73,7 @@ def dag_rows(nodes: Mapping[str, Mapping[str, Any]]) -> Text:
         label = str(node.get("label") or "")
         if label:
             text.append(f" · {label}", style="dim")
-        state = str(node.get("state") or "queued")
+        state = human_state(str(node.get("state") or "queued"))
         text.append(f" · {state}", style=style or "dim")
         detail = str(node.get("detail") or "")
         if detail:

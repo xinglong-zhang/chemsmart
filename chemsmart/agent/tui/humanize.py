@@ -222,6 +222,10 @@ def _validation(record: Mapping[str, Any]) -> str:
     verdict = record.get("verdict")
     if verdict is None:
         verdict = record.get("validated")
+    if verdict in (True, 1, "true", "True", "passed"):
+        verdict = "passed"
+    elif verdict in (False, 0, "false", "False", "failed"):
+        verdict = "failed"
     label = record.get("validation_id") or record.get("rule_id") or "validation"
     return f"validation {label}: {verdict}"
 
@@ -288,9 +292,8 @@ def humanize_tool_settled(
     tool = str(payload.get("tool") or "tool")
     icon, _pending, summarize = _REGISTRY.get(tool, (_GENERIC_ICON, "", None))
     if kind == "tool_failed":
-        error = str(payload.get("error_class") or "refused")
         message = str(_get(payload, "canonical_result", "message") or "")
-        text = f"{tool.replace('_', ' ')} refused ({error})"
+        text = f"{tool.replace('_', ' ')} refused"
         if message:
             text += f": {message}"
         return HumanizedRowV1(icon="✗", text=text, state="failed")
@@ -301,18 +304,13 @@ def humanize_tool_settled(
         except Exception:  # pragma: no cover - a summary must never crash
             text = tool.replace("_", " ")
     else:
-        keys = _join(sorted(record)[:3], limit=3)
         text = tool.replace("_", " ")
-        if keys:
-            text += f" [{keys}]"
     return HumanizedRowV1(icon=icon, text=text, state="finished")
 
 
 def humanize_provider_turn(payload: Mapping[str, Any]) -> HumanizedRowV1:
     model = payload.get("observed_model") or payload.get("requested_model")
-    return HumanizedRowV1(
-        icon="▣", text=f"provider turn · {model}", state="note"
-    )
+    return HumanizedRowV1(icon="▣", text=f"model turn · {model}", state="note")
 
 
 __all__ = [

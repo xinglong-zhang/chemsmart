@@ -21,6 +21,7 @@ from .humanize import (
     humanize_tool_settled,
     humanize_tool_started,
 )
+from .voice import human_turn_blocked
 
 
 @dataclass
@@ -80,7 +81,7 @@ def planning_feed_update(event: Mapping[str, Any]) -> HumanizedRowV1 | None:
     if kind == "provider_turn_observed":
         return humanize_provider_turn(payload)
     if kind == "turn_blocked":
-        reason = str(payload.get("reason") or "turn blocked")
+        reason = human_turn_blocked(payload.get("reason") or "turn blocked")
         return HumanizedRowV1(icon="△", text=reason, state="failed")
     if kind == "tool_waiting":
         timeout = payload.get("timeout_seconds")

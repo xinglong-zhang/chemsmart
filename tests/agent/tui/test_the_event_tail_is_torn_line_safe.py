@@ -98,6 +98,8 @@ def test_planning_rows_read_as_sentences(tmp_path: Path):
     assert refused is not None
     assert refused.state == "failed"
     assert "unknown workflow ID" in refused.text
+    # The Python exception class is bookkeeping; the host message suffices.
+    assert "ContractError" not in refused.text
 
     silent = planning_feed_update({"kind": "artifact_recorded", "payload": {}})
     assert silent is None
