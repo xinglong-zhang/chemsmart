@@ -205,17 +205,17 @@ Run stages in order and stop on the first scientific or environment failure.
 Provider configuration
 ======================
 
-Keep provider profiles in ``~/.chemsmart/agent/agent.yaml`` and credentials in
-a permission-restricted file outside the repository. The secret assignment
-file is parsed as data and must never be sourced or committed.
+Set up provider profiles and credentials with the guided command; it
+writes ``~/.chemsmart/agent/agent.yaml`` and stores the key in the managed
+store at ``~/.chemsmart/agent/keys.env`` (0600), which is parsed as data
+and never sourced or committed.
 
 .. code-block:: bash
 
-   chmod 600 /secure/path/api.env
+   chemsmart config agent
    chemsmart agent plan \
      --provider PROFILE \
      --task-file task.md \
-     --secret-file /secure/path/api.env \
      --workspace ./agent-workspace
 
 See :doc:`agent-workflows` for the scientific and execution boundary.

@@ -28,7 +28,9 @@ server configuration needed to generate submission scripts. CHEMSMART provides s
 -  ``local.yaml`` - For local workstations without a job scheduler
 -  ``small.yaml`` - Example for SLURM with specific resource limits
 
-To use a template, copy it to your ``~/.chemsmart/server/`` directory and customize it:
+``chemsmart wizard --server`` writes this file from live host analysis
+and is the recommended route; the template flow below is the manual
+alternative. To use a template, copy it to your ``~/.chemsmart/server/`` directory and customize it:
 
 .. code:: bash
 

@@ -46,7 +46,14 @@ workflow.
 Scheduler configuration
 =======================
 
-Create a named file under ``~/.chemsmart/server``. Example SLURM shape:
+Run the wizard on a login node; it detects the scheduler, reads the queues
+and their limits from the scheduler itself, and writes the server file with
+verification::
+
+   chemsmart wizard --server
+
+To hand-maintain the file instead, create a named file under
+``~/.chemsmart/server``. Example SLURM shape:
 
 .. code-block:: yaml
 

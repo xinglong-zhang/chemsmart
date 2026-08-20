@@ -72,10 +72,13 @@ Product support never asserts that an engine is installed on the current host.
 Every real operation must pass its normal environment probe and appear in the
 human review before it can run.
 
-Runtime orchestration is provider-neutral. Version 3.1.4 contains registered
-adapters for Alibaba Token Plan and DeepSeek. A user-selected profile supplies
-the provider, endpoint, model, reasoning setting, and credential label; source
-code and documentation must not impose a default model.
+Runtime orchestration is provider-neutral. This release contains registered
+adapters for Alibaba Token Plan, DeepSeek, and OpenAI; an Anthropic profile
+is accepted as configuration and refuses execution until its adapter is
+registered. A user-selected profile supplies the provider, endpoint, model,
+reasoning setting, and credential label; source code and documentation must
+not impose a default model. Credentials resolve from the environment or the
+managed key store and never live in agent.yaml or in Git.
 
 ## Authority and approval chain
 

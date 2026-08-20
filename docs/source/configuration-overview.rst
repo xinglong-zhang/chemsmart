@@ -8,6 +8,19 @@ After installation, run simple commands to configure CHEMSMART on your local mac
  For Linux, macOS, Ubuntu, and Clusters
 ****************************************
 
+On any new machine, the host analysis wizard is the first command::
+
+   chemsmart wizard --server
+
+It detects the batch scheduler (SLURM and PBS are submission-qualified;
+SGE, LSF, and HTCondor are detected and honestly written as local-run
+configurations), reads the queues and their advertised limits, confirms
+every choice with the detected value as the default, writes the
+scheduler-named file under ``~/.chemsmart/server/`` (backing up whatever
+it touches and preserving hand-tuned program blocks), and verifies the
+result with non-fatal checks. The manual template flow below remains
+available for hand-maintained configurations.
+
 Run the configuration command:
 
 .. code:: bash

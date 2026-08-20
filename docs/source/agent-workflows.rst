@@ -55,11 +55,19 @@ licensed installation and GPU4PySCF requires a compatible CUDA stack.
 Configure a provider
 ====================
 
-The runtime is provider-neutral.  The current release registers Alibaba Token Plan
-and DeepSeek adapters.  It has no default model: every selected profile names
-its model, endpoint, context and output limits, reasoning setting, and
-credential label explicitly.  Credentials belong in a separate assignment
-file rather than ``agent.yaml``.
+The runtime is provider-neutral.  The current release registers Alibaba
+Token Plan, DeepSeek, and OpenAI adapters; an ``anthropic`` profile is
+accepted as configuration and refuses execution until its adapter is
+registered.  There is no default model: every selected profile names its
+model, endpoint, context and output limits, reasoning setting, and
+credential label explicitly.  Credentials never live in ``agent.yaml``:
+they resolve from an exported environment variable matching the profile's
+key label, or from the managed key store at
+``~/.chemsmart/agent/keys.env`` that ``chemsmart config agent`` maintains.
+The guided setup asks for the provider, the exact model id, the effort,
+the token limits, and the credential (hidden input)::
+
+   chemsmart config agent
 
 The following example defines one profile for each registered adapter.  Replace
 the placeholders with values supported by the selected account and model.
@@ -99,12 +107,13 @@ empty because ChemSmart does not switch providers inside one session.  After a
 provider failure, start a new, explicitly attributed attempt with another
 profile.
 
-The separate assignment file contains the label selected by the active
+The managed key store contains the label selected by the active
 profile::
 
    ALIBABA_TOKEN_PLAN_KEY=your-secret-value
 
-ChemSmart parses this file as data; it does not source it into the shell.
+ChemSmart parses this file as data; it does not source it into the shell,
+and an exported environment variable with the same label takes precedence.
 Provider reasoning, response text, and credentials are not scientific
 execution evidence.
 
@@ -121,7 +130,6 @@ but cannot start a chemistry engine:
      --provider PROFILE \
      --provider-config /secure/path/agent.yaml \
      --task-file task.md \
-     --secret-file /secure/path/provider.env \
      --workspace /absolute/path/task-workspace
 
 ``chemsmart agent plan`` may create and validate project YAML, compile live
@@ -166,7 +174,6 @@ able to provide it.  Open the terminal interface with the envelope:
    chemsmart agent tui \
      --provider PROFILE \
      --provider-config /secure/path/agent.yaml \
-     --secret-file /secure/path/provider.env \
      --workspace /absolute/path/task-workspace \
      --execution-envelope /absolute/path/resources.yaml
 
@@ -342,7 +349,6 @@ For example::
    chemsmart agent plan \
      --provider PROFILE \
      --provider-config /secure/path/agent.yaml \
-     --secret-file /secure/path/provider.env \
      --workspace /absolute/path/completed-results \
      --task "Extract the final energy and frequencies, diagnose the stationary point, and report the result with explicit units."
 

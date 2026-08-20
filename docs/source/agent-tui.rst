@@ -21,8 +21,9 @@ commands::
    cd /path/to/task
    chemsmart agent
 
-The workspace defaults to the current directory; the credential assignment
-defaults to ``~/.chemsmart/agent/api.env`` when that file exists; a
+The workspace defaults to the current directory; credentials resolve from
+an exported environment variable or the managed key store that
+``chemsmart config agent`` maintains; a
 workspace's ``execution-envelope.yaml`` and ``identity-manifest.yaml`` are
 discovered by convention.  Every default and discovery is announced in the
 startup banner -- nothing is silent.  Each may also be given explicitly::
@@ -30,7 +31,6 @@ startup banner -- nothing is silent.  Each may also be given explicitly::
    chemsmart agent tui \
      --provider PROFILE \
      --provider-config /path/to/agent.yaml \
-     --secret-file /path/to/provider.env \
      --workspace /path/to/task
 
 Use ``--plain`` for inline rendering in a simple SSH terminal; it disables the

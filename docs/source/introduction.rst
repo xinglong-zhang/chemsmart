@@ -41,7 +41,7 @@ runs the approved DAG without asking a model to reinterpret it.
 .. code-block:: bash
 
    chemsmart agent plan --provider PROFILE --task-file research-task.txt \
-     --secret-file provider.env --workspace ./agent-workspace
+     --workspace ./agent-workspace
 
 Use :doc:`agent-workflows` for review, approval, deterministic execution, and
 provider configuration. CHEMSMART, not the model, resolves project artifacts,

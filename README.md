@@ -102,6 +102,14 @@ cd chemsmart
 conda env create -f environment.yml
 conda activate chemsmart
 python -m pip install .
+```
+
+Then let the host analysis wizard write the server configuration -- it
+detects the scheduler and its queues, confirms every choice, and verifies
+the result:
+
+```bash
+chemsmart wizard --server
 chemsmart config
 ```
 
@@ -173,10 +181,10 @@ A plan session may create project YAML, compile commands, and safe previews but
 cannot launch an engine:
 
 ```bash
+chemsmart config agent   # one-time provider, model, and credential setup
 chemsmart agent plan \
   --provider PROFILE \
   --task-file task.md \
-  --secret-file /secure/path/provider.env \
   --workspace /absolute/path/agent-workspace
 ```
 
