@@ -123,14 +123,27 @@ def test_detection_only_claims_host_reports():
     assert not looks_like_host_report("# My notes\n\nhello")
 
 
-def test_the_parser_is_pinned_to_the_live_renderer():
-    source = Path("chemsmart/agent/tool_runtime.py").read_text()
-    for heading in (
-        '"# Host-validated structured analysis"',
-        '"## Host-rendered numerical claims"',
-        '"## Thermochemical conditions"',
-        '"## Task-owned conditions"',
-        '"| Claim | Value | Unit | Source receipt |"',
-        '"Scientific decision: not recorded -- interpretation is "',
+def test_the_parser_and_renderer_share_one_vocabulary():
+    """Writer and reader import the same heading constants.
+
+    The contract is the import itself: the renderer inside the tool host
+    and this parser both bind chemsmart.agent.report_format, so a heading
+    change is a single-module edit that cannot drift.
+    """
+
+    import chemsmart.agent.report_format as vocabulary
+    import chemsmart.agent.tool_runtime as writer
+    import chemsmart.agent.tui.report as reader
+
+    for name in (
+        "HOST_REPORT_TITLE",
+        "CLAIMS_HEADING",
+        "THERMO_CONDITIONS_HEADING",
+        "CONDITIONS_HEADING",
+        "SOURCE_RECEIPT_COLUMN",
+        "NO_DECISION_PREFIX",
+        "DECISION_SECTIONS",
     ):
-        assert heading in source, f"host renderer drifted: {heading}"
+        expected = getattr(vocabulary, name)
+        assert getattr(writer, name) is expected
+        assert getattr(reader, name) is expected

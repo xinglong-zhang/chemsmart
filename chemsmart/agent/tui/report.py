@@ -20,25 +20,32 @@ from rich.markdown import Markdown
 from rich.table import Table
 from rich.text import Text
 
-HOST_REPORT_TITLE = "# Host-validated structured analysis"
+from chemsmart.agent.report_format import (
+    CLAIM_RECORD_LABEL,
+    CLAIMS_HEADING,
+    COMPLETION_RECEIPT_LABEL,
+    CONDITIONS_HEADING,
+    DECISION_SECTIONS,
+    EVIDENCE_COLUMN,
+    HOST_REPORT_TITLE,
+    NO_DECISION_PREFIX,
+    SOURCE_RECEIPT_COLUMN,
+    THERMO_CONDITIONS_HEADING,
+    TOOLCHAIN_PLAN_LABEL,
+)
 
 _HEX64 = re.compile(r"\b[0-9a-f]{64}\b")
 _PROVENANCE_LINE = re.compile(
-    r"^(Completion receipt|Toolchain plan|Claim record): `[0-9a-f]{64}`\s*$"
+    rf"^({COMPLETION_RECEIPT_LABEL}|{TOOLCHAIN_PLAN_LABEL}"
+    rf"|{CLAIM_RECORD_LABEL}): `[0-9a-f]{{64}}`\s*$"
 )
-_NO_DECISION_PREFIX = "Scientific decision: not recorded"
+_NO_DECISION_PREFIX = NO_DECISION_PREFIX
 _NO_DECISION_HUMAN = (
     "No interpretation was recorded in this run. The numbers above are "
     "host-validated results; the scientific reading remains yours to make "
     "in the session."
 )
-_DECISION_SECTIONS = {
-    "Method rationale",
-    "Assumptions",
-    "Diagnostics",
-    "Uncertainties",
-    "Alternatives",
-}
+_DECISION_SECTIONS = set(DECISION_SECTIONS)
 
 
 def looks_like_host_report(text: str) -> bool:
@@ -112,21 +119,21 @@ def render_report_for_humans(markdown_text: str) -> Group:
             while index < len(lines) and lines[index].strip() and not lines[index].startswith("#"):
                 index += 1
             continue
-        if stripped == "## Task-owned conditions":
+        if stripped == CONDITIONS_HEADING:
             flush()
             index += 1
             while index < len(lines) and not lines[index].strip().startswith("|"):
                 index += 1
             headers, rows, index = _read_table(lines, index)
             drop: set[int] = set()
-            if "Evidence" in headers:
-                evidence = headers.index("Evidence")
+            if EVIDENCE_COLUMN in headers:
+                evidence = headers.index(EVIDENCE_COLUMN)
                 cells = [row[evidence] for row in rows if evidence < len(row)]
                 if cells and all(re.fullmatch(r"[0-9a-f]{64}", cell) for cell in cells):
                     drop = {evidence}
             blocks.append(_table("Conditions", headers, rows, drop=drop))
             continue
-        if stripped == "## Thermochemical conditions":
+        if stripped == THERMO_CONDITIONS_HEADING:
             flush()
             index += 1
             while index < len(lines) and not lines[index].strip().startswith("|"):
@@ -134,13 +141,17 @@ def render_report_for_humans(markdown_text: str) -> Group:
             headers, rows, index = _read_table(lines, index)
             blocks.append(_table("Thermochemical conditions", headers, rows, drop=set()))
             continue
-        if stripped == "## Host-rendered numerical claims":
+        if stripped == CLAIMS_HEADING:
             flush()
             index += 1
             while index < len(lines) and not lines[index].strip().startswith("|"):
                 index += 1
             headers, rows, index = _read_table(lines, index)
-            drop = {headers.index("Source receipt")} if "Source receipt" in headers else set()
+            drop = (
+                {headers.index(SOURCE_RECEIPT_COLUMN)}
+                if SOURCE_RECEIPT_COLUMN in headers
+                else set()
+            )
             blocks.append(_table("Results", headers, rows, drop=drop))
             continue
         if stripped.startswith("## ") and stripped[3:] in _DECISION_SECTIONS:

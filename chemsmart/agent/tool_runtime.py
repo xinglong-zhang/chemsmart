@@ -62,6 +62,19 @@ from chemsmart.agent.cli_schema import (
     LiveClickSchemaV1,
     build_live_click_schema,
 )
+from chemsmart.agent.report_format import (
+    CLAIM_RECORD_LABEL,
+    CLAIMS_HEADING,
+    COMPLETION_RECEIPT_LABEL,
+    CONDITIONS_HEADING,
+    DECISION_SECTIONS,
+    EVIDENCE_COLUMN,
+    HOST_REPORT_TITLE,
+    NO_DECISION_PREFIX,
+    SOURCE_RECEIPT_COLUMN,
+    THERMO_CONDITIONS_HEADING,
+    TOOLCHAIN_PLAN_LABEL,
+)
 from chemsmart.agent.commands import (
     CanonicalCommandInvocationV1,
     CommandCounterexampleV1,
@@ -6393,18 +6406,18 @@ class CommandCompiledToolHostV1:
                 "completed analysis policy is absent or differs from the receipt"
             )
         lines = [
-            "# Host-validated structured analysis",
+            HOST_REPORT_TITLE,
             "",
-            f"Completion receipt: `{completion.receipt_sha256}`",
-            f"Claim record: `{claims.receipt_sha256}`",
+            f"{COMPLETION_RECEIPT_LABEL}: `{completion.receipt_sha256}`",
+            f"{CLAIM_RECORD_LABEL}: `{claims.receipt_sha256}`",
         ]
         if policy.required_conditions:
             lines.extend(
                 (
                     "",
-                    "## Task-owned conditions",
+                    CONDITIONS_HEADING,
                     "",
-                    "| Condition | Value | Unit | Origin | Evidence |",
+                    f"| Condition | Value | Unit | Origin | {EVIDENCE_COLUMN} |",
                     "|---|---:|---|---|---|",
                 )
             )
@@ -6417,9 +6430,9 @@ class CommandCompiledToolHostV1:
         lines.extend(
             (
                 "",
-                "## Host-rendered numerical claims",
+                CLAIMS_HEADING,
                 "",
-                "| Claim | Value | Unit | Source receipt |",
+                f"| Claim | Value | Unit | {SOURCE_RECEIPT_COLUMN} |",
                 "|---|---:|---|---|",
             )
         )
@@ -6433,12 +6446,17 @@ class CommandCompiledToolHostV1:
                 f"| {claim.claim_id} | `{display}` | {claim.display_unit} | "
                 f"`{claim.source_receipt_sha256}` |"
             )
-        sections = (
-            ("Method rationale", (decision.method_rationale,)),
-            ("Assumptions", decision.assumptions),
-            ("Diagnostics", decision.diagnostics),
-            ("Uncertainties", decision.uncertainties),
-            ("Alternatives", decision.alternatives),
+        sections = tuple(
+            zip(
+                DECISION_SECTIONS,
+                (
+                    (decision.method_rationale,),
+                    decision.assumptions,
+                    decision.diagnostics,
+                    decision.uncertainties,
+                    decision.alternatives,
+                ),
+            )
         )
         for title, values in sections:
             entries = tuple(value for value in values if value)
@@ -6459,10 +6477,10 @@ class CommandCompiledToolHostV1:
         """Render an approved toolchain's executed analysis, decision or not."""
 
         lines = [
-            "# Host-validated structured analysis",
+            HOST_REPORT_TITLE,
             "",
-            f"Completion receipt: `{completion.receipt_sha256}`",
-            f"Toolchain plan: `{toolchain.plan_sha256}`",
+            f"{COMPLETION_RECEIPT_LABEL}: `{completion.receipt_sha256}`",
+            f"{TOOLCHAIN_PLAN_LABEL}: `{toolchain.plan_sha256}`",
         ]
         conditions = tuple(
             (node.node_id, node.temperature_k, node.pressure_atm)
@@ -6474,7 +6492,7 @@ class CommandCompiledToolHostV1:
             lines.extend(
                 (
                     "",
-                    "## Thermochemical conditions",
+                    THERMO_CONDITIONS_HEADING,
                     "",
                     "| Stage | Temperature (K) | Pressure (atm) |",
                     "|---|---:|---:|",
@@ -6488,11 +6506,11 @@ class CommandCompiledToolHostV1:
             lines.extend(
                 (
                     "",
-                    f"Claim record: `{claims.receipt_sha256}`",
+                    f"{CLAIM_RECORD_LABEL}: `{claims.receipt_sha256}`",
                     "",
-                    "## Host-rendered numerical claims",
+                    CLAIMS_HEADING,
                     "",
-                    "| Claim | Value | Unit | Source receipt |",
+                    f"| Claim | Value | Unit | {SOURCE_RECEIPT_COLUMN} |",
                     "|---|---:|---|---|",
                 )
             )
@@ -6507,12 +6525,17 @@ class CommandCompiledToolHostV1:
                     f"| `{claim.source_receipt_sha256}` |"
                 )
         if decision is not None:
-            sections = (
-                ("Method rationale", (decision.method_rationale,)),
-                ("Assumptions", decision.assumptions),
-                ("Diagnostics", decision.diagnostics),
-                ("Uncertainties", decision.uncertainties),
-                ("Alternatives", decision.alternatives),
+            sections = tuple(
+                zip(
+                    DECISION_SECTIONS,
+                    (
+                        (decision.method_rationale,),
+                        decision.assumptions,
+                        decision.diagnostics,
+                        decision.uncertainties,
+                        decision.alternatives,
+                    ),
+                )
             )
             for title, values in sections:
                 entries = tuple(value for value in values if value)
@@ -6524,7 +6547,7 @@ class CommandCompiledToolHostV1:
             lines.extend(
                 (
                     "",
-                    "Scientific decision: not recorded -- interpretation is "
+                    f"{NO_DECISION_PREFIX} -- interpretation is "
                     "a session act; this run executed extraction, "
                     "thermochemistry, expressions, validation verdicts, and "
                     "claim rendering only.",
