@@ -28,14 +28,17 @@ from chemsmart.agent._contracts import ContractError
 
 from . import commands as command_registry
 from .controller import AgentTuiController, AgentTuiPhase
+from .mermaid import render_workflow_mermaid
 from .monitor import (
     EventTailerV1,
+    execution_signal,
     planning_feed_update,
     planning_row_key,
 )
-from .panels import phase_chip, wordmark
-from .presentation import session_evidence_blocks
+from .panels import DagPanel, JobsPanel, phase_chip, wordmark
+from .presentation import human_cli_operation, session_evidence_blocks
 from .review import render_raw_review, render_review_blocks
+from .runs import list_runs
 from .theme import CHEMSMART_THEME
 from .transcript import ToolRow, TranscriptView
 
@@ -87,12 +90,17 @@ class ChemSmartAgentApp(App[None]):
         self._tail_rows: dict[str, ToolRow] = {}
         self._tail_stop = threading.Event()
         self._live_rows_seen = 0
+        self._workflow_nodes: dict[str, dict] = {}
+        self._jobs_timer = None
+        self._last_report_path: Path | None = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-shell"):
             yield Static(wordmark(), id="wordmark")
             yield Static("", id="phase-bar")
             yield TranscriptView(id="transcript")
+            yield DagPanel("", id="dag-panel")
+            yield JobsPanel("", id="jobs-panel")
             yield ScientificRequestInput(
                 placeholder=(
                     "Describe a calculation, or type /help for the approval chain"
@@ -174,6 +182,9 @@ class ChemSmartAgentApp(App[None]):
             "deny": self._deny,
             "revise": self._revise,
             "raw": self._show_raw_review,
+            "dag": self._toggle_dag,
+            "report": self._show_report,
+            "runs": self._show_runs,
             "quit": self._quit,
         }
 
@@ -233,11 +244,29 @@ class ChemSmartAgentApp(App[None]):
 
     def _approve(self, tail: list[str]) -> None:
         try:
-            self.controller.begin_execution()
+            prepared = self.controller.begin_execution()
         except ContractError as exc:
             # The guard speaks before any approval banner can appear.
             self._operation_failed("Approval", exc)
             return
+        run_directory = self.controller.execution_run_directory
+        if run_directory is not None:
+            run_directory.mkdir(parents=True, exist_ok=True)
+            (run_directory / "workflow.mmd").write_text(
+                render_workflow_mermaid(prepared), encoding="utf-8"
+            )
+        self._seed_workflow_nodes(prepared)
+        jobs = self.query_one("#jobs-panel", JobsPanel)
+        jobs.display = True
+        jobs.refresh_from(self._workflow_nodes)
+        self._refresh_dag()
+        self._jobs_timer = self.set_interval(1.0, self._refresh_live_panels)
+        if run_directory is not None:
+            self._tail_stop.clear()
+            self._run_event_tail(
+                EventTailerV1(run_directory / "events.jsonl"),
+                mode="execution",
+            )
         self._write(
             Panel(
                 "The human approved the displayed molecule, project YAML, "
@@ -313,15 +342,22 @@ class ChemSmartAgentApp(App[None]):
         self._run_event_tail(EventTailerV1(run_directory / "events.jsonl"))
 
     @work(thread=True, exclusive=True, group="event-tail")
-    def _run_event_tail(self, tailer: EventTailerV1) -> None:
+    def _run_event_tail(
+        self, tailer: EventTailerV1, mode: str = "planning"
+    ) -> None:
+        apply = (
+            self._apply_planning_events
+            if mode == "planning"
+            else self._apply_execution_events
+        )
         while not self._tail_stop.is_set():
             events = tailer.poll()
             if events:
-                self.call_from_thread(self._apply_planning_events, events)
+                self.call_from_thread(apply, events)
             time.sleep(0.3)
         events = tailer.poll()
         if events:
-            self.call_from_thread(self._apply_planning_events, events)
+            self.call_from_thread(apply, events)
 
     def _apply_planning_events(self, events) -> None:
         transcript = self.query_one("#transcript", TranscriptView)
@@ -348,6 +384,189 @@ class ChemSmartAgentApp(App[None]):
             else:
                 transcript.add_row(text, state=spec.state)
             self._live_rows_seen += 1
+
+    # -- execution surface ---------------------------------------------------
+
+    def _seed_workflow_nodes(self, review) -> None:
+        review_by_id = {item.node_id: item for item in review.node_reviews}
+        deferred = set(review.non_executable_node_ids)
+        nodes: dict[str, dict] = {}
+        for planned in review.scientific_plan.nodes:
+            item = review_by_id.get(planned.node_id)
+            if item is not None:
+                formula = str(
+                    item.molecular_identity.get("formula") or ""
+                )
+                label = f"{item.program} {item.stage}"
+                if formula:
+                    label += f" · {formula}"
+                nodes[planned.node_id] = {
+                    "kind": "calc",
+                    "label": label,
+                    "argv": human_cli_operation(item.real_execution_argv),
+                    "state": "queued",
+                    "detail": "",
+                    "started": None,
+                }
+            else:
+                nodes[planned.node_id] = {
+                    "kind": "calc",
+                    "label": f"{planned.program} {planned.stage}",
+                    "argv": "",
+                    "state": "deferred",
+                    "detail": planned.blocked_reason
+                    or (
+                        "deferred"
+                        if planned.node_id in deferred
+                        else "not executable"
+                    ),
+                    "started": None,
+                }
+        plan = review.scientific_toolchain_plan
+        if plan is not None:
+            for node in plan.analysis_nodes:
+                blocked = node.support_state == "blocked_unsupported"
+                nodes[node.node_id] = {
+                    "kind": "analysis",
+                    "label": node.analysis_kind,
+                    "argv": "",
+                    "state": "blocked_unsupported" if blocked else "queued",
+                    "detail": node.blocked_reason,
+                    "started": None,
+                }
+        self._workflow_nodes = nodes
+
+    def _apply_execution_events(self, events) -> None:
+        for event in events:
+            signal = execution_signal(event)
+            if signal is None:
+                continue
+            node = self._workflow_nodes.get(signal.node_id)
+            if signal.kind == "node_launched" and node is not None:
+                node["state"] = "running"
+                node["started"] = time.monotonic()
+            elif signal.kind == "engine_done" and node is not None:
+                node["state"] = (
+                    "validated"
+                    if signal.detail == "validated"
+                    else "engine_complete"
+                )
+                node["detail"] = signal.detail
+            elif signal.kind == "node_state" and node is not None:
+                node["state"] = signal.state
+                node["detail"] = ""
+            elif signal.kind == "analysis_settled" and node is not None:
+                node["state"] = signal.state
+                node["detail"] = signal.detail
+            elif signal.kind == "report_rendered":
+                self._write(
+                    Text(
+                        "Σ completed-analysis report rendered · /report "
+                        "opens it",
+                        style="dim",
+                    )
+                )
+        self._refresh_live_panels()
+
+    def _refresh_live_panels(self) -> None:
+        jobs = self.query_one("#jobs-panel", JobsPanel)
+        if jobs.display:
+            jobs.refresh_from(self._workflow_nodes)
+        self._refresh_dag()
+
+    def _refresh_dag(self) -> None:
+        dag = self.query_one("#dag-panel", DagPanel)
+        if dag.display:
+            dag.refresh_from(self._workflow_nodes)
+
+    def _toggle_dag(self, tail: list[str]) -> None:
+        dag = self.query_one("#dag-panel", DagPanel)
+        if dag.display:
+            dag.display = False
+            return
+        if not self._workflow_nodes:
+            review = self.controller.prepared_execution
+            if review is not None:
+                self._seed_workflow_nodes(review)
+        if not self._workflow_nodes:
+            self._write(
+                Panel(
+                    "No workflow to display yet; plan one first.",
+                    title="Workflow",
+                )
+            )
+            return
+        dag.display = True
+        dag.refresh_from(self._workflow_nodes)
+
+    def _show_runs(self, tail: list[str]) -> None:
+        summaries = list_runs(self.controller.config.workspace)
+        if not summaries:
+            self._write(
+                Panel(
+                    "No executions or replays exist under this workspace.",
+                    title="Runs",
+                )
+            )
+            return
+        table = Table(title="Workspace runs (newest first)")
+        table.add_column("#", style="bold cyan")
+        table.add_column("Run")
+        table.add_column("Kind")
+        table.add_column("Terminal state")
+        table.add_column("Report")
+        for index, summary in enumerate(summaries, start=1):
+            table.add_row(
+                str(index),
+                summary.name,
+                summary.kind,
+                summary.terminal_state,
+                "/report " + str(index) if summary.report_path else "—",
+            )
+        self._write(table)
+
+    def _show_report(self, tail: list[str]) -> None:
+        path: Path | None = None
+        if tail:
+            summaries = list_runs(self.controller.config.workspace)
+            try:
+                chosen = summaries[int(tail[0]) - 1]
+            except (ValueError, IndexError):
+                self._usage(
+                    "/report takes a run number from /runs, or no argument "
+                    "for the latest report"
+                )
+                return
+            path = chosen.report_path
+        else:
+            path = self._last_report_path
+            if path is None:
+                path = next(
+                    (
+                        summary.report_path
+                        for summary in list_runs(
+                            self.controller.config.workspace
+                        )
+                        if summary.report_path is not None
+                    ),
+                    None,
+                )
+        if path is None or not path.exists():
+            self._write(
+                Panel(
+                    "No completed-analysis report exists yet. A report is "
+                    "rendered when an approved run's analysis chain "
+                    "completes.",
+                    title="Report",
+                )
+            )
+            return
+        self._write(
+            Panel(
+                Markdown(path.read_text(encoding="utf-8")),
+                title=f"Completed analysis · {path}",
+            )
+        )
 
     def _plan_finished(self, result: LiveAgentSessionResultV1) -> None:
         self._busy = False
@@ -406,6 +625,12 @@ class ChemSmartAgentApp(App[None]):
 
     def _execution_finished(self, result: WorkflowExecutionResultV1) -> None:
         self._busy = False
+        self._tail_stop.set()
+        if self._jobs_timer is not None:
+            self._jobs_timer.stop()
+            self._jobs_timer = None
+        self.query_one("#jobs-panel", JobsPanel).display = False
+        self._refresh_dag()
         table = Table(title="ChemSmart execution result")
         table.add_column("Node")
         table.add_column("Program")
@@ -437,6 +662,41 @@ class ChemSmartAgentApp(App[None]):
                 ),
             )
         )
+        if result.analysis_nodes:
+            analysis = Table(title="Approved analysis chain")
+            analysis.add_column("Node", style="bold cyan")
+            analysis.add_column("Kind")
+            analysis.add_column("State")
+            analysis.add_column("Reason")
+            for node in result.analysis_nodes:
+                analysis.add_row(
+                    node.node_id,
+                    node.analysis_kind,
+                    node.state,
+                    node.reason or "—",
+                )
+            self._write(analysis)
+        if result.analysis_status:
+            self._write(
+                Text(
+                    f"analysis: {result.analysis_status}",
+                    style=(
+                        "green"
+                        if result.analysis_status == "completed"
+                        else "yellow"
+                    ),
+                )
+            )
+        if result.analysis_report_path:
+            report_path = Path(result.analysis_report_path)
+            self._last_report_path = report_path
+            if report_path.exists():
+                self._write(
+                    Panel(
+                        Markdown(report_path.read_text(encoding="utf-8")),
+                        title=f"Completed analysis · {report_path}",
+                    )
+                )
         hint = (
             "Approved execution finished; non-executable planned stages remain "
             "unperformed. "
@@ -445,8 +705,8 @@ class ChemSmartAgentApp(App[None]):
         )
         self._sync_phase(
             hint
-            + "place completed results in the task workspace and enter a new "
-            "request for typed analysis"
+            + "interpretation and the recorded decision remain a session "
+            "act; enter a new request when ready"
         )
 
     def _present_request(self, review: WorkflowExecutionReviewV1) -> None:

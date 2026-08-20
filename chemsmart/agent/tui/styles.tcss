@@ -41,3 +41,22 @@ Screen {
 TranscriptView > Static {
     width: 100%;
 }
+
+#dag-panel {
+    display: none;
+    height: auto;
+    max-height: 14;
+    margin: 0 2;
+    padding: 0 1;
+    border: round $primary;
+    overflow-y: auto;
+}
+
+#jobs-panel {
+    display: none;
+    height: auto;
+    max-height: 8;
+    margin: 0 2;
+    padding: 0 1;
+    border: round $primary;
+}

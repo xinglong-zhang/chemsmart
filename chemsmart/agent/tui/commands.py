@@ -69,6 +69,26 @@ COMMANDS: tuple[CommandSpecV1, ...] = (
         category="session",
     ),
     CommandSpecV1(
+        name="dag",
+        slash="/dag",
+        title="Toggle the workflow panel with every node's status",
+        category="view",
+    ),
+    CommandSpecV1(
+        name="report",
+        slash="/report",
+        title="Open the completed-analysis report",
+        category="view",
+        usage="/report [n]",
+        takes_argument=True,
+    ),
+    CommandSpecV1(
+        name="runs",
+        slash="/runs",
+        title="List this workspace's executions and their reports",
+        category="view",
+    ),
+    CommandSpecV1(
         name="raw",
         slash="/raw",
         title="Show the pending review's canonical JSON and digest",
