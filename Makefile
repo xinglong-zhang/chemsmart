@@ -125,7 +125,7 @@ install:          ## Install the project in user mode. Normal users (runtime onl
 
 .PHONY: install-dev
 install-dev:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[voronoi,dev,test,docs]
+	$(ENV_PREFIX)pip install -e .[dev,test,docs,agent-tui]
 
 .PHONY: pre-commit
 pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
@@ -195,8 +195,12 @@ fmt:              ## Format code using black and isort.
 	$(ENV_PREFIX)black -l 79 .
 
 .PHONY: lint
-lint:             ## Run linters (ruff).
+lint:             ## Run linters (ruff) with autofix for local use.
 	$(ENV_PREFIX)ruff check . --fix
+
+.PHONY: lint-check
+lint-check:       ## Run linters read-only (CI must not mutate the tree).
+	$(ENV_PREFIX)ruff check .
 
 # === Testing ===
 .PHONY: coverage-clean
@@ -212,7 +216,7 @@ else
 endif
 
 .PHONY: test
-test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
+test: lint-check coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
 	$(ENV_PREFIX)pytest \
 		-v \
 		--cov-config=pyproject.toml \
