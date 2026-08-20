@@ -6,6 +6,9 @@ ChemSmart Agent turns a scientific request into project YAML, compiled ChemSmart
 typed result analysis. The model proposes the chemistry; ChemSmart owns native-input generation, execution, validation,
 and result parsing.
 
+Approved execution stops an engine and its whole process tree through POSIX process groups and signals, so the Agent
+layer runs on Linux and macOS. The human CLI remains supported on Windows.
+
 *****************
  Supported scope
 *****************

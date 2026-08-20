@@ -8,6 +8,7 @@ survive byte-for-byte, comments and all.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import yaml
@@ -143,7 +144,9 @@ def test_write_backs_up_then_splices(tmp_path: Path):
     merged = target.read_text(encoding="utf-8")
     assert "# licensed install" in merged
     assert yaml.safe_load(merged)["SERVER"]["NUM_CORES"] == 6
-    assert (target.stat().st_mode & 0o777) == 0o600
+    if sys.platform != "win32":
+        # Windows has no POSIX mode bits; the ACL model differs.
+        assert (target.stat().st_mode & 0o777) == 0o600
 
 
 def test_a_new_file_grows_from_the_template(tmp_path: Path):

@@ -16,6 +16,14 @@ from chemsmart.utils.process_observation import (
     observe_process,
 )
 
+# Bounded execution stops an engine and its whole process tree through
+# POSIX process groups and signals; Windows has no equivalent, and the
+# SIGTERM cases would terminate the test runner itself.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="bounded process observation requires POSIX process groups",
+)
+
 
 def _python_process(source):
     return subprocess.Popen(

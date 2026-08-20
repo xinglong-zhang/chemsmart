@@ -18,6 +18,11 @@ artifacts; they are not a second user or model API.
 
 Python **3.10** is required.
 
+The human CLI runs on Linux, macOS, and Windows. Agent execution
+supervises engine processes through POSIX process groups and signals, so
+the Agent layer is supported on Linux and macOS; its test suite is
+skipped on Windows rather than reported as passing.
+
 ## Product model
 
 ```text

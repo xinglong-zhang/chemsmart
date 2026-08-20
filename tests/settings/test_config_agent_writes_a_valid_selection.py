@@ -7,6 +7,8 @@ legacy api.env migrates verbatim, unknown labels included.
 
 from __future__ import annotations
 
+import sys
+
 import yaml
 from click.testing import CliRunner
 
@@ -58,7 +60,9 @@ def test_flags_write_a_loader_valid_profile_and_store_the_key(
     assert "sk-test-key" not in agent_yaml.read_text(encoding="utf-8")
     keys = home / ".chemsmart" / "agent" / "keys.env"
     assert keys.read_text(encoding="utf-8") == "OPENAI_API_KEY=sk-test-key\n"
-    assert (keys.stat().st_mode & 0o777) == 0o600
+    if sys.platform != "win32":
+        # Windows has no POSIX mode bits; the ACL model differs.
+        assert (keys.stat().st_mode & 0o777) == 0o600
     assert "sk-test-key" not in result.output, "never echoed"
 
     from chemsmart.agent.provider_config import (

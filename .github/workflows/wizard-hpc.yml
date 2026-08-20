@@ -52,13 +52,14 @@ jobs:
           MEM_MB="$(free -m | awk '/^Mem:/{print $2}')"
           # Emit one directive per echo: slurm.conf has no
           # line-continuation syntax, and a heredoc inside this indented
-          # YAML block would prefix every line with the YAML indent. Run
-          # the daemons as root so the state directories need no
-          # separate SlurmUser ownership dance.
+          # YAML block would prefix every line with the YAML indent.
+          # SlurmUser must match the packaged unit's user (slurm), or
+          # slurmctld refuses the state directory it cannot own; slurmd
+          # stays root so it can launch jobs.
           {
             echo "ClusterName=ci"
             echo "SlurmctldHost=localhost"
-            echo "SlurmUser=root"
+            echo "SlurmUser=slurm"
             echo "SlurmdUser=root"
             echo "AuthType=auth/munge"
             echo "ProctrackType=proctrack/linuxproc"
@@ -73,7 +74,15 @@ jobs:
             echo "NodeName=localhost CPUs=${CPUS} RealMemory=${MEM_MB} State=UNKNOWN"
             echo "PartitionName=compute Nodes=localhost Default=YES MaxTime=2-00:00:00 State=UP"
           } | sudo tee /etc/slurm/slurm.conf > /dev/null
+
+          # slurmctld refuses to start unless SlurmUser owns the state
+          # directory (and it must not be group- or world-writable), and
+          # it needs a log file it can open.
           sudo mkdir -p /var/spool/slurmctld /var/spool/slurmd
+          sudo chown slurm:slurm /var/spool/slurmctld
+          sudo chmod 0755 /var/spool/slurmctld
+          sudo touch /var/log/slurmctld.log /var/log/slurmd.log
+          sudo chown slurm:slurm /var/log/slurmctld.log
 
           sudo systemctl restart slurmctld slurmd || {
             echo "::group::slurmctld journal"

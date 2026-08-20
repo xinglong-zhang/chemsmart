@@ -1,5 +1,17 @@
+"""Shared fixtures for the Agent suite.
+
+The Agent supervises engine processes through POSIX process groups and
+signals (``os.killpg``/``os.getpgid`` in
+``chemsmart/utils/process_observation.py``), which Windows does not
+provide, and it writes its evidence files with POSIX permission bits.
+The Agent is therefore supported on Linux and macOS; on Windows the
+whole suite is skipped rather than reported as passing something it
+never exercised. The human CLI keeps its Windows coverage.
+"""
+
 from __future__ import annotations
 
+import sys
 from types import MappingProxyType, SimpleNamespace
 
 import click
@@ -11,6 +23,13 @@ from chemsmart.agent.capabilities import (
     load_program_capabilities,
 )
 from chemsmart.agent.cli_schema import build_live_click_schema
+
+
+def pytest_ignore_collect(collection_path, config):
+    """Skip the Agent suite on platforms without POSIX process control."""
+
+    del collection_path, config
+    return sys.platform == "win32"
 
 
 def _execution_group(name: str, *, include_test: bool):
