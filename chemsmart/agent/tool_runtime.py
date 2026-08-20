@@ -1896,14 +1896,15 @@ class CommandCompiledToolHostV1:
     ) -> Any:
         """Place two identity-bound fragments into one host-owned arrangement.
 
-        Cycle-039 observed four sessions in a row end with the paper's
-        observable uncomputable because nothing could join two approved
-        monomers; one session probed four invented option names looking for
-        this affordance. The host owns the placement mathematics and the
-        bytes; the model owns the scientific choices (fragments, contact
-        atoms, distance) and must bind the arrangement's charge and
-        multiplicity explicitly afterwards -- composition never infers an
-        electronic state, and the consuming stage is a new workflow.
+        Without this affordance, sessions that needed a bimolecular
+        observable ended uncomputable because nothing could join two
+        approved monomers -- observed repeatedly, including a session
+        probing invented option names looking for it. The host owns the
+        placement mathematics and the bytes; the model owns the scientific
+        choices (fragments, contact atoms, distance) and must bind the
+        arrangement's charge and multiplicity explicitly afterwards --
+        composition never infers an electronic state, and the consuming
+        stage is a new workflow.
         """
 
         if self.approved_workspace is None:

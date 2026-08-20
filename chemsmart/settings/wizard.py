@@ -41,6 +41,12 @@ class ServerChoicesV1:
 
 
 def default_hours(queue: QueueFactsV1 | None) -> int:
+    """Conservative default under the queue ceiling (shown in the prompt).
+
+    24 h is a starting point a user confirms interactively, not a policy:
+    the wizard displays the queue's real limit beside it.
+    """
+
     if queue is None or queue.max_time_seconds is None:
         return 24
     return max(1, min(queue.max_time_seconds // 3600 or 1, 24))
@@ -49,7 +55,13 @@ def default_hours(queue: QueueFactsV1 | None) -> int:
 def default_mem_gb(
     queue: QueueFactsV1 | None, host: HostFactsV1
 ) -> int:
-    """floor(0.9 x advertised kB / 1024^2); queue first, host fallback."""
+    """floor(0.9 x advertised kB / 1024^2); queue first, host fallback.
+
+    The 10% headroom keeps the job request under the node's advertised
+    memory so the OS and scheduler daemons never force the allocation to
+    swap or reject; the prompt shows the raw ceiling for the user to
+    override.
+    """
 
     source_kb = None
     if queue is not None and queue.mem_kb_per_node:

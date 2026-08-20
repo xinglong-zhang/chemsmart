@@ -302,18 +302,12 @@ def _normalized_domain(values) -> tuple[str, ...]:
 def orca_method_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
     """Method vocabulary projected from the single-source ORCA io tables.
 
-    A live session planned MN15 for ORCA; the YAML validated, the CLI
-    compiled, the native input was generated, and only the safe preview's
-    membership test against these very tables refused it -- after the whole
-    stage was built. The tables existed all along; nothing declared them as
-    domains, so the receipt the model reads first carried every enumerated
-    vocabulary *except* the ones a chemist actually chooses by.
-
-    The tables are probe-verified against the installed ORCA 6.1.1 binary
-    (campaign keyword-probe report): all 94 prior entries were probed, one
-    legacy keyword the binary rejects was removed, and fourteen keywords the
-    binary accepts were added. The io module stays the single source, so the
-    route parser, the preview verifier, and this receipt can never fork.
+    Declaring these domains up front lets a planner learn that a keyword
+    is outside ORCA's vocabulary before a whole stage is built, instead of
+    at the safe preview's membership test. The tables are probe-verified
+    against an installed ORCA binary, and the io module stays the single
+    source, so the route parser, the preview verifier, and this receipt
+    can never fork.
     """
 
     from chemsmart.io.orca import (
