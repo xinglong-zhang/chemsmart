@@ -11,7 +11,9 @@ and no digest is ever displayed to the human.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping
+import hashlib
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -21,8 +23,61 @@ from rich.text import Text
 if TYPE_CHECKING:
     from chemsmart.agent.execution import WorkflowExecutionReviewV1
 
-from .presentation import human_cli_operation
+from .presentation import _canonical_tool_results, human_cli_operation
 from .voice import human_identity_evidence, human_state
+
+
+def _walk_render_records(value: Any) -> Iterable[Mapping[str, Any]]:
+    if isinstance(value, Mapping):
+        if "rendered_yaml" in value and "rendered_sha256" in value:
+            yield value
+        for item in value.values():
+            yield from _walk_render_records(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _walk_render_records(item)
+
+
+def resolve_project_yaml_texts(
+    review: "WorkflowExecutionReviewV1",
+    *,
+    public_transcript: Iterable[Mapping[str, Any]] = (),
+    workspace: Path | None = None,
+) -> dict[str, str]:
+    """Readable project YAML per reviewed node, from session evidence.
+
+    Promotion enforces that a node's project artifact digest equals the
+    digest of the rendered YAML bytes, so the join is exact: first over the
+    session transcript's render/promotion records, then over the promoted
+    YAML files kept under the planning runs, and a node that resolves
+    nowhere keeps its canonical-settings fallback.
+    """
+
+    wanted = {
+        digest: item.node_id
+        for item in review.node_reviews
+        if (digest := str(getattr(item, "project_artifact_sha256", "")))
+    }
+    texts: dict[str, str] = {}
+    for _tool, record in _canonical_tool_results(public_transcript):
+        for found in _walk_render_records(record):
+            digest = str(found.get("rendered_sha256") or "")
+            node_id = wanted.get(digest)
+            rendered = found.get("rendered_yaml")
+            if node_id and node_id not in texts and isinstance(rendered, str):
+                texts[node_id] = rendered
+    missing = set(wanted.values()) - set(texts)
+    if workspace is not None and missing:
+        pattern = ".chemsmart-agent/runs/*/projects/*.yaml"
+        for path in sorted(Path(workspace).glob(pattern)):
+            try:
+                data = path.read_bytes()
+            except OSError:
+                continue
+            node_id = wanted.get(hashlib.sha256(data).hexdigest())
+            if node_id and node_id not in texts:
+                texts[node_id] = data.decode("utf-8", errors="replace")
+    return texts
 
 
 def _overview_table(review: "WorkflowExecutionReviewV1") -> Table:
@@ -276,9 +331,12 @@ def _decision_panel(review: "WorkflowExecutionReviewV1") -> Panel:
 
 def render_review_blocks(
     review: "WorkflowExecutionReviewV1",
+    *,
+    project_yaml: Mapping[str, str] | None = None,
 ) -> tuple[Any, ...]:
     """Every renderable of the approval display, in reading order."""
 
+    yaml_texts = project_yaml or {}
     blocks: list[Any] = [_overview_table(review), _environment_table(review)]
     blocks.append(_bounds_panel(review))
     if review.scientific_plan.edges:
@@ -286,17 +344,24 @@ def render_review_blocks(
     blocks.extend(_composition_panels(review))
     blocks.append(_analysis_chain_renderable(review))
     for item in review.node_reviews:
-        blocks.append(
-            Panel(
-                Syntax(
-                    item.project_settings_text,
-                    "json",
-                    word_wrap=True,
-                    background_color="default",
-                ),
-                title=f"{item.node_id} · effective project settings",
+        yaml_text = yaml_texts.get(item.node_id)
+        if yaml_text:
+            settings = Syntax(
+                yaml_text.rstrip() + "\n",
+                "yaml",
+                word_wrap=True,
+                background_color="default",
             )
-        )
+            settings_title = f"{item.node_id} · project settings (YAML)"
+        else:
+            settings = Syntax(
+                item.project_settings_text,
+                "json",
+                word_wrap=True,
+                background_color="default",
+            )
+            settings_title = f"{item.node_id} · effective project settings"
+        blocks.append(Panel(settings, title=settings_title))
         blocks.append(
             Panel(
                 Text(human_cli_operation(item.real_execution_argv)),
@@ -307,4 +372,4 @@ def render_review_blocks(
     return tuple(blocks)
 
 
-__all__ = ["render_review_blocks"]
+__all__ = ["render_review_blocks", "resolve_project_yaml_texts"]

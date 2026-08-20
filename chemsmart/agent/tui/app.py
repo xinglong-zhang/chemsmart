@@ -40,7 +40,7 @@ from .monitor import (
 )
 from .panels import DagPanel, JobsPanel, phase_chip, wordmark
 from .presentation import human_cli_operation, session_evidence_blocks
-from .review import render_review_blocks
+from .review import render_review_blocks, resolve_project_yaml_texts
 from .runs import list_runs
 from .theme import CHEMSMART_THEME
 from .transcript import ToolRow, TranscriptView
@@ -826,7 +826,15 @@ class ChemSmartAgentApp(App[None]):
         )
 
     def _present_request(self, review: WorkflowExecutionReviewV1) -> None:
-        for block in render_review_blocks(review):
+        transcript = ()
+        if self.controller.plan_result is not None:
+            transcript = self.controller.plan_result.public_transcript
+        yaml_texts = resolve_project_yaml_texts(
+            review,
+            public_transcript=transcript,
+            workspace=self.controller.config.workspace,
+        )
+        for block in render_review_blocks(review, project_yaml=yaml_texts):
             self._write(block)
 
     def _operation_failed(self, label: str, exc: Exception) -> None:
