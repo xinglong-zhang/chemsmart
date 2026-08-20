@@ -72,6 +72,10 @@ class ChemSmartAgentApp(App[None]):
     SUB_TITLE = "project YAML · compiled CLI · explicit approval"
     BINDINGS = [
         Binding("ctrl+c", "safe_quit", "Quit", priority=True),
+        Binding(
+            "escape", "interrupt_planning", "Cancel planning", priority=True,
+            show=False,
+        ),
         Binding("pageup", "scroll_transcript_up", "Scroll up", show=False),
         Binding(
             "pagedown", "scroll_transcript_down", "Scroll down", show=False
@@ -93,6 +97,8 @@ class ChemSmartAgentApp(App[None]):
         self._workflow_nodes: dict[str, dict] = {}
         self._jobs_timer = None
         self._last_report_path: Path | None = None
+        self._esc_armed = False
+        self._esc_disarm_timer = None
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agent-shell"):
@@ -614,6 +620,11 @@ class ChemSmartAgentApp(App[None]):
             self._sync_phase(
                 "Review shown; /approve runs once, /revise or /deny declines"
             )
+        elif result.terminal_state == "cancelled":
+            self._sync_phase(
+                "Planning cancelled at a provider-turn boundary; the session "
+                "remains an observed run"
+            )
         elif self.controller.phase is AgentTuiPhase.COMPLETE:
             self._sync_phase(
                 "Plan or typed analysis complete; enter another scientific request"
@@ -757,6 +768,50 @@ class ChemSmartAgentApp(App[None]):
 
     def action_safe_quit(self) -> None:
         self._quit([])
+
+    def action_interrupt_planning(self) -> None:
+        """Double-esc cancels planning at the next provider-turn boundary.
+
+        Engines are never killable from the interface; the event is consulted
+        only by the planning loop between provider turns.
+        """
+
+        if not (
+            self._busy
+            and self.controller.phase is AgentTuiPhase.PLANNING
+        ):
+            self._disarm_interrupt()
+            return
+        if not self._esc_armed:
+            self._esc_armed = True
+            self.query_one("#footer", Static).update(
+                Text(
+                    "esc again to cancel planning (disarms in 5 s)",
+                    style="bold yellow",
+                )
+            )
+            self._esc_disarm_timer = self.set_timer(
+                5.0, self._disarm_interrupt
+            )
+            return
+        self.controller.cancel_planning.set()
+        self._esc_armed = False
+        self.query_one("#footer", Static).update(
+            Text(
+                "cancelling at the next provider-turn boundary…",
+                style="yellow",
+            )
+        )
+
+    def _disarm_interrupt(self) -> None:
+        if self._esc_disarm_timer is not None:
+            self._esc_disarm_timer.stop()
+            self._esc_disarm_timer = None
+        if self._esc_armed:
+            self._esc_armed = False
+            self.query_one("#footer", Static).update(
+                command_registry.footer_hint(self.controller.phase.value)
+            )
 
     def action_scroll_transcript_up(self) -> None:
         self.query_one("#transcript", TranscriptView).scroll_page_up()
