@@ -1,8 +1,10 @@
-Creating a Molecule
-===================
+#####################
+ Creating a Molecule
+#####################
 
-From Symbols and Positions
---------------------------
+****************************
+ From Symbols and Positions
+****************************
 
 The simplest way to create a :class:`Molecule` is to specify atomic symbols and Cartesian positions directly:
 
@@ -27,8 +29,9 @@ The simplest way to create a :class:`Molecule` is to specify atomic symbols and 
    print(mol.mass)                 # ~18.015 amu
    print(mol.get_distance(2, 3))   # distance between H2 and H3 in Å
 
-From Files
-----------
+************
+ From Files
+************
 
 CHEMSMART supports a wide range of file formats via :meth:`Molecule.from_filepath`:
 
@@ -76,8 +79,9 @@ The following examples use real test files shipped with the CHEMSMART repository
    The ``index`` parameter uses **1-based** indexing to match Gaussian / ORCA conventions. Use ``"-1"`` for the last
    structure (default), ``":"`` for all structures, or a specific integer.
 
-From PubChem
-------------
+**************
+ From PubChem
+**************
 
 Query PubChem directly by name, CID, or SMILES string:
 
@@ -100,19 +104,18 @@ Query PubChem directly by name, CID, or SMILES string:
 
 .. note::
 
-   PubChem queries require an **internet connection** and the ``tenacity``
-   Python package (``pip install tenacity``). If a 3D conformer is
-   unavailable, CHEMSMART automatically falls back to the 2D structure and
-   generates 3D coordinates using RDKit (``pip install rdkit``).
+   PubChem queries require an **internet connection** and the ``tenacity`` Python package (``pip install tenacity``). If
+   a 3D conformer is unavailable, CHEMSMART automatically falls back to the 2D structure and generates 3D coordinates
+   using RDKit (``pip install rdkit``).
 
 .. tip::
 
-   To avoid the harmless-but-confusing "400 BadRequest" logger message for
-   name-based queries, prefer CID or SMILES identifiers when running in a
-   notebook or CI.
+   To avoid the harmless-but-confusing "400 BadRequest" logger message for name-based queries, prefer CID or SMILES
+   identifiers when running in a notebook or CI.
 
-From Other Python Objects
--------------------------
+***************************
+ From Other Python Objects
+***************************
 
 CHEMSMART provides seamless conversion from popular chemistry libraries:
 
@@ -146,17 +149,17 @@ CHEMSMART provides seamless conversion from popular chemistry libraries:
    )
    print(mol.chemical_formula)   # CO2
 
-.. seealso::
+.. important::
 
    :doc:`molecule-input-formats` for a full overview of supported input formats and CLI usage.
 
-Constructor Parameters
-----------------------
+************************
+ Constructor Parameters
+************************
 
-The constructor accepts the following parameters. Parameters typed in
-**bold** are required; the rest are optional and are typically populated
-automatically when reading calculation output files (Gaussian ``.log``,
-ORCA ``.out``, xTB, etc.).
+The constructor accepts the following parameters. Parameters typed in **bold** are required; the rest are optional and
+are typically populated automatically when reading calculation output files (Gaussian ``.log``, ORCA ``.out``, xTB,
+etc.).
 
 .. list-table::
    :header-rows: 1

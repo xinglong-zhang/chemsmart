@@ -1,8 +1,10 @@
-Working with Molecules
-======================
+########################
+ Working with Molecules
+########################
 
-Indexing and Copies
--------------------
+*********************
+ Indexing and Copies
+*********************
 
 CHEMSMART uses **1-based indexing** for atom indices throughout the API, matching the convention used by Gaussian and
 ORCA input files.
@@ -48,30 +50,32 @@ ORCA input files.
 
    CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
 
-:meth:`~chemsmart.io.molecules.structure.Molecule.copy()`
-Returns a deep copy of the molecule.
+:meth:`~chemsmart.io.molecules.structure.Molecule.copy()` Returns a deep copy of the molecule.
 
-- Returns: :class:`Molecule` — A new molecule with independent copies of all arrays and metadata.
+-  Returns: :class:`Molecule` — A new molecule with independent copies of all arrays and metadata.
 
-:meth:`~chemsmart.io.molecules.structure.Molecule.delete_atoms_by_indices(atom_indices, one_based=True)`
-Remove atoms by index and return a new molecule.
+:meth:`~chemsmart.io.molecules.structure.Molecule.delete_atoms_by_indices(atom_indices, one_based=True)` Remove atoms by
+index and return a new molecule.
 
-- ``atom_indices`` (int or iterable of int) — Atom indices to remove. Default is **1-based** (matching Gaussian/Orca conventions).
-- ``one_based`` (bool) — If ``True`` (default), indices are 1-based. Set to ``False`` for 0-based Python-style indexing.
-- Returns: :class:`Molecule` — New molecule with the specified atoms removed.
-- Raises: ``ValueError`` if any index is out of range or removing all atoms would leave an empty molecule.
+-  ``atom_indices`` (int or iterable of int) — Atom indices to remove. Default is **1-based** (matching Gaussian/Orca
+   conventions).
+-  ``one_based`` (bool) — If ``True`` (default), indices are 1-based. Set to ``False`` for 0-based Python-style
+   indexing.
+-  Returns: :class:`Molecule` — New molecule with the specified atoms removed.
+-  Raises: ``ValueError`` if any index is out of range or removing all atoms would leave an empty molecule.
 
 .. warning::
 
    CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
 
-Writing Molecules to Files
---------------------------
+****************************
+ Writing Molecules to Files
+****************************
 
 Use :meth:`Molecule.write` to export molecules to various formats:
 
-:meth:`~chemsmart.io.molecules.structure.Molecule.write(filename, format="xyz", mode="w", **kwargs)`
-Write the molecule to a file in one of the supported formats.
+:meth:`~chemsmart.io.molecules.structure.Molecule.write(filename, format="xyz", mode="w", **kwargs)` Write the molecule
+to a file in one of the supported formats.
 
 .. code:: python
 
@@ -104,17 +108,20 @@ Write the molecule to a file in one of the supported formats.
 
 Supported formats:
 
-====================  ========================================
-Format                Description
-====================  ========================================
-``"xyz"``             Standard XYZ format (default)
-``"extxyz"``          Extended XYZ with energy, forces, metadata
-``"com"``             Gaussian input file with route section
-``"pdb"``             Protein Data Bank format
-====================  ========================================
++--------------------+------------------------------------------+
+| Format             | Description                              |
++====================+==========================================+
+| ``"xyz"``          | Standard XYZ format (default)            |
++--------------------+------------------------------------------+
+| ``"extxyz"``       | Extended XYZ with energy, forces,        |
+|                    | metadata                                 |
++--------------------+------------------------------------------+
+| ``"com"``          | Gaussian input file with route section   |
++--------------------+------------------------------------------+
+| ``"pdb"``          | Protein Data Bank format                 |
++--------------------+------------------------------------------+
 
-For formats not listed above (e.g. COSMORS-XYZ, MOL), use the dedicated
-writer methods directly:
+For formats not listed above (e.g. COSMORS-XYZ, MOL), use the dedicated writer methods directly:
 
 .. code:: python
 
@@ -130,32 +137,32 @@ writer methods directly:
        f.write(molblock)
    print("Wrote output.mol")
 
-- ``filename`` (str) — Output file path.
-- ``format`` (str) — Output format. Defaults to ``"xyz"``.
-- ``mode`` (str) — File write mode (default: ``"w"``).
-- Raises: ``ValueError`` if the requested format is not supported.
+-  ``filename`` (str) — Output file path.
+-  ``format`` (str) — Output format. Defaults to ``"xyz"``.
+-  ``mode`` (str) — File write mode (default: ``"w"``).
+-  Raises: ``ValueError`` if the requested format is not supported.
 
 **Dedicated writer methods:**
 
-- ``write_xyz(filename, mode="w")`` — Write standard XYZ.
-- ``write_extxyz(filename, mode="w")`` — Write extended XYZ.
-- ``write_com(filename)`` — Write Gaussian input (``.com``).
-- ``write_pdb(filename, mode="w")`` — Write PDB format.
-- ``write_cosmorsxyz(filename, mode="w")`` — Write COSMORS-XYZ format.
-- ``write_coordinates(filename, mode="w", atom_indices=None)`` — Write a text coordinate block.
-- ``write_pdb_pybabel(filename)`` — Write PDB via PyBabel.
+-  ``write_xyz(filename, mode="w")`` — Write standard XYZ.
+-  ``write_extxyz(filename, mode="w")`` — Write extended XYZ.
+-  ``write_com(filename)`` — Write Gaussian input (``.com``).
+-  ``write_pdb(filename, mode="w")`` — Write PDB format.
+-  ``write_cosmorsxyz(filename, mode="w")`` — Write COSMORS-XYZ format.
+-  ``write_coordinates(filename, mode="w", atom_indices=None)`` — Write a text coordinate block.
+-  ``write_pdb_pybabel(filename)`` — Write PDB via PyBabel.
 
-Format Conversion
------------------
+*******************
+ Format Conversion
+*******************
 
-CHEMSMART provides bidirectional conversion with popular chemistry libraries (ASE, pymatgen, RDKit, NetworkX, etc.)
-via a set of :meth:`to_*` methods.
+CHEMSMART provides bidirectional conversion with popular chemistry libraries (ASE, pymatgen, RDKit, NetworkX, etc.) via
+a set of :meth:`to_*` methods.
 
 .. note::
 
-   Always start a format-conversion workflow from a **calculation output file**
-   (``xTB .out``, ``Gaussian .log``, ``ORCA .out``, etc.). Plain ``.xyz``
-   files carry no charge or spin multiplicity, so downstream conversions may fail.
+   Always start a format-conversion workflow from a **calculation output file** (``xTB .out``, ``Gaussian .log``, ``ORCA
+   .out``, etc.). Plain ``.xyz`` files carry no charge or spin multiplicity, so downstream conversions may fail.
 
 .. code:: python
 
@@ -191,5 +198,5 @@ via a set of :meth:`to_*` methods.
    X = mol.to_X_data()
    print(len(X))                        # feature vector length
 
-**Conversion methods:** :meth:`to_ase`, :meth:`to_pymatgen`, :meth:`to_rdkit`, :meth:`to_smiles`,
-:meth:`to_pdb`, :meth:`to_cosmorsxyz`, :meth:`to_graph`, :meth:`to_X_data`.
+**Conversion methods:** :meth:`to_ase`, :meth:`to_pymatgen`, :meth:`to_rdkit`, :meth:`to_smiles`, :meth:`to_pdb`,
+:meth:`to_cosmorsxyz`, :meth:`to_graph`, :meth:`to_X_data`.

@@ -1,8 +1,10 @@
-Molecular Properties
-====================
+######################
+ Molecular Properties
+######################
 
-Molecular Identifiers
----------------------
+***********************
+ Molecular Identifiers
+***********************
 
 CHEMSMART provides several identifiers for molecules and structures. The four most commonly used ones are:
 
@@ -12,16 +14,12 @@ CHEMSMART provides several identifiers for molecules and structures. The four mo
 
    -  -  Property
       -  Description
-
    -  -  :attr:`~Molecule.smiles`
       -  SMILES string via RDKit
-
    -  -  :attr:`~Molecule.cxsmiles`
       -  CXSMILES string (with 3D coordinates and stereo)
-
    -  -  :attr:`~Molecule.inchi`
       -  Full InChI string (requires Open Babel)
-
    -  -  :attr:`~Molecule.inchikey`
       -  InChIKey string (requires Open Babel)
 
@@ -44,11 +42,12 @@ All other identifiers — :attr:`~Molecule.chemical_formula`, :attr:`~Molecule.e
    print(mol.inchi)        # InChI=1S/H2O/h1H2O
    print(mol.inchikey)     # UHOVQNZJYSORNB-UHFFFAOYSA-N
 
-Atomic and Molecular Properties
--------------------------------
+*********************************
+ Atomic and Molecular Properties
+*********************************
 
 Counts and Symbols
-^^^^^^^^^^^^^^^^^^
+==================
 
 .. code:: python
 
@@ -71,12 +70,13 @@ Counts and Symbols
 -  ``chemical_symbols`` (list) — List of chemical symbol strings (e.g. ``["C", "O", "O"]``).
 
 Masses
-^^^^^^
+======
 
 CHEMSMART supports three mass conventions:
 
 -  **Standard atomic masses** (:attr:`mass`, :attr:`masses`)
--  **Natural abundance weighted masses** (:attr:`natural_abundance_weighted_mass`, :attr:`natural_abundance_weighted_masses`)
+-  **Natural abundance weighted masses** (:attr:`natural_abundance_weighted_mass`,
+   :attr:`natural_abundance_weighted_masses`)
 -  **Most abundant isotope masses** (:attr:`most_abundant_mass`, :attr:`most_abundant_masses`)
 
 .. code:: python
@@ -99,18 +99,17 @@ CHEMSMART supports three mass conventions:
 
 **Attributes:**
 
-- ``mass`` (float) — Total molecular mass in amu (standard atomic masses).
-- ``masses`` (list) — Per-atom standard atomic masses in amu.
-- ``natural_abundance_weighted_mass`` (float) — Total mass using natural isotope-abundance weighted atomic masses.
-- ``natural_abundance_weighted_masses`` (list) — Per-atom abundance-weighted masses.
-- ``most_abundant_mass`` (float) — Total mass using the most abundant isotope of each element.
-- ``most_abundant_masses`` (list) — Per-atom most-abundant isotope masses.
+-  ``mass`` (float) — Total molecular mass in amu (standard atomic masses).
+-  ``masses`` (list) — Per-atom standard atomic masses in amu.
+-  ``natural_abundance_weighted_mass`` (float) — Total mass using natural isotope-abundance weighted atomic masses.
+-  ``natural_abundance_weighted_masses`` (list) — Per-atom abundance-weighted masses.
+-  ``most_abundant_mass`` (float) — Total mass using the most abundant isotope of each element.
+-  ``most_abundant_masses`` (list) — Per-atom most-abundant isotope masses.
 
 Energy, Forces, and Velocities
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+==============================
 
-These are populated from calculation output files (Gaussian ``.log``,
-ORCA ``.out``, xTB, etc.).
+These are populated from calculation output files (Gaussian ``.log``, ORCA ``.out``, xTB, etc.).
 
 .. code:: python
 
@@ -142,10 +141,10 @@ ORCA ``.out``, xTB, etc.).
    :meth:`to_ase` to convert to eV and eV/Å respectively.
 
 Electronic and Thermochemical Properties
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+========================================
 
-These properties are typically populated when reading calculation output files.
-The example below uses a real Gaussian output file:
+These properties are typically populated when reading calculation output files. The example below uses a real Gaussian
+output file:
 
 .. code:: python
 
@@ -187,7 +186,7 @@ The example below uses a real Gaussian output file:
 -  ``is_optimized_structure`` (bool or None) — Whether the structure is an optimized / final geometry.
 
 Atomic Radii
-^^^^^^^^^^^^
+============
 
 .. code:: python
 
@@ -202,11 +201,12 @@ Atomic Radii
 -  ``atomic_radii_list`` (list) — Covalent radii (Å) for each atom, from ASE's ``covalent_radii`` table.
 -  ``vdw_radii_list`` (list) — Van der Waals radii (Å) for each atom, from ASE's ``vdW_radii`` table.
 
-Structure Classification
-------------------------
+**************************
+ Structure Classification
+**************************
 
-CHEMSMART provides several boolean properties for classifying molecular structure. These are based on RDKit's
-perception of the 3D geometry (bonds, rings, stereochemistry).
+CHEMSMART provides several boolean properties for classifying molecular structure. These are based on RDKit's perception
+of the 3D geometry (bonds, rings, stereochemistry).
 
 .. list-table::
    :header-rows: 1
@@ -214,25 +214,18 @@ perception of the 3D geometry (bonds, rings, stereochemistry).
 
    -  -  Property
       -  Description
-
    -  -  :attr:`~Molecule.is_aromatic`
       -  ``True`` if any atom is aromatic and belongs to a ring
-
    -  -  :attr:`~Molecule.is_ring`
       -  ``True`` if the molecule contains any ring
-
    -  -  :attr:`~Molecule.is_monoatomic`
       -  ``True`` for single-atom molecules
-
    -  -  :attr:`~Molecule.is_diatomic`
       -  ``True`` for two-atom molecules
-
    -  -  :attr:`~Molecule.is_linear`
       -  ``True`` if all atoms are collinear
-
    -  -  :attr:`~Molecule.is_chiral`
       -  ``True`` if the molecule has chiral centers
-
    -  -  :attr:`~Molecule.is_multicomponent`
       -  ``True`` if the molecule has multiple fragments (salts, complexes)
 
@@ -249,15 +242,17 @@ perception of the 3D geometry (bonds, rings, stereochemistry).
 
 **Attributes:**
 
-- ``is_aromatic`` (bool) — ``True`` if any atom is aromatic and part of a ring (requires RDKit connectivity).
-- ``is_ring`` (bool) — ``True`` if the molecular graph contains at least one cycle.
-- ``is_monoatomic`` (bool) — ``True`` when ``num_atoms == 1``.
-- ``is_diatomic`` (bool) — ``True`` when ``num_atoms == 2``.
-- ``is_linear`` (bool) — ``True`` if all atoms are collinear (within tolerance).
-- ``is_chiral`` (bool) — ``True`` if any tetrahedral centre has no improper-rotation symmetry.
-- ``chiral_centers`` (dict) — Map of 1-based atom index → stereodescriptor (``"R"``/``"S"``) for detected chiral centres.
-- ``is_multicomponent`` (bool) — ``True`` if the connectivity graph has more than one connected component (salts, solvates, etc.).
-- ``num_components`` (int) — Number of connected components in the molecular graph.
+-  ``is_aromatic`` (bool) — ``True`` if any atom is aromatic and part of a ring (requires RDKit connectivity).
+-  ``is_ring`` (bool) — ``True`` if the molecular graph contains at least one cycle.
+-  ``is_monoatomic`` (bool) — ``True`` when ``num_atoms == 1``.
+-  ``is_diatomic`` (bool) — ``True`` when ``num_atoms == 2``.
+-  ``is_linear`` (bool) — ``True`` if all atoms are collinear (within tolerance).
+-  ``is_chiral`` (bool) — ``True`` if any tetrahedral centre has no improper-rotation symmetry.
+-  ``chiral_centers`` (dict) — Map of 1-based atom index → stereodescriptor (``"R"``/``"S"``) for detected chiral
+   centres.
+-  ``is_multicomponent`` (bool) — ``True`` if the connectivity graph has more than one connected component (salts,
+   solvates, etc.).
+-  ``num_components`` (int) — Number of connected components in the molecular graph.
 
 .. note::
 
@@ -265,7 +260,7 @@ perception of the 3D geometry (bonds, rings, stereochemistry).
    **model-dependent**. For borderline or unusual systems, the result should be treated as a heuristic estimate.
 
 Periodic Boundary Conditions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+============================
 
 .. code:: python
 
@@ -290,12 +285,13 @@ Periodic Boundary Conditions
 
 **Attributes:**
 
--  ``pbc`` (bool) — ``True`` if the molecule has no periodic boundary conditions (all entries in ``pbc_conditions`` are 0).
+-  ``pbc`` (bool) — ``True`` if the molecule has no periodic boundary conditions (all entries in ``pbc_conditions`` are
+   0).
 -  ``pbc_conditions`` (list) — Periodic boundary conditions ``[x, y, z]``.
 -  ``translation_vectors`` (list) — Cell / translation vectors for periodic systems.
 
 Frozen Atoms
-^^^^^^^^^^^^
+============
 
 .. code:: python
 
@@ -316,14 +312,15 @@ Frozen Atoms
    frozen_indices = [i+1 for i, f in enumerate(mol.frozen_atoms) if f == -1]
    print("Frozen atoms:", frozen_indices)  # [2, 3]
 
--  ``frozen_atoms`` (list) — Per-atom constraint flags following the Gaussian convention: ``-1`` = frozen, ``0`` = relaxed.
+-  ``frozen_atoms`` (list) — Per-atom constraint flags following the Gaussian convention: ``-1`` = frozen, ``0`` =
+   relaxed.
 
 .. note::
 
    Frozen atom flags follow the Gaussian convention: ``-1`` denotes a frozen atom and ``0`` denotes a relaxed atom.
 
 Miscellaneous
-^^^^^^^^^^^^^
+=============
 
 .. code:: python
 

@@ -1,5 +1,6 @@
-The Molecule Object Overview
-===================
+##############################
+ The Molecule Object Overview
+##############################
 
 The :class:`~chemsmart.io.molecules.structure.Molecule` object is the central data structure in CHEMSMART for
 representing a molecular structure. It stores atomic symbols, 3D coordinates, electronic properties (charge,
