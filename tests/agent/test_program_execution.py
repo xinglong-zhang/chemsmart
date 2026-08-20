@@ -1452,6 +1452,7 @@ def test_orca_neb_execution_requires_path_and_ts_convergence(
     )
     parsed_output = SimpleNamespace(
         vibrational_frequencies=(),
+        excited_state_records=(),
         normal_termination=True,
         converged=False,
         charge=0,
