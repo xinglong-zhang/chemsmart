@@ -29,7 +29,7 @@ from chemsmart.agent.permissions import (
     ApprovalResolutionV1,
     PermissionReceiptV1,
     PermissionRequestV1,
-    _evaluate_permission,
+    evaluate_permission,
 )
 from chemsmart.agent.execution import (
     WorkflowExecutionApprovalBundleV1,
@@ -166,7 +166,7 @@ class RuntimeEventStore:
             )
             if consumed:
                 raise ContractError("approval has already been consumed")
-            receipt = _evaluate_permission(request, approval=approval)
+            receipt = evaluate_permission(request, approval=approval)
             payload = {
                 "receipt_sha256": receipt.receipt_sha256,
                 "permission_request_sha256": request.request_sha256,

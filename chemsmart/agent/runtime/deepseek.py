@@ -592,12 +592,6 @@ def _public_message(message: Mapping[str, Any]) -> dict[str, Any]:
     return sanitized if isinstance(sanitized, dict) else {}
 
 
-def public_payload(value: Any) -> Any:
-    """Recursively remove private reasoning fields from persistable values."""
-
-    return _public_payload_at_path(value, (), "generic")
-
-
 def _is_tool_function_path(
     path: tuple[Any, ...], context: str
 ) -> bool:
@@ -871,7 +865,6 @@ __all__ = [
     "ProviderCapabilitiesV1",
     "ProviderTurnReceiptV1",
     "ProviderTurnDeadlinesV1",
-    "public_payload",
     "public_provider_request",
     "public_provider_response",
 ]

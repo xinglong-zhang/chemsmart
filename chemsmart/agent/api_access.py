@@ -116,31 +116,6 @@ class SecretLease:
             self._consumed = True
 
 
-@dataclass(frozen=True)
-class ApiCredentialStatusReceiptV1:
-    schema_version: str
-    provider: str
-    key_validation_status: str
-    quota_status: str
-    entitlement_status: str
-    nonsecret_error_class: str
-    receipt_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.api-credential-status.v1":
-            raise ContractError("unsupported API credential receipt schema")
-        body = {
-            "schema_version": self.schema_version,
-            "provider": self.provider,
-            "key_validation_status": self.key_validation_status,
-            "quota_status": self.quota_status,
-            "entitlement_status": self.entitlement_status,
-            "nonsecret_error_class": self.nonsecret_error_class,
-        }
-        if self.receipt_sha256 != canonical_sha256(body):
-            raise ContractError("API credential status digest mismatch")
-
-
 def parse_secret_file(path: str | Path) -> dict[str, str]:
     """Parse simple assignments as data; never source or expand the file."""
 
@@ -285,7 +260,6 @@ def _normalize_label(label: str) -> str:
 
 
 __all__ = [
-    "ApiCredentialStatusReceiptV1",
     "DEFAULT_KEY_LABELS",
     "SecretLease",
     "load_secret_lease",

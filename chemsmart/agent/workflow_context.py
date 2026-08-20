@@ -19,23 +19,10 @@ A model cannot assert that a node is ready; it can only be told.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
 from chemsmart.agent._contracts import ContractError, require_identifier
-
-
-def workflow_context_enabled() -> bool:
-    """Return whether the dependency projection is surfaced to the agent.
-
-    Defaults to enabled. ``CHEMSMART_AGENT_WORKFLOW_CONTEXT=0`` withholds the
-    projection for callers that need the smaller historical result shape.
-    """
-
-    return os.environ.get(
-        "CHEMSMART_AGENT_WORKFLOW_CONTEXT", "1"
-    ).strip() not in ("0", "false", "no")
 
 
 #: ``completed`` -- this exact approved node already has a validated result.

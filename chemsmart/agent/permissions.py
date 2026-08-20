@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from threading import Lock
 
 from chemsmart.agent._contracts import (
     ContractError,
@@ -168,39 +167,7 @@ class PermissionReceiptV1:
             raise ContractError("permission receipt digest mismatch")
 
 
-def build_permission_request(
-    *, request_id: str, action: str, scope_sha256: str, **bindings: object
-) -> PermissionRequestV1:
-    body = {
-        "schema_version": "chemsmart.permission-request.v1",
-        "request_id": request_id,
-        "action": action,
-        "scope_sha256": scope_sha256,
-        "command_sha256": str(bindings.get("command_sha256", "")),
-        "input_sha256s": tuple(bindings.get("input_sha256s", ())),
-        "project_sha256": str(bindings.get("project_sha256", "")),
-        "environment_sha256": str(bindings.get("environment_sha256", "")),
-        "provider": str(bindings.get("provider", "")),
-        "quota_scope": str(bindings.get("quota_scope", "")),
-    }
-    return PermissionRequestV1(
-        **body, request_sha256=canonical_sha256(body)
-    )
-
-
-def resolve_permission(
-    request: PermissionRequestV1,
-    *,
-    approval: ApprovalResolutionV1 | None = None,
-) -> PermissionReceiptV1:
-    if request.action in _MATERIAL_ACTIONS and approval is not None:
-        raise ContractError(
-            "material approvals must be consumed by the persistent event store"
-        )
-    return _evaluate_permission(request, approval=approval)
-
-
-def _evaluate_permission(
+def evaluate_permission(
     request: PermissionRequestV1,
     *,
     approval: ApprovalResolutionV1 | None = None,
@@ -241,88 +208,11 @@ def _evaluate_permission(
     )
 
 
-def build_approval_resolution(
-    *,
-    approval_id: str,
-    request: PermissionRequestV1,
-    allow: bool,
-    actor: str,
-) -> ApprovalResolutionV1:
-    body = {
-        "schema_version": "chemsmart.approval-resolution.v1",
-        "approval_id": approval_id,
-        "permission_request_sha256": request.request_sha256,
-        "decision": (
-            PermissionDecision.ALLOW_ONCE if allow else PermissionDecision.DENY
-        ),
-        "actor": actor,
-        "one_shot": bool(allow),
-        "consumed": False,
-    }
-    return ApprovalResolutionV1(
-        **body, resolution_sha256=canonical_sha256(body)
-    )
-
-
-class PermissionLedgerV1:
-    """Compatibility ledger; material consumption moved to RuntimeEventStore."""
-
-    def __init__(self) -> None:
-        self._consumed_approval_ids: set[str] = set()
-        self._lock = Lock()
-
-    def resolve(
-        self,
-        request: PermissionRequestV1,
-        *,
-        approval: ApprovalResolutionV1 | None = None,
-    ) -> PermissionReceiptV1:
-        if request.action in _READ_ONLY_ACTIONS or approval is None:
-            return resolve_permission(request, approval=approval)
-        raise ContractError(
-            "material approvals require persistent, crash-stable "
-            "RuntimeEventStore consumption"
-        )
-
-    def _unsafe_legacy_resolve(
-        self,
-        request: PermissionRequestV1,
-        *,
-        approval: ApprovalResolutionV1,
-    ) -> PermissionReceiptV1:
-        """Unexported historical behavior for migration-only replay tests."""
-
-        with self._lock:
-            if approval.approval_id in self._consumed_approval_ids:
-                consumed_body = {
-                    "schema_version": "chemsmart.approval-resolution.v1",
-                    "approval_id": approval.approval_id,
-                    "permission_request_sha256": (
-                        approval.permission_request_sha256
-                    ),
-                    "decision": approval.decision,
-                    "actor": approval.actor,
-                    "one_shot": approval.one_shot,
-                    "consumed": True,
-                }
-                consumed = ApprovalResolutionV1(
-                    **consumed_body,
-                    resolution_sha256=canonical_sha256(consumed_body),
-                )
-                return _evaluate_permission(request, approval=consumed)
-            receipt = _evaluate_permission(request, approval=approval)
-            if receipt.decision is PermissionDecision.ALLOW_ONCE:
-                self._consumed_approval_ids.add(approval.approval_id)
-            return receipt
-
 
 __all__ = [
     "ApprovalResolutionV1",
     "PermissionDecision",
     "PermissionReceiptV1",
     "PermissionRequestV1",
-    "PermissionLedgerV1",
-    "build_approval_resolution",
-    "build_permission_request",
-    "resolve_permission",
+    "evaluate_permission",
 ]
