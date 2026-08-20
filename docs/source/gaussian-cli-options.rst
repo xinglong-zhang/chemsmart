@@ -8,7 +8,7 @@ complete list.
 .. note::
 
    The human ``run`` and ``sub`` commands can use an operator-provided licensed
-   Gaussian installation.  The version-3.1.4 Agent boundary is narrower:
+   Gaussian installation.  The current Agent boundary is narrower:
    ``sp``, ``opt``, ``ts``, ``irc``, ``td``, and ``link`` support project YAML,
    generated native input, safe preview, and typed parsing of user-supplied
    completed outputs, but this release does not claim Gaussian Agent execution.

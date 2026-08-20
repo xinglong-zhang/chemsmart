@@ -7,7 +7,7 @@ families as its executable-backed programs. The executable CPU surface is
 ``sp``, ``opt``, and ``hess``. A bounded fixed-geometry, closed-shell,
 gas-phase singlet ``td`` surface is available for safe TDA/TDDFT preview but is
 not authorised for execution. GPU4PySCF 1.8.0 is an execution engine of the
-PySCF program; it is not a separate program. Version 3.1.4 qualifies real Agent
+PySCF program; it is not a separate program. The current release qualifies real Agent
 execution for the three CPU leaves. GPU4PySCF configuration and safe preview
 are available, but this release does not claim a qualified Agent GPU run.
 

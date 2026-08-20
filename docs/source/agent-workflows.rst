@@ -9,7 +9,7 @@ execution, validation, and result parsing.
 Supported scope
 ===============
 
-Version 3.1.4 provides broad planning, project-YAML generation, live CLI
+The current release provides broad planning, project-YAML generation, live CLI
 compilation, and safe preview for these Agent job families:
 
 * Gaussian CPU: ``irc``, ``link``, ``modred``, ``opt``, ``scan``, ``sp``,
@@ -55,7 +55,7 @@ licensed installation and GPU4PySCF requires a compatible CUDA stack.
 Configure a provider
 ====================
 
-The runtime is provider-neutral.  Version 3.1.4 registers Alibaba Token Plan
+The runtime is provider-neutral.  The current release registers Alibaba Token Plan
 and DeepSeek adapters.  It has no default model: every selected profile names
 its model, endpoint, context and output limits, reasoning setting, and
 credential label explicitly.  Credentials belong in a separate assignment

@@ -15,7 +15,12 @@ from datetime import datetime
 project = "chemsmart"
 author = "Zhang Lab, The Chinese University of Hong Kong"
 copyright = f"{datetime.now():%Y}, {author}"
-release = "3.1.4"
+try:
+    from importlib import metadata as _metadata
+
+    release = _metadata.version("chemsmart")
+except Exception:  # pragma: no cover - docs built outside an install
+    release = "unknown"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

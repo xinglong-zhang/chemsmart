@@ -5,12 +5,13 @@
 This page documents the CLI options available for all ORCA jobs. Use ``chemsmart sub orca --help`` for the complete
 list.
 
-The version-3.1.4 Agent can plan and safely preview ORCA ``sp``, ``opt``,
-``ts``, ``irc``, ``td``, and ``neb`` workflows. Release-qualified CPU
-execution covers single-points, optimization/frequency, transition-state,
-excited-state, and serial producer-to-consumer DAGs. ``irc`` and ``neb`` still
-require qualification on the selected target before being described as a
-completed Agent execution path.
+The current Agent release can plan and safely preview ORCA ``sp``, ``opt``,
+``ts``, ``irc``, ``td``, ``neb``, ``scan``, and ``modred`` workflows.
+Release-qualified CPU execution covers single-points,
+optimization/frequency, transition-state, excited-state, relaxed coordinate
+scans, and serial producer-to-consumer DAGs. ``irc``, ``neb``, and
+constrained optimisation still require qualification on the selected target
+before being described as a completed Agent execution path.
 
 *************************
  Basic Command Structure

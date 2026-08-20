@@ -16,7 +16,7 @@ choices into program-native inputs, compiles the public CLI, controls execution,
 and exposes typed, unit-aware results. Generated native files are downstream
 artifacts; they are not a second user or model API.
 
-Current package version: **3.1.4**. Python **3.10** is required.
+Python **3.10** is required.
 
 ## Product model
 
@@ -62,14 +62,14 @@ chemsmart sub --help
 chemsmart run PROGRAM --help
 ```
 
-## Agent support in version 3.1.4
+## Agent support in the current release
 
 | Program | Planning and safe preview | Release-qualified execution | Result analysis |
 | --- | --- | --- | --- |
 | PySCF CPU | `sp`, `opt`, `hess`; `td` preview | `sp`, `opt`, `hess` | structured HDF5 quantities actually produced |
 | GPU4PySCF | `sp`, `opt`, `hess` configuration and preview | not qualified in this release | the structured PySCF result path when a compatible result is supplied |
 | xTB CPU | `sp`, `opt`, `hess` | `sp`, `opt`, `hess` | validated native quantities, orbitals, dipoles, frequencies, geometry handoffs, and portable archive analysis |
-| ORCA CPU | `sp`, `opt`, `ts`, `irc`, `td`, `neb` | qualified for `sp`, optimization/frequency, `ts`, `td`, and serial DAGs; `irc` and `neb` require target qualification | native energies, structures, frequencies, excited states, spin, solvent, auxiliary-basis, and trajectory evidence |
+| ORCA CPU | `sp`, `opt`, `ts`, `irc`, `td`, `neb`, `scan`, `modred` | qualified for `sp`, optimization/frequency, `ts`, `td`, relaxed `scan`, and serial DAGs; `irc`, `neb`, and `modred` require target qualification | native energies, structures, frequencies, excited states, spin, solvent, auxiliary-basis, and trajectory evidence |
 | Gaussian CPU | `sp`, `opt`, `ts`, `irc`, `td`, `link` project YAML and native-input preview | not qualified in this release | normal native outputs supplied by the user, including thermochemistry, excited states, spin, and trajectory evidence |
 
 Planning support, release-qualified execution, and current-host readiness are
@@ -78,33 +78,18 @@ selected program environment to be available and shows the requested resources
 in the human review. Gaussian is separately licensed, GPU4PySCF requires a
 compatible CUDA stack, and neither is implied by installing ChemSmart. NCIPLOT
 and remaining CLI job families without an Agent declaration stay available to
-human CLI users but are not Agent execution paths in version 3.1.4.
+human CLI users but are not Agent execution paths in this release.
 
-The Runtime is provider-neutral. Version 3.1.4 ships registered adapters for
+The Runtime is provider-neutral. This release ships registered adapters for
 Alibaba Token Plan and DeepSeek. The user profile supplies the provider,
 endpoint, model, reasoning setting, and credential label; CHEMSMART does not
 choose a default model.
 
-Across those programs, the public Agent surface includes:
-
-- live capability and target-environment inspection;
-- molecular identity/state binding and loader-validated project YAML;
-- causal calculation DAGs, workflow-frontier inspection, independent branches,
-  and validated optimized-geometry handoff;
-- live CLI compilation, generated-artifact inspection, safe preview, and
-  program preflight;
-- semantic extraction from Gaussian and ORCA native output, validated or
-  relocated xTB result folders, structured PySCF HDF5, and XYZ geometries or
-  trajectories;
-- RRHO and explicitly parameterised quasi-harmonic thermochemistry;
-- unit-aware expressions for energy differences, CBS extrapolation,
-  Boltzmann populations/averages from vector or scalar state energies,
-  harmonic ZPE, imaginary-mode counts,
-  distances, angles, dihedrals, centres of mass, inertia, rotor constants, and
-  connectivity changes; and
-- typed text evidence such as solvent treatment and auxiliary-basis role,
-  without assigning fictitious physical units; and
-- evidence-bound numerical claims and a human-readable scientific decision.
+Across those programs, the public Agent surface spans live capability
+inspection, identity-bound project YAML, causal calculation DAGs with
+typed analysis chains, safe preview, one-shot human approval,
+provider-free execution, and unit-aware typed analysis. The complete
+surface is documented in `docs/source/agent-workflows.rst`.
 
 ## Installation
 

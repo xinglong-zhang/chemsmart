@@ -45,11 +45,12 @@ visible.
 
 - Gaussian CPU ``sp/opt/ts/irc/td/link`` has project-backed planning, native
   input preview, and typed analysis of supplied completed outputs; do not claim
-  Agent execution in version 3.1.4.
-- ORCA CPU planning covers ``sp/opt/ts/irc/td/neb``. Release-qualified
-  execution covers single-points, optimization/frequency, transition-state,
-  excited-state, and serial DAG workflows. Treat ``irc`` and ``neb`` as
-  preview paths until the selected target is qualified.
+  Agent execution in this release.
+- ORCA CPU planning covers ``sp/opt/ts/irc/td/neb/scan/modred``.
+  Release-qualified execution covers single-points, optimization/frequency,
+  transition-state, excited-state, relaxed coordinate scans, and serial DAG
+  workflows. Treat ``irc``, ``neb``, and constrained optimisation
+  (``modred``) as preview paths until the selected target is qualified.
 - PySCF CPU ``sp/opt/hess`` and xTB CPU ``sp/opt/hess`` have approved real
   execution paths. PySCF CPU ``td`` is preview-only.
 - GPU4PySCF ``sp/opt/hess`` is a PySCF-engine configuration and preview
@@ -60,7 +61,7 @@ visible.
   executable is present; a supported GPU path does not imply a compatible GPU
   stack. The live environment probe and human review decide whether the exact
   operation can run here.
-- Runtime semantics are provider-neutral. Registered version-3.1.4 adapters
+- Runtime semantics are provider-neutral. Registered adapters in this release
   are Alibaba Token Plan and DeepSeek, configured entirely by a user profile.
   There is no default model; the profile must explicitly state the selected
   model and its context/output limits.
