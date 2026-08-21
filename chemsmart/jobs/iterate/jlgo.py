@@ -1717,6 +1717,7 @@ class JointLagrangeOptimizer:
         accepted only through the unchanged exact quality gate.
         """
 
+        # [step 1] Initialize run-level counters and best-result state.
         attempted = 0
         successful = 0
         accepted = 0
@@ -1742,6 +1743,36 @@ class JointLagrangeOptimizer:
             message_prefix: str = "",
             track_quality_rejection: bool = True,
         ) -> bool:
+            """Process one solved candidate and update run-level state.
+
+            This is the common acceptance gate used by callback SLSQP,
+            ordinary-SLSQP fallback, and quality repair. It first records the
+            attempt and solver diagnostics. A candidate with ``raw_ok=False``
+            is rejected immediately. Otherwise, it is converted into a full
+            molecule, evaluated by the exact structural quality metrics, and
+            rejected when quality-gated early stop is enabled but the gate is
+            not passed. Every accepted candidate increments the acceptance
+            counters and replaces the current best result when its objective
+            value is lower.
+
+            Parameters
+            ----------
+            solution:
+                Candidate returned by :meth:`_solve_one`.
+            message_prefix:
+                Prefix used to distinguish fallback and repair diagnostics in
+                the aggregated solver-message counts.
+            track_quality_rejection:
+                Whether a numerically valid quality reject should be retained
+                as a possible quality-repair starting point. Repair results set
+                this to ``False`` so failed repairs are not queued recursively.
+
+            Returns
+            -------
+            bool
+                ``True`` only when the candidate is accepted and is therefore
+                eligible to trigger multi-start early stop.
+            """
             nonlocal attempted, successful, accepted, detected
             nonlocal total_iterations, total_function_evaluations
             nonlocal best_solution, best_molecule, best_ranges
@@ -1779,6 +1810,25 @@ class JointLagrangeOptimizer:
             use_detection: bool,
             message_prefix: str = "",
         ) -> None:
+            """Solve one ordered multi-start phase and consume each result.
+
+            Starts are processed sequentially by :meth:`_solve_one`, then
+            passed through :func:`consume`. Depending on ``use_detection``, the
+            solves either attach the callback convergence detector or allow
+            ordinary SLSQP to terminate by itself. If either configured early-
+            stop mode is active, the phase ends after the first accepted
+            candidate. Elapsed time is accumulated into the enclosing run's
+            ``solve_time`` counter.
+
+            Parameters
+            ----------
+            starts:
+                Ordered SLSQP starting records for the current sampling level.
+            use_detection:
+                Whether each solve uses callback convergence detection.
+            message_prefix:
+                Prefix forwarded to :func:`consume` for solver diagnostics.
+            """
             nonlocal solve_time, stopped_early
             started = time.perf_counter()
             try:
@@ -1808,7 +1858,29 @@ class JointLagrangeOptimizer:
         def execute_quality_repair(
             candidates: list[_CandidateSolution],
         ) -> bool:
-            """Repair the closest quality reject; return whether attempted."""
+            """Attempt one constrained repair of the closest quality reject.
+
+            The candidate with the smallest squared quality-constraint deficit
+            is used as a new start. It is rerun through ordinary SLSQP with the
+            quality constraints explicitly added, then passed through the same
+            exact :func:`consume` acceptance gate as every other result. Only
+            one candidate is repaired per call, and a failed repair is not
+            placed back into the repair queue.
+
+            Parameters
+            ----------
+            candidates:
+                Numerically valid candidates that failed the exact structural
+                quality gate during the current sampling level.
+
+            Returns
+            -------
+            bool
+                ``True`` when a repair was attempted and ``False`` when the
+                candidate list was empty. This does not indicate acceptance;
+                acceptance is recorded in ``quality_repair_accepted`` and the
+                enclosing best-result state.
+            """
             nonlocal quality_repair_triggered, quality_repair_attempted
             nonlocal quality_repair_accepted, solve_time, stopped_early
             if not candidates:
@@ -1842,6 +1914,7 @@ class JointLagrangeOptimizer:
                 stopped_early = True
             return True
 
+        # [step 2] Select the baseline path or adaptive coarse-to-full levels.
         levels: list[Optional[_SamplingLevel]] = (
             self._sampling_levels()
             if self.config.use_region_exclusion
@@ -1850,13 +1923,17 @@ class JointLagrangeOptimizer:
         for level in levels:
             used_levels += 1
             rejected_before_stage = len(quality_rejected)
+
+            # [step 3] Generate and select SLSQP starts for this level.
             starts, stage_stats = self._build_starts(level)
             build_time += stage_stats.seed_time_s
             total_examined += stage_stats.joint_combinations_examined
             build_stats = stage_stats
 
+            # [step 4] Solve starts with callback convergence detection enabled.
             execute_phase(starts, self.config.use_convergence_detection)
 
+            # [step 5] Repair the closest callback-phase quality reject once.
             stage_rejected = quality_rejected[rejected_before_stage:]
             repair_attempted_for_stage = False
             if best_solution is None and stage_rejected:
@@ -1864,6 +1941,7 @@ class JointLagrangeOptimizer:
                     stage_rejected
                 )
 
+            # [step 6] Retry the same starts with ordinary SLSQP when required.
             stage_fallback = bool(
                 self.config.use_convergence_detection
                 and self.config.use_slsqp_fallback
@@ -1880,6 +1958,7 @@ class JointLagrangeOptimizer:
                 fallback_successful += successful - successful_before
                 fallback_accepted += accepted - accepted_before
 
+            # [step 7] Repair fallback rejects if this level has not repaired yet.
             if (
                 best_solution is None
                 and not repair_attempted_for_stage
@@ -1889,9 +1968,11 @@ class JointLagrangeOptimizer:
                     quality_rejected[rejected_before_stage:]
                 )
 
+            # [step 8] Stop adaptive expansion after the first accepted solution.
             if best_solution is not None:
                 break
 
+        # [step 9] Aggregate start-generation, solve, repair, and fallback stats.
         build_stats.seed_time_s = build_time
         build_stats.adaptive_levels = used_levels
         build_stats.adaptive_expanded = bool(
@@ -1929,6 +2010,8 @@ class JointLagrangeOptimizer:
             ),
             messages=messages,
         )
+
+        # [step 10] Return a structured failure or the best accepted result.
         if best_solution is None or best_molecule is None:
             return JointLagrangeResult(
                 success=False,
