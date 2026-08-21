@@ -1027,17 +1027,21 @@ class TestPyMOLStyleCommands:
             wrapper = getattr(zhang_group_scientific_styles, style_cls.command)
             assert wrapper.__name__ == style_cls.command
 
-    def test_zhang_group_scientific_styles_import_without_pymol(self):
+    def test_zhang_group_scientific_styles_import_without_pymol(self, mocker):
         """Style template sets cmd=None when PyMOL is not installed."""
         import importlib.util
+        import sys
 
-        if importlib.util.find_spec("pymol") is not None:
-            pytest.skip("PyMOL installed; ImportError path not exercised here")
-        assert zhang_group_scientific_styles.cmd is None
-        assert hasattr(
-            zhang_group_scientific_styles,
-            SCIENTIFIC_STYLE_CLASSES[0].command,
+        spec = importlib.util.spec_from_file_location(
+            "zhang_group_scientific_styles_without_pymol",
+            zhang_group_scientific_styles.__file__,
         )
+        module = importlib.util.module_from_spec(spec)
+        mocker.patch.dict(sys.modules, {"pymol": None, "pymol.cmd": None})
+        spec.loader.exec_module(module)
+
+        assert module.cmd is None
+        assert hasattr(module, SCIENTIFIC_STYLE_CLASSES[0].command)
 
     def test_select_coordination_uses_command_as_prefix(self, mocker):
         style = StericSurfaceStyle()
