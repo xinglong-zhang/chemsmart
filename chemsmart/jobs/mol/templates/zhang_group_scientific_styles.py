@@ -18,7 +18,11 @@ In PyMOL directly::
 """
 
 import numpy as np
-from pymol import cmd  # type: ignore
+
+try:
+    from pymol import cmd  # type: ignore
+except ImportError:
+    cmd = None
 
 from chemsmart.utils.geometry import get_coordinating_atoms
 from chemsmart.utils.periodictable import is_metal, metal_element_symbols
@@ -1557,4 +1561,5 @@ def _make_style_wrapper(style_cls):
 for _style_cls in SCIENTIFIC_STYLE_CLASSES:
     _wrapper = _make_style_wrapper(_style_cls)
     globals()[_style_cls.command] = _wrapper
-    cmd.extend(_style_cls.command, _wrapper)
+    if cmd is not None:
+        cmd.extend(_style_cls.command, _wrapper)
