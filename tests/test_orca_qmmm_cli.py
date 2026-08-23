@@ -297,46 +297,49 @@ class TestOrcaQmmmSubcommand:
         _, kwargs = mock_new.call_args
         assert kwargs["label"] == "myjob_qmmm"
 
-    def test_high_level_h_bond_length_option_is_unusable(
+    def test_high_level_h_bond_length_option_parses_dict_literal(
         self,
         single_molecule_xyz_file,
     ):
-        """BUG (see BUGS_FOUND.md #28): -h/--high-level-h-bond-length is
-        declared with click's type=dict, which converts the raw CLI
+        """Previously BUG (see BUGS_FOUND.md #28): -h/--high-level-h-bond-length
+        was declared with click's type=dict, which converts the raw CLI
         string via Python's dict(value) constructor -- not a literal
-        dict parser. Any non-empty value therefore fails at the click
+        dict parser. Any non-empty value therefore failed at the click
         parsing layer itself, before ast.literal_eval (used later on
-        this same value) is ever reached, making the option unusable
-        for its documented purpose."""
-        result = CliRunner().invoke(
-            orca,
-            [
-                "-p",
-                "gas_solv",
-                "-f",
-                single_molecule_xyz_file,
-                "opt",
-                "qmmm",
-                "-h",
-                "{1: 1.1}",
-            ],
-            obj={"jobrunner": None},
-        )
-        assert result.exit_code != 0
-        assert "Invalid value for '-h'" in result.output
+        this same value) was ever reached, making the option unusable
+        for its documented purpose. Fixed upstream: the option is now
+        declared with type=str, so the raw string reaches the callback
+        unchanged and ast.literal_eval parses it into the expected dict."""
+        with patch("chemsmart.jobs.orca.qmmm.ORCAQMMMJob") as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                orca,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "opt",
+                    "qmmm",
+                    "-h",
+                    "{1: 1.1}",
+                ],
+                obj={"jobrunner": None},
+            )
+        assert result.exit_code == 0, result.output
 
-    def test_high_level_h_bond_length_empty_string_crashes_differently(
+    def test_high_level_h_bond_length_empty_string_raises_syntax_error(
         self,
         single_molecule_xyz_file,
     ):
-        """The only value that survives click's broken type=dict
-        conversion is the empty string ("" -> {}), which then reaches
-        the callback body (assigning it to settings.high_level_h_bond_length,
-        then attempting ast.literal_eval on it) -- but ast.literal_eval
-        expects a string, not a dict, so it crashes with a different
-        error instead. See BUGS_FOUND.md #28 for the full picture:
-        no real CLI input for -h can ever reach a successful
-        ast.literal_eval call."""
+        """Previously BUG (see BUGS_FOUND.md #28): with click's broken
+        type=dict conversion, the only value that survived was the
+        empty string ("" -> {}), which then crashed downstream because
+        ast.literal_eval expects a string, not a dict. Fixed upstream:
+        type=str now passes "" through unchanged, so ast.literal_eval("")
+        is reached directly -- but "" still isn't valid Python literal
+        syntax, so it now raises SyntaxError instead (an inherent
+        limitation of passing an empty value, not a bug)."""
         result = CliRunner().invoke(
             orca,
             [
@@ -352,7 +355,7 @@ class TestOrcaQmmmSubcommand:
             obj={"jobrunner": None},
         )
         assert result.exit_code != 0
-        assert "malformed node or string" in str(result.exception)
+        assert isinstance(result.exception, SyntaxError)
 
     def test_qmmm_merge_failure_falls_back_to_settings_reconstruction(
         self,

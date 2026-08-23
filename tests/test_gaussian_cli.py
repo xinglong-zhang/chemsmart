@@ -732,42 +732,51 @@ class TestGaussianCLIGroupValidation:
         assert result.exit_code == 0, result.output
         assert settings is not None
 
-    def test_pubchem_only_without_label_crashes(
+    def test_pubchem_only_without_label_falls_back_to_output(
         self,
         gaussian_jobrunner_no_scratch,
         make_cli_ctx_obj,
-        run_gaussian_and_capture_settings,
     ):
-        """BUG (see BUGS_FOUND.md #25): the intended "output" label
-        fallback for a filename-less (PubChem-only) job with no -l/-a
-        is unreachable -- `os.path.basename(filename)` at gaussian.py's
-        default-label branch is called unconditionally on `filename`
-        (None here) before the `if filename:` guard that would skip it,
-        so this currently crashes with a TypeError instead of falling
-        back to "output"."""
+        """Previously BUG (see BUGS_FOUND.md #25): the intended "output"
+        label fallback for a filename-less (PubChem-only) job with no
+        -l/-a was unreachable -- `os.path.basename(filename)` at
+        gaussian.py's default-label branch was called unconditionally
+        on `filename` (None here) before the `if filename:` guard that
+        would skip it, crashing with a TypeError. Fixed upstream: the
+        unconditional call was removed, so this now falls back to
+        "output" as intended."""
         from unittest.mock import MagicMock, patch
 
         pubchem_molecule = MagicMock(name="pubchem_molecule")
-        with patch(
-            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
-            return_value=[pubchem_molecule],
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob"
+            ) as mock_job_cls,
         ):
-            with pytest.raises(TypeError):
-                run_gaussian_and_capture_settings(
-                    "chemsmart.jobs.gaussian.opt.GaussianOptJob",
-                    [
-                        "-p",
-                        "gas_solv",
-                        "--pubchem",
-                        "222",
-                        "-c",
-                        "0",
-                        "-m",
-                        "1",
-                        "opt",
-                    ],
-                    make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
-                )
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                gaussian,
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_opt"
 
     def test_default_label_with_filename_ignores_db_id_suffix(
         self,
@@ -1064,15 +1073,22 @@ class TestGaussianCLIGroupValidation:
     def test_empty_filename_falls_back_to_output_label(self):
         """Covers the `if filename: ... else: label = "output"` False
         arm directly, since a real CLI run can't reach it (filename is
-        either a real path or None, and None crashes earlier per
-        BUGS_FOUND.md #25)."""
+        either a real path or None, and None used to crash earlier per
+        BUGS_FOUND.md #25, now fixed). The subcommand suffix is
+        appended unconditionally (the old `if ctx.invoked_subcommand:`
+        guard was removed as part of that fix, since a real Click
+        invocation of this group always has a non-None
+        `invoked_subcommand` by the time this callback runs), so this
+        synthetic direct invocation with `_invoked_subcommand=None`
+        documents that unconditional append rather than a reachable
+        branch."""
         ctx = self._direct_invoke_gaussian_group(_invoked_subcommand=None)
-        assert ctx.obj["label"] == "output"
+        assert ctx.obj["label"] == "output_None"
 
     def test_invoked_subcommand_suffixes_default_label_when_present(self):
-        """Covers the `if ctx.invoked_subcommand:` True arm of the
-        same fallback chain: the invoked subcommand name gets appended
-        to the "output" default label."""
+        """Covers the (now unconditional) subcommand-suffix append in
+        the same fallback chain: the invoked subcommand name gets
+        appended to the "output" default label."""
         ctx = self._direct_invoke_gaussian_group(_invoked_subcommand="opt")
         assert ctx.obj["label"] == "output_opt"
 

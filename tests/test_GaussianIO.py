@@ -928,28 +928,25 @@ class TestGaussian16InputDirectPropertyCoverage:
         self, gaussian_qmmm_inputfile_3layer
     ):
         """When the charge/mult line has more than two numbers (as in a
-        combined-layer ONIOM line), the base class's charge/multiplicity
-        properties fall back to oniom parsing with use_partition=False
-        (which never touches self.partition, unlike oniom_charge)."""
+        combined-layer ONIOM line), _get_charge_and_multiplicity now
+        parses the line directly and returns ints (BUGS_FOUND.md #45
+        fix: previously this fell back to oniom parsing and returned
+        raw strings instead)."""
         g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_3layer)
-        # the oniom fallback returns the raw parsed string, unlike the
-        # normal charge/mult line path which returns an int
-        assert g16.charge == "0"
-        assert g16.multiplicity == "1"
+        assert g16.charge == 0
+        assert g16.multiplicity == 1
 
     def test_oniom_charge_crashes_on_base_class_non_qmmm_input(
         self, gaussian_qmmm_inputfile_2layer
     ):
-        """Documents BUGS_FOUND.md #44: oniom_charge/oniom_multiplicity
-        call _get_oniom_charge_and_multiplicity with the default
-        use_partition=True, which accesses self.partition -- an
-        attribute that only exists on the Gaussian16QMMMInput subclass.
-        On the plain base class this raises AttributeError, which the
-        `except RecursionError` guard cannot catch."""
+        """BUGS_FOUND.md #44 is fixed: oniom_charge/oniom_multiplicity/
+        _get_oniom_charge_and_multiplicity were moved off the base class
+        onto Gaussian16QMMMInput, so the base class simply has no such
+        attribute (instead of crashing on the missing self.partition)."""
         g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_2layer)
-        with pytest.raises(AttributeError, match="partition"):
+        with pytest.raises(AttributeError, match="oniom_charge"):
             g16.oniom_charge
-        with pytest.raises(AttributeError, match="partition"):
+        with pytest.raises(AttributeError, match="oniom_multiplicity"):
             g16.oniom_multiplicity
 
     def test_has_frozen_coordinates_and_indices(
@@ -1060,16 +1057,19 @@ class TestGaussian16InputDirectPropertyCoverage:
     ):
         g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_2layer)
         assert g16.partition == {
-            "high level atoms": ["2-5"],
-            "low level atoms": ["6-9"],
+            "high level atoms": ["1-4"],
+            "low level atoms": ["5-8"],
         }
         assert g16.oniom_charge == {
             "charge_total": "0",
-            "int_charge": "0",
+            "model_charge": "0",
         }
-        assert g16.oniom_multiplicity == {"real_multiplicity": "1"}
+        assert g16.oniom_multiplicity == {
+            "real_multiplicity": "1",
+            "model_multiplicity": "1",
+        }
         assert g16.real_charge == 0
-        assert g16.int_charge == 0
+        assert g16.int_charge is None
         assert g16.real_multiplicity == 1
 
     def test_qmmm_3layer_partition_includes_medium_atoms(
@@ -1102,18 +1102,17 @@ class TestGaussian16InputDirectPropertyCoverage:
         assert g16.basis is None
         assert g16.gen_genecp_group is None
 
-    def test_qmmm_2layer_model_charge_crashes_with_keyerror(
+    def test_qmmm_2layer_model_charge_and_multiplicity_resolved(
         self, gaussian_qmmm_inputfile_2layer
     ):
-        """Documents BUGS_FOUND.md #45: for a 2-layer ONIOM system, the
-        QMMM subclass's own _get_oniom_charge_and_multiplicity keeps
-        charge_total/real_multiplicity/int_charge (not model_charge),
-        so model_charge/model_multiplicity crash with KeyError."""
+        """BUGS_FOUND.md #45 (2-layer ONIOM model_charge/model_multiplicity
+        raising KeyError) is fixed: _get_oniom_charge_and_multiplicity now
+        maps the model pair for 2-layer systems instead of omitting it."""
         g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_2layer)
-        with pytest.raises(KeyError, match="model_charge"):
-            g16.model_charge
-        with pytest.raises(KeyError, match="model_multiplicity"):
-            g16.model_multiplicity
+        assert g16.model_charge == 0
+        assert g16.model_multiplicity == 1
+        assert g16.int_charge is None
+        assert g16.int_multiplicity is None
 
 
 class TestGaussian16Output:

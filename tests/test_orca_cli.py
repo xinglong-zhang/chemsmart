@@ -1161,13 +1161,14 @@ class TestORCACLIGroupValidation:
         assert isinstance(result.exception, ValueError)
         assert "not both" in str(result.exception)
 
-    def test_pubchem_only_without_label_crashes(self):
-        """BUG (see BUGS_FOUND.md #30): the "output" label fallback for
-        a filename-less (PubChem-only) job with no -l/-a is
-        unreachable -- os.path.basename(filename) is called
+    def test_pubchem_only_without_label_falls_back_to_output(self):
+        """Previously BUG (see BUGS_FOUND.md #30): the "output" label
+        fallback for a filename-less (PubChem-only) job with no -l/-a
+        was unreachable because os.path.basename(filename) was called
         unconditionally on filename (None here) before the
-        `if filename:` guard that would skip it, so this currently
-        crashes with a TypeError instead of falling back to "output"."""
+        `if filename:` guard that would skip it, crashing with a
+        TypeError. Fixed upstream: the unconditional call was removed,
+        so this now falls back to "output" as intended."""
         from unittest.mock import MagicMock, patch
 
         from click.testing import CliRunner
@@ -1175,10 +1176,14 @@ class TestORCACLIGroupValidation:
         from chemsmart.cli.orca.orca import orca
 
         pubchem_molecule = MagicMock(name="pubchem_molecule")
-        with patch(
-            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
-            return_value=[pubchem_molecule],
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch("chemsmart.jobs.orca.opt.ORCAOptJob") as mock_job_cls,
         ):
+            mock_job_cls.return_value = MagicMock()
             result = CliRunner().invoke(
                 orca,
                 [
@@ -1190,20 +1195,23 @@ class TestORCACLIGroupValidation:
                     "0",
                     "-m",
                     "1",
-                    "sp",
+                    "opt",
                 ],
                 catch_exceptions=True,
             )
-        assert result.exit_code != 0
-        assert isinstance(result.exception, TypeError)
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_opt"
 
-    def test_default_label_doubles_subcommand_suffix(
+    def test_default_label_appends_subcommand_once(
         self, single_molecule_xyz_file
     ):
-        """BUG (see BUGS_FOUND.md #30): the default label ends up with
-        the subcommand name appended twice (e.g. "mol_opt_opt")
-        because an unconditional final append duplicates the
-        conditional one just above it."""
+        """Previously BUG (see BUGS_FOUND.md #30): the default label
+        ended up with the subcommand name appended twice (e.g.
+        "mol_opt_opt") because an unconditional final append
+        duplicated a conditional one just above it. Fixed upstream:
+        the duplicate conditional append was removed, so the
+        subcommand suffix is now appended exactly once."""
         from unittest.mock import MagicMock, patch
 
         from click.testing import CliRunner
@@ -1229,7 +1237,8 @@ class TestORCACLIGroupValidation:
             )
         assert result.exit_code == 0, result.output
         label = mock_job_cls.call_args[1]["label"]
-        assert label.endswith("_opt_opt")
+        assert label == "crest_best_opt"
+        assert not label.endswith("_opt_opt")
 
     def test_group_level_keywords_applied(
         self, single_molecule_xyz_file, run_orca_and_capture_settings

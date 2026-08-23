@@ -199,7 +199,7 @@ class XTBRoute:
         Extract job type from route specification.
 
         Checks for various job type keywords in order of precedence:
-        1. Optimization: --opt, --metaopt, --ohess
+        1. Optimization: --opt, --omd, --metaopt, --ohess, --bhess
         2. Hessian: --hess
         3. MD: --md, --metadyn
         4. Path: --path
@@ -209,14 +209,16 @@ class XTBRoute:
         Returns:
             str: Job type ('opt', 'hess', 'md', 'path', 'modef', or 'sp')
         """
-        # Check for optimization keywords (including ohess which do opt first then hess)
+        # Check for optimization keywords (including ohess and bhess which do opt first)
         if any(
             flag in self.route_inputs
             for flag in (
                 "--opt",
                 "-o",
+                "--omd",
                 "--metaopt",
                 "--ohess",
+                "--bhess",
             )
         ):
             return "opt"
@@ -240,15 +242,19 @@ class XTBRoute:
         """
         Check if frequency/Hessian calculation is requested.
 
-        xTB frequency keywords: --hess, --ohess
+        xTB frequency keywords: --hess, --ohess, --bhess
 
         - --hess  : Numerical Hessian on input geometry
         - --ohess : Numerical Hessian on optimized geometry
+        - --bhess : Biased numerical Hessian on optimized geometry
 
         Returns:
             bool: True if frequency calculation is requested
         """
-        return any(flag in self.route_inputs for flag in ("--hess", "--ohess"))
+        return any(
+            flag in self.route_inputs
+            for flag in ("--hess", "--ohess", "--bhess")
+        )
 
     @property
     def grad(self):

@@ -2146,7 +2146,7 @@ class TestXTBFolder:
 
     def test_is_xtb_calculation_directory_false_without_output(self, tmp_path):
         folder = XTBFolder(str(tmp_path))
-        assert folder._xtb_out() is None
+        assert folder.xtb_out_filepath is None
         assert folder.is_xtb_calculation_directory is False
 
     def test_is_xtb_calculation_directory_false_without_markers(
@@ -2157,7 +2157,7 @@ class TestXTBFolder:
         wbo) exist -- must not be considered a valid xTB directory."""
         (tmp_path / "job.out").write_text("x T B\nsome xtb output\n")
         folder = XTBFolder(str(tmp_path))
-        assert folder._xtb_out() is not None
+        assert folder.xtb_out_filepath is not None
         assert folder.is_xtb_calculation_directory is False
 
     def test_input_geometry_skips_xtbopt_prefixed_parseable_files(
@@ -2165,13 +2165,13 @@ class TestXTBFolder:
     ):
         """A parseable-format file whose name starts with "xtbopt" is
         the optimized-geometry output, not the input geometry, and
-        must be skipped by _input_geometry."""
+        must be skipped by input_geometry_filepath."""
         (tmp_path / "xtbopt.xyz").write_text("optimized geometry\n")
         real_input = tmp_path / "structure.xyz"
         real_input.write_text("input geometry\n")
 
         folder = XTBFolder(str(tmp_path))
-        assert folder._input_geometry() == str(real_input)
+        assert folder.input_geometry_filepath == str(real_input)
 
     def test_input_geometry_skips_xtbopt_prefixed_unsupported_files(
         self, tmp_path
@@ -2181,11 +2181,11 @@ class TestXTBFolder:
         real_input.write_text("input geometry\n")
 
         folder = XTBFolder(str(tmp_path))
-        assert folder._input_geometry() == str(real_input)
+        assert folder.input_geometry_filepath == str(real_input)
 
     def test_input_geometry_none_when_nothing_found(self, tmp_path):
         folder = XTBFolder(str(tmp_path))
-        assert folder._input_geometry() is None
+        assert folder.input_geometry_filepath is None
 
     def test_xtb_out_raises_for_multiple_output_files(self, tmp_path):
         import pytest
@@ -2195,7 +2195,7 @@ class TestXTBFolder:
 
         folder = XTBFolder(str(tmp_path))
         with pytest.raises(ValueError, match="Multiple xTB main output"):
-            folder._xtb_out()
+            folder.xtb_out_filepath
 
 
 class TestXTBOutput:
@@ -2473,21 +2473,21 @@ class TestXTBOutputUnsupportedGeometryFormats:
         self, xtb_cyclopentadienyl_anion_outfolder
     ):
         output = XTBOutput(folder=xtb_cyclopentadienyl_anion_outfolder)
-        assert output.folder._xtbopt_geometry() is not None
+        assert output.folder.xtbopt_geometry_filepath is not None
         assert output.xtbopt_geometry_file is None
 
     def test_input_geometry_file_none_for_unsupported_format(
         self, xtb_cyclopentadienyl_anion_outfolder
     ):
         output = XTBOutput(folder=xtb_cyclopentadienyl_anion_outfolder)
-        assert output.folder._input_geometry() is not None
+        assert output.folder.input_geometry_filepath is not None
         assert output.input_geometry_file is None
 
     def test_xtbopt_geometry_file_none_when_no_xtbopt_file_at_all(
         self, xtb_p_benzyne_sp_outfolder
     ):
         output = XTBOutput(folder=xtb_p_benzyne_sp_outfolder)
-        assert output.folder._xtbopt_geometry() is None
+        assert output.folder.xtbopt_geometry_filepath is None
         assert output.xtbopt_geometry_file is None
 
     def test_input_geometry_file_none_when_no_geometry_file_at_all(
@@ -2495,7 +2495,10 @@ class TestXTBOutputUnsupportedGeometryFormats:
     ):
         output = XTBOutput(folder=xtb_co2_outfolder)
         with patch.object(
-            type(output.folder), "_input_geometry", return_value=None
+            type(output.folder),
+            "input_geometry_filepath",
+            new_callable=PropertyMock,
+            return_value=None,
         ):
             assert output.input_geometry_file is None
 
@@ -2513,7 +2516,7 @@ class TestXTBOutputReadGeometryFile:
         self, xtb_cyclopentadienyl_anion_outfolder
     ):
         output = XTBOutput(folder=xtb_cyclopentadienyl_anion_outfolder)
-        path = output.folder._input_geometry()
+        path = output.folder.input_geometry_filepath
         assert path.endswith(".coord")
         assert output._read_geometry_file(path) is None
 

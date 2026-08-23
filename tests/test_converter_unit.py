@@ -122,6 +122,9 @@ class TestConvertAllFilesDirectoryDispatch:
     def test_include_intermediate_structures_directory(
         self, tmp_path, gaussian_singlet_opt_outfile
     ):
+        """With multiple intermediate structures, each one is written to
+        its own numbered file (nhc_1.xyz, nhc_2.xyz, ...) rather than
+        being overwritten into a single nhc.xyz."""
         log_path = tmp_path / "nhc.log"
         copyfile(gaussian_singlet_opt_outfile, log_path)
         converter = FileConverter(
@@ -131,7 +134,9 @@ class TestConvertAllFilesDirectoryDispatch:
             include_intermediate_structures=True,
         )
         converter.convert_files()
-        assert (tmp_path / "nhc.xyz").is_file()
+        assert (tmp_path / "nhc_1.xyz").is_file()
+        assert (tmp_path / "nhc_10.xyz").is_file()
+        assert not (tmp_path / "nhc.xyz").is_file()
 
 
 class TestConvertSingleFileDispatch:
@@ -141,7 +146,9 @@ class TestConvertSingleFileDispatch:
         converter = FileConverter(
             filename=str(fake_out), output_filetype="xyz"
         )
-        with pytest.raises(ValueError, match="Could not detect program"):
+        with pytest.raises(
+            ValueError, match="Unsupported .out file program type"
+        ):
             converter.convert_files()
 
     def test_out_gaussian_single_file(
@@ -216,15 +223,23 @@ class TestConvertSingleFileDispatch:
         assert (tmp_path / "water.com").is_file()
 
     def test_unsupported_single_file_type_raises(self, tmp_path):
+        """An unrecognized extension falls through to ASE (via
+        Molecule._read_other), which raises its own UnknownFileTypeError
+        for a format neither Open Babel nor ASE recognizes."""
+        from ase.io.formats import UnknownFileTypeError
+
         bogus = tmp_path / "file.bogus"
         bogus.write_text("data")
         converter = FileConverter(filename=str(bogus))
-        with pytest.raises(ValueError, match="is not supported"):
+        with pytest.raises(UnknownFileTypeError, match="bogus"):
             converter.convert_files()
 
     def test_include_intermediate_structures_single_file(
         self, tmp_path, gaussian_singlet_opt_outfile
     ):
+        """With multiple intermediate structures, each one is written to
+        its own numbered file (nhc_1.xyz, nhc_2.xyz, ...) rather than
+        being overwritten into a single nhc.xyz."""
         log_path = tmp_path / "nhc.log"
         copyfile(gaussian_singlet_opt_outfile, log_path)
         converter = FileConverter(
@@ -233,7 +248,9 @@ class TestConvertSingleFileDispatch:
             include_intermediate_structures=True,
         )
         converter.convert_files()
-        assert (tmp_path / "nhc.xyz").is_file()
+        assert (tmp_path / "nhc_1.xyz").is_file()
+        assert (tmp_path / "nhc_10.xyz").is_file()
+        assert not (tmp_path / "nhc.xyz").is_file()
 
 
 class TestXyzToPdb:

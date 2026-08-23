@@ -1,10 +1,11 @@
 """
-Extended direct unit tests for :class:`chemsmart.cli.update.Updater` and
-the ``update`` CLI group, beyond what ``test_update.py`` already covers
-(package-name normalization in ``_get_missing_dependencies``).
+Extended direct unit tests for :class:`chemsmart.cli.update.DependencyUpdater`
+and :class:`chemsmart.cli.update.VersionUpdater`, and the ``update`` CLI
+group, beyond what ``test_update.py`` already covers (package-name
+normalization in ``_get_missing_dependencies``).
 
 Every test that needs a pyproject.toml/environment.yml/VERSION/conf.py
-redirects the ``Updater`` instance's private path attributes to files
+redirects the updater instance's private path attributes to files
 under ``tmp_path`` — never the real project files.
 """
 
@@ -14,13 +15,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from chemsmart.cli.update import Updater, update
+from chemsmart.cli.update import DependencyUpdater, VersionUpdater, update
 
 
 @pytest.fixture()
 def updater(tmp_path):
-    u = Updater()
+    u = DependencyUpdater()
     u._package_path = tmp_path
+    u._pyproject_path = tmp_path / "pyproject.toml"
+    return u
+
+
+@pytest.fixture()
+def version_updater(tmp_path):
+    u = VersionUpdater("0.0.0")
     u._pyproject_path = tmp_path / "pyproject.toml"
     u._version_file_path = tmp_path / "VERSION"
     u._docs_conf_file_path = tmp_path / "conf.py"
@@ -28,11 +36,18 @@ def updater(tmp_path):
 
 
 class TestUpdaterPathProperties:
-    def test_properties_expose_private_attrs(self, updater, tmp_path):
+    def test_dependency_updater_properties_expose_private_attrs(
+        self, updater, tmp_path
+    ):
         assert updater.package_path == tmp_path
         assert updater.pyproject_path == tmp_path / "pyproject.toml"
-        assert updater.version_file_path == tmp_path / "VERSION"
-        assert updater.docs_conf_file_path == tmp_path / "conf.py"
+
+    def test_version_updater_properties_expose_private_attrs(
+        self, version_updater, tmp_path
+    ):
+        assert version_updater.pyproject_path == tmp_path / "pyproject.toml"
+        assert version_updater.version_file_path == tmp_path / "VERSION"
+        assert version_updater.docs_conf_file_path == tmp_path / "conf.py"
 
 
 class TestGetExistingDependenciesFromPyproject:
@@ -181,55 +196,63 @@ class TestUpdatePyprojectToml:
 
 class TestUpdateVersionNumber:
     def test_missing_version_file_logs_error_but_continues(
-        self, updater, caplog
+        self, version_updater, caplog
     ):
         # version_file_path doesn't exist; pyproject/conf also don't
         # exist, so this should log errors/warnings but not raise.
         with caplog.at_level("ERROR"):
-            updater.update_version_number("9.9.9")
+            version_updater.update_version_number("9.9.9")
         assert "Version file not found" in caplog.text
 
-    def test_writes_version_file(self, updater):
-        updater.version_file_path.write_text("0.0.1\n")
-        updater.update_version_number("1.2.3")
-        assert updater.version_file_path.read_text() == "1.2.3\n"
+    def test_writes_version_file(self, version_updater):
+        version_updater.version_file_path.write_text("0.0.1\n")
+        version_updater.update_version_number("1.2.3")
+        assert version_updater.version_file_path.read_text() == "1.2.3\n"
 
-    def test_updates_pyproject_version_field(self, updater):
-        updater.pyproject_path.write_text(
+    def test_updates_pyproject_version_field(self, version_updater):
+        version_updater.pyproject_path.write_text(
             '[project]\nname = "chemsmart"\nversion = "0.1.0"\n'
         )
-        updater.update_version_number("2.0.0")
-        new_text = updater.pyproject_path.read_text()
+        version_updater.update_version_number("2.0.0")
+        new_text = version_updater.pyproject_path.read_text()
         assert 'version = "2.0.0"' in new_text
 
-    def test_pyproject_without_version_field_warns(self, updater, caplog):
-        updater.pyproject_path.write_text('[project]\nname = "chemsmart"\n')
+    def test_pyproject_without_version_field_warns(
+        self, version_updater, caplog
+    ):
+        version_updater.pyproject_path.write_text(
+            '[project]\nname = "chemsmart"\n'
+        )
         with caplog.at_level("WARNING"):
-            updater.update_version_number("2.0.0")
+            version_updater.update_version_number("2.0.0")
         assert "not updated" in caplog.text
 
-    def test_updates_docs_conf_release_field(self, updater):
-        updater.docs_conf_file_path.write_text('release = "0.1.0"\n')
-        updater.update_version_number("2.0.0")
-        new_text = updater.docs_conf_file_path.read_text()
+    def test_updates_docs_conf_release_field(self, version_updater):
+        version_updater.docs_conf_file_path.write_text('release = "0.1.0"\n')
+        version_updater.update_version_number("2.0.0")
+        new_text = version_updater.docs_conf_file_path.read_text()
         assert 'release = "2.0.0"' in new_text
 
-    def test_missing_docs_conf_warns_but_continues(self, updater, caplog):
+    def test_missing_docs_conf_warns_but_continues(
+        self, version_updater, caplog
+    ):
         with caplog.at_level("WARNING"):
-            updater.update_version_number("2.0.0")
+            version_updater.update_version_number("2.0.0")
         assert "skipping docs version update" in caplog.text
 
 
 class TestUpdateCLI:
     def test_deps_command_calls_update_pyproject_toml(self):
         runner = CliRunner()
-        with patch("chemsmart.cli.update.Updater") as mock_updater_cls:
+        with patch(
+            "chemsmart.cli.update.DependencyUpdater"
+        ) as mock_updater_cls:
             mock_updater = MagicMock()
             mock_updater_cls.return_value = mock_updater
             result = runner.invoke(update, ["deps"], obj={})
 
         assert result.exit_code == 0, result.output
-        mock_updater.update_pyproject_toml.assert_called_once()
+        mock_updater.update.assert_called_once()
 
     def test_version_command_requires_version_number(self):
         runner = CliRunner()
@@ -238,10 +261,11 @@ class TestUpdateCLI:
 
     def test_version_command_calls_update_version_number(self):
         runner = CliRunner()
-        with patch("chemsmart.cli.update.Updater") as mock_updater_cls:
+        with patch("chemsmart.cli.update.VersionUpdater") as mock_updater_cls:
             mock_updater = MagicMock()
             mock_updater_cls.return_value = mock_updater
             result = runner.invoke(update, ["version", "-v", "3.2.1"], obj={})
 
         assert result.exit_code == 0, result.output
-        mock_updater.update_version_number.assert_called_once_with("3.2.1")
+        mock_updater_cls.assert_called_once_with("3.2.1")
+        mock_updater.update.assert_called_once()

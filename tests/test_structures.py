@@ -5136,8 +5136,10 @@ class TestMoleculeWriteMethods:
         assert "O" in content
 
     def test_write_unsupported_format_raises(self, water_molecule, tmp_path):
+        # Formats with no native writer now fall back to Open Babel; "foo"
+        # isn't a real Open Babel format either, so that fallback raises.
         outfile = tmp_path / "out.foo"
-        with pytest.raises(ValueError, match="not supported for writing"):
+        with pytest.raises(ValueError, match="Open Babel could not write"):
             water_molecule.write(str(outfile), format="foo")
 
     def test_str_representation(self, water_molecule):
@@ -5161,7 +5163,9 @@ class TestMoleculeWriteMethods:
         outfile = tmp_path / "out.cosmorsxyz"
         water_molecule.write_cosmorsxyz(str(outfile))
         content = outfile.read_text()
-        assert content == water_molecule.to_cosmorsxyz()
+        # write_cosmorsxyz appends a trailing newline for POSIX-friendly
+        # text files; to_cosmorsxyz() itself returns the bare string.
+        assert content == water_molecule.to_cosmorsxyz() + "\n"
 
     def test_write_com_format(self, water_molecule, tmp_path):
         water_molecule.charge = 0
@@ -5919,7 +5923,9 @@ class TestQMMMMoleculeExtra:
             high_level_atoms=[1],
             medium_level_atoms=[2],
             low_level_atoms=[3, 4],
-            bonded_atoms=[(1, 2), (2, 3), (3, 1)],
+            # each bond's lower-level host atom (2, 4, 3) is distinct, so no
+            # atom is asked to carry two Gaussian link-atom specifications
+            bonded_atoms=[(1, 2), (2, 4), (3, 1)],
         )
         outfile = tmp_path / "tmp.xyz"
         with open(outfile, "w") as f:
@@ -5992,10 +5998,12 @@ class TestQMMMMoleculeExtra:
             high_level_atoms=[1],
             medium_level_atoms=[2],
             low_level_atoms=[3, 4],
-            bonded_atoms=[(1, 2), (2, 3), (3, 1)],
+            # each bond's lower-level host atom (2, 4, 3) is distinct, so no
+            # atom is asked to carry two Gaussian link-atom specifications
+            bonded_atoms=[(1, 2), (2, 4), (3, 1)],
             scale_factors={
                 (1, 2): [0.1, 0.2, 0.3],
-                (2, 3): [0.4, 0.5, 0.6],
+                (2, 4): [0.4, 0.5, 0.6],
                 (3, 1): [0.7, 0.8, 0.9],
             },
         )

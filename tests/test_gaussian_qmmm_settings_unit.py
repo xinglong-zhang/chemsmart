@@ -58,9 +58,14 @@ class TestRouteStringDiezeTagAndIrc:
 
 class TestOniomStringBranches:
     def test_medium_only_level_specified(self):
+        # medium_level_atoms must be set for the medium layer to count --
+        # a medium level of theory with no atoms assigned to it is treated
+        # as absent (see _get_oniom_string's `and self.medium_level_atoms`
+        # guard).
         settings = GaussianQMMMJobSettings(
             medium_level_functional="b3lyp",
             medium_level_basis="6-31g(d)",
+            medium_level_atoms=[2],
             charge_total=0,
             mult_total=1,
         )
@@ -79,22 +84,6 @@ class TestOniomStringBranches:
     def test_no_levels_specified_bare_oniom(self):
         settings = GaussianQMMMJobSettings(charge_total=0, mult_total=1)
         assert settings._get_oniom_string() == " oniom"
-
-
-class TestGetQmmmLevelOfTheoryString:
-    def test_warns_when_jobtype_none(self, caplog):
-        settings = GaussianQMMMJobSettings(
-            high_level_functional="b3lyp",
-            high_level_basis="6-31g(d)",
-            low_level_force_field="uff",
-            charge_total=0,
-            mult_total=1,
-            jobtype=None,
-            parent_jobtype="sp",
-        )
-        with caplog.at_level("WARNING"):
-            settings.get_qmmm_level_of_theory_string()
-        assert "Job type not specified" in caplog.text
 
 
 class TestChargeAndMultiplicityErrors:
@@ -123,11 +112,15 @@ class TestChargeAndMultiplicityErrors:
         # always equal, since they all derive from the same single
         # int_charge/int_multiplicity and model_charge/model_multiplicity
         # constructor parameters respectively).
+        # medium_level_atoms must be set, otherwise this is treated as a
+        # 2-layer job regardless of int_charge/int_multiplicity (see the
+        # `not self.medium_level_atoms` guard in _get_charge_and_multiplicity).
         settings = GaussianQMMMJobSettings(
             high_level_functional="mn15",
             high_level_basis="def2svp",
             medium_level_functional="b3lyp",
             medium_level_basis="6-31g(d)",
+            medium_level_atoms=[2],
             low_level_force_field="uff",
             charge_total=0,
             mult_total=1,

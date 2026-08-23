@@ -3420,7 +3420,9 @@ def _invoke_sub_process_pipeline_directly(
         ),
     ):
         ctx = click.Context(sub_module.sub)
-        ctx.obj = {"jobrunner": MagicMock()}
+        mock_jobrunner = MagicMock()
+        mock_jobrunner.server = fake_server
+        ctx.obj = {"jobrunner": mock_jobrunner}
         if not _omit_subcommand_key:
             ctx.obj["subcommand"] = subcommand_list
         with ctx:

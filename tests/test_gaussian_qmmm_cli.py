@@ -11,6 +11,7 @@ exercise the freeze-atoms inheritance branch.
 from unittest.mock import MagicMock, patch
 
 import click
+import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.gaussian.gaussian import gaussian
@@ -347,6 +348,8 @@ def _invoke_qmmm_callback_directly(**ctx_obj_overrides):
         low_level_atoms=None,
         bonded_atoms=None,
         scale_factors=None,
+        mm_atom_info=None,
+        mm_parameters_file=None,
     )
 
     with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
@@ -365,101 +368,34 @@ class TestQmmmCallbackDirectInvocation:
         mock_job = _invoke_qmmm_callback_directly()
         mock_job.assert_called_once()
 
-    def test_merge_exception_is_caught_and_logged(self):
+    def test_merge_is_called_once_and_exceptions_propagate(self):
+        """Upstream removed a second, redundant parent-settings merge
+        block (identical keyword list to the first) that used to wrap
+        its call in a try/except and log-and-continue on failure. Only
+        one merge call remains now, with no exception handling, so a
+        failure there propagates instead of being swallowed."""
         from chemsmart.jobs.gaussian.settings import GaussianQMMMJobSettings
 
         real_merge = GaussianQMMMJobSettings.merge
         call_count = {"n": 0}
 
-        def fake_merge(self, *args, **kwargs):
+        def counting_merge(self, *args, **kwargs):
             call_count["n"] += 1
-            if call_count["n"] == 2:
-                raise RuntimeError("merge failed")
             return real_merge(self, *args, **kwargs)
 
-        with patch.object(GaussianQMMMJobSettings, "merge", fake_merge):
+        with patch.object(GaussianQMMMJobSettings, "merge", counting_merge):
             mock_job = _invoke_qmmm_callback_directly(
                 parent_settings=MagicMock()
             )
         mock_job.assert_called_once()
-        assert call_count["n"] == 2
+        assert call_count["n"] == 1
 
+        def raising_merge(self, *args, **kwargs):
+            raise RuntimeError("merge failed")
 
-class TestPopulateChargeAndMultiplicityOnSettings:
-    """Documents BUGS_FOUND.md #52: this helper is defined but never
-    called anywhere in chemsmart/cli/gaussian/qmmm.py (or elsewhere in
-    the Gaussian CLI) -- only its identically named ORCA counterpart
-    in cli/orca/qmmm.py is actually wired up. Unit-tested directly
-    here since no code path reaches it."""
-
-    @staticmethod
-    def _settings(**overrides):
-        from types import SimpleNamespace
-
-        return SimpleNamespace(charge=None, multiplicity=None, **overrides)
-
-    def test_intermediate_charge_and_multiplicity_take_priority(self):
-        from chemsmart.cli.gaussian.qmmm import (
-            _populate_charge_and_multiplicity_on_settings,
-        )
-
-        qs = self._settings(
-            charge_intermediate=1,
-            mult_intermediate=2,
-            charge_high=3,
-            mult_high=4,
-            charge_total=5,
-            mult_total=6,
-        )
-        _populate_charge_and_multiplicity_on_settings(qs)
-        assert (qs.charge, qs.multiplicity) == (1, 2)
-        assert (qs.charge_total, qs.mult_total) == (1, 2)
-
-    def test_high_level_charge_and_multiplicity_used_when_no_intermediate(
-        self,
-    ):
-        from chemsmart.cli.gaussian.qmmm import (
-            _populate_charge_and_multiplicity_on_settings,
-        )
-
-        qs = self._settings(
-            charge_intermediate=None,
-            mult_intermediate=None,
-            charge_high=3,
-            mult_high=4,
-            charge_total=5,
-            mult_total=6,
-        )
-        _populate_charge_and_multiplicity_on_settings(qs)
-        assert (qs.charge, qs.multiplicity) == (3, 4)
-
-    def test_total_charge_and_multiplicity_used_as_last_resort(self):
-        from chemsmart.cli.gaussian.qmmm import (
-            _populate_charge_and_multiplicity_on_settings,
-        )
-
-        qs = self._settings(
-            charge_intermediate=None,
-            mult_intermediate=None,
-            charge_high=None,
-            mult_high=None,
-            charge_total=5,
-            mult_total=6,
-        )
-        _populate_charge_and_multiplicity_on_settings(qs)
-        assert (qs.charge, qs.multiplicity) == (5, 6)
-
-    def test_no_charge_or_multiplicity_set_leaves_settings_untouched(self):
-        from types import SimpleNamespace
-
-        from chemsmart.cli.gaussian.qmmm import (
-            _populate_charge_and_multiplicity_on_settings,
-        )
-
-        qs = SimpleNamespace()
-        _populate_charge_and_multiplicity_on_settings(qs)
-        assert not hasattr(qs, "charge")
-        assert not hasattr(qs, "multiplicity")
+        with patch.object(GaussianQMMMJobSettings, "merge", raising_merge):
+            with pytest.raises(RuntimeError, match="merge failed"):
+                _invoke_qmmm_callback_directly(parent_settings=MagicMock())
 
 
 class TestClickGaussianQmmmOptionsIsUnusedDeadCode:

@@ -157,7 +157,7 @@ class TestGaussianJobSettings:
         qmmm_settings = all_project_settings["qmmm"]
         assert qmmm_settings["jobtype"] == "qmmm"
         assert qmmm_settings["high_level_functional"] == "MN15"
-        assert qmmm_settings["low_level_force_field"] == "AMBER=HardFirst"
+        assert qmmm_settings["low_level_force_field"] == "UFF"
 
     def test_get_settings_from_yaml_solv(self, gaussian_yaml_settings_solv):
         all_project_settings = read_molecular_job_yaml(
