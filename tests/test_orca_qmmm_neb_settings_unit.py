@@ -588,8 +588,11 @@ class TestQmmmBlockGeneration:
         assert "Charge_Total 0" in block
         assert "Mult_Total 1" in block
         assert 'ORCAFFFilename "system.prms"' in block
-        assert "Delete_LA_Double_Counting true" in block
-        assert "Embedding Electronic" in block
+        assert "DeleteLADoubleCounting true" in block
+        # Electronic embedding is ORCA's default and is omitted from
+        # the block rather than written explicitly (only mechanical
+        # embedding needs an explicit "Embedding Mechanical" line).
+        assert "Embedding" not in block
 
     def test_qmmm_block_property_delegates(self):
         s = ORCAQMMMJobSettings(
@@ -632,7 +635,7 @@ class TestQmmmBlockGeneration:
             mult_intermediate=1,
         )
         block = s._write_qmmm_block()
-        assert 'QM2CustomFile "my_custom_method" end' in block
+        assert 'QM2CustomFile "my_custom_method"' in block
 
     def test_custom_functional_basis_written_when_no_builtin_method(self):
         s = ORCAQMMMJobSettings(
@@ -644,8 +647,8 @@ class TestQmmmBlockGeneration:
             mult_intermediate=1,
         )
         block = s._write_qmmm_block()
-        assert 'QM2CUSTOMMETHOD "B3LYP" end' in block
-        assert 'QM2CUSTOMBASIS "def2-SVP" end' in block
+        assert 'QM2CUSTOMMETHOD "B3LYP"' in block
+        assert 'QM2CUSTOMBASIS "def2-SVP"' in block
 
     def test_use_active_info_from_pbc_line(self):
         s = ORCAQMMMJobSettings(
@@ -722,7 +725,7 @@ class TestQmmmBlockGeneration:
             mult_total=1,
         )
         block = s._write_qmmm_block()
-        assert "Dist_C_H 1.09" in block
+        assert "Dist_C_HLA 1.09" in block
 
     def test_empty_dict_h_bond_length_produces_falsy_block_and_is_skipped(
         self,
@@ -784,8 +787,8 @@ class TestHBondLength:
             high_level_h_bond_length={("C", "H"): 1.09, ("O", "H"): 0.98}
         )
         result = s._get_h_bond_length()
-        assert "Dist_C_H 1.09" in result
-        assert "Dist_O_H 0.98" in result
+        assert "Dist_C_HLA 1.09" in result
+        assert "Dist_O_HLA 0.98" in result
 
     def test_string_form_requires_existing_file(self, tmp_path):
         missing = tmp_path / "does_not_exist.txt"
@@ -816,7 +819,11 @@ class TestEmbeddingType:
             low_level_method="ff.prms",
             embedding_type="electronic",
         )
-        assert s._get_embedding_type() == "Embedding Electronic"
+        # Electronic embedding is ORCA's default and is represented by
+        # omitting the line (see reference fixtures under
+        # tests/data/ORCATests/inputs/dna_qmmm*.inp, which never write
+        # an "Embedding Electronic" line).
+        assert s._get_embedding_type() is None
 
     def test_mechanical(self):
         s = ORCAQMMMJobSettings(

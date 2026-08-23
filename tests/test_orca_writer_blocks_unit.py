@@ -714,22 +714,25 @@ class TestChargeAndMultiplicity:
         with pytest.raises(AssertionError, match="Charge and multiplicity"):
             writer._write_charge_and_multiplicity(io.StringIO())
 
-    def test_falls_back_to_qmmm_total_fields(self):
+    def test_qmmm_without_charge_high_raises(self):
+        # The QMMM coordinate line ("* xyz ...") must reflect the
+        # high-level (QM) region's own charge/multiplicity, not the
+        # whole-system total -- using total here could silently write
+        # a chemically wrong charge for the QM subsystem. So when only
+        # charge_total/mult_total are supplied (no charge_high/mult_high),
+        # the writer must raise rather than fall back to total, even
+        # though ORCAQMMMJobSettings.__init__ separately resolves
+        # settings.charge/settings.multiplicity from total for other
+        # purposes. See tests/test_ORCAIO.py::TestORCAQMMMJobSettings::
+        # test_qmmm_xyz_line_does_not_fall_back_to_total_charge for the
+        # sibling assertion of this same contract.
         settings = ORCAQMMMJobSettings(
-            jobtype="MOL-CRYSTAL-QMMM",
-            n_unit_cell_atoms=12,
+            jobtype="QMMM",
             low_level_method="ff.prms",
+            charge_total=0,
+            mult_total=1,
         )
-        # charge/multiplicity are None on this settings object; total
-        # fields were also not supplied, so patch them in directly to
-        # exercise the QMMM fallback path without invoking
-        # check_crystal_qmmm (which forbids setting multiplicity here).
-        settings.charge_total = 0
-        settings.mult_total = 1
         writer = _writer(settings)
         f = io.StringIO()
-        writer._write_charge_and_multiplicity(f)
-        assert f.getvalue() == "* xyz 0 1\n"
-        # settings object is updated in place for downstream use
-        assert settings.charge == 0
-        assert settings.multiplicity == 1
+        with pytest.raises(AssertionError, match="Charge and multiplicity"):
+            writer._write_charge_and_multiplicity(f)
