@@ -7,7 +7,7 @@ import click
 
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
-from chemsmart.utils.utils import convert_string_to_slices
+from chemsmart.utils.utils import get_list_from_string_range
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def create_orca_qmmm_subcommand(parent_command):
         "--low-level-method",
         "--low-level-force-field",  # legacy alias
         type=str,
-        help="Method/force field for low-level (MM) region",
+        help="ORCA force-field parameter file for the MM region (ORCAFFFilename), e.g. system.ORCAFF.prms",
     )
     @click.option(
         "-ha",
@@ -109,13 +109,13 @@ def create_orca_qmmm_subcommand(parent_command):
         "-ch",
         "--charge-high",
         type=int,
-        help="High-level region charge",
+        help="Required high-level (QM) region charge for the * xyz line",
     )
     @click.option(
         "-mh",
         "--mult-high",
         type=int,
-        help="High-level region multiplicity",
+        help="Required high-level (QM) region multiplicity for the * xyz line",
     )
     @click.option(
         "-s",
@@ -152,8 +152,8 @@ def create_orca_qmmm_subcommand(parent_command):
     @click.option(
         "-h",
         "--high-level-h-bond-length",
-        type=dict,
-        help="Custom high-level-H bond lengths",
+        type=str,
+        help="Custom high-level-H bond lengths as a string representation of a dict.",
     )
     @click.option(
         "-d",
@@ -318,7 +318,15 @@ def create_orca_qmmm_subcommand(parent_command):
             qmmm_settings.parent_jobtype = parent_jobtype
 
         if jobtype is not None:
+            previous_jobtype = (qmmm_settings.jobtype or "").upper()
             qmmm_settings.jobtype = jobtype
+            if (
+                jobtype.upper() == "QM/QM2"
+                and previous_jobtype == "QM/QM2/MM"
+                and intermediate_level_atoms is None
+            ):
+                qmmm_settings.intermediate_level_atoms = None
+                qmmm_settings.low_level_method = None
         if high_level_functional is not None:
             qmmm_settings.high_level_functional = high_level_functional
         if high_level_basis is not None:
@@ -361,7 +369,9 @@ def create_orca_qmmm_subcommand(parent_command):
         if optregion_fixed_atoms is not None:
             qmmm_settings.optregion_fixed_atoms = optregion_fixed_atoms
         if high_level_h_bond_length is not None:
-            qmmm_settings.high_level_h_bond_length = high_level_h_bond_length
+            qmmm_settings.high_level_h_bond_length = ast.literal_eval(
+                high_level_h_bond_length
+            )
         if delete_la_double_counting is not None:
             qmmm_settings.delete_la_double_counting = delete_la_double_counting
         if delete_la_bond_double_counting_atoms is not None:
@@ -415,8 +425,6 @@ def create_orca_qmmm_subcommand(parent_command):
 
         qmmm_settings.re_init_and_validate()
 
-        _populate_charge_and_multiplicity_on_settings(qmmm_settings)
-
         molecules = ctx.obj["molecules"]
         molecule = molecules[-1]
         logger.info(
@@ -424,22 +432,13 @@ def create_orca_qmmm_subcommand(parent_command):
         )
 
         if high_level_atoms is not None:
-            high_level_atoms_converted = convert_string_to_slices(
+            molecule.high_level_atoms = get_list_from_string_range(
                 high_level_atoms
             )
-            molecule.high_level_atoms = high_level_atoms_converted
         if intermediate_level_atoms is not None:
-            intermediate_level_atoms_converted = convert_string_to_slices(
+            molecule.intermediate_level_atoms = get_list_from_string_range(
                 intermediate_level_atoms
             )
-            molecule.intermediate_level_atoms = (
-                intermediate_level_atoms_converted
-            )
-        if high_level_h_bond_length is not None:
-            high_level_h_bond_length_dict = ast.literal_eval(
-                high_level_h_bond_length
-            )
-            molecule.scale_factors = high_level_h_bond_length_dict
 
         combined_kwargs = {**parent_kwargs, **kwargs}
 
@@ -455,32 +454,3 @@ def create_orca_qmmm_subcommand(parent_command):
         )
 
     return qmmm
-
-
-def _populate_charge_and_multiplicity_on_settings(qs):
-    charge = getattr(qs, "charge", None)
-    mult = getattr(qs, "multiplicity", None)
-
-    if (
-        getattr(qs, "charge_intermediate", None) is not None
-        and getattr(qs, "mult_intermediate", None) is not None
-    ):
-        charge = qs.charge_intermediate
-        mult = qs.mult_intermediate
-    elif (
-        getattr(qs, "charge_high", None) is not None
-        and getattr(qs, "mult_high", None) is not None
-    ):
-        charge = qs.charge_high
-        mult = qs.mult_high
-    elif (
-        getattr(qs, "charge_total", None) is not None
-        and getattr(qs, "mult_total", None) is not None
-    ):
-        charge = qs.charge_total
-        mult = qs.mult_total
-
-    if charge is not None:
-        qs.charge = charge
-    if mult is not None:
-        qs.multiplicity = mult

@@ -80,13 +80,20 @@ def sub(
         create_logger(debug=debug, stream=stream)
     logger.info("Entering main program")
 
-    # Instantiate the jobrunner with CLI options
-    if server is not None:
-        server = Server.from_servername(server)
-        if time_hours is not None:
-            server.num_hours = time_hours
-        if queue is not None:
-            server.queue_name = queue
+    # Resolve one shared Server instance for both JobRunner and Submitter.
+    server = (
+        Server.current() if server is None else Server.from_servername(server)
+    )
+    if time_hours is not None:
+        server.num_hours = time_hours
+    if queue is not None:
+        server.queue_name = queue
+    if num_cores is not None:
+        server.kwargs["NUM_CORES"] = num_cores
+    if num_gpus is not None:
+        server.kwargs["NUM_GPUS"] = num_gpus
+    if mem_gb is not None:
+        server.kwargs["MEM_GB"] = mem_gb
 
     jobrunner = JobRunner(
         server=server,
@@ -317,8 +324,11 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
         cli_args = _reconstruct_cli_args(ctx, job)
 
-        server = Server.from_servername(kwargs.get("server"))
-        server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
+        jobrunner.server.submit(
+            job=job,
+            test=kwargs.get("test"),
+            cli_args=cli_args,
+        )
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]

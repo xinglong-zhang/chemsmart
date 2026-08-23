@@ -37,7 +37,7 @@ Configuration Structure
 Each server configuration file contains:
 
 #. **SERVER** section - Defines scheduler and resource allocation settings
-#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, NCIPLOT, etc.)
+#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, XTB, CREST, NCIPLOT, etc.)
 
 SERVER Section
 ==============
@@ -275,8 +275,8 @@ set environment variables, or activate conda environments. Use the pipe (``|``) 
 Program-Specific Sections
 =========================
 
-Each computational chemistry program (GAUSSIAN, ORCA, NCIPLOT) has its own configuration section. These sections define
-program-specific paths, execution settings, and environment variables.
+Each computational chemistry program (GAUSSIAN, ORCA, XTB, CREST, NCIPLOT) has its own configuration section. These
+sections define program-specific paths, execution settings, and environment variables.
 
 GAUSSIAN Section
 ----------------
@@ -492,6 +492,191 @@ ENVARS
        export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
        export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
 
+XTB Section
+-----------
+
+Configuration for the standalone xTB executable used by CHEMSMART xTB jobs.
+
+EXEFOLDER
+^^^^^^^^^
+
+**Type:** String or ``null``
+
+**Description:** Path to an xTB installation directory, or ``null`` to use the ``xtb`` executable from the activated
+conda environment / ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null  # use xtb from conda env / PATH
+
+LOCAL_RUN
+^^^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to treat xTB as a local/serial executable. Packaged templates typically use ``True``.
+
+**Example:**
+
+.. code:: yaml
+
+   LOCAL_RUN: True
+
+SCRATCH
+^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to run xTB in a scratch directory. Packaged templates default to ``False`` (job folder).
+
+**Example:**
+
+.. code:: yaml
+
+   SCRATCH: False  # run in job folder
+   SCRATCH: True   # run in scratch, then copy results back
+
+CONDA_ENV
+^^^^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Commands to activate the conda environment that provides ``xtb`` (and CHEMSMART).
+
+**Example:**
+
+.. code:: yaml
+
+   CONDA_ENV: |
+       source ~/miniconda3/etc/profile.d/conda.sh
+       conda activate ~/miniconda3/envs/chemsmart
+
+ENVARS
+^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Environment variables for xTB runs. Set ``SCRATCH`` if scratch mode is enabled.
+
+**Example:**
+
+.. code:: yaml
+
+   ENVARS: |
+       export SCRATCH=~/scratch
+
+Full example:
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+
+CREST Section
+-------------
+
+Configuration for the standalone CREST executable used by CHEMSMART CREST conformational search jobs.
+
+EXEFOLDER
+^^^^^^^^^
+
+**Type:** String or ``null``
+
+**Description:** Path to a CREST installation directory, or ``null`` to use the ``crest`` executable from the activated
+conda environment / ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   CREST:
+       EXEFOLDER: null  # use crest from conda env / PATH
+
+LOCAL_RUN
+^^^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to treat CREST as a local/serial executable. Packaged templates typically use ``True``.
+
+**Example:**
+
+.. code:: yaml
+
+   LOCAL_RUN: True
+
+SCRATCH
+^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to run CREST in a scratch directory. Packaged templates default to ``False`` (job folder).
+
+**Example:**
+
+.. code:: yaml
+
+   SCRATCH: False  # run in job folder
+   SCRATCH: True   # run in scratch, then copy results back
+
+CONDA_ENV
+^^^^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Commands to activate the conda environment that provides ``crest`` (and CHEMSMART). Most CREST
+workflows also requires ``xtb`` to be available on ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   CONDA_ENV: |
+       source ~/miniconda3/etc/profile.d/conda.sh
+       conda activate ~/miniconda3/envs/chemsmart
+
+ENVARS
+^^^^^^
+
+**Type:** Multiline string or ``null``
+
+**Description:** Environment variables for CREST runs. Set ``SCRATCH`` if scratch mode is enabled. Packaged templates
+typically use ``null``.
+
+**Example:**
+
+.. code:: yaml
+
+   ENVARS: null
+   ENVARS: |
+       export SCRATCH=~/scratch
+
+Full example:
+
+.. code:: yaml
+
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+
 NCIPLOT Section
 ---------------
 
@@ -639,6 +824,26 @@ Complete example for a SLURM-based HPC cluster:
            module load openmpi
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -703,6 +908,26 @@ Complete example for a PBS/Torque-based HPC cluster:
            module load openmpi
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -763,6 +988,26 @@ Complete example for a local workstation without a job scheduler:
            module purge
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -794,7 +1039,7 @@ When both ``--scratch`` and ``--no-scratch`` are omitted, ``JobRunner.from_job``
 runner is constructed:
 
 #. Explicit ``--scratch`` or ``--no-scratch`` wins.
-#. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
+#. Else program ``SCRATCH`` in server YAML for executable-backed runners.
 #. Else the job-runner class default.
 
 Programmatic API (direct constructor)
@@ -806,8 +1051,9 @@ default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI f
 
 .. note::
 
-   Server YAML ``SCRATCH`` is read only for ``GAUSSIAN``, ``ORCA``, and ``NCIPLOT``. A ``PYMOL:`` block (or other
-   non-executable program) does not affect scratch when the CLI flag is omitted.
+   Server YAML ``SCRATCH`` is read only for executable-backed programs such as ``GAUSSIAN``, ``ORCA``, ``XTB``,
+   ``CREST``, and ``NCIPLOT``. A ``PYMOL:`` block (or other non-executable program) does not affect scratch when the CLI
+   flag is omitted.
 
 Resolution table (CLI path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -844,7 +1090,7 @@ Resolution table (CLI path)
       -  scratch directory if path exists; else job folder (warning)
 
    -  -  omit
-      -  absent *(class ``False``, e.g. PyMOL, thermochemistry)*
+      -  absent *(class ``False``, e.g. xTB, PyMOL, thermochemistry)*
       -  ``False``
       -  job folder
 
@@ -862,7 +1108,8 @@ Scratch directory path
 
 When scratch mode is ``True``, the scratch directory path is resolved in this order:
 
-#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``NCIPLOT``)
+#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``XTB`` / ``CREST`` /
+   ``NCIPLOT``)
 #. ``SERVER.SCRATCH_DIR``
 #. User settings ``SCRATCH`` (from CHEMSMART user configuration)
 
@@ -889,8 +1136,9 @@ When customizing server configuration files:
 #. **Module system**: Update MODULES sections to load the correct versions of libraries and tools available on your
    system.
 
-#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. This
-   will be automatically updated when configuring CHEMSMART during the configuration phase.
+#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. For
+   xTB and CREST, ``EXEFOLDER`` may be ``null`` to use ``xtb`` / ``crest`` from the activated conda environment /
+   ``PATH``. Paths for Gaussian, ORCA, and NCIPLOT are updated interactively when configuring CHEMSMART.
 
 #. **Scratch directories**: Configure program ``SCRATCH`` (mode) and a valid scratch path (``ENVARS`` / ``SCRATCH_DIR``
    / user settings). Some HPC systems provide node-local scratch (e.g., ``/tmp``) while others use network-attached
@@ -920,3 +1168,36 @@ After creating a custom server configuration file:
 #. Verify the generated submission script to ensure all paths and settings are correct
 
 #. Test with a small job first to validate the configuration works correctly on your system
+
+Updating Existing Server YAML Files
+===================================
+
+When CHEMSMART adds support for a new program section in its bundled server template, existing user YAML files can be
+updated with either of the following:
+
+.. code:: bash
+
+   chemsmart update configs
+   chemsmart update configs -s SLURM
+   chemsmart update configs -s SLURM -s PBS
+
+`chemsmart update configs` updates the server configuration files interactively; `chemsmart update configs -s SLURM`
+updates the server configuration file located at `~/.chemsmart/server/SLURM.yaml`; whereas `chemsmart update configs -s
+SLURM -s PBS` updates multiple server configuration files located at `~/.chemsmart/server/SLURM.yaml` and
+`~/.chemsmart/server/PBS.yaml`.
+
+The command compares each selected YAML file with the bundled ``server.yaml`` template and only adds missing top-level
+program configuration sections. It does not update fields under``SERVER``, does not recursively fill missing fields
+inside an existing program section, and does not overwrite existing program sections or existing ``EXEFOLDER`` values.
+Custom top-level fields are preserved.
+
+Use ``-s`` / ``--server`` to select an existing YAML file from ``~/.chemsmart/server/``; the value may be given with or
+without ``.yaml``. Repeat the option to select multiple files. Without ``-s``, all existing ``*.yaml`` files in the
+server directory are checked. The command does not create missing server YAML files.
+
+In an interactive terminal, the command prompts at most once for the ``EXEFOLDER`` of each missing program discovered
+across the selected files. Press Enter to keep the value from the bundled template. A supplied path is applied only to
+newly copied program sections in files that were missing that program; existing program sections and paths are never
+changed. Program names are discovered from the template rather than maintained in a fixed list.
+
+When standard input is not an interactive terminal, the command does not prompt and uses the bundled template values.

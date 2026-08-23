@@ -92,9 +92,9 @@ Execution Control Options
    the typed runner is built:
 
    #. Explicit ``--scratch`` or ``--no-scratch`` wins.
-   #. Else program ``SCRATCH`` in server YAML (Gaussian, ORCA, NCIPLOT only).
-   #. Else the job-runner class default (``True`` for Gaussian/ORCA/NCIPLOT; ``False`` for PyMOL, thermochemistry,
-      etc.).
+   #. Else program ``SCRATCH`` in server YAML for executable-backed runners.
+   #. Else the job-runner class default (``True`` for Gaussian/ORCA/NCIPLOT; ``False`` for xTB, CREST, PyMOL,
+      thermochemistry, etc.).
 
    **Programmatic API (direct constructor)**
 
@@ -110,6 +110,8 @@ Execution Control Options
 
    -  ``chemsmart run --fake gaussian ...`` / ``chemsmart sub --fake gaussian ...`` uses the Gaussian fake runner.
    -  ``chemsmart run --fake orca ...`` / ``chemsmart sub --fake orca ...`` uses the ORCA fake runner.
+   -  ``chemsmart run --fake xtb ...`` / ``chemsmart sub --fake xtb ...`` uses the xTB fake runner.
+   -  ``chemsmart run --fake crest ...`` / ``chemsmart sub --fake crest ...`` uses the CREST fake runner.
 
    In these fake modes, executable-path checks for the corresponding real program are not required and the corresponding
    fake runner will be used without needing to specify its path.
@@ -173,9 +175,12 @@ These options are only available with ``chemsmart sub``:
 
 -  ``gaussian``: Run or submit Gaussian jobs
 -  ``orca``: Run or submit ORCA jobs
+-  ``xtb``: Run or submit xTB jobs
+-  ``crest``: Run or submit CREST conformational search jobs
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
 -  ``grouper``: Run structure grouping jobs
+-  ``convert``: Convert molecular structure files between formats
 
 ************
  Next Steps
@@ -185,9 +190,13 @@ For specific job types, see the detailed tutorials:
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`xtb-cli-options`
+-  :doc:`crest-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
 -  :doc:`grouper-cli-options`
+-  :doc:`convert-cli-options`
+-  :doc:`molecule-input-formats`
 
 .. note::
 
