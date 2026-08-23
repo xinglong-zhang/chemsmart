@@ -2681,6 +2681,12 @@ class Gaussian16Output(GaussianFileMixin):
         pass
 
     @cached_property
+    def is_oniom(self):
+        """Return True if the route string indicates an ONIOM calculation."""
+        route = self.route_string
+        return route is not None and "oniom" in route.lower()
+
+    @cached_property
     def oniom_partition(self):
         """Obtain the atomic indices of each layer in the ONIOM calculation.
         Returns:

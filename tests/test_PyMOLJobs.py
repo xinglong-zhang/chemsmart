@@ -149,9 +149,14 @@ class TestPyMOLJobs:
         self, tmpdir, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_pubchem(
-            "8028", label="thf", jobrunner=pymol_visualization_jobrunner
-        )
+        try:
+            job = PyMOLVisualizationJob.from_pubchem(
+                "8028", label="thf", jobrunner=pymol_visualization_jobrunner
+            )
+        except Exception as exc:
+            pytest.skip(f"PubChem unavailable for CID 8028: {exc}")
+        if job.molecule is None:
+            pytest.skip("PubChem returned no structure for CID 8028")
         job.set_folder(tmpdir)
 
         # run job
@@ -172,11 +177,20 @@ class TestPyMOLJobs:
         self, tmpdir, pymol_visualization_jobrunner
     ):
         # set up jobs
-        job = PyMOLVisualizationJob.from_pubchem(
-            "C1=CC=C(C=C1)C2=NOC(=O)O2",
-            label="phenyldioxazolone",
-            jobrunner=pymol_visualization_jobrunner,
-        )
+        try:
+            job = PyMOLVisualizationJob.from_pubchem(
+                "C1=CC=C(C=C1)C2=NOC(=O)O2",
+                label="phenyldioxazolone",
+                jobrunner=pymol_visualization_jobrunner,
+            )
+        except Exception as exc:
+            pytest.skip(
+                f"PubChem unavailable for phenyldioxazolone SMILES: {exc}"
+            )
+        if job.molecule is None:
+            pytest.skip(
+                "PubChem returned no structure for phenyldioxazolone SMILES"
+            )
         job.set_folder(tmpdir)
 
         # run job
@@ -1012,6 +1026,22 @@ class TestPyMOLStyleCommands:
             assert template_commands[style_cls.command] == style_cls.command
             wrapper = getattr(zhang_group_scientific_styles, style_cls.command)
             assert wrapper.__name__ == style_cls.command
+
+    def test_zhang_group_scientific_styles_import_without_pymol(self, mocker):
+        """Style template sets cmd=None when PyMOL is not installed."""
+        import importlib.util
+        import sys
+
+        spec = importlib.util.spec_from_file_location(
+            "zhang_group_scientific_styles_without_pymol",
+            zhang_group_scientific_styles.__file__,
+        )
+        module = importlib.util.module_from_spec(spec)
+        mocker.patch.dict(sys.modules, {"pymol": None, "pymol.cmd": None})
+        spec.loader.exec_module(module)
+
+        assert module.cmd is None
+        assert hasattr(module, SCIENTIFIC_STYLE_CLASSES[0].command)
 
     def test_select_coordination_uses_command_as_prefix(self, mocker):
         style = StericSurfaceStyle()

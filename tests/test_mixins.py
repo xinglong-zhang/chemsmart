@@ -1,8 +1,12 @@
 import os
 
+import pytest
+
 from chemsmart.utils.mixins import (
+    CRESTFileMixin,
     FileMixin,
     FolderMixin,
+    FolderOutputMixin,
     GaussianFileMixin,
     ORCAFileMixin,
     RegistryMixin,
@@ -207,6 +211,28 @@ class TestXTBFileMixin:
         assert dummy.grad is True
 
 
+class DummyCRESTFile(CRESTFileMixin):
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def route_string(self):
+        return "crest 1a.xyz --cinp constraints.inp --gfn2 --chrg 0 --uhf 0 --optlev tight"
+
+
+class TestCRESTFileMixin:
+    def test_crest_file_properties(self):
+        dummy = DummyCRESTFile("test.out")
+        assert dummy.jobtype == "conformers"
+        assert dummy.optimization_level == "tight"
+        assert dummy.gfn_version == "gfn2"
+        assert dummy.solvent_model is None
+        assert dummy.solvent_id is None
+        assert dummy.charge == 0
+        assert dummy.uhf == 0
+        assert dummy.constrained is True
+
+
 class TestYAMLFileMixin:
     def test_yaml_file_properties(self, dummy_yaml_file):
         dummy = dummy_yaml_file
@@ -247,6 +273,27 @@ class TestFolderMixin:
         txt_files = dummy.get_all_files_in_current_folder_by_suffix(".txt")
         assert file1 in txt_files
 
+    def test_suffix_without_dot_excludes_compound_extensions(self, tmpdir):
+        """filetype='xyz' must match .xyz but not .extxyz."""
+        xyz = os.path.join(str(tmpdir), "water.xyz")
+        extxyz = os.path.join(str(tmpdir), "crystal.extxyz")
+        for path, content in (
+            (xyz, "3\n\nO 0 0 0\nH 1 0 0\nH 0 1 0\n"),
+            (extxyz, "3\n\nO 0 0 0\nH 1 0 0\nH 0 1 0\n"),
+        ):
+            with open(path, "w") as f:
+                f.write(content)
+
+        dummy = DummyFolder(str(tmpdir))
+        files = dummy.get_all_files_in_current_folder_by_suffix("xyz")
+        assert xyz in files
+        assert extxyz not in files
+
+        # Leading-dot form remains supported.
+        files_dotted = dummy.get_all_files_in_current_folder_by_suffix(".xyz")
+        assert xyz in files_dotted
+        assert extxyz not in files_dotted
+
     def test_get_all_files_by_regex(self, temp_folder_with_files):
         folder, file1, file2 = temp_folder_with_files
         dummy = DummyFolder(folder)
@@ -255,3 +302,45 @@ class TestFolderMixin:
         )
         assert file2 in log_files
         assert file1 not in log_files
+
+
+class DummyParser:
+    def __init__(self, **attrs):
+        for name, value in attrs.items():
+            setattr(self, name, value)
+
+
+class DummyFolderOutput(FolderOutputMixin):
+    FILE_PARSERS = ("main_out", "secondary_out")
+
+    def __init__(self, main_out=None, secondary_out=None):
+        self.main_out = main_out
+        self.secondary_out = secondary_out
+
+
+class TestFolderOutputMixin:
+    def test_delegates_to_first_parser(self):
+        output = DummyFolderOutput(
+            main_out=DummyParser(total_energy=-123.45),
+            secondary_out=DummyParser(total_energy=-123),
+        )
+        assert output.total_energy == -123.45
+
+    def test_falls_back_to_next_parser(self):
+        output = DummyFolderOutput(
+            main_out=DummyParser(),
+            secondary_out=DummyParser(charge=0),
+        )
+        assert output.charge == 0
+
+    def test_skips_none_parser(self):
+        output = DummyFolderOutput(
+            main_out=None,
+            secondary_out=DummyParser(multiplicity=1),
+        )
+        assert output.multiplicity == 1
+
+    def test_raises_attribute_error_when_not_found(self):
+        output = DummyFolderOutput()
+        with pytest.raises(AttributeError, match="no attribute 'missing'"):
+            _ = output.missing

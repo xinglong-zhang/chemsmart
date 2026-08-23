@@ -139,6 +139,10 @@ ifeq ($(OS_FAMILY),Windows)
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
+	@echo Updating chemsmart project templates...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: chemsmart project template update failed." && exit 1 )
+	@echo Updating existing chemsmart server configurations...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
 	@echo.
 	@echo ===========================================================
 	@echo  Configuration complete!
@@ -153,6 +157,10 @@ else
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
 	@echo Running chemsmart server configuration...
 	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
+	@echo Updating chemsmart project templates...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update projects || ( $(ECHO) "Error: chemsmart project template update failed." && exit 1 )
+	@echo Updating existing chemsmart server configurations...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update configs || ( $(ECHO) "Error: chemsmart server configuration update failed." && exit 1 )
 	@echo ""
 	@echo "==========================================================="
 	@echo " Configuration complete!"
@@ -224,6 +232,16 @@ test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML cove
 		-l \
 		--tb=short \
 		tests/
+
+.PHONY: test-cov-io
+test-cov-io: coverage-clean ## Branch coverage for converter.py + structure.py (target ≥90% each).
+	$(ENV_PREFIX)pytest tests/ \
+		--cov=chemsmart.io.converter \
+		--cov=chemsmart.io.molecules.structure \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage-io-target.xml \
+		-q
 
 # === Docs ===
 .PHONY: docs-lint docs-fmt docs docs-clean

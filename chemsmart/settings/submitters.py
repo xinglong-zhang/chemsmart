@@ -4,9 +4,11 @@ from abc import abstractmethod
 from typing import Optional
 
 from chemsmart.settings.executable import (
+    CRESTExecutable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
+    XTBExecutable,
 )
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -248,7 +250,8 @@ class Submitter(RegistryMixin):
 
         Returns:
             Executable: Instance of the appropriate executable handler
-            (GaussianExecutable, ORCAExecutable, or NCIPLOTExecutable)
+            (GaussianExecutable, ORCAExecutable, XTBExecutable, or
+            NCIPLOTExecutable)
             based on `job.PROGRAM`.
 
         Raises:
@@ -258,6 +261,10 @@ class Submitter(RegistryMixin):
             executable = GaussianExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "orca":
             executable = ORCAExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "xtb":
+            executable = XTBExecutable.from_servername(self.server.name)
+        elif self.job.PROGRAM.lower() == "crest":
+            executable = CRESTExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
 

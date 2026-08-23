@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from chemsmart.io.gaussian.route import GaussianRoute
@@ -122,6 +124,122 @@ class TestGaussianJobSettings:
 
 
 class TestGaussianQMMMJobSettings:
+    def test_builtin_mm_helpers(self, tmpdir):
+        amber = GaussianQMMMJobSettings(
+            low_level_force_field="AMBER=HardFirst"
+        )
+        uff = GaussianQMMMJobSettings(low_level_force_field="UFF")
+        dreiding = GaussianQMMMJobSettings(low_level_force_field="dreiding")
+        pm6 = GaussianQMMMJobSettings(low_level_force_field="PM6")
+        empty = GaussianQMMMJobSettings()
+
+        assert amber.uses_builtin_mm()
+        assert uff.uses_builtin_mm()
+        assert dreiding.uses_builtin_mm()
+        assert not pm6.uses_builtin_mm()
+        assert not empty.uses_builtin_mm()
+
+        assert amber.requires_mm_atom_info()
+        assert not uff.requires_mm_atom_info()
+        assert not pm6.requires_mm_atom_info()
+
+        assert GaussianQMMMJobSettings.format_mm_atom_label("C", None) == "C"
+        assert (
+            GaussianQMMMJobSettings.format_mm_atom_label(
+                "C", ("CT", 0.03, None, None)
+            )
+            == "C-CT-0.03"
+        )
+        assert (
+            GaussianQMMMJobSettings.format_mm_atom_label(
+                "O", ("OH", -0.65, None, None)
+            )
+            == "O-OH--0.65"
+        )
+        assert GaussianQMMMJobSettings.format_mm_link_atom(3, None) == "H 3"
+        assert (
+            GaussianQMMMJobSettings.format_mm_link_atom(
+                3, ("CT", 0.03, "HC", 0.09)
+            )
+            == "H-HC-0.09 3"
+        )
+
+        indexed = os.path.join(tmpdir, "indexed.dat")
+        with open(indexed, "w") as handle:
+            handle.write("# comment\n")
+            handle.write("2 CT 0.03 HC 0.09\n")
+            handle.write("1 OH -0.65\n")
+        records = GaussianQMMMJobSettings.load_mm_atom_info(
+            indexed, num_atoms=2
+        )
+        assert records[0][0] == "OH"
+        assert records[0][1] == -0.65
+        assert records[1][2] == "HC"
+        assert records[1][3] == 0.09
+
+        ordered = os.path.join(tmpdir, "ordered.dat")
+        with open(ordered, "w") as handle:
+            handle.write("OH -0.65\n")
+            handle.write("CT 0.03 HC 0.09\n")
+        records = GaussianQMMMJobSettings.load_mm_atom_info(
+            ordered, num_atoms=2
+        )
+        assert [r[0] for r in records] == ["OH", "CT"]
+
+        bad = os.path.join(tmpdir, "bad.dat")
+        with open(bad, "w") as handle:
+            handle.write("OH -0.65\n")
+        with pytest.raises(ValueError, match="expected 2"):
+            GaussianQMMMJobSettings.load_mm_atom_info(bad, num_atoms=2)
+
+        mixed = os.path.join(tmpdir, "mixed.dat")
+        with open(mixed, "w") as handle:
+            handle.write("1 CT 0.03\n")
+            handle.write("OH -0.65\n")
+        with pytest.raises(ValueError, match="mixes indexed and unindexed"):
+            GaussianQMMMJobSettings.load_mm_atom_info(mixed, num_atoms=2)
+
+        with pytest.raises(FileNotFoundError, match="not found"):
+            GaussianQMMMJobSettings.load_mm_atom_info(
+                os.path.join(tmpdir, "missing.dat"), num_atoms=1
+            )
+
+        short = os.path.join(tmpdir, "short.dat")
+        with open(short, "w") as handle:
+            handle.write("OH\n")
+        with pytest.raises(ValueError, match="Invalid MM atom info line"):
+            GaussianQMMMJobSettings.load_mm_atom_info(short, num_atoms=1)
+
+        bad_charge = os.path.join(tmpdir, "bad_charge.dat")
+        with open(bad_charge, "w") as handle:
+            handle.write("CT not-a-float\n")
+        with pytest.raises(ValueError, match="Invalid MM atom info line"):
+            GaussianQMMMJobSettings.load_mm_atom_info(bad_charge, num_atoms=1)
+
+        out_of_range = os.path.join(tmpdir, "oor.dat")
+        with open(out_of_range, "w") as handle:
+            handle.write("1 CT 0.03\n")
+            handle.write("3 OH -0.65\n")
+        with pytest.raises(ValueError, match="out-of-range"):
+            GaussianQMMMJobSettings.load_mm_atom_info(
+                out_of_range, num_atoms=2
+            )
+
+        missing_index = os.path.join(tmpdir, "missing_index.dat")
+        with open(missing_index, "w") as handle:
+            handle.write("1 CT 0.03\n")
+            handle.write("3 OH -0.65\n")
+        with pytest.raises(ValueError, match="missing atom indices"):
+            GaussianQMMMJobSettings.load_mm_atom_info(
+                missing_index, num_atoms=3
+            )
+
+        medium_amber = GaussianQMMMJobSettings(
+            medium_level_force_field="amber"
+        )
+        assert medium_amber.uses_builtin_mm()
+        assert medium_amber.requires_mm_atom_info()
+
     def test_qmmm_settings(self):
         settings1 = GaussianQMMMJobSettings(
             high_level_functional="b3lyp",
@@ -133,9 +251,12 @@ class TestGaussianQMMMJobSettings:
             parent_jobtype="opt",
             freq=True,
         )
-        assert settings1.route_string == "# opt freq oniom(b3lyp/6-31g(d):uff)"
+        assert (
+            settings1.route_string
+            == "# opt freq oniom(b3lyp/6-31g(d):uff) geom=connectivity"
+        )
 
-        settings2 = GaussianQMMMJobSettings(
+        settings_medium_theory_no_atoms = GaussianQMMMJobSettings(
             high_level_functional="mn15",
             high_level_basis="def2svp",
             medium_level_functional="b3lyp",
@@ -147,8 +268,29 @@ class TestGaussianQMMMJobSettings:
             parent_jobtype="sp",
         )
         assert (
+            settings_medium_theory_no_atoms.route_string
+            == "# oniom(mn15/def2svp:uff) geom=connectivity"
+        )
+        assert (
+            settings_medium_theory_no_atoms.charge_and_multiplicity_string
+            == "0 1 0 1 0 1"
+        )
+
+        settings2 = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            real_charge=0,
+            real_multiplicity=1,
+            high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
+            parent_jobtype="sp",
+        )
+        assert (
             settings2.route_string
-            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff)"
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff) geom=connectivity"
         )
 
         settings3 = GaussianQMMMJobSettings(
@@ -161,10 +303,11 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="sp",
         )
         # assert settings3.route_string == "#
-        # oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff)"
+        # oniom(mn15/def2svp:uff:b3lyp/6-31g(d):uff) geom=connectivity"
         # ValueError: For high level of theory, one should
         # specify only functional/basis or force field!
         with pytest.raises(ValueError):
@@ -180,13 +323,14 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             solvent_model="smd",
             solvent_id="toluene",
             parent_jobtype="sp",
         )
         assert (
             settings4.route_string
-            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+            == "# oniom(mn15/def2svp:b3lyp/6-31g(d):uff) geom=connectivity scrf=(smd,solvent=toluene)"
         )
 
         # settings with solvent specification for opt job
@@ -199,6 +343,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="opt",
             freq=True,
             solvent_model="smd",
@@ -206,7 +351,7 @@ class TestGaussianQMMMJobSettings:
         )
         assert (
             settings5.route_string
-            == "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+            == "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) geom=connectivity scrf=(smd,solvent=toluene)"
         )
 
         # settings with solvent specification for ts job
@@ -219,6 +364,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="ts",
             freq=True,
             solvent_model="smd",
@@ -226,7 +372,7 @@ class TestGaussianQMMMJobSettings:
         )
         assert (
             settings5.route_string
-            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) geom=connectivity scrf=(smd,solvent=toluene)"
         )
 
         # settings with solvent specification for ts job
@@ -239,6 +385,7 @@ class TestGaussianQMMMJobSettings:
             real_charge=0,
             real_multiplicity=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="ts",
             freq=False,
             numfreq=True,
@@ -247,7 +394,7 @@ class TestGaussianQMMMJobSettings:
         )
         assert (
             settings6.route_string
-            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) scrf=(smd,solvent=toluene)"
+            == "# opt=(ts,calcfc,noeigentest) freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) geom=connectivity scrf=(smd,solvent=toluene)"
         )
 
     def test_qmmm_additional_route_parameters(self):
@@ -302,6 +449,7 @@ class TestGaussianQMMMJobSettings:
             charge_total=0,
             mult_total=1,
             high_level_atoms=[1, 2, 3],
+            medium_level_atoms=[4],
             parent_jobtype="opt",
             freq=True,
             solvent_model="smd",
@@ -309,7 +457,7 @@ class TestGaussianQMMMJobSettings:
             additional_route_parameters="scf=xqc",
         )
         assert settings_solv.route_string == (
-            "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) "
+            "# opt freq oniom(mn15/def2svp:b3lyp/6-31g(d):uff) geom=connectivity "
             "scrf=(smd,solvent=water) scf=xqc"
         )
 
@@ -360,7 +508,7 @@ class TestGaussianQMMMJobSettings:
             additional_opt_options_in_route="maxstep=5",
         )
         assert s_ts.route_string == (
-            "# opt=(ts,calcfc,noeigentest,maxstep=5) oniom(mn15/def2svp:UFF)"
+            "# opt=(ts,calcfc,noeigentest,maxstep=5) oniom(mn15/def2svp:UFF) geom=connectivity"
         )
 
         # ts parent with calcall replaces calcfc
@@ -375,7 +523,7 @@ class TestGaussianQMMMJobSettings:
             additional_opt_options_in_route="calcall",
         )
         assert s_ts_calcall.route_string == (
-            "# opt=(ts,noeigentest,calcall) oniom(mn15/def2svp:UFF)"
+            "# opt=(ts,noeigentest,calcall) oniom(mn15/def2svp:UFF) geom=connectivity"
         ), "calcall should replace calcfc in ts QMMM route"
 
         # modred parent with extra opt option
@@ -390,7 +538,7 @@ class TestGaussianQMMMJobSettings:
             additional_opt_options_in_route="maxstep=10",
         )
         assert s_modred.route_string == (
-            "# opt=(modredundant,maxstep=10) oniom(b3lyp/6-31g(d):UFF)"
+            "# opt=(modredundant,maxstep=10) oniom(b3lyp/6-31g(d):UFF) geom=connectivity"
         )
 
         # without additional_opt_options_in_route, opt keyword is plain
@@ -434,7 +582,7 @@ class TestGaussianQMMMJobSettings:
             additional_opt_options_in_route="  ",
         )
         assert s_ts_blank.route_string == (
-            "# opt=(ts,calcfc,noeigentest) oniom(mn15/def2svp:UFF)"
+            "# opt=(ts,calcfc,noeigentest) oniom(mn15/def2svp:UFF) geom=connectivity"
         ), "whitespace-only opt option for ts should fall back to plain ts keyword"
 
         # same guard for modred parent
@@ -449,7 +597,7 @@ class TestGaussianQMMMJobSettings:
             additional_opt_options_in_route="",
         )
         assert s_modred_blank.route_string == (
-            "# opt=modredundant oniom(b3lyp/6-31g(d):UFF)"
+            "# opt=modredundant oniom(b3lyp/6-31g(d):UFF) geom=connectivity"
         ), "empty opt option for modred should fall back to plain opt=modredundant"
 
     def test_qmmm_settings_for_atoms(
@@ -532,6 +680,7 @@ class TestGaussianQMMMJobSettings:
             low_level_force_field="uff",
             real_charge=0,
             real_multiplicity=1,
+            medium_level_atoms=[4],
         )
         assert (
             settings1.charge_and_multiplicity_string
@@ -549,6 +698,7 @@ class TestGaussianQMMMJobSettings:
             real_multiplicity=1,
             int_charge=1,
             int_multiplicity=3,
+            medium_level_atoms=[4],
         )
         assert (
             settings2.charge_and_multiplicity_string
@@ -568,6 +718,7 @@ class TestGaussianQMMMJobSettings:
             int_multiplicity=2,
             model_charge=0,
             model_multiplicity=1,
+            medium_level_atoms=[4],
         )
         assert (
             settings3.charge_and_multiplicity_string

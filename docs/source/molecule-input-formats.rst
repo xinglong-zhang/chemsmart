@@ -165,6 +165,55 @@ calculation directory must contain exactly one xTB main output.
 
    chemsmart sub -s server gaussian -p project -f co2_ohess/co2_ohess.out sp
 
+CREST Files
+===========
+
+A CREST calculation writes its results to a **directory** (containing ``crest_conformers.xyz``, ``crest.energies``,
+``crest_dynamics.trj``, and other auxiliary files).
+
+CREST Ensemble XYZ Files
+------------------------
+
+These are standard single- or multi-frame XYZ files and can be passed directly with ``-f``: ``crest_best.xyz`` is the
+lowest-energy conformer (a single structure) and the usual starting point for follow-up DFT jobs;
+``crest_conformers.xyz`` is the conformer ensemble sorted by energy, for conformational sampling; and
+``crest_rotamers.xyz`` is the rotamer ensemble, for cases where rotamers rather than only conformers are needed as
+geometry input.
+
+.. code:: bash
+
+   # Using Gaussian via the gaussian subcommand: Optimization on CREST best conformer
+   chemsmart sub -s server gaussian -p project -f crest_best.xyz -c 0 -m 1 opt
+
+   # Using Gaussian via the gaussian subcommand: TS optimization on CREST conformer ensemble
+   chemsmart sub -s server gaussian -p project -f crest_conformers.xyz -c 0 -m 1 crest -j ts
+
+   # Using ORCA via the orca subcommand: Single-point calculation on a selected CREST rotamer
+   chemsmart sub -s server orca -p project -f crest_rotamers.xyz -i 3 -c 0 -m 1 opt
+
+   # Visualize an ensemble
+   chemsmart run mol -f crest_conformers.xyz -i ':' visualize
+   chemsmart run mol -f crest_rotamers.xyz -i ':' visualize
+
+CREST Dynamics Trajectory File
+------------------------------
+
+CREST MD trajectories are saved as ``crest_dynamics.trj``. The trajectory can be inspected with:
+
+.. code:: bash
+
+   chemsmart run mol -f crest_dynamics.trj -i ':' visualize
+
+CREST Optimization Log File
+---------------------------
+
+CREST geometry-optimization intermediates are written to ``crestopt.log``. The optimization trajectory can be inspected
+with:
+
+.. code:: bash
+
+   chemsmart run mol -f crestopt.log -i ':' visualize
+
 ChemDraw Files
 ==============
 
@@ -200,11 +249,17 @@ with aromatic ligands such as Cp, Cp\*, and benzene rings.
 .. note::
 
    -  Both binary (``.cdx``) and XML-based (``.cdxml``) ChemDraw formats are supported.
+
    -  RDKit is used internally to parse ChemDraw files and generate 3D coordinates.
-   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule.
+
+   -  For multi-molecule ChemDraw files, use ``-i`` to select a specific molecule when submitting jobs.
+
    -  3D coordinates are automatically generated from 2D structures.
-   -  Reading binary ``.cdx`` files requires Open Babel (``obabel``) to be installed. If Open Babel is not available,
-      save the file as ``.cdxml`` instead.
+
+   -  Reading binary ``.cdx`` files requires the Open Babel **CLI** (``obabel`` on ``PATH``) when RDKit cannot parse the
+      file. This is separate from the Python ``openbabel`` / ``pybel`` bindings used for generic format conversion. If
+      ``obabel`` is not available, save the file as ``.cdxml`` instead.
+
    -  Charge and multiplicity of organometallic complexes are **not** inferred from the ChemDraw file – always specify
       ``-c`` and ``-m`` explicitly.
 
@@ -214,6 +269,16 @@ with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
    # Select the 2nd molecule from a ChemDraw file with multiple structures
    chemsmart sub -s server gaussian -p project -f molecules.cdxml -i 2 -c 0 -m 1 opt
+
+.. warning::
+
+   **Converting multi-fragment ChemDraw files:** by default, ``chemsmart run convert`` (and ``FileConverter``) writes
+   only the **last** molecule, consistent with other multi-structure formats. To emit every fragment as numbered files
+   (``basename_1.ext``, ``basename_2.ext``, …), pass ``-z`` / ``--include-intermediate-structures``:
+
+   .. code:: bash
+
+      chemsmart run convert -i two_molecules.cdxml -o two_molecules.xyz -z
 
 For full details on organometallic complex support and its restrictions, see :doc:`chemdraw-organometallic`.
 
@@ -419,7 +484,22 @@ CHEMSMART automatically detects file formats based on extensions:
    file header. If detection fails, an error will be raised indicating the unsupported format. For xTB, the ``.out``
    file is resolved to its parent calculation directory so that the associated output files can be read.
 
-For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilities.
+For unsupported extensions, CHEMSMART first tries Open Babel (preferred for molecular formats such as ``.mol2``,
+``.smi``, ``.cml``, ``.mol``). If Open Babel cannot read the file, CHEMSMART falls back to ASE. Periodic / ASE-specific
+extensions (``.traj``, ``.cif``, ``.cfg``, ``.db``, VASP/POSCAR, ``.gen``, ``.castep``, ``.xsf``, ``.extxyz``, …) skip
+Open Babel and go straight to ASE, because Open Babel either cannot read them or silently drops cell / PBC information.
+
+Directory batch conversion (``--directory`` + ``--filetype``) still uses a fixed whitelist (``log``, ``com``, ``gjf``,
+``out``, ``inp``, ``xyz``, ``sdf``, ``pdb``, ``cdxml``, ``cdx``). Formats such as ``.mol2`` / ``.smi`` are available via
+single-file convert (``-i`` / ``-o``) only. See :doc:`convert-cli-options` for convert CLI options and output formats.
+
+.. note::
+
+   **Open Babel read limits:** the Open Babel → ``Molecule`` path round-trips geometry through XYZ, so bond orders,
+   residue metadata, and atom typing are **not** preserved. Non-zero formal charge and spin multiplicity are taken from
+   Open Babel when available; neutral charge is left as ``None``. Zero-dimensional inputs (e.g. SMILES) are expanded
+   with Open Babel ``make3D()`` — coordinates are a force-field guess, not experimental geometry. If ``make3D`` fails,
+   CHEMSMART logs a warning and may still return a molecule with incomplete 3D coordinates.
 
 **********
  See Also
@@ -427,7 +507,10 @@ For unsupported extensions, CHEMSMART falls back to ASE's file reading capabilit
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`xtb-cli-options`
+-  :doc:`crest-cli-options`
 -  :doc:`pymol-cli-options`
+-  :doc:`convert-cli-options`
 -  :doc:`database-workflow`
 -  :doc:`cli-overview`
 

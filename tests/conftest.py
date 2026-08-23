@@ -3,6 +3,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from textwrap import dedent
 from unittest.mock import MagicMock, patch
 
 import click
@@ -18,6 +19,7 @@ from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.crest.runner import FakeCRESTJobRunner
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
@@ -31,6 +33,7 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
 
 thermochemistry_cli_module = importlib.import_module(
@@ -118,6 +121,106 @@ def invoke_config_server():
     def _invoke(args=None):
         runner = CliRunner()
         return runner.invoke(config, ["server"] + (args or []))
+
+    return _invoke
+
+
+@pytest.fixture()
+def write_server_yaml():
+    """Return a callable that writes a server YAML file under
+    ``<config_root>/server/<name>``.
+
+    The content is dedented and left-stripped before being written, so
+    tests can pass indented triple-quoted strings.
+
+    Usage in tests::
+
+        def test_something(write_server_yaml, tmp_path):
+            path = write_server_yaml(
+                tmp_path, "A.yaml", "SERVER:\n    USER_VALUE: preserved\n"
+            )
+    """
+
+    def _write(config_root, name, content):
+        server_dir = Path(config_root) / "server"
+        server_dir.mkdir(parents=True, exist_ok=True)
+        path = server_dir / name
+        path.write_text(dedent(content).lstrip(), encoding="utf-8")
+        return path
+
+    return _write
+
+
+@pytest.fixture()
+def invoke_update_configs():
+    """Return a callable that invokes 'chemsmart update configs' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_update_configs, tmp_path):
+            result = invoke_update_configs(tmp_path, ["-s", "A"])
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.update import update
+
+    def _invoke(config_root, args=None):
+        return CliRunner().invoke(
+            update,
+            ["configs"] + (args or []),
+            env={"CHEMSMART_CONFIG_DIR": str(config_root)},
+        )
+
+    return _invoke
+
+
+@pytest.fixture()
+def read_yaml_file():
+    """Return a callable that reads and parses a YAML file at the given path."""
+
+    def _read(path):
+        return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+
+    return _read
+
+
+@pytest.fixture()
+def write_text_file():
+    """Return a callable that writes text content to a path, creating
+    parent directories as needed.
+
+    Usage in tests::
+
+        def test_something(write_text_file, tmp_path):
+            path = write_text_file(tmp_path / "a" / "b.yaml", "content\n")
+    """
+
+    def _write(path, content):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    return _write
+
+
+@pytest.fixture()
+def invoke_update_projects():
+    """Return a callable that invokes 'chemsmart update projects' via Click's CliRunner.
+
+    Usage in tests::
+
+        def test_something(invoke_update_projects, tmp_path):
+            result = invoke_update_projects(tmp_path)
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.update import update
+
+    def _invoke(config_root):
+        return CliRunner().invoke(
+            update,
+            ["projects"],
+            env={"CHEMSMART_CONFIG_DIR": str(config_root)},
+        )
 
     return _invoke
 
@@ -1755,6 +1858,64 @@ def xtb_he_outfolder(xtb_outputs_directory):
     return os.path.join(xtb_outputs_directory, "he_hess")
 
 
+# master CREST test directory
+@pytest.fixture()
+def crest_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "CRESTTests")
+
+
+# crest yaml files
+@pytest.fixture()
+def crest_yaml_settings_directory(crest_test_directory):
+    return os.path.join(crest_test_directory, "project_yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_gas(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "gas.yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_gas_project_name(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "gas")
+
+
+@pytest.fixture()
+def crest_yaml_settings_solv(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "solv.yaml")
+
+
+@pytest.fixture()
+def crest_yaml_settings_solv_project_name(crest_yaml_settings_directory):
+    return os.path.join(crest_yaml_settings_directory, "solv")
+
+
+@pytest.fixture()
+def crest_outputs_directory(crest_test_directory):
+    crest_outputs_directory = os.path.join(crest_test_directory, "outputs")
+    return os.path.abspath(crest_outputs_directory)
+
+
+@pytest.fixture()
+def crest_styrene_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "styrene_conformers")
+
+
+@pytest.fixture()
+def crest_octane_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "octane_conformers")
+
+
+@pytest.fixture()
+def crest_ts1a_constrained_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "TS1A_constrained_conformers")
+
+
+@pytest.fixture()
+def crest_hexane_failed_outfolder(crest_outputs_directory):
+    return os.path.join(crest_outputs_directory, "hexane_failed_conformers")
+
+
 # test for structure.py
 @pytest.fixture()
 def structure_test_directory(test_data_directory):
@@ -1976,6 +2137,30 @@ def orca_jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def orca_jobrunner_scratch(tmpdir, pbs_server):
     return FakeORCAJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def xtb_jobrunner_no_scratch(pbs_server):
+    return FakeXTBJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def xtb_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeXTBJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def crest_jobrunner_no_scratch(pbs_server):
+    return FakeCRESTJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def crest_jobrunner_scratch(tmpdir, pbs_server):
+    return FakeCRESTJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
 
@@ -2890,3 +3075,41 @@ def database_ase_file(database_test_directory):
 @pytest.fixture()
 def database_empty_file(database_test_directory):
     return os.path.join(database_test_directory, "empty.db")
+
+
+# ---------------------------------------------------------------------------
+# Reusable fixture: minimal server YAML without XTB/CREST sections
+# (simulates a pre-xTB CHEMSMART install)
+# ---------------------------------------------------------------------------
+
+_LEGACY_SERVER_YAML = """\
+SERVER:
+    SCHEDULER: PBS
+    QUEUE_NAME: normal
+    NUM_HOURS: 24
+    MEM_GB: 375
+    NUM_CORES: 64
+    NUM_GPUS: 0
+    NUM_THREADS: 64
+    SUBMIT_COMMAND: qsub
+    SCRATCH_DIR: null
+    USE_HOSTS: false
+GAUSSIAN:
+    EXEFOLDER: ~/programs/g16
+    LOCAL_RUN: True
+ORCA:
+    EXEFOLDER: ~/programs/orca_6_0_0
+    LOCAL_RUN: False
+"""
+
+
+@pytest.fixture()
+def legacy_server_yaml(tmp_path):
+    """Path to a temporary server YAML that has no XTB or CREST block.
+
+    Simulates a server configuration written before xTB support was added to
+    CHEMSMART, so that tests can verify the graceful fallback behaviour.
+    """
+    yaml_path = tmp_path / "legacy_server.yaml"
+    yaml_path.write_text(_LEGACY_SERVER_YAML)
+    return str(yaml_path)

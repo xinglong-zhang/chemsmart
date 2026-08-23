@@ -999,46 +999,14 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If charge or multiplicity is not specified
         """
-        charge = self.settings.charge
-        multiplicity = self.settings.multiplicity
-
-        # If missing, attempt to populate from common QMMM-related fields.
-        # Common names across settings: charge_qm,
-        # charge_intermediate, charge_total
-        # and mult_qm, mult_intermediate, mult_total.
-        if charge is None or multiplicity is None:
-            # order of preference: intermediate (QM2) -> qm -> total
-            candidate_charge_attrs = [
-                "charge_intermediate",
-                "charge_qm",
-                "charge_total",
-                "charge",
-            ]
-            candidate_mult_attrs = [
-                "mult_intermediate",
-                "mult_qm",
-                "mult_total",
-                "multiplicity",
-            ]
-
-            for attr in candidate_charge_attrs:
-                if charge is None:
-                    charge = getattr(self.settings, attr, None)
-            for attr in candidate_mult_attrs:
-                if multiplicity is None:
-                    multiplicity = getattr(self.settings, attr, None)
-
-            # if we found values, assign back to settings for downstream use
-            if charge is not None:
-                logger.debug(
-                    f"Populating settings.charge from QMMM fields: {charge}"
-                )
-                self.settings.charge = charge
-            if multiplicity is not None:
-                logger.debug(
-                    f"Populating settings.multiplicity from QMMM fields: {multiplicity}"
-                )
-                self.settings.multiplicity = multiplicity
+        # QMMM coordinate section uses the high-level (QM) region only.
+        # Intermediate/total charges belong in the %qmmm block.
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            charge = self.settings.charge_high
+            multiplicity = self.settings.mult_high
+        else:
+            charge = self.settings.charge
+            multiplicity = self.settings.multiplicity
 
         assert (
             charge is not None and multiplicity is not None

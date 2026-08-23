@@ -14,7 +14,7 @@ from chemsmart.io.gaussian.output import (
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
-from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
@@ -283,9 +283,21 @@ class TestGaussian16Input:
         )
         assert g16_oniom.molecule.symbols.formula == "CH3CH3"
         assert g16_oniom.partition == {
-            "high level atoms": ["2-5"],
-            "low level atoms": ["6-9"],
+            "high level atoms": ["1-4"],
+            "low level atoms": ["5-8"],
         }
+        assert g16_oniom.molecule.num_atoms == 8
+        assert g16_oniom.molecule.high_level_atoms == [1, 2, 3, 4]
+        np.testing.assert_allclose(
+            g16_oniom.molecule.positions[0],
+            [-0.48611108, -0.34722222, 0.00000000],
+        )
+        from_filepath = Molecule.from_filepath(gaussian_qmmm_inputfile_2layer)
+        assert from_filepath.high_level_atoms == [1, 2, 3, 4]
+        np.testing.assert_allclose(
+            from_filepath.positions[0],
+            [-0.48611108, -0.34722222, 0.00000000],
+        )
 
     def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfile_3layer):
         g16_oniom = Gaussian16QMMMInput(
@@ -307,6 +319,314 @@ class TestGaussian16Input:
         assert g16_oniom.real_multiplicity == 1
         assert g16_oniom.int_multiplicity == 1
         assert g16_oniom.model_multiplicity == 1
+
+    def test_oniom_charge_multiplicity_2layer(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert g16_oniom.oniom_charge == {
+            "charge_total": "0",
+            "model_charge": "0",
+        }
+        assert g16_oniom.oniom_multiplicity == {
+            "real_multiplicity": "1",
+            "model_multiplicity": "1",
+        }
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.int_charge is None
+        assert g16_oniom.int_multiplicity is None
+
+    def test_oniom_negative_charge_line(self, tmp_path):
+        com = tmp_path / "charged_oniom.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "-1 1 0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " H   -1.0  0.0  0.0 H\n"
+            " H    0.0  1.0  0.0 H\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            " H    1.0  0.0  1.5 L\n"
+            " H   -1.0  0.0  1.5 L\n"
+            " H    0.0  1.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == -1
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.molecule.num_atoms == 8
+        assert g16_oniom.molecule.chemical_symbols[0] == "C"
+        assert g16_oniom.partition == {
+            "high level atoms": ["1-4"],
+            "low level atoms": ["5-8"],
+        }
+
+    def test_oniom_single_pair_charge_defaults_model(self, tmp_path):
+        com = tmp_path / "single_pair_oniom.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " H   -1.0  0.0  0.0 H\n"
+            " H    0.0  1.0  0.0 H\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            " H    1.0  0.0  1.5 L\n"
+            " H   -1.0  0.0  1.5 L\n"
+            " H    0.0  1.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.molecule.num_atoms == 8
+
+    def test_oniom_three_layer_full_charge_line_maps_model(self, tmp_path):
+        com = tmp_path / "three_layer_charges.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:am1:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "1 2 3 4 5 6 7 8 9 10 11 12\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " C    0.0  0.0  1.5 M H 1\n"
+            " H    1.0  0.0  1.5 M\n"
+            " C    0.0  0.0  3.0 L H 3\n"
+            " H    1.0  0.0  3.0 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 1
+        assert g16_oniom.int_charge == 3
+        assert g16_oniom.model_charge == 7
+        assert g16_oniom.real_multiplicity == 2
+        assert g16_oniom.int_multiplicity == 4
+        assert g16_oniom.model_multiplicity == 8
+
+    def test_oniom_freeze_flags_are_preserved(self, tmp_path):
+        com = tmp_path / "frozen_oniom.com"
+        com.write_text(
+            "%chk=frozen.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            " C    0    0.0  0.0  0.0 H\n"
+            " H    0    1.0  0.0  0.0 H\n"
+            " C   -1    0.0  0.0  1.5 L H 1\n"
+            " H   -1    1.0  0.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.molecule.num_atoms == 4
+        np.testing.assert_allclose(
+            g16_oniom.molecule.positions[2], [0.0, 0.0, 1.5]
+        )
+        assert g16_oniom.molecule.frozen_atoms == [0, 0, -1, -1]
+        from_filepath = Molecule.from_filepath(str(com))
+        assert from_filepath.frozen_atoms == [0, 0, -1, -1]
+        assert from_filepath.high_level_atoms == [1, 2]
+
+    def test_oniom_mm_parameters_extracted_after_connectivity(self, tmp_path):
+        com = tmp_path / "oniom_mm_params.com"
+        com.write_text(
+            "%chk=mm.chk\n"
+            "# oniom(hf/sto-3g:AMBER=HardFirst) geom=connectivity\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            "C-CT-0.03      0.0 0.0 0.0 H\n"
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1\n"
+            "\n"
+            "1 2 1.0\n"
+            "2\n"
+            "\n"
+            "HrmBnd1 CT OH HC 50.0 109.5\n"
+            "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert isinstance(g16_oniom.molecule, QMMMMolecule)
+        assert (
+            "HrmBnd1 CT OH HC 50.0 109.5" in g16_oniom.molecule.mm_parameters
+        )
+        assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in (
+            g16_oniom.molecule.mm_parameters
+        )
+
+    def test_oniom_connectivity_only_has_no_mm_parameters(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert isinstance(g16_oniom.molecule, QMMMMolecule)
+        assert g16_oniom.molecule.mm_parameters is None
+
+    def test_oniom_route_without_layer_labels_returns_plain_molecule(
+        self, tmp_path
+    ):
+        com = tmp_path / "oniom_plain.com"
+        com.write_text(
+            "%chk=plain.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0\n"
+            " H    1.0  0.0  0.0\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        mol = g16_oniom.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+
+    def test_oniom_three_layer_short_charge_line(self, tmp_path):
+        com = tmp_path / "three_layer_short_charge.com"
+        com.write_text(
+            "%chk=short.chk\n"
+            "# oniom(hf/sto-3g:hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 M\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.int_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.int_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+
+    def test_oniom_model_charge_defaults_when_absent(self, tmp_path):
+        """Fallback when model charge/mult keys are missing from the ONIOM dict."""
+        from unittest.mock import patch
+
+        com = tmp_path / "fallback.com"
+        com.write_text(
+            "%chk=fallback.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 L\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        with patch.object(
+            g16,
+            "_get_oniom_charge_and_multiplicity",
+            return_value=(
+                {"charge_total": "-1"},
+                {"real_multiplicity": "2"},
+            ),
+        ):
+            assert g16.model_charge == -1
+            assert g16.model_multiplicity == 2
+
+    def test_oniom_partition_recursion_error_is_tolerated(self, tmp_path):
+        com = tmp_path / "recurse.com"
+        com.write_text(
+            "%chk=recurse.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 L\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        from unittest.mock import PropertyMock, patch
+
+        with patch.object(
+            type(g16),
+            "partition",
+            new_callable=PropertyMock,
+            side_effect=RecursionError,
+        ):
+            charge, mult = g16._get_oniom_charge_and_multiplicity()
+        assert charge["charge_total"] == "0"
+        assert mult["real_multiplicity"] == "1"
+
+    def test_oniom_mm_parameters_empty_parts_and_groups(self):
+        """Cover empty groups/lines and non-float connectivity tokens."""
+
+        class _Fake:
+            content_groups = [
+                ["header"],
+                ["title"],
+                ["0 1", "C 0 0 0 H"],
+                [],
+                ["   "],
+                ["1 2 foo"],
+                ["HrmBnd1 CT OH HC 50.0 109.5"],
+            ]
+
+            def _get_mm_parameters_text(self):
+                return Gaussian16QMMMInput._get_mm_parameters_text(self)
+
+        params = _Fake()._get_mm_parameters_text()
+        assert "HrmBnd1" in params
+
+    def test_oniom_mm_parameters_skips_empty_and_non_mm_groups(self, tmp_path):
+        com = tmp_path / "mm_edge.com"
+        # content_groups layout depends on blank-line splitting; include
+        # empty groups, a bogus non-connectivity/non-MM block, and MM params.
+        com.write_text(
+            "%chk=mm_edge.chk\n"
+            "# oniom(hf/sto-3g:AMBER=HardFirst) geom=connectivity\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            "C-CT-0.03      0.0 0.0 0.0 H\n"
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1\n"
+            "\n"
+            "1 2 foo\n"
+            "\n"
+            "\n"
+            "not-a-mm-keyword 1 2 3\n"
+            "\n"
+            "HrmBnd1 CT OH HC 50.0 109.5\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        params = g16._get_mm_parameters_text()
+        assert params is not None
+        assert "HrmBnd1 CT OH HC 50.0 109.5" in params
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
@@ -2080,6 +2400,8 @@ class TestGaussian16Output:
     def test_read_oniom_outputfile(self, gaussian_oniom_outputfile):
         assert os.path.exists(gaussian_oniom_outputfile)
         g16_oniom = Gaussian16Output(filename=gaussian_oniom_outputfile)
+        assert g16_oniom.is_oniom
+        assert "high level atoms" in g16_oniom.oniom_partition
         assert g16_oniom.normal_termination is False
         assert g16_oniom.oniom_cutting_bonds == {
             (49, 50): (0.700189, 0.700189),

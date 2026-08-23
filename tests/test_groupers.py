@@ -1529,10 +1529,12 @@ class Test_conformer_ids_functionality:
 
     def test_traj_conformer_ids_original_indices(self):
         """Test that traj job correctly sets original conformer indices."""
+        from ase.build import molecule as ase_molecule
+
         from chemsmart.io.molecules.structure import Molecule
 
-        # Create test molecules simulating a trajectory
-        mol = Molecule.from_pubchem(identifier="CO")
+        # Local ASE methanol — avoid flaky live PubChem for a trivial fixture.
+        mol = Molecule.from_ase_atoms(ase_molecule("CH3OH"))
         molecules = [mol.copy() for _ in range(18)]
 
         # Simulate traj behavior: select last 50% (indices 10-18 in original)
@@ -1733,9 +1735,11 @@ class Test_edge_cases:
 
     def test_two_molecules_grouping(self):
         """Test grouping with minimum number of molecules (2)."""
+        from ase.build import molecule as ase_molecule
+
         from chemsmart.io.molecules.structure import Molecule
 
-        mol1 = Molecule.from_pubchem(identifier="CO")
+        mol1 = Molecule.from_ase_atoms(ase_molecule("CH3OH"))
         mol2 = mol1.copy()
 
         grouper = BasicRMSDGrouper([mol1, mol2], threshold=0.5)

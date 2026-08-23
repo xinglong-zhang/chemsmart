@@ -2935,6 +2935,72 @@ class TestORCAQMMMJobSettings:
         assert s2.charge == -1
         assert s2.multiplicity == 2
 
+        # re_init keeps high-first priority after overrides
+        s1.charge_high = 5
+        s1.mult_high = 1
+        s1.re_init_and_validate()
+        assert s1.charge == 5
+        assert s1.multiplicity == 1
+
+    def test_qmmm_xyz_line_uses_charge_high_not_total(self):
+        from io import StringIO
+        from unittest.mock import MagicMock
+
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        settings = ORCAQMMMJobSettings(
+            charge_high=1,
+            mult_high=2,
+            charge_total=0,
+            mult_total=1,
+        )
+        job = MagicMock()
+        job.settings = settings
+        job.jobrunner = MagicMock()
+        buf = StringIO()
+        ORCAInputWriter(job=job)._write_charge_and_multiplicity(buf)
+        assert buf.getvalue() == "* xyz 1 2\n"
+
+    def test_qmmm_xyz_line_does_not_fall_back_to_total_charge(self):
+        from io import StringIO
+        from unittest.mock import MagicMock
+
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        settings = ORCAQMMMJobSettings(
+            charge_total=0,
+            mult_total=1,
+        )
+        assert settings.charge == 0
+        assert settings.charge_high is None
+        job = MagicMock()
+        job.settings = settings
+        job.jobrunner = MagicMock()
+        with pytest.raises(
+            AssertionError, match="Charge and multiplicity must be specified"
+        ):
+            ORCAInputWriter(job=job)._write_charge_and_multiplicity(StringIO())
+
+    def test_route_string_without_parent_jobtype(self):
+        """Unset parent_jobtype should not crash route generation."""
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings(
+            high_level_functional="B3LYP",
+            high_level_basis="def2-SVP",
+            low_level_method="XTB",
+            jobtype="QMMM",
+            charge_high=0,
+            mult_high=1,
+            charge_total=0,
+            mult_total=1,
+            high_level_atoms="1-5",
+            parent_jobtype=None,
+        )
+        route = s._get_level_of_theory_string()
+        assert "QMMM" in route
+        assert "B3LYP" in route.upper() or "b3lyp" in route.lower()
+
     def test_partition_string_empty_and_none(self):
         """Empty string or None should return empty partition block."""
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
@@ -2945,6 +3011,95 @@ class TestORCAQMMMJobSettings:
 
         s.high_level_atoms = None
         assert s._get_partition_string() == ""
+
+    def test_qmmm_block_uses_orca_keywords(self):
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        s = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            high_level_functional="MN15",
+            high_level_basis="def2-SVP",
+            intermediate_level_functional="B3LYP",
+            intermediate_level_basis="def2-SVP",
+            high_level_atoms="1-3",
+            charge_high=0,
+            mult_high=2,
+            charge_total=0,
+            mult_total=2,
+            high_level_h_bond_length={("C", "H"): 1.09, "N_H": 1.01},
+            delete_la_double_counting=True,
+            delete_la_bond_double_counting_atoms=True,
+            embedding_type="electronic",
+            parent_jobtype="opt",
+        )
+        block = s.qmmm_block
+        assert 'QM2CUSTOMMETHOD "B3LYP"' in block
+        assert 'QM2CUSTOMMETHOD "B3LYP" end' not in block
+        assert 'QM2CUSTOMBASIS "def2-SVP"' in block
+        assert 'QM2CUSTOMBASIS "def2-SVP" end' not in block
+        assert "Dist_C_HLA 1.09" in block
+        assert "Dist_N_HLA 1.01" in block
+        assert "DeleteLADoubleCounting true" in block
+        assert "Delete_LA_Double_Counting" not in block
+        assert "Embedding" not in block
+        assert "ORCAFFFilename" not in block
+        route = s.qmmm_route_string
+        assert "QM/QM2" in route
+
+        custom_file = ORCAQMMMJobSettings(
+            jobtype="QM/QM2",
+            high_level_functional="MN15",
+            high_level_basis="def2-SVP",
+            intermediate_level_method="myQM2Method.txt",
+            high_level_atoms="1-3",
+            charge_high=0,
+            mult_high=2,
+            charge_total=0,
+            mult_total=2,
+        )
+        custom_block = custom_file.qmmm_block
+        assert 'QM2CustomFile "myQM2Method.txt"' in custom_block
+        assert 'QM2CustomFile "myQM2Method.txt" end' not in custom_block
+
+    def test_embedding_type_helpers(self, tmp_path):
+        from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
+
+        mechanical = ORCAQMMMJobSettings(
+            jobtype="QMMM",
+            embedding_type="mechanical",
+            high_level_atoms="1-3",
+            charge_high=0,
+            mult_high=1,
+            charge_total=0,
+            mult_total=1,
+            low_level_method="system.ORCAFF.prms",
+            high_level_h_bond_length={("C", "X"): 1.2, ("O", "HLA"): 0.98},
+        )
+        assert mechanical._get_embedding_type() == "Embedding Mechanical"
+        block = mechanical.qmmm_block
+        assert "Embedding Mechanical" in block
+        assert "Dist_C_X 1.2" in block
+        assert "Dist_O_HLA 0.98" in block
+
+        electrostatic = ORCAQMMMJobSettings(embedding_type="electrostatic")
+        assert electrostatic._get_embedding_type() is None
+
+        invalid = ORCAQMMMJobSettings(embedding_type="invalid")
+        with pytest.raises(ValueError, match="Invalid embedding type"):
+            invalid._get_embedding_type()
+
+        h_file = tmp_path / "QM_H_dist.txt"
+        h_file.write_text("C 1.09\n")
+        from_file = ORCAQMMMJobSettings(high_level_h_bond_length=str(h_file))
+        assert from_file._get_h_bond_length() == (
+            f'H_Dist_FileName "{h_file}"'
+        )
+
+        missing = ORCAQMMMJobSettings(
+            high_level_h_bond_length=str(tmp_path / "missing.txt")
+        )
+        with pytest.raises(AssertionError, match="does not exist"):
+            missing._get_h_bond_length()
 
 
 class TestORCANEB:

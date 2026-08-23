@@ -247,6 +247,10 @@ def read_molecular_job_yaml(filename, program="gaussian"):
             from chemsmart.settings.orca import ORCAJobSettings
 
             default_config = ORCAJobSettings.default().__dict__
+        elif program == "xtb":
+            from chemsmart.jobs.xtb.settings import XTBJobSettings
+
+            default_config = XTBJobSettings.default().__dict__
         else:
             # other programs may be implemented in future
             pass
