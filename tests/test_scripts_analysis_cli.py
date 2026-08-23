@@ -1,0 +1,1165 @@
+"""
+Tests for the larger standalone analysis CLI scripts under
+``chemsmart/scripts`` (fmo, fukui, plot_dias, structure_filter,
+generate_isotope_data, get_thermochemistry).
+
+Underlying analysis classes are mocked so these tests exercise only the
+CLI argument-parsing/dispatch logic, without real quantum-chemistry
+output files or real computation.
+"""
+
+import textwrap
+from unittest.mock import MagicMock, patch
+
+import pytest
+from click.testing import CliRunner
+
+
+class TestFmoScript:
+    def test_closed_shell_system(self):
+        from chemsmart.scripts.fmo import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fmo.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fmo.Gaussian16Output") as mock_cls,
+        ):
+            mock_output = MagicMock()
+            mock_output.multiplicity = 1
+            mock_output.homo_energy = -5.0
+            mock_output.lumo_energy = -1.0
+            mock_output.fmo_gap = 4.0
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.log"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
+    def test_closed_shell_missing_energies_returns_early(self):
+        from chemsmart.scripts.fmo import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fmo.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fmo.Gaussian16Output") as mock_cls,
+        ):
+            mock_output = MagicMock()
+            mock_output.multiplicity = 1
+            mock_output.homo_energy = None
+            mock_output.lumo_energy = None
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.log"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
+    def test_open_shell_system_kcal_mol_unit(self):
+        from chemsmart.scripts.fmo import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fmo.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fmo.ORCAOutput") as mock_cls,
+        ):
+            mock_output = MagicMock()
+            mock_output.multiplicity = 2
+            mock_output.alpha_homo_energy = -5.0
+            mock_output.alpha_lumo_energy = -1.0
+            mock_output.beta_homo_energy = -6.0
+            mock_output.beta_lumo_energy = -0.5
+            mock_output.somo_energies = [-3.0]
+            mock_output.highest_somo_energy = -3.0
+            mock_output.lowest_somo_energy = -3.0
+            mock_output.num_unpaired_electrons = 1
+            mock_output.alpha_fmo_gap = 4.0
+            mock_output.beta_fmo_gap = 5.5
+            mock_output.fmo_gap = 2.0
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.out", "-u", "kcal/mol"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
+    def test_unknown_program_raises(self):
+        from chemsmart.scripts.fmo import entry_point
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.scripts.fmo.get_program_type_from_file",
+            return_value="unknown",
+        ):
+            with pytest.raises(TypeError, match="unknown filetype"):
+                runner.invoke(
+                    entry_point,
+                    ["-f", "some.txt"],
+                    catch_exceptions=False,
+                )
+
+
+class TestFukuiScript:
+    def test_requires_at_least_one_radical_file(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with pytest.raises(ValueError, match="At least one"):
+            runner.invoke(
+                entry_point,
+                ["-n", "neutral.log"],
+                catch_exceptions=False,
+            )
+
+    def test_mulliken_mode_with_cation_and_anion(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+
+        def make_output(shift):
+            output = MagicMock()
+            output.energies = [-100.0 + shift]
+            output.mulliken_atomic_charges = {"1C": 0.1 + shift}
+            return output
+
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                make_output(0.0),
+                make_output(0.1),
+                make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                [
+                    "-n",
+                    "neutral.log",
+                    "-c",
+                    "cation.log",
+                    "-a",
+                    "anion.log",
+                ],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
+    def test_unknown_mode_rejected_by_cli(self):
+        """``-m`` is restricted to a fixed choice set at the CLI level."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "-n",
+                "neutral.log",
+                "-c",
+                "cation.log",
+                "-m",
+                "bogus",
+            ],
+        )
+        assert result.exit_code != 0
+
+    def test_unknown_program_raises(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.scripts.fukui.get_program_type_from_file",
+            return_value="unknown",
+        ):
+            with pytest.raises(TypeError, match="unknown filetype"):
+                runner.invoke(
+                    entry_point,
+                    ["-n", "neutral.txt", "-c", "cation.txt"],
+                    catch_exceptions=False,
+                )
+
+    @staticmethod
+    def _make_output(shift):
+        output = MagicMock()
+        output.energies = [-100.0 + shift]
+        output.mulliken_atomic_charges = {"1C": 0.1 + shift}
+        output.natural_charges = {"1C": 0.2 + shift}
+        output.hirshfeld_charges = {"1C": 0.3 + shift}
+        output.hirshfeld_cm5_charges = {"1C": 0.4 + shift}
+        return output
+
+    def test_cation_only_skips_anion_and_global_indices(self):
+        """With no radical anion file, the global electrophilicity
+        block is skipped entirely (only 2 outputs constructed) and the
+        fukui_plus/fukui_zero/fukui_dual default-0.0 branches run."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_anion_only_skips_cation_and_global_indices(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_orca_dispatch_with_cation_and_anion(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.2),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                [
+                    "-n",
+                    "neutral.out",
+                    "-c",
+                    "cation.out",
+                    "-a",
+                    "anion.out",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_orca_cation_only(self):
+        """Covers the orca branch's own radical_anion_filename-is-None
+        skip arm (the cation-only/anion-only gaussian equivalents are
+        already covered above, but not for the orca branch)."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.out", "-c", "cation.out"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_orca_anion_only(self):
+        """Covers the orca branch's own radical_cation_filename-is-None
+        skip arm."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.out", "-a", "anion.out"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_nbo_mode_cation_only(self):
+        """Covers the nbo mode block's own cation/anion-present skip
+        arms (test_each_charge_mode_with_gaussian always supplies
+        both)."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log", "-m", "nbo"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_hirshfeld_mode_anion_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log", "-m", "hirshfeld"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_nbo_mode_anion_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log", "-m", "nbo"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_hirshfeld_mode_cation_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log", "-m", "hirshfeld"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_cm5_mode_cation_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-c", "cation.log", "-m", "cm5"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_cm5_mode_anion_only(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                ["-n", "neutral.log", "-a", "anion.log", "-m", "cm5"],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_unknown_mode_direct_call_raises_value_error(self):
+        """The CLI's -m/--mode option is restricted to a fixed Choice
+        set, making the `else: raise ValueError` branch for an unknown
+        mode unreachable through the real CLI. Call the underlying
+        callback directly (bypassing Click's option validation) to
+        exercise it as a defensive-programming safeguard."""
+        from chemsmart.scripts.fukui import entry_point
+
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.1),
+            ]
+            with pytest.raises(ValueError, match="Unknown mode"):
+                entry_point.callback(
+                    neutral_filename="neutral.log",
+                    radical_cation_filename="cation.log",
+                    mode="bogus",
+                )
+
+    @pytest.mark.parametrize("mode", ["nbo", "hirshfeld", "cm5"])
+    def test_each_charge_mode_with_gaussian(self, mode):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.2),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                [
+                    "-n",
+                    "neutral.log",
+                    "-c",
+                    "cation.log",
+                    "-a",
+                    "anion.log",
+                    "-m",
+                    mode,
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+    def test_cm5_mode_requires_gaussian(self):
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.2),
+                self._make_output(-0.1),
+            ]
+            with pytest.raises(
+                AssertionError, match="only available for Gaussian"
+            ):
+                runner.invoke(
+                    entry_point,
+                    [
+                        "-n",
+                        "neutral.out",
+                        "-c",
+                        "cation.out",
+                        "-a",
+                        "anion.out",
+                        "-m",
+                        "cm5",
+                    ],
+                    catch_exceptions=False,
+                )
+
+    def test_asymmetric_energies_computes_nonzero_electrophilicity(self):
+        """Covers the non-zero chemical_hardness branch (the warning
+        branch is exercised by test_mulliken_mode_with_cation_and_anion,
+        whose symmetric +/-0.1 shifts happen to give exactly zero
+        hardness)."""
+        from chemsmart.scripts.fukui import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fukui.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
+        ):
+            mock_cls.side_effect = [
+                self._make_output(0.0),
+                self._make_output(0.3),
+                self._make_output(-0.1),
+            ]
+            result = runner.invoke(
+                entry_point,
+                [
+                    "-n",
+                    "neutral.log",
+                    "-c",
+                    "cation.log",
+                    "-a",
+                    "anion.log",
+                ],
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+
+
+class TestPlotDiasScript:
+    def test_gaussian_dispatch(self):
+        from chemsmart.scripts.plot_dias import entry_point
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.scripts.plot_dias.GaussianDIASLogFolder"
+        ) as mock_cls:
+            mock_folder = MagicMock()
+            mock_cls.return_value = mock_folder
+            result = runner.invoke(
+                entry_point,
+                ["-p", "gaussian", "-a", "1", "-b", "2"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_folder.write_data.assert_called_once()
+        mock_folder.plot_dias.assert_called_once()
+
+    def test_orca_dispatch(self):
+        from chemsmart.scripts.plot_dias import entry_point
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.scripts.plot_dias.ORCADIASOutFolder"
+        ) as mock_cls:
+            mock_folder = MagicMock()
+            mock_cls.return_value = mock_folder
+            result = runner.invoke(
+                entry_point,
+                ["-p", "orca", "-a", "1", "-b", "2"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_folder.write_data.assert_called_once()
+
+    def test_unknown_program_raises(self):
+        from chemsmart.scripts.plot_dias import entry_point
+
+        runner = CliRunner()
+        with pytest.raises(TypeError, match="Unknown program"):
+            runner.invoke(
+                entry_point,
+                ["-p", "xtb", "-a", "1", "-b", "2"],
+                catch_exceptions=False,
+            )
+
+    def test_requires_atom_numbers(self):
+        from chemsmart.scripts.plot_dias import entry_point
+
+        runner = CliRunner()
+        result = runner.invoke(entry_point, ["-p", "gaussian"])
+        assert result.exit_code != 0
+
+
+class TestStructureFilterScript:
+    def test_basic_grouping_run(self):
+        from chemsmart.scripts.structure_filter import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with (
+                patch(
+                    "chemsmart.scripts.structure_filter.BaseFolder"
+                ) as mock_folder_cls,
+                patch(
+                    "chemsmart.scripts.structure_filter.Molecule.from_filepath"
+                ) as mock_from_filepath,
+                patch(
+                    "chemsmart.scripts.structure_filter.StructureGrouperFactory"
+                ) as mock_factory,
+            ):
+                mock_folder = MagicMock()
+                mock_folder.get_all_files_in_current_folder_by_suffix.return_value = [
+                    "mol_c1.log",
+                    "mol_c2.log",
+                ]
+                mock_folder_cls.return_value = mock_folder
+                mock_from_filepath.return_value = MagicMock()
+
+                mock_grouper = MagicMock()
+                mock_grouper.group.return_value = ([[0], [1]], [[0], [1]])
+                mock_grouper.unique.return_value = [MagicMock(), MagicMock()]
+                mock_factory.create.return_value = mock_grouper
+
+                result = runner.invoke(
+                    entry_point,
+                    ["-d", ".", "-t", "log"],
+                    catch_exceptions=False,
+                )
+
+            assert result.exit_code == 0, result.output
+            mock_factory.create.assert_called_once()
+
+    def test_grouper_creation_error_propagates(self):
+        from chemsmart.scripts.structure_filter import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with (
+                patch(
+                    "chemsmart.scripts.structure_filter.BaseFolder"
+                ) as mock_folder_cls,
+                patch(
+                    "chemsmart.scripts.structure_filter.Molecule.from_filepath"
+                ) as mock_from_filepath,
+                patch(
+                    "chemsmart.scripts.structure_filter.StructureGrouperFactory"
+                ) as mock_factory,
+            ):
+                mock_folder = MagicMock()
+                mock_folder.get_all_files_in_current_folder_by_suffix.return_value = [
+                    "mol_c1.log",
+                ]
+                mock_folder_cls.return_value = mock_folder
+                mock_from_filepath.return_value = MagicMock()
+                mock_factory.create.side_effect = RuntimeError("boom")
+
+                with pytest.raises(RuntimeError, match="boom"):
+                    runner.invoke(
+                        entry_point,
+                        ["-d", ".", "-t", "log"],
+                        catch_exceptions=False,
+                    )
+
+
+class TestGenerateIsotopeData:
+    def test_parse_isotope_file_with_natural_abundance(self, tmp_path):
+        from chemsmart.scripts.generate_isotope_data import (
+            parse_isotope_file,
+        )
+
+        isotope_txt = tmp_path / "isotopes.txt"
+        isotope_txt.write_text(textwrap.dedent("""\
+                Atomic Number = 1
+                Mass Number = 1
+                Relative Atomic Mass = 1.00782503(1)
+                Isotopic Composition = 0.999885(70)
+                Atomic Number = 1
+                Mass Number = 2
+                Relative Atomic Mass = 2.01410178(1)
+                Isotopic Composition = 0.000115(70)
+                """))
+
+        isotopes = parse_isotope_file(str(isotope_txt))
+
+        assert 1 in isotopes
+        assert isotopes[1]["most_abundant"]["mass_number"] == 1
+        assert isotopes[1]["weighted_atomic_mass"] == pytest.approx(
+            1.00782503, rel=1e-3
+        )
+
+    def test_parse_isotope_file_radioactive_element_fallback(self, tmp_path):
+        from chemsmart.scripts.generate_isotope_data import (
+            parse_isotope_file,
+        )
+
+        # Technetium (Z=43): no natural abundance, falls back to most
+        # stable mass number 98 per `most_stable_mass_numbers`.
+        isotope_txt = tmp_path / "isotopes_tc.txt"
+        isotope_txt.write_text(textwrap.dedent("""\
+                Atomic Number = 43
+                Mass Number = 98
+                Relative Atomic Mass = 97.9072124(1)
+                Isotopic Composition =
+                """))
+
+        isotopes = parse_isotope_file(str(isotope_txt))
+
+        assert isotopes[43]["most_abundant"]["mass_number"] == 98
+        assert isotopes[43]["weighted_atomic_mass"] == pytest.approx(
+            97.9072124, rel=1e-6
+        )
+
+    def test_parse_isotope_file_skips_irrelevant_lines(self, tmp_path):
+        """Lines matching none of the four recognized prefixes (e.g. a
+        blank line or file header) are simply skipped."""
+        from chemsmart.scripts.generate_isotope_data import (
+            parse_isotope_file,
+        )
+
+        isotope_txt = tmp_path / "isotopes.txt"
+        isotope_txt.write_text(textwrap.dedent("""\
+                Some irrelevant header line
+
+                Atomic Number = 1
+                Mass Number = 1
+                Relative Atomic Mass = 1.00782503(1)
+                Isotopic Composition = 0.999885(70)
+                """))
+
+        isotopes = parse_isotope_file(str(isotope_txt))
+
+        assert 1 in isotopes
+
+
+class TestGetThermochemistryScript:
+    def _make_thermo_mock(self):
+        thermo = MagicMock()
+        thermo.electronic_energy = -100.0
+        thermo.zero_point_energy = 0.05
+        thermo.enthalpy = -99.9
+        thermo.qrrho_enthalpy = -99.9
+        thermo.entropy_times_temperature = -0.02
+        thermo.qrrho_entropy_times_temperature = -0.02
+        thermo.gibbs_free_energy = -99.92
+        thermo.qrrho_gibbs_free_energy = -99.92
+        thermo.qrrho_gibbs_free_energy_qh = -99.92
+        thermo.qrrho_gibbs_free_energy_qs = -99.92
+        thermo.imaginary_frequencies = []
+        thermo.jobtype = "opt"
+        thermo.vibrational_frequencies = [100.0]
+        return thermo
+
+    def test_default_run_writes_results(self, tmp_path):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        log_file = tmp_path / "mol.log"
+        log_file.write_text("dummy")
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", str(log_file)],
+                    catch_exceptions=False,
+                )
+
+            assert result.exit_code == 0, result.output
+            mock_cls.assert_called_once()
+
+    def test_quasi_rrho_flag_run(self, tmp_path):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        log_file = tmp_path / "mol.log"
+        log_file.write_text("dummy")
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", str(log_file), "-q"],
+                    catch_exceptions=False,
+                )
+
+            assert result.exit_code == 0, result.output
+
+    def test_directory_without_filetype_asserts(self, tmp_path):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with pytest.raises(AssertionError):
+                runner.invoke(
+                    entry_point,
+                    ["-d", str(tmp_path)],
+                    catch_exceptions=False,
+                )
+
+    def test_unsupported_file_extension_logs_error(self, tmp_path):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        bad_file = tmp_path / "mol.txt"
+        bad_file.write_text("dummy")
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                entry_point,
+                ["-f", str(bad_file)],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
+    def test_directory_with_log_filetype_globs_files(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("a.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-d", ".", "-ft", "log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        mock_cls.assert_called_once()
+
+    def test_directory_with_out_filetype_globs_files(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("a.out", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-d", ".", "-ft", "out"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        mock_cls.assert_called_once()
+
+    def test_cutoff_overrides_entropy_and_enthalpy_cutoffs(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", "--cutoff", "50.0"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        assert mock_cls.call_args.kwargs["s_freq_cutoff"] == 50.0
+        assert mock_cls.call_args.kwargs["h_freq_cutoff"] == 50.0
+
+    @pytest.mark.parametrize(
+        "unit,expected_label",
+        [
+            ("eV", "eV"),
+            ("kcal/mol", "kcal/mol"),
+            ("kJ/mol", "kJ/mol"),
+        ],
+    )
+    def test_energy_unit_conversion(self, unit, expected_label):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", "-u", unit],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_concentration_option_logged_instead_of_pressure(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", "-c", "1.0"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+        assert mock_cls.call_args.kwargs["concentration"] == 1.0
+
+    @pytest.mark.parametrize("flag", ["-qs", "-qh"])
+    def test_quasi_rrho_entropy_and_enthalpy_flags(self, flag):
+        """Covers the quasi_rrho_entropy-only and
+        quasi_rrho_enthalpy-only header/result-table branches (as
+        opposed to test_quasi_rrho_flag_run's combined -q flag)."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = self._make_thermo_mock()
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log", flag],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_ts_with_single_imaginary_frequency_warns_but_keeps_structure(
+        self,
+    ):
+        """A transition state with exactly one (the expected) imaginary
+        frequency is reported with a warning rather than skipped."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = self._make_thermo_mock()
+        thermo.imaginary_frequencies = [-50.0]
+        thermo.jobtype = "ts"
+        thermo.vibrational_frequencies = [-50.0, 100.0]
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_ts_with_multiple_imaginary_frequencies_is_skipped(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = self._make_thermo_mock()
+        thermo.imaginary_frequencies = [-50.0, -60.0]
+        thermo.jobtype = "ts"
+        thermo.vibrational_frequencies = [-50.0, -60.0]
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_non_ts_with_imaginary_frequency_is_skipped(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = self._make_thermo_mock()
+        thermo.imaginary_frequencies = [-50.0]
+        thermo.jobtype = "opt"
+        thermo.vibrational_frequencies = [-50.0]
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_typeerror_after_energy_assigned_logs_warning_and_continues(
+        self,
+    ):
+        """When the TypeError instead occurs on a *later* property
+        (after `structure`/`energy` are already assigned), the
+        except TypeError handler works as intended: it logs the
+        "Frequency information not found" warning and moves on to the
+        next file, rather than crashing (contrast with
+        test_missing_frequency_data_crashes_instead_of_warning below,
+        where the very first property access is what's missing)."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = MagicMock()
+        thermo.electronic_energy = -100.0
+        thermo.zero_point_energy = 0.05
+        thermo.enthalpy = -99.9
+        thermo.qrrho_enthalpy = None  # None * float -> TypeError here
+        thermo.entropy_times_temperature = -0.02
+        thermo.qrrho_entropy_times_temperature = -0.02
+        thermo.gibbs_free_energy = -99.92
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output
+
+    def test_missing_frequency_data_crashes_instead_of_warning(self):
+        """Regression test for BUGS_FOUND.md #41: when
+        thermochemistry.electronic_energy is None (the real
+        "frequency information not found" case the except TypeError
+        handler's own message is meant to report), the handler itself
+        crashes with UnboundLocalError since `energy` was never
+        assigned before the exception, rather than logging the
+        intended per-structure warning and continuing."""
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        thermo = MagicMock()
+        thermo.electronic_energy = None
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry"
+            ) as mock_cls:
+                mock_cls.return_value = thermo
+                with pytest.raises(
+                    UnboundLocalError,
+                    match="local variable 'energy' referenced",
+                ):
+                    runner.invoke(
+                        entry_point,
+                        ["-f", "mol.log"],
+                        catch_exceptions=False,
+                    )
+
+    def test_generic_exception_during_processing_is_logged_and_skipped(self):
+        from chemsmart.scripts.get_thermochemistry import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("mol.log", "w") as f:
+                f.write("dummy")
+            with patch(
+                "chemsmart.scripts.get_thermochemistry.Thermochemistry",
+                side_effect=ValueError("simulated parse failure"),
+            ):
+                result = runner.invoke(
+                    entry_point,
+                    ["-f", "mol.log"],
+                    catch_exceptions=False,
+                )
+        assert result.exit_code == 0, result.output

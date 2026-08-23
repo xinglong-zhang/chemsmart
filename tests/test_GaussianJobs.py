@@ -1,6 +1,6 @@
 import os
 from filecmp import cmp
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -188,6 +188,60 @@ class TestGaussianQRCJobs:
             assert mock_general_job.call_count == 2
             forward_job.run.assert_called_once()
             reverse_job.run.assert_called_once()
+
+    def test_run_delegates_to_run_both_jobs(
+        self, mock_molecule, real_settings, mock_jobrunner
+    ):
+        job = GaussianQRCJob(
+            molecule=mock_molecule,
+            settings=real_settings,
+            jobrunner=mock_jobrunner,
+            label="test_qrc",
+        )
+        with patch.object(job, "_run_both_jobs") as mock_run_both:
+            job._run()
+        mock_run_both.assert_called_once()
+
+    def test_is_complete_checks_both_qrc_jobs(
+        self, mock_molecule, real_settings, mock_jobrunner
+    ):
+        job = GaussianQRCJob(
+            molecule=mock_molecule,
+            settings=real_settings,
+            jobrunner=mock_jobrunner,
+            label="test_qrc",
+        )
+        complete_job = MagicMock()
+        complete_job.is_complete.return_value = True
+        incomplete_job = MagicMock()
+        incomplete_job.is_complete.return_value = False
+        with patch.object(
+            type(job),
+            "both_qrc_jobs",
+            new_callable=PropertyMock,
+            return_value=[complete_job, incomplete_job],
+        ):
+            assert job.is_complete() is False
+
+    def test_label_no_jobtype_suffix_when_jobtype_none(
+        self, mock_molecule, real_settings, mock_jobrunner
+    ):
+        real_settings.jobtype = None
+        job = GaussianQRCJob(
+            molecule=mock_molecule,
+            settings=real_settings,
+            jobrunner=mock_jobrunner,
+            label="test_qrc",
+        )
+        with patch(
+            "chemsmart.jobs.gaussian.qrc.GaussianGeneralJob"
+        ) as mock_general_job:
+            job._prepare_both_qrc_jobs()
+
+        labels = [
+            call.kwargs["label"] for call in mock_general_job.call_args_list
+        ]
+        assert labels == ["test_qrcf", "test_qrcr"]
 
 
 class TestGaussianlinkIRCJobs:

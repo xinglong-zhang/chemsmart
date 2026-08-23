@@ -1,5 +1,9 @@
+import io
 import os
 from shutil import copy
+from types import SimpleNamespace
+
+import pytest
 
 from chemsmart.jobs.nciplot import NCIPLOTJob
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
@@ -361,3 +365,141 @@ class TestNCIPLOTPathHandling:
         assert lines[0] == "1\n"
         # Should be basename with _promolecular suffix
         assert lines[1] == "test_calculation_promolecular.xyz\n"
+
+
+def _make_writer(tmp_path, **setting_overrides):
+    """Direct-construction helper bypassing NCIPLOTJob/JobRunner
+    entirely, since most of the writer's validation branches are pure
+    functions of self.job.filenames/self.settings and don't need a
+    real job or running directory."""
+    writer = NCIPLOTInputWriter.__new__(NCIPLOTInputWriter)
+    writer.job = SimpleNamespace(
+        filenames=None, label="test", folder=str(tmp_path)
+    )
+    writer.settings = NCIPLOTJobSettings()
+    writer.jobrunner = SimpleNamespace(running_directory=str(tmp_path))
+    for key, value in setting_overrides.items():
+        setattr(writer.settings, key, value)
+    return writer
+
+
+class TestNCIPLOTWriterValidationBranches:
+    """Direct unit coverage for the writer's error/edge branches, none
+    of which the full-job success-path tests above reach."""
+
+    def test_write_creates_missing_target_directory(self, tmp_path):
+        writer = _make_writer(tmp_path)
+        new_dir = tmp_path / "newsub"
+        writer._write(target_directory=str(new_dir))
+        assert new_dir.is_dir()
+        assert (new_dir / "test.nci").exists()
+
+    def test_write_uses_job_folder_when_no_target_directory(self, tmp_path):
+        writer = _make_writer(tmp_path)
+        writer._write(target_directory=None)
+        assert (tmp_path / "test.nci").exists()
+
+    def test_write_filenames_empty_list_raises(self, tmp_path):
+        writer = _make_writer(tmp_path)
+        writer.job.filenames = []
+        with pytest.raises(ValueError, match="No filenames provided"):
+            writer._write_filenames(io.StringIO())
+
+    def test_write_filenames_missing_file_raises(self, tmp_path):
+        writer = _make_writer(tmp_path)
+        writer.job.filenames = ["missing.xyz"]
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            writer._write_filenames(io.StringIO())
+
+    def test_write_ligand_only_one_value_raises(self, tmp_path):
+        writer = _make_writer(
+            tmp_path, ligand_file_number=1, ligand_radius=None
+        )
+        with pytest.raises(ValueError, match="must be provided or"):
+            writer._write_ligand(io.StringIO())
+
+    def test_write_radius_wrong_coordinate_count_raises(self, tmp_path):
+        writer = _make_writer(
+            tmp_path, radius_positions="1.0,2.0", radius_r=1.5
+        )
+        with pytest.raises(ValueError, match="exactly 3 coordinates"):
+            writer._write_radius(io.StringIO())
+
+    def test_write_radius_invalid_coordinate_value_raises(self, tmp_path):
+        writer = _make_writer(
+            tmp_path, radius_positions="1.0,x,2.0", radius_r=1.5
+        )
+        with pytest.raises(ValueError, match="Invalid coordinate value"):
+            writer._write_radius(io.StringIO())
+
+    def test_write_radius_only_one_value_raises(self, tmp_path):
+        writer = _make_writer(
+            tmp_path, radius_positions="1.0,2.0,3.0", radius_r=None
+        )
+        with pytest.raises(ValueError, match="must be provided or"):
+            writer._write_radius(io.StringIO())
+
+    def test_write_intermolecular_negative_value_raises(self, tmp_path):
+        writer = _make_writer(tmp_path, intercut1=-0.5)
+        with pytest.raises(ValueError, match="must be positive"):
+            writer._write_intermolecular(io.StringIO())
+
+    def test_write_increments_invalid_value_raises(self, tmp_path):
+        writer = _make_writer(tmp_path, increments="0.1,x,0.1")
+        with pytest.raises(ValueError, match="Invalid increment value"):
+            writer._write_increments(io.StringIO())
+
+    def test_write_fragments_value_not_list_or_tuple_raises(self, tmp_path):
+        writer = _make_writer(tmp_path, fragments={1: "notalist"})
+        with pytest.raises(ValueError, match="must be a list or tuple"):
+            writer._write_fragments(io.StringIO())
+
+    def test_write_fragments_not_a_dict_raises(self, tmp_path):
+        writer = _make_writer(tmp_path, fragments=["a", "b"])
+        with pytest.raises(ValueError, match="must be a dictionary"):
+            writer._write_fragments(io.StringIO())
+
+    def test_write_cutoffs_negative_value_raises(self, tmp_path):
+        writer = _make_writer(tmp_path, cutoff_density_dat=-0.5)
+        with pytest.raises(ValueError, match="must be positive"):
+            writer._write_cutoffs(io.StringIO())
+
+    def test_write_cutplot_filenames_not_list_or_tuple_raises(self, tmp_path):
+        writer = _make_writer(tmp_path)
+        writer.job.filenames = "notalist"
+        with pytest.raises(TypeError, match="list or tuple"):
+            writer._write_cutplot(io.StringIO())
+
+    def test_write_cutplot_empty_filenames_raises(self, tmp_path):
+        writer = _make_writer(tmp_path)
+        writer.job.filenames = []
+        with pytest.raises(ValueError, match="No filenames provided"):
+            writer._write_cutplot(io.StringIO())
+
+    def test_write_cutplot_wfn_uses_scf_defaults(self, tmp_path):
+        writer = _make_writer(
+            tmp_path, cutoff_density_cube=None, cutoff_rdg_cube=0.6
+        )
+        writer.job.filenames = ["mol.wfn"]
+        buf = io.StringIO()
+        writer._write_cutplot(buf)
+        # SCF default for r1 is 0.05 (vs. promolecular's 0.07)
+        assert "CUTPLOT 0.05" in buf.getvalue()
+
+    def test_write_cutplot_negative_value_raises(self, tmp_path):
+        writer = _make_writer(
+            tmp_path, cutoff_density_cube=-0.1, cutoff_rdg_cube=0.5
+        )
+        writer.job.filenames = ["mol.xyz"]
+        with pytest.raises(ValueError, match="must be positive"):
+            writer._write_cutplot(io.StringIO())
+
+    def test_write_ranges_invalid_value_raises(self, tmp_path):
+        writer = _make_writer(tmp_path, ranges=[["a", 1.0]])
+        with pytest.raises(ValueError, match="Invalid range values"):
+            writer._write_ranges(io.StringIO())
+
+    def test_write_ranges_wrong_shape_raises(self, tmp_path):
+        writer = _make_writer(tmp_path, ranges=[[1.0, 2.0, 3.0]])
+        with pytest.raises(ValueError, match="list or tuple of two"):
+            writer._write_ranges(io.StringIO())

@@ -21,7 +21,11 @@ from chemsmart.jobs.grouper.rmsd import (
 from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
 from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 from chemsmart.utils.grouper import StructureGrouperFactory
-from chemsmart.utils.utils import find_irmsd_command, kabsch_align
+from chemsmart.utils.utils import (
+    find_irmsd_command,
+    kabsch_align,
+    to_graph_wrapper,
+)
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -1037,6 +1041,50 @@ class Test_other_groupers:
         assert len(group_indices) == 4
         unique_structures = grouper.unique()
         assert len(unique_structures) == 4
+
+    def test_connectivity_grouper_ignore_hydrogens(self, methanol_molecules):
+        """Covers the ignore_hydrogens branch in group(), which strips
+        H nodes from every graph before running isomorphism checks."""
+        grouper = ConnectivityGrouper(
+            methanol_molecules, ignore_hydrogens=True
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 1
+        assert len(group_indices) == 1
+
+    def test_connectivity_grouper_repr(self, methanol_molecules):
+        grouper = ConnectivityGrouper(
+            methanol_molecules, num_procs=2, ignore_hydrogens=True
+        )
+        text = repr(grouper)
+        assert "num_procs=2" in text
+        assert "ignore_hydrogens=True" in text
+
+    def test_connectivity_grouper_record_results_without_grouping_time(
+        self, methanol_molecules, tmp_path, monkeypatch
+    ):
+        """Covers `if grouping_time is not None:`'s False arm: calling
+        the internal result-writer directly without a grouping_time
+        must skip the "Grouping Time" header line rather than raising."""
+        monkeypatch.chdir(tmp_path)
+        grouper = ConnectivityGrouper(methanol_molecules, label="conn_test")
+        groups, index_groups = grouper.group()
+        # Should not raise when grouping_time is omitted (defaults to None).
+        grouper._record_results(groups=groups, index_groups=index_groups)
+
+    def test_check_isomorphism_direct(self, methanol_molecules):
+        """See BUGS_FOUND.md #62: _check_isomorphism is defined but
+        never called by group() (which calls _are_isomorphic directly
+        in a serial loop instead). Unit-tested directly since no code
+        path reaches it."""
+        grouper = ConnectivityGrouper(methanol_molecules)
+        grouper.graphs = [
+            to_graph_wrapper(mol, 0.0, grouper.adjust_H)
+            for mol in methanol_molecules
+        ]
+        i, j, is_isomorphic = grouper._check_isomorphism((0, 1))
+        assert (i, j) == (0, 1)
+        assert is_isomorphic is True
 
     def test_rdkit_isomorphism_grouper(
         self, methanol_molecules, methanol_and_ethanol
@@ -2264,3 +2312,92 @@ class Test_energy_extraction_function:
         )
         extracted = _extract_energy_based_on_energy_type(thermo_qhg, "qhG")
         assert np.isclose(extracted, -1568.186619, rtol=1e-7)
+
+
+class TestStructureGrouperFactoryValidation:
+    """Direct tests for StructureGrouperFactory.create's validation
+    branches (unknown strategy, mutually-exclusive/unsupported
+    parameter combinations, and strategy-mismatch warnings)."""
+
+    def test_unknown_strategy_raises(self, methanol_molecules):
+        with pytest.raises(ValueError, match="Unknown grouping strategy"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="not_a_real_strategy"
+            )
+
+    def test_threshold_and_num_groups_mutually_exclusive(
+        self, methanol_molecules
+    ):
+        with pytest.raises(ValueError, match="Cannot specify both"):
+            StructureGrouperFactory.create(
+                methanol_molecules,
+                strategy="rmsd",
+                threshold=0.5,
+                num_groups=3,
+            )
+
+    def test_threshold_unsupported_for_strategy_raises(
+        self, methanol_molecules
+    ):
+        with pytest.raises(ValueError, match="does not support threshold"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="formula", threshold=0.5
+            )
+
+    def test_num_groups_unsupported_for_strategy_raises(
+        self, methanol_molecules
+    ):
+        with pytest.raises(ValueError, match="does not support num_groups"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="formula", num_groups=3
+            )
+
+    def test_ignore_hydrogens_unsupported_for_strategy_raises(
+        self, methanol_molecules
+    ):
+        with pytest.raises(
+            ValueError, match="does not support ignore_hydrogens"
+        ):
+            StructureGrouperFactory.create(
+                methanol_molecules,
+                strategy="energy",
+                ignore_hydrogens=True,
+            )
+
+    def test_inversion_kwarg_warns_for_non_irmsd_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="rmsd", inversion="always"
+            )
+        assert "is only effective for 'irmsd'" in caplog.text
+
+    def test_fingerprint_type_kwarg_warns_for_non_tanimoto_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules,
+                strategy="rmsd",
+                fingerprint_type="morgan",
+            )
+        assert "is only effective for 'tanimoto'" in caplog.text
+
+    def test_use_weights_kwarg_warns_for_non_torsion_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="rmsd", use_weights=False
+            )
+        assert "is only effective for 'torsion'" in caplog.text
+
+    def test_max_dev_kwarg_warns_for_non_torsion_strategy(
+        self, methanol_molecules, caplog
+    ):
+        with caplog.at_level("WARNING"):
+            StructureGrouperFactory.create(
+                methanol_molecules, strategy="rmsd", max_dev="custom"
+            )
+        assert "is only effective for 'torsion'" in caplog.text

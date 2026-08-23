@@ -1,4 +1,5 @@
 import os
+import sys
 from filecmp import cmp
 from io import StringIO
 from pathlib import Path
@@ -27,6 +28,35 @@ from chemsmart.utils.cluster import (
     is_pubchem_network_available,
 )
 from chemsmart.utils.utils import cmp_with_ignore
+
+
+class TestCovalentRadiusAndBondCutoff:
+    """get_covalent_radius/get_bond_cutoff had no direct test coverage."""
+
+    def test_get_covalent_radius_known_element(self):
+        from chemsmart.io.molecules import get_covalent_radius
+
+        assert get_covalent_radius("c") == pytest.approx(0.76)
+
+    def test_get_covalent_radius_unknown_element_raises(self):
+        from chemsmart.io.molecules import get_covalent_radius
+
+        with pytest.raises(ValueError, match="Unknown element"):
+            get_covalent_radius("Xx")
+
+    def test_get_bond_cutoff_uses_default_buffer(self):
+        from chemsmart.io.molecules import (
+            DEFAULT_BUFFER,
+            get_bond_cutoff,
+            get_covalent_radius,
+        )
+
+        expected = (
+            get_covalent_radius("C")
+            + get_covalent_radius("H")
+            + DEFAULT_BUFFER
+        )
+        assert get_bond_cutoff("C", "H") == pytest.approx(expected)
 
 
 class TestCoordinateBlock:
@@ -217,6 +247,44 @@ class TestStructures:
         # test conversion to RDKit molecule
         rdkit_molecule = molecule.to_rdkit()
         assert isinstance(rdkit_molecule, RDKitMolecule)
+
+    def test_xyz_file_repr_and_str(self, single_molecule_xyz_file):
+        xyz_file = XYZFile(filename=single_molecule_xyz_file)
+        assert repr(xyz_file) == f"XYZFile({single_molecule_xyz_file})"
+        assert str(xyz_file) == (
+            f"XYZFile object with filename: {single_molecule_xyz_file}"
+        )
+
+    def test_xyz_file_molecule_and_comments_properties(
+        self, single_molecule_xyz_file
+    ):
+        xyz_file = XYZFile(filename=single_molecule_xyz_file)
+        assert isinstance(xyz_file.molecule, Molecule)
+        assert xyz_file.comments == xyz_file.get_comments(index="-1")
+
+    def test_xyz_file_get_comments(self, multiple_molecules_xyz_file):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        all_comments = xyz_file.get_comments(index=":", return_list=True)
+        assert isinstance(all_comments, list)
+        assert len(all_comments) > 1
+        assert all(isinstance(c, str) for c in all_comments)
+
+        last_comment = xyz_file.get_comments(index="-1")
+        assert last_comment == all_comments[-1]
+
+    def test_xyz_file_empty_file_returns_none(self, tmp_path):
+        empty_file = tmp_path / "empty.xyz"
+        empty_file.write_text("")
+        xyz_file = XYZFile(filename=str(empty_file))
+        assert xyz_file.get_molecules(index=":", return_list=False) is None
+        assert xyz_file.get_molecules(index=":", return_list=True) == []
+
+    def test_xyz_file_zero_atoms_raises(self, tmp_path):
+        bad_file = tmp_path / "zero_atoms.xyz"
+        bad_file.write_text("0\ncomment\n")
+        xyz_file = XYZFile(filename=str(bad_file))
+        with pytest.raises(ValueError, match="Number of atoms .* is zero"):
+            xyz_file.get_molecules()
 
     def test_read_molecule_energy_from_xyz_file(
         self,
@@ -2186,6 +2254,30 @@ $$$$"""
 
         assert np.all(sdf_molecule.positions == structure_coords)
 
+    def test_get_molecule_no_matching_lines_raises(self, tmpdir):
+        """SDF text with no lines matching sdf_pattern raises ValueError."""
+        from chemsmart.io.file import SDFFile
+
+        tmpfile = os.path.join(tmpdir, "no_coords.sdf")
+        with open(tmpfile, "w") as f:
+            f.write("just some text\nno coordinate lines here\n$$$$")
+        sdf_file = SDFFile(filename=tmpfile)
+        with pytest.raises(ValueError, match="No coordinates found"):
+            sdf_file.get_molecule()
+
+
+class TestFindElementParent:
+    """Tests for the module-level _find_element_parent helper."""
+
+    def test_returns_none_when_target_not_under_root(self):
+        import xml.etree.ElementTree as ET
+
+        from chemsmart.io.file import _find_element_parent
+
+        root = ET.fromstring("<a><b/></a>")
+        target = ET.fromstring("<c/>")
+        assert _find_element_parent(root, target) is None
+
 
 class TestCDXFile:
     """Tests for ChemDraw file reading functionality."""
@@ -2445,6 +2537,256 @@ class TestCDXFile:
         assert isinstance(mol, Molecule)
         assert mol.chemical_formula == "C6H10MnO6"
         assert mol.num_atoms == 23
+
+
+class TestCDXFileInternalBranches:
+    """Direct/mocked tests for CDXFile private helpers and edge-case branches
+    that are hard to reach through end-to-end fixture files alone.
+
+    NOTE: `_combine_metal_and_ligand_fragments.has_metal(None)`'s
+    `return False` is dead code -- its only call site (`has_metal(mol)`
+    inside the main while-loop) is always preceded by a `mol is None`
+    guard that already `continue`s, so `has_metal` is never invoked with
+    `None`. Left uncovered rather than forcing an artificial direct call.
+    """
+
+    # ------------------------------------------------------------------
+    # get_molecules
+    # ------------------------------------------------------------------
+
+    def test_get_molecules_with_slice_object(self, mocker):
+        """Passing an actual slice object hits the isinstance(..., slice)
+        branch directly rather than going through string2index_1based."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        fake_mols = [1, 2, 3, 4, 5]
+        mocker.patch.object(
+            CDXFile,
+            "molecules",
+            new_callable=mocker.PropertyMock,
+            return_value=fake_mols,
+        )
+        result = cdx_file.get_molecules(index=slice(1, 3))
+        assert result == [2, 3]
+
+    # ------------------------------------------------------------------
+    # _parse_chemdraw_file
+    # ------------------------------------------------------------------
+
+    def test_parse_chemdraw_file_rdkit_exception_is_logged(
+        self, tmp_path, mocker
+    ):
+        """RDKit raising inside the try block hits the debug-log except
+        branch; since no molecules are produced, the final ValueError
+        is also raised."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/></fragment></page></CDXML>'
+        )
+        p = tmp_path / "test.cdxml"
+        p.write_text(content)
+        mocker.patch(
+            "rdkit.Chem.MolsFromCDXML", side_effect=RuntimeError("boom")
+        )
+        cdx_file = CDXFile(filename=str(p))
+        with pytest.raises(ValueError, match="No molecules could be read"):
+            cdx_file.molecules
+
+    def test_parse_chemdraw_file_cdx_obabel_fallback_raises(
+        self, tmp_path, mocker
+    ):
+        """A .cdx file RDKit can't parse falls back to the Open Babel
+        helper; forcing shutil.which to report no obabel makes that
+        helper raise too, exercising the fallback except branch and the
+        final 'no molecules could be read' ValueError."""
+        mocker.patch("chemsmart.utils.io.shutil.which", return_value=None)
+        bogus = tmp_path / "bogus.cdx"
+        bogus.write_bytes(b"not a real cdx file \x00\x01\x02")
+        cdx_file = CDXFile(filename=str(bogus))
+        with pytest.raises(ValueError, match="No molecules could be read"):
+            cdx_file.molecules
+
+    def test_parse_chemdraw_file_none_entry_and_processing_exception(
+        self, tmp_path, mocker
+    ):
+        """A None entry in the RDKit mol list is skipped (both in the
+        property-cache loop and after fragment combining), and when the
+        only real molecule fails processing, the final 'no valid
+        molecules' ValueError is raised."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/></fragment></page></CDXML>'
+        )
+        p = tmp_path / "test.cdxml"
+        p.write_text(content)
+
+        real_mol = Chem.MolFromSmiles("C", sanitize=False)
+        mocker.patch("rdkit.Chem.MolsFromCDXML", return_value=[None, real_mol])
+        mocker.patch.object(
+            CDXFile, "_process_cdx_molecule", side_effect=Exception("boom")
+        )
+
+        cdx_file = CDXFile(filename=str(p))
+        with pytest.raises(ValueError, match="No valid molecules"):
+            cdx_file.molecules
+
+    def test_parse_chemdraw_file_skips_none_after_combining(
+        self, tmp_path, mocker
+    ):
+        """`_combine_metal_and_ligand_fragments` normally filters out None
+        entries itself, so mock it directly to return a list containing a
+        None to exercise the 'if rdkit_mol is None: continue' branch in
+        the processing loop that follows it."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/></fragment></page></CDXML>'
+        )
+        p = tmp_path / "test.cdxml"
+        p.write_text(content)
+
+        real_mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch("rdkit.Chem.MolsFromCDXML", return_value=[real_mol])
+        mocker.patch.object(
+            CDXFile,
+            "_combine_metal_and_ligand_fragments",
+            return_value=[None, real_mol],
+        )
+
+        cdx_file = CDXFile(filename=str(p))
+        molecules = cdx_file.molecules
+        assert len(molecules) == 1
+
+    # ------------------------------------------------------------------
+    # _process_cdx_molecule
+    # ------------------------------------------------------------------
+
+    def test_process_cdx_molecule_embed_retry_succeeds(self, mocker):
+        """First EmbedMolecule call fails (-1); the retry with
+        useRandomCoords succeeds."""
+        mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch("rdkit.Chem.AllChem.EmbedMolecule", side_effect=[-1, 0])
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        result = cdx_file._process_cdx_molecule(mol)
+        assert result is not None
+
+    def test_process_cdx_molecule_embed_retry_fails_raises(self, mocker):
+        """Both the initial embed and the retry fail (-1), raising
+        ValueError."""
+        mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch("rdkit.Chem.AllChem.EmbedMolecule", side_effect=[-1, -1])
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        with pytest.raises(
+            ValueError, match="Could not generate 3D coordinates"
+        ):
+            cdx_file._process_cdx_molecule(mol)
+
+    def test_process_cdx_molecule_mmff_optimize_exception_logged(self, mocker):
+        """MMFFOptimizeMolecule raising is caught and logged; the
+        molecule is still returned."""
+        mol = Chem.MolFromSmiles("c1ccccc1")
+        mocker.patch(
+            "rdkit.Chem.AllChem.MMFFOptimizeMolecule",
+            side_effect=RuntimeError("boom"),
+        )
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        result = cdx_file._process_cdx_molecule(mol)
+        assert result is not None
+
+    # ------------------------------------------------------------------
+    # _combine_metal_and_ligand_fragments
+    # ------------------------------------------------------------------
+
+    def test_combine_metal_ligand_fragments_none_lookahead_and_none_entry(
+        self,
+    ):
+        """A None fragment used as look-ahead ligand candidate is treated
+        as 'not a ligand ring' (is_small_ligand_ring(None) -> False), and
+        a later standalone None entry in the main loop is skipped via
+        i += 1; continue without being appended."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, None]
+        )
+        # metal fragment appended unmodified (no ligands found);
+        # the trailing None is skipped, not appended.
+        assert result == [metal_mol]
+
+    def test_combine_metal_ligand_fragments_wrong_ring_size(self):
+        """A metal fragment followed by a 4-membered carbocycle is not a
+        valid Cp/benzene ring, so it is left uncombined."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        ligand = Chem.MolFromSmiles("C1CCC1")  # cyclobutane, ring size 4
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, ligand]
+        )
+        assert len(result) == 2
+        assert result[0] is metal_mol
+        assert result[1] is ligand
+
+    def test_combine_metal_ligand_fragments_heteroatom_ring(self):
+        """A metal fragment followed by a 6-membered ring containing a
+        heteroatom (pyridine) is not an all-carbon ring, so it is left
+        uncombined."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        ligand = Chem.MolFromSmiles("c1ccncc1")  # pyridine
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, ligand]
+        )
+        assert len(result) == 2
+        assert result[0] is metal_mol
+        assert result[1] is ligand
+
+    def test_combine_metal_ligand_fragments_no_stub_atoms(self):
+        """A metal fragment with no degree-1 carbon stub neighbours still
+        combines correctly with a valid ligand ring (the stub-removal
+        block is simply skipped)."""
+        cdx_file = CDXFile(filename="dummy.cdxml")
+        metal_mol = Chem.MolFromSmiles("[Fe]", sanitize=False)
+        metal_mol.UpdatePropertyCache(strict=False)
+        ligand = Chem.MolFromSmiles("c1ccccc1")
+        ligand.UpdatePropertyCache(strict=False)
+        result = cdx_file._combine_metal_and_ligand_fragments(
+            [metal_mol, ligand]
+        )
+        assert len(result) == 1
+        combined = result[0]
+        assert (
+            combined.GetNumAtoms()
+            == metal_mol.GetNumAtoms() + ligand.GetNumAtoms()
+        )
+
+    # ------------------------------------------------------------------
+    # _preprocess_cdxml_remove_multi_attachments
+    # ------------------------------------------------------------------
+
+    def test_preprocess_remove_multi_attachments_missing_and_present_id(
+        self, tmp_path
+    ):
+        """A MultiAttachment node without an id attribute is still
+        removed (the multi_ids.add call is simply skipped), alongside one
+        with an id (the main path)."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" Element="6"/>'
+            '<n NodeType="MultiAttachment"/>'
+            '<n id="4" NodeType="MultiAttachment"/>'
+            "</fragment></page></CDXML>"
+        )
+        p = tmp_path / "multi.cdxml"
+        p.write_text(content)
+        cleaned = CDXFile._preprocess_cdxml_remove_multi_attachments(str(p))
+        assert "MultiAttachment" not in cleaned
+        assert 'id="4"' not in cleaned
+        assert 'id="2"' in cleaned
 
 
 class TestpKaCDXFile:
@@ -2785,6 +3127,619 @@ class TestpKaCDXFile:
             assert a["cdxml_id"] == b["cdxml_id"]
             assert a["color"] == b["color"]
             assert a["symbol"] == b["symbol"]
+
+
+class TestPKaCDXFileInternalBranches:
+    """Direct/mocked tests for PKaCDXFile private helpers and edge-case
+    branches that are hard to reach through end-to-end fixture files
+    alone."""
+
+    # ------------------------------------------------------------------
+    # _resolve_proton_from_cdxml
+    # ------------------------------------------------------------------
+
+    def test_resolve_proton_from_cdxml_reraises_value_error(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "get_pka_molecules", side_effect=ValueError("bad")
+        )
+        with pytest.raises(ValueError, match="Could not auto-detect proton"):
+            pka._resolve_proton_from_cdxml()
+
+    def test_resolve_proton_from_cdxml_single_molecule_success(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        fake_pka_mol = mocker.MagicMock(proton_index=5)
+        mocker.patch.object(
+            pka, "get_pka_molecules", return_value=[fake_pka_mol]
+        )
+        idx, mols = pka._resolve_proton_from_cdxml()
+        assert idx == 5
+        assert mols is None
+
+    # ------------------------------------------------------------------
+    # resolve_reference_proton
+    # ------------------------------------------------------------------
+
+    def test_resolve_reference_proton_none_reference(self):
+        result = PKaCDXFile.resolve_reference_proton(None, None, None)
+        assert result is None
+
+    def test_resolve_reference_proton_explicit_index_bypasses(self):
+        result = PKaCDXFile.resolve_reference_proton("something", 5, None)
+        assert result == 5
+
+    def test_resolve_reference_proton_cdxml_file(
+        self, colored_proton_cdxml_file
+    ):
+        result = PKaCDXFile.resolve_reference_proton(
+            colored_proton_cdxml_file, None, None
+        )
+        assert result == 8
+
+    def test_resolve_reference_proton_non_cdx_with_color_code_raises(self):
+        with pytest.raises(ValueError, match="reference-color-code"):
+            PKaCDXFile.resolve_reference_proton("something.xyz", None, 3)
+
+    def test_resolve_reference_proton_non_cdx_without_color_code_returns_none(
+        self,
+    ):
+        """A non-cdx/cdxml reference with no reference_color_code falls
+        through to the final `return None`."""
+        result = PKaCDXFile.resolve_reference_proton(
+            "something.xyz", None, None
+        )
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # _parse_cdxml_root
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_root_invalid_xml_raises(self, tmp_path):
+        p = tmp_path / "broken.cdxml"
+        p.write_text("<CDXML><fragment></CDXML>")  # mismatched tags
+        pka = PKaCDXFile(filename=str(p))
+        with pytest.raises(ValueError, match="Failed to parse CDXML"):
+            pka._parse_cdxml_root()
+
+    # ------------------------------------------------------------------
+    # _parse_fragment_nodes
+    # ------------------------------------------------------------------
+
+    def test_parse_fragment_nodes_edge_cases(self, tmp_path):
+        """Covers: ExternalConnectionPoint skip, whitespace-only span
+        text skip, and an invalid Element number falling back to '?'."""
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="2" NodeType="ExternalConnectionPoint"/>'
+            '<n id="3" Element="6"><t><s color="0">   </s></t></n>'
+            '<n id="4" Element="999"/>'
+            "</fragment></page></CDXML>"
+        )
+        p = tmp_path / "edge.cdxml"
+        p.write_text(content)
+        pka = PKaCDXFile(filename=str(p))
+        atoms = pka.parse_cdxml_element_colors()
+
+        assert len(atoms) == 2
+        assert atoms[0]["cdxml_id"] == "3"
+        assert atoms[1]["cdxml_id"] == "4"
+        assert atoms[1]["symbol"] == "?"
+
+    # ------------------------------------------------------------------
+    # _rdkit_atom_idx_by_cdxml_id
+    # ------------------------------------------------------------------
+
+    def test_rdkit_atom_idx_by_cdxml_id_none_mol(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        assert pka._rdkit_atom_idx_by_cdxml_id(None, "1") is None
+
+    # ------------------------------------------------------------------
+    # _nested_deprotonatable_cdxml_ids
+    # ------------------------------------------------------------------
+
+    def test_nested_deprotonatable_cdxml_ids_various(self, tmp_path):
+        content = (
+            '<?xml version="1.0"?>\n'
+            '<CDXML><page><fragment id="1">'
+            '<n id="10" NodeType="Fragment">'
+            '<fragment id="11">'
+            '<n id="12" NumHydrogens="0" Element="8"/>'
+            '<n NumHydrogens="1" Element="8"/>'
+            '<n id="14" NumHydrogens="1" Element="6"/>'
+            '<n id="15" NumHydrogens="1" Element="7"/>'
+            '<n id="16" NodeType="ExternalConnectionPoint" '
+            'NumHydrogens="1" Element="8"/>'
+            "</fragment>"
+            "</n>"
+            '<n id="20" NodeType="Unspecified"/>'
+            '<n id="30" NodeType="Fragment"/>'
+            "</fragment></page></CDXML>"
+        )
+        p = tmp_path / "nested.cdxml"
+        p.write_text(content)
+        pka = PKaCDXFile(filename=str(p))
+
+        # No node with this id exists at all -> loop exhausts, node is None.
+        assert pka._nested_deprotonatable_cdxml_ids("999") == []
+
+        # Node exists but is not a Fragment node.
+        assert pka._nested_deprotonatable_cdxml_ids("20") == []
+
+        # Node is a Fragment but has no nested <fragment> child.
+        assert pka._nested_deprotonatable_cdxml_ids("30") == []
+
+        # Node 10: id=12 has NumHydrogens=0 (skip); the id-less child
+        # has NumHydrogens=1/Element=8 but no id (skip append); id=14 is
+        # carbon (not in 1/7/8/16, skip); id=15 is nitrogen with H and an
+        # id (kept); id=16 is an ExternalConnectionPoint (skip).
+        result = pka._nested_deprotonatable_cdxml_ids("10")
+        assert result == ["15"]
+
+    # ------------------------------------------------------------------
+    # _rdkit_heavy_idx_for_implicit_h
+    # ------------------------------------------------------------------
+
+    def test_rdkit_heavy_idx_for_implicit_h_nested_match(self, mocker):
+        """Two nested candidate ids: the first fails to resolve (loop
+        continues back to the top), the second succeeds (loop breaks)."""
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", side_effect=[None, None, 7]
+        )
+        mocker.patch.object(
+            pka,
+            "_nested_deprotonatable_cdxml_ids",
+            return_value=["98", "99"],
+        )
+        atom = {"cdxml_id": "5"}
+        result = pka._rdkit_heavy_idx_for_implicit_h(
+            mocker.MagicMock(), atom, local_idx=None
+        )
+        assert result == 7
+
+    def test_rdkit_heavy_idx_for_implicit_h_local_idx_fallback(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", return_value=None
+        )
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        rdkit_mol_h = mocker.MagicMock()
+        rdkit_mol_h.GetNumAtoms.return_value = 10
+        atom = {"cdxml_id": "5"}
+        result = pka._rdkit_heavy_idx_for_implicit_h(
+            rdkit_mol_h, atom, local_idx=3
+        )
+        assert result == 3
+
+    def test_rdkit_heavy_idx_for_implicit_h_no_fallback_returns_none(
+        self, mocker
+    ):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", return_value=None
+        )
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        rdkit_mol_h = mocker.MagicMock()
+        rdkit_mol_h.GetNumAtoms.return_value = 10
+        atom = {"cdxml_id": "5"}
+
+        assert (
+            pka._rdkit_heavy_idx_for_implicit_h(
+                rdkit_mol_h, atom, local_idx=None
+            )
+            is None
+        )
+        # Out-of-range local_idx also falls through to None.
+        assert (
+            pka._rdkit_heavy_idx_for_implicit_h(
+                rdkit_mol_h, atom, local_idx=99
+            )
+            is None
+        )
+
+    # ------------------------------------------------------------------
+    # _proton_index_from_rdkit_heavy
+    # ------------------------------------------------------------------
+
+    def test_proton_index_from_rdkit_heavy_no_hydrogen_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mol = Chem.MolFromSmiles("C(F)(F)(F)F")
+        mol = Chem.AddHs(mol)
+        atom = {"symbol": "C", "cdxml_id": "1"}
+        with pytest.raises(ValueError, match="No hydrogen bonded to"):
+            pka._proton_index_from_rdkit_heavy(mol, 0, atom)
+
+    # ------------------------------------------------------------------
+    # get_colored_proton_index / _proton_index_by_color / _proton_index_auto
+    # ------------------------------------------------------------------
+
+    def test_get_colored_proton_index_empty_atoms_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(pka, "parse_cdxml_element_colors", return_value=[])
+        with pytest.raises(ValueError, match="No atoms found"):
+            pka.get_colored_proton_index()
+
+    def test_proton_index_by_color_multiple_explicit_h_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(ValueError, match="Multiple explicit H atoms"):
+            pka._proton_index_by_color(atoms, 4)
+
+    def test_proton_index_by_color_non_hydrogen_match_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 8,
+                "color": 4,
+                "symbol": "O",
+                "num_hydrogens": 0,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            pka._proton_index_by_color(atoms, 4)
+
+    def test_proton_index_by_color_multiple_fg_matches_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 8,
+                "color": 0,
+                "symbol": "O",
+                "num_hydrogens": 1,
+                "implicit_h_color": 4,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 7,
+                "color": 0,
+                "symbol": "N",
+                "num_hydrogens": 1,
+                "implicit_h_color": 4,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="Multiple functional-group H spans"
+        ):
+            pka._proton_index_by_color(atoms, 4)
+
+    def test_proton_index_auto_single_functional_group_candidate(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 8,
+                "color": 0,
+                "symbol": "O",
+                "num_hydrogens": 1,
+                "implicit_h_color": 4,
+            },
+        ]
+        mocker.patch.object(pka, "_resolve_implicit_h_index", return_value=42)
+        result = pka._proton_index_auto(atoms)
+        assert result == 42
+
+    def test_proton_index_auto_multiple_candidates_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "3",
+                "element": 1,
+                "color": 5,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="Multiple uniquely coloured hydrogen atoms"
+        ):
+            pka._proton_index_auto(atoms)
+
+    # NOTE: `_proton_index_auto`'s "No uniquely coloured atom found"
+    # branch (total_candidates == 0 and not unique_atoms) appears to be
+    # dead code: any colour value beyond the majority necessarily comes
+    # from either an atom's own `color` (which makes it a member of
+    # `unique_atoms`) or its `implicit_h_color` (which makes it a member
+    # of `fg_h`, so total_candidates > 0). Unlike `_detect_proton_in_fragment`
+    # (see below), this method's `fg_h` has no `symbol != "H"` guard, so
+    # there is no way to have a second colour value that avoids both
+    # sets simultaneously. Left uncovered after this analysis rather than
+    # forcing an artificial/inconsistent atoms list.
+
+    # ------------------------------------------------------------------
+    # _resolve_implicit_h_index
+    # ------------------------------------------------------------------
+
+    def test_resolve_implicit_h_index_no_num_h_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": None}
+        with pytest.raises(
+            ValueError, match="Cannot identify an implicit hydrogen"
+        ):
+            pka._resolve_implicit_h_index([atom], 0, atom)
+
+    def test_resolve_implicit_h_index_rdkit_no_mols_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=["2"]
+        )
+        mocker.patch("rdkit.Chem.MolsFromCDXMLFile", return_value=[])
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": 1}
+        with pytest.raises(ValueError, match="RDKit could not read"):
+            pka._resolve_implicit_h_index([atom], 0, atom)
+
+    def test_resolve_implicit_h_index_skips_none_and_failed_candidates(
+        self, mocker
+    ):
+        """Covers: a None entry in the RDKit mol list is skipped; a
+        candidate heavy atom that can't be mapped is skipped; success on
+        a later candidate."""
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        real_mol1 = Chem.MolFromSmiles("CO")
+        real_mol2 = Chem.MolFromSmiles("CO")
+        mocker.patch(
+            "rdkit.Chem.MolsFromCDXMLFile",
+            return_value=[None, real_mol1, real_mol2],
+        )
+        mocker.patch.object(
+            pka, "_rdkit_heavy_idx_for_implicit_h", side_effect=[None, 1]
+        )
+        mocker.patch.object(
+            pka, "_proton_index_from_rdkit_heavy", return_value=99
+        )
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": 1}
+        result = pka._resolve_implicit_h_index([atom], 0, atom)
+        assert result == 99
+
+    def test_resolve_implicit_h_index_exhausts_candidates_raises(self, mocker):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        mocker.patch.object(
+            pka, "_nested_deprotonatable_cdxml_ids", return_value=[]
+        )
+        real_mol = Chem.MolFromSmiles("CO")
+        mocker.patch("rdkit.Chem.MolsFromCDXMLFile", return_value=[real_mol])
+        mocker.patch.object(
+            pka, "_rdkit_heavy_idx_for_implicit_h", return_value=0
+        )
+        mocker.patch.object(
+            pka,
+            "_proton_index_from_rdkit_heavy",
+            side_effect=ValueError("no h"),
+        )
+        atom = {"cdxml_id": "1", "symbol": "O", "num_hydrogens": 1}
+        with pytest.raises(ValueError, match="No hydrogen bonded to"):
+            pka._resolve_implicit_h_index([atom], 0, atom)
+
+    # ------------------------------------------------------------------
+    # parse_cdxml_fragment_colors
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_fragment_colors_skips_empty_fragment(self, tmp_path):
+        content = (
+            '<?xml version="1.0"?>\n'
+            "<CDXML><page>"
+            '<fragment id="1">'
+            '<n id="2" NodeType="ExternalConnectionPoint"/>'
+            "</fragment>"
+            '<fragment id="3">'
+            '<n id="4" Element="6"/>'
+            "</fragment>"
+            "</page></CDXML>"
+        )
+        p = tmp_path / "empty_frag.cdxml"
+        p.write_text(content)
+        pka = PKaCDXFile(filename=str(p))
+        fragments = pka.parse_cdxml_fragment_colors()
+        assert len(fragments) == 1
+        assert fragments[0][0]["cdxml_id"] == "4"
+
+    # ------------------------------------------------------------------
+    # _detect_proton_in_fragment
+    # ------------------------------------------------------------------
+
+    def test_detect_proton_in_fragment_non_hydrogen_unique_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 8,
+                "color": 4,
+                "symbol": "O",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            pka._detect_proton_in_fragment(atoms, fragment_index=2)
+
+    def test_detect_proton_in_fragment_multiple_candidates_raises(self):
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 4,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "3",
+                "element": 1,
+                "color": 5,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="Multiple uniquely coloured H atoms"
+        ):
+            pka._detect_proton_in_fragment(atoms, fragment_index=3)
+
+    def test_detect_proton_in_fragment_no_unique_atom_at_all(self):
+        """Unlike `_proton_index_auto`, `_detect_proton_in_fragment`'s
+        `fg_h` excludes atoms whose own symbol is "H". This lets an H
+        atom contribute a second colour via `implicit_h_color` while its
+        own `color` still equals the majority colour, so it lands in
+        neither `explicit_h` nor `fg_h` nor `unique_atoms` -- reaching
+        the true "No uniquely coloured atom found" branch."""
+        pka = PKaCDXFile(filename="dummy.cdxml")
+        atoms = [
+            {
+                "cdxml_id": "1",
+                "element": 6,
+                "color": 0,
+                "symbol": "C",
+                "num_hydrogens": None,
+                "implicit_h_color": None,
+            },
+            {
+                "cdxml_id": "2",
+                "element": 1,
+                "color": 0,
+                "symbol": "H",
+                "num_hydrogens": None,
+                "implicit_h_color": 5,
+            },
+        ]
+        with pytest.raises(
+            ValueError, match="No uniquely coloured atom found"
+        ):
+            pka._detect_proton_in_fragment(atoms, fragment_index=1)
+
+    # ------------------------------------------------------------------
+    # get_pka_molecules_auto
+    # ------------------------------------------------------------------
+
+    def test_get_pka_molecules_auto_fragment_count_mismatch_fallback(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch.object(
+            pka, "parse_cdxml_fragment_colors", return_value=[[], []]
+        )
+        result = pka.get_pka_molecules_auto()
+        assert len(result) == 1
+        assert result[0].proton_index == 8
+
+    def test_get_pka_molecules_auto_none_rdkit_mol_raises(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch("rdkit.Chem.MolsFromCDXMLFile", return_value=[None])
+        with pytest.raises(ValueError, match="is None"):
+            pka.get_pka_molecules_auto()
+
+    def test_get_pka_molecules_auto_explicit_fallback_to_local_idx(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch.object(
+            pka,
+            "_detect_proton_in_fragment",
+            return_value={
+                "type": "explicit",
+                "local_idx": 7,
+                "atom": {"cdxml_id": "999", "symbol": "H"},
+            },
+        )
+        mocker.patch.object(
+            pka, "_rdkit_atom_idx_by_cdxml_id", return_value=None
+        )
+        result = pka.get_pka_molecules_auto()
+        assert len(result) == 1
+        assert result[0].proton_index == 8  # local_idx(7) + 1, the H atom
+
+    def test_get_pka_molecules_auto_implicit_no_heavy_idx_raises(
+        self, mocker, colored_proton_cdxml_file
+    ):
+        pka = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mocker.patch.object(
+            pka,
+            "_detect_proton_in_fragment",
+            return_value={
+                "type": "implicit",
+                "local_idx": 2,
+                "atom": {"cdxml_id": "999", "symbol": "O"},
+            },
+        )
+        mocker.patch.object(
+            pka, "_rdkit_heavy_idx_for_implicit_h", return_value=None
+        )
+        with pytest.raises(ValueError, match="No hydrogen bonded to"):
+            pka.get_pka_molecules_auto()
 
 
 class TestQMMMMolecule:
@@ -3515,6 +4470,1541 @@ class TestMoleculeAndStructureIdentifiers:
         assert mol_ch2o.structure_label != mol_ch4.structure_label
         assert mol_ch2o.molecule_id != mol_ch4.molecule_id
         assert mol_ch2o.molecule_label != mol_ch4.molecule_label
+
+
+class TestMoleculeInitValidation:
+    """Direct coverage for Molecule.__init__ / positions setter validation."""
+
+    def test_init_raises_when_positions_is_none(self):
+        with pytest.raises(ValueError, match="symbols and positions"):
+            Molecule(symbols=["H"], positions=None)
+
+    def test_positions_setter_rejects_wrong_shape(self, water_molecule):
+        with pytest.raises(ValueError, match="positions must be"):
+            water_molecule.positions = np.zeros((3, 2))
+
+    def test_positions_setter_rejects_1d_array(self, water_molecule):
+        with pytest.raises(ValueError, match="positions must be"):
+            water_molecule.positions = np.zeros(3)
+
+    def test_positions_setter_stores_copy(self, water_molecule):
+        new_positions = np.array(
+            [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.0, 0.0, 0.0]]
+        )
+        water_molecule.positions = new_positions
+        new_positions[0, 0] = 99.0
+        assert water_molecule.positions[0, 0] == 1.0
+
+
+class TestMoleculeGetitem:
+    def test_getitem_returns_subset_molecule(self, methane_molecule):
+        subset = methane_molecule[[1, 2]]
+        assert isinstance(subset, Molecule)
+        assert subset.symbols == ["C", "H"]
+        assert subset.num_atoms == 2
+
+
+class TestMoleculeSimpleProperties:
+    def test_elements_returns_sorted_unique_symbols(self, methane_molecule):
+        assert methane_molecule.elements == ["C", "H"]
+
+    def test_element_counts(self, methane_molecule):
+        assert methane_molecule.element_counts == {"C": 1, "H": 4}
+
+    def test_chemical_symbols_none_when_symbols_unset(self, water_molecule):
+        # Bypass __init__ validation by clearing symbols on an existing
+        # instance before the cached_property has been accessed.
+        water_molecule.symbols = None
+        assert water_molecule.chemical_symbols is None
+
+    def test_pbc_property_true_when_all_conditions_zero(self, water_molecule):
+        water_molecule.pbc_conditions = [0, 0, 0]
+        assert water_molecule.pbc is True
+
+    def test_pbc_property_false_when_any_condition_nonzero(
+        self, water_molecule
+    ):
+        water_molecule.pbc_conditions = [1, 0, 0]
+        assert water_molecule.pbc is False
+
+    def test_from_ase_atoms(self):
+        atoms = Atoms(
+            symbols=["O", "H", "H"],
+            positions=[
+                [0.0, 0.0, 0.0],
+                [0.9572, 0.0, 0.0],
+                [-0.239, 0.927, 0.0],
+            ],
+        )
+        molecule = Molecule.from_ase_atoms(atoms)
+        assert isinstance(molecule, Molecule)
+        assert molecule.chemical_symbols == ["O", "H", "H"]
+
+    def test_from_filepath_wraps_single_molecule_in_list(
+        self, gaussian_opt_inputfile
+    ):
+        """_read_gaussian_inputfile (for .com/.gjf) always returns a
+        bare Molecule, ignoring return_list -- from_filepath must
+        wrap it in a list itself when return_list=True."""
+        result = Molecule.from_filepath(
+            gaussian_opt_inputfile, return_list=True
+        )
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert isinstance(result[0], Molecule)
+
+    def test_mass_weighted_properties(self, water_molecule):
+        assert water_molecule.mass > 0
+        assert water_molecule.natural_abundance_weighted_mass > 0
+        assert water_molecule.most_abundant_mass > 0
+        assert water_molecule.center_of_mass.shape == (3,)
+
+    def test_is_multicomponent_single_fragment(self, water_molecule):
+        assert water_molecule.is_multicomponent is False
+
+    def test_num_components_single_fragment(self, water_molecule):
+        assert water_molecule.num_components == 1
+
+    def test_is_multicomponent_two_fragments(self):
+        # Two well-separated H2 molecules -> two disconnected fragments.
+        mol = Molecule(
+            symbols=["H", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.74, 0.0, 0.0],
+                    [20.0, 0.0, 0.0],
+                    [20.74, 0.0, 0.0],
+                ]
+            ),
+        )
+        assert mol.is_multicomponent is True
+        assert mol.num_components == 2
+
+    def test_is_diatomic(self, hydrogen_molecule, water_molecule):
+        assert hydrogen_molecule.is_diatomic is True
+        assert water_molecule.is_diatomic is False
+
+    def test_is_linear_two_atom_molecule(self, hydrogen_molecule):
+        assert hydrogen_molecule.is_linear is True
+
+    def test_is_linear_single_atom_molecule(self, single_atom_molecule):
+        assert single_atom_molecule.is_linear is True
+
+
+class TestMoleculeMomentsOfInertia:
+    def test_moments_of_inertia_tensor(self, water_molecule):
+        tensor = water_molecule.moments_of_inertia_tensor
+        assert tensor.shape == (3, 3)
+
+    def test_moments_of_inertia_monoatomic(self, single_atom_molecule):
+        assert single_atom_molecule.moments_of_inertia == [0.0, 0.0, 0.0]
+
+    def test_moments_of_inertia_weighted_mass_monoatomic(
+        self, single_atom_molecule
+    ):
+        assert single_atom_molecule.moments_of_inertia_weighted_mass == [
+            0.0,
+            0.0,
+            0.0,
+        ]
+
+    def test_moments_of_inertia_most_abundant_mass_monoatomic(
+        self, single_atom_molecule
+    ):
+        assert single_atom_molecule.moments_of_inertia_most_abundant_mass == [
+            0.0,
+            0.0,
+            0.0,
+        ]
+
+    def test_get_moments_of_inertia_monoatomic_internal(
+        self, single_atom_molecule
+    ):
+        result = single_atom_molecule._get_moments_of_inertia
+        assert np.allclose(result, np.zeros(3))
+
+    def test_get_moments_of_inertia_weighted_mass_monoatomic_internal(
+        self, single_atom_molecule
+    ):
+        result = single_atom_molecule._get_moments_of_inertia_weighted_mass
+        assert np.allclose(result, np.zeros(3))
+
+    def test_get_moments_of_inertia_most_abundant_mass_monoatomic_internal(
+        self, single_atom_molecule
+    ):
+        result = (
+            single_atom_molecule._get_moments_of_inertia_most_abundant_mass
+        )
+        assert np.allclose(result, np.zeros(3))
+
+    def test_rotational_temperatures_linear_molecule_has_infinite_axis(
+        self, hydrogen_molecule
+    ):
+        # A diatomic (linear) molecule has one zero moment of inertia
+        # (about the bond axis) -> infinite rotational temperature there,
+        # but only the finite perpendicular value is returned.
+        temps = hydrogen_molecule.rotational_temperatures
+        assert len(temps) == 1
+        assert np.isfinite(temps[0])
+
+    def test_rotational_temperatures_nonlinear_molecule(
+        self, methane_molecule
+    ):
+        temps = methane_molecule.rotational_temperatures
+        assert len(temps) == 3
+        assert all(np.isfinite(t) for t in temps)
+
+
+class TestMoleculeFilepathEdgeCases:
+    def test_from_filepath_returns_none_for_empty_file(self, tmp_path):
+        empty_file = tmp_path / "empty.xyz"
+        empty_file.write_text("")
+        assert Molecule.from_filepath(str(empty_file)) is None
+
+    def test_from_directorypath_missing_folder_raises(self, tmp_path):
+        missing = tmp_path / "does_not_exist"
+        with pytest.raises(FileNotFoundError):
+            Molecule.from_directorypath(str(missing))
+
+    def test_from_directorypath_not_a_directory_raises(self, tmp_path):
+        a_file = tmp_path / "afile.txt"
+        a_file.write_text("hello")
+        with pytest.raises(NotADirectoryError):
+            Molecule.from_directorypath(str(a_file))
+
+    def test_from_directorypath_unsupported_program_raises(
+        self, xtb_water_outfolder
+    ):
+        with pytest.raises(ValueError, match="Unsupported program"):
+            Molecule.from_directorypath(
+                xtb_water_outfolder, program="gaussian"
+            )
+
+    def test_from_directorypath_xtb_default(self, xtb_water_outfolder):
+        mol = Molecule.from_directorypath(xtb_water_outfolder)
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "H2O"
+
+    def test_from_filepath_db_ase_database(self, database_ase_file):
+        result = Molecule.from_filepath(database_ase_file)
+        assert result is not None
+
+    def test_from_filepath_db_empty_database_raises(self, tmp_path):
+        # An ASE database with zero rows (but non-empty file size, unlike
+        # an empty .db file which short-circuits earlier via the
+        # zero-byte-file check) exercises the "empty result list" branch.
+        import ase.db
+        from ase import Atoms
+
+        db_path = tmp_path / "empty_valid.db"
+        db = ase.db.connect(str(db_path))
+        rowid = db.write(Atoms("H2", positions=[[0, 0, 0], [0.74, 0, 0]]))
+        db.delete([rowid])
+
+        with pytest.raises(ValueError, match="neither a valid chemsmart"):
+            Molecule.from_filepath(str(db_path), index=":")
+
+    def test_from_filepath_db_garbage_file_raises(self, tmp_path):
+        garbage = tmp_path / "garbage.db"
+        garbage.write_text("this is not a valid database file at all\n")
+        with pytest.raises(ValueError, match="neither a valid chemsmart"):
+            Molecule.from_filepath(str(garbage))
+
+    def test_from_filepath_falls_back_to_ase_for_unhandled_extension(
+        self, tmp_path
+    ):
+        from ase import Atoms
+        from ase.io import write as ase_write
+
+        atoms = Atoms(
+            "H2O",
+            positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]],
+        )
+        filepath = tmp_path / "mol.json"
+        ase_write(str(filepath), atoms)
+        result = Molecule.from_filepath(str(filepath))
+        assert isinstance(result, Molecule)
+        assert result.chemical_formula == "H2O"
+
+    def test_from_filepath_out_extension_gaussian(self, tmp_path, monkeypatch):
+        # Exercise the ".out" -> gaussian branch of _read_filepath by
+        # forcing get_program_type_from_file to report "gaussian" for a
+        # renamed copy of a real Gaussian log file.
+        import chemsmart.utils.io as chemsmart_io
+
+        monkeypatch.setattr(
+            chemsmart_io,
+            "get_program_type_from_file",
+            lambda _filepath: "gaussian",
+        )
+
+        log_source = os.path.join(
+            os.path.dirname(__file__),
+            "data",
+        )
+        # Find any Gaussian .log fixture and copy it to a .out file.
+        gaussian_log = None
+        for root, _dirs, files in os.walk(log_source):
+            for fname in files:
+                if fname.endswith(".log") and "opt" in fname:
+                    gaussian_log = os.path.join(root, fname)
+                    break
+            if gaussian_log:
+                break
+        assert gaussian_log is not None, "no Gaussian .log fixture found"
+
+        import shutil
+
+        out_path = tmp_path / "renamed.out"
+        shutil.copy(gaussian_log, out_path)
+        result = Molecule.from_filepath(str(out_path))
+        assert result is not None
+
+    def test_from_filepath_out_extension_unsupported_program_raises(
+        self, tmp_path, monkeypatch
+    ):
+        import chemsmart.utils.io as chemsmart_io
+
+        monkeypatch.setattr(
+            chemsmart_io,
+            "get_program_type_from_file",
+            lambda _filepath: "nwchem",
+        )
+        out_path = tmp_path / "unknown.out"
+        out_path.write_text("some content\n")
+        with pytest.raises(ValueError, match="Unsupported .out file"):
+            Molecule.from_filepath(str(out_path))
+
+    def test_read_gaussian_inputfile_wraps_value_error(self, tmp_path):
+        # Route section + title + charge/mult line with no parseable
+        # coordinate lines beneath it -> CoordinateBlock finds zero
+        # symbols, which Molecule.__init__ rejects; _read_gaussian_inputfile
+        # should catch and re-wrap that ValueError with a clearer message.
+        bad_com = tmp_path / "bad.com"
+        bad_com.write_text(
+            "%chk=test.chk\n"
+            "# hf/sto-3g\n"
+            "\n"
+            "Title\n"
+            "\n"
+            "0 1\n"
+            "1 2 3\n"
+        )
+        with pytest.raises(ValueError, match="Failed to read Gaussian"):
+            Molecule.from_filepath(str(bad_com))
+
+    def test_from_filepath_gro_extension_is_broken(self, tmp_path):
+        """`.gro`/`.trr` dispatch to `_read_gromacs_gro`/`_read_gromacs_trr`,
+        but those staticmethods are commented out in the source (dead
+        dispatch branch) -- see BUGS_FOUND.md."""
+        gro_file = tmp_path / "structure.gro"
+        gro_file.write_text("fake gro content\n")
+        with pytest.raises(AttributeError):
+            Molecule.from_filepath(str(gro_file))
+
+    def test_from_filepath_trr_extension_is_broken(self, tmp_path):
+        trr_file = tmp_path / "structure.trr"
+        trr_file.write_text("fake trr content\n")
+        with pytest.raises(AttributeError):
+            Molecule.from_filepath(str(trr_file))
+
+    def test_from_filepath_missing_file_raises(self, tmp_path):
+        missing = tmp_path / "nope.xyz"
+        with pytest.raises(FileNotFoundError):
+            Molecule.from_filepath(str(missing))
+
+    def test_from_filepath_sdf_extension(self, tmp_path):
+        sdf_string = (
+            "water\n"
+            "  -ChemSmart-3D\n"
+            "\n"
+            "  3  2  0  0  0  0  0  0  0  0999 V2000\n"
+            "    0.0000    0.0000    0.1173 O   0  0  0  0  0  0  0  0  0  0  0  0\n"
+            "    0.0000    0.7572   -0.4692 H   0  0  0  0  0  0  0  0  0  0  0  0\n"
+            "    0.0000   -0.7572   -0.4692 H   0  0  0  0  0  0  0  0  0  0  0  0\n"
+            "  1  2  1  0  0  0  0\n"
+            "  1  3  1  0  0  0  0\n"
+            "M  END\n"
+            "$$$$\n"
+        )
+        sdf_path = tmp_path / "water.sdf"
+        sdf_path.write_text(sdf_string)
+        result = Molecule.from_filepath(str(sdf_path))
+        assert isinstance(result, Molecule)
+        assert result.chemical_formula == "H2O"
+
+    def test_from_filepath_orca_inp_extension(self, water_sp_input_path):
+        result = Molecule.from_filepath(water_sp_input_path)
+        assert isinstance(result, Molecule)
+        assert result.chemical_formula == "H2O"
+
+    def test_from_filepath_orca_out_extension(self, water_sp_gas_path):
+        result = Molecule.from_filepath(water_sp_gas_path)
+        assert isinstance(result, Molecule)
+
+    def test_from_filepath_xtb_out_extension(self, xtb_water_outfolder):
+        xtb_out = os.path.join(xtb_water_outfolder, "water_ohess.out")
+        result = Molecule.from_filepath(xtb_out)
+        assert isinstance(result, Molecule)
+
+    def test_from_filepath_chemsmart_db_extension(
+        self, database_chemsmart_file
+    ):
+        result = Molecule.from_filepath(database_chemsmart_file, index=":")
+        assert result is not None
+
+
+class TestReadChemsmartDbfileDispatch:
+    """Isolate Molecule._read_chemsmart_dbfile's dispatch logic from
+    DatabaseFile's own (separately, fully-tested) behavior via mocking."""
+
+    def test_dispatches_by_structure_id(self, mocker):
+        mock_cls = mocker.patch("chemsmart.io.database.DatabaseFile")
+        mock_cls.return_value.get_molecule_by_structure_id.return_value = (
+            "sentinel_structure"
+        )
+        result = Molecule._read_chemsmart_dbfile(
+            filepath="fake.db", structure_id="abc123"
+        )
+        mock_cls.return_value.get_molecule_by_structure_id.assert_called_once_with(
+            structure_id="abc123", return_list=False
+        )
+        assert result == "sentinel_structure"
+
+    def test_dispatches_by_molecule_id(self, mocker):
+        mock_cls = mocker.patch("chemsmart.io.database.DatabaseFile")
+        mock_cls.return_value.get_molecules_by_molecule_id.return_value = (
+            "sentinel_molecule"
+        )
+        result = Molecule._read_chemsmart_dbfile(
+            filepath="fake.db", molecule_id="mid123"
+        )
+        mock_cls.return_value.get_molecules_by_molecule_id.assert_called_once_with(
+            molecule_id="mid123", return_list=False
+        )
+        assert result == "sentinel_molecule"
+
+    def test_dispatches_by_record_index(self, mocker):
+        mock_cls = mocker.patch("chemsmart.io.database.DatabaseFile")
+        mock_cls.return_value.get_molecules_by_record.return_value = (
+            "sentinel_record"
+        )
+        result = Molecule._read_chemsmart_dbfile(
+            filepath="fake.db", record_index=2
+        )
+        mock_cls.return_value.get_molecules_by_record.assert_called_once_with(
+            record_index=2,
+            record_id=None,
+            structure_index="-1",
+            return_list=False,
+        )
+        assert result == "sentinel_record"
+
+    def test_dispatches_to_get_all_molecules_by_default(self, mocker):
+        mock_cls = mocker.patch("chemsmart.io.database.DatabaseFile")
+        mock_cls.return_value.get_all_molecules.return_value = "sentinel_all"
+        result = Molecule._read_chemsmart_dbfile(filepath="fake.db")
+        mock_cls.return_value.get_all_molecules.assert_called_once_with(
+            return_list=False
+        )
+        assert result == "sentinel_all"
+
+
+class TestInChIKeyInChIImportErrors:
+    def test_inchikey_raises_importerror_without_openbabel(
+        self, mocker, water_molecule
+    ):
+        mocker.patch.dict(
+            sys.modules, {"openbabel": None, "openbabel.pybel": None}
+        )
+        with pytest.raises(ImportError, match="Open Babel"):
+            _ = water_molecule.inchikey
+
+    def test_inchi_raises_importerror_without_openbabel(
+        self, mocker, water_molecule
+    ):
+        mocker.patch.dict(
+            sys.modules, {"openbabel": None, "openbabel.pybel": None}
+        )
+        with pytest.raises(ImportError, match="Open Babel"):
+            _ = water_molecule.inchi
+
+
+class TestMoleculeSmilesAndFormula:
+    def test_smiles_cached_property(self, water_molecule):
+        assert water_molecule.smiles == water_molecule.to_smiles()
+
+    def test_get_chemical_formula_returns_none_when_symbols_unset(
+        self, water_molecule
+    ):
+        water_molecule.symbols = None
+        assert water_molecule.get_chemical_formula() is None
+
+
+class TestMoleculeVibrationCounts:
+    def test_has_vibrations_false_by_default(self, water_molecule):
+        assert water_molecule.has_vibrations is False
+        assert water_molecule.num_vib_frequencies == 0
+        assert water_molecule.num_vib_modes == 0
+
+    def test_has_vibrations_true_when_frequencies_present(self):
+        mol = Molecule(
+            symbols=["H", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]]),
+            vibrational_frequencies=[4400.0],
+        )
+        assert mol.has_vibrations is True
+        assert mol.num_vib_frequencies == 1
+
+
+class TestMoleculeConstructorsExtra:
+    def test_from_pubchem_returns_none_when_all_attempts_fail(self, mocker):
+        mock_search = mocker.patch(
+            "chemsmart.io.molecules.pubchem.pubchem_search",
+            return_value=None,
+        )
+        result = Molecule.from_pubchem("nonexistent_compound_zzz")
+        assert result is None
+        assert mock_search.call_count == 3  # smiles, name, conformer
+
+    def test_from_pubchem_returns_list_when_requested(
+        self, mocker, water_molecule
+    ):
+        mocker.patch(
+            "chemsmart.io.molecules.pubchem.pubchem_search",
+            return_value=water_molecule,
+        )
+        result = Molecule.from_pubchem(
+            "some_unique_identifier_for_list_test", return_list=True
+        )
+        assert result == [water_molecule]
+
+    def test_from_pubchem_falls_through_to_later_attribute(
+        self, mocker, water_molecule
+    ):
+        # First attribute (smiles) fails, second (name) succeeds.
+        mock_search = mocker.patch(
+            "chemsmart.io.molecules.pubchem.pubchem_search",
+            side_effect=[None, water_molecule],
+        )
+        result = Molecule.from_pubchem(
+            "some_unique_identifier_for_fallthrough_test"
+        )
+        assert result is water_molecule
+        assert mock_search.call_count == 2
+
+    def test_from_pubchem_numeric_identifier_uses_cid(self, mocker):
+        mock_search = mocker.patch(
+            "chemsmart.io.molecules.pubchem.pubchem_search",
+            return_value=None,
+        )
+        Molecule.from_pubchem("9999999999999")
+        mock_search.assert_called_once_with(cid="9999999999999")
+
+    def test_from_molecule_raises_due_to_internal_attribute_name_mismatch(
+        self, water_molecule
+    ):
+        """``Molecule.from_molecule`` forwards ``molecule.__dict__`` directly
+        as kwargs to ``cls(**...)``, but ``__dict__`` contains the internal
+        ``_positions``/``_energy`` attribute names (set by the property
+        setters in ``__init__``), which ``__init__`` does not accept as
+        keyword arguments. This always raises for any real Molecule.
+        See BUGS_FOUND.md."""
+        with pytest.raises(TypeError, match="_positions"):
+            Molecule.from_molecule(water_molecule)
+
+    def test_from_rdkit_mol_raises_on_none(self):
+        with pytest.raises(ValueError, match="Invalid RDKit molecule"):
+            Molecule.from_rdkit_mol(None)
+
+    def test_from_rdkit_mol_raises_on_no_conformers(self, water_molecule):
+        rdkit_mol = Chem.RWMol()
+        for symbol in water_molecule.symbols:
+            rdkit_mol.AddAtom(Chem.Atom(symbol))
+        with pytest.raises(ValueError, match="no conformers"):
+            Molecule.from_rdkit_mol(rdkit_mol.GetMol())
+
+    def test_from_rdkit_mol_raises_on_multiple_conformers(
+        self, water_molecule
+    ):
+        rdkit_mol = water_molecule.to_rdkit()
+        rw = Chem.RWMol(rdkit_mol)
+        conf = rw.GetConformer(0)
+        # RDKit's Conformer supports a copy constructor (deepcopy isn't
+        # supported, as it's a Boost.Python-wrapped C++ object).
+        conf2 = Chem.Conformer(conf)
+        rw.AddConformer(conf2, assignId=True)
+        with pytest.raises(ValueError, match="single conformer"):
+            Molecule.from_rdkit_mol(rw.GetMol())
+
+
+class TestMoleculeMomentsOfInertiaNonMonoatomic:
+    """Cover the non-monoatomic bodies of the weighted/most-abundant-mass
+    moment-of-inertia properties (the monoatomic short-circuit is covered
+    separately in TestMoleculeMomentsOfInertia)."""
+
+    def test_moments_of_inertia_weighted_mass_nonmonoatomic(
+        self, water_molecule
+    ):
+        result = water_molecule.moments_of_inertia_weighted_mass
+        assert len(result) == 3
+
+    def test_moments_of_inertia_most_abundant_mass_nonmonoatomic(
+        self, water_molecule
+    ):
+        result = water_molecule.moments_of_inertia_most_abundant_mass
+        assert len(result) == 3
+
+    def test_get_moments_of_inertia_weighted_mass_nonmonoatomic_internal(
+        self, water_molecule
+    ):
+        result = water_molecule._get_moments_of_inertia_weighted_mass
+        assert len(result[1]) == 3
+
+    def test_get_moments_of_inertia_most_abundant_mass_nonmonoatomic_internal(
+        self, water_molecule
+    ):
+        result = water_molecule._get_moments_of_inertia_most_abundant_mass
+        assert len(result[1]) == 3
+
+    def test_moments_of_inertia_principal_axes(self, water_molecule):
+        axes = water_molecule.moments_of_inertia_principal_axes
+        assert axes.shape == (3, 3)
+
+
+class TestMoleculeDetermineLevelFromAtomIndexBaseClass:
+    """The base Molecule class carries its own copy of
+    _determine_level_from_atom_index (separate from QMMMMolecule's
+    override); exercise it directly with synthetic high/medium/low
+    level attributes."""
+
+    def test_returns_none_when_high_level_atoms_unset(self, water_molecule):
+        water_molecule.high_level_atoms = None
+        assert water_molecule._determine_level_from_atom_index(1) is None
+
+    def test_returns_h_for_high_level_atom(self, water_molecule):
+        water_molecule.high_level_atoms = ["1"]
+        water_molecule.medium_level_atoms = None
+        assert water_molecule._determine_level_from_atom_index(1) == "H"
+
+    def test_returns_m_for_medium_level_atom(self, water_molecule):
+        water_molecule.high_level_atoms = ["1"]
+        water_molecule.medium_level_atoms = ["2"]
+        assert water_molecule._determine_level_from_atom_index(2) == "M"
+
+    def test_returns_l_when_not_high_and_no_medium_level_atoms(
+        self, water_molecule
+    ):
+        water_molecule.high_level_atoms = ["1"]
+        water_molecule.medium_level_atoms = None
+        assert water_molecule._determine_level_from_atom_index(3) == "L"
+
+    def test_returns_none_when_not_high_and_not_in_medium_level_atoms(
+        self, water_molecule
+    ):
+        """medium_level_atoms is set (truthy) but the atom index is
+        not in it -- falls through without an explicit return."""
+        water_molecule.high_level_atoms = ["1"]
+        water_molecule.medium_level_atoms = ["2"]
+        assert water_molecule._determine_level_from_atom_index(3) is None
+
+
+class TestMoleculeWriteMethods:
+    def test_write_coordinates_unsupported_program_raises(
+        self, water_molecule, tmp_path
+    ):
+        outfile = tmp_path / "out.txt"
+        with open(outfile, "w") as f:
+            with pytest.raises(ValueError, match="not supported for writing"):
+                water_molecule.write_coordinates(f, program="nwchem")
+
+    def test_write_coordinates_default_program_is_gaussian(
+        self, water_molecule, tmp_path
+    ):
+        outfile = tmp_path / "out_default.txt"
+        with open(outfile, "w") as f:
+            water_molecule.write_coordinates(f, program=None)
+        content = outfile.read_text()
+        assert "O" in content
+
+    def test_write_coordinates_orca_program(self, water_molecule, tmp_path):
+        outfile = tmp_path / "out_orca.txt"
+        with open(outfile, "w") as f:
+            water_molecule.write_coordinates(f, program="orca")
+        content = outfile.read_text()
+        assert "O" in content
+
+    def test_write_unsupported_format_raises(self, water_molecule, tmp_path):
+        outfile = tmp_path / "out.foo"
+        with pytest.raises(ValueError, match="not supported for writing"):
+            water_molecule.write(str(outfile), format="foo")
+
+    def test_str_representation(self, water_molecule):
+        water_molecule.energy = -76.0
+        assert str(water_molecule) == (
+            f"Molecule<{water_molecule.empirical_formula},energy: -76.0>"
+        )
+
+    def test_to_cosmorsxyz(self, water_molecule):
+        water_molecule.charge = 0
+        water_molecule.multiplicity = 1
+        result = water_molecule.to_cosmorsxyz()
+        lines = result.split("\n")
+        assert lines[0] == "3"
+        assert lines[1] == "0 1"
+        assert len(lines) == 5
+
+    def test_write_cosmorsxyz(self, water_molecule, tmp_path):
+        water_molecule.charge = 0
+        water_molecule.multiplicity = 1
+        outfile = tmp_path / "out.cosmorsxyz"
+        water_molecule.write_cosmorsxyz(str(outfile))
+        content = outfile.read_text()
+        assert content == water_molecule.to_cosmorsxyz()
+
+    def test_write_com_format(self, water_molecule, tmp_path):
+        water_molecule.charge = 0
+        water_molecule.multiplicity = 1
+        outfile = tmp_path / "out.com"
+        water_molecule.write(str(outfile), format="com")
+        content = outfile.read_text()
+        assert "%chk=out.chk" in content
+        assert "0 1\n" in content
+
+    def test_write_com_uses_default_charge_multiplicity_when_unset(
+        self, water_molecule, tmp_path
+    ):
+        water_molecule.charge = None
+        water_molecule.multiplicity = None
+        outfile = tmp_path / "out_default.com"
+        water_molecule.write_com(str(outfile), charge=2, multiplicity=3)
+        content = outfile.read_text()
+        assert "2 3\n" in content
+
+    def test_write_xyz_includes_energy_when_present(
+        self, water_molecule, tmp_path
+    ):
+        water_molecule.energy = -76.123456
+        outfile = tmp_path / "out_energy.xyz"
+        water_molecule.write(str(outfile), format="xyz")
+        content = outfile.read_text()
+        assert "Energy(Hartree): -76.123456" in content
+
+    def test_write_extxyz_without_forces(self, water_molecule, tmp_path):
+        outfile = tmp_path / "out.extxyz"
+        water_molecule.write(str(outfile), format="extxyz")
+        content = outfile.read_text()
+        assert "Properties=species:S:1:pos:R:3" in content
+        assert "forces" not in content
+
+    def test_write_extxyz_with_energy(self, water_molecule, tmp_path):
+        water_molecule.energy = -76.0
+        outfile = tmp_path / "out.extxyz"
+        water_molecule.write_extxyz(str(outfile), mode="w")
+        content = outfile.read_text()
+        assert "energy=" in content
+        assert 'energy_units="Hartree"' in content
+
+    def test_write_extxyz_with_valid_forces(self, water_molecule, tmp_path):
+        water_molecule.forces = np.zeros((3, 3))
+        outfile = tmp_path / "out.extxyz"
+        water_molecule.write_extxyz(str(outfile), mode="w")
+        content = outfile.read_text()
+        assert "forces:R:3" in content
+        assert 'forces_units="Hartree/Bohr"' in content
+
+    def test_write_extxyz_with_invalid_forces_shape_ignored(
+        self, water_molecule, tmp_path
+    ):
+        # Wrong shape -> forces silently dropped from the extxyz header.
+        water_molecule.forces = np.zeros((2, 3))
+        outfile = tmp_path / "out.extxyz"
+        water_molecule.write_extxyz(str(outfile), mode="w")
+        content = outfile.read_text()
+        assert "forces" not in content
+
+    def test_write_extxyz_with_non_numeric_forces_ignored(
+        self, water_molecule, tmp_path
+    ):
+        water_molecule.forces = "not an array"
+        outfile = tmp_path / "out.extxyz"
+        water_molecule.write_extxyz(str(outfile), mode="w")
+        content = outfile.read_text()
+        assert "forces" not in content
+
+    def test_write_pdb_rejects_legacy_conf_id_kwargs(
+        self, water_molecule, tmp_path
+    ):
+        outfile = tmp_path / "out.pdb"
+        with pytest.raises(TypeError, match="Legacy conformer-selection"):
+            water_molecule.write_pdb(str(outfile), confId=0)
+
+    def test_write_pdb_pybabel_creates_file(self, water_molecule, tmp_path):
+        outfile = tmp_path / "out_pybabel.pdb"
+        water_molecule.write_pdb_pybabel(str(outfile))
+        assert outfile.exists()
+        assert outfile.read_text().strip() != ""
+
+    def test_write_pdb_pybabel_no_cleanup_keeps_tempfile(
+        self, water_molecule, tmp_path
+    ):
+        outfile = tmp_path / "out_pybabel2.pdb"
+        water_molecule.write_pdb_pybabel(str(outfile), cleanup=False)
+        assert outfile.exists()
+
+    def test_write_pdb_pybabel_raises_importerror_without_openbabel(
+        self, mocker, water_molecule, tmp_path
+    ):
+        mocker.patch.dict(
+            sys.modules, {"openbabel": None, "openbabel.pybel": None}
+        )
+        outfile = tmp_path / "out_pybabel3.pdb"
+        with pytest.raises(ImportError, match="openbabel"):
+            water_molecule.write_pdb_pybabel(str(outfile))
+
+    def test_write_pdb_pybabel_importerror_no_cleanup(
+        self, mocker, water_molecule, tmp_path
+    ):
+        """cleanup=False skips the temp-file removal attempt entirely
+        in the ImportError branch."""
+        mocker.patch.dict(
+            sys.modules, {"openbabel": None, "openbabel.pybel": None}
+        )
+        outfile = tmp_path / "out_pybabel3b.pdb"
+        with pytest.raises(ImportError, match="openbabel"):
+            water_molecule.write_pdb_pybabel(str(outfile), cleanup=False)
+
+    def test_write_pdb_pybabel_importerror_cleanup_oserror_is_swallowed(
+        self, mocker, water_molecule, tmp_path
+    ):
+        """If the temp XYZ file cannot be removed during ImportError
+        cleanup, the OSError is swallowed and the original ImportError
+        still propagates."""
+        mocker.patch.dict(
+            sys.modules, {"openbabel": None, "openbabel.pybel": None}
+        )
+        mocker.patch("os.remove", side_effect=OSError("locked"))
+        outfile = tmp_path / "out_pybabel4.pdb"
+        with pytest.raises(ImportError, match="openbabel"):
+            water_molecule.write_pdb_pybabel(str(outfile))
+
+    def test_write_pdb_pybabel_raises_when_xyz_unreadable(
+        self, mocker, water_molecule, tmp_path
+    ):
+        mocker.patch("openbabel.pybel.readfile", return_value=iter([]))
+        outfile = tmp_path / "out_pybabel5.pdb"
+        with pytest.raises(ValueError, match="Unable to read molecule"):
+            water_molecule.write_pdb_pybabel(str(outfile))
+
+    def test_write_pdb_pybabel_final_cleanup_oserror_logs_warning(
+        self, mocker, water_molecule, tmp_path, caplog
+    ):
+        """If the temp XYZ file cannot be removed after a successful
+        conversion, the OSError is caught and logged as a warning
+        rather than propagating."""
+        mocker.patch("os.remove", side_effect=OSError("locked"))
+        outfile = tmp_path / "out_pybabel6.pdb"
+        with caplog.at_level("WARNING"):
+            water_molecule.write_pdb_pybabel(str(outfile))
+        assert outfile.exists()
+        assert any(
+            "Failed to remove temporary file" in record.message
+            for record in caplog.records
+        )
+
+
+class TestMoleculeBondingAndGraphExtra:
+    def test_bond_lengths_matches_get_all_distances(self, water_molecule):
+        assert (
+            water_molecule.bond_lengths() == water_molecule.get_all_distances()
+        )
+
+    def test_to_pdb_reraises_kekulize_error_when_add_bonds_false(
+        self, water_molecule, mocker
+    ):
+        mocker.patch(
+            "rdkit.Chem.MolToPDBBlock",
+            side_effect=Chem.KekulizeException("forced"),
+        )
+        with pytest.raises(Chem.KekulizeException):
+            water_molecule.to_pdb(add_bonds=False)
+
+    def test_add_bonds_to_rdkit_mol_without_adjust_h(self, water_molecule):
+        rdkit_mol = water_molecule.to_rdkit(adjust_H=False)
+        assert rdkit_mol.GetNumAtoms() == 3
+
+    def test_add_bonds_to_rdkit_mol_vectorized(self, water_molecule):
+        rdkit_mol = Chem.RWMol()
+        for symbol in water_molecule.symbols:
+            rdkit_mol.AddAtom(Chem.Atom(symbol))
+        result = water_molecule._add_bonds_to_rdkit_mol_vectorized(rdkit_mol)
+        assert result.GetNumBonds() == 2
+
+    def test_add_bonds_to_rdkit_mol_vectorized_no_adjust_h(
+        self, water_molecule
+    ):
+        rdkit_mol = Chem.RWMol()
+        for symbol in water_molecule.symbols:
+            rdkit_mol.AddAtom(Chem.Atom(symbol))
+        result = water_molecule._add_bonds_to_rdkit_mol_vectorized(
+            rdkit_mol, adjust_H=False
+        )
+        assert result.GetNumAtoms() == 3
+
+    def test_add_bonds_to_rdkit_mol_vectorized_non_h_pair_uses_default_buffer(
+        self, gaussian_acetone_opt_outfile
+    ):
+        """adjust_H=True (default) with a pair of non-H atoms exercises
+        the plain bond_cutoff_buffer branch, distinct from the H-H and
+        H-heavy special cases covered by the water_molecule tests."""
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        rdkit_mol = Chem.RWMol()
+        for symbol in acetone.symbols:
+            rdkit_mol.AddAtom(Chem.Atom(symbol))
+        result = acetone._add_bonds_to_rdkit_mol_vectorized(rdkit_mol)
+        assert result.GetNumBonds() > 0
+
+    def test_rdkit_fingerprints(self, water_molecule):
+        fp = water_molecule.rdkit_fingerprints
+        assert fp is not None
+
+    def test_get_bond_orders_from_graph(self, water_molecule):
+        orders = water_molecule.get_bond_orders_from_graph()
+        assert len(orders) == 2
+        assert all(o > 0 for o in orders)
+
+    def test_bond_orders_falls_back_to_rdkit_on_graph_failure(
+        self, mocker, water_molecule
+    ):
+        mocker.patch.object(
+            type(water_molecule),
+            "get_bond_orders_from_graph",
+            side_effect=RuntimeError("graph failure"),
+        )
+        assert water_molecule.bond_orders == (
+            water_molecule.get_bond_orders_from_rdkit_mol()
+        )
+
+    def test_to_graph_non_vectorized(self, water_molecule):
+        graph = water_molecule.to_graph_non_vectorized()
+        assert isinstance(graph, nx.Graph)
+        assert graph.number_of_nodes() == 3
+        assert graph.number_of_edges() == 2
+
+    def test_to_graph_non_vectorized_non_h_pair_uses_default_buffer(
+        self, gaussian_acetone_opt_outfile
+    ):
+        """adjust_H=True (default) with a pair of non-H atoms exercises
+        the plain bond_cutoff_buffer branch, distinct from the H-H and
+        H-heavy special cases covered by the water_molecule tests."""
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        graph = acetone.to_graph_non_vectorized()
+        assert graph.number_of_edges() > 0
+
+    def test_to_graph_non_vectorized_no_adjust_h(self, water_molecule):
+        graph = water_molecule.to_graph_non_vectorized(adjust_H=False)
+        assert isinstance(graph, nx.Graph)
+        assert graph.number_of_nodes() == 3
+
+    def test_to_graph_and_non_vectorized_agree(self, methane_molecule):
+        g1 = methane_molecule.to_graph()
+        g2 = methane_molecule.to_graph_non_vectorized()
+        assert set(g1.edges()) == set(g2.edges())
+
+
+class TestMoleculeToXData:
+    def test_to_x_data_basic(self, water_molecule):
+        x = water_molecule.to_X_data()
+        # 1 (energy) + num_atoms*3 (positions)
+        assert x.shape == (1, 1 + water_molecule.num_atoms * 3)
+
+    def test_to_x_data_with_wbo(self, water_molecule):
+        x = water_molecule.to_X_data(wbo=True)
+        assert x.shape[1] > 1 + water_molecule.num_atoms * 3
+
+    def test_to_x_data_raises_when_positions_none(self, water_molecule):
+        water_molecule._positions = None
+        with pytest.raises(ValueError, match="Positions are not available"):
+            water_molecule.to_X_data()
+
+    def test_to_x_data_defaults_energy_to_zero(self, water_molecule):
+        assert water_molecule.energy is None
+        x = water_molecule.to_X_data()
+        assert x[0, 0] == 0.0
+
+
+class TestMoleculeDeleteAtomsByIndicesExtra:
+    def test_delete_atoms_raises_when_indices_none(self, water_molecule):
+        with pytest.raises(ValueError, match="must be provided"):
+            water_molecule.delete_atoms_by_indices(None)
+
+    def test_delete_atoms_raises_on_non_int_non_iterable(self, water_molecule):
+        with pytest.raises(TypeError, match="int or iterable"):
+            water_molecule.delete_atoms_by_indices(3.14)
+
+    def test_delete_atoms_empty_iterable_returns_copy(self, water_molecule):
+        result = water_molecule.delete_atoms_by_indices([])
+        assert result.num_atoms == water_molecule.num_atoms
+        assert result is not water_molecule
+
+    def test_delete_atoms_raises_on_non_integer_index(self, water_molecule):
+        with pytest.raises(ValueError, match="not a valid integer"):
+            water_molecule.delete_atoms_by_indices(["abc"])
+
+    def test_delete_atoms_raises_on_out_of_range_index(self, water_molecule):
+        with pytest.raises(ValueError, match="out of range"):
+            water_molecule.delete_atoms_by_indices(99)
+
+    def test_delete_atoms_raises_when_all_atoms_removed(
+        self, hydrogen_molecule
+    ):
+        with pytest.raises(ValueError, match="empty molecule"):
+            hydrogen_molecule.delete_atoms_by_indices([1, 2])
+
+    def test_delete_atoms_zero_based_indexing(self, methane_molecule):
+        result = methane_molecule.delete_atoms_by_indices(0, one_based=False)
+        assert result.num_atoms == 4
+        assert "C" not in result.symbols
+
+    def test_delete_atoms_filters_forces_and_velocities(self):
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+            forces=np.array(
+                [[0.1, 0.0, 0.0], [0.2, 0.0, 0.0], [0.3, 0.0, 0.0]]
+            ),
+            velocities=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+            frozen_atoms=[0, 0, -1],
+        )
+        result = mol.delete_atoms_by_indices(2)
+        assert result.num_atoms == 2
+        assert len(result.forces) == 2
+        assert len(result.velocities) == 2
+        assert len(result.frozen_atoms) == 2
+
+    def test_delete_atoms_leaves_mismatched_length_seq_unfiltered(self):
+        """A per-atom-shaped attribute whose length does not match
+        the number of atoms (e.g. a stale/malformed frozen_atoms list)
+        is returned unchanged rather than filtered."""
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+            frozen_atoms=[0, 0],
+        )
+        result = mol.delete_atoms_by_indices(2)
+        assert result.num_atoms == 2
+        assert result.frozen_atoms == [0, 0]
+
+    def test_delete_atoms_filters_vibrational_modes(self):
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+            vibrational_modes=[np.zeros((3, 3)), np.ones((3, 3))],
+        )
+        result = mol.delete_atoms_by_indices(1)
+        assert result.num_atoms == 2
+        assert len(result.vibrational_modes) == 2
+        assert result.vibrational_modes[0].shape == (2, 3)
+
+
+@pytest.fixture()
+def water_with_vib_modes():
+    """Water molecule with a single synthetic mass-weighted mode."""
+    mol = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.1173],
+                [0.0000, 0.7572, -0.4692],
+                [0.0000, -0.7572, -0.4692],
+            ]
+        ),
+        vibrational_modes=[
+            np.array(
+                [
+                    [0.0, 0.0, 0.1],
+                    [0.0, 0.2, -0.1],
+                    [0.0, -0.2, -0.1],
+                ]
+            )
+        ],
+    )
+    return mol
+
+
+class TestVibrationallyDisplaced:
+    def test_positive_index_single_frame(self, water_with_vib_modes):
+        displaced = water_with_vib_modes.vibrationally_displaced(mode_idx=1)
+        assert isinstance(displaced, Molecule)
+        assert not np.allclose(
+            displaced.positions, water_with_vib_modes.positions
+        )
+
+    def test_negative_index_single_frame(self, water_with_vib_modes):
+        displaced = water_with_vib_modes.vibrationally_displaced(mode_idx=-1)
+        assert isinstance(displaced, Molecule)
+
+    def test_non_integer_mode_idx_raises(self, water_with_vib_modes):
+        with pytest.raises(ValueError, match="should be integer"):
+            water_with_vib_modes.vibrationally_displaced(mode_idx="1")
+
+    def test_wrong_shape_mode_raises(self, water_with_vib_modes):
+        water_with_vib_modes.vibrational_modes = [np.zeros((2, 3))]
+        with pytest.raises(ValueError, match="must have shape"):
+            water_with_vib_modes.vibrationally_displaced(mode_idx=1)
+
+    def test_normalize_true(self, water_with_vib_modes):
+        displaced = water_with_vib_modes.vibrationally_displaced(
+            mode_idx=1, normalize=True
+        )
+        assert isinstance(displaced, Molecule)
+
+    def test_normalize_zero_norm_mode_raises(self, water_with_vib_modes):
+        water_with_vib_modes.vibrational_modes = [np.zeros((3, 3))]
+        with pytest.raises(ValueError, match="zero norm"):
+            water_with_vib_modes.vibrationally_displaced(
+                mode_idx=1, normalize=True
+            )
+
+    def test_nframes_returns_list_of_molecules(self, water_with_vib_modes):
+        frames = water_with_vib_modes.vibrationally_displaced(
+            mode_idx=1, nframes=4
+        )
+        assert isinstance(frames, list)
+        assert len(frames) == 4
+        assert all(isinstance(m, Molecule) for m in frames)
+
+    def test_nframes_with_return_xyz(self, water_with_vib_modes):
+        xyz_string = water_with_vib_modes.vibrationally_displaced(
+            mode_idx=1, nframes=3, return_xyz=True
+        )
+        assert isinstance(xyz_string, str)
+        assert xyz_string.count("vib frame") == 3
+
+
+class TestCoordinateBlockEdgeCasesExtra:
+    def test_invalid_type_raises_typeerror(self):
+        with pytest.raises(TypeError, match="must be str or list"):
+            CoordinateBlock(coordinate_block=12345)
+
+    def test_get_symbols_raises_when_no_valid_lines(self):
+        cb = CoordinateBlock(coordinate_block=["too short"])
+        with pytest.raises(ValueError, match="No symbols found"):
+            cb._get_symbols()
+
+    def test_get_atomic_numbers_positions_raises_when_no_valid_lines(self):
+        cb = CoordinateBlock(coordinate_block=["too short"])
+        with pytest.raises(ValueError, match="No atomic numbers or positions"):
+            cb._get_atomic_numbers_positions_and_constraints()
+
+    def test_get_atomic_numbers_wrapper(self):
+        block = [
+            "C   0.000  0.000  0.000",
+            "H   1.089  0.000  0.000",
+        ]
+        cb = CoordinateBlock(coordinate_block=block)
+        assert cb._get_atomic_numbers() == [6, 1]
+
+    def test_get_constraints_returns_none_when_all_unconstrained(self):
+        block = [
+            "C   0      0.000  0.000  0.000",
+            "H   0      1.089  0.000  0.000",
+        ]
+        cb = CoordinateBlock(coordinate_block=block)
+        assert cb.constrained_atoms is None
+
+    def test_non_integer_atomic_number_token_raises(self):
+        # First token "6.5" is a non-integer float -> hits the explicit
+        # `raise ValueError` inside the float-parsing branch, then falls
+        # through to the element-sanitize path (no regex match since it
+        # starts with a digit), and ultimately fails inside PeriodicTable.
+        cb = CoordinateBlock(coordinate_block=["6.5 0.0 0.0 0.0"])
+        with pytest.raises(ValueError):
+            cb._get_atomic_numbers_positions_and_constraints()
+
+    def test_unparseable_leading_token_raises(self):
+        cb = CoordinateBlock(coordinate_block=["123abc 0.0 0.0 0.0"])
+        with pytest.raises(ValueError):
+            cb._get_atomic_numbers_positions_and_constraints()
+
+    def test_non_numeric_second_token_raises_downstream(self):
+        # Second token isn't a valid constraint flag or coordinate,
+        # exercising the except (ValueError, IndexError) branch before
+        # ultimately failing to parse it as a coordinate.
+        cb = CoordinateBlock(coordinate_block=["C abc 1.0 2.0 3.0"])
+        with pytest.raises(ValueError):
+            cb._get_atomic_numbers_positions_and_constraints()
+
+    def test_get_symbols_logs_and_skips_on_unexpected_exception(self, mocker):
+        import chemsmart.io.molecules.structure as structure_module
+
+        mocker.patch.object(
+            structure_module.p,
+            "to_symbol",
+            side_effect=RuntimeError("boom"),
+        )
+        mocker.patch.object(
+            structure_module.p,
+            "to_element",
+            side_effect=RuntimeError("boom"),
+        )
+        cb = CoordinateBlock(
+            coordinate_block=["6 0.0 0.0 0.0", "C 1.0 0.0 0.0"]
+        )
+        with pytest.raises(ValueError, match="No symbols found"):
+            cb._get_symbols()
+
+    def test_frozen_atoms_with_partition_labels_cube_style(self):
+        # 6-token lines: symbol, constraint flag, x, y, z, partition label
+        # -- the "cube file and frozen atoms case" branch of _get_partitions.
+        block = [
+            "C   -1   0.000  0.000  0.000  H",
+            "H    0   1.089  0.000  0.000  M",
+            "H    0  -0.363  1.027  0.000  L",
+        ]
+        cb = CoordinateBlock(coordinate_block=block)
+        mol = cb.molecule
+        assert isinstance(mol, QMMMMolecule)
+        assert mol.high_level_atoms == [1]
+        assert mol.medium_level_atoms == [2]
+        assert mol.low_level_atoms == [3]
+
+    def test_translation_vector_line_with_extra_tokens(self):
+        block = [
+            "C   0.000  0.000  0.000",
+            "TV  label  1.0  2.0  3.0",
+        ]
+        cb = CoordinateBlock(coordinate_block=block)
+        assert cb.translation_vectors == [[1.0, 2.0, 3.0]]
+
+    def test_pbc_conditions_two_translation_vectors(self):
+        block = [
+            "C   0.000  0.000  0.000",
+            "TV  1.0  0.0  0.0",
+            "TV  0.0  1.0  0.0",
+        ]
+        cb = CoordinateBlock(coordinate_block=block)
+        assert cb.pbc_conditions == [1, 1, 0]
+
+    def test_pbc_conditions_three_translation_vectors(self):
+        block = [
+            "C   0.000  0.000  0.000",
+            "TV  1.0  0.0  0.0",
+            "TV  0.0  1.0  0.0",
+            "TV  0.0  0.0  1.0",
+        ]
+        cb = CoordinateBlock(coordinate_block=block)
+        assert cb.pbc_conditions == [1, 1, 1]
+
+    def test_pbc_conditions_none_without_translation_vectors(self):
+        block = ["C   0.000  0.000  0.000"]
+        cb = CoordinateBlock(coordinate_block=block)
+        assert cb.pbc_conditions is None
+
+
+class TestPKaMoleculeValidation:
+    def test_raises_when_molecule_is_none(self):
+        with pytest.raises(ValueError, match="parent Molecule must be"):
+            PKaMolecule(molecule=None, proton_index=1)
+
+    def test_raises_when_proton_index_is_none(self, water_molecule):
+        with pytest.raises(ValueError, match="positive 1-based integer"):
+            PKaMolecule(molecule=water_molecule, proton_index=None)
+
+    def test_raises_when_proton_index_less_than_one(self, water_molecule):
+        with pytest.raises(ValueError, match="positive 1-based integer"):
+            PKaMolecule(molecule=water_molecule, proton_index=0)
+
+    def test_raises_when_proton_index_out_of_range(self, water_molecule):
+        with pytest.raises(ValueError, match="out of range"):
+            PKaMolecule(molecule=water_molecule, proton_index=99)
+
+    def test_raises_when_atom_is_not_hydrogen(self, water_molecule):
+        # Atom 1 is oxygen in the water_molecule fixture.
+        with pytest.raises(ValueError, match="not 'H'"):
+            PKaMolecule(molecule=water_molecule, proton_index=1)
+
+    def test_successful_construction_preserves_attributes(
+        self, water_molecule
+    ):
+        water_molecule.energy = -76.0
+        pka_mol = PKaMolecule(molecule=water_molecule, proton_index=2)
+        assert pka_mol.proton_index == 2
+        assert pka_mol.chemical_formula == "H2O"
+        assert pka_mol.energy == -76.0
+
+    def test_from_molecule_and_proton_index_classmethod(self, water_molecule):
+        pka_mol = PKaMolecule.from_molecule_and_proton_index(
+            molecule=water_molecule, proton_index=2
+        )
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 2
+
+
+class TestQMMMMoleculeExtra:
+    def test_init_without_molecule_behaves_like_molecule(self):
+        qmmm = QMMMMolecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+        )
+        assert qmmm.chemical_formula == "H2O"
+        assert qmmm.high_level_atoms is None
+
+    def test_getattr_forwards_to_wrapped_molecule(self, water_molecule):
+        qmmm = QMMMMolecule(molecule=water_molecule)
+        # `is_linear` isn't set directly on QMMMMolecule.__dict__ (it's a
+        # property inherited via Molecule, so __getattr__ isn't actually
+        # invoked for it) -- use a genuinely-forwarded custom attribute.
+        water_molecule.custom_marker = "hello"
+        assert qmmm.custom_marker == "hello"
+
+    def test_getattr_raises_for_truly_missing_attribute(self, water_molecule):
+        qmmm = QMMMMolecule(molecule=water_molecule)
+        with pytest.raises(AttributeError):
+            qmmm.definitely_does_not_exist_anywhere
+
+    def test_getattr_raises_when_no_wrapped_molecule(self):
+        qmmm = QMMMMolecule(
+            symbols=["O", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0]]),
+        )
+        with pytest.raises(AttributeError):
+            qmmm.definitely_does_not_exist_anywhere
+
+    def test_partition_level_strings_property(self, water_molecule):
+        qmmm = QMMMMolecule(
+            molecule=water_molecule,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[3],
+        )
+        assert qmmm.partition_level_strings == ["H", "M", "L"]
+
+    def test_get_partition_levels_raises_when_high_level_atoms_none(
+        self, water_molecule
+    ):
+        qmmm = QMMMMolecule(molecule=water_molecule)
+        with pytest.raises(ValueError, match="High level atoms"):
+            qmmm._get_partition_levels()
+
+    def test_get_partition_levels_defaults_low_level_to_remainder(
+        self, water_molecule
+    ):
+        qmmm = QMMMMolecule(
+            molecule=water_molecule,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+        )
+        high, medium, low = qmmm._get_partition_levels()
+        assert high == [1]
+        assert medium == [2]
+        assert low == [3]
+
+    def test_get_partition_levels_string_range_inputs(self, water_molecule):
+        qmmm = QMMMMolecule(
+            molecule=water_molecule,
+            high_level_atoms="1",
+            medium_level_atoms="2",
+            low_level_atoms="3",
+        )
+        high, medium, low = qmmm._get_partition_levels()
+        assert high == [1]
+        assert medium == [2]
+        assert low == [3]
+
+    def test_get_partition_levels_invalid_index_raises(self, water_molecule):
+        qmmm = QMMMMolecule(
+            molecule=water_molecule,
+            high_level_atoms=["not_an_int"],
+        )
+        with pytest.raises(ValueError, match="Invalid atom index"):
+            qmmm._get_partition_levels()
+
+    def test_get_partition_levels_overlap_high_low(self, water_molecule):
+        qmmm = QMMMMolecule(
+            molecule=water_molecule,
+            high_level_atoms=[1, 3],
+            medium_level_atoms=[2],
+            low_level_atoms=[3],
+        )
+        with pytest.raises(ValueError, match="Overlap"):
+            qmmm._get_partition_levels()
+
+    def test_get_partition_levels_overlap_medium_low(self, water_molecule):
+        qmmm = QMMMMolecule(
+            molecule=water_molecule,
+            high_level_atoms=[1],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=[3],
+        )
+        with pytest.raises(ValueError, match="Overlap"):
+            qmmm._get_partition_levels()
+
+    def test_determine_level_from_atom_index_none_when_unset(
+        self, water_molecule
+    ):
+        qmmm = QMMMMolecule(molecule=water_molecule)
+        assert qmmm._determine_level_from_atom_index(1) is None
+
+    def test_write_gaussian_coordinates_bonded_atoms_string_literal(
+        self, tmp_path
+    ):
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.0],
+                    [-3.88098484, -0.56804789, 0.0],
+                    [-5.16121212, 0.33672729, 0.0],
+                    [-1.93181817, -0.59090908, 0.0],
+                ]
+            ),
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms="[(1, 3)]",
+        )
+        outfile = tmp_path / "tmp.xyz"
+        with open(outfile, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        assert isinstance(mol.bonded_atoms, list)
+        assert mol.bonded_atoms == [(1, 3)]
+
+    def test_write_gaussian_coordinates_same_level_bond_raises(self, tmp_path):
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.0],
+                    [-3.88098484, -0.56804789, 0.0],
+                    [-5.16121212, 0.33672729, 0.0],
+                    [-1.93181817, -0.59090908, 0.0],
+                ]
+            ),
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 2)],  # both low-level -> same level
+        )
+        outfile = tmp_path / "tmp.xyz"
+        with pytest.raises(ValueError, match="cannot be at the same level"):
+            with open(outfile, "w") as f:
+                mol._write_gaussian_coordinates(f)
+
+    def test_write_gaussian_coordinates_remaining_bonded_atom_level_combos(
+        self, tmp_path
+    ):
+        """Cover the H-(M/L), M-L, and (M/L)-H link-atom branches of
+        _write_gaussian_coordinates not exercised by test_qmmm_atoms_handling
+        (which only covers the L-M combo)."""
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.0],
+                    [-3.88098484, -0.56804789, 0.0],
+                    [-5.16121212, 0.33672729, 0.0],
+                    [-1.93181817, -0.59090908, 0.0],
+                ]
+            ),
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[3, 4],
+            bonded_atoms=[(1, 2), (2, 3), (3, 1)],
+        )
+        outfile = tmp_path / "tmp.xyz"
+        with open(outfile, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(outfile) as f:
+            content = f.read()
+        assert "H 1" in content or "H 2" in content or "H 3" in content
+
+    def test_write_gaussian_coordinates_scale_factors_not_list_raises(
+        self, tmp_path
+    ):
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.0],
+                    [-3.88098484, -0.56804789, 0.0],
+                    [-5.16121212, 0.33672729, 0.0],
+                    [-1.93181817, -0.59090908, 0.0],
+                ]
+            ),
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 3)],
+            scale_factors={(1, 3): 0.9},  # not a list
+        )
+        outfile = tmp_path / "tmp.xyz"
+        with pytest.raises(ValueError, match="should be a list"):
+            with open(outfile, "w") as f:
+                mol._write_gaussian_coordinates(f)
+
+    def test_write_gaussian_coordinates_scale_factors_same_level_raises(
+        self, tmp_path
+    ):
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.0],
+                    [-3.88098484, -0.56804789, 0.0],
+                    [-5.16121212, 0.33672729, 0.0],
+                    [-1.93181817, -0.59090908, 0.0],
+                ]
+            ),
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 2)],
+            scale_factors={(1, 2): [0.9, 0.8, 0.7]},  # both low -> same level
+        )
+        outfile = tmp_path / "tmp.xyz"
+        with pytest.raises(ValueError, match="cannot be at the same level"):
+            with open(outfile, "w") as f:
+                mol._write_gaussian_coordinates(f)
+
+    def test_write_gaussian_coordinates_scale_factors_remaining_combos(
+        self, tmp_path
+    ):
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.0],
+                    [-3.88098484, -0.56804789, 0.0],
+                    [-5.16121212, 0.33672729, 0.0],
+                    [-1.93181817, -0.59090908, 0.0],
+                ]
+            ),
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[3, 4],
+            bonded_atoms=[(1, 2), (2, 3), (3, 1)],
+            scale_factors={
+                (1, 2): [0.1, 0.2, 0.3],
+                (2, 3): [0.4, 0.5, 0.6],
+                (3, 1): [0.7, 0.8, 0.9],
+            },
+        )
+        outfile = tmp_path / "tmp.xyz"
+        with open(outfile, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(outfile) as f:
+            content = f.read()
+        assert "0.1" in content or "0.4" in content or "0.7" in content
 
 
 class TestStructureCoverageBoost:

@@ -4,7 +4,15 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from chemsmart.cli.config import Config
+import pytest
+from click.testing import CliRunner
+
+from chemsmart.cli.config import (
+    Config,
+    add_lines_in_yaml_files,
+    config,
+    update_yaml_files,
+)
 from chemsmart.utils.io import update_powershell_profiles, update_windows_env
 
 
@@ -24,6 +32,59 @@ class TestConfig:
     def test_chemsmart_dest(self):
         cfg = Config()
         assert cfg.chemsmart_dest == Path.home() / ".chemsmart"
+
+    def test_chemsmart_gaussian(self):
+        cfg = Config()
+        assert cfg.chemsmart_gaussian == cfg.chemsmart_dest / "gaussian"
+
+    def test_chemsmart_orca(self):
+        cfg = Config()
+        assert cfg.chemsmart_orca == cfg.chemsmart_dest / "orca"
+
+    # ------------------------------------------------------------------
+    # conda_path / conda_folder
+    # ------------------------------------------------------------------
+
+    def test_conda_path_returns_which_result_when_found(self):
+        cfg = Config()
+        with (
+            patch(
+                "chemsmart.cli.config.shutil.which",
+                return_value="/opt/conda/bin/conda",
+            ),
+            patch("chemsmart.cli.config.os.path.exists", return_value=True),
+        ):
+            assert cfg.conda_path == "/opt/conda/bin/conda"
+
+    def test_conda_path_raises_when_not_on_path(self):
+        cfg = Config()
+        with patch("chemsmart.cli.config.shutil.which", return_value=None):
+            with pytest.raises(FileNotFoundError, match="Conda not found"):
+                cfg.conda_path
+
+    def test_conda_path_raises_when_which_result_does_not_exist(self):
+        """shutil.which can return a stale path (e.g. deleted shim)."""
+        cfg = Config()
+        with (
+            patch(
+                "chemsmart.cli.config.shutil.which",
+                return_value="/no/such/conda",
+            ),
+            patch("chemsmart.cli.config.os.path.exists", return_value=False),
+        ):
+            with pytest.raises(FileNotFoundError, match="Conda not found"):
+                cfg.conda_path
+
+    def test_conda_folder_is_grandparent_of_executable(self):
+        cfg = Config()
+        with patch.object(
+            Config,
+            "conda_path",
+            new_callable=lambda: property(
+                lambda self: "/home/user/miniconda3/bin/conda"
+            ),
+        ):
+            assert cfg.conda_folder == "/home/user/miniconda3"
 
     # ------------------------------------------------------------------
     # shell_config
@@ -101,6 +162,19 @@ class TestConfig:
         ):
             result = cfg.shell_config
         assert result == fake_home / ".zshrc"
+
+    def test_shell_config_unknown_shell_falls_back_to_profile(self, tmp_path):
+        cfg = Config()
+        fake_home = tmp_path
+        with (
+            patch(
+                "chemsmart.cli.config.platform.system", return_value="Linux"
+            ),
+            patch.dict("os.environ", {"SHELL": "/bin/sh"}),
+            patch.object(Path, "home", return_value=fake_home),
+        ):
+            result = cfg.shell_config
+        assert result == fake_home / ".profile"
 
     # ------------------------------------------------------------------
     # env_vars
@@ -781,3 +855,172 @@ class TestConfigurePathsInteractively:
             cfg.configure_paths_interactively()
 
         mock_update.assert_not_called()
+
+
+class TestUpdateYamlFilesFunction:
+    """Direct tests for the module-level update_yaml_files helper."""
+
+    def test_replaces_value_in_all_yaml_files(self, tmp_path):
+        (tmp_path / "a.yaml").write_text("path: ~/bin/g16\nother: value\n")
+        (tmp_path / "b.txt").write_text("path: ~/bin/g16\n")
+
+        update_yaml_files(tmp_path, "~/bin/g16", "/opt/g16")
+
+        assert (
+            tmp_path / "a.yaml"
+        ).read_text() == "path: /opt/g16\nother: value\n"
+        # non-.yaml files are left untouched
+        assert (tmp_path / "b.txt").read_text() == "path: ~/bin/g16\n"
+
+    def test_missing_target_directory_is_a_no_op(self, tmp_path):
+        missing = tmp_path / "does_not_exist"
+        # Should not raise even though the directory doesn't exist.
+        update_yaml_files(missing, "~/bin/g16", "/opt/g16")
+
+
+class TestAddLinesInYamlFilesFunction:
+    """Direct tests for the module-level add_lines_in_yaml_files helper."""
+
+    def test_adds_lines_after_matching_position_once(self, tmp_path):
+        (tmp_path / "server.yaml").write_text(
+            "EXTRA_COMMANDS: |\n"
+            "  #extra commands to activate chemsmart environment\n"
+            "other: 1\n"
+        )
+
+        add_lines_in_yaml_files(
+            tmp_path,
+            ["#extra commands to activate chemsmart environment"],
+            ["export PATH=x", "export PYTHONPATH=y"],
+            prepend_string="        ",
+        )
+
+        content = (tmp_path / "server.yaml").read_text()
+        assert "        export PATH=x\n" in content
+        assert "        export PYTHONPATH=y\n" in content
+        # only added once even though the file is only processed once
+        assert content.count("export PATH=x") == 1
+
+    def test_multiple_matching_lines_only_add_once(self, tmp_path):
+        """Covers the skip_addition guard's False arm: a second
+        matching line later in the same file must not re-add lines."""
+        (tmp_path / "server.yaml").write_text(
+            "EXTRA_COMMANDS: |\n"
+            "  #extra commands\n"
+            "  #extra commands\n"
+            "other: 1\n"
+        )
+
+        add_lines_in_yaml_files(
+            tmp_path, ["#extra commands"], ["export X=1"], prepend_string="  "
+        )
+
+        content = (tmp_path / "server.yaml").read_text()
+        assert content.count("export X=1") == 1
+
+    def test_missing_target_directory_is_a_no_op(self, tmp_path):
+        missing = tmp_path / "does_not_exist"
+        add_lines_in_yaml_files(missing, ["x"], ["y"])
+
+    def test_malformed_yaml_is_logged_not_raised(self, tmp_path):
+        """A file that fails to open/process shouldn't abort the whole
+        directory scan; unexpected errors (generic Exception) are
+        caught and logged. Note the `except yaml.YAMLError` clause
+        (see BUGS_FOUND.md #40) can never actually trigger, since this
+        function only ever does plain text I/O (readlines/write) --
+        no yaml.safe_load or similar parsing call exists in its body."""
+        (tmp_path / "broken.yaml").write_text("some: content\n")
+        with patch(
+            "builtins.open", side_effect=OSError("simulated read failure")
+        ):
+            # Should not raise despite the simulated failure.
+            add_lines_in_yaml_files(tmp_path, ["some"], ["extra"])
+
+
+class TestConfigGroupDefaultInvocation:
+    """Covers the `config` group's own callback when invoked with no
+    subcommand: it runs setup_environment() + configure_paths_interactively().
+    """
+
+    def test_no_subcommand_runs_setup_and_interactive_configuration(self):
+        runner = CliRunner()
+        with (
+            patch.object(Config, "setup_environment") as mock_setup,
+            patch.object(
+                Config, "configure_paths_interactively"
+            ) as mock_interactive,
+        ):
+            result = runner.invoke(config, [])
+        assert result.exit_code == 0, result.output
+        mock_setup.assert_called_once()
+        mock_interactive.assert_called_once()
+
+
+class TestConfigSoftwareFolderCommands:
+    """Covers the gaussian/orca/nciplot/scratch subcommands, which all
+    share the same "if '~' in folder: validate expanded path exists"
+    plus update_yaml_files pattern."""
+
+    def _invoke(self, subcommand, folder):
+        runner = CliRunner()
+        with patch("chemsmart.cli.config.update_yaml_files") as mock_update:
+            result = runner.invoke(config, [subcommand, "--folder", folder])
+        return result, mock_update
+
+    def test_gaussian_updates_yaml_with_absolute_path(self):
+        result, mock_update = self._invoke("gaussian", "/opt/g16")
+        assert result.exit_code == 0, result.output
+        mock_update.assert_called_once()
+        args = mock_update.call_args[0]
+        assert args[1] == "~/bin/g16"
+        assert args[2] == "/opt/g16"
+
+    def test_gaussian_expands_and_validates_tilde_path(self, tmp_path):
+        with patch(
+            "chemsmart.cli.config.os.path.expanduser",
+            return_value=str(tmp_path),
+        ):
+            result, mock_update = self._invoke("gaussian", "~/bin/g16")
+        assert result.exit_code == 0, result.output
+        mock_update.assert_called_once()
+
+    def test_gaussian_tilde_path_not_found_raises(self):
+        result, _ = self._invoke("gaussian", "~/no/such/g16/folder/at/all")
+        assert result.exit_code != 0
+        assert isinstance(result.exception, AssertionError)
+
+    def test_orca_updates_yaml_with_absolute_path(self):
+        result, mock_update = self._invoke("orca", "/opt/orca")
+        assert result.exit_code == 0, result.output
+        args = mock_update.call_args[0]
+        assert args[1] == "~/bin/orca_6_0_0"
+        assert args[2] == "/opt/orca"
+
+    def test_orca_tilde_path_not_found_raises(self):
+        result, _ = self._invoke("orca", "~/no/such/orca/folder/at/all")
+        assert result.exit_code != 0
+        assert isinstance(result.exception, AssertionError)
+
+    def test_nciplot_updates_yaml_with_absolute_path(self):
+        result, mock_update = self._invoke("nciplot", "/opt/nciplot")
+        assert result.exit_code == 0, result.output
+        args = mock_update.call_args[0]
+        assert args[1] == "~/bin/nciplot"
+        assert args[2] == "/opt/nciplot"
+
+    def test_nciplot_tilde_path_not_found_raises(self):
+        result, _ = self._invoke("nciplot", "~/no/such/nciplot/folder")
+        assert result.exit_code != 0
+        assert isinstance(result.exception, AssertionError)
+
+    def test_scratch_updates_yaml_with_absolute_path(self):
+        result, mock_update = self._invoke("scratch", "/opt/scratch")
+        assert result.exit_code == 0, result.output
+        args = mock_update.call_args[0]
+        assert args[1] == "~/scratch"
+        assert args[2] == "/opt/scratch"
+
+    def test_scratch_tilde_path_not_found_raises(self):
+        result, _ = self._invoke("scratch", "~/no/such/scratch/folder")
+        assert result.exit_code != 0
+        assert isinstance(result.exception, AssertionError)

@@ -1,6 +1,7 @@
 import csv
 import json
 import sqlite3
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -80,6 +81,16 @@ class TestDatabaseUtilities:
         assert is_chemsmart_database(database_chemsmart_file)
         assert not is_chemsmart_database(database_ase_file)
         assert not is_chemsmart_database(database_empty_file)
+
+    def test_is_chemsmart_database_returns_false_for_non_db_extension(self):
+        assert not is_chemsmart_database("not_a_database.txt")
+
+    def test_is_chemsmart_database_returns_false_for_corrupt_file(
+        self, tmp_path
+    ):
+        corrupt_db = tmp_path / "corrupt.db"
+        corrupt_db.write_bytes(b"not a real sqlite file at all \x00\x01")
+        assert not is_chemsmart_database(str(corrupt_db))
 
     def test_is_custom_basis(self):
         assert is_custom_basis(" GenECP ")
@@ -300,6 +311,10 @@ class TestDatabaseUtilities:
         for known in ("pbe0", "def2tzvp", "opt"):
             assert known not in tokens3
 
+    def test_canonicalize_route_string_returns_none_for_falsy_input(self):
+        assert canonicalize_route_string("") is None
+        assert canonicalize_route_string(None) is None
+
     def test_compute_trajectory_id(self):
         sid_a = "a" * 64
         sid_b = "b" * 64
@@ -327,6 +342,7 @@ class TestDatabaseUtilities:
         assert human_size(1024) == "1.0 KB"
         assert human_size(1048576) == "1.0 MB"
         assert human_size(None) == "-"
+        assert human_size(1024**4) == "1.0 TB"
 
     def test_convert_numpy(self):
         assert convert_numpy(np.int64(2)) == 2  # int
@@ -378,6 +394,8 @@ class TestDatabaseUtilities:
         assert standardize_basis_set("def2-svp") == "def2svp"
         assert standardize_basis_set("def2-tzvp") == "def2tzvp"
         assert standardize_basis_set("6-31g") == "6-31g"
+        assert standardize_basis_set(None) is None
+        assert standardize_basis_set("") == ""
 
     def test_sort_frames_by_energy(self):
         frames = [
@@ -419,6 +437,11 @@ class TestDatabaseUtilities:
         # No-energy case: original order preserved, no IndexError.
         empty_frames = [{"structure_id": "x", "energies": []}]
         assert sort_frames_by_energy(empty_frames) == empty_frames
+
+    def test_sort_structure_dicts_by_energy_empty_input(self, tmp_path):
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        assert sort_structure_dicts_by_energy(db.db_file, []) == []
 
     def test_sort_structure_dicts_no_energy(self, tmp_path):
         db = Database(str(tmp_path / "empty.db"))
@@ -464,6 +487,26 @@ class TestDatabaseUtilities:
 
         assert record_by_index["record_id"] == record_by_id["record_id"]
 
+        with pytest.raises(ValueError, match="No record found at index"):
+            resolve_record(db, record_index=999)
+
+    def test_resolve_record_by_id_not_found_raises(self):
+        # get_record_by_partial_id resolves to a full ID, but get_record
+        # then finds nothing for it (e.g. deleted between the two calls).
+        mock_db = MagicMock()
+        mock_db.get_record_by_partial_id.return_value = "full-record-id"
+        mock_db.get_record.return_value = None
+
+        with pytest.raises(ValueError, match="No record found with ID"):
+            resolve_record(mock_db, record_id="partial")
+
+    def test_resolve_record_requires_index_or_id(self):
+        mock_db = MagicMock()
+        with pytest.raises(
+            ValueError, match="Either record_index or record_id"
+        ):
+            resolve_record(mock_db)
+
 
 class TestDatabaseSchemaAndInsertion:
     def test_create_schema(self, tmp_path):
@@ -497,6 +540,16 @@ class TestDatabaseSchemaAndInsertion:
         assert required_tables <= tables
         assert "idx_record_id" in indexes
         assert "idx_struct_molecule_id" in indexes
+
+    def test_get_record_without_index_or_id_returns_none(self, tmp_path):
+        db = Database(str(tmp_path / "empty2.db"))
+        db.create()
+        assert db.get_record() is None
+
+    def test_get_record_missing_id_returns_none(self, tmp_path):
+        db = Database(str(tmp_path / "empty3.db"))
+        db.create()
+        assert db.get_record(record_id="no-such-record") is None
 
     def test_insert_deduplicates_molecules(
         self,
@@ -622,6 +675,11 @@ class TestDatabaseSchemaAndInsertion:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         conn.close()
         assert version == SCHEMA_VERSION
+
+    def test_schema_version_matches_does_not_raise(self, tmp_path):
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        check_schema_version(db.db_file)  # should not raise
 
     def test_schema_version_mismatch_raises(self, tmp_path):
         """check_schema_version() raises RuntimeError for a stale database."""
@@ -817,6 +875,120 @@ class TestDatabaseRecordMoleculeStructureQueries:
             == STRUCTURE_ID_ORIGIN_HE
         )
 
+    def test_partial_id_resolution_error_branches(self, tmp_path):
+        """No-match and ambiguous-match errors for
+        get_structure_by_partial_id, exercised via raw rows rather
+        than real assembled data (real content-hash structure_ids
+        don't collide on a short prefix in a small test database)."""
+        db = Database(str(tmp_path / "partial_errors.db"))
+        db.create()
+        conn = db.get_connection()
+        conn.execute("INSERT INTO molecules (molecule_id) VALUES (?)", ("m1",))
+        conn.execute(
+            "INSERT INTO structures (structure_id, molecule_id) VALUES (?, ?)",
+            ("abc111", "m1"),
+        )
+        conn.execute(
+            "INSERT INTO structures (structure_id, molecule_id) VALUES (?, ?)",
+            ("abc222", "m1"),
+        )
+        conn.commit()
+        conn.close()
+
+        with pytest.raises(ValueError, match="No structure found"):
+            db.get_structure_by_partial_id("xyz")
+
+        with pytest.raises(ValueError, match="Ambiguous ID prefix"):
+            db.get_structure_by_partial_id("abc")
+
+
+class TestDatabaseForcesQueries:
+    """pick_primary_forces_method_basis, resolve_method_basis,
+    get_forces_for_structure_at, and get_forces_for_record_structure_at
+    had no test coverage at all. Populated via raw SQL rows rather than
+    a full SingleFileAssembler pipeline, since these queries only care
+    about the records/structures/record_structures columns directly."""
+
+    def _seed_forces_db(self, tmp_path):
+        db = Database(str(tmp_path / "forces.db"))
+        db.create()
+        conn = db.get_connection()
+        conn.execute("INSERT INTO molecules (molecule_id) VALUES (?)", ("m1",))
+        conn.execute(
+            "INSERT INTO records (record_id, method, basis, record_index) "
+            "VALUES (?, ?, ?, ?)",
+            ("rec1", "b3lyp", "def2svp", 1),
+        )
+        conn.execute(
+            "INSERT INTO structures (structure_id, molecule_id) VALUES (?, ?)",
+            ("struct1", "m1"),
+        )
+        conn.execute(
+            "INSERT INTO record_structures "
+            "(record_id, structure_id, index_in_record, energy, forces_json) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("rec1", "struct1", 0, -100.0, json.dumps([[0.1, 0.2, 0.3]])),
+        )
+        conn.commit()
+        conn.close()
+        return db
+
+    def test_pick_primary_forces_method_basis_returns_best_match(
+        self, tmp_path
+    ):
+        db = self._seed_forces_db(tmp_path)
+        assert db.pick_primary_forces_method_basis(["struct1"]) == (
+            "b3lyp",
+            "def2svp",
+        )
+
+    def test_pick_primary_forces_method_basis_empty_input(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.pick_primary_forces_method_basis([]) == (None, None)
+
+    def test_resolve_method_basis_case_insensitive_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.resolve_method_basis("B3LYP", "DEF2SVP") == (
+            "b3lyp",
+            "def2svp",
+        )
+
+    def test_resolve_method_basis_none_input_returns_none(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.resolve_method_basis(None, "def2svp") is None
+
+    def test_resolve_method_basis_no_match_returns_none(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.resolve_method_basis("nomatch", "nomatch") is None
+
+    def test_get_forces_for_structure_at_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        forces, energy = db.get_forces_for_structure_at(
+            "struct1", "b3lyp", "def2svp"
+        )
+        assert forces == [[0.1, 0.2, 0.3]]
+        assert energy == -100.0
+
+    def test_get_forces_for_structure_at_no_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.get_forces_for_structure_at(
+            "nomatch", "b3lyp", "def2svp"
+        ) == (None, None)
+
+    def test_get_forces_for_record_structure_at_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        forces, energy = db.get_forces_for_record_structure_at(
+            "rec1", "struct1", "b3lyp", "def2svp"
+        )
+        assert forces == [[0.1, 0.2, 0.3]]
+        assert energy == -100.0
+
+    def test_get_forces_for_record_structure_at_no_match(self, tmp_path):
+        db = self._seed_forces_db(tmp_path)
+        assert db.get_forces_for_record_structure_at(
+            "rec1", "nomatch", "b3lyp", "def2svp"
+        ) == (None, None)
+
 
 class TestDatabaseQuery:
     def test_parse_query_validation(self, tmp_path):
@@ -918,6 +1090,81 @@ class TestDatabaseQuery:
         empty_summaries = empty.query_summaries()
         assert len(empty_summaries) == 0
         assert "No records" in empty.format_summary(empty.query_summaries())
+
+        # Unquoted numeric-looking values parse as float when not a
+        # plain int, and fall back to the raw string when neither.
+        float_query = DatabaseQuery(db.db_file, "total_energy = -3.5")
+        _, float_params = float_query.parse_query()
+        assert float_params == (-3.5,)
+
+        bareword_query = DatabaseQuery(db.db_file, "program = ORCA")
+        _, bareword_params = bareword_query.parse_query()
+        assert bareword_params == ("ORCA",)
+
+        # format_summary with a limit but no query string covers the
+        # "no query" skip alongside the "limit set" branch together.
+        limited_no_query = DatabaseQuery(db.db_file, None, limit=1)
+        formatted_limited = limited_no_query.format_summary(
+            limited_no_query.query_summaries()
+        )
+        assert "Query   :" not in formatted_limited
+        assert "Limit   : 1" in formatted_limited
+
+    def test_format_table_empty_and_missing_values(self, tmp_path):
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        dq = DatabaseQuery(db.db_file, None)
+
+        assert dq._format_table([]) == []
+
+        rows = dq._format_table([{"record_index": 1}])
+        assert any("" in row for row in rows[2:])
+
+    def test_parse_query_empty_clause_parts_is_unreachable_defensively(
+        self, tmp_path, monkeypatch
+    ):
+        """See BUGS_FOUND.md #60: `if not clause_parts:` can never be
+        true through any real query string, since every token either
+        appends to clause_parts or raises. Force an empty token list
+        directly to exercise the guard for coverage."""
+        import types
+
+        import chemsmart.database.query as query_module
+
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        dq = DatabaseQuery(db.db_file, "program = 'ORCA'")
+
+        fake_splitter = types.SimpleNamespace(split=lambda s: [])
+        monkeypatch.setattr(query_module, "_LOGIC_SPLIT_RE", fake_splitter)
+        with pytest.raises(ValueError, match="Empty query string"):
+            dq.parse_query()
+
+    def test_parse_query_unsupported_operator_is_unreachable_defensively(
+        self, tmp_path, monkeypatch
+    ):
+        """See BUGS_FOUND.md #60: query_condition_pattern's operator
+        group only ever matches operators already in
+        SUPPORTED_OPERATORS, so `if operator not in SUPPORTED_OPERATORS`
+        can never be true through any real query string. Force a fake
+        match object to exercise the guard for coverage."""
+        import types
+
+        import chemsmart.database.query as query_module
+
+        db = Database(str(tmp_path / "empty.db"))
+        db.create()
+        dq = DatabaseQuery(db.db_file, "total_energy !! -3")
+
+        fake_match = types.SimpleNamespace(
+            groups=lambda: ("total_energy", "!!", "-3")
+        )
+        fake_condition_re = types.SimpleNamespace(
+            fullmatch=lambda token: fake_match
+        )
+        monkeypatch.setattr(query_module, "_CONDITION_RE", fake_condition_re)
+        with pytest.raises(ValueError, match="Unsupported operator"):
+            dq.parse_query()
 
 
 class TestDatabaseExport:

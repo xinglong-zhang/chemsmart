@@ -1,6 +1,7 @@
 import importlib
 import os.path
 from shutil import copyfile
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -4352,6 +4353,267 @@ class TestCleanedFrequencies:
             Thermochemistry.cleaned_frequencies.fget(mock)
 
 
+class TestThermochemistryFileObjectAndRotationalConstants:
+    """file_object, average_rotational_constant,
+    geometry/gaussian/effective_rotational_constants_in_Hz,
+    effective_rotational_temperatures, and vibrational/real/imaginary
+    frequencies had several branches never reached by the extensive
+    real-fixture tests elsewhere in this file (which all use normally
+    terminated, non-monoatomic, frequency-bearing Gaussian outputs).
+    """
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    @staticmethod
+    def _cached(name, mock):
+        return Thermochemistry.__dict__[name].func(mock)
+
+    def test_file_object_constructs_real_xtb_output(self, xtb_co2_outfolder):
+        """No test anywhere actually constructs a Thermochemistry from
+        an xTB output despite several tests being named as if they
+        did -- they only ever construct XTBOutput directly."""
+        main_out = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
+        thermochem = Thermochemistry(filename=main_out, temperature=298.15)
+        assert thermochem.program == "xtb"
+        from chemsmart.io.xtb.output import XTBOutput
+
+        assert isinstance(thermochem.file_object, XTBOutput)
+        assert thermochem.gibbs_free_energy is not None
+
+    def test_file_object_unsupported_format_raises(self):
+        mock = self._mock_with(program="unknown", filename="some.xyz")
+        with pytest.raises(ValueError, match="Unsupported file format"):
+            self._cached("file_object", mock)
+
+    def test_file_object_abnormal_termination_raises(self):
+        mock = self._mock_with(program="gaussian", filename="some.log")
+        with patch(
+            "chemsmart.analysis.thermochemistry.Gaussian16Output"
+        ) as mock_g16:
+            mock_g16.return_value = MagicMock(normal_termination=False)
+            with pytest.raises(ValueError, match="did not terminate normally"):
+                self._cached("file_object", mock)
+
+    def test_average_rotational_constant_none_when_constants_none(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            effective_rotational_constants_in_Hz=None,
+        )
+        assert Thermochemistry.average_rotational_constant.fget(mock) is None
+
+    def test_average_rotational_constant_none_when_constants_empty(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            effective_rotational_constants_in_Hz=[],
+        )
+        assert Thermochemistry.average_rotational_constant.fget(mock) is None
+
+    def test_geometry_rotational_constants_none_for_monoatomic(self):
+        mock = self._mock_with(molecule=MagicMock(is_monoatomic=True))
+        assert (
+            self._cached("geometry_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_gaussian_rotational_constants_none_for_non_gaussian_output(self):
+        from chemsmart.io.orca.output import ORCAOutput
+
+        mock = self._mock_with(file_object=MagicMock(spec=ORCAOutput))
+        assert (
+            self._cached("gaussian_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_gaussian_rotational_constants_none_when_empty(self):
+        fake_g16 = MagicMock(spec=Gaussian16Output)
+        fake_g16.all_rotational_constants.return_value = []
+        mock = self._mock_with(file_object=fake_g16)
+        assert (
+            self._cached("gaussian_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_effective_rotational_constants_gaussian_mode_falls_back(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="gaussian",
+            gaussian_rotational_constants_in_Hz=None,
+            geometry_rotational_constants_in_Hz=np.array([1.0, 2.0]),
+        )
+        result = self._cached("effective_rotational_constants_in_Hz", mock)
+        assert list(result) == [1.0, 2.0]
+
+    def test_effective_rotational_constants_gaussian_mode_succeeds(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="gaussian",
+            gaussian_rotational_constants_in_Hz=np.array([1.0, 2.0]),
+        )
+        result = self._cached("effective_rotational_constants_in_Hz", mock)
+        assert list(result) == [1.0, 2.0]
+
+    def test_effective_rotational_constants_unsupported_mode_raises(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="bogus",
+        )
+        with pytest.raises(ValueError, match="Unsupported rotational"):
+            self._cached("effective_rotational_constants_in_Hz", mock)
+
+    def test_effective_rotational_temperatures_none(self):
+        mock = self._mock_with(effective_rotational_constants_in_Hz=None)
+        assert self._cached("effective_rotational_temperatures", mock) is None
+
+    def test_vibrational_frequencies_none_without_freq_job(self):
+        mock = self._mock_with(file_object=MagicMock(freq=False))
+        assert Thermochemistry.vibrational_frequencies.fget(mock) is None
+
+    def test_real_frequencies_none_without_vibrational_frequencies(self):
+        mock = self._mock_with(vibrational_frequencies=None)
+        assert Thermochemistry.real_frequencies.fget(mock) is None
+
+    def test_imaginary_frequencies_none_without_vibrational_frequencies(self):
+        mock = self._mock_with(vibrational_frequencies=None)
+        assert Thermochemistry.imaginary_frequencies.fget(mock) is None
+
+
+class TestThermochemistryNoFrequencyDataPropertyGuards:
+    """Every real fixture used elsewhere in this file has vibrational
+    frequency data, so the "no frequencies available" (theta/v/derived
+    property is None) branch of ~20 downstream properties was never
+    exercised. Calls each property's getter directly on a
+    MagicMock(spec=Thermochemistry) with only the specific upstream
+    attribute it checks set to None, bypassing the need to construct
+    a full Thermochemistry from a real (freq-less) output file."""
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    def test_vibrational_partition_function_bot_none(self):
+        mock = self._mock_with(vibrational_partition_function_by_mode_bot=None)
+        assert (
+            Thermochemistry.vibrational_partition_function_bot.fget(mock)
+            is None
+        )
+
+    def test_vibrational_partition_function_v0_none(self):
+        mock = self._mock_with(vibrational_partition_function_by_mode_v0=None)
+        assert (
+            Thermochemistry.vibrational_partition_function_v0.fget(mock)
+            is None
+        )
+
+    def test_vibrational_entropy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_entropy.fget(mock) is None
+
+    def test_zero_point_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.zero_point_energy.fget(mock) is None
+
+    def test_vibrational_internal_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_internal_energy.fget(mock) is None
+
+    def test_vibrational_heat_capacity_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_heat_capacity.fget(mock) is None
+
+    def test_total_partition_function_none(self):
+        mock = self._mock_with(vibrational_partition_function_v0=None)
+        assert Thermochemistry.total_partition_function.fget(mock) is None
+
+    def test_total_entropy_none(self):
+        mock = self._mock_with(vibrational_entropy=None)
+        assert Thermochemistry.total_entropy.fget(mock) is None
+
+    def test_total_internal_energy_none(self):
+        mock = self._mock_with(vibrational_internal_energy=None)
+        assert Thermochemistry.total_internal_energy.fget(mock) is None
+
+    def test_total_heat_capacity_none(self):
+        mock = self._mock_with(vibrational_heat_capacity=None)
+        assert Thermochemistry.total_heat_capacity.fget(mock) is None
+
+    def test_calculate_damping_function_none_freq_cutoff(self):
+        mock = self._mock_with()
+        assert Thermochemistry._calculate_damping_function(mock, None) is None
+
+    def test_calculate_damping_function_none_v(self):
+        mock = self._mock_with(v=None)
+        assert Thermochemistry._calculate_damping_function(mock, 100.0) is None
+
+    def test_free_rotor_entropy_none_without_v(self):
+        mock = self._mock_with(v=None)
+        assert Thermochemistry.free_rotor_entropy.fget(mock) is None
+
+    def test_free_rotor_entropy_empty_list_without_bav(self):
+        mock = self._mock_with(v=[1.0, 2.0], Bav=None)
+        assert Thermochemistry.free_rotor_entropy.fget(mock) == []
+
+    def test_rrho_entropy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.rrho_entropy.fget(mock) is None
+
+    def test_rrho_internal_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.rrho_internal_energy.fget(mock) is None
+
+    def test_enthalpy_none(self):
+        mock = self._mock_with(total_internal_energy=None)
+        assert Thermochemistry.enthalpy.fget(mock) is None
+
+    def test_qrrho_total_entropy_none(self):
+        mock = self._mock_with(qrrho_vibrational_entropy=None)
+        assert Thermochemistry.qrrho_total_entropy.fget(mock) is None
+
+    def test_entropy_times_temperature_none(self):
+        mock = self._mock_with(total_entropy=None)
+        assert Thermochemistry.entropy_times_temperature.fget(mock) is None
+
+    def test_qrrho_entropy_times_temperature_none(self):
+        mock = self._mock_with(qrrho_total_entropy=None)
+        assert (
+            Thermochemistry.qrrho_entropy_times_temperature.fget(mock) is None
+        )
+
+    def test_gibbs_free_energy_none(self):
+        mock = self._mock_with(entropy_times_temperature=None, enthalpy=1.0)
+        assert Thermochemistry.gibbs_free_energy.fget(mock) is None
+
+    def test_qrrho_total_internal_energy_none(self):
+        mock = self._mock_with(qrrho_vibrational_internal_energy=None)
+        assert Thermochemistry.qrrho_total_internal_energy.fget(mock) is None
+
+    def test_qrrho_enthalpy_none(self):
+        mock = self._mock_with(qrrho_total_internal_energy=None)
+        assert Thermochemistry.qrrho_enthalpy.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_none(self):
+        mock = self._mock_with(
+            qrrho_enthalpy=None, qrrho_entropy_times_temperature=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_qs_none(self):
+        mock = self._mock_with(
+            qrrho_entropy_times_temperature=None, enthalpy=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy_qs.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_qh_none(self):
+        mock = self._mock_with(
+            qrrho_enthalpy=None, entropy_times_temperature=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy_qh.fget(mock) is None
+
+
 class TestThermochemistryCLI:
     """CLI option-propagation tests for the thermochemistry command."""
 
@@ -4577,3 +4839,421 @@ class TestThermochemistryCLIFolderOptions:
             for call in mock_from_filename.call_args_list
         ]
         assert xtb_output in discovered_files
+
+
+class TestThermochemistryRemainingBranches:
+    """Covers a handful of remaining branches in Thermochemistry that the
+    extensive real-fixture tests elsewhere in this file never reach:
+    an infinite rotational constant inside effective_rotational_temperatures,
+    non-None real_frequencies, the "unknown entropy_method" fallthrough in
+    qrrho_vibrational_entropy, the check_imaginary_frequencies=False skip in
+    _compute_thermochemistry, check_frequencies' two error branches, and
+    Thermochemistry.__str__. Uses the same MagicMock(spec=Thermochemistry) +
+    unbound-method-call pattern established in
+    TestThermochemistryFileObjectAndRotationalConstants.
+    """
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    @staticmethod
+    def _cached(name, mock):
+        return Thermochemistry.__dict__[name].func(mock)
+
+    def test_effective_rotational_temperatures_handles_infinite_constant(
+        self,
+    ):
+        mock = self._mock_with(
+            effective_rotational_constants_in_Hz=np.array([1e10, np.inf, 2e10])
+        )
+        result = self._cached("effective_rotational_temperatures", mock)
+        assert result[1] == np.inf
+        assert np.isfinite(result[0])
+        assert np.isfinite(result[2])
+
+    def test_real_frequencies_filters_negative_values(self):
+        mock = self._mock_with(
+            vibrational_frequencies=[-50.0, 100.0, 200.0, -10.0]
+        )
+        result = Thermochemistry.real_frequencies.fget(mock)
+        assert result == [100.0, 200.0]
+
+    def test_qrrho_vibrational_entropy_unknown_method_returns_zero(self):
+        """Real bug: if entropy_method is left at its default None (or set
+        to any value other than "grimme"/"truhlar") while s_freq_cutoff is
+        set, qrrho_vibrational_entropy silently returns 0.0 instead of
+        raising or warning. See BUGS_FOUND.md for details."""
+        mock = self._mock_with(
+            s_freq_cutoff=100.0,
+            v=[1e13, 2e13, 3e13],
+            entropy_method=None,
+        )
+        result = Thermochemistry.qrrho_vibrational_entropy.fget(mock)
+        assert result == 0
+
+    def test_compute_thermochemistry_skips_check_when_disabled(self):
+        mock = self._mock_with(
+            check_imaginary_frequencies=False,
+            filename="/tmp/some_structure.log",
+            energy_units="hartree",
+        )
+        mock.convert_energy_units.return_value = (1, 2, 3, 4, 5, 6, 7, 8)
+        result = Thermochemistry._compute_thermochemistry(mock)
+        assert result == ("some_structure", 1, 2, 3, 4, 5, 6, 7, 8)
+        mock.check_frequencies.assert_not_called()
+
+    def test_check_frequencies_ts_with_multiple_imaginary_raises(self):
+        mock = self._mock_with(
+            imaginary_frequencies=[-10.0, -20.0],
+            jobtype="ts",
+            filename="ts.log",
+        )
+        with pytest.raises(
+            ValueError, match="Invalid number of imaginary frequencies"
+        ):
+            Thermochemistry.check_frequencies(mock)
+
+    def test_check_frequencies_non_ts_with_imaginary_raises(self):
+        mock = self._mock_with(
+            imaginary_frequencies=[-10.0],
+            jobtype="opt",
+            filename="opt.log",
+        )
+        with pytest.raises(ValueError, match="Invalid geometry optimization"):
+            Thermochemistry.check_frequencies(mock)
+
+    def test_str_representation_of_thermochemistry(
+        self, gaussian_singlet_opt_outfile
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+        )
+        text = str(thermochem)
+        assert "Thermochemistry Results for" in text
+        assert "Temperature: 298.15 K" in text
+        assert "Pressure: 1.0 atm" in text
+        assert "Most Abundant Masses" in text
+        assert "Energy Unit: hartree" in text
+
+    def test_str_representation_with_concentration_and_weighted_mass(
+        self, gaussian_singlet_opt_outfile
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            concentration=1.0,
+            use_weighted_mass=True,
+        )
+        text = str(thermochem)
+        assert "Concentration: 1.0 mol/L" in text
+        assert "Natural Abundance Weighted Masses" in text
+
+
+class TestConvertEnergyUnitsBranches:
+    """convert_energy_units' four s_freq_cutoff/h_freq_cutoff combinations
+    were only ever exercised via the "neither" (default) combination in
+    TestThermochemistryBatchMode -- no test called compute_thermochemistry()
+    /convert_energy_units() with s_freq_cutoff and/or h_freq_cutoff set."""
+
+    def test_both_cutoffs_set(self, gaussian_singlet_opt_outfile):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=100,
+            h_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        result = thermochem.convert_energy_units()
+        assert result[-1] is not None
+        assert np.isclose(
+            result[-1],
+            thermochem.qrrho_gibbs_free_energy * joule_per_mol_to_hartree,
+        )
+
+    def test_s_freq_cutoff_only(self, gaussian_singlet_opt_outfile):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        result = thermochem.convert_energy_units()
+        assert result[-1] is not None
+        assert np.isclose(
+            result[-1],
+            thermochem.qrrho_gibbs_free_energy_qs * joule_per_mol_to_hartree,
+        )
+
+    def test_h_freq_cutoff_only(self, gaussian_singlet_opt_outfile):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            h_freq_cutoff=100,
+        )
+        result = thermochem.convert_energy_units()
+        assert result[-1] is not None
+        assert np.isclose(
+            result[-1],
+            thermochem.qrrho_gibbs_free_energy_qh * joule_per_mol_to_hartree,
+        )
+
+
+class TestLogResultsToFileHeaderAndRowBranches:
+    """build_header()/build_row() inside log_results_to_file adapt their
+    column layout depending on which of s_freq_cutoff/h_freq_cutoff are
+    set, and whether concentration vs pressure is in use. No existing test
+    ever called log_results_to_file with s_freq_cutoff and/or h_freq_cutoff
+    set, or with concentration set, so those branches were never
+    exercised; nor was the all-None "NO FREQ INFO" placeholder row, nor
+    the default (auto-derived) outputfile path."""
+
+    def test_both_cutoffs_and_concentration_grimme(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            concentration=1.0,
+            s_freq_cutoff=100,
+            h_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        result = thermochem.compute_thermochemistry()
+        outputfile = os.path.join(str(tmp_path), "both.dat")
+        thermochem.log_results_to_file(*result, outputfile=outputfile)
+
+        with open(outputfile) as f:
+            content = f.read()
+
+        assert "Concentration: 1.0 mol/L" in content
+        assert "Entropy Frequency Cut-off:" in content
+        assert "Enthalpy Frequency Cut-off:" in content
+        assert "Damping Function Exponent:" in content
+        assert "Grimme's quasi-RRHO entropy" in content
+        assert "Head-Gordon's quasi-RRHO enthalpy" in content
+        assert "Chai and Head-Gordon" in content
+        assert "qh-H" in content
+        assert "T.qh-S" in content
+        assert "qh-G(T)" in content
+
+    def test_s_freq_cutoff_only_truhlar(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=100,
+            entropy_method="truhlar",
+        )
+        result = thermochem.compute_thermochemistry()
+        outputfile = os.path.join(str(tmp_path), "s_only.dat")
+        thermochem.log_results_to_file(*result, outputfile=outputfile)
+
+        with open(outputfile) as f:
+            content = f.read()
+
+        assert "Entropy Frequency Cut-off:" in content
+        assert "Enthalpy Frequency Cut-off:" not in content
+        assert "Truhlar's quasi-RRHO entropy" in content
+        assert "Head-Gordon's quasi-RRHO enthalpy" not in content
+        assert "qh-H" not in content
+        assert "T.qh-S" in content
+        assert "qh-G(T)" in content
+
+    def test_h_freq_cutoff_only(self, gaussian_singlet_opt_outfile, tmp_path):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            h_freq_cutoff=100,
+        )
+        result = thermochem.compute_thermochemistry()
+        outputfile = os.path.join(str(tmp_path), "h_only.dat")
+        thermochem.log_results_to_file(*result, outputfile=outputfile)
+
+        with open(outputfile) as f:
+            content = f.read()
+
+        assert "Enthalpy Frequency Cut-off:" in content
+        assert "Entropy Frequency Cut-off:" not in content
+        assert "Head-Gordon's quasi-RRHO enthalpy" in content
+        assert "Grimme's quasi-RRHO entropy" not in content
+        assert "Truhlar's quasi-RRHO entropy" not in content
+        assert "qh-H" in content
+        assert "T.qh-S" not in content
+        assert "qh-G(T)" in content
+
+    def test_all_none_writes_no_freq_placeholder(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile, temperature=298.15
+        )
+        outputfile = os.path.join(str(tmp_path), "none.dat")
+        thermochem.log_results_to_file(
+            "no_freq_structure",
+            -100.0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            outputfile=outputfile,
+        )
+        with open(outputfile) as f:
+            content = f.read()
+        assert "NO FREQ INFO" in content
+        assert "no_freq_structure" in content
+
+    def test_default_outputfile_derived_from_filename(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        copied = os.path.join(str(tmp_path), "copy_of_singlet.log")
+        copyfile(gaussian_singlet_opt_outfile, copied)
+        thermochem = Thermochemistry(filename=copied, temperature=298.15)
+        result = thermochem.compute_thermochemistry()
+        thermochem.log_results_to_file(*result)
+
+        expected_outputfile = os.path.splitext(copied)[0] + ".dat"
+        assert os.path.exists(expected_outputfile)
+
+
+class TestBoltzmannAverageThermochemistryRemainingBranches:
+    """BoltzmannAverageThermochemistry.__init__'s validation branches,
+    compute_boltzmann_averages' check_imaginary_frequencies skip, the
+    s/h freq cutoff combinations inside _compute_boltzmann_averages, and a
+    few boltzmann_* properties/__str__ that no existing real-fixture test
+    happens to exercise directly.
+    """
+
+    def test_empty_files_raises_indexerror_before_reaching_guard(self):
+        """BUGS_FOUND.md: __init__ calls super().__init__(filename=
+        files[0], ...) before the `if not files: raise ValueError(...)`
+        guard further down, so an empty file list raises IndexError, not
+        the documented ValueError("List of files cannot be empty.")."""
+        with pytest.raises(IndexError):
+            BoltzmannAverageThermochemistry(files=[], temperature=298.15)
+
+    def test_unparseable_molecule_raises_value_error(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        empty_file = os.path.join(str(tmp_path), "empty.log")
+        open(empty_file, "w").close()
+        with pytest.raises(
+            ValueError,
+            match="Could not parse molecule from one or more files",
+        ):
+            BoltzmannAverageThermochemistry(
+                files=[gaussian_singlet_opt_outfile, empty_file],
+                temperature=298.15,
+            )
+
+    def test_mismatched_formulae_raises_value_error(
+        self, gaussian_singlet_opt_outfile, gaussian_triplet_opt_outfile
+    ):
+        with pytest.raises(
+            ValueError,
+            match="All files must contain the same molecular structure",
+        ):
+            BoltzmannAverageThermochemistry(
+                files=[
+                    gaussian_singlet_opt_outfile,
+                    gaussian_triplet_opt_outfile,
+                ],
+                temperature=298.15,
+            )
+
+    def test_invalid_energy_type_raises_value_error(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        with pytest.raises(
+            ValueError, match="energy_type must be 'electronic' or 'gibbs'"
+        ):
+            BoltzmannAverageThermochemistry(
+                files=[
+                    gaussian_conformer1_outfile,
+                    gaussian_conformer2_outfile,
+                ],
+                temperature=298.15,
+                energy_type="bogus",
+            )
+
+    def test_compute_boltzmann_averages_skips_check_when_disabled(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            check_imaginary_frequencies=False,
+        )
+        result = boltzmann.compute_boltzmann_averages()
+        assert result[0].endswith("_boltzmann_avg_by_gibbs")
+
+    def test_gibbs_weighting_h_freq_cutoff_only(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            h_freq_cutoff=100,
+            energy_type="gibbs",
+        )
+        boltzmann.compute_boltzmann_averages()
+        assert boltzmann.boltzmann_qrrho_gibbs_free_energy is not None
+
+    def test_gibbs_weighting_no_cutoffs(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            energy_type="gibbs",
+        )
+        boltzmann.compute_boltzmann_averages()
+        assert boltzmann.boltzmann_gibbs_free_energy is not None
+        assert boltzmann.boltzmann_qrrho_gibbs_free_energy is None
+
+    def test_compute_boltzmann_averages_raises_when_energy_missing(self):
+        mock_thermo = MagicMock(spec=Thermochemistry)
+        mock_thermo.gibbs_free_energy = None
+        mock_thermo.filename = "bad.log"
+        mock = MagicMock(spec=BoltzmannAverageThermochemistry)
+        mock.temperature = 298.15
+        mock.thermochemistries = [mock_thermo]
+        mock.energy_type = "gibbs"
+        mock.s_freq_cutoff = None
+        mock.h_freq_cutoff = None
+        with pytest.raises(ValueError, match="not available for file"):
+            BoltzmannAverageThermochemistry._compute_boltzmann_averages(mock)
+
+    def test_boltzmann_entropy_properties(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            s_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        boltzmann.compute_boltzmann_averages()
+        assert boltzmann.boltzmann_entropy is not None
+        assert boltzmann.boltzmann_qrrho_entropy is not None
+
+    def test_str_representation(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+        )
+        boltzmann.compute_boltzmann_averages()
+        text = str(boltzmann)
+        assert "Boltzmann-Averaged Thermochemistry" in text
+        assert "Temperature: 298.15 K" in text
+        assert "Gibbs Free Energy:" in text

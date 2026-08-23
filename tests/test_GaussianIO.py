@@ -135,6 +135,111 @@ class TestRouteString:
         assert r3qmmm.functional == "mp2:hf"
         assert r3qmmm.basis == "6-31g:6-31g"
 
+    def test_read_route_string_oniom_semiempirical_high_layer(self):
+        s1 = "# oniom(am1:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.semiempirical == "AM1:UFF"
+
+    def test_read_route_string_oniom_high_layer_not_semiempirical(self):
+        s1 = "# oniom(b3lyp:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.semiempirical is None
+
+    def test_read_route_string_oniom_ab_initio_high_layer(self):
+        s1 = "# oniom(mp2/6-31g:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.ab_initio == "mp2:uff"
+
+    def test_read_route_string_oniom_missing_closing_paren(self):
+        # No closing ")" anywhere: the char-scan never finds a match at
+        # depth 0, so the oniom parser bails out via its for/else clause.
+        s1 = "# oniom(b3lyp:uff opt"
+        r1 = GaussianRoute(s1)
+        assert r1._get_oniom_layer_methods_and_bases() == (None, None)
+
+    def test_read_route_string_oniom_empty_parens(self):
+        s1 = "# oniom() opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional is None
+        assert r1.basis is None
+
+    def test_read_route_string_oniom_skips_empty_layer(self):
+        # A bare "/" between colons produces an empty method/basis split
+        # for that middle layer, which must be skipped, not appended.
+        s1 = "# oniom(am1:/:uff) opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "am1:uff"
+
+    def test_jobtype_ircf(self):
+        s1 = "# irc=forward b3lyp def2svp"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "ircf"
+
+    def test_jobtype_ircr(self):
+        s1 = "# irc=reverse b3lyp def2svp"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "ircr"
+
+    def test_jobtype_nci(self):
+        s1 = "# b3lyp def2svp output=wfn"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "nci"
+
+    def test_jobtype_resp(self):
+        s1 = "# hf 6-31g* pop=mk iop(6/33=2,6/41=10,6/42=17,6/50=1)"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "resp"
+
+    def test_jobtype_link(self):
+        s1 = "# b3lyp def2svp stable=opt"
+        r1 = GaussianRoute(s1)
+        assert r1.jobtype == "link"
+
+    def test_three_part_functional_basis_fit(self):
+        # A trailing token after the 3-part func/basis/fit spec is needed
+        # so the parsing loop continues past it to a further iteration.
+        s1 = "# opt tpsstpss/def2tzvp/fit nosymm"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "tpsstpss"
+        assert r1.basis == "def2tzvp/fit"
+
+    def test_slash_separated_token_with_unsupported_part_count_is_ignored(
+        self,
+    ):
+        # Neither the 2-part nor 3-part func/basis split applies for a
+        # token with 4 slash-separated parts; it's silently skipped.
+        s1 = "# opt a/b/c/d nosymm"
+        r1 = GaussianRoute(s1)
+        assert r1.functional is None
+        assert r1.basis is None
+
+    def test_functional_leading_hash_is_stripped(self):
+        s1 = "#mn15/def2svp opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "mn15"
+
+    def test_dispersion_with_no_matching_suffix_key_leaves_functional_as_is(
+        self,
+    ):
+        s1 = "# b3lyp def2svp empiricaldispersion=foo"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "b3lyp"
+
+    def test_dispersion_merges_into_oniom_functional_first_layer_only(self):
+        s1 = "# oniom(b3lyp:uff) empiricaldispersion=gd3bj opt"
+        r1 = GaussianRoute(s1)
+        assert r1.functional == "b3lyp-d3bj:uff"
+
+    def test_solvent_id_none_when_scrf_has_no_solvent_keyword(self):
+        s1 = "# opt b3lyp def2svp scrf=(pcm)"
+        r1 = GaussianRoute(s1)
+        assert r1.solvent_id is None
+
+    def test_solvent_id_appends_read_when_read_precedes_solvent(self):
+        s1 = "# opt b3lyp def2svp scrf=(cpcm,read,solvent=toluene)"
+        r1 = GaussianRoute(s1)
+        assert r1.solvent_id == "toluene,read"
+
     def test_read_route_string_nonstandard(self):
         s1 = "# pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly"
         r1 = GaussianRoute(s1)
@@ -777,6 +882,238 @@ class TestGaussian16Input:
         assert g16_pbc_1d.modred is None
         assert g16_pbc_1d.functional == "pbepbe"
         assert g16_pbc_1d.basis == "6-31g(d,p)/auto"
+
+
+class TestGaussian16InputDirectPropertyCoverage:
+    """Direct coverage for Gaussian16Input/Gaussian16QMMMInput
+    properties that TestGaussian16Input above doesn't reach directly
+    (it mostly asserts on higher-level derived values like molecule
+    formulas), plus three real bugs discovered along the way."""
+
+    def test_num_content_groups(self, gaussian_opt_genecp_inputfile):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.num_content_groups == g16.num_content_blocks
+
+    def test_modredundant_group_present_when_modred_section_exists(
+        self, gaussian_modred_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16.modredundant_group == ["B 2 12 F", "B 9 2 F"]
+
+    def test_modredundant_group_none_without_modred(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.modredundant_group is None
+
+    def test_is_pbc_true_for_translation_vector_input(
+        self, gaussian_pbc_1d_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
+        assert g16.is_pbc is True
+        assert len(g16.translation_vectors) >= 1
+
+    def test_is_pbc_false_for_non_pbc_input(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.is_pbc is False
+
+    def test_mem_and_nproc(self, gaussian_opt_genecp_inputfile):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.mem is not None
+        assert g16.nproc is not None
+
+    def test_charge_and_multiplicity_fall_back_to_oniom_parsing(
+        self, gaussian_qmmm_inputfile_3layer
+    ):
+        """When the charge/mult line has more than two numbers (as in a
+        combined-layer ONIOM line), the base class's charge/multiplicity
+        properties fall back to oniom parsing with use_partition=False
+        (which never touches self.partition, unlike oniom_charge)."""
+        g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_3layer)
+        # the oniom fallback returns the raw parsed string, unlike the
+        # normal charge/mult line path which returns an int
+        assert g16.charge == "0"
+        assert g16.multiplicity == "1"
+
+    def test_oniom_charge_crashes_on_base_class_non_qmmm_input(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        """Documents BUGS_FOUND.md #44: oniom_charge/oniom_multiplicity
+        call _get_oniom_charge_and_multiplicity with the default
+        use_partition=True, which accesses self.partition -- an
+        attribute that only exists on the Gaussian16QMMMInput subclass.
+        On the plain base class this raises AttributeError, which the
+        `except RecursionError` guard cannot catch."""
+        g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_2layer)
+        with pytest.raises(AttributeError, match="partition"):
+            g16.oniom_charge
+        with pytest.raises(AttributeError, match="partition"):
+            g16.oniom_multiplicity
+
+    def test_has_frozen_coordinates_and_indices(
+        self, gaussian_frozen_opt_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16.has_frozen_coordinates
+        assert g16.frozen_coordinate_indices == list(range(1, 11))
+        assert g16.free_coordinate_indices == [11, 12, 13, 14]
+
+    def test_no_frozen_coordinates_returns_none(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert not g16.has_frozen_coordinates
+        assert g16.frozen_coordinate_indices is None
+        assert g16.free_coordinate_indices is None
+
+    def test_gen_genecp_group_and_light_heavy_elements_direct(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16.gen_genecp_group is not None
+        assert g16.light_elements == ["H", "C", "O"]
+        assert g16.light_elements_basis == "def2svp"
+        assert g16.heavy_elements == ["Pd"]
+        assert g16.heavy_elements_basis == "def2-tzvppd"
+
+    def test_genecp_derived_properties_none_without_gen_basis(
+        self, gaussian_modred_inputfile
+    ):
+        g16 = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16.genecp_section is None
+        assert g16.light_elements is None
+        assert g16.light_elements_basis is None
+        assert g16.heavy_elements is None
+        assert g16.heavy_elements_basis is None
+        assert g16.custom_solvent is None
+        assert g16.custom_solvent_group is None
+
+    def test_gen_genecp_group_modred_and_solvent_present(
+        self, modred_genecp_custom_solvent_inputfile
+    ):
+        g16 = Gaussian16Input(filename=modred_genecp_custom_solvent_inputfile)
+        assert "modred" in g16.route_string
+        assert "solvent=generic" in g16.route_string
+        assert g16.gen_genecp_group == g16.content_groups[4:-1]
+        assert g16.custom_solvent_group == g16.content_groups[-1]
+
+    def test_gen_genecp_group_modred_only(self, modred_gen_inputfile):
+        g16 = Gaussian16Input(filename=modred_gen_inputfile)
+        assert "modred" in g16.route_string
+        assert "solvent=generic" not in g16.route_string
+        assert g16.gen_genecp_group == g16.content_groups[4:]
+
+    def test_gen_genecp_group_solvent_only(self, tmp_path):
+        """Neither of the existing genecp fixtures combines a custom
+        solvent without modred, so a minimal synthetic input covers
+        this branch of _get_gen_genecp_group."""
+        path = tmp_path / "solvent_only_genecp.com"
+        path.write_text(
+            "\n".join(
+                [
+                    "%chk=t.chk",
+                    "%mem=4GB",
+                    "# opt mn15/genecp scrf=(smd,solvent=generic,read)",
+                    "",
+                    "title",
+                    "",
+                    "0 1",
+                    "C 0.0 0.0 0.0",
+                    "H 0.0 0.0 1.0",
+                    "",
+                    "C 0",
+                    "def2svp",
+                    "****",
+                    "",
+                    "stoichiometry=CH4",
+                    "solventname=customsolvent",
+                    "eps=10.0",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Input(filename=str(path))
+        assert "modred" not in g16.route_string
+        assert "solvent=generic" in g16.route_string
+        assert g16.gen_genecp_group == g16.content_groups[3:-1]
+        assert g16.custom_solvent is not None
+        assert "solventname=customsolvent" in g16.custom_solvent
+
+    def test_constrained_atoms_getter(self, gaussian_frozen_opt_inputfile):
+        g16 = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16.constrained_atoms == g16.coordinate_block.constrained_atoms
+
+    def test_constrained_atoms_setter_recurses_infinitely(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        """Documents BUGS_FOUND.md #43: the setter reassigns
+        self.constrained_atoms, recursing into itself forever instead
+        of storing the value anywhere."""
+        g16 = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        with pytest.raises(RecursionError):
+            g16.constrained_atoms = [1, 2]
+
+    def test_qmmm_2layer_oniom_charge_and_real_charge(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_2layer)
+        assert g16.partition == {
+            "high level atoms": ["2-5"],
+            "low level atoms": ["6-9"],
+        }
+        assert g16.oniom_charge == {
+            "charge_total": "0",
+            "int_charge": "0",
+        }
+        assert g16.oniom_multiplicity == {"real_multiplicity": "1"}
+        assert g16.real_charge == 0
+        assert g16.int_charge == 0
+        assert g16.real_multiplicity == 1
+
+    def test_qmmm_3layer_partition_includes_medium_atoms(
+        self, gaussian_qmmm_inputfile_3layer
+    ):
+        g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_3layer)
+        assert "medium level atoms" in g16.partition
+
+    def test_gen_genecp_group_none_for_semiempirical_without_basis(
+        self, tmp_path
+    ):
+        path = tmp_path / "semiempirical_no_basis.com"
+        path.write_text(
+            "\n".join(
+                [
+                    "%chk=t.chk",
+                    "%mem=4GB",
+                    "# opt freq pm6",
+                    "",
+                    "title",
+                    "",
+                    "0 1",
+                    "C 0.0 0.0 0.0",
+                    "H 0.0 0.0 1.0",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Input(filename=str(path))
+        assert g16.basis is None
+        assert g16.gen_genecp_group is None
+
+    def test_qmmm_2layer_model_charge_crashes_with_keyerror(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        """Documents BUGS_FOUND.md #45: for a 2-layer ONIOM system, the
+        QMMM subclass's own _get_oniom_charge_and_multiplicity keeps
+        charge_total/real_multiplicity/int_charge (not model_charge),
+        so model_charge/model_multiplicity crash with KeyError."""
+        g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_2layer)
+        with pytest.raises(KeyError, match="model_charge"):
+            g16.model_charge
+        with pytest.raises(KeyError, match="model_multiplicity"):
+            g16.model_multiplicity
 
 
 class TestGaussian16Output:
@@ -3372,3 +3709,1827 @@ class TestGaussian16pKaOutput:
 
         # Check computed pKa is displayed
         assert "Computed pKa(HA)" in output
+
+
+class TestGaussian16OutputAdditionalCoverage:
+    """Additional direct-property coverage for Gaussian16Output/subclasses,
+    targeting edge cases and rarely-exercised branches not reached by the
+    higher-level fixture-driven tests above: empty/blank files, missing
+    thermochemistry sections (SP-only jobs), link-job structure assembly,
+    ONIOM helpers, WBI helpers, PBC helpers, and pKa error paths. Real
+    fixtures are used wherever a natural one exists; small synthetic
+    outputs are used only for edge cases no real fixture covers."""
+
+    def test_normal_termination_empty_file(self, tmp_path):
+        outputfile = tmp_path / "empty.log"
+        outputfile.write_text("")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.contents == []
+        assert g16.normal_termination is False
+
+    def test_normal_termination_blank_lines_only(self, tmp_path):
+        outputfile = tmp_path / "blank_only.log"
+        outputfile.write_text("\n\n\n")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.contents == ["", "", ""]
+        assert g16.normal_termination is False
+
+    def test_gen_genecp_none_for_semiempirical(
+        self, gaussian_semiempirical_pm6_output_file
+    ):
+        g16 = Gaussian16Output(filename=gaussian_semiempirical_pm6_output_file)
+        assert g16.basis is None
+        assert g16.gen_genecp is None
+
+    def test_genecp_info_gen_route_but_no_basis_block_found(self, tmp_path):
+        """gen_genecp is not None (route says genecp) but the output never
+        actually prints a 'General basis read from cards:' block, so the
+        parsing loop in _genecp_info runs to completion without matching."""
+        outputfile = tmp_path / "no_basis_block.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    " H                     0.0000    0.0000    1.0000",
+                    "",
+                    " NAtoms=      2 NQM=        2 NQMF=       0",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.gen_genecp == "genecp"
+        assert g16.heavy_elements is None
+        assert g16.heavy_elements_basis is None
+        assert g16.light_elements is None
+        assert g16.light_elements_basis is None
+        assert g16.heavy_elements_ecp is None
+
+    def test_genecp_info_empty_symbols_raises_and_is_caught(self, tmp_path):
+        """gen_genecp is not None but the Symbolic Z-matrix coordinate
+        block is empty, so self.symbols raises ValueError (no symbols
+        found), which _genecp_info's try/except catches, bailing out
+        early with the all-None defaults."""
+        outputfile = tmp_path / "no_symbols.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    "",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:       1",
+                    " def2svp",
+                    " ****",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        with pytest.raises(ValueError, match="No symbols found"):
+            g16.symbols
+        assert g16.heavy_elements is None
+        assert g16.light_elements is None
+
+    def test_genecp_info_multi_center_and_blank_line_handling(self, tmp_path):
+        """Exercises: blank line preceding a 'Centers:' continuation line,
+        multiple center numbers on a single light-element block (loop runs
+        more than once), a second light-element block reusing the already
+        -set light_elements_basis, and a heavy-element block with more
+        than one center number."""
+        outputfile = tmp_path / "genecp_multi_center.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    " H                     0.0000    0.0000    1.0000",
+                    " O                     0.0000    0.0000    2.0000",
+                    " N                     0.0000    0.0000    3.0000",
+                    " Cl                    0.0000    0.0000    4.0000",
+                    " Br                    0.0000    0.0000    5.0000",
+                    "",
+                    " NAtoms=      6 NQM=        6 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:       1      2",
+                    " def2svp",
+                    " ****",
+                    "",
+                    " Centers:       3      4",
+                    " def2svp",
+                    " ****",
+                    " Centers:       5      6",
+                    " S   1 1.00",
+                    "     Exponent=  1.0000000000D+01 Coefficients=  1.0000000000D+00",
+                    " ****",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert set(g16.light_elements) == {"N", "O", "C", "H"}
+        assert g16.light_elements_basis == "def2svp"
+        assert set(g16.heavy_elements) == {"Br", "Cl"}
+        assert "Cl" in g16.heavy_elements_basis
+        assert "Br" in g16.heavy_elements_basis
+
+    def test_genecp_info_centers_line_with_nondigit_token(self, tmp_path):
+        """A 'Centers:' line with a non-numeric token is tolerated: the
+        token is silently skipped (ValueError caught) while the digit
+        tokens are still parsed."""
+        outputfile = tmp_path / "genecp_bad_center_token.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:     1 x",
+                    " def2svp",
+                    " ****",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.light_elements == ["C"]
+        assert g16.light_elements_basis == "def2svp"
+
+    def test_genecp_info_centers_line_at_end_of_file(self, tmp_path):
+        """A 'Centers:' line with nothing following it before EOF exercises
+        the 'if j >= len(self.contents): break' guard."""
+        outputfile = tmp_path / "genecp_centers_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:     1",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.light_elements is None
+        assert g16.heavy_elements is None
+
+    def test_custom_solvent_none_when_no_marker(
+        self, gaussian_singlet_opt_outfile
+    ):
+        g16 = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16.custom_solvent is None
+
+    def test_num_steps_none_without_scan(self, gaussian_link_sp_outputfile):
+        g16 = Gaussian16Output(filename=gaussian_link_sp_outputfile)
+        assert g16.num_steps is None
+
+    def test_thermochemistry_none_fields_for_sp_job(
+        self, gaussian_link_sp_outputfile
+    ):
+        """An SP-only link output has no frequency/thermochemistry
+        section at all, so all of these thermal/entropy correction
+        properties fall through their loops to the implicit/explicit
+        None return."""
+        g16 = Gaussian16Output(filename=gaussian_link_sp_outputfile)
+        assert g16.zero_point_energy is None
+        assert g16.thermal_vibration_correction is None
+        assert g16.thermal_rotation_correction is None
+        assert g16.thermal_translation_correction is None
+        assert g16.thermal_energy_correction is None
+        assert g16.thermal_enthalpy_correction is None
+        assert g16.thermal_gibbs_free_energy_correction is None
+        assert g16.internal_energy is None
+        assert g16.enthalpy is None
+        assert g16.electronic_entropy_no_temperature_in_SI is None
+        assert g16.electronic_entropy is None
+        assert g16.vibrational_entropy_no_temperature_in_SI is None
+        assert g16.vibrational_entropy is None
+        assert g16.rotational_entropy_no_temperature_in_SI is None
+        assert g16.rotational_entropy is None
+        assert g16.translational_entropy_no_temperature_in_SI is None
+        assert g16.translational_entropy is None
+        assert g16.entropy_in_J_per_mol_per_K is None
+        assert g16.entropy is None
+        assert g16.entropy_times_temperature is None
+        assert g16.gibbs_free_energy is None
+        assert g16.convergence_criterion_not_met is False
+        assert g16.has_forces is False
+        assert g16.forces is None
+        assert g16.temperature_in_K is None
+        assert g16.rotational_symmetry_number is None
+        assert g16.service_units_by_jobs == g16.cpu_runtime_by_jobs_core_hours
+
+    def test_spin_none_when_no_scf_done_line(self, tmp_path):
+        outputfile = tmp_path / "no_scf_done.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.spin is None
+
+    def test_parse_explicit_basis_block_empty_returns_no_shells(self):
+        assert Gaussian16Output._parse_explicit_basis_block([]) == []
+
+    def test_parse_explicit_basis_block_primitive_before_any_shell_header(
+        self,
+    ):
+        """A primitive line appearing before any shell header is ignored
+        (current_shell is still None), so no shell dict is produced."""
+        block_lines = [
+            "    Exponent=  1.0000000000D+01 Coefficients=  1.0000000000D+00",
+        ]
+        assert Gaussian16Output._parse_explicit_basis_block(block_lines) == []
+
+    def test_parse_pseudopotential_section_only_reachable_via_genecp_info(
+        self, gaussian_full_genecp_outfile
+    ):
+        """_parse_pseudopotential_section is only ever invoked from
+        _genecp_info, after self.symbols has already succeeded and been
+        cached, so calling it directly still exercises the normal
+        (non-exception) path."""
+        g16 = Gaussian16Output(filename=gaussian_full_genecp_outfile)
+        result = g16._parse_pseudopotential_section()
+        assert "Ag" in result
+
+    def test_spin_none_for_method_without_r_or_u_prefix(self, tmp_path):
+        """Some composite/theory labels (e.g. printed for CBS-type or
+        other composite methods) do not begin with 'R' or 'U', so spin
+        falls through to the else branch and returns None."""
+        outputfile = tmp_path / "no_ru_spin.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # cbs-qb3",
+                    " ----------------------------------------------------------------------",
+                    " SCF Done:  E(CBS-QB3) =  -1.234567890     A.U. after   10 cycles",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.spin is None
+
+    def test_custom_solvent_marker_present_but_no_solvent_line(self, tmp_path):
+        """The non-standard PCM marker is present, but no 'Solvent...:'
+        line ever follows, so the parsing loop runs to completion without
+        ever setting `inside = True`, and params stays empty -> None."""
+        outputfile = tmp_path / "custom_solvent_no_name.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Using the following non-standard input for PCM:",
+                    " Some other unrelated line.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.custom_solvent is None
+
+    def test_input_coordinates_block_no_markers_present(self, tmp_path):
+        outputfile = tmp_path / "no_coord_markers.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Just some text.",
+                    " Nothing relevant here.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.input_coordinates_block.coordinate_block == []
+
+    def test_input_coordinates_block_symbolic_zmatrix_runs_to_eof(
+        self, tmp_path
+    ):
+        """No trailing blank line after the coordinates: the inner loop
+        exhausts self.contents[i+2:] normally instead of breaking on a
+        blank line."""
+        outputfile = tmp_path / "zmatrix_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    " H                     0.0000    0.0000    1.0000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.symbols == ["C", "H"]
+
+    def test_input_coordinates_block_symbolic_zmatrix_skips_extra_charge_line(
+        self, tmp_path
+    ):
+        """A second 'Charge =' line inside the coordinate block (as seen
+        in QM/MM output) is skipped rather than treated as an atom."""
+        outputfile = tmp_path / "zmatrix_extra_charge.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " Charge =  0 Multiplicity = 1 for low level calculation on real system.",
+                    " C                     0.0000    0.0000    0.0000",
+                    " H                     0.0000    0.0000    1.0000",
+                    "",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.symbols == ["C", "H"]
+
+    def test_input_coordinates_block_first_zmatrix_block_empty_second_valid(
+        self, tmp_path
+    ):
+        """The first 'Symbolic Z-matrix:' occurrence has nothing after it
+        (blank line right away), so the outer loop must continue past it
+        and pick up the coordinates from the second occurrence."""
+        outputfile = tmp_path / "zmatrix_two_blocks.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    "",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    " H                     0.0000    0.0000    1.0000",
+                    "",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.symbols == ["C", "H"]
+
+    def test_input_coordinates_block_redundant_form_with_junk_and_charge(
+        self, tmp_path
+    ):
+        """Covers several branches of the 'Redundant internal coordinates'
+        old-form parsing path in a single file: a leading blank line
+        (continue, not break, since nothing collected yet), a malformed
+        non-numeric atom token, a non-integer atomic number token, a
+        non-numeric coordinate token, a junk line, and a 'Charge =' line
+        -- all skipped -- followed by valid old-form coordinate lines that
+        run straight to EOF (no trailing blank line)."""
+        outputfile = tmp_path / "redundant_old_form_junk.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Redundant internal coordinates found in file.  (old form).",
+                    "",
+                    " not,a,valid,coordinate,line,at,all",
+                    " abc,0,0.000000,0.000000,0.000000",
+                    " 45.5,0,0.000000,0.000000,0.000000",
+                    " 46.0,0,abc,0.000000,0.000000",
+                    " Charge =  0 Multiplicity = 1",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " 1.0,0,0.000000,0.000000,1.000000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.symbols == ["Pd", "H"]
+
+    def test_input_coordinates_block_redundant_form_blank_after_data(
+        self, tmp_path
+    ):
+        """A blank line appearing AFTER coordinates have already been
+        collected terminates the inner loop via the break at line 566,
+        distinct from the 'blank line before any data' continue case."""
+        outputfile = tmp_path / "redundant_blank_after_data.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " 1.0,0,0.000000,0.000000,1.000000",
+                    "",
+                    " Recover connectivity data from disk.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.symbols == ["Pd", "H"]
+
+    def test_thermal_corrections_none_when_component_keyword_missing(
+        self, tmp_path
+    ):
+        """The 'E (Thermal) ... CV ...' header line is found (and
+        zero_point_energy is available, satisfying
+        thermal_vibration_correction's extra guard), but none of the
+        Electronic/Vibrational/Rotational/Translational/Total component
+        lines that should follow it are present, so each of these
+        properties' inner search loop exhausts without a match and the
+        outer loop simply keeps scanning (eventually returning None)."""
+        outputfile = tmp_path / "thermal_missing_components.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Zero-point correction=                          0.284336",
+                    " E (Thermal)             CV                       S",
+                    "                          KCal/Mol        Cal/Mol-Kelvin",
+                    " Nothing relevant follows here at all.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.zero_point_energy == 0.284336
+        assert g16.thermal_vibration_correction is None
+        assert g16.thermal_rotation_correction is None
+        assert g16.thermal_translation_correction is None
+        assert g16.electronic_entropy_no_temperature_in_SI is None
+        assert g16.vibrational_entropy_no_temperature_in_SI is None
+        assert g16.rotational_entropy_no_temperature_in_SI is None
+        assert g16.translational_entropy_no_temperature_in_SI is None
+        assert g16.entropy_in_J_per_mol_per_K is None
+
+    def test_hirshfeld_heavy_atoms_three_token_line_and_eof_no_terminator(
+        self, tmp_path
+    ):
+        """Covers a heavy-atom Hirshfeld data line with neither 4 nor 5
+        tokens (charge only, no CM5/spin -- the elif's False branch),
+        and the block running to EOF without a 'Tot'/blank terminator."""
+        outputfile = tmp_path / "hirshfeld_heavy_edge.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Hirshfeld charges with hydrogens summed into heavy atoms:",
+                    "       Q-H",
+                    "  1 C    0.100000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.hirshfeld_charges_heavy_atoms == {"C1": 0.1}
+
+    def test_input_coordinates_block_redundant_form_never_succeeds(
+        self, tmp_path
+    ):
+        """No valid old-form coordinate line ever appears, so the inner
+        loop exhausts with an empty list, the outer break is skipped, and
+        the outer loop continues (and ultimately exhausts too, since no
+        further marker exists)."""
+        outputfile = tmp_path / "redundant_old_form_all_junk.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " junk line one, not coordinates",
+                    " junk line two, still not coordinates",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.input_coordinates_block.coordinate_block == []
+
+    def test_num_atoms_charge_multiplicity_none_when_absent(self, tmp_path):
+        outputfile = tmp_path / "no_natoms_charge.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " Just some unrelated text.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.num_atoms is None
+        assert g16.charge is None
+        assert g16.multiplicity is None
+        assert g16.num_basis_functions is None
+        assert g16.num_primitive_gaussians is None
+        assert g16.num_cartesian_basis_functions is None
+        assert g16.all_dipole_moments == []
+        assert g16.all_dipole_moment_magnitudes == []
+        assert g16.has_dipole_moment is False
+        assert g16.route_string == "# opt mn15/def2svp"
+        assert g16.pressure_in_atm is None
+        assert g16.mass is None
+        assert g16._get_moments_of_inertia_and_principal_axes() is None
+
+    def test_mulliken_and_hirshfeld_loop_exhaustion_and_none_returns(
+        self, tmp_path
+    ):
+        """Covers the 'section header found but no terminating marker
+        line before EOF' branches for both the plain and heavy-atom
+        Mulliken parsers, plus the 'section never found at all' None
+        -returning branch for the heavy-atom Mulliken parser."""
+        outputfile = tmp_path / "mulliken_no_terminator.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Mulliken charges:",
+                    "               1",
+                    "     1  C    0.100000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.mulliken_atomic_charges == {"C1": 0.1}
+        assert g16.mulliken_atomic_charges_heavy_atoms is None
+        assert g16.mulliken_spin_densities_heavy_atoms is None
+
+        outputfile2 = tmp_path / "mulliken_heavy_no_terminator.log"
+        outputfile2.write_text(
+            "\n".join(
+                [
+                    " Mulliken charges with hydrogens summed into heavy atoms:",
+                    "               1",
+                    "     1  C    0.100000",
+                ]
+            )
+        )
+        g16_heavy = Gaussian16Output(filename=str(outputfile2))
+        assert g16_heavy.mulliken_atomic_charges_heavy_atoms == {"C1": 0.1}
+
+    def test_hirshfeld_charges_raises_indexerror_when_section_absent(
+        self, gaussian_singlet_opt_outfile
+    ):
+        """BUG: unlike hirshfeld_charges_heavy_atoms (which gracefully
+        returns None when the Hirshfeld section is absent),
+        _get_hirshfeld_charges_spins_dipoles_cm5 unconditionally indexes
+        all_hirshfeld_charges[-1] etc. without checking for emptiness, so
+        hirshfeld_charges/hirshfeld_spin_densities/hirshfeld_dipoles/
+        hirshfeld_cm5_charges crash with IndexError instead of returning
+        None for a file with no Hirshfeld analysis section at all."""
+        g16 = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        with pytest.raises(IndexError):
+            g16.hirshfeld_charges
+        # the heavy-atom counterpart handles the same "absent" case
+        # gracefully by returning None instead of crashing
+        assert g16.hirshfeld_charges_heavy_atoms is None
+        assert g16.hirshfeld_spin_densities_heavy_atoms is None
+        assert g16.hirshfeld_cm5_charges_heavy_atoms is None
+
+    def test_hirshfeld_cm5_charges_heavy_atoms_wrong_type_when_spin_present(
+        self, gaussian_rc_hirshfeld_outfile
+    ):
+        """BUG: when both Hirshfeld charges and spin densities are
+        present with hydrogens summed into heavy atoms (open-shell
+        case), _get_hirshfeld_charges_spin_densities_cm5_charges_heavy_atoms
+        returns the raw list `all_cm5_charges_heavy_atoms` for the CM5
+        component instead of `all_cm5_charges_heavy_atoms[-1]` like the
+        other two return values and like the closed-shell branch below
+        it. hirshfeld_cm5_charges_heavy_atoms therefore returns a
+        one-element list-of-dicts instead of a dict for any open-shell
+        Hirshfeld calculation, unlike its closed-shell counterpart."""
+        g16 = Gaussian16Output(filename=gaussian_rc_hirshfeld_outfile)
+        # spin densities ARE present for this fixture (open-shell)
+        assert g16.hirshfeld_spin_densities_heavy_atoms is not None
+        result = g16.hirshfeld_cm5_charges_heavy_atoms
+        assert isinstance(result, list)  # should be a dict, like the
+        # closed-shell branch (see test_read_hirshfeld_charges_outputfile)
+        assert isinstance(result[0], dict)
+
+    def test_hirshfeld_no_terminator_before_eof(self, tmp_path):
+        """The non-heavy-atom Hirshfeld block's inner loop runs to EOF
+        without ever hitting the 'Tot' or blank-line terminator."""
+        outputfile = tmp_path / "hirshfeld_no_terminator.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Hirshfeld charges, spin densities, dipoles, and CM5 charges",
+                    "       Q-H        Spin       Dipole X   Dipole Y   Dipole Z    Q-CM5",
+                    "  1 C    0.100000   0.000000   0.010000   0.020000   0.030000   0.150000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.hirshfeld_charges == {"C1": 0.1}
+
+    def test_oniom_partition_alt_format_with_medium_layer(self, tmp_path):
+        """CH3COOH_qmmm.log uses the 'alternative' ONIOM coordinate-block
+        format (coordinates start 7 lines after 'Symbolic Z-matrix:'
+        because multiple 'Charge =' lines are echoed for the different
+        ONIOM sub-systems), and includes atoms in all three H/M/L
+        layers, plus 'med'/'low' on 'mid' and 'med' on 'model' charge
+        /multiplicity lines not exercised by the 2-layer ONIOM fixture
+        used elsewhere."""
+        g16 = Gaussian16Output(
+            filename=os.path.join(
+                "tests", "data", "GaussianTests", "outputs", "CH3COOH_qmmm.log"
+            )
+        )
+        partition = g16.oniom_partition
+        assert "high level atoms" in partition
+        assert "medium level atoms" in partition
+        assert "low level atoms" in partition
+
+        charge_mult = g16.oniom_get_charge_and_multiplicity
+        assert charge_mult["medium-level, mid system"] == (0, 1)
+        assert charge_mult["low-level, mid system"] == (0, 1)
+        assert charge_mult["medium-level, model system"] == (0, 1)
+
+    def test_to_dataset_is_a_noop(self, gaussian_singlet_opt_outfile):
+        g16 = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16.to_dataset() is None
+
+    def test_moments_of_inertia_full_parse(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """This real fixture happens to demonstrate a known Gaussian
+        formatting quirk: when three eigenvalues run together with no
+        separating whitespace ('229.315721660.916151828.89264'), the
+        combined token fails float() parsing, so the code's own
+        exception handler substitutes one 3-element inf array in place
+        of the (unparseable) 3 separate eigenvalues -- a graceful,
+        already-handled degradation, not a bug."""
+        g16 = Gaussian16Output(
+            filename=gaussian_pKa_HA_optimization_outputfile
+        )
+        moments, axes = g16._get_moments_of_inertia_and_principal_axes()
+        assert len(moments) == 1
+        assert np.all(np.isinf(moments[0]))
+        assert axes.shape[0] == 3
+
+    def test_moments_of_inertia_crashes_when_section_absent(
+        self, gaussian_link_sp_outputfile
+    ):
+        """BUG: when 'Principal axes and moments of inertia' is not found
+        at all (e.g. an SP-only job, which never prints that banner),
+        _get_moments_of_inertia_and_principal_axes falls off the end of
+        the function and implicitly returns a single None (not a
+        (None, None) tuple). moments_of_inertia and
+        moments_of_inertia_principal_axes both unconditionally unpack
+        this return value as a 2-tuple, so both crash with TypeError
+        instead of gracefully returning None like almost every other
+        'section not found' property in this class does."""
+        g16 = Gaussian16Output(filename=gaussian_link_sp_outputfile)
+        assert "Principal axes and moments of inertia" not in "\n".join(
+            g16.contents
+        )
+        with pytest.raises(TypeError):
+            g16.moments_of_inertia
+        with pytest.raises(TypeError):
+            g16.moments_of_inertia_principal_axes
+
+    def test_wbi_sections_run_to_eof_without_terminator(self, tmp_path):
+        """Each of natural_atomic_orbitals, natural_population_analysis,
+        and electronic_configuration searches for its own header line and
+        then scans forward for a terminator line ('WARNING'/'Summary of
+        Natural Population Analysis', a '===' divider, or 'Wiberg bond
+        index matrix' respectively). When the relevant section is the
+        last thing in the file, that inner loop exhausts self.contents
+        without ever finding the terminator -- tested here one section
+        per minimal file so the sections don't bleed into each other."""
+        nao_file = tmp_path / "nao_no_terminator.log"
+        nao_file.write_text(
+            "\n".join(
+                [
+                    " NAO  Atom  No  lang   Type(AO)    Occupancy      Energy",
+                    " ---------------------------------------------------",
+                    "    1    Ni    1  S      Cor( 1S)     1.99858       -2.68937",
+                ]
+            )
+        )
+        g16_nao = Gaussian16WBIOutput(filename=str(nao_file))
+        assert (
+            g16_nao.natural_atomic_orbitals["Ni1"]["NAO_Ni1"]["occupancy"]
+            == 1.99858
+        )
+
+        npa_file = tmp_path / "npa_no_terminator.log"
+        npa_file.write_text(
+            "\n".join(
+                [
+                    " Atom  No    Charge         Core      Valence    Rydberg      Total",
+                    " ---------------------------------------------------",
+                    " Ni     1     0.52827        10.0      15.0        1.0         27.47173",
+                    " Ni     1     0.52827        10.0      15.0        1.0         27.47173",
+                ]
+            )
+        )
+        g16_npa = Gaussian16WBIOutput(filename=str(npa_file))
+        assert g16_npa.natural_charges["Ni1"] == 0.52827
+
+        econf_file = tmp_path / "econf_no_terminator.log"
+        econf_file.write_text(
+            "\n".join(
+                [
+                    " Natural Electron Configuration",
+                    " ---------------------------------------------------",
+                    " Ni    1     [core]4S(0.27)3d(8.70)4p(0.51)",
+                ]
+            )
+        )
+        g16_econf = Gaussian16WBIOutput(filename=str(econf_file))
+        assert (
+            g16_econf.electronic_configuration["Ni1"]
+            == "[core]4S(0.27)3d(8.70)4p(0.51)"
+        )
+
+    def test_wbi_properties_none_or_empty_for_non_wbi_file(
+        self, gaussian_singlet_opt_outfile
+    ):
+        g16 = Gaussian16WBIOutput(filename=gaussian_singlet_opt_outfile)
+        assert g16.nbo_version is None
+        assert g16.natural_atomic_orbitals == {}
+        assert g16.natural_population_analysis == {}
+        assert g16.natural_charges == {}
+        assert g16.total_electrons == {}
+        assert g16.electronic_configuration == {}
+
+    def test_pbc_properties_none_for_non_pbc_file(
+        self, gaussian_singlet_opt_outfile
+    ):
+        g16 = Gaussian16OutputWithPBC(filename=gaussian_singlet_opt_outfile)
+        assert g16._parse("anything") is None
+        assert g16.pbc is None
+        assert g16.input_translation_vectors is None
+        assert g16.final_translation_vector is None
+
+    def test_pka_output_raises_valueerror_without_frequency_data(
+        self, gaussian_pKa_HA_single_point_outputfile
+    ):
+        """The SP-only file has no frequency section, so
+        Thermochemistry's derived quantities are all None, and each of
+        these *_in_units properties (except electronic_energy_in_units,
+        which doesn't need frequency data) raises a descriptive
+        ValueError instead of silently returning None."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_single_point_outputfile
+        )
+        # electronic energy doesn't require frequency data
+        assert output.electronic_energy_in_units is not None
+        with pytest.raises(ValueError, match="zero-point energy"):
+            output.zero_point_energy_in_units
+        with pytest.raises(ValueError, match="enthalpy"):
+            output.enthalpy_in_units
+        with pytest.raises(ValueError, match="qh-enthalpy"):
+            output.qh_enthalpy_in_units
+        with pytest.raises(ValueError, match="Gibbs free energy"):
+            output.gibbs_free_energy_in_units
+        with pytest.raises(ValueError, match="qh-Gibbs free energy"):
+            output.qh_gibbs_free_energy
+
+    def test_pka_output_thermochemical_properties_full(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+        )
+        props = output.thermochemical_properties
+        assert set(props.keys()) == {
+            "electronic_energy",
+            "zero_point_energy",
+            "enthalpy",
+            "qh_enthalpy",
+            "gibbs_free_energy",
+            "qh_gibbs_free_energy",
+        }
+        assert props["electronic_energy"] == pytest.approx(
+            -345.741944, abs=1e-4
+        )
+
+    def test_route_string_none_when_no_hash_line(self, tmp_path):
+        outputfile = tmp_path / "no_route.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Just some unrelated text with no route line at all.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.route_string is None
+
+    def test_route_string_spanning_two_lines(self, tmp_path):
+        outputfile = tmp_path / "route_two_lines.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt freq mn15 def2svp scrf=(smd,solvent=generic,read)",
+                    "  additional continued keyword",
+                    " ----------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert "additional continued keyword" in g16.route_string
+
+    def test_route_string_spanning_three_lines(self, tmp_path):
+        outputfile = tmp_path / "route_three_lines.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt freq mn15 def2svp",
+                    "  scrf=(smd,solvent=generic,read)",
+                    "  additional continued keyword",
+                    " ----------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert "additional continued keyword" in g16.route_string
+        assert "generic" in g16.route_string
+
+    def test_modredundant_group_on_output_for_failed_modred_and_scan(
+        self, gaussian_failed_modred_outfile, gaussian_failed_scan_outfile
+    ):
+        g16_modred = Gaussian16Output(filename=gaussian_failed_modred_outfile)
+        assert g16_modred.modredundant_group is not None
+        assert len(g16_modred.modredundant_group) > 0
+
+        g16_scan = Gaussian16Output(filename=gaussian_failed_scan_outfile)
+        assert g16_scan.modredundant_group is not None
+
+    def test_frozen_and_free_coordinate_indices_none_without_frozen(
+        self, gaussian_singlet_opt_outfile
+    ):
+        g16 = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16.has_frozen_coordinates is False
+        assert g16.frozen_coordinate_indices is None
+        assert g16.free_coordinate_indices is None
+        assert g16.frozen_elements == []
+        assert g16.free_elements == []
+
+    def test_num_forces_and_optimized_structure_none_for_abnormal_termination(
+        self, gaussian_ts_genecp_outfile, gaussian_failed_modred_outfile
+    ):
+        g16 = Gaussian16Output(filename=gaussian_ts_genecp_outfile)
+        assert g16.num_forces == len(g16.forces)
+
+        g16_failed = Gaussian16Output(filename=gaussian_failed_modred_outfile)
+        assert not g16_failed.normal_termination
+        assert g16_failed.optimized_structure is None
+
+    def test_link_job_structure_assembly_sp_and_ts(
+        self, gaussian_link_sp_outputfile, gaussian_link_ts_outputfile
+    ):
+        """Exercises the is_link branches of _get_all_molecular_structures:
+        normal-termination SP link job (keep_last_only after drop_first),
+        and abnormal-termination link job with multiple carried-over
+        frames (drop_first then safe_min_lengths truncation)."""
+        g16_sp = Gaussian16Output(filename=gaussian_link_sp_outputfile)
+        assert g16_sp.is_link
+        assert g16_sp.normal_termination
+        assert g16_sp.jobtype == "sp"
+        structures_sp = g16_sp.all_structures
+        assert len(structures_sp) == 1
+
+        g16_ts = Gaussian16Output(filename=gaussian_link_ts_outputfile)
+        assert g16_ts.is_link
+        assert not g16_ts.normal_termination
+        structures_ts = g16_ts.all_structures
+        assert len(structures_ts) >= 1
+
+    def test_all_structures_no_mulliken_charges_attached(self, tmp_path):
+        """When no Mulliken section is printed at all, the final structure
+        does not get mulliken_atomic_charges/mulliken_spin_densities
+        attached (the 'is not None' guards take their False branch)."""
+        outputfile = tmp_path / "no_mulliken.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt hf/sto-3g",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    " H                     0.0000    0.0000    1.0000",
+                    "",
+                    " NAtoms=      2 NQM=        2 NQMF=       0",
+                    "                         Standard orientation:",
+                    " ---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    " ---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                    "      2          1           0        0.000000    0.000000    1.000000",
+                    " ---------------------------------------------------------------------",
+                    " SCF Done:  E(RHF) =  -38.0000000     A.U. after   10 cycles",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.mulliken_atomic_charges is None
+        assert g16.mulliken_spin_densities is None
+        structures = g16.all_structures
+        assert len(structures) == 1
+        assert not hasattr(structures[-1], "mulliken_atomic_charges") or (
+            structures[-1].mulliken_atomic_charges is None
+        )
+
+    def test_absorptions_in_nm_and_oscillatory_strengths(self, td_outputfile):
+        g16 = Gaussian16Output(filename=td_outputfile)
+        assert len(g16.absorptions_in_nm) == 50
+        assert g16.absorptions_in_nm[0] == 1601.13
+        assert len(g16.oscillatory_strengths) == 50
+        assert g16.oscillatory_strengths[0] == 0.0084
+
+    def test_alpha_eigenvalues_none_when_absent(self, tmp_path):
+        outputfile = tmp_path / "no_eigenvalues.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt hf/sto-3g",
+                    " ----------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.alpha_occ_eigenvalues == []
+        assert g16.alpha_virtual_eigenvalues is None
+
+    def test_read_transitions_edge_cases(self, tmp_path):
+        """Covers two edge branches of
+        _read_transitions_and_contribution_coefficients: a non-blank,
+        non-transition-matching line appearing before any transition line
+        has been found for a state (falls through via plain increment),
+        and an 'Excited State' header that is the very last line in the
+        file (the inner while loop runs zero iterations)."""
+        outputfile = tmp_path / "td_edge_cases.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    "Excited State   1:  Singlet-A  1.0 eV  100.0 nm  f=0.1",
+                    " This state for optimization and/or second-order correction.",
+                    "   104A -> 108A        0.15573",
+                    "",
+                    "Excited State   2:  Singlet-A  2.0 eV  200.0 nm  f=0.2",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        transitions = g16.transitions
+        assert transitions[0] == ["104A -> 108A"]
+        assert transitions[1] == []
+
+    def test_genecp_info_heavy_elements_none_when_gen_genecp_none(
+        self, gaussian_semiempirical_pm6_output_file
+    ):
+        """When gen_genecp is None (e.g. semiempirical calc), _genecp_info
+        returns its all-None defaults immediately without ever touching
+        self.symbols."""
+        g16 = Gaussian16Output(filename=gaussian_semiempirical_pm6_output_file)
+        assert g16.gen_genecp is None
+        assert g16.heavy_elements is None
+        assert g16.heavy_elements_basis is None
+        assert g16.heavy_elements_ecp is None
+        assert g16.light_elements is None
+        assert g16.light_elements_basis is None
+
+    def test_genecp_info_not_atom_symbols_branch_is_dead_code(
+        self, monkeypatch, tmp_path
+    ):
+        """BUG (#105): _genecp_info's `if not atom_symbols: return result`
+        can never fire through any real call path, since self.symbols
+        either raises (caught above) or returns a non-empty list. Forcing
+        it via monkeypatch is the only way to reach it directly."""
+        outputfile = tmp_path / "genecp_dead_branch.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        monkeypatch.setattr(type(g16), "symbols", property(lambda self: []))
+        assert g16.heavy_elements is None
+        assert g16.light_elements is None
+
+    def test_genecp_info_general_basis_marker_at_eof(self, tmp_path):
+        """'General basis read from cards:' is the very last line in the
+        file, so the while loop's condition is False on its very first
+        check (j >= len(self.contents) immediately, before the loop body
+        ever runs)."""
+        outputfile = tmp_path / "genecp_marker_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.light_elements is None
+        assert g16.heavy_elements is None
+
+    def test_genecp_info_blank_line_between_centers_and_basis_name(
+        self, tmp_path
+    ):
+        """A blank line between 'Centers:' and its basis-name content
+        line exercises the 'skip blank lines' inner loop."""
+        outputfile = tmp_path / "genecp_centers_blank.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:       1",
+                    "",
+                    " def2svp",
+                    " ****",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.light_elements == ["C"]
+        assert g16.light_elements_basis == "def2svp"
+
+    def test_genecp_info_out_of_range_center_numbers(self, tmp_path):
+        """A 'Centers:' line listing a center number outside
+        1..len(atom_symbols) is silently skipped for both the heavy
+        (explicit-orbital) and light (named-basis) branches, without
+        crashing or being recorded."""
+        outputfile = tmp_path / "genecp_out_of_range_centers.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/genecp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " General basis read from cards:  (5D, 7F)",
+                    " Centers:      99",
+                    " S   1 1.00",
+                    "     Exponent=  1.0000000000D+01 Coefficients=  1.0000000000D+00",
+                    " ****",
+                    " Centers:      99",
+                    " def2svp",
+                    " ****",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.heavy_elements is None
+        assert g16.light_elements is None
+
+    def test_parse_pseudopotential_section_returns_empty_when_symbols_fail(
+        self, tmp_path
+    ):
+        """Calling _parse_pseudopotential_section directly on a file whose
+        self.symbols raises exercises its own try/except (independent of
+        _genecp_info's identical guard, which is never reached since this
+        method is called directly here)."""
+        outputfile = tmp_path / "no_symbols_for_ecp.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Just some text with no coordinate block at all.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        with pytest.raises(ValueError):
+            g16.symbols
+        assert g16._parse_pseudopotential_section() == {}
+
+    def test_parse_pseudopotential_section_line_matching_term_shape_but_not_is_term(
+        self, tmp_path
+    ):
+        """A line with exactly 4 tokens whose first token is a digit but
+        whose second token has no '.' fails the stricter is_term token
+        check yet still matches the looser ecp_term_pattern regex, so
+        the final 'channel name' elif's `not term_re.match(line)` is
+        False and the line falls through untouched back to the next
+        loop iteration instead of being treated as a channel name."""
+        outputfile = tmp_path / "ecp_channel_fallthrough.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " Ag                    0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    " Pseudopotential Parameters",
+                    " ======================================================================",
+                    " ======================================================================",
+                    " Center     Number     Number of atoms",
+                    " ----------------------------------------------------------------------",
+                    "   1     19",
+                    " 1 abc def ghi",
+                    " ======================================================================",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16._parse_pseudopotential_section() == {}
+
+    def test_link_job_drop_first_and_keep_last_only_falsy_branches(
+        self, tmp_path
+    ):
+        """A minimal link-sp job (normal termination, jobtype 'sp') with
+        two Standard orientation frames and a Forces block, but no SCF
+        energies, no rotational constants, and no point group data,
+        exercises the falsy (data-absent) branches of both drop_first()
+        and keep_last_only() inside _get_all_molecular_structures --
+        except for their `if orientations:`/`if orientations_pbc:`
+        guards, which are dead code (see BUGS_FOUND.md #107): orientations
+        is always non-empty when drop_first/keep_last_only run (guarded
+        by their call sites), and orientations_pbc always mirrors
+        orientations' length 1:1. Also covers keep_last_only's forces
+        truthy branch, since Forces data (but not energies/rot_consts/
+        point_groups) is present here."""
+        outputfile = tmp_path / "link_sp_falsy_branches.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # um062x def2tzvp stable=opt guess=mix",
+                    " ----------------------------------------------------------------------",
+                    " # um062x def2tzvp",
+                    " ----------------------------------------------------------------------",
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1",
+                    " C                     0.0000    0.0000    0.0000",
+                    "",
+                    " NAtoms=      1 NQM=        1 NQMF=       0",
+                    "                         Standard orientation:",
+                    " ---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    " ---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                    " ---------------------------------------------------------------------",
+                    "                         Standard orientation:",
+                    " ---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    " ---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    1.000000",
+                    " ---------------------------------------------------------------------",
+                    " Center     Atomic                   Forces (Hartrees/Bohr)",
+                    " Number     Number              X              Y              Z",
+                    " -------------------------------------------------------------------",
+                    "      1          6           0.000046905   -0.000110437   -0.000107477",
+                    " -------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.is_link
+        assert g16.jobtype == "sp"
+        assert g16.normal_termination
+        assert g16.energies == []
+        assert g16.all_rotational_constants(mode="physical") == []
+        assert g16.all_point_groups == []
+        structures = g16.all_structures
+        assert len(structures) == 1
+        assert structures[-1].positions.tolist() == [[0.0, 0.0, 1.0]]
+
+    def test_forces_no_terminator_at_true_eof(self, tmp_path):
+        """The Forces block's inner loop exhausts self.contents cleanly
+        (no closing divider) when the block is the literal last content
+        in the file, with nothing after it to trip up the parser."""
+        outputfile = tmp_path / "forces_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Center     Atomic                   Forces (Hartrees/Bohr)",
+                    " Number     Number              X              Y              Z",
+                    " -------------------------------------------------------------------",
+                    "      1          6           0.000046905   -0.000110437   -0.000107477",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        forces = g16.forces
+        assert len(forces) == 1
+        assert forces[0].shape == (1, 3)
+
+    def test_forces_no_terminator_followed_by_trailing_content_crashes(
+        self, tmp_path
+    ):
+        """BUG (#106): when a Forces block has no closing divider AND is
+        followed by further non-blank content later in the file (e.g.
+        the standard termination line), the parser keeps scanning and
+        tries to parse that trailing content as force data, crashing
+        with ValueError instead of stopping at the table's natural
+        end."""
+        outputfile = tmp_path / "forces_no_terminator_trailing.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Center     Atomic                   Forces (Hartrees/Bohr)",
+                    " Number     Number              X              Y              Z",
+                    " -------------------------------------------------------------------",
+                    "      1          6           0.000046905   -0.000110437   -0.000107477",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        with pytest.raises(ValueError):
+            g16.forces
+
+    def test_align_lengths_to_orientations_trims_longer_energies(
+        self, tmp_path
+    ):
+        """Two identical Standard orientation frames get deduplicated
+        down to one by clean_duplicate_structure, but the two SCF Done
+        energies printed alongside them are untouched by dedup, so
+        align_lengths_to_orientations must right-trim energies (now
+        longer than the deduplicated orientations list) back down to
+        match."""
+        std_block = [
+            "                         Standard orientation:",
+            " ---------------------------------------------------------------------",
+            " Center     Atomic      Atomic             Coordinates (Angstroms)",
+            " Number     Number       Type             X           Y           Z",
+            " ---------------------------------------------------------------------",
+            "      1          6           0        0.000000    0.000000    0.000000",
+            " ---------------------------------------------------------------------",
+        ]
+        lines = [
+            " ----------------------------------------------------------------------",
+            " # opt mn15/def2svp",
+            " ----------------------------------------------------------------------",
+            " Symbolic Z-matrix:",
+            " Charge =  0 Multiplicity = 1",
+            " C                     0.0000    0.0000    0.0000",
+            "",
+            " NAtoms=      1 NQM=        1 NQMF=       0",
+        ]
+        lines += std_block
+        lines.append(
+            " SCF Done:  E(RHF) =  -38.0000000     A.U. after   10 cycles"
+        )
+        lines += std_block
+        lines.append(
+            " SCF Done:  E(RHF) =  -38.0000001     A.U. after   10 cycles"
+        )
+        lines.append(
+            " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023."
+        )
+        outputfile = tmp_path / "align_lengths_trim.log"
+        outputfile.write_text("\n".join(lines) + "\n")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert len(g16.standard_orientations) == 2
+        assert g16.energies == [-38.0, -38.0000001]
+        structures = g16.all_structures
+        assert len(structures) == 1
+        assert structures[0].energy == -38.0
+
+    def test_include_intermediate_scan_multiple_optimized_indices(
+        self, tmp_path
+    ):
+        """A synthetic multi-scan-point job with two fully-completed scan
+        points (each with its own final optimized step) gives
+        optimized_steps_indices more than one entry, so the
+        is_optimized-tagging loop in _get_all_molecular_structures
+        actually iterates more than once. A third scan point is recorded
+        (via a 'Step number ... on scan point 3 out of 3' line) without a
+        corresponding fourth orientation frame, so its mapped index (3)
+        falls outside the valid range for the 3-frame is_optimized list,
+        exercising the loop's `0 <= idx < len(is_optimized)` False branch
+        (which loops back without setting anything) in addition to the
+        True branch."""
+        std_block_lines = [
+            "                         Standard orientation:",
+            " ---------------------------------------------------------------------",
+            " Center     Atomic      Atomic             Coordinates (Angstroms)",
+            " Number     Number       Type             X           Y           Z",
+            " ---------------------------------------------------------------------",
+            "      1          6           0        0.000000    0.000000    0.000000",
+            " ---------------------------------------------------------------------",
+        ]
+        lines = [
+            " ----------------------------------------------------------------------",
+            " # opt modredundant mn15/def2svp",
+            " ----------------------------------------------------------------------",
+            " Symbolic Z-matrix:",
+            " Charge =  0 Multiplicity = 1",
+            " C                     0.0000    0.0000    0.0000",
+            "",
+            " NAtoms=      1 NQM=        1 NQMF=       0",
+        ]
+        lines += std_block_lines
+        lines.append(
+            " Step number   1 out of a maximum of  100 on scan point"
+            "     1 out of     2"
+        )
+        lines += std_block_lines
+        lines.append(
+            " Step number   2 out of a maximum of  100 on scan point"
+            "     1 out of     2"
+        )
+        lines += std_block_lines
+        lines.append(
+            " Step number   1 out of a maximum of  100 on scan point"
+            "     2 out of     2"
+        )
+        lines.append(
+            " Step number   1 out of a maximum of  100 on scan point"
+            "     3 out of     3"
+        )
+        outputfile = tmp_path / "multi_scan_point.log"
+        outputfile.write_text("\n".join(lines) + "\n")
+        g16 = Gaussian16Output(
+            filename=str(outputfile), include_intermediate=True
+        )
+        assert g16.optimized_steps_indices == [1, 2, 3]
+        structures = g16.all_structures
+        assert len(structures) == 3
+        assert [s.is_optimized_structure for s in structures] == [
+            False,
+            True,
+            True,
+        ]
+
+    def test_energies_uses_mp2_energies_when_present(self, tmp_path):
+        """When EUMP2 lines are present, `energies` returns mp2_energies
+        rather than falling back to scf_energies."""
+        outputfile = tmp_path / "mp2_energies.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " SCF Done:  E(RHF) =  -76.0000000     A.U. after   10 cycles",
+                    " EUMP2 =    -0.7635026712D+02",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.scf_energies == [-76.0]
+        assert g16.mp2_energies == [-76.35026712]
+        assert g16.energies == [-76.35026712]
+
+    def test_modredundant_group_none_when_route_has_no_modred(self, tmp_path):
+        outputfile = tmp_path / "no_modred_route.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.modredundant_group is None
+
+    def test_modredundant_group_no_terminator_runs_to_eof(self, tmp_path):
+        """The ModRedundant section is the last content in the file, so
+        the inner blank-line-terminator search loop exhausts
+        self.contents instead of hitting `break`."""
+        outputfile = tmp_path / "modred_no_terminator.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt modredundant mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " The following ModRedundant input section has been read:",
+                    " B 1 2 F",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.modredundant_group == ["B 1 2 F"]
+
+    def test_gen_genecp_none_for_non_gen_basis(self, tmp_path):
+        """A basis set string that does not contain 'gen' (e.g. a
+        standard Pople/Karlsruhe basis) makes _get_gen_genecp fall
+        through to its final `return None`."""
+        outputfile = tmp_path / "non_gen_basis.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt mn15/def2svp",
+                    " ----------------------------------------------------------------------",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.basis is not None
+        assert "gen" not in g16.basis
+        assert g16.gen_genecp is None
+
+    def test_basis_function_counts_parsed_from_header_line(self, tmp_path):
+        """A single real-format 'N basis functions, M primitive
+        gaussians, K cartesian basis functions' line satisfies all
+        three properties' search conditions at once."""
+        outputfile = tmp_path / "basis_counts.log"
+        outputfile.write_text(
+            "    43 basis functions,    85 primitive gaussians,"
+            "    46 cartesian basis functions\n"
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.num_basis_functions == 43
+        assert g16.num_primitive_gaussians == 85
+        assert g16.num_cartesian_basis_functions == 46
+
+    def test_vibrational_modes_empty_when_frequencies_line_near_eof(
+        self, tmp_path
+    ):
+        """A 'Frequencies --' line within the last 4 lines of the file
+        makes the mode-row inner loop's iterable (self.contents[i+5:])
+        empty, so it runs zero iterations instead of collecting rows or
+        breaking on a mismatch."""
+        outputfile = tmp_path / "vib_modes_near_eof.log"
+        outputfile.write_text(" Frequencies --   123.4")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        modes = g16.vibrational_modes
+        assert len(modes) == 3
+        assert all(m.size == 0 for m in modes)
+
+    def test_entropy_in_j_per_mol_per_k_with_real_thermochemistry_data(
+        self, gaussian_koh_linear_opt_outfile
+    ):
+        """A real fixture with a full 'E (Thermal) ... CV ... S' table
+        (including its 'Total' row) exercises the successful-parse
+        return path of entropy_in_J_per_mol_per_K, and by extension
+        entropy and entropy_times_temperature."""
+        g16 = Gaussian16Output(filename=gaussian_koh_linear_opt_outfile)
+        assert g16.entropy_in_J_per_mol_per_K is not None
+        assert g16.entropy is not None
+        assert g16.entropy > 0
+        if g16.temperature_in_K:
+            assert g16.entropy_times_temperature is not None
+
+    def test_input_orientations_no_terminator_runs_to_eof(self, tmp_path):
+        """'Input orientation:' is close enough to EOF that the inner
+        coordinate-row loop exhausts self.contents instead of hitting
+        the dashed-divider break."""
+        outputfile = tmp_path / "input_orientation_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    "Input orientation:",
+                    "---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    "---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert len(g16.input_orientations) == 1
+        assert g16.input_orientations[0].tolist() == [[0.0, 0.0, 0.0]]
+
+    def test_standard_orientations_no_terminator_with_tv_row(self, tmp_path):
+        """Covers both the standard-orientation no-terminator EOF loop
+        exhaustion and the PBC ('-2' atomic number, translation-vector)
+        row-handling branch in a single minimal block."""
+        outputfile = tmp_path / "standard_orientation_tv_eof.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    "Standard orientation:",
+                    "---------------------------------------------------------------------",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    "---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                    "      2         -2           0        1.000000    0.000000    0.000000",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert len(g16.standard_orientations) == 1
+        assert g16.standard_orientations[0].tolist() == [[0.0, 0.0, 0.0]]
+        assert g16.standard_orientations_pbc[0].tolist() == [[1.0, 0.0, 0.0]]
+
+    def test_tddft_transitions_skips_partial_regex_match(self, tmp_path):
+        """An 'Excited State' line missing the oscillator-strength token
+        ('f=...') fails the combined eV/nm/f match, so the transition is
+        skipped and the loop continues to the next line instead of
+        appending anything."""
+        outputfile = tmp_path / "tddft_partial_match.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    "Excited State   1:  Singlet-A  1.0 eV  100.0 nm",
+                    "Excited State   2:  Singlet-A  2.0 eV  200.0 nm  f=0.2",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.tddft_transitions == [(2.0, 200.0, 0.2)]
+
+    def test_mass_parsed_from_real_fixture(
+        self, gaussian_koh_linear_opt_outfile
+    ):
+        g16 = Gaussian16Output(filename=gaussian_koh_linear_opt_outfile)
+        assert g16.mass == pytest.approx(55.96645)
+
+    def test_moments_of_inertia_wrapper_properties_and_eof_handling(
+        self, tmp_path
+    ):
+        """Covers the moments_of_inertia/moments_of_inertia_principal_axes
+        wrapper properties directly (not just the underlying _get_...
+        helper), and exercises both the 'This molecule' terminator-absent
+        EOF loop-exhaustion arc and the 'non-4-token line inside the
+        block' skip arc. Real Gaussian output prints its '1  2  3' column
+        header immediately after the section marker, which falls outside
+        the self.contents[i+2:] scan window; a junk 3-token row is placed
+        after the 'Eigenvalues --' row instead so it actually falls
+        inside the scanned window."""
+        outputfile = tmp_path / "moments_no_terminator.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Principal axes and moments of inertia in atomic units:",
+                    "                            1         2         3",
+                    "     Eigenvalues --    10.0      20.0      30.0",
+                    "           extra   junk   row",
+                    "           X            1.0       0.0       0.0",
+                    "           Y            0.0       1.0       0.0",
+                    "           Z            0.0       0.0       1.0",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        moments = g16.moments_of_inertia
+        axes = g16.moments_of_inertia_principal_axes
+        assert moments is not None
+        assert len(moments) == 3
+        assert axes.shape == (3, 3)
+
+    def test_rotational_temperatures_and_constants_no_marker(self, tmp_path):
+        """No 'Rotational temperature'/'Rotational constant' marker line
+        is present at all, so both reversed-scan loops exhaust without
+        ever returning, falling through to the implicit None."""
+        outputfile = tmp_path / "no_rotational_marker.log"
+        outputfile.write_text(" Just some unrelated content.\n")
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.rotational_temperatures is None
+        assert g16.rotational_constants_in_Hz is None
+
+    def test_rotational_temperatures_and_constants_overflow_dedup(
+        self, gaussian_koh_opt_outfile
+    ):
+        """KOH.log (a linear molecule) prints an overflow token
+        ('************') for the axial rotational temperature/constant
+        and duplicate values for the two degenerate perpendicular axes,
+        exercising both the overflow-token-skip branch and the
+        duplicate-collapsing dedup loop for both properties."""
+        g16 = Gaussian16Output(filename=gaussian_koh_opt_outfile)
+        rot_temps = g16.rotational_temperatures
+        rot_consts = g16.rotational_constants_in_Hz
+        assert rot_temps == [pytest.approx(0.39865)]
+        assert rot_consts == [pytest.approx(8306469999.999999)]
+
+    def test_all_rotational_constants_with_return_status(
+        self, gaussian_koh_linear_opt_outfile
+    ):
+        """Calling all_rotational_constants with return_status=True (not
+        exercised by the default-arg call inside
+        _get_all_molecular_structures) exercises the
+        (vals_ghz, status)-tuple-appending branch."""
+        g16 = Gaussian16Output(filename=gaussian_koh_linear_opt_outfile)
+        result = g16.all_rotational_constants(
+            mode="physical", return_status=True
+        )
+        assert len(result) > 0
+        vals, status = result[0]
+        assert isinstance(status, str)
+        assert vals.shape[0] >= 1
+
+    def test_oniom_partition_first_format_edge_cases(self, tmp_path):
+        """Covers, all in the 'first ONIOM format' branch (coordinates
+        start 4 lines after 'Symbolic Z-matrix:'): a 5-token row (no
+        frozen-flag column) using the `tokens[4]` layer fallback for both
+        a recognized ('M') and an unrecognized ('X', falls through every
+        elif without appending) layer letter, and a too-short junk line
+        (<=4 characters, but non-empty) that is skipped and looped back
+        on rather than breaking the block. See BUGS_FOUND.md #108 for why
+        the sibling 'loop is empty' arc for this format is unreachable
+        (unlike the alternative format, covered separately below)."""
+        outputfile = tmp_path / "oniom_first_format_edges.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  1 Multiplicity = 2 for low   level calculation on real  system.",
+                    " Charge =  1 Multiplicity = 1 for high  level calculation on model system.",
+                    " Charge =  1 Multiplicity = 1 for low   level calculation on model system.",
+                    " O                    0    -12.48248   5.30094  -8.00429  H",
+                    " C                    -13.21397   6.08531  -7.06089  M",
+                    " N                    -12.6012   5.91137  -5.65849  X",
+                    " ab",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        partition = g16.oniom_partition
+        assert partition["high level atoms"] == ["1"]
+        assert partition["medium level atoms"] == ["2"]
+        assert "low level atoms" not in partition
+
+    def test_oniom_partition_alt_format_empty_loop(self, tmp_path):
+        """'Symbolic Z-matrix:' is close enough to EOF (only 5 lines,
+        including 5 Charge lines, follow it) that the 'alternative
+        format' inner loop's iterable (self.contents[i+7:]) is empty,
+        so it runs zero iterations."""
+        outputfile = tmp_path / "oniom_alt_format_empty_loop.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on real  system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for high  level calculation on model system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on model system.",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        assert g16.oniom_partition == {}
+
+    def test_oniom_partition_alt_format_edge_cases(self, tmp_path):
+        """Mirrors test_oniom_partition_first_format_edge_cases but for
+        the 'alternative ONIOM format' branch (coordinates start 7 lines
+        after the marker, triggered when the 4th line after the marker
+        is itself still a 'Charge =' line): the tokens[4] layer fallback
+        (5-token row) and the too-short junk-line skip-and-loop-back
+        arc."""
+        outputfile = tmp_path / "oniom_alt_format_edges.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Symbolic Z-matrix:",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on real  system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on mid   system.",
+                    " Charge =  0 Multiplicity = 1 for high  level calculation on model system.",
+                    " Charge =  0 Multiplicity = 1 for med   level calculation on model system.",
+                    " Charge =  0 Multiplicity = 1 for low   level calculation on model system.",
+                    " C                    -2.98798  -1.16645  -0.64775  H",
+                    " ab",
+                    " O                    0    -3.58797   0.11588  -0.84912  X",
+                    "",
+                ]
+            )
+        )
+        g16 = Gaussian16Output(filename=str(outputfile))
+        partition = g16.oniom_partition
+        assert partition["high level atoms"] == ["1"]
+        assert "medium level atoms" not in partition
+        assert "low level atoms" not in partition
+
+    def test_natural_population_analysis_blank_line_within_block(
+        self, tmp_path
+    ):
+        """A blank line appearing between two data rows inside the NPA
+        table is skipped (does not terminate the block or crash), unlike
+        the block-terminating '===...' divider or EOF."""
+        outputfile = tmp_path / "npa_blank_line.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " Atom  No    Charge         Core      Valence    Rydberg      Total",
+                    " ---------------------------------------------------------------------",
+                    " Ni     1     0.52827        10.0      15.0        1.0         27.47173",
+                    "",
+                    " Ni     1     0.52827        10.0      15.0        1.0         27.47173",
+                    " =======================================================================",
+                ]
+            )
+        )
+        g16 = Gaussian16WBIOutput(filename=str(outputfile))
+        assert g16.natural_charges == {"Ni1": 0.52827}
+
+    def test_pbc_input_translation_vectors_divider_and_non_tv_rows(
+        self, tmp_path
+    ):
+        """A synthetic PBC block where `num_atoms` (used to size the
+        scanned window ending just before 'Lengths of translation
+        vectors:') is deliberately larger than the number of real TV
+        rows, so the scanned window also picks up the coordinate table's
+        own dashed divider (skipped via `continue`) and two non-TV
+        (real-atom) rows (skipped via the loop-continues arc), in
+        addition to the one genuine TV row."""
+        outputfile = tmp_path / "pbc_translation_vectors_edges.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " NAtoms=      5 NQM=        5 NQMF=       0",
+                    " Center     Atomic      Atomic             Coordinates (Angstroms)",
+                    " Number     Number       Type             X           Y           Z",
+                    " ---------------------------------------------------------------------",
+                    "      1          6           0        0.000000    0.000000    0.000000",
+                    "      2          6           0        1.000000    0.000000    0.000000",
+                    "      3          6           0        2.000000    0.000000    0.000000",
+                    "      4         -2           0        3.000000    0.000000    0.000000",
+                    " ---------------------------------------------------------------------",
+                    " Lengths of translation vectors:      3.000000",
+                ]
+            )
+            + "\n"
+        )
+        g16 = Gaussian16OutputWithPBC(filename=str(outputfile))
+        assert g16.num_atoms == 5
+        result = g16.input_translation_vectors
+        assert result.tolist() == [[3.0, 0.0, 0.0]]

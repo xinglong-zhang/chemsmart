@@ -1,3 +1,6 @@
+import sys
+
+import pytest
 from ase import Atoms
 
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
@@ -165,6 +168,132 @@ class TestGaussianGenGenECP:
             "S",
         }
         assert genecp_section.light_elements_basis == "def2svp"
+
+
+class TestGenGenECPSectionEdgeCases:
+    def test_light_elements_basis_returns_none_when_only_one_line(self):
+        section = GenGenECPSection("H C 0")
+        assert section.light_elements_basis is None
+
+    def test_light_elements_empty_when_first_line_blank(self):
+        section = GenGenECPSection("\nsome basis\n****\n")
+        assert section.light_elements == []
+
+    def test_light_elements_warns_when_line_does_not_end_with_zero(
+        self, caplog
+    ):
+        section = GenGenECPSection("H C 1\nsome basis\n****\n")
+        assert section.light_elements == ["H", "C"]
+        assert "should end with 0" in str(caplog.messages)
+
+    def test_heavy_elements_basis_returns_none_when_not_found(self):
+        section = GenGenECPSection("H C 0\nsome basis\n****\n")
+        assert section.heavy_elements_basis is None
+
+    def test_string_blocks_splits_on_blank_lines(self):
+        section = GenGenECPSection("a\nb\n\nc\nd")
+        assert section._string_blocks == [["a", "b"], ["c", "d"]]
+
+    def test_genecp_type_gen_for_single_block(self):
+        section = GenGenECPSection("H C 0\nbasis\n****")
+        assert section.genecp_type == "gen"
+
+    def test_genecp_type_genecp_for_two_blocks(self):
+        section = GenGenECPSection("H C 0\nbasis\n****\n\nPd 0\nbasis2\n****")
+        assert section.genecp_type == "genecp"
+
+    def test_genecp_type_empty_string_for_other_block_counts(self):
+        assert GenGenECPSection("").genecp_type == ""
+        three_blocks = "a\n\nb\n\nc"
+        assert GenGenECPSection(three_blocks).genecp_type == ""
+
+    def test_from_genecp_path_raises_when_missing(self, tmp_path):
+        missing_path = tmp_path / "does_not_exist.txt"
+        with pytest.raises(FileNotFoundError, match="is not found"):
+            GenGenECPSection.from_genecp_path(str(missing_path))
+
+    def test_from_genecp_path_reads_file_dropping_trailing_blank_line(
+        self, tmp_path
+    ):
+        genecp_file = tmp_path / "genecp.txt"
+        genecp_file.write_text("H C 0\nbasis\n****\n\n")
+
+        section = GenGenECPSection.from_genecp_path(str(genecp_file))
+
+        # The extra trailing blank line is dropped before reading; the
+        # remaining single "\n" at the end of "****\n" still produces one
+        # empty trailing entry when split, but not two.
+        assert section.string_list == ["H C 0", "basis", "****", ""]
+
+    def test_from_genecp_path_reads_file_without_trailing_blank_line(
+        self, tmp_path
+    ):
+        genecp_file = tmp_path / "genecp.txt"
+        genecp_file.write_text("H C 0\nbasis\n****")
+
+        section = GenGenECPSection.from_genecp_path(str(genecp_file))
+
+        assert section.string_list == ["H C 0", "basis", "****"]
+
+    def test_from_bse_api_raises_importerror_when_bse_unavailable(
+        self, mocker
+    ):
+        mocker.patch.dict(sys.modules, {"basis_set_exchange": None})
+        with pytest.raises(ImportError, match="basis_set_exchange module"):
+            GenGenECPSection.from_bse_api(
+                light_elements=["H"],
+                light_elements_basis="6-31G*",
+                heavy_elements=["Pd"],
+                heavy_elements_basis="def2-TZVPPD",
+            )
+
+    def test_from_bse_api_with_no_light_elements(self):
+        section = GenGenECPSection.from_bse_api(
+            light_elements=[],
+            light_elements_basis="6-31G*",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="nonexistent-basis-for-test",
+        )
+        # No light-element preamble written; starts straight with heavy Pd.
+        assert section.string_list[0] == "Pd 0"
+
+    def test_from_bse_api_with_no_heavy_elements_returns_light_only(self):
+        section = GenGenECPSection.from_bse_api(
+            light_elements=["H", "C"],
+            light_elements_basis="6-31G*",
+            heavy_elements=[],
+            heavy_elements_basis="def2-TZVPPD",
+        )
+        assert section.string_list[0] == "H C 0"
+        assert section.string_list[1] == "6-31g*"
+        assert section.string_list[2] == "****"
+        assert section.heavy_elements == []
+
+    def test_from_bse_api_falls_back_on_get_basis_key_error(self, mocker):
+        mocker.patch(
+            "basis_set_exchange.get_basis",
+            side_effect=KeyError("boom"),
+        )
+        section = GenGenECPSection.from_bse_api(
+            light_elements=["H"],
+            light_elements_basis="6-31G*",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="def2-TZVPPD",
+        )
+        assert "Pd 0" in section.string_list
+
+    def test_from_bse_api_falls_back_on_get_basis_value_error(self, mocker):
+        mocker.patch(
+            "basis_set_exchange.get_basis",
+            side_effect=ValueError("boom"),
+        )
+        section = GenGenECPSection.from_bse_api(
+            light_elements=["H"],
+            light_elements_basis="6-31G*",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="def2-TZVPPD",
+        )
+        assert "Pd 0" in section.string_list
 
 
 class TestGenGenECPBasisDetermination:
