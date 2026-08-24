@@ -28,11 +28,11 @@ IRC Options
 
    -  -  ``-r, --reactant``
       -  string
-      -  IRC file for reactant side (-r and -p must be used together)
+      -  IRC file for reactant side
 
    -  -  ``-p, --product``
       -  string
-      -  IRC file for product side (-r and -p must be used together)
+      -  IRC file for product side
 
    -  -  ``-a, --all``
       -  string
@@ -61,4 +61,4 @@ For reactant side pathway movie:
 
 .. code:: bash
 
-   chemsmart run mol irc -a irc_reactant_side.log
+   chemsmart run mol irc -r irc_reactant_side.log
