@@ -1487,6 +1487,51 @@ class TestDescriptors:
         bmax = sterimol["B5"]
         assert np.isclose(bmin, bmax, atol=0.5)
 
+    def test_sterimol_close_atoms(self):
+        """Ensure close atom1/atom2 are dealt with"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 3],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        meth = Molecule(symbols=symbol, positions=position)
+
+        with pytest.raises(
+            ValueError, match="atom2 vector norm too close to zero"
+        ):
+            meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+
+    def test_sterimol_flipped_molecules(self):
+        """Ensure same calculation for flipped molecules"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 4.09],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        position = position * np.array([1, 1, -1])
+        meth = Molecule(symbols=symbol, positions=position)
+        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        sterimol = meth.sterimol_parameter
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        length = sterimol["L"]
+
+        # By hand calculation
+        # B1 = 1.70, B5 = 2.23, L = 2.79
+        assert bmin == 1.70
+        assert bmax == 2.23
+        assert length == 2.79
+
 
 class TestCoordinateBlockAdvanced:
     def test_mixed_coordinate_formats(self):
