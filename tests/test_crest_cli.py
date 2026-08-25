@@ -384,6 +384,46 @@ class TestCRESTCLIGroupValidation:
         label = mock_job_cls.call_args[1]["label"]
         assert label == "output_conformers"
 
+    def test_pubchem_only_with_append_label_falls_back_to_output(self):
+        """Previously a bug native to crest.py (not merge-related): the
+        append_label branch called os.path.basename(filename)
+        unconditionally, without the `if filename:` guard that the
+        default-label branch just below it already has, crashing with a
+        TypeError for a filename-less (PubChem-only) job combined with
+        -a/--append-label. Fixed by adding the same guard."""
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                crest,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-a",
+                    "suffix",
+                    "conformers",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_suffix"
+
     def test_default_label_suffixed_with_invoked_subcommand(
         self, single_molecule_xyz_file
     ):
