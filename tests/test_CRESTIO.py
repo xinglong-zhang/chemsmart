@@ -1,6 +1,8 @@
 import os
+from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
 from chemsmart.io.crest.file import CRESTEnergiesFile, CRESTMainOut
 from chemsmart.io.crest.folder import CRESTFolder
@@ -268,6 +270,122 @@ class TestCRESTMainOut:
         assert hexane_main_out.lowest_energy is None
         assert hexane_main_out.wall_time is None
         assert hexane_main_out.cpu_time is None
+        # CREGEN never ran for this failed job, so none of its summary
+        # lines are present -- every one of these falls through to None.
+        assert hexane_main_out.rmsd_threshold is None
+        assert hexane_main_out.bconst_threshold is None
+        assert hexane_main_out.population_threshold is None
+        assert hexane_main_out.energy_window is None
+        assert hexane_main_out.reference_state_energy is None
+        assert hexane_main_out.temperature is None
+        assert hexane_main_out.average_energy_ensemble is None
+        assert hexane_main_out.entropy_ensemble is None
+        assert hexane_main_out.free_energy_ensemble is None
+        assert hexane_main_out.population_of_lowest is None
+
+    def test_get_route_accepts_prompt_style_prefix(self, tmp_path):
+        """Some CREST logs prefix the command line with '>' instead of
+        '$' depending on how the run was invoked/piped."""
+        out_file = tmp_path / "synthetic.out"
+        out_file.write_text("some header\n> crest mol.xyz --gfn2\nmore text\n")
+        main_out = CRESTMainOut(str(out_file))
+        assert main_out.route_string == "crest mol.xyz --gfn2"
+
+    def test_get_route_returns_none_when_no_command_line_present(
+        self, tmp_path
+    ):
+        out_file = tmp_path / "synthetic.out"
+        out_file.write_text("some header\nno command line here\n")
+        main_out = CRESTMainOut(str(out_file))
+        assert main_out.route_string is None
+
+    def test_topology_mismatch_true_when_warning_present(self, tmp_path):
+        out_file = tmp_path / "synthetic.out"
+        out_file.write_text(
+            "$ crest mol.xyz --gfn2\n"
+            "*WARNING* Change in topology detected!\n"
+        )
+        main_out = CRESTMainOut(str(out_file))
+        assert main_out.topology_mismatch is True
+
+    def test_malformed_summary_values_fall_back_to_none(self, tmp_path):
+        """Every CREGEN/ensemble-summary line present but with a
+        non-numeric value hits the except-continue branch and, since no
+        other matching line follows, ultimately returns None."""
+        out_file = tmp_path / "synthetic.out"
+        out_file.write_text(
+            "$ crest mol.xyz --gfn2\n"
+            " number of atoms                : notanumber\n"
+            " RMSD threshold                 : notanumber\n"
+            " Bconst threshold               : notanumber\n"
+            " population threshold           : notanumber\n"
+            " sorting energy window (EWIN)   : notanumber / kcal*mol-1\n"
+            " reference state Etot           : notanumber\n"
+            "T /K                            : notanumber\n"
+            "E lowest                        :   notanumber\n"
+            "ensemble average energy (kcal)  : notanumber\n"
+            "ensemble entropy (J/mol K, cal/mol K) : notanumber notanumber\n"
+            "ensemble free energy (kcal/mol) : notanumber\n"
+            "population of lowest in %       : notanumber\n"
+            " number of unique conformers for further calc   notanumber\n"
+            " total number unique points considered further  notanumber\n"
+        )
+        main_out = CRESTMainOut(str(out_file))
+        assert main_out.num_atoms is None
+        assert main_out.rmsd_threshold is None
+        assert main_out.bconst_threshold is None
+        assert main_out.population_threshold is None
+        assert main_out.energy_window is None
+        assert main_out.reference_state_energy is None
+        assert main_out.temperature is None
+        assert main_out.lowest_energy is None
+        # average/entropy/free energy all short-circuit to None as soon
+        # as reference_state_energy is None, without even scanning for
+        # their own markers -- covered by the reference_state_energy
+        # malformed-value branch above already returning None.
+        assert main_out.average_energy_ensemble is None
+        assert main_out.entropy_ensemble is None
+        assert main_out.free_energy_ensemble is None
+        assert main_out.population_of_lowest is None
+        assert main_out.num_conformers is None
+        assert main_out.num_rotamers is None
+
+    def test_entropy_and_average_energy_malformed_when_reference_present(
+        self, tmp_path
+    ):
+        """With a valid reference_state_energy (so the early-return guard
+        in average_energy_ensemble is skipped), a malformed ensemble
+        average/entropy line still hits its own except-continue branch."""
+        out_file = tmp_path / "synthetic.out"
+        out_file.write_text(
+            "$ crest mol.xyz --gfn2\n"
+            " reference state Etot           : -1.0\n"
+            "ensemble average energy (kcal)  : notanumber\n"
+            "ensemble entropy (J/mol K, cal/mol K) : notanumber notanumber\n"
+        )
+        main_out = CRESTMainOut(str(out_file))
+        assert main_out.reference_state_energy == -1.0
+        assert main_out.average_energy_ensemble is None
+        assert main_out.entropy_ensemble is None
+        # free_energy_ensemble's own guard short-circuits to None too,
+        # since it depends on average_energy_ensemble.
+        assert main_out.free_energy_ensemble is None
+
+    def test_free_energy_malformed_when_average_energy_present(self, tmp_path):
+        """With a valid average_energy_ensemble (so free_energy_ensemble's
+        own early-return guard is skipped), a malformed ensemble free
+        energy line hits free_energy_ensemble's own except-continue
+        branch instead of short-circuiting at the guard."""
+        out_file = tmp_path / "synthetic.out"
+        out_file.write_text(
+            "$ crest mol.xyz --gfn2\n"
+            " reference state Etot           : -1.0\n"
+            "ensemble average energy (kcal)  : 1.0\n"
+            "ensemble free energy (kcal/mol) : notanumber\n"
+        )
+        main_out = CRESTMainOut(str(out_file))
+        assert main_out.average_energy_ensemble is not None
+        assert main_out.free_energy_ensemble is None
 
 
 class TestCRESTEnergiesFile:
@@ -307,6 +425,28 @@ class TestCRESTEnergiesFile:
         assert styrene_energies.num_conformers == 1
         assert np.isclose(styrene_energies.relative_energies[0], 0.000)
         assert np.isclose(styrene_energies.energy_range, 0.000)
+
+    def test_skips_lines_with_fewer_than_two_columns(self, tmp_path):
+        energies_file = tmp_path / "crest.energies"
+        energies_file.write_text("1\n2 0.5\n")
+        energies = CRESTEnergiesFile(str(energies_file))
+        assert energies.relative_energies == [0.5]
+
+    def test_skips_lines_with_non_numeric_energy(self, tmp_path):
+        energies_file = tmp_path / "crest.energies"
+        energies_file.write_text("1 notanumber\n2 0.5\n")
+        energies = CRESTEnergiesFile(str(energies_file))
+        assert energies.relative_energies == [0.5]
+
+    def test_empty_file_gives_none_num_conformers_and_energy_range(
+        self, tmp_path
+    ):
+        energies_file = tmp_path / "crest.energies"
+        energies_file.write_text("")
+        energies = CRESTEnergiesFile(str(energies_file))
+        assert energies.relative_energies == []
+        assert energies.num_conformers is None
+        assert energies.energy_range is None
 
 
 class TestCRESTFolder:
@@ -434,6 +574,41 @@ class TestCRESTFolder:
         assert hexane_folder.coord_filepath is not None
         assert os.path.basename(hexane_folder.coord_filepath) == "coord"
 
+    def test_is_crest_calculation_directory_false_without_out_file(
+        self, tmp_path
+    ):
+        folder = CRESTFolder(str(tmp_path))
+        assert folder.crest_out_filepath is None
+        assert folder.is_crest_calculation_directory is False
+
+    def test_is_crest_calculation_directory_false_without_markers(
+        self, tmp_path, crest_octane_outfolder
+    ):
+        """A folder with a valid CREST *.out file but none of the
+        common auxiliary marker files is not considered a valid CREST
+        calculation directory."""
+        import shutil
+
+        shutil.copy(
+            os.path.join(crest_octane_outfolder, "octane_conformers.out"),
+            tmp_path / "octane_conformers.out",
+        )
+        folder = CRESTFolder(str(tmp_path))
+        assert folder.crest_out_filepath is not None
+        assert folder.is_crest_calculation_directory is False
+
+    def test_crest_out_filepath_raises_on_multiple_output_files(
+        self, tmp_path, crest_octane_outfolder
+    ):
+        import shutil
+
+        src = os.path.join(crest_octane_outfolder, "octane_conformers.out")
+        shutil.copy(src, tmp_path / "octane_conformers.out")
+        shutil.copy(src, tmp_path / "octane_conformers_copy.out")
+        folder = CRESTFolder(str(tmp_path))
+        with pytest.raises(ValueError, match="Multiple CREST main output"):
+            folder.crest_out_filepath
+
 
 class TestCRESTOutput:
     """Tests for CRESTOutput class."""
@@ -474,3 +649,138 @@ class TestCRESTOutput:
         assert hexane_output.rotamers == []
         assert hexane_output.best_conformer is None
         assert hexane_output.energies == []
+
+    @staticmethod
+    def _make_output_with_mock_folder(**folder_overrides):
+        output = CRESTOutput.__new__(CRESTOutput)
+        mock_folder = MagicMock()
+        for attr in (
+            "crest_out_filepath",
+            "energies_filepath",
+            "conformers_xyz_filepath",
+            "rotamers_xyz_filepath",
+            "best_xyz_filepath",
+        ):
+            setattr(mock_folder, attr, folder_overrides.get(attr))
+        output.folder = mock_folder
+        return output
+
+    def test_normal_termination_false_without_main_out(self):
+        output = self._make_output_with_mock_folder()
+        assert output.main_out is None
+        assert output.normal_termination is False
+
+    def test_conformers_empty_list_on_read_exception(self):
+        output = self._make_output_with_mock_folder(
+            conformers_xyz_filepath="/some/conformers.xyz"
+        )
+        with patch(
+            "chemsmart.io.crest.output.Molecule.from_filepath",
+            side_effect=ValueError("bad xyz"),
+        ):
+            assert output.conformers == []
+
+    def test_rotamers_empty_list_on_read_exception(self):
+        output = self._make_output_with_mock_folder(
+            rotamers_xyz_filepath="/some/rotamers.xyz"
+        )
+        with patch(
+            "chemsmart.io.crest.output.Molecule.from_filepath",
+            side_effect=ValueError("bad xyz"),
+        ):
+            assert output.rotamers == []
+
+    def test_best_conformer_falls_back_to_first_conformer_when_missing(
+        self, crest_octane_outfolder
+    ):
+        output = self._make_output_with_mock_folder(
+            crest_out_filepath=os.path.join(
+                crest_octane_outfolder, "octane_conformers.out"
+            ),
+            conformers_xyz_filepath="/some/conformers.xyz",
+        )
+        fake_molecule = MagicMock()
+        with patch(
+            "chemsmart.io.crest.output.Molecule.from_filepath",
+            return_value=[fake_molecule],
+        ):
+            assert output.best_conformer is fake_molecule
+
+    def test_best_conformer_none_when_no_best_file_and_no_conformers(self):
+        output = self._make_output_with_mock_folder()
+        assert output.best_conformer is None
+
+    def test_best_conformer_none_on_read_exception(self):
+        output = self._make_output_with_mock_folder(
+            best_xyz_filepath="/some/best.xyz"
+        )
+        with patch(
+            "chemsmart.io.crest.output.Molecule.from_filepath",
+            side_effect=ValueError("bad xyz"),
+        ):
+            assert output.best_conformer is None
+
+    def test_energies_falls_back_to_energies_file_and_main_out(
+        self, crest_octane_outfolder
+    ):
+        """When conformers carry no per-molecule energy, fall back to
+        main_out.lowest_energy + energies_file.relative_energies."""
+        output = self._make_output_with_mock_folder(
+            crest_out_filepath=os.path.join(
+                crest_octane_outfolder, "octane_conformers.out"
+            ),
+            energies_filepath=os.path.join(
+                crest_octane_outfolder, "crest.energies"
+            ),
+        )
+        # conformers_xyz_filepath is None -> self.conformers == []
+        assert output.conformers == []
+        assert output.main_out is not None
+        assert output.energies_file is not None
+        assert output.energies
+        assert np.isclose(output.energies[0], output.main_out.lowest_energy)
+
+    def test_num_conformers_falls_back_to_energies_file(
+        self, crest_octane_outfolder
+    ):
+        output = self._make_output_with_mock_folder(
+            energies_filepath=os.path.join(
+                crest_octane_outfolder, "crest.energies"
+            ),
+        )
+        assert output.main_out is None
+        assert output.num_conformers == output.energies_file.num_conformers
+
+    def test_num_conformers_falls_back_to_len_conformers(
+        self, crest_hexane_failed_outfolder
+    ):
+        # hexane's main_out has no "number of unique conformers" line, so
+        # main_out.num_conformers is None and no energies_file exists
+        # either -- forces the len(self.conformers) fallback.
+        output = self._make_output_with_mock_folder(
+            crest_out_filepath=os.path.join(
+                crest_hexane_failed_outfolder, "hexane.out"
+            ),
+            conformers_xyz_filepath="/some/conformers.xyz",
+        )
+        assert output.main_out.num_conformers is None
+        fake_molecule = MagicMock()
+        with patch(
+            "chemsmart.io.crest.output.Molecule.from_filepath",
+            return_value=[fake_molecule],
+        ):
+            assert output.num_conformers == 1
+
+    def test_num_rotamers_falls_back_to_len_rotamers(
+        self, crest_hexane_failed_outfolder
+    ):
+        # hexane's main_out has no "total number unique points" line, so
+        # main_out.num_rotamers is None -- forces the len(self.rotamers)
+        # fallback (no rotamers_xyz_filepath here, so it's 0).
+        output = self._make_output_with_mock_folder(
+            crest_out_filepath=os.path.join(
+                crest_hexane_failed_outfolder, "hexane.out"
+            ),
+        )
+        assert output.main_out.num_rotamers is None
+        assert output.num_rotamers == 0
