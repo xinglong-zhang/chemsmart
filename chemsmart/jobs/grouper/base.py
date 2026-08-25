@@ -825,7 +825,7 @@ class MatrixGrouper(MoleculeGrouper):
         distance_matrix: np.ndarray,
         original_indices: Optional[List[int]] = None,
     ) -> Tuple[np.ndarray, List[int]]:
-        """Remove structures involved in +inf pairs and return a finite submatrix."""
+        """Remove structures responsible for +inf pairs and return a finite submatrix."""
         clustering_matrix = self._validate_distance_matrix(distance_matrix)
         n = clustering_matrix.shape[0]
 
@@ -836,12 +836,25 @@ class MatrixGrouper(MoleculeGrouper):
                 "original_indices must match the size of the distance matrix."
             )
 
-        inf_mask = np.isposinf(clustering_matrix)
-        if n > 0:
-            inf_mask = inf_mask.copy()
-            inf_mask[np.diag_indices(n)] = False
+        remaining_local_indices = list(range(n))
+        skipped_local_indices = []
 
-        skipped_local_indices = np.where(np.any(inf_mask, axis=1))[0].tolist()
+        while remaining_local_indices:
+            current_matrix = clustering_matrix[
+                np.ix_(remaining_local_indices, remaining_local_indices)
+            ]
+            inf_mask = np.isposinf(current_matrix).copy()
+            np.fill_diagonal(inf_mask, False)
+
+            if not np.any(inf_mask):
+                break
+
+            inf_counts = np.sum(inf_mask, axis=1)
+            worst_current_index = int(np.argmax(inf_counts))
+            skipped_local_indices.append(
+                remaining_local_indices.pop(worst_current_index)
+            )
+
         skipped_original_indices = [
             original_indices[idx] for idx in skipped_local_indices
         ]
