@@ -214,6 +214,479 @@ class TestXTBCLISettings:
         assert mock_job_cls.call_args.kwargs["label"] == "co2_ohess_hess"
 
 
+class TestXTBCLIGroupValidation:
+    """Validation and settings-merge branches on the ``xtb`` group
+    callback itself (not delegated to any subcommand)."""
+
+    def test_molecule_id_not_supported_raises(self, single_molecule_xyz_file):
+        result = CliRunner().invoke(
+            xtb,
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "--mid",
+                "abc",
+                "sp",
+            ],
+            obj={"jobrunner": MagicMock()},
+        )
+        assert result.exit_code != 0
+        assert "not supported for xTB job submission" in result.output
+
+    def test_index_and_structure_index_mutually_exclusive(
+        self, single_molecule_xyz_file
+    ):
+        result = CliRunner().invoke(
+            xtb,
+            [
+                "-f",
+                single_molecule_xyz_file,
+                "-i",
+                "1",
+                "--si",
+                "1",
+                "sp",
+            ],
+            obj={"jobrunner": MagicMock()},
+        )
+        assert result.exit_code != 0
+        assert "mutually exclusive" in result.output
+
+    def test_structure_index_used_as_index(self, multiple_molecules_xyz_file):
+        """``--si`` is treated as an alias for ``-i`` when given alone."""
+        result, settings, _ = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                multiple_molecules_xyz_file,
+                "--si",
+                "1",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_requires_exactly_one_selector(
+        self, database_chemsmart_file
+    ):
+        result = CliRunner().invoke(
+            xtb,
+            ["-f", database_chemsmart_file, "sp"],
+            obj={"jobrunner": MagicMock()},
+        )
+        assert result.exit_code != 0
+        assert "select exactly one of" in result.output
+
+    def test_chemsmart_db_rejects_multiple_selectors(
+        self, database_chemsmart_file
+    ):
+        result = CliRunner().invoke(
+            xtb,
+            [
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "--sid",
+                "abc",
+                "sp",
+            ],
+            obj={"jobrunner": MagicMock()},
+        )
+        assert result.exit_code != 0
+        assert "select exactly one of" in result.output
+
+    def test_chemsmart_db_index_requires_record_selector(
+        self, database_chemsmart_file
+    ):
+        result = CliRunner().invoke(
+            xtb,
+            [
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "abc",
+                "-i",
+                "1",
+                "sp",
+            ],
+            obj={"jobrunner": MagicMock()},
+        )
+        assert result.exit_code != 0
+        assert "can only be used together with" in result.output
+
+    def test_non_chemsmart_db_falls_back_to_defaults(self, database_ase_file):
+        """A .db file that isn't a chemsmart database (e.g. a plain ASE
+        db) falls back to default xTB settings entirely."""
+        mock_molecule = MagicMock(name="ase_db_molecule")
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_filepath",
+            return_value=[mock_molecule],
+        ):
+            result, settings, _ = _invoke_xtb_and_capture_settings(
+                "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+                [
+                    "-p",
+                    "test",
+                    "-f",
+                    database_ase_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "sp",
+                ],
+            )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_filename_and_pubchem_both_missing_raises(self):
+        result = CliRunner().invoke(
+            xtb,
+            ["-p", "test", "sp"],
+            obj={"jobrunner": MagicMock()},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "has not been specified" in str(result.exception)
+
+    def test_filename_and_pubchem_both_given_raises(
+        self, single_molecule_xyz_file
+    ):
+        result = CliRunner().invoke(
+            xtb,
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "--pubchem",
+                "222",
+                "sp",
+            ],
+            obj={"jobrunner": MagicMock()},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "have been specified" in str(result.exception)
+
+    def test_label_and_append_label_mutually_exclusive_raises(
+        self, single_molecule_xyz_file
+    ):
+        result = CliRunner().invoke(
+            xtb,
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-l",
+                "custom",
+                "-a",
+                "suffix",
+                "sp",
+            ],
+            obj={"jobrunner": MagicMock()},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "not both" in str(result.exception)
+
+    def test_append_label_suffixes_filename_derived_label(
+        self, single_molecule_xyz_file
+    ):
+        result, settings, mock_job_cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-a",
+                "suffix",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label.endswith("_suffix")
+
+    def test_pubchem_only_without_label_falls_back_to_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                xtb,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "sp",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_sp"
+
+    def test_pubchem_only_with_append_label_falls_back_to_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                xtb,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-a",
+                    "suffix",
+                    "sp",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_suffix"
+
+    def test_default_label_suffixed_with_invoked_subcommand(
+        self, single_molecule_xyz_file
+    ):
+        result, settings, mock_job_cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label.endswith("_sp")
+
+    def test_chemsmart_db_loads_molecule_by_record_index(
+        self, database_chemsmart_file
+    ):
+        result, settings, _ = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_loads_molecule_by_structure_id(
+        self, database_chemsmart_file
+    ):
+        result, settings, _ = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "f751bb2c27e2",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings is not None
+
+    def test_chemsmart_db_append_label_includes_structure_id_suffix(
+        self, database_chemsmart_file
+    ):
+        result, settings, mock_job_cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                database_chemsmart_file,
+                "--sid",
+                "f751bb2c27e2",
+                "-a",
+                "suffix",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert "SID-f751bb2c27e2" in label
+
+    def test_chemsmart_db_append_label_includes_record_id_suffix(
+        self, database_chemsmart_file
+    ):
+        result, settings, mock_job_cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                database_chemsmart_file,
+                "--rid",
+                "6de213a0",
+                "-a",
+                "suffix",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert "RID-6de213a0" in label
+
+    def test_chemsmart_db_default_label_includes_record_id_suffix(
+        self, database_chemsmart_file
+    ):
+        result, settings, mock_job_cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                database_chemsmart_file,
+                "--rid",
+                "6de213a0",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert "RID-6de213a0" in label
+
+    def test_chemsmart_db_append_label_includes_record_index_suffix(
+        self, database_chemsmart_file
+    ):
+        result, settings, mock_job_cls = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                database_chemsmart_file,
+                "--ri",
+                "1",
+                "-a",
+                "suffix",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert "RI-1" in label
+
+    def test_remove_solvent_clears_solvent_fields(
+        self, single_molecule_xyz_file
+    ):
+        result, settings, _ = _invoke_xtb_and_capture_settings(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "gbsa",
+                "-si",
+                "water",
+                "--remove-solvent",
+                "sp",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+
+    def test_multiple_molecules_with_indices_creates_one_job_each(
+        self, multiple_molecules_xyz_file
+    ):
+        with patch(
+            "chemsmart.jobs.xtb.singlepoint.XTBSinglePointJob"
+        ) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                xtb,
+                [
+                    "-p",
+                    "test",
+                    "-f",
+                    multiple_molecules_xyz_file,
+                    "-i",
+                    "1-2",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "sp",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_job_cls.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job_cls.call_args_list]
+        assert labels[0] != labels[1]
+
+
 class TestXTBJobClasses:
     def test_xtb_job_types_are_distinct(self):
         assert XTBOptJob.TYPE == "xtbopt"
