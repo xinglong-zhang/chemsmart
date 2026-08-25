@@ -793,6 +793,50 @@ class TestGenerateIsotopeData:
 
         assert 1 in isotopes
 
+    def test_generate_isotope_data_file_writes_importable_module(
+        self, tmp_path
+    ):
+        from chemsmart.scripts.generate_isotope_data import (
+            generate_isotope_data_file,
+        )
+
+        isotope_txt = tmp_path / "isotopes.txt"
+        isotope_txt.write_text(textwrap.dedent("""\
+                Atomic Number = 1
+                Mass Number = 1
+                Relative Atomic Mass = 1.00782503(1)
+                Isotopic Composition = 0.999885(70)
+                Atomic Number = 1
+                Mass Number = 2
+                Relative Atomic Mass = 2.01410178(1)
+                Isotopic Composition = 0.000115(70)
+                Atomic Number = 43
+                Mass Number = 98
+                Relative Atomic Mass = 97.9072124(1)
+                Isotopic Composition =
+                """))
+        output_file = tmp_path / "isotopes_data.py"
+
+        generate_isotope_data_file(str(isotope_txt), str(output_file))
+
+        content = output_file.read_text()
+        assert content.startswith('"""Isotope data extracted from NIST')
+        assert "isotopes = {" in content
+        assert "1: {" in content
+        assert '1: {"mass": 1.00782503, "abundance": 0.999885},' in content
+        assert '"most_abundant": {"mass_number": 1,' in content
+        assert '"weighted_atomic_mass":' in content
+        # radioactive element with no natural abundance still gets a
+        # most_abundant/weighted_atomic_mass entry via the fallback path
+        assert "43: {" in content
+        assert '"most_abundant": {"mass_number": 98,' in content
+
+        # the written file is valid, importable Python
+        namespace = {}
+        exec(compile(content, str(output_file), "exec"), namespace)
+        assert namespace["isotopes"][1]["most_abundant"]["mass_number"] == 1
+        assert namespace["isotopes"][43]["most_abundant"]["mass_number"] == 98
+
 
 class TestGetThermochemistryScript:
     def _make_thermo_mock(self):
