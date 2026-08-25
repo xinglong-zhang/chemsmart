@@ -124,16 +124,15 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--step-size-method",
     type=click.Choice(
-        ["bb", "grow_shrink", "harvey", "harvey_bfgs"],
+        ["bb", "grow_shrink", "harvey"],
         case_sensitive=False,
     ),
     default=None,
     help=(
         "[MECP] Step size adaptation algorithm when adaptive is enabled. "
-        "'bb' uses the Barzilai-Borwein secant rule (default). "
-        "'grow_shrink' uses a merit-based grow/shrink rule; 'harvey' uses "
-        "Harvey's energy-based heuristic; 'harvey_bfgs' uses the full "
-        "Harvey quasi-Newton optimizer."
+        "'harvey' uses the Harvey inverse-BFGS optimizer (default). "
+        "'bb' uses the Barzilai-Borwein secant rule; 'grow_shrink' uses "
+        "a merit-based grow/shrink rule."
     ),
 )
 @click.option(

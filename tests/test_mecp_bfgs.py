@@ -3,8 +3,10 @@ import os
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
+from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 
@@ -107,3 +109,8 @@ def test_inverse_bfgs_update_skips_singular_secant_pair():
     )
 
     np.testing.assert_array_equal(updated, inv_hessian)
+
+
+def test_removed_harvey_bfgs_setting_is_rejected():
+    with pytest.raises(ValueError, match="Unknown MECP step_size_method"):
+        GaussianMECPJobSettings(step_size_method="harvey_bfgs")

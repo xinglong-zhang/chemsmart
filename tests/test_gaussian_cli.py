@@ -1134,7 +1134,7 @@ class TestGaussianCLIMecpCommand:
 
         assert result.exit_code == 0, result.output
         assert settings.adaptive_step_size is True
-        assert settings.step_size_method == "bb"
+        assert settings.step_size_method == "harvey"
         assert settings.step_size_grow == 1.2
         assert settings.step_size_shrink == 0.7
         assert settings.step_size_min == 1e-4
@@ -1168,6 +1168,64 @@ class TestGaussianCLIMecpCommand:
 
         assert result.exit_code == 0, result.output
         assert settings.step_size_method == "grow_shrink"
+
+    def test_mecp_harvey_selects_inverse_bfgs_optimizer(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """The public ``harvey`` name selects the inverse-BFGS optimizer."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                str(single_molecule_xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "harvey",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.step_size_method == "harvey"
+
+    def test_mecp_harvey_bfgs_old_name_is_rejected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """The removed implementation name is no longer part of the CLI."""
+        result, _ = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                str(single_molecule_xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "harvey_bfgs",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid value for '--step-size-method'" in result.output
 
 
 class TestGaussianCLILinkMecpCommand:

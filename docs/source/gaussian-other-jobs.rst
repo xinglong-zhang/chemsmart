@@ -150,9 +150,9 @@ MECP Options
 
    -  -  ``--step-size-method``
       -  string
-      -  ``"bb"``
-      -  Step size adaptation algorithm: ``"bb"`` (Barzilai-Borwein, default) or ``"grow_shrink"`` (merit-based
-         grow/shrink).
+      -  ``"harvey"``
+      -  MECP optimizer: ``"harvey"`` (inverse-BFGS, default), ``"bb"`` (Barzilai-Borwein), or ``"grow_shrink"``
+         (merit-based grow/shrink).
 
    -  -  ``--step-size-grow``
       -  float
@@ -289,8 +289,8 @@ Adaptive Step Size
 When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated at the end of each
 iteration. The available algorithms are selected via ``--step-size-method``.
 
-Barzilai-Borwein (``"bb"``, default)
-------------------------------------
+Barzilai-Borwein (``"bb"``)
+-----------------------------
 
 The BB2 step size is derived from the secant condition and provides near-quadratic convergence near the MECP:
 
@@ -321,8 +321,8 @@ A dimensionless merit function tracks progress:
 
 The current step size is recorded on every line of ``<label>_report.log``.
 
-Harvey BFGS (``"harvey_bfgs"``)
---------------------------------
+Harvey inverse-BFGS (``"harvey"``, default)
+--------------------------------------------
 
 This method follows the inverse-BFGS update used by easyMECP: it builds a full
 inverse Hessian from successive effective-gradient and Cartesian-displacement

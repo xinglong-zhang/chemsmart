@@ -318,35 +318,6 @@ class GaussianMECPJob(GaussianJob):
 
         return displacement, projected_grad, seam_correction
 
-    def _harvey_step_size(self, current_step_size, prev_energy_a, curr_energy_a):
-        """
-        Harvey's heuristic step-size update (1998).
-
-        Uses the *total energy of state A* (not a merit function) to decide
-        whether to grow or shrink:
-
-        * If ``E_A`` decreased -> step grew by ``step_size_grow`` (default x1.2).
-        * If ``E_A`` increased or stagnated -> step shrunk by
-          ``step_size_shrink`` (default x0.5).
-
-        This mirrors the original Fortran code's ``TSTEP`` / ``TSMIN`` / ``TSMAX``
-        logic where ``TSMAX`` is typically 0.30 Bohr (much smaller than the
-        chemsmart default of 1.0).
-
-        The result is clamped to ``[step_size_min, step_size_max]``.
-        """
-        if curr_energy_a < prev_energy_a:
-            new_step = current_step_size * self.settings.step_size_grow
-        else:
-            new_step = current_step_size * self.settings.step_size_shrink
-        return float(
-            np.clip(
-                new_step,
-                self.settings.step_size_min,
-                self.settings.step_size_max,
-            )
-        )
-
     @staticmethod
     def _update_inverse_hessian(
         inv_hessian, delta_x, delta_g, return_diagnostics=False
@@ -619,8 +590,7 @@ class GaussianMECPJob(GaussianJob):
         prev_merit = None
         prev_positions = None
         prev_proj_grad = None
-        prev_energy_a = None
-        # BFGS state variables for harvey_bfgs method
+        # BFGS state variables for the Harvey method
         inv_hessian = None
         prev_eff_grad = None
         prev_positions_bfgs = None
@@ -644,7 +614,7 @@ class GaussianMECPJob(GaussianJob):
 
                 energy_diff = ea - eb
 
-                if self.settings.step_size_method == "harvey_bfgs":
+                if self.settings.step_size_method == "harvey":
                     (
                         displacement,
                         projected_grad,
@@ -671,7 +641,7 @@ class GaussianMECPJob(GaussianJob):
                         step_size=current_step_size,
                     )
 
-                if self.settings.step_size_method != "harvey_bfgs":
+                if self.settings.step_size_method != "harvey":
                     displacement = self._apply_trust_radius(displacement)
 
                 self._log_step(
@@ -684,7 +654,7 @@ class GaussianMECPJob(GaussianJob):
                     seam_correction,
                     current_step_size,
                 )
-                if self.settings.step_size_method == "harvey_bfgs":
+                if self.settings.step_size_method == "harvey":
                     report.write(
                         f"bfgs_status={bfgs_status} "
                         f"delta_g_dot_delta_x={bfgs_fac:+.8e} "
@@ -711,12 +681,6 @@ class GaussianMECPJob(GaussianJob):
                         prev_positions = positions_bohr.copy()
                         prev_proj_grad = projected_grad.copy()
                     elif self.settings.step_size_method == "harvey":
-                        if prev_energy_a is not None:
-                            current_step_size = self._harvey_step_size(
-                                current_step_size, prev_energy_a, ea
-                            )
-                        prev_energy_a = ea
-                    elif self.settings.step_size_method == "harvey_bfgs":
                         # BFGS maintains its own step size via inverse Hessian
                         pass
                     else:  # "grow_shrink"
@@ -731,7 +695,7 @@ class GaussianMECPJob(GaussianJob):
                             )
                         prev_merit = current_merit
 
-                if self.settings.step_size_method == "harvey_bfgs":
+                if self.settings.step_size_method == "harvey":
                     prev_positions_bfgs = positions_bohr.copy()
                     prev_eff_grad = projected_grad.ravel().copy()
 
