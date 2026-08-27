@@ -253,8 +253,8 @@ class TestXTBSubmission:
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output
-        run_script = tmp_path / "chemsmart_run_water_sp.py"
-        submit_script = tmp_path / "chemsmart_sub_water_sp.sh"
+        run_script = tmp_path / "chemsmart_run_water_sp_gas_phase.py"
+        submit_script = tmp_path / "chemsmart_sub_water_sp_gas_phase.sh"
         assert run_script.exists()
         assert submit_script.exists()
         assert "'--test'" not in run_script.read_text()
