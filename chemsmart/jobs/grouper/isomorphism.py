@@ -152,8 +152,10 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
                 hash_groups[f"invalid_{i}"].append(mol)
                 hash_indices[f"invalid_{i}"].append(i)
 
-        groups = list(hash_groups.values())
         index_groups = list(hash_indices.values())
+        groups, index_groups = self._apply_lowest_representative_ordering(
+            index_groups
+        )
         hashes = list(hash_groups.keys())
 
         grouping_time = time.time() - grouping_start_time

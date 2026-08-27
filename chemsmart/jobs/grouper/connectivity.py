@@ -220,18 +220,16 @@ class ConnectivityGrouper(MoleculeGrouper):
                 group_map[root] = []
             group_map[root].append(i)
 
-        # Convert to output format
-        groups = []
+        # Convert to output format and preserve deterministic group order.
         index_groups = []
         for indices_list in group_map.values():
-            indices_list.sort()  # Sort by index (energy order)
-            groups.append([molecules_list[i] for i in indices_list])
+            indices_list.sort()
             index_groups.append(indices_list)
 
-        # Sort groups by first index
-        sorted_pairs = sorted(zip(index_groups, groups), key=lambda x: x[0][0])
-        index_groups = [p[0] for p in sorted_pairs]
-        groups = [p[1] for p in sorted_pairs]
+        index_groups = sorted(index_groups, key=lambda group: group[0])
+        groups, index_groups = self._apply_lowest_representative_ordering(
+            index_groups
+        )
 
         grouping_time = time.time() - grouping_start_time
 

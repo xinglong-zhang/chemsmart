@@ -50,5 +50,5 @@ def tfd(ctx, use_weights, max_dev):
         f"Running TFD grouping with use_weights={use_weights}, max_dev={max_dev}"
     )
     return create_grouper_job_from_context(
-        ctx, strategy="torsion", use_weights=use_weights, max_dev=max_dev
+        ctx, strategy="tfd", use_weights=use_weights, max_dev=max_dev
     )

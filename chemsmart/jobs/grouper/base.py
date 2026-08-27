@@ -428,6 +428,8 @@ class MoleculeGrouper(ABC):
     # Concrete subclasses opt in when they are safe to run pair calculations
     # in multiple processes.
     supports_multiprocessing = False
+    supports_matrix_representative_selection = False
+    SUPPORTED_REPRESENTATIVE_STRATEGIES = {"lowest", "center", "top3"}
 
     def __init__(
         self,
@@ -440,6 +442,7 @@ class MoleculeGrouper(ABC):
         output_dir: str = None,
         energy_type: str = "E",
         thermo_parameters: str = None,
+        representative_strategy: str = "lowest",
     ):
         """
         Initialize the molecular grouper.
@@ -476,6 +479,9 @@ class MoleculeGrouper(ABC):
         self.output_dir = output_dir
         self.energy_type = energy_type
         self.thermo_parameters = thermo_parameters
+        self.representative_strategy = str(
+            representative_strategy or "lowest"
+        ).lower()
 
         # Cache for avoiding repeated grouping calculations
         self._cached_groups = None
@@ -484,6 +490,69 @@ class MoleculeGrouper(ABC):
         self._matrix_skipped_indices = []
 
         self._validate_inputs()
+        self._validate_representative_strategy()
+
+    def _validate_representative_strategy(self) -> None:
+        """Validate representative strategy and strategy compatibility."""
+        if (
+            self.representative_strategy
+            not in self.SUPPORTED_REPRESENTATIVE_STRATEGIES
+        ):
+            raise ValueError(
+                f"Unsupported representative strategy '{self.representative_strategy}'. "
+                "Supported values: lowest, center, top3."
+            )
+
+        if (
+            self.representative_strategy in {"center", "top3"}
+            and not self.supports_matrix_representative_selection
+        ):
+            raise ValueError(
+                f"Representative strategy '{self.representative_strategy}' requires a pairwise distance matrix. "
+                f"Use '-r lowest' for {self.__class__.__name__}."
+            )
+
+    def _energy_sort_key(self, original_index: int) -> Tuple[int, float, int]:
+        """Deterministic key: finite-energy first, then energy, then index."""
+        energy = self.molecules[original_index].energy
+        if energy is None:
+            return (1, float("inf"), original_index)
+
+        try:
+            value = float(energy)
+        except (TypeError, ValueError):
+            return (1, float("inf"), original_index)
+
+        if not np.isfinite(value):
+            return (1, float("inf"), original_index)
+
+        return (0, value, original_index)
+
+    def _order_index_group_by_energy(
+        self, index_group: List[int]
+    ) -> List[int]:
+        """Order one index group by energy with deterministic tie-breaking."""
+        return sorted(index_group, key=self._energy_sort_key)
+
+    def _rebuild_groups_from_index_groups(
+        self, index_groups: List[List[int]]
+    ) -> List[List[Molecule]]:
+        """Rebuild molecule groups from index groups preserving order."""
+        return [
+            [self.molecules[idx] for idx in group] for group in index_groups
+        ]
+
+    def _apply_lowest_representative_ordering(
+        self, index_groups: List[List[int]]
+    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Apply lowest-energy representative ordering to each group."""
+        ordered_index_groups = [
+            self._order_index_group_by_energy(group) for group in index_groups
+        ]
+        return (
+            self._rebuild_groups_from_index_groups(ordered_index_groups),
+            ordered_index_groups,
+        )
 
     def _get_output_dir(self) -> str:
         """Get the output directory path for this grouper."""
@@ -576,6 +645,7 @@ class MoleculeGrouper(ABC):
         )
         header_info.extend(
             [
+                ("Representative Strategy", self.representative_strategy),
                 ("Total Molecules", total_molecules),
                 ("Used Molecules", used_molecules),
                 ("Skipped Molecules", len(combined_skipped_ids)),
@@ -647,38 +717,15 @@ class MoleculeGrouper(ABC):
             file_prefix = prefix
 
         for i, (group, indices) in enumerate(zip(groups, group_indices)):
-            # Create tuples of (molecule, original_index) for tracking
-            mol_index_pairs = list(zip(group, indices))
-
-            # Filter molecules that have energy information and sort by energy
-            molecules_with_energy = [
-                (mol, idx)
-                for mol, idx in mol_index_pairs
-                if mol.energy is not None
-            ]
-            molecules_without_energy = [
-                (mol, idx)
-                for mol, idx in mol_index_pairs
-                if mol.energy is None
-            ]
-
-            # Sort molecules with energy by energy (ascending - lowest first)
-            if molecules_with_energy:
-                sorted_pairs = sorted(
-                    molecules_with_energy, key=lambda pair: pair[0].energy
-                )
-                # Add molecules without energy at the end
-                sorted_pairs.extend(molecules_without_energy)
-            else:
-                # If no molecules have energy, use original group order
-                sorted_pairs = mol_index_pairs
+            # Group ordering is finalized by the representative strategy.
+            ordered_pairs = list(zip(group, indices))
 
             # Write group XYZ file with all molecules sorted by energy
             group_filename = os.path.join(
                 full_output_path, f"{file_prefix}_{i+1}.xyz"
             )
             with open(group_filename, "w") as f:
-                for j, (mol, original_idx) in enumerate(sorted_pairs):
+                for j, (mol, original_idx) in enumerate(ordered_pairs):
                     # Write the molecule coordinates
                     f.write(f"{mol.num_atoms}\n")
 
@@ -705,11 +752,12 @@ class MoleculeGrouper(ABC):
                         )
 
             logger.info(
-                f"Written group {i+1} with {len(sorted_pairs)} molecules to {group_filename}"
+                f"Written group {i+1} with {len(ordered_pairs)} molecules to {group_filename}"
             )
 
-            # Add the lowest energy molecule (first in sorted pairs) as representative
-            unique_molecules.append(sorted_pairs[0][0])
+            # Representative is always the first member by convention.
+            if ordered_pairs:
+                unique_molecules.append(ordered_pairs[0][0])
 
         logger.info(
             f"Generated {len(groups)} group XYZ files in {full_output_path}"
@@ -727,6 +775,8 @@ class MatrixGrouper(MoleculeGrouper):
     and simple post-clustering representative selection.
     """
 
+    supports_matrix_representative_selection = True
+
     def __init__(
         self,
         molecules: Iterable[Molecule],
@@ -740,6 +790,7 @@ class MatrixGrouper(MoleculeGrouper):
         output_dir: str = None,
         energy_type: str = "E",
         thermo_parameters: str = None,
+        representative_strategy: str = "lowest",
     ):
         super().__init__(
             molecules,
@@ -751,6 +802,7 @@ class MatrixGrouper(MoleculeGrouper):
             output_dir=output_dir,
             energy_type=energy_type,
             thermo_parameters=thermo_parameters,
+            representative_strategy=representative_strategy,
         )
 
         if threshold is not None and num_groups is not None:
@@ -950,6 +1002,139 @@ class MatrixGrouper(MoleculeGrouper):
         ]
         return groups, index_groups
 
+    def _matrix_score_key(
+        self,
+        original_index: int,
+        score: float,
+    ) -> Tuple[float, int, float, int]:
+        """Deterministic score key for center/top3 representative selection."""
+        energy_missing, energy_value, _ = self._energy_sort_key(original_index)
+        return (score, energy_missing, energy_value, original_index)
+
+    def _mean_distance_to_group(
+        self,
+        candidate_original_index: int,
+        group_original_indices: List[int],
+        distance_matrix: np.ndarray,
+        original_to_matrix_index: Dict[int, int],
+    ) -> float:
+        """Mean pairwise distance from one candidate to the rest of a group."""
+        if len(group_original_indices) <= 1:
+            return 0.0
+
+        candidate_matrix_index = original_to_matrix_index[
+            candidate_original_index
+        ]
+        distances = []
+        for other_original_index in group_original_indices:
+            if other_original_index == candidate_original_index:
+                continue
+            other_matrix_index = original_to_matrix_index[other_original_index]
+            distances.append(
+                float(
+                    distance_matrix[candidate_matrix_index, other_matrix_index]
+                )
+            )
+
+        return float(np.mean(distances)) if distances else 0.0
+
+    def _order_index_group_by_center(
+        self,
+        index_group: List[int],
+        distance_matrix: np.ndarray,
+        original_to_matrix_index: Dict[int, int],
+    ) -> List[int]:
+        """Order a group by centrality score ascending."""
+        if len(index_group) <= 1:
+            return list(index_group)
+
+        scored = []
+        for original_index in index_group:
+            score = self._mean_distance_to_group(
+                original_index,
+                index_group,
+                distance_matrix,
+                original_to_matrix_index,
+            )
+            scored.append((original_index, score))
+
+        scored.sort(key=lambda item: self._matrix_score_key(item[0], item[1]))
+        return [original_index for original_index, _ in scored]
+
+    def _order_index_group_by_top3(
+        self,
+        index_group: List[int],
+        distance_matrix: np.ndarray,
+        original_to_matrix_index: Dict[int, int],
+    ) -> List[int]:
+        """Order group using top3 representative selection with lowest fallback."""
+        if len(index_group) < 3:
+            return self._order_index_group_by_energy(index_group)
+
+        energy_ordered = self._order_index_group_by_energy(index_group)
+        candidate_indices = energy_ordered[:3]
+
+        best_candidate = min(
+            candidate_indices,
+            key=lambda original_index: self._matrix_score_key(
+                original_index,
+                self._mean_distance_to_group(
+                    original_index,
+                    index_group,
+                    distance_matrix,
+                    original_to_matrix_index,
+                ),
+            ),
+        )
+
+        remaining = [
+            original_index
+            for original_index in energy_ordered
+            if original_index != best_candidate
+        ]
+        return [best_candidate, *remaining]
+
+    def _order_groups_by_representative_strategy(
+        self,
+        index_groups: List[List[int]],
+        distance_matrix: np.ndarray,
+        matrix_original_indices: Optional[List[int]] = None,
+    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Order each group so that index_group[0] is the selected representative."""
+        if matrix_original_indices is None:
+            matrix_original_indices = list(range(distance_matrix.shape[0]))
+
+        original_to_matrix_index = {
+            original_index: matrix_index
+            for matrix_index, original_index in enumerate(
+                matrix_original_indices
+            )
+        }
+
+        ordered_index_groups: List[List[int]] = []
+        for index_group in index_groups:
+            if self.representative_strategy == "lowest":
+                ordered_group = self._order_index_group_by_energy(index_group)
+            elif self.representative_strategy == "center":
+                ordered_group = self._order_index_group_by_center(
+                    index_group,
+                    distance_matrix,
+                    original_to_matrix_index,
+                )
+            else:  # top3
+                ordered_group = self._order_index_group_by_top3(
+                    index_group,
+                    distance_matrix,
+                    original_to_matrix_index,
+                )
+
+            ordered_index_groups.append(ordered_group)
+
+        return (
+            self._rebuild_groups_from_index_groups(ordered_index_groups),
+            ordered_index_groups,
+        )
+
     def _cut_tree_by_threshold(
         self, linkage_matrix: np.ndarray, threshold: float
     ) -> np.ndarray:
@@ -979,9 +1164,14 @@ class MatrixGrouper(MoleculeGrouper):
         cluster_labels = self._cut_tree_by_threshold(
             linkage_matrix, self.threshold
         )
-        return self._build_groups_from_cluster_labels(
+        groups, index_groups = self._build_groups_from_cluster_labels(
             cluster_labels,
             original_indices=valid_original_indices,
+        )
+        return self._order_groups_by_representative_strategy(
+            index_groups,
+            clean_submatrix,
+            matrix_original_indices=valid_original_indices,
         )
 
     def _group_by_num_groups(
@@ -1055,7 +1245,11 @@ class MatrixGrouper(MoleculeGrouper):
             f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
         )
 
-        return groups, index_groups
+        return self._order_groups_by_representative_strategy(
+            index_groups,
+            clean_submatrix,
+            matrix_original_indices=valid_original_indices,
+        )
 
     def select_representatives(
         self, index_groups: List[List[int]], strategy: str = "first"
@@ -1066,4 +1260,13 @@ class MatrixGrouper(MoleculeGrouper):
                 f"Unsupported representative selection strategy: {strategy}"
             )
 
-        return [group[0] for group in index_groups if group]
+        if self.representative_strategy == "lowest":
+            return [
+                self._order_index_group_by_energy(group)[0]
+                for group in index_groups
+                if group
+            ]
+
+        raise ValueError(
+            "select_representatives() with strategy='first' is only available for representative_strategy='lowest'."
+        )

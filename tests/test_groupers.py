@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.jobs.grouper.base import MoleculeGrouper
+from chemsmart.jobs.grouper.base import MatrixGrouper, MoleculeGrouper
 from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
 from chemsmart.jobs.grouper.energy import EnergyGrouper
 from chemsmart.jobs.grouper.formula import FormulaGrouper
@@ -1355,10 +1355,8 @@ class Testfactory:
             pymolrmsd_grouper._temp_dir = None
         pymolrmsd_grouper.cmd = None  # Prevent __del__ from calling quit()
 
-        torsion_grouper = factory.create(
-            methanol_molecules, strategy="torsion"
-        )
-        assert isinstance(torsion_grouper, TorsionFingerprintGrouper)
+        tfd_grouper = factory.create(methanol_molecules, strategy="tfd")
+        assert isinstance(tfd_grouper, TorsionFingerprintGrouper)
         formula_grouper = factory.create(
             methanol_molecules, strategy="formula"
         )
@@ -2072,9 +2070,9 @@ class Test_conformer_ids_functionality:
             excel_file
         ), f"Excel file not found: {excel_file}"
 
-        # Matrix data starts at row 8 (0-indexed: skiprows=14), first column is index
+        # Matrix data starts at row 8 (0-indexed: skiprows=15), first column is index
         df = pd.read_excel(
-            excel_file, sheet_name="RMSD_Matrix", skiprows=13, index_col=0
+            excel_file, sheet_name="RMSD_Matrix", skiprows=14, index_col=0
         )
         # Check that conformer IDs are used as labels
         assert "c1" in str(df.columns[0]) or "c1" in str(df.index[0])
@@ -3046,3 +3044,458 @@ def test_matrix_grouper_log_progress(caplog):
         # Test edge case with zero total
         next_p = grouper._log_progress(10, 0, 10)
         assert next_p == 10
+
+
+@pytest.mark.usefixtures("temporary_working_dir")
+class Test_representative_selection:
+    class DummyDistanceGrouper(MatrixGrouper):
+        def __init__(self, molecules, distance_matrix, **kwargs):
+            super().__init__(molecules, threshold=9.9, **kwargs)
+            self._distance_matrix = np.array(distance_matrix, dtype=float)
+
+        def group(self):
+            groups, index_groups = self._group_by_threshold(
+                self._distance_matrix
+            )
+            self._cached_groups = groups
+            self._cached_group_indices = index_groups
+            self.record(distance_matrix=self._distance_matrix)
+            return groups, index_groups
+
+        def _record_results(self, distance_matrix):
+            recorder = self._get_results_recorder()
+            labels = recorder.get_labels(distance_matrix.shape[0])
+            header_info = [("", "Dummy Distance Grouper")]
+            self._append_input_usage_header(header_info)
+            sheets_data = {}
+            if self._cached_group_indices is not None:
+                sheets_data["Groups"] = recorder.build_groups_dataframe(
+                    self._cached_group_indices, len(self.molecules)
+                )
+            recorder.record_results(
+                grouper_name=self.__class__.__name__,
+                header_info=header_info,
+                sheets_data=sheets_data,
+                matrix_data=("Distance", distance_matrix, labels),
+                suffix="test",
+                startrow=len(header_info) + 2,
+            )
+
+    @staticmethod
+    def _set_energies(molecules, energies):
+        for mol, energy in zip(molecules, energies):
+            mol.energy = energy
+
+    def test_default_representative_strategy_is_lowest(
+        self, methanol_molecules
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules[:2], threshold=0.5)
+        assert grouper.representative_strategy == "lowest"
+
+    def test_lowest_strategy_orders_group_by_energy(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:4]
+        self._set_energies(molecules, [5.0, 1.0, 3.0, None])
+        matrix = np.array(
+            [
+                [0.0, 0.1, 0.2, 0.3],
+                [0.1, 0.0, 0.2, 0.3],
+                [0.2, 0.2, 0.0, 0.3],
+                [0.3, 0.3, 0.3, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="lowest",
+        )
+        groups, index_groups = grouper.group()
+
+        assert index_groups[0][0] == 1
+        assert groups[0][0] is molecules[1]
+        assert index_groups[0] == [1, 2, 0, 3]
+
+    def test_center_strategy_orders_entire_group_by_centrality(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:5]
+        self._set_energies(molecules, [0.0, 0.1, 0.2, -1.0, 0.3])
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 0.0, 2.0, 2.0, 2.0],
+                [1.0, 2.0, 0.0, 2.0, 2.0],
+                [1.0, 2.0, 2.0, 0.0, 2.0],
+                [1.0, 2.0, 2.0, 2.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="center",
+        )
+        groups, index_groups = grouper.group()
+
+        assert set(index_groups[0]) == {0, 1, 2, 3, 4}
+        assert index_groups[0][0] == 0
+        assert groups[0][0] is molecules[0]
+        assert index_groups[0] == [0, 3, 1, 2, 4]
+
+    def test_top3_strategy_picks_most_central_among_three_lowest_energy(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:5]
+        self._set_energies(molecules, [0.0, 0.1, 0.2, -1.0, 0.3])
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 0.0, 2.0, 2.0, 2.0],
+                [1.0, 2.0, 0.0, 2.0, 2.0],
+                [1.0, 2.0, 2.0, 0.0, 2.0],
+                [1.0, 2.0, 2.0, 2.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="top3",
+        )
+        groups, index_groups = grouper.group()
+
+        assert index_groups[0][0] == 0
+        assert groups[0][0] is molecules[0]
+        assert index_groups[0] == [0, 3, 1, 2, 4]
+
+    def test_top3_falls_back_to_lowest_for_group_size_two(
+        self, methanol_molecules
+    ):
+        molecules = methanol_molecules[:2]
+        self._set_energies(molecules, [5.0, 1.0])
+        matrix = np.array([[0.0, 0.2], [0.2, 0.0]])
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="top3",
+        )
+        _, index_groups = grouper.group()
+        assert index_groups[0] == [1, 0]
+
+    def test_top3_falls_back_to_lowest_for_group_size_one(
+        self, methanol_molecules
+    ):
+        molecules = [methanol_molecules[0]]
+        molecules[0].energy = 3.0
+        matrix = np.array([[0.0]])
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="top3",
+        )
+        _, index_groups = grouper.group()
+        assert index_groups[0] == [0]
+
+    def test_non_matrix_lowest_orders_first_by_energy(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:4]
+        self._set_energies(molecules, [5.0, 2.0, 1.0, None])
+        grouper = FormulaGrouper(molecules, representative_strategy="lowest")
+        groups, index_groups = grouper.group()
+        assert index_groups[0] == [2, 1, 0, 3]
+        assert groups[0][0] is molecules[2]
+
+    def test_non_matrix_center_and_top3_raise(self, methanol_molecules):
+        with pytest.raises(
+            ValueError, match="requires a pairwise distance matrix"
+        ):
+            FormulaGrouper(
+                methanol_molecules[:2], representative_strategy="center"
+            )
+        with pytest.raises(
+            ValueError, match="requires a pairwise distance matrix"
+        ):
+            FormulaGrouper(
+                methanol_molecules[:2], representative_strategy="top3"
+            )
+
+    def test_groups_table_and_unique_and_xyz_use_representative_first(
+        self, multiple_molecules_xyz_file, temporary_working_dir
+    ):
+        from openpyxl import load_workbook
+
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:5]
+        self._set_energies(molecules, [0.0, 0.1, 0.2, -1.0, 0.3])
+        conformer_ids = ["c1", "c2", "c3", "c4", "c5"]
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 0.0, 2.0, 2.0, 2.0],
+                [1.0, 2.0, 0.0, 2.0, 2.0],
+                [1.0, 2.0, 2.0, 0.0, 2.0],
+                [1.0, 2.0, 2.0, 2.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="center",
+            label="rep_center",
+            conformer_ids=conformer_ids,
+        )
+        groups, index_groups = grouper.group()
+        assert index_groups[0][0] == 0
+
+        xlsx_file = os.path.join(
+            temporary_working_dir,
+            "rep_center_group_result",
+            "rep_center_DummyDistanceGrouper_test.xlsx",
+        )
+        wb = load_workbook(xlsx_file, data_only=True)
+        ws = wb["Groups"]
+        assert ws["B2"].value.startswith("c1")
+
+        unique_mols = grouper.unique()
+        assert unique_mols[0] is groups[0][0]
+
+        xyz_file = os.path.join(
+            temporary_working_dir,
+            "rep_center_group_result",
+            "rep_center_group_1.xyz",
+        )
+        with open(xyz_file, "r") as handle:
+            lines = handle.readlines()
+        assert "Original_Index: c1" in lines[1]
+
+    @staticmethod
+    def _partition(index_groups):
+        return {frozenset(group) for group in index_groups}
+
+    @staticmethod
+    def _center_score(matrix, group, idx):
+        others = [j for j in group if j != idx]
+        if not others:
+            return 0.0
+        return float(np.mean([matrix[idx, j] for j in others]))
+
+    def test_representative_strategy_does_not_change_group_membership(
+        self, multiple_molecules_xyz_file
+    ):
+        """lowest/center/top3 may reorder groups but must not change membership."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        partitions = []
+        for strategy in ("lowest", "center", "top3"):
+            grouper = BasicRMSDGrouper(
+                molecules,
+                threshold=2.0,
+                num_procs=1,
+                representative_strategy=strategy,
+            )
+            _, index_groups = grouper.group()
+            partitions.append(self._partition(index_groups))
+
+        assert partitions[0] == partitions[1] == partitions[2]
+
+    def test_center_puts_most_central_member_first(
+        self, multiple_molecules_xyz_file
+    ):
+        """center must place the member with minimum mean within-group distance first."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="center",
+        )
+        matrix = grouper.calculate_full_rmsd_matrix()
+        _, index_groups = grouper.group()
+
+        for group in index_groups:
+            if len(group) == 1:
+                continue
+            expected = min(
+                group,
+                key=lambda idx: (
+                    self._center_score(matrix, group, idx),
+                    (
+                        float("inf")
+                        if molecules[idx].energy is None
+                        else molecules[idx].energy
+                    ),
+                    idx,
+                ),
+            )
+            assert group[0] == expected
+
+    def test_top3_uses_only_three_lowest_energy_candidates(
+        self, multiple_molecules_xyz_file
+    ):
+        """top3 chooses the most central candidate among the three lowest energies."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="top3",
+        )
+        matrix = grouper.calculate_full_rmsd_matrix()
+        _, index_groups = grouper.group()
+
+        tested_large_group = False
+        for group in index_groups:
+            if len(group) < 3:
+                continue
+            tested_large_group = True
+            energy_order = sorted(
+                group,
+                key=lambda idx: (
+                    (
+                        float("inf")
+                        if molecules[idx].energy is None
+                        else molecules[idx].energy
+                    ),
+                    idx,
+                ),
+            )
+            candidates = energy_order[:3]
+            expected = min(
+                candidates,
+                key=lambda idx: (
+                    self._center_score(matrix, group, idx),
+                    (
+                        float("inf")
+                        if molecules[idx].energy is None
+                        else molecules[idx].energy
+                    ),
+                    idx,
+                ),
+            )
+            assert group[0] == expected
+            assert group[0] in candidates
+
+            expected_remaining = [
+                idx for idx in energy_order if idx != expected
+            ]
+            assert group[1:] == expected_remaining
+
+        assert (
+            tested_large_group
+        ), "Fixture must contain at least one group of size >= 3"
+
+    def test_top3_falls_back_to_lowest_for_two_member_group(self):
+        """top3 must use lowest-energy ordering when a group has fewer than 3 members."""
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        mol0 = Molecule.from_ase_atoms(ase_molecule("CH3OH"))
+        mol1 = mol0.copy()
+        mol0._energy = -100.0
+        mol1._energy = -101.0
+
+        grouper = BasicRMSDGrouper(
+            [mol0, mol1],
+            threshold=1.0,
+            num_procs=1,
+            representative_strategy="top3",
+        )
+        _, index_groups = grouper.group()
+
+        assert index_groups == [[1, 0]]
+
+    @pytest.mark.parametrize("strategy", ["center", "top3"])
+    def test_non_matrix_grouper_rejects_matrix_representative_strategy(
+        self, methanol_molecules, strategy
+    ):
+        """Non-matrix groupers must reject center/top3 instead of silently falling back."""
+        with pytest.raises(ValueError, match="pairwise distance matrix"):
+            grouper = FormulaGrouper(
+                methanol_molecules,
+                representative_strategy=strategy,
+            )
+            grouper.group()
+
+    def test_unique_uses_first_group_member_as_representative(
+        self, multiple_molecules_xyz_file
+    ):
+        """unique() must trust group[0] and must not re-select by energy."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="center",
+            label="center_unique_test",
+        )
+        groups, index_groups = grouper.group()
+        unique_molecules = grouper.unique()
+
+        assert len(unique_molecules) == len(groups)
+        for unique_mol, group, indices in zip(
+            unique_molecules, groups, index_groups
+        ):
+            assert indices[0] in range(len(molecules))
+            assert np.allclose(unique_mol.positions, group[0].positions)
+
+    def test_default_representative_matches_explicit_lowest(
+        self, multiple_molecules_xyz_file
+    ):
+        """The new option must preserve the historical lowest-energy default."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        default_grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+        )
+        explicit_grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="lowest",
+        )
+
+        _, default_indices = default_grouper.group()
+        _, explicit_indices = explicit_grouper.group()
+
+        assert default_indices == explicit_indices
+
+    def test_center_tie_breaks_by_energy_then_original_index(
+        self, multiple_molecules_xyz_file
+    ):
+        """center ties must resolve deterministically by energy, then original index."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:3]
+        self._set_energies(molecules, [1.0, 0.5, 0.5])
+
+        # All three members have identical mean centrality.
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="center",
+        )
+        _, index_groups = grouper.group()
+
+        # 1 and 2 tie in centrality and energy, so original index 1 wins.
+        assert index_groups[0] == [1, 2, 0]
