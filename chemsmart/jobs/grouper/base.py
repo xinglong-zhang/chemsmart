@@ -425,6 +425,10 @@ class MoleculeGrouper(ABC):
         output_dir (str): Base directory for output files.
     """
 
+    # Concrete subclasses opt in when they are safe to run pair calculations
+    # in multiple processes.
+    supports_multiprocessing = False
+
     def __init__(
         self,
         molecules: Iterable[Molecule],
@@ -457,7 +461,14 @@ class MoleculeGrouper(ABC):
             thermo_parameters (str): Thermochemistry parameters from CLI.
         """
         self.molecules = list(molecules)
-        self.num_procs = int(max(1, num_procs))
+        requested_num_procs = int(max(1, num_procs))
+        if requested_num_procs > 1 and not self.supports_multiprocessing:
+            logger.warning(
+                "%s does not support multiprocessing; using num_procs=1.",
+                self.__class__.__name__,
+            )
+            requested_num_procs = 1
+        self.num_procs = requested_num_procs
         self.label = label
         self.conformer_ids = conformer_ids
         self.skipped_ids = skipped_ids if skipped_ids is not None else []
@@ -759,6 +770,24 @@ class MatrixGrouper(MoleculeGrouper):
         self.threshold = threshold
         self.num_groups = num_groups
         self._auto_threshold = None
+
+    def _log_progress(
+        self, completed: int, total: int, next_progress: int
+    ) -> int:
+        """
+        Log matrix calculation progress at 10% intervals.
+        """
+        if total <= 0:
+            return next_progress
+
+        current_percent = (completed * 100) // total
+        while current_percent >= next_progress and next_progress <= 100:
+            logger.info(
+                f"[{self.__class__.__name__}] Matrix calculation progress: {next_progress}% ({completed}/{total})"
+            )
+            next_progress += 10
+
+        return next_progress
 
     def _build_singleton_groups(
         self,

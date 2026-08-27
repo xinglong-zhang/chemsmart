@@ -1,3 +1,4 @@
+import importlib
 import os
 import shutil
 
@@ -22,6 +23,22 @@ from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
 from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 from chemsmart.utils.grouper import StructureGrouperFactory
 from chemsmart.utils.utils import find_irmsd_command, kabsch_align
+
+
+def _is_irmsd_available() -> bool:
+    """Return True when either irmsd Python API or CLI is available."""
+    try:
+        irmsd_module = importlib.import_module("irmsd.api.irmsd_exposed")
+        getattr(irmsd_module, "get_irmsd")
+        return True
+    except (ImportError, OSError, AttributeError):
+        return bool(find_irmsd_command())
+
+
+def _assert_progress_milestones(log_text: str) -> None:
+    """Assert that progress milestones from 10% to 100% are present."""
+    for milestone in range(10, 101, 10):
+        assert f"Matrix calculation progress: {milestone}%" in log_text
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -465,7 +482,7 @@ class Test_SpyRMSD_grouper:
 
 
 @pytest.mark.skipif(
-    not find_irmsd_command(), reason="irmsd command not available"
+    not _is_irmsd_available(), reason="irmsd API/command not available"
 )
 @pytest.mark.usefixtures("temporary_working_dir")
 class Test_IRMSD_grouper:
@@ -671,18 +688,26 @@ class Test_PymolRMSD_grouper:
             grouper._temp_dir = None
         grouper.cmd = None  # Prevent __del__ from calling quit()
 
-    def test_pymol_grouper_rejects_multiproc(self, methanol_molecules):
-        """Test that PyMOL grouper raises error when num_procs > 1."""
-        with pytest.raises(ValueError) as excinfo:
-            PymolRMSDGrouper(
-                methanol_molecules,
-                threshold=0.5,
-                num_procs=4,  # Should raise error
-            )
-        assert (
-            "single" in str(excinfo.value).lower()
-            or "num_procs" in str(excinfo.value).lower()
+    def test_pymol_grouper_falls_back_to_single_proc(
+        self, methanol_molecules, caplog
+    ):
+        """PyMOL grouper warns and falls back to num_procs=1 when >1 is requested."""
+        caplog.set_level("WARNING")
+        grouper = PymolRMSDGrouper(
+            methanol_molecules,
+            threshold=0.5,
+            num_procs=4,
         )
+        assert grouper.num_procs == 1
+        assert (
+            "PymolRMSDGrouper does not support multiprocessing; using num_procs=1."
+            in caplog.text
+        )
+
+        if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
+            shutil.rmtree(grouper._temp_dir, ignore_errors=True)
+            grouper._temp_dir = None
+        grouper.cmd = None
 
     @classmethod
     def teardown_class(cls):
@@ -1308,8 +1333,8 @@ class Testfactory:
         )
         assert isinstance(spyrmsd_grouper, RMSDGrouper)
 
-        # irmsd requires external command, skip if not available
-        if find_irmsd_command():
+        # irmsd requires either Python API or external command
+        if _is_irmsd_available():
             irmsd_grouper = factory.create(
                 methanol_molecules, strategy="irmsd"
             )
@@ -2808,3 +2833,216 @@ class Test_energy_extraction_function:
         )
         extracted = _extract_energy_based_on_energy_type(thermo_qhg, "qhG")
         assert np.isclose(extracted, -1568.186619, rtol=1e-7)
+
+
+@pytest.mark.usefixtures("temporary_working_dir")
+class Test_multiprocessing_support:
+    def test_basic_rmsd_serial_parallel_equivalent(self, methanol_molecules):
+        serial = BasicRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=1
+        )
+        parallel = BasicRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=2
+        )
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-10, rtol=1e-10
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+    def test_hungarian_rmsd_serial_parallel_equivalent(
+        self, methanol_molecules
+    ):
+        serial = HungarianRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=1
+        )
+        parallel = HungarianRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=2
+        )
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-10, rtol=1e-10
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+    def test_spyrmsd_parallel_preserves_isomorphisms(self, methanol_molecules):
+        serial = SpyRMSDGrouper(methanol_molecules, threshold=0.5, num_procs=1)
+        parallel = SpyRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=2
+        )
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-8, rtol=1e-8
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+        assert serial.best_isomorphisms
+        assert parallel.best_isomorphisms
+        assert (0, 1) in serial.best_isomorphisms
+        assert (0, 1) in parallel.best_isomorphisms
+        assert serial.get_best_isomorphism(0, 1) is not None
+        assert parallel.get_best_isomorphism(0, 1) is not None
+
+    @pytest.mark.skipif(
+        not _is_irmsd_available(), reason="irmsd API/command not available"
+    )
+    def test_irmsd_serial_parallel_equivalent(self, methanol_molecules):
+        serial = IRMSDGrouper(methanol_molecules, threshold=0.5, num_procs=1)
+        parallel = IRMSDGrouper(methanol_molecules, threshold=0.5, num_procs=2)
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-8, rtol=1e-8
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+    def test_formula_grouper_falls_back_to_single_proc(
+        self, caplog, methanol_molecules
+    ):
+        """FormulaGrouper warns and falls back to num_procs=1 when >1 is requested."""
+        caplog.set_level("WARNING")
+        grouper = FormulaGrouper(methanol_molecules, num_procs=4)
+        assert grouper.num_procs == 1
+        assert (
+            "FormulaGrouper does not support multiprocessing; using num_procs=1."
+            in caplog.text
+        )
+
+        groups, group_indices = grouper.group()
+        assert len(groups) == 1
+        assert len(group_indices) == 1
+
+    def test_serial_only_strategy_warns_and_falls_back(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        """Serial-only grouper warns and falls back to num_procs=1."""
+        caplog.set_level("WARNING")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = EnergyGrouper(molecules, threshold=0.5, num_procs=4)
+        assert grouper.num_procs == 1
+        assert (
+            "EnergyGrouper does not support multiprocessing; using num_procs=1."
+            in caplog.text
+        )
+
+    def test_basic_rmsd_progress_logs_all_milestones_serial(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        caplog.set_level("INFO")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+
+        grouper.calculate_full_rmsd_matrix()
+
+        _assert_progress_milestones(caplog.text)
+
+    def test_basic_rmsd_progress_logs_all_milestones_parallel(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        caplog.set_level("INFO")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=2)
+
+        grouper.calculate_full_rmsd_matrix()
+
+        _assert_progress_milestones(caplog.text)
+
+    def test_energy_grouper_progress_logs_all_milestones(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        caplog.set_level("INFO")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = EnergyGrouper(molecules, threshold=0.5, num_procs=1)
+
+        grouper.group()
+
+        _assert_progress_milestones(caplog.text)
+
+    def test_basic_rmsd_parallel_single_molecule_no_pair_no_crash(
+        self, methanol_molecules
+    ):
+        """Single-molecule RMSD run with num_procs>1 should safely skip pair workers."""
+        molecules = [methanol_molecules[0]]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=2)
+
+        matrix = grouper.calculate_full_rmsd_matrix()
+        assert matrix.shape == (1, 1)
+        assert matrix[0, 0] == 0.0
+
+        groups, index_groups = grouper.group()
+        assert len(groups) == 1
+        assert len(index_groups) == 1
+        assert index_groups == [[0]]
+
+
+def test_matrix_grouper_log_progress(caplog):
+    """Test functionality of MatrixGrouper._log_progress method."""
+    import logging
+
+    from chemsmart.jobs.grouper.base import MatrixGrouper
+
+    class DummyGrouper(MatrixGrouper):
+        def _calculate_rmsd(self, idx_pair):
+            return 0.0
+
+        def group(self):
+            return [], []
+
+    # Create dummy grouper
+    grouper = DummyGrouper([], threshold=0.1)
+    with caplog.at_level(logging.INFO):
+        # Initial call, 0% complete, next_progress threshold at 10%
+        next_progress = 10
+        next_progress = grouper._log_progress(0, 100, next_progress)
+        assert next_progress == 10
+        assert len(caplog.records) == 0
+
+        # Call at 9%
+        next_progress = grouper._log_progress(9, 100, next_progress)
+        assert next_progress == 10
+        assert len(caplog.records) == 0
+
+        # Call at 10%
+        next_progress = grouper._log_progress(10, 100, next_progress)
+        assert next_progress == 20
+        assert len(caplog.records) == 1
+        assert "Matrix calculation progress: 10%" in caplog.records[-1].message
+
+        # Call at 15% (no log, threshold is 20)
+        next_progress = grouper._log_progress(15, 100, next_progress)
+        assert next_progress == 20
+        assert len(caplog.records) == 1
+
+        # Call jumping from 15% to 35%
+        next_progress = grouper._log_progress(35, 100, next_progress)
+        assert next_progress == 40
+        assert len(caplog.records) == 3
+        assert "Matrix calculation progress: 20%" in caplog.records[-2].message
+        assert "Matrix calculation progress: 30%" in caplog.records[-1].message
+
+        # Test edge case with zero total
+        next_p = grouper._log_progress(10, 0, 10)
+        assert next_p == 10

@@ -185,14 +185,14 @@ class EnergyGrouper(MatrixGrouper):
         # Calculate energy differences (both relative and absolute)
         energy_diff_relative = []  # For output matrix (with sign)
         energy_diff_absolute = []  # For threshold comparison
+        next_progress = 10
         for idx, (i, j) in enumerate(indices):
             rel_diff, abs_diff = self._calculate_energy_diff((i, j))
             energy_diff_relative.append(rel_diff)
             energy_diff_absolute.append(abs_diff)
-            if (idx + 1) % 10 == 0 or (idx + 1) == total_pairs:
-                logger.info(
-                    f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished"
-                )
+            next_progress = self._log_progress(
+                idx + 1, total_pairs, next_progress
+            )
 
         # Build full energy difference matrix for output (with sign, relative to smaller index)
         # matrix[i,j] = E_j - E_i (positive means j has higher energy)

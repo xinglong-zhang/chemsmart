@@ -22,7 +22,6 @@ from .rmsd import (
     IRMSDGrouper,
     PymolRMSDGrouper,
     RMSDGrouper,
-    RMSDGrouperSharedMemory,
     SpyRMSDGrouper,
 )
 from .runner import GrouperJobRunner
@@ -40,7 +39,6 @@ __all__ = [
     "SpyRMSDGrouper",
     "IRMSDGrouper",
     "PymolRMSDGrouper",
-    "RMSDGrouperSharedMemory",
     "TanimotoSimilarityGrouper",
     "TorsionFingerprintGrouper",
     "RDKitIsomorphismGrouper",

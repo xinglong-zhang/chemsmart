@@ -328,22 +328,41 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
         pairs = [
             (i, j) for i in range(num_valid) for j in range(i + 1, num_valid)
         ]
+        total_pairs = len(pairs)
+        similarities = []
+        next_progress = 10
 
         if self.fingerprint_type in {"usr", "usrcat"}:
             # USR/USRCAT are continuous 3D descriptors and should be compared
             # with RDKit's native USR similarity score, not Tanimoto.
             with ThreadPool(self.num_procs) as pool:
-                similarities = pool.starmap(
-                    rdMolDescriptors.GetUSRScore,
-                    [(valid_fps[i], valid_fps[j]) for i, j in pairs],
-                )
+                for idx, sim in enumerate(
+                    pool.imap(
+                        lambda p: rdMolDescriptors.GetUSRScore(
+                            valid_fps[p[0]], valid_fps[p[1]]
+                        ),
+                        pairs,
+                    )
+                ):
+                    similarities.append(sim)
+                    next_progress = self._log_progress(
+                        idx + 1, total_pairs, next_progress
+                    )
         else:
             # Binary/topological fingerprints use Tanimoto similarity.
             with ThreadPool(self.num_procs) as pool:
-                similarities = pool.starmap(
-                    DataStructs.FingerprintSimilarity,
-                    [(valid_fps[i], valid_fps[j]) for i, j in pairs],
-                )
+                for idx, sim in enumerate(
+                    pool.imap(
+                        lambda p: DataStructs.FingerprintSimilarity(
+                            valid_fps[p[0]], valid_fps[p[1]]
+                        ),
+                        pairs,
+                    )
+                ):
+                    similarities.append(sim)
+                    next_progress = self._log_progress(
+                        idx + 1, total_pairs, next_progress
+                    )
 
         # Fill similarity matrix
         for (i, j), sim in zip(pairs, similarities):
