@@ -383,22 +383,6 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
 
         return groups, index_groups
 
-    def _build_groups_from_cluster_labels_for_valid_indices(
-        self, cluster_labels: np.ndarray, valid_indices: List[int]
-    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        index_groups_local = super()._build_groups_from_cluster_labels(
-            cluster_labels
-        )[1]
-        index_groups = [
-            [valid_indices[idx] for idx in group]
-            for group in index_groups_local
-        ]
-        groups = [
-            [self.molecules[idx] for idx in index_group]
-            for index_group in index_groups
-        ]
-        return groups, index_groups
-
     def _group_by_threshold_for_valid_indices(
         self, distance_matrix: np.ndarray, valid_indices: List[int]
     ) -> Tuple[List[List[Molecule]], List[List[int]]]:
