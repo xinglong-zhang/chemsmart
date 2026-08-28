@@ -8,6 +8,11 @@ from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_solvent_options,
     gaussian,
 )
+from chemsmart.cli.gaussian.mecp_options import (
+    add_mecp_method_suffix,
+    click_mecp_restart_option,
+    click_mecp_step_size_method_option,
+)
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
@@ -45,28 +50,36 @@ logger = logging.getLogger(__name__)
 )
 # MECP-specific options (used when --jobtype mecp)
 @click.option(
-    "--multiplicity-a",
+    "--multiplicity1",
+    "--m1",
+    "multiplicity_a",
     type=int,
     default=None,
-    help="[MECP] Spin multiplicity for state A.",
+    help="[MECP] Spin multiplicity for state 1.",
 )
 @click.option(
-    "--multiplicity-b",
+    "--multiplicity2",
+    "--m2",
+    "multiplicity_b",
     type=int,
     default=None,
-    help="[MECP] Spin multiplicity for state B. Defaults to multiplicity-a + 2.",
+    help="[MECP] Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
 )
 @click.option(
-    "--charge-a",
+    "--charge1",
+    "--c1",
+    "charge_a",
     type=int,
     default=None,
-    help="[MECP] Charge for state A.",
+    help="[MECP] Charge for state 1.",
 )
 @click.option(
-    "--charge-b",
+    "--charge2",
+    "--c2",
+    "charge_b",
     type=int,
     default=None,
-    help="[MECP] Charge for state B. Defaults to charge-a.",
+    help="[MECP] Charge for state 2. Defaults to charge1.",
 )
 @click.option(
     "--max-steps",
@@ -119,22 +132,9 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--adaptive-step-size/--no-adaptive-step-size",
     default=None,
-    help="[MECP] Enable adaptive step size scaling (default: enabled).",
+    help="[MECP] Enable adaptive scaling for bb/grow_shrink (default: enabled).",
 )
-@click.option(
-    "--step-size-method",
-    type=click.Choice(
-        ["bb", "grow_shrink", "harvey"],
-        case_sensitive=False,
-    ),
-    default=None,
-    help=(
-        "[MECP] Step size adaptation algorithm when adaptive is enabled. "
-        "'harvey' uses the Harvey inverse-BFGS optimizer (default). "
-        "'bb' uses the Barzilai-Borwein secant rule; 'grow_shrink' uses "
-        "a merit-based grow/shrink rule."
-    ),
-)
+@click_mecp_step_size_method_option
 @click.option(
     "--step-size-grow",
     type=float,
@@ -159,6 +159,7 @@ logger = logging.getLogger(__name__)
     default=None,
     help="[MECP] Maximum allowed adaptive step size in Bohr^2/Hartree (default: 1.0).",
 )
+@click_mecp_restart_option
 @click.pass_context
 def link(
     ctx,
@@ -198,6 +199,7 @@ def link(
     step_size_shrink,
     step_size_min,
     step_size_max,
+    restart,
     **kwargs,
 ):
     """CLI subcommand for running Gaussian link jobs."""
@@ -229,6 +231,7 @@ def link(
             step_size_shrink=step_size_shrink,
             step_size_min=step_size_min,
             step_size_max=step_size_max,
+            restart=restart,
             **kwargs,
         )
 
@@ -355,6 +358,7 @@ def _link_mecp(
     step_size_shrink,
     step_size_min,
     step_size_max,
+    restart,
     **kwargs,
 ):
     """
@@ -396,7 +400,7 @@ def _link_mecp(
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
-            "Use gaussian -m/--multiplicity or link -j mecp --multiplicity-a."
+            "Use gaussian -m/--multiplicity or link -j mecp --multiplicity1/--m1."
         )
 
     if multiplicity_b is None:
@@ -411,7 +415,7 @@ def _link_mecp(
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
-            "Use gaussian -c/--charge or link -j mecp --charge-a."
+            "Use gaussian -c/--charge or link -j mecp --charge1/--c1."
         )
 
     if charge_b is None:
@@ -461,13 +465,16 @@ def _link_mecp(
         mecp_settings.step_size_min = step_size_min
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
+    mecp_settings.restart = restart
 
     # automatically use unrestricted DFT for broken-symmetry calculations
     if not mecp_settings.functional.lower().startswith("u"):
         mecp_settings.functional = "u" + mecp_settings.functional
 
     molecule = ctx.obj["molecules"][-1]
-    label = ctx.obj["label"] + "_mecp_link"
+    label = add_mecp_method_suffix(
+        ctx.obj["label"], mecp_settings.step_size_method
+    ) + "_link"
 
     logger.info(
         f"Link MECP job settings from project: {mecp_settings.__dict__}"

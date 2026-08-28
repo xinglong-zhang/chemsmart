@@ -3,6 +3,11 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.gaussian.mecp_options import (
+    add_mecp_method_suffix,
+    click_mecp_restart_option,
+    click_mecp_step_size_method_option,
+)
 from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 from chemsmart.utils.cli import MyCommand
@@ -14,28 +19,36 @@ logger = logging.getLogger(__name__)
 @gaussian.command("mecp", cls=MyCommand)
 @click_job_options
 @click.option(
-    "--multiplicity-a",
+    "--multiplicity1",
+    "--m1",
+    "multiplicity_a",
     type=int,
     default=None,
-    help="Spin multiplicity for state A.",
+    help="Spin multiplicity for state 1.",
 )
 @click.option(
-    "--multiplicity-b",
+    "--multiplicity2",
+    "--m2",
+    "multiplicity_b",
     type=int,
     default=None,
-    help="Spin multiplicity for state B. Defaults to multiplicity-a + 2.",
+    help="Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
 )
 @click.option(
-    "--charge-a",
+    "--charge1",
+    "--c1",
+    "charge_a",
     type=int,
     default=None,
-    help="Charge for state A.",
+    help="Charge for state 1.",
 )
 @click.option(
-    "--charge-b",
+    "--charge2",
+    "--c2",
+    "charge_b",
     type=int,
     default=None,
-    help="Charge for state B. Defaults to charge-a.",
+    help="Charge for state 2. Defaults to charge1.",
 )
 @click.option(
     "--title-a",
@@ -114,22 +127,9 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--adaptive-step-size/--no-adaptive-step-size",
     default=None,
-    help="Enable adaptive step size scaling (default: enabled).",
+    help="Enable adaptive scaling for bb/grow_shrink (default: enabled).",
 )
-@click.option(
-    "--step-size-method",
-    type=click.Choice(
-        ["bb", "grow_shrink", "harvey"],
-        case_sensitive=False,
-    ),
-    default=None,
-    help=(
-        "Step size adaptation algorithm when adaptive is enabled. "
-        "'harvey' uses the Harvey inverse-BFGS optimizer (default). "
-        "'bb' uses the Barzilai-Borwein secant rule; 'grow_shrink' uses "
-        "a merit-based grow/shrink rule."
-    ),
-)
+@click_mecp_step_size_method_option
 @click.option(
     "--step-size-grow",
     type=float,
@@ -174,6 +174,7 @@ logger = logging.getLogger(__name__)
     help="Finite-difference step size (Bohr) for the numerical Hessian used in "
     "--verify-seam-minimum (default: 1e-3).",
 )
+@click_mecp_restart_option
 @click.pass_context
 def mecp(
     ctx,
@@ -200,6 +201,7 @@ def mecp(
     step_size_max,
     verify_seam_minimum,
     hess_step_size,
+    restart,
     skip_completed,
     **kwargs,
 ):
@@ -241,7 +243,7 @@ def mecp(
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
-            "Use gaussian -m/--multiplicity or mecp --multiplicity-a."
+            "Use gaussian -m/--multiplicity or mecp --multiplicity1/--m1."
         )
 
     if multiplicity_b is None:
@@ -258,7 +260,7 @@ def mecp(
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
-            "Use gaussian -c/--charge or mecp --charge-a."
+            "Use gaussian -c/--charge or mecp --charge1/--c1."
         )
     if charge_b is None:
         mecp_settings.charge_b = mecp_settings.charge_a
@@ -310,6 +312,7 @@ def mecp(
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
     mecp_settings.verify_seam_minimum = verify_seam_minimum
+    mecp_settings.restart = restart
     if hess_step_size is not None:
         mecp_settings.hess_step_size = hess_step_size
 
@@ -321,6 +324,7 @@ def mecp(
 
     # get label for the job
     label = ctx.obj["label"]
+    label = add_mecp_method_suffix(label, mecp_settings.step_size_method)
 
     logger.debug(f"Label for job: {label}")
 
