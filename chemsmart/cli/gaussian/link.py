@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--multiplicity1",
     "--m1",
-    "multiplicity_a",
+    "multiplicity1",
     type=int,
     default=None,
     help="[MECP] Spin multiplicity for state 1.",
@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--multiplicity2",
     "--m2",
-    "multiplicity_b",
+    "multiplicity2",
     type=int,
     default=None,
     help="[MECP] Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--charge1",
     "--c1",
-    "charge_a",
+    "charge1",
     type=int,
     default=None,
     help="[MECP] Charge for state 1.",
@@ -76,7 +76,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--charge2",
     "--c2",
-    "charge_b",
+    "charge2",
     type=int,
     default=None,
     help="[MECP] Charge for state 2. Defaults to charge1.",
@@ -183,10 +183,10 @@ def link(
     stepsize,
     direction,
     # MECP options
-    multiplicity_a,
-    multiplicity_b,
-    charge_a,
-    charge_b,
+    multiplicity1,
+    multiplicity2,
+    charge1,
+    charge2,
     max_steps,
     energy_diff_tol,
     force_max_tol,
@@ -214,10 +214,10 @@ def link(
             solvent_model=solvent_model,
             solvent_id=solvent_id,
             solvent_options=solvent_options,
-            multiplicity_a=multiplicity_a,
-            multiplicity_b=multiplicity_b,
-            charge_a=charge_a,
-            charge_b=charge_b,
+            multiplicity1=multiplicity1,
+            multiplicity2=multiplicity2,
+            charge1=charge1,
+            charge2=charge2,
             max_steps=max_steps,
             step_size=step_size,
             energy_diff_tol=energy_diff_tol,
@@ -341,10 +341,10 @@ def _link_mecp(
     solvent_model,
     solvent_id,
     solvent_options,
-    multiplicity_a,
-    multiplicity_b,
-    charge_a,
-    charge_b,
+    multiplicity1,
+    multiplicity2,
+    charge1,
+    charge2,
     max_steps,
     step_size,
     energy_diff_tol,
@@ -393,35 +393,35 @@ def _link_mecp(
     )
 
     # --- state A charge / multiplicity ---
-    if multiplicity_a is None:
+    if multiplicity1 is None:
         mecp_settings.multiplicity_a = mecp_project_settings.multiplicity
     else:
-        mecp_settings.multiplicity_a = multiplicity_a
+        mecp_settings.multiplicity_a = multiplicity1
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
             "Use gaussian -m/--multiplicity or link -j mecp --multiplicity1/--m1."
         )
 
-    if multiplicity_b is None:
+    if multiplicity2 is None:
         mecp_settings.multiplicity_b = mecp_settings.multiplicity_a + 2
     else:
-        mecp_settings.multiplicity_b = multiplicity_b
+        mecp_settings.multiplicity_b = multiplicity2
 
-    if charge_a is None:
+    if charge1 is None:
         mecp_settings.charge_a = mecp_settings.charge
     else:
-        mecp_settings.charge_a = charge_a
+        mecp_settings.charge_a = charge1
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
             "Use gaussian -c/--charge or link -j mecp --charge1/--c1."
         )
 
-    if charge_b is None:
+    if charge2 is None:
         mecp_settings.charge_b = mecp_settings.charge_a
     else:
-        mecp_settings.charge_b = charge_b
+        mecp_settings.charge_b = charge2
 
     # --- broken-symmetry (link) settings ---
     mecp_settings.use_link = True

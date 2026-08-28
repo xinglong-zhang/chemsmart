@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--multiplicity1",
     "--m1",
-    "multiplicity_a",
+    "multiplicity1",
     type=int,
     default=None,
     help="Spin multiplicity for state 1.",
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--multiplicity2",
     "--m2",
-    "multiplicity_b",
+    "multiplicity2",
     type=int,
     default=None,
     help="Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--charge1",
     "--c1",
-    "charge_a",
+    "charge1",
     type=int,
     default=None,
     help="Charge for state 1.",
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--charge2",
     "--c2",
-    "charge_b",
+    "charge2",
     type=int,
     default=None,
     help="Charge for state 2. Defaults to charge1.",
@@ -178,10 +178,10 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def mecp(
     ctx,
-    multiplicity_a,
-    multiplicity_b,
-    charge_a,
-    charge_b,
+    multiplicity1,
+    multiplicity2,
+    charge1,
+    charge2,
     title_a,
     title_b,
     max_steps,
@@ -235,37 +235,37 @@ def mecp(
     )
 
     # update mecp_settings if any attribute is specified in cli options
-    if multiplicity_a is None:
+    if multiplicity1 is None:
         # if not given, then takes value from gaussian project settings or input file
         mecp_settings.multiplicity_a = mecp_project_settings.multiplicity
     else:
-        mecp_settings.multiplicity_a = multiplicity_a
+        mecp_settings.multiplicity_a = multiplicity1
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
             "Use gaussian -m/--multiplicity or mecp --multiplicity1/--m1."
         )
 
-    if multiplicity_b is None:
+    if multiplicity2 is None:
         # if not given, then defaults to multiplicity_a + 2
         mecp_settings.multiplicity_b = mecp_settings.multiplicity_a + 2
     else:
-        mecp_settings.multiplicity_b = multiplicity_b
+        mecp_settings.multiplicity_b = multiplicity2
 
-    if charge_a is None:
+    if charge1 is None:
         mecp_settings.charge_a = mecp_settings.charge
     else:
-        mecp_settings.charge_a = charge_a
+        mecp_settings.charge_a = charge1
 
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
             "Use gaussian -c/--charge or mecp --charge1/--c1."
         )
-    if charge_b is None:
+    if charge2 is None:
         mecp_settings.charge_b = mecp_settings.charge_a
     else:
-        mecp_settings.charge_b = charge_b
+        mecp_settings.charge_b = charge2
 
     if title_a is not None:
         mecp_settings.title_a = title_a
