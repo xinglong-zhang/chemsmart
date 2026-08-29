@@ -517,6 +517,52 @@ class TestPyMOLJobs:
             len(molecules_check) == 10
         ), f"Expected 10 molecules, but got {len(molecules_check)}."
 
+    def test_irc_from_files(self, mocker):
+        with pytest.raises(ValueError, match="No reactant or product file"):
+            PyMOLIRCMovieJob.from_files(None, None, None, None)
+
+        with pytest.raises(ValueError, match="only provide reactant/product"):
+            PyMOLIRCMovieJob.from_files("r.log", None, "all.log", None)
+
+        # reactant + product branch: reverse reactant trajectory, forward product
+        reactant = [mocker.Mock(name="r1"), mocker.Mock(name="r2")]
+        product = [mocker.Mock(name="p1")]
+        mock_read = mocker.patch(
+            "chemsmart.jobs.mol.irc.Molecule.from_filepath",
+            side_effect=[reactant, product],
+        )
+        job = PyMOLIRCMovieJob.from_files(
+            "/tmp/path/ts_ircr.log",
+            "/tmp/path/ts_ircf.log",
+            None,
+            "ignored",
+            jobrunner=object(),
+        )
+        assert job.label == "ts_irc_movie"
+        assert job.molecule == reactant + product
+        assert mock_read.call_args_list[0].args == ("ts_ircr.log",)
+        assert mock_read.call_args_list[0].kwargs == {"index": "::-1"}
+        assert mock_read.call_args_list[1].args == ("ts_ircf.log",)
+        assert mock_read.call_args_list[1].kwargs == {"index": ":"}
+
+        # reactant-only / product-only / all-file branches
+        mock_read = mocker.patch(
+            "chemsmart.jobs.mol.irc.Molecule.from_filepath",
+            return_value=[],
+        )
+        PyMOLIRCMovieJob.from_files(
+            "r.log", None, None, None, jobrunner=object()
+        )
+        assert mock_read.call_args.kwargs["index"] == "::-1"
+        PyMOLIRCMovieJob.from_files(
+            None, "p.log", None, None, jobrunner=object()
+        )
+        assert mock_read.call_args.kwargs["index"] == ":"
+        PyMOLIRCMovieJob.from_files(
+            None, None, "all.log", None, jobrunner=object()
+        )
+        assert mock_read.call_args.kwargs["index"] == ":"
+
     def test_pymol_MO_job_parameters(
         self,
         tmpdir,
