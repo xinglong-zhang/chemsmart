@@ -73,7 +73,7 @@ def click_grouper_sub_options(f):
         "--use-weights/--no-use-weights",
         type=bool,
         default=True,
-        help="Whether to use torsion weights in TFD calculation for torsion grouping.",
+        help="Whether to use torsion weights in TFD calculation.",
     )
     @click.option(
         "--max-dev",

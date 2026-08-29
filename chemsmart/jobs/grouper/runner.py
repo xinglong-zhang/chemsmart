@@ -161,7 +161,7 @@ class GrouperJobRunner(JobRunner):
         """
         Write grouping results following the same logic as utils/grouper.py unique() method.
 
-        - Creates per-group xyz files with molecules sorted by energy
+        - Creates per-group xyz files with representative-defined ordering
         - Collects representative molecules for downstream job state/output use
         """
         unique_molecules = []
@@ -176,7 +176,7 @@ class GrouperJobRunner(JobRunner):
             # Group ordering is finalized upstream; first entry is representative.
             ordered_pairs = list(zip(group, indices))
 
-            # Write group XYZ file with all molecules sorted by energy
+            # Write group XYZ file preserving representative-defined ordering
             group_filename = os.path.join(
                 job.output_dir, f"{file_prefix}_{i+1}.xyz"
             )

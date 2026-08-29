@@ -3,7 +3,7 @@ Grouper Job Management Module.
 
 This module provides grouper job classes and runners for molecular structure
 clustering tasks including RMSD-based grouping, fingerprint similarity,
-torsion fingerprint deviation, and more.
+tfd (torsion fingerprint deviation), and more.
 """
 
 from .base import (

@@ -659,9 +659,10 @@ class MoleculeGrouper(ABC):
         """
         Get unique representative molecules from each group.
 
-        Returns the lowest energy molecule from each group as a representative
-        of that structural family. Also generates XYZ files for each group,
-        sorted by energy, in a dedicated subfolder.
+        Returns the selected representative molecule from each group
+        (always the first member in the finalized group ordering).
+        Also generates XYZ files for each group in that same ordering
+        in a dedicated subfolder.
 
         Args:
             output_dir (str): Base directory for output. If None, uses self.output_dir
@@ -669,7 +670,7 @@ class MoleculeGrouper(ABC):
             prefix (str): Prefix for output XYZ files. Default is "group".
 
         Returns:
-            List[Molecule]: List of unique representative molecules (lowest energy from each group).
+            List[Molecule]: List of unique representative molecules (first member from each group).
         """
 
         # Use cached results if available, otherwise compute and cache
@@ -720,7 +721,7 @@ class MoleculeGrouper(ABC):
             # Group ordering is finalized by the representative strategy.
             ordered_pairs = list(zip(group, indices))
 
-            # Write group XYZ file with all molecules sorted by energy
+            # Write group XYZ file preserving representative-defined ordering
             group_filename = os.path.join(
                 full_output_path, f"{file_prefix}_{i+1}.xyz"
             )
@@ -772,7 +773,7 @@ class MatrixGrouper(MoleculeGrouper):
 
     Provides shared matrix validation, hierarchical complete-linkage
     clustering, threshold-based grouping, requested-num-groups grouping,
-    and simple post-clustering representative selection.
+    and representative-aware group ordering.
     """
 
     supports_matrix_representative_selection = True
@@ -1249,24 +1250,4 @@ class MatrixGrouper(MoleculeGrouper):
             index_groups,
             clean_submatrix,
             matrix_original_indices=valid_original_indices,
-        )
-
-    def select_representatives(
-        self, index_groups: List[List[int]], strategy: str = "first"
-    ) -> List[int]:
-        """Select representative indices from already determined groups."""
-        if strategy != "first":
-            raise ValueError(
-                f"Unsupported representative selection strategy: {strategy}"
-            )
-
-        if self.representative_strategy == "lowest":
-            return [
-                self._order_index_group_by_energy(group)[0]
-                for group in index_groups
-                if group
-            ]
-
-        raise ValueError(
-            "select_representatives() with strategy='first' is only available for representative_strategy='lowest'."
         )

@@ -10,6 +10,7 @@ progress and completion tracking across the ensemble.
 import logging
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
+from chemsmart.utils.grouper import StructureGrouperFactory
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,10 @@ class GaussianCrestJob(GaussianJob):
             all conformers.
         incomplete_conformers_jobs (list[GaussianGeneralJob]): Prepared
             jobs that are not yet complete.
+
+    Additional grouping options:
+        num_procs (int): Number of processes used by supported grouping strategies.
+        representative_strategy (str): Representative selection strategy for grouped conformers.
     """
 
     TYPE = "g16crest"
@@ -52,6 +57,8 @@ class GaussianCrestJob(GaussianJob):
         num_confs_to_run=None,
         grouping_strategy=None,
         num_groups=None,
+        num_procs=1,
+        representative_strategy="lowest",
         skip_completed=True,
         **kwargs,
     ):
@@ -73,7 +80,11 @@ class GaussianCrestJob(GaussianJob):
             grouping_strategy (str, optional): Grouping strategy for molecules.
             num_groups (int, optional): Number of groups to create when grouping
                 is enabled. Takes precedence over threshold-based grouping.
-            **kwargs: Additional keyword arguments for parent class.
+            num_procs (int, optional): Number of processes used by supported
+                grouping strategies.
+            representative_strategy (str, optional): Representative selection
+                strategy for grouped conformers.
+            **kwargs: Additional keyword arguments for parent class and grouping.
 
         Raises:
             ValueError: If molecules fails basic list validation.
@@ -94,6 +105,8 @@ class GaussianCrestJob(GaussianJob):
             num_confs_to_run = len(molecules)
 
         self.num_confs_to_opt = num_confs_to_run
+        self.num_procs = num_procs
+        self.representative_strategy = representative_strategy
 
         # if grouping strategy is provided, set the grouper
         # and carry out the grouping before running the group of molecules
@@ -105,13 +118,15 @@ class GaussianCrestJob(GaussianJob):
                     f"Using num_groups mode: {num_groups} groups requested"
                 )
 
-            from chemsmart.utils.grouper import StructureGrouperFactory
+            representative_strategy = representative_strategy
 
             logger.info(f"Total structures to group: {len(molecules)}")
             grouper = StructureGrouperFactory.create(
                 molecules,
                 strategy=grouping_strategy,
                 num_groups=num_groups,
+                num_procs=self.num_procs,
+                representative_strategy=representative_strategy,
                 label=label,
                 **kwargs,
             )

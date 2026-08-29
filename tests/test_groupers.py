@@ -295,7 +295,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
             num_procs=self.NUM_PROCS,
             ignore_hydrogens=True,
         )
-groups, group_indices = grouper6.group()
+        groups, group_indices = grouper6.group()
         for indices in group_indices:
             for i, idx_i in enumerate(indices):
                 for idx_j in indices[i + 1 :]:
@@ -560,6 +560,25 @@ class Test_IRMSD_grouper:
         rmsd = grouper._calculate_rmsd((0, 1))
         assert np.isclose(rmsd, 0.2294, rtol=1e-3)
 
+    def test_parallel_irmsd_preserves_actual_inversion_metadata(
+        self, two_rotated_molecules_xyz_file
+    ):
+        """Parallel iRMSD must propagate resolved inversion metadata to the parent."""
+        xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = IRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=False,
+            inversion="off",
+        )
+        grouper.group()
+
+        assert grouper.num_procs > 1
+        assert grouper._actual_inversion == "off"
+
 
 @pytest.mark.usefixtures("temporary_working_dir")
 class Test_PymolRMSD_grouper:
@@ -784,6 +803,39 @@ class Test_Tanimoto_similarity_grouper:
         unique_structures = grouper.unique()
         assert len(unique_structures) == 17
 
+    def test_tanimoto_threshold_boundary_through_group(
+        self, methanol_molecules, monkeypatch
+    ):
+        molecules = methanol_molecules[:2]
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        for fingerprint_type in ("usr", "usrcat"):
+            for similarity, expected_num_groups in (
+                (0.90, 1),
+                (0.91, 1),
+                (0.89, 2),
+            ):
+                monkeypatch.setattr(
+                    tanimoto_module.rdMolDescriptors,
+                    "GetUSRScore",
+                    lambda *args, value=similarity, **kwargs: value,
+                )
+
+                grouper = TanimotoSimilarityGrouper(
+                    molecules,
+                    threshold=0.9,
+                    fingerprint_type=fingerprint_type,
+                    num_procs=1,
+                )
+                groups, group_indices = grouper.group()
+
+                assert len(groups) == expected_num_groups
+                assert len(group_indices) == expected_num_groups
+                if expected_num_groups == 1:
+                    assert set(group_indices[0]) == {0, 1}
+                else:
+                    assert all(len(group) == 1 for group in group_indices)
+
 
 @pytest.mark.usefixtures("temporary_working_dir")
 class Test_TorsionFingerprint_grouper:
@@ -920,6 +972,60 @@ class Test_other_groupers:
         grouper = DummyGrouper(methanol_molecules)
         payload = grouper.record(example_key="example_value")
         assert payload["example_key"] == "example_value"
+
+    @pytest.mark.parametrize("energy_type", ["QHH", "QHG", "SP_QHG"])
+    def test_thermochemistry_parameters_header_for_qhg_energy_types(
+        self, methanol_molecules, energy_type
+    ):
+        """qhG and SP-qhG results must record the exact thermochemistry settings used."""
+        thermo_parameters = (
+            "temperature=298.15, concentration=1.0, pressure=1.0, "
+            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
+            "entropy_method=grimme, h_freq_cutoff=100.0, "
+            "energy_units=hartree, check_imaginary_frequencies=True, "
+            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
+        )
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2],
+            threshold=0.5,
+            num_procs=1,
+            energy_type=energy_type,
+            thermo_parameters=thermo_parameters,
+        )
+
+        header_info = []
+        grouper._append_thermo_header(header_info)
+
+        assert header_info == [
+            ("Thermochemistry Parameters", thermo_parameters)
+        ]
+
+    @pytest.mark.parametrize("energy_type", ["E", "H", "G"])
+    def test_thermochemistry_parameters_header_not_written_for_other_energy_types(
+        self, methanol_molecules, energy_type
+    ):
+        """Thermochemistry parameter header is specific to qhG and SP-qhG."""
+        thermo_parameters = (
+            "temperature=298.15, concentration=1.0, pressure=1.0, "
+            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
+            "entropy_method=grimme, h_freq_cutoff=100.0, "
+            "energy_units=hartree, check_imaginary_frequencies=True, "
+            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
+        )
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2],
+            threshold=0.5,
+            num_procs=1,
+            energy_type=energy_type,
+            thermo_parameters=thermo_parameters,
+        )
+
+        header_info = []
+        grouper._append_thermo_header(header_info)
+
+        assert not any(
+            key == "Thermochemistry Parameters" for key, _ in header_info
+        )
 
     def test_record_writes_rmsd_matrix_with_headers(
         self, methanol_molecules, temporary_working_dir
@@ -2995,55 +3101,63 @@ class Test_multiprocessing_support:
         assert len(index_groups) == 1
         assert index_groups == [[0]]
 
+    def test_matrix_grouper_log_progress(self, caplog):
+        """Test functionality of MatrixGrouper._log_progress method."""
+        import logging
 
-def test_matrix_grouper_log_progress(caplog):
-    """Test functionality of MatrixGrouper._log_progress method."""
-    import logging
+        from chemsmart.jobs.grouper.base import MatrixGrouper
 
-    from chemsmart.jobs.grouper.base import MatrixGrouper
+        class DummyGrouper(MatrixGrouper):
+            def _calculate_rmsd(self, idx_pair):
+                return 0.0
 
-    class DummyGrouper(MatrixGrouper):
-        def _calculate_rmsd(self, idx_pair):
-            return 0.0
+            def group(self):
+                return [], []
 
-        def group(self):
-            return [], []
+        # Create dummy grouper
+        grouper = DummyGrouper([], threshold=0.1)
+        with caplog.at_level(logging.INFO):
+            # Initial call, 0% complete, next_progress threshold at 10%
+            next_progress = 10
+            next_progress = grouper._log_progress(0, 100, next_progress)
+            assert next_progress == 10
+            assert len(caplog.records) == 0
 
-    # Create dummy grouper
-    grouper = DummyGrouper([], threshold=0.1)
-    with caplog.at_level(logging.INFO):
-        # Initial call, 0% complete, next_progress threshold at 10%
-        next_progress = 10
-        next_progress = grouper._log_progress(0, 100, next_progress)
-        assert next_progress == 10
-        assert len(caplog.records) == 0
+            # Call at 9%
+            next_progress = grouper._log_progress(9, 100, next_progress)
+            assert next_progress == 10
+            assert len(caplog.records) == 0
 
-        # Call at 9%
-        next_progress = grouper._log_progress(9, 100, next_progress)
-        assert next_progress == 10
-        assert len(caplog.records) == 0
+            # Call at 10%
+            next_progress = grouper._log_progress(10, 100, next_progress)
+            assert next_progress == 20
+            assert len(caplog.records) == 1
+            assert (
+                "Matrix calculation progress: 10%"
+                in caplog.records[-1].message
+            )
 
-        # Call at 10%
-        next_progress = grouper._log_progress(10, 100, next_progress)
-        assert next_progress == 20
-        assert len(caplog.records) == 1
-        assert "Matrix calculation progress: 10%" in caplog.records[-1].message
+            # Call at 15% (no log, threshold is 20)
+            next_progress = grouper._log_progress(15, 100, next_progress)
+            assert next_progress == 20
+            assert len(caplog.records) == 1
 
-        # Call at 15% (no log, threshold is 20)
-        next_progress = grouper._log_progress(15, 100, next_progress)
-        assert next_progress == 20
-        assert len(caplog.records) == 1
+            # Call jumping from 15% to 35%
+            next_progress = grouper._log_progress(35, 100, next_progress)
+            assert next_progress == 40
+            assert len(caplog.records) == 3
+            assert (
+                "Matrix calculation progress: 20%"
+                in caplog.records[-2].message
+            )
+            assert (
+                "Matrix calculation progress: 30%"
+                in caplog.records[-1].message
+            )
 
-        # Call jumping from 15% to 35%
-        next_progress = grouper._log_progress(35, 100, next_progress)
-        assert next_progress == 40
-        assert len(caplog.records) == 3
-        assert "Matrix calculation progress: 20%" in caplog.records[-2].message
-        assert "Matrix calculation progress: 30%" in caplog.records[-1].message
-
-        # Test edge case with zero total
-        next_p = grouper._log_progress(10, 0, 10)
-        assert next_p == 10
+            # Test edge case with zero total
+            next_p = grouper._log_progress(10, 0, 10)
+            assert next_p == 10
 
 
 @pytest.mark.usefixtures("temporary_working_dir")

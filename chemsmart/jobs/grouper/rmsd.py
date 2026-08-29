@@ -807,7 +807,7 @@ class IRMSDGrouper(RMSDGrouper):
             getattr(irmsd_module, "get_irmsd")
             self._use_direct_api = True
             logger.info("Using direct irmsd Python/Fortran API")
-        except (ImportError, OSError) as exc:
+        except (ImportError, OSError, AttributeError) as exc:
             logger.info(
                 "Direct irmsd Python API is unavailable (%s); "
                 "falling back to the external irmsd CLI",
@@ -1018,6 +1018,18 @@ class IRMSDGrouper(RMSDGrouper):
         if self._use_direct_api:
             return self._calculate_rmsd_direct(mol_idx_pair)
         return self._calculate_rmsd_cli(mol_idx_pair)
+
+    def _calculate_pair_payload(self, idx_pair):
+        """Return iRMSD value together with resolved inversion metadata."""
+        rmsd_value = self._calculate_rmsd(idx_pair)
+        return rmsd_value, self._actual_inversion
+
+    def _consume_pair_payload(self, idx_pair, payload) -> float:
+        """Merge iRMSD inversion metadata in the parent process."""
+        rmsd_value, actual_inversion = payload
+        if self._actual_inversion is None and actual_inversion is not None:
+            self._actual_inversion = actual_inversion
+        return float(rmsd_value)
 
 
 class PymolRMSDGrouper(RMSDGrouper):

@@ -407,7 +407,12 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
     ) -> Tuple[List[List[Molecule]], List[List[int]]]:
         original_threshold = self.threshold
         try:
-            self.threshold = 1.0 - original_threshold
+            dtype = distance_matrix.dtype
+            distance_threshold = dtype.type(1.0) - dtype.type(
+                original_threshold
+            )
+            self.threshold = float(distance_threshold)
+
             return super()._group_by_threshold(
                 distance_matrix,
                 original_indices=valid_indices,
@@ -420,8 +425,9 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
     ) -> Tuple[List[List[Molecule]], List[List[int]]]:
         original_threshold = self.threshold
         try:
+            dtype = distance_matrix.dtype
             self.threshold = (
-                1.0 - original_threshold
+                float(dtype.type(1.0) - dtype.type(original_threshold))
                 if original_threshold is not None
                 else None
             )
@@ -430,7 +436,9 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
                 original_indices=valid_indices,
             )
             if self._auto_threshold is not None:
-                self._auto_threshold = 1.0 - self._auto_threshold
+                self._auto_threshold = float(
+                    dtype.type(1.0) - dtype.type(self._auto_threshold)
+                )
             return groups, index_groups
         finally:
             self.threshold = original_threshold
