@@ -295,12 +295,12 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
             num_procs=self.NUM_PROCS,
             ignore_hydrogens=True,
         )
+groups, group_indices = grouper6.group()
         for indices in group_indices:
             for i, idx_i in enumerate(indices):
                 for idx_j in indices[i + 1 :]:
                     rmsd = grouper6._calculate_rmsd((idx_i, idx_j))
                     assert rmsd <= 2.5
-        groups, group_indices = grouper6.group()
         assert len(groups) == 4
         assert len(group_indices) == 4
         unique_structures = grouper6.unique()
