@@ -62,3 +62,9 @@ For reactant side pathway movie:
 .. code:: bash
 
    chemsmart run mol irc -r irc_reactant_side.log
+
+For product side pathway movie:
+
+.. code:: bash
+
+   chemsmart run mol irc -p irc_product_side.log
