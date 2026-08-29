@@ -1,11 +1,14 @@
+import inspect
 import os.path
 from shutil import copy, copytree, rmtree
 from unittest.mock import patch
 
+import click
 import numpy as np
 import pytest
 from click.testing import CliRunner
 
+from chemsmart.cli.convert import convert
 from chemsmart.cli.main import entry_point
 from chemsmart.io.converter import FileConverter
 from chemsmart.io.gaussian.folder import (
@@ -1109,6 +1112,54 @@ class TestConverterTwoWay:
         assert mol.num_atoms == 3
 
 
+class TestResolveOutputPath:
+    """Tests for ``FileConverter.resolve_output_path``."""
+
+    def test_resolve_output_path_default(self):
+        assert FileConverter.resolve_output_path(
+            "/path/to/molecule.pdb"
+        ) == os.path.join("/path/to", "molecule.xyz")
+
+    def test_resolve_output_path_output_filetype(self):
+        assert FileConverter.resolve_output_path(
+            "/path/to/molecule.pdb", output_filetype="com"
+        ) == os.path.join("/path/to", "molecule.com")
+
+    def test_resolve_output_path_extension_with_dot(self):
+        assert FileConverter.resolve_output_path(
+            "/path/to/molecule.pdb", output=".mol2"
+        ) == os.path.join("/path/to", "molecule.mol2")
+
+    def test_resolve_output_path_extension_without_dot(self):
+        assert FileConverter.resolve_output_path(
+            "/path/to/molecule.pdb", output="pdb"
+        ) == os.path.join("/path/to", "molecule.pdb")
+
+    def test_resolve_output_path_full_path(self):
+        assert (
+            FileConverter.resolve_output_path(
+                "/path/to/molecule.pdb", output="/tmp/foo.xyz"
+            )
+            == "/tmp/foo.xyz"
+        )
+
+    def test_resolve_output_path_relative_path_with_extension(self):
+        assert (
+            FileConverter.resolve_output_path(
+                "/path/to/molecule.pdb", output="othername.xyz"
+            )
+            == "othername.xyz"
+        )
+
+    def test_resolve_output_path_subdirectory_path(self):
+        assert (
+            FileConverter.resolve_output_path(
+                "/path/to/molecule.pdb", output="subdir/out.xyz"
+            )
+            == "subdir/out.xyz"
+        )
+
+
 class TestConvertCLI:
     """Tests for ``chemsmart run convert``."""
 
@@ -1258,18 +1309,99 @@ class TestConvertCLI:
             ],
         )
         assert result.exit_code != 0
-        assert "either --input/--output" in result.output.lower() or (
+        assert "either --input" in result.output.lower() or (
             "not both" in result.output.lower()
         )
 
-    def test_cli_convert_input_requires_output(self, single_model_pdb_file):
+    def test_cli_convert_input_defaults_to_xyz(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", ".xyz")
+
         runner = CliRunner()
         result = runner.invoke(
             entry_point,
             ["run", "convert", "--input", single_model_pdb_file],
         )
-        assert result.exit_code != 0
-        assert "--output" in result.output
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+
+        mol = Molecule.from_filepath(output_path)
+        assert mol.num_atoms == 3
+
+    def test_cli_convert_input_defaults_to_output_filetype(
+        self, single_model_pdb_file
+    ):
+        output_path = single_model_pdb_file.replace(".pdb", ".com")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output-filetype",
+                "com",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+
+    def test_cli_convert_output_extension_only(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", ".com")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output",
+                ".com",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+
+    def test_cli_convert_output_extension_without_dot(
+        self, single_model_pdb_file
+    ):
+        output_path = single_model_pdb_file.replace(".pdb", ".pdb")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output",
+                "pdb",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
+
+    def test_cli_convert_output_full_path(self, single_model_pdb_file, tmpdir):
+        output_path = os.path.join(str(tmpdir), "othername.xyz")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            entry_point,
+            [
+                "run",
+                "convert",
+                "--input",
+                single_model_pdb_file,
+                "--output",
+                output_path,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
 
     def test_cli_convert_directory_requires_filetype(self, tmpdir):
         runner = CliRunner()
@@ -1284,9 +1416,95 @@ class TestConvertCLI:
         runner = CliRunner()
         result = runner.invoke(entry_point, ["run", "convert"])
         assert result.exit_code != 0
-        assert "either --input/--output" in result.output.lower() or (
+        assert "either --input" in result.output.lower() or (
             "--directory/--filetype" in result.output.lower()
         )
+
+    def _call_convert_callback(self, **kwargs):
+        """Call the convert command function, bypassing Click wrapping."""
+        convert_fn = inspect.unwrap(convert.callback)
+        defaults = {
+            "ctx": click.Context(convert),
+            "input_file": None,
+            "output_file": None,
+            "directory": None,
+            "filetype": None,
+            "program": None,
+            "output_filetype": "xyz",
+            "include_intermediate_structures": False,
+            "debug": False,
+            "stream": False,
+        }
+        defaults.update(kwargs)
+        return convert_fn(**defaults)
+
+    def test_convert_callback_resolves_default_output(
+        self, single_model_pdb_file
+    ):
+        """Direct callback call covers resolve_output_path in convert.py."""
+        output_path = single_model_pdb_file.replace(".pdb", ".xyz")
+        result = self._call_convert_callback(
+            input_file=single_model_pdb_file,
+        )
+        assert result is None
+        assert os.path.exists(output_path)
+
+    def test_convert_callback_uses_output_file(self, single_model_pdb_file):
+        output_path = single_model_pdb_file.replace(".pdb", "_named.com")
+        result = self._call_convert_callback(
+            input_file=single_model_pdb_file,
+            output_file=output_path,
+        )
+        assert result is None
+        assert os.path.exists(output_path)
+
+    def test_convert_callback_rejects_input_and_directory(
+        self, single_model_pdb_file, tmpdir
+    ):
+        with pytest.raises(click.UsageError, match="not both"):
+            self._call_convert_callback(
+                input_file=single_model_pdb_file,
+                directory=str(tmpdir),
+            )
+
+    def test_convert_callback_directory_requires_filetype(self, tmpdir):
+        with pytest.raises(click.UsageError, match="--filetype is required"):
+            self._call_convert_callback(directory=str(tmpdir))
+
+    def test_convert_callback_requires_mode(self):
+        with pytest.raises(click.UsageError, match="either --input"):
+            self._call_convert_callback()
+
+    def test_convert_callback_batch_directory(self, tmpdir):
+        with patch("chemsmart.cli.convert.FileConverter") as mock_fc:
+            mock_fc.return_value.convert_files.return_value = None
+            result = self._call_convert_callback(
+                directory=str(tmpdir),
+                filetype="pdb",
+                program="gaussian",
+                output_filetype="xyz",
+                include_intermediate_structures=True,
+            )
+        assert result is None
+        mock_fc.assert_called_once_with(
+            directory=str(tmpdir),
+            type="pdb",
+            program="gaussian",
+            output_filetype="xyz",
+            include_intermediate_structures=True,
+        )
+        mock_fc.return_value.convert_files.assert_called_once_with()
+
+    def test_cli_convert_command_object_defaults_to_xyz(
+        self, single_model_pdb_file
+    ):
+        """Invoke convert directly, without going through ``run``."""
+        output_path = single_model_pdb_file.replace(".pdb", ".xyz")
+        result = CliRunner().invoke(
+            convert, ["--input", single_model_pdb_file]
+        )
+        assert result.exit_code == 0, result.output
+        assert os.path.exists(output_path)
 
 
 class TestOpenBabelWriteFallback:
