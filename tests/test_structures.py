@@ -501,6 +501,296 @@ class TestStructures:
         assert np.isclose(mol.get_dihedral(0, 1, 2, 0), 0)
         assert mol.is_linear
 
+    def rotation_matrix(self, axis, theta):
+        axis = np.asarray(axis, dtype=float)
+        axis = axis / np.linalg.norm(axis)
+        a = np.cos(theta / 2.0)
+        b, c, d = -axis * np.sin(theta / 2.0)
+        return np.array([
+            [a*a+b*b-c*c-d*d, 2*(b*c+a*d),     2*(b*d-a*c)],
+            [2*(b*c-a*d),     a*a+c*c-b*b-d*d, 2*(c*d+a*b)],
+            [2*(b*d+a*c),     2*(c*d-a*b),     a*a+d*d-b*b-c*c],
+        ])
+
+
+    def water_like(self):
+        pos = np.array([[0.0, 0.0, 0.0],
+                        [0.96, 0.0, 0.0],
+                        [-0.24, 0.93, 0.0]])
+        return ['O', 'H', 'H'], pos
+
+    def test_soap_spherical_harmonics_properties(self):
+        """Tests Y_lm orthonormality, periodicity, and pole conditions."""
+        # 1. Orthonormality via numerical quadrature over the sphere
+        symbols, positions = self.water_like()
+        MoleculeUnderTest = Molecule(symbols = symbols, positions = positions)
+        n_theta, n_phi = 60, 120
+        thetas = np.linspace(1e-4, np.pi - 1e-4, n_theta)
+        phis = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
+        dtheta = thetas[1] - thetas[0]
+        dphi = phis[1] - phis[0]
+        TT, PP = np.meshgrid(thetas, phis, indexing='ij')
+
+        test_pairs = [((1, 1), (1, 1)), ((1, 1), (1, -1)), ((2, 0), (2, 0)), ((2, 1), (3, 1))]
+        for (l1, m1), (l2, m2) in test_pairs:
+            Y1 = MoleculeUnderTest._sph_harm_numpy(m1, l1, PP, TT)
+            Y2 = MoleculeUnderTest._sph_harm_numpy(m2, l2, PP, TT)
+            integrand = Y1 * np.conj(Y2) * np.sin(TT)
+            integral = np.sum(integrand) * dtheta * dphi
+            expected = 1.0 if (l1, m1) == (l2, m2) else 0.0
+            assert abs(integral - expected) < 5e-2
+
+        # 2. Angle wraparound continuity (phi=0 vs phi=2*pi)
+        theta = 1.0
+        for l in range(4):
+            for m in range(-l, l + 1):
+                y0 = MoleculeUnderTest._sph_harm_numpy(m, l, 0.0, theta)
+                y2pi = MoleculeUnderTest._sph_harm_numpy(m, l, 2 * np.pi, theta)
+                assert abs(y0 - y2pi) < 1e-9
+
+        # 3. Pole behavior (theta=0 forces Y_lm = 0 for m != 0)
+        for l in range(5):
+            for m in range(-l, l + 1):
+                y = MoleculeUnderTest._sph_harm_numpy(m, l, 0.7, 0.0)
+                if m != 0:
+                    assert abs(y) < 1e-10
+                else:
+                    assert abs(y) > 0
+
+    def test_soap_modified_spherical_bessel_properties(self):
+        """Tests i_l recurrence relations, monotonicity, and continuity."""
+        # 1. Check recurrence relation: i_{l-1}(x) - i_{l+1}(x) = ((2l+1)/x) * i_l(x)
+        xs = np.linspace(0.5, 5.0, 10)
+        for l in range(1, 5):
+            symbols, positions = self.water_like()
+            MoleculeUnderTest = Molecule(symbols = symbols, positions = positions)
+            i_minus = MoleculeUnderTest._spherical_in_numpy(l - 1, xs)
+            i_curr = MoleculeUnderTest._spherical_in_numpy(l, xs)
+            i_plus = MoleculeUnderTest._spherical_in_numpy(l + 1, xs)
+            rec_lhs = i_minus - i_plus
+            rec_rhs = ((2 * l + 1) / xs) * i_curr
+            assert np.allclose(rec_lhs, rec_rhs, rtol=1e-4)
+
+        # 2. Smoothness / Continuity across historical threshold
+        x_below, x_above = np.array([9.999e-5]), np.array([1.0001e-4])
+        for l in range(3):
+            v_below = MoleculeUnderTest._spherical_in_numpy(l, x_below)[0]
+            v_above = MoleculeUnderTest._spherical_in_numpy(l, x_above)[0]
+            rel_step = abs(v_below - v_above) / max(abs(v_below), 1e-300)
+            assert rel_step < 1e-3
+
+        # 3. Monotonicity for x >= 0
+        xs_mono = np.linspace(0.01, 10, 100)
+        for l in range(3):
+            vals = MoleculeUnderTest._spherical_in_numpy(l, xs_mono) * np.exp(xs_mono)
+            assert np.all(np.diff(vals) > -1e-9)
+
+    def test_soap_basis_properties(self):
+        # Orthonormality check under r^2 weighting
+        symbols, positions = self.water_like()
+        MoleculeUnderTest = Molecule(symbols = symbols, positions = positions)
+        basis = MoleculeUnderTest._build_radial_basis(n_max=6, r_cut=5.0, n_quad=300)
+        g, r, w, jac = basis["g_nodes"], basis["r_nodes"], basis["weights"], basis["jac"]
+        gram = (g * (r ** 2) * w) @ g.T * jac
+        assert np.allclose(gram, np.eye(g.shape[0]), atol=1e-4)
+
+        # Quad convergence check
+        errs = []
+        for n_quad in (20, 50, 200):
+            b = MoleculeUnderTest._build_radial_basis(n_max=4, r_cut=5.0, n_quad=n_quad)
+            gram_q = (b["g_nodes"] * (b["r_nodes"] ** 2) * b["weights"]) @ b["g_nodes"].T * b["jac"]
+            errs.append(np.max(np.abs(gram_q - np.eye(b["g_nodes"].shape[0]))))
+        assert errs[-1] < 1e-8
+        assert errs[0] < 1e-2
+
+        # n_max = 1 edge case
+        b1 = MoleculeUnderTest._build_radial_basis(n_max=1, r_cut=5.0, n_quad=50)
+        assert b1["g_nodes"].shape[0] == 1
+
+    def test_soap_invariances(self):
+        syms, pos = self.water_like()
+        mol = Molecule(syms, pos)
+
+        # Translation
+        shift = np.array([5.0, -3.0, 2.0])
+        mol_shift = Molecule(syms, pos + shift)
+        v1 = mol.compute_soap(r_cut=4.0, n_max=3, l_max=3, sigma=0.5, centers=[0], n_quad=80)
+        v2 = mol_shift.compute_soap(r_cut=4.0, n_max=3, l_max=3, sigma=0.5, centers=[0], n_quad=80)
+        assert np.allclose(v1, v2, atol=1e-8)
+
+        # Permutation of identical species
+        mol_perm = Molecule(['O', 'H', 'H'], pos[[0, 2, 1]])
+        v_perm = mol_perm.compute_soap(r_cut=4.0, n_max=3, l_max=3, sigma=0.5, centers=[0], n_quad=80)
+        assert np.allclose(v1, v_perm, atol=1e-10)
+
+        # Rotation l_max = 0 baseline
+        rng = np.random.default_rng(42)
+        R0 = self.rotation_matrix(rng.normal(size=3), 1.7)
+        mol_rot0 = Molecule(syms, pos @ R0.T)
+        v1_l0 = mol.compute_soap(r_cut=4.0, n_max=3, l_max=0, sigma=0.5, centers=[0], n_quad=80)
+        v2_l0 = mol_rot0.compute_soap(r_cut=4.0, n_max=3, l_max=0, sigma=0.5, centers=[0], n_quad=80)
+        assert np.allclose(v1_l0, v2_l0, atol=1e-8)
+
+    def test_soap_full_rotation_invariance(self):
+        syms, pos = self.water_like()
+        R = self.rotation_matrix([1.0, 0.5, -0.2], 1.25)
+        mol = Molecule(syms, pos)
+        mol_rot = Molecule(syms, pos @ R.T)
+        v1 = mol.compute_soap(r_cut=4.0, n_max=3, l_max=4, sigma=0.5, centers=[0], n_quad=100)
+        v2 = mol_rot.compute_soap(r_cut=4.0, n_max=3, l_max=4, sigma=0.5, centers=[0], n_quad=100)
+        assert np.allclose(v1, v2, atol=1e-6, rtol=1e-6)
+
+    def test_soap_parity_invariance(self):
+        syms, pos = self.water_like()
+        mol = Molecule(syms, pos)
+        mol_inv = Molecule(syms, -pos)
+        v1 = mol.compute_soap(r_cut=4.0, n_max=3, l_max=4, sigma=0.5, centers=[0], n_quad=100)
+        v2 = mol_inv.compute_soap(r_cut=4.0, n_max=3, l_max=4, sigma=0.5, centers=[0], n_quad=100)
+        assert np.allclose(v1, v2, atol=1e-6)
+
+    def test_soap_api_boundaries_and_dimensions(self):
+        syms, pos = self.water_like()
+        mol = Molecule(syms, pos)
+
+        # 1. Dimension check for single-species system
+        n_max, l_max = 3, 2
+        mol_single = Molecule(['C', 'C', 'C'], np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]]))
+        v_single = mol_single.compute_soap(r_cut=3.0, n_max=n_max, l_max=l_max, sigma=0.5, centers=[0], n_quad=40)
+        
+        # 1 species -> 1 pair (C-C). 
+        # Same-species radial pairs = n_max * (n_max + 1) // 2 = 6
+        # Total features = (l_max + 1) * 6 = 3 * 6 = 18
+        expected_single = (l_max + 1) * (n_max * (n_max + 1) // 2)
+        assert v_single.shape == (1, expected_single)
+
+        # 2. Dimension check for multi-species system
+        mol_multi = Molecule(['O', 'H', 'H'], pos)
+        v_multi_species = mol_multi.compute_soap(r_cut=3.0, n_max=3, l_max=2, species=['H', 'O'], centers=[0], n_quad=40)
+        
+        # 2 species ('H', 'O') -> 3 species pairs: (H, H), (H, O), (O, O)
+        # Same-species pairs (H-H, O-O): 2 * (3 * 4 // 2) = 12
+        # Diff-species pairs (H-O): 3 * 3 = 9
+        # Total radial combinations = 12 + 9 = 21
+        # Total features = (l_max + 1) * 21 = 3 * 21 = 63
+        expected_multi = (l_max + 1) * (2 * (n_max * (n_max + 1) // 2) + (n_max ** 2))
+        assert v_multi_species.shape == (1, expected_multi)
+
+    def test_soap_spatial_edge_cases(self):
+        # Isolated atom
+        mol_iso = Molecule(['O'], np.array([[0.0, 0.0, 0.0]]))
+        v_iso = mol_iso.compute_soap(r_cut=4.0, n_max=2, l_max=2, sigma=0.5, n_quad=40)
+        assert np.allclose(v_iso, 0.0) and np.all(np.isfinite(v_iso))
+
+        # Atom exactly at cutoff vs well inside
+        mol_cut = Molecule(['O', 'H'], np.array([[0.0, 0.0, 0.0], [4.0, 0.0, 0.0]]))
+        v_cut = mol_cut.compute_soap(r_cut=4.0, n_max=2, l_max=1, sigma=0.5, centers=[0], n_quad=40)
+        mol_in = Molecule(['O', 'H'], np.array([[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]))
+        v_in = mol_in.compute_soap(r_cut=4.0, n_max=2, l_max=1, sigma=0.5, centers=[0], n_quad=40)
+        assert np.allclose(v_cut, 0.0) and not np.allclose(v_in, 0.0)
+
+        # Overlapping coincident atom
+        mol_overlap = Molecule(['O', 'H', 'H'], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]))
+        v_overlap = mol_overlap.compute_soap(r_cut=4.0, n_max=2, l_max=1, sigma=0.5, centers=[0], n_quad=40)
+        assert np.all(np.isfinite(v_overlap))
+
+    def test_soap_centers_indexing_bounds(self):
+        syms, pos = self.water_like()
+        mol = Molecule(syms, pos)
+        
+        # 0 is the first atom
+        v0 = mol.compute_soap(r_cut=4.0, n_max=2, l_max=1, sigma=0.5, centers=[0], n_quad=40)
+        assert v0.shape[0] == 1
+        
+        # Out of bounds raises IndexError
+        with pytest.raises(IndexError):
+            mol.compute_soap(r_cut=4.0, n_max=2, l_max=1, sigma=0.5, centers=[3], n_quad=40)
+
+    def test_soap_limits_and_dense_packing(self):
+        pos = np.array([[0.0, 0.0, 0.0], [1.2, 0.0, 0.0], [0.0, 1.2, 0.0]])
+        mol = Molecule(['O', 'H', 'H'], pos)
+
+        # Large sigma / smooth density limit
+        v_diffuse = mol.compute_soap(r_cut=3.0, n_max=3, l_max=3, sigma=5.0, centers=[0], n_quad=60)
+        assert np.all(np.isfinite(v_diffuse))
+
+        # All neighbors outside cutoff
+        mol_far = Molecule(['O', 'H'], np.array([[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]]))
+        v_far = mol_far.compute_soap(r_cut=2.0, n_max=2, l_max=1, sigma=0.5, centers=[0], n_quad=40)
+        assert np.allclose(v_far, 0.0)
+
+        # Dense atom packing stress test
+        rng = np.random.default_rng(3)
+        n_atoms = 60
+        mol_dense = Molecule(['C'] * n_atoms, rng.uniform(-3, 3, size=(n_atoms, 3)))
+        v_dense = mol_dense.compute_soap(r_cut=4.0, n_max=3, l_max=3, sigma=0.5, centers=[0], n_quad=60)
+        assert np.all(np.isfinite(v_dense))
+
+    def test_soap_tight_sigma_large_rcut_no_nan(self):
+        pos = np.array([[0.0, 0.0, 0.0], [1.2, 0.0, 0.0], [0.0, 1.2, 0.0]])
+        mol = Molecule(['O', 'H', 'H'], pos)
+        v = mol.compute_soap(r_cut=8.0, n_max=4, l_max=4, sigma=0.15, centers=[0], n_quad=100)
+        assert np.all(np.isfinite(v))
+
+    def test_soap_heteronuclear_species_channels(self):
+        """Ensures SOAP vectors correctly differentiate atom environments when species swapped."""
+        pos = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+        
+        # Molecule A: Center O with H and C neighbors
+        mol_a = Molecule(['O', 'H', 'C'], pos)
+        v_a = mol_a.compute_soap(r_cut=3.0, n_max=2, l_max=1, species=['C', 'H', 'O'], centers=[0])
+
+        # Molecule B: Center O with two H neighbors
+        mol_b = Molecule(['O', 'H', 'H'], pos)
+        v_b = mol_b.compute_soap(r_cut=3.0, n_max=2, l_max=1, species=['C', 'H', 'O'], centers=[0])
+
+        # Vectors must differ because species composition around center O is different
+        assert not np.allclose(v_a, v_b)
+
+    def test_soap_custom_species_list_alignment(self):
+        """Verifies passing a unified species list enforces identical descriptor length across different molecules."""
+        mol_water = Molecule(['O', 'H', 'H'], np.array([[0,0,0], [1,0,0], [0,1,0]]))
+        mol_methane_fragment = Molecule(['C', 'H'], np.array([[0,0,0], [1,0,0]]))
+        
+        unified_species = ['C', 'H', 'O']
+        v_water = mol_water.compute_soap(r_cut=3.0, n_max=2, l_max=1, species=unified_species, centers=[0])
+        v_methane = mol_methane_fragment.compute_soap(r_cut=3.0, n_max=2, l_max=1, species=unified_species, centers=[0])
+        
+        assert v_water.shape[1] == v_methane.shape[1]
+
+    def test_soap_spherical_in_small_x_branches(self):
+        """Tests scaled modified spherical Bessel function for very small arguments across multiple degrees."""
+        symbols, positions = self.water_like()
+        mol = Molecule(symbols, positions)
+
+        # 1. Extremely tiny x (< 1e-12)
+        x_tiny = np.array([1e-15, 1e-13])
+        res_l0 = mol._spherical_in_numpy(0, x_tiny)
+        res_l2 = mol._spherical_in_numpy(2, x_tiny)
+        assert np.allclose(res_l0, 1.0)
+        assert np.allclose(res_l2, 0.0)
+
+        # 2. Small x Taylor expansion range (1e-12 <= x < 1e-2)
+        x_small = np.array([1e-4, 5e-3])
+        for l in range(1, 4):
+            res = mol._spherical_in_numpy(l, x_small)
+            assert np.all(res > 0)
+            assert np.all(np.isfinite(res))
+
+    def test_soap_sph_harm_south_pole(self):
+        """Tests spherical harmonics evaluation at polar = pi (South Pole)."""
+        symbols, positions = self.water_like()
+        mol = Molecule(symbols, positions)
+
+        polar_south = np.pi
+        azimuth = 0.5
+        for l in range(4):
+            for m in range(-l, l + 1):
+                y = mol._sph_harm_numpy(m, l, azimuth, polar_south)
+                if m != 0:
+                    # sin(pi)^|m| = 0 for m != 0
+                    assert abs(y) < 1e-10
+                else:
+                    assert abs(y) > 0
 
 class TestMoleculeAdvanced:
     def test_molecule_to_rdkit_conversion(self):
@@ -1336,6 +1626,201 @@ class TestMoleculeAdvanced:
         last_model = Molecule.from_filepath(pdb_file, index="-1")
         assert np.allclose(last_model.positions, np.array([[1.5, 2.5, 3.5]]))
         assert last_model.residue_numbers == [2]
+
+
+class TestDescriptors:
+    from dbstep import Dbstep
+    from rdkit.Chem import AllChem, Descriptors
+
+    @staticmethod
+    def _rdkit_embed_and_optimize(smiles, seed=1):
+        """Return an RDKit Mol with a single optimized 3D conformer (Hs added)."""
+        m = Chem.MolFromSmiles(smiles)
+        m = Chem.AddHs(m)
+        # fixed seed for deterministic embedding
+        params = Chem.AllChem.ETKDGv3()
+        params.randomSeed = seed
+        Chem.AllChem.EmbedMolecule(m, params)
+        Chem.AllChem.UFFOptimizeMolecule(m)
+        return m
+
+    def test_2d_descriptors_match_rdkit(self):
+        """2D Descriptors should match the result from rdkit"""
+
+        from rdkit.Chem import Descriptors
+
+        smiles = "CCO"  # Ethanol
+        rdkit_mol = self._rdkit_embed_and_optimize(smiles=smiles)
+
+        mol = Molecule.from_rdkit_mol(rdkit_mol)
+
+        desc2D = mol.twod_descriptors
+        expected = {
+            # Few important descriptors
+            "MolWt": Descriptors.MolWt(rdkit_mol),
+            "HeavyAtomMolWt": Descriptors.HeavyAtomMolWt(rdkit_mol),
+            "NumValenceElectrons": Descriptors.NumValenceElectrons(rdkit_mol),
+        }
+
+        assert isinstance(desc2D, dict)
+        for k, v in expected.items():
+            assert k in desc2D
+            assert isinstance(desc2D[k], (int, float))
+            assert np.isclose(desc2D[k], v)
+
+    def test_3d_descriptors_rotation_and_translation_invariance(self):
+        """3D descriptors should be invariant to rigid transforms (rotation+translation)."""
+        import math
+
+        smiles = "CCO"  # ethanol with a 3D conformer
+        rd_m = self._rdkit_embed_and_optimize(smiles, seed=42)
+        mol = Molecule.from_rdkit_mol(rd_m)
+        desc3_a = mol.threed_descriptors
+        assert isinstance(desc3_a, dict)
+        # basic value types
+        for k, v in desc3_a.items():
+            assert isinstance(v, (int, float))
+
+        # apply a random rigid rotation + translation to positions
+        pos = np.array(mol.positions, dtype=float)
+        # random rotation with deterministic seed
+        rng = np.random.RandomState(42)
+        theta = rng.rand() * 2 * math.pi
+        u = rng.randn(3)
+        u /= np.linalg.norm(u)
+        # Rodrigues' rotation formula
+        K = np.array([[0, -u[2], u[1]], [u[2], 0, -u[0]], [-u[1], u[0], 0]])
+        R = np.eye(3) + math.sin(theta) * K + (1 - math.cos(theta)) * (K @ K)
+        pos_rot = (pos @ R.T) + np.array([3.2, -1.7, 0.5])  # translate
+
+        mol2 = Molecule(symbols=mol.symbols, positions=pos_rot)
+        desc3_b = mol2.threed_descriptors
+
+        # same keys and numerically close values (allow small numerical tolerance)
+        assert set(desc3_a.keys()) == set(desc3_b.keys())
+        for k in desc3_a:
+            assert np.isclose(
+                desc3_a[k], desc3_b[k], rtol=1e-5, atol=1e-5
+            ), f"3D descriptor {k} changed under rigid transform: {desc3_a[k]} vs {desc3_b[k]}"
+
+    def test_descriptors_repeatability(self):
+        """Repeated access returns identical results (no caching flakiness)."""
+        rd_m = self._rdkit_embed_and_optimize("c1ccccc1")  # benzene
+        mol = Molecule.from_rdkit_mol(rd_m)
+        d1 = mol.twod_descriptors
+        d2 = mol.twod_descriptors
+        assert d1 == d2
+        e1 = mol.threed_descriptors
+        e2 = mol.threed_descriptors
+        # compare floats within tolerance
+        assert set(e1.keys()) == set(e2.keys())
+        for k in e1:
+            assert np.isclose(e1[k], e2[k], rtol=1e-5, atol=1e-5)
+
+    def test_sterimol_translation_rotation(self):
+        """Ensure the molecule rotates and translates properly."""
+        rdmol = Chem.AddHs(self._rdkit_embed_and_optimize("Cc1ccccc1"))
+        mol = Molecule.from_rdkit_mol(rdmol)
+        atom1, atom2 = 0, 1
+        mol.calculate_sterimol_parameters(atom1, atom2)
+        pos = mol.sterimol_parameter["pos"]
+
+        # atom1 at origin, atom2 on z-axis
+        assert np.allclose(pos[atom1], 0)
+        assert np.allclose(pos[atom2][:2], 0)
+
+        # all bond lengths preserved
+        rdmol = mol.to_rdkit()
+        for bond in rdmol.GetBonds():
+            i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            assert np.isclose(
+                np.linalg.norm(mol.positions[i] - mol.positions[j]),
+                np.linalg.norm(pos[i] - pos[j]),
+            )
+
+    def test_sterimol_val(self):
+        """Ensure logic is correct by constructed molecule"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 4.09],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        meth = Molecule(symbols=symbol, positions=position)
+        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        sterimol = meth.sterimol_parameter
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        length = sterimol["L"]
+
+        # By hand calculation
+        # B1 = 1.70, B5 = 2.23, L = 2.79
+        assert bmin == 1.70
+        assert bmax == 2.23
+        assert length == 2.79
+
+    def test_sterimol_symmetry(self):
+        """Ensure close bmin and bmax on symmetric molecules"""
+        smiles = "C(C)(C)(C)"
+        rdmol = self._rdkit_embed_and_optimize(smiles)
+        rdmol = Chem.AddHs(rdmol)
+        mol = Molecule.from_rdkit_mol(rdmol)
+        atom1 = 4
+        atom2 = 0
+
+        sterimol = mol.calculate_sterimol_parameters(atom1, atom2)
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        assert np.isclose(bmin, bmax, atol=0.5)
+
+    def test_sterimol_close_atoms(self):
+        """Ensure close atom1/atom2 are dealt with"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 3],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        meth = Molecule(symbols=symbol, positions=position)
+
+        with pytest.raises(
+            ValueError, match="atom2 vector norm too close to zero"
+        ):
+            meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+
+    def test_sterimol_flipped_molecules(self):
+        """Ensure same calculation for flipped molecules"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 4.09],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        position = position * np.array([1, 1, -1])
+        meth = Molecule(symbols=symbol, positions=position)
+        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        sterimol = meth.sterimol_parameter
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        length = sterimol["L"]
+
+        # By hand calculation
+        # B1 = 1.70, B5 = 2.23, L = 2.79
+        assert bmin == 1.70
+        assert bmax == 2.23
+        assert length == 2.79
 
 
 class TestCoordinateBlockAdvanced:

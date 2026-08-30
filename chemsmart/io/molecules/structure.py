@@ -15,7 +15,7 @@ from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
 from rdkit import Chem
-from rdkit.Chem import rdchem
+from rdkit.Chem import Descriptors, Descriptors3D, rdchem
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
@@ -108,6 +108,12 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
+    twod_descriptors: dict | None
+        The full set of 2D descriptors for a molecule.
+    threed_descriptors: dict | None
+        Descriptors derived from a molecule’s 3D structure
+    sterimol_parameter: dbstep.dbstep | None
+        A DBSTEP results object containing directional steric descriptors (L, Bmin, Bmax).
     """
 
     def __init__(
@@ -937,6 +943,104 @@ class Molecule:
             # for linear molecule, has only one rotational temperature
             return [result[-1]]
         return result
+
+    @cached_property
+    def sterimol_parameter(self):
+        return self._sterimol
+
+    def calculate_sterimol_parameters(self, atom1: int, atom2: int):
+        """Sterimol Parameters: B1, B5, and L"""
+        # Translate and Rotate to place atom1 and atom2 on z-axis
+        positions = self.positions
+        positions -= self.positions[atom1]
+
+        # Rodringues Rotation to rotate atom2 on z-axis
+        # v: rotational axis, z: z-axis, theta: rotational angle
+        z = np.array([0.0, 0.0, 1.0])
+        if np.isclose(np.linalg.norm(positions[atom2]), 0.0):
+            raise ValueError(
+                "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
+            )
+        norm_atom2 = positions[atom2] / np.linalg.norm(positions[atom2])
+        v = np.cross(norm_atom2, z)
+        if not np.isclose(np.linalg.norm(v), 0):
+            v /= np.linalg.norm(v)
+            cos_theta = np.dot(z, norm_atom2)
+            theta = np.arccos(np.clip(cos_theta, -1, 1))
+
+            k = np.array(
+                [[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]]
+            )
+
+            identity = np.eye(3)
+            r = identity + np.sin(theta) * k + (1.0 - np.cos(theta)) * (k @ k)
+            positions = positions @ r.T
+
+        elif positions[atom2][2] < 0:
+            # Atom2 on negative z, flip
+            positions *= -1
+
+        old_pos = positions
+
+        # Compute Sterimol
+        x, y, z = positions.T
+        # VDW radii
+        pt = rdchem.GetPeriodicTable()
+        radii_list = []
+
+        radii_list = [pt.GetRvdw(symb) for symb in self.symbols]
+        radii = np.array(radii_list)
+
+        # Mask the atom1
+        x = np.delete(x, atom1)
+        y = np.delete(y, atom1)
+        z = np.delete(z, atom1)
+        radii = np.delete(radii, atom1)
+        positions = np.delete(positions, obj=atom1, axis=0)
+
+        # Compute L
+        length = np.max(z + radii)
+
+        # Compute B5
+        radial_dist = np.hypot(x, y)
+        b5 = np.max(radial_dist + radii)
+        # Compute B1
+        # Create a normalised rotating vector on xy-plane and project every atom on it
+        b_vals = []
+        for j in range(361):
+            phi = 2 * np.pi / 360 * j
+            cos_phi, sin_phi = np.cos(phi), np.sin(phi)
+            # unit vector for projection
+            u = np.array([cos_phi, sin_phi, 0])
+            proj = positions @ u.T + radii
+            b_vals.append(np.max(proj))
+        b1 = np.min(b_vals)
+
+        self._sterimol = {
+            "L": length,
+            "B1": b1,
+            "B5": b5,
+            "pos": old_pos,
+        }
+
+        return self._sterimol
+
+    @cached_property
+    def twod_descriptors(self):
+        """A list of 2D descriptors"""
+        return Descriptors.CalcMolDescriptors(self.to_rdkit())
+
+    @cached_property
+    def threed_descriptors(self):
+        """
+        Calculate 3D descriptors for the molecule.
+
+        Returns:
+            dict: Dictionary containing 3D descriptors.
+        """
+        rdmol = self.to_rdkit()
+        self._threed_descriptors = Descriptors3D.CalcMolDescriptors3D(rdmol)
+        return self._threed_descriptors
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
@@ -2978,6 +3082,320 @@ class Molecule:
 
         return frames
 
+    # =========================================================================
+    # PUBLIC DESCRIPTOR INTERFACES
+    # =========================================================================
+
+    def compute_soap(
+        self,
+        r_cut=5.0,
+        n_max=8,
+        l_max=6,
+        sigma=1.0,
+        centers=None,
+        species=None,
+        n_quad=200,
+    ):
+        """Compute SOAP descriptor for this molecule.
+
+        Parameters
+        ----------
+        r_cut : float
+            Cutoff radius in Angstroms.
+        n_max : int
+            Maximum radial basis order.
+        l_max : int
+            Maximum spherical harmonic degree.
+        sigma : float
+            Gaussian smoothing width.
+        centers : list[int] | None
+            0-based atom indices to center on. Defaults to every atom in the molecule.
+        species : list[str] | None
+            Global species channel list. If None, defaults to unique species in this molecule.
+            Provide a unified species list when comparing molecules of different compositions.
+        n_quad : int
+            Number of Gauss-Legendre quadrature nodes for radial integration.
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (len(centers), n_features) containing the SOAP vectors.
+        """
+        # Determine global species channels to ensure consistent descriptor sizing
+        if species is None:
+            species_list = sorted(set(self.symbols))
+        else:
+            species_list = sorted(set(species))
+
+        # Add boundary validation for l_max
+        if l_max < 0 or l_max > 6:
+            raise ValueError(f"l_max={l_max} is out of bounds. Must be between 0 and 6.")
+
+        # Build orthonormal radial basis and caching nodes
+        basis = self._build_radial_basis(n_max, r_cut, n_quad=n_quad)
+
+        if centers is None:
+            center_indices = list(range(len(self.symbols)))
+        else:
+            if any(c < 0 or c >= len(self.symbols) for c in centers):
+                raise IndexError(f"Center indices must be between 0 and {len(self.symbols) - 1}.")
+            center_indices = list(centers)
+
+        rows = [
+            self._compute_soap_single_center(
+                center_idx=i,
+                species=species_list,
+                r_cut=r_cut,
+                n_max=n_max,
+                l_max=l_max,
+                sigma=sigma,
+                radial_basis=basis,
+            )
+            for i in center_indices
+        ]
+        return np.vstack(rows)
+
+    # =========================================================================
+    # INTERNAL SOAP HELPER METHODS
+    # =========================================================================
+
+    def _compute_soap_single_center(
+        self, center_idx, species, r_cut, n_max, l_max, sigma, radial_basis
+    ):
+        """Computes and contracts SOAP power spectrum for a single target center atom."""
+        center = self.positions[center_idx]
+
+        # 1. Calculate expansion coefficients c_{nlm} per species channel
+        coeffs_by_species = {}
+        for element in species:
+            neighbor_idx = [
+                i
+                for i, s in enumerate(self.symbols)
+                if s == element and i != center_idx
+            ]
+            neighbor_positions = (
+                self.positions[neighbor_idx]
+                if neighbor_idx
+                else np.zeros((0, 3))
+            )
+            coeffs_by_species[element] = self._expansion_coefficients(
+                neighbor_positions=neighbor_positions,
+                center=center,
+                radial_basis=radial_basis,
+                l_max=l_max,
+                sigma=sigma,
+                r_cut=r_cut,
+            )
+
+        # 2. Contract over m to construct the rotationally invariant power spectrum
+        features = []
+        for a, species_a in enumerate(species):
+            for species_b in species[a:]:
+                same_species = species_a == species_b
+                for l in range(l_max + 1):
+                    for n in range(n_max):
+                        n_prime_range = (
+                            range(n, n_max)
+                            if same_species
+                            else range(n_max)
+                        )
+                        for n_prime in n_prime_range:
+                            value = sum(
+                                coeffs_by_species[species_a][(n, l, m)]
+                                * np.conj(
+                                    coeffs_by_species[species_b][
+                                        (n_prime, l, m)
+                                    ]
+                                )
+                                for m in range(-l, l + 1)
+                            )
+                            features.append(value.real)
+        return np.array(features)
+
+    def _expansion_coefficients(
+        self, neighbor_positions, center, radial_basis, l_max, sigma, r_cut
+    ):
+        """Projects single-species atomic density onto radial & spherical harmonic basis."""
+        n_max = radial_basis["n_max"]
+        g_nodes = radial_basis["g_nodes"]
+        r_nodes = radial_basis["r_nodes"]
+        weights = radial_basis["weights"]
+        jac = radial_basis["jac"]
+
+        coeffs = {
+            (n, l, m): 0j
+            for n in range(n_max)
+            for l in range(l_max + 1)
+            for m in range(-l, l + 1)
+        }
+
+        for pos in neighbor_positions:
+            r_j, polar_j, azimuth_j = self._cartesian_to_spherical(pos - center)
+            if r_j >= r_cut or r_j < 1e-8:
+                continue
+
+            f_cut = self._cosine_cutoff(r_j, r_cut)
+
+            for l in range(l_max + 1):
+                bessel_arg = r_nodes * r_j / sigma ** 2
+                
+                # Scaled modified spherical Bessel function: i_l_scaled = exp(-x) * i_l(x)
+                i_l_scaled = self._spherical_in_numpy(l, bessel_arg)
+
+                # Combine arguments in log-space/scaled form to eliminate floating point overflow
+                log_env = -((r_nodes - r_j) ** 2) / (2 * sigma ** 2)
+                gaussian_envelope_scaled = np.exp(log_env)
+
+                integrand = g_nodes * gaussian_envelope_scaled * i_l_scaled * (r_nodes ** 2)
+                radial_integral_n = np.sum(integrand * weights, axis=1) * jac
+
+                for m in range(-l, l + 1):
+                    y_lm_conj = np.conj(
+                        self._sph_harm_numpy(m, l, azimuth_j, polar_j)
+                    )
+                    contribution = 4 * np.pi * f_cut * y_lm_conj * radial_integral_n
+                    for n in range(n_max):
+                        coeffs[(n, l, m)] += contribution[n]
+
+        return coeffs
+
+    # =========================================================================
+    # PURE NUMPY MATHEMATICAL SPECIAL FUNCTIONS
+    # =========================================================================
+
+    @staticmethod
+    def _spherical_in_numpy(l, x):
+        """Computes scaled modified spherical Bessel function exp(-x) * i_l(x).
+        
+        Uses downward Miller recurrence for numerical stability across arbitrary l and x.
+        """
+        x = np.asarray(x, dtype=float)
+        shape = x.shape
+        x_flat = x.ravel()
+        res = np.zeros_like(x_flat)
+
+        for i, val in enumerate(x_flat):
+            if val < 1e-12:
+                res[i] = 1.0 if l == 0 else 0.0
+            elif val < 1e-2:
+                # Taylor expansion for small arguments
+                val2 = val * val
+                i0 = np.exp(-val) * (1.0 + val2 / 6.0 + val2**2 / 120.0)
+                if l == 0:
+                    res[i] = i0
+                else:
+                    # Series approximation for higher l at small x
+                    double_fact = np.prod(np.arange(1, 2 * l + 2, 2))
+                    res[i] = np.exp(-val) * (val**l) / double_fact
+            else:
+                # Downward Miller Recurrence
+                # Estimate starting degree N_start > l to guarantee convergence
+                n_start = int(l + np.sqrt(40 * l + val) + 15)
+                
+                f_next = 0.0
+                f_curr = 1e-100  # Arbitrary tiny starting value
+                
+                i_l_unnorm = 0.0
+                i_0_unnorm = 0.0
+
+                for k in range(n_start, 0, -1):
+                    f_prev = f_next + ((2 * k + 1) / val) * f_curr
+                    if k - 1 == l:
+                        i_l_unnorm = f_prev
+                    if k - 1 == 0:
+                        i_0_unnorm = f_prev
+                    f_next = f_curr
+                    f_curr = f_prev
+
+                # Analytical i_0(x) * exp(-x) for exact normalization
+                exact_i0_scaled = (1.0 - np.exp(-2.0 * val)) / (2.0 * val)
+                res[i] = i_l_unnorm * (exact_i0_scaled / i_0_unnorm)
+
+        return res.reshape(shape)
+
+    @staticmethod
+    def _sph_harm_numpy(m, l, azimuth, polar):
+        """Complex Spherical Harmonics Y_lm(azimuth, polar) in pure NumPy."""
+        import math
+
+        abs_m = abs(m)
+        x = np.cos(polar)
+        sint = np.sin(polar)
+
+        # 1. Compute Associated Legendre Polynomial P_l^{|m|}(x)
+        p_curr = np.ones_like(x) if abs_m == 0 else np.zeros_like(x)
+        if abs_m > 0:
+            # P_m^m(x) = (-1)^m * (2m-1)!! * (1-x^2)^(m/2)
+            fact = 1.0
+            for i in range(1, abs_m + 1):
+                fact *= (2 * i - 1)
+            p_curr = ((-1) ** abs_m) * fact * (sint ** abs_m)
+
+        if l > abs_m:
+            p_next = x * (2 * abs_m + 1) * p_curr
+            for k in range(abs_m + 2, l + 1):
+                p_2 = ((2 * k - 1) * x * p_next - (k + abs_m - 1) * p_curr) / (k - abs_m)
+                p_curr = p_next
+                p_next = p_2
+            p_lm = p_next
+        else:
+            p_lm = p_curr
+
+        # 2. Orthonormal normalization factor
+        num = (2 * l + 1) * math.factorial(l - abs_m)
+        den = 4.0 * np.pi * math.factorial(l + abs_m)
+        norm = np.sqrt(num / den)
+
+        # 3. Y_lm construction
+        # For negative m, use the fundamental identity Y_{l, -m} = (-1)^m * conj(Y_{l, m})
+        if m < 0:
+            y_abs_m = norm * p_lm * np.exp(1j * abs_m * azimuth)
+            return ((-1) ** abs_m) * np.conj(y_abs_m)
+
+        return norm * p_lm * np.exp(1j * m * azimuth)
+
+    @staticmethod
+    def _build_radial_basis(n_max, r_cut, n_quad=200):
+        """Constructs Löwdin-orthonormalized GTO radial basis set data."""
+        x, w = np.polynomial.legendre.leggauss(n_quad)
+        r_nodes = 0.5 * r_cut * (x + 1.0)
+        jac = 0.5 * r_cut
+        alphas = (np.arange(1, n_max + 1) / r_cut) ** 2
+
+        prims = np.array(
+            [r_nodes ** (n + 1) * np.exp(-alphas[n] * r_nodes ** 2) for n in range(n_max)]
+        )
+
+        weighted = prims * (r_nodes ** 2) * w
+        overlap = (prims @ weighted.T) * jac
+        eigval, eigvec = np.linalg.eigh(overlap)
+        eigval = np.clip(eigval, 1e-12, None)
+        betas = eigvec @ np.diag(eigval ** -0.5) @ eigvec.T
+
+        return {
+            "n_max": n_max,
+            "r_nodes": r_nodes,
+            "weights": w,
+            "jac": jac,
+            "g_nodes": betas @ prims,
+        }
+
+    @staticmethod
+    def _cosine_cutoff(r, r_cut):
+        """Taper function ensuring density smoothly vanishes at r_cut."""
+        r = np.asarray(r)
+        tapered = 0.5 * (np.cos(np.pi * r / r_cut) + 1.0)
+        return np.where(r < r_cut, tapered, 0.0)
+
+    @staticmethod
+    def _cartesian_to_spherical(vec):
+        """Converts a 3D cartesian displacement vector to spherical coordinates."""
+        radius = np.linalg.norm(vec)
+        if radius < 1e-12:
+            return 0.0, 0.0, 0.0
+        polar = np.arccos(np.clip(vec[2] / radius, -1.0, 1.0))
+        azimuth = np.arctan2(vec[1], vec[0])
+        return radius, polar, azimuth
 
 class CoordinateBlock:
     """
