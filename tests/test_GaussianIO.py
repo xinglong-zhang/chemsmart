@@ -333,6 +333,28 @@ class TestRouteString:
         assert r4e.additional_solvent_options == "iterative"
 
 
+class TestGaussian16InputGetRouteEdgeCases:
+    def test_route_block_immediately_followed_by_non_hash_line(self, tmp_path):
+        """A malformed .com with no blank line between the route block
+        and the next (title) line still flushes the route block via the
+        "non-blank, non-# line also ends a block" branch."""
+        com_file = tmp_path / "no_blank_after_route.com"
+        com_file.write_text(
+            "# opt freq mn15 def2svp\ntitle line right after route\n\n" "0 1\n"
+        )
+        g16 = Gaussian16Input(filename=str(com_file))
+        assert g16.route_string == "# opt freq mn15 def2svp"
+
+    def test_route_block_flushed_at_end_of_file(self, tmp_path):
+        """A file that ends immediately after the route block (no
+        trailing blank line) still flushes the pending block via the
+        "flush last block if file ends with route content" branch."""
+        com_file = tmp_path / "route_at_eof.com"
+        com_file.write_text("# opt freq mn15 def2svp")
+        g16 = Gaussian16Input(filename=str(com_file))
+        assert g16.route_string == "# opt freq mn15 def2svp"
+
+
 class TestGaussian16Input:
     def test_read_gaussian_input(self, gaussian_opt_inputfile):
         assert os.path.exists(gaussian_opt_inputfile)

@@ -99,6 +99,10 @@ conda activate ~/anaconda3/envs/chemsmart
         assert xtb_executable.scripts is None
         assert xtb_executable.envars is None
 
+    def test_xtb_executable_with_explicit_folder(self):
+        xtb_executable = XTBExecutable(executable_folder="/opt/xtb/bin")
+        assert xtb_executable.get_executable() == "/opt/xtb/bin/xtb"
+
     def test_crest_executable(self, server_yaml_file):
         crest_executable = CRESTExecutable.from_servername(server_yaml_file)
         assert crest_executable.executable_folder is None
@@ -112,6 +116,10 @@ conda activate ~/anaconda3/envs/chemsmart
         assert crest_executable.modules is None
         assert crest_executable.scripts is None
         assert crest_executable.envars is None
+
+    def test_crest_executable_with_explicit_folder(self):
+        crest_executable = CRESTExecutable(executable_folder="/opt/crest/bin")
+        assert crest_executable.get_executable() == "/opt/crest/bin/crest"
 
     def test_slurm_submitter_writes_extra_scheduler_directives(self):
         server = Server(
