@@ -27,6 +27,11 @@ def opt_settings():
     return GaussianLinkJobSettings(jobtype="opt")
 
 
+class TestSettingsClass:
+    def test_returns_gaussian_link_job_settings(self):
+        assert GaussianLinkJob.settings_class() is GaussianLinkJobSettings
+
+
 class TestIsIrcJob:
     def test_true_for_irc_jobtype(self, ethanol_molecule, irc_settings):
         job = GaussianLinkJob(
@@ -111,6 +116,20 @@ class TestCreateIrcSubjob:
         )
         subjob = job._create_irc_subjob("r")
         assert subjob.label == "mymol_ircr_flat_link"
+
+    def test_none_label_skips_label_derivation(
+        self, ethanol_molecule, irc_settings
+    ):
+        job = GaussianLinkJob(
+            molecule=ethanol_molecule,
+            settings=irc_settings,
+            label="link_test",
+        )
+        job.label = None
+        subjob = job._create_irc_subjob("f")
+        assert subjob.label == ethanol_molecule.get_chemical_formula(
+            empirical=True
+        )
 
 
 class TestGetIrcJobs:
@@ -259,3 +278,41 @@ class TestBackupFilesIsDeadCode:
         mock_backup_file.assert_any_call("rev.com")
         mock_backup_file.assert_any_call("rev.log")
         mock_backup_file.assert_any_call("rev.chk")
+
+    def test_backup_files_with_backup_chk_false_skips_chk(
+        self, ethanol_molecule, irc_settings
+    ):
+        job = GaussianLinkJob(
+            molecule=ethanol_molecule,
+            settings=irc_settings,
+            label="link_test",
+        )
+        fwd = MagicMock()
+        fwd.inputfile = "fwd.com"
+        fwd.outputfile = "fwd.log"
+        fwd.chkfile = "fwd.chk"
+
+        with (
+            patch.object(job, "_get_irc_jobs", return_value=[fwd]),
+            patch.object(job, "backup_file") as mock_backup_file,
+        ):
+            job.backup_files(backup_chk=False)
+
+        called_paths = [
+            call.args[0] for call in mock_backup_file.call_args_list
+        ]
+        assert called_paths == ["fwd.com", "fwd.log"]
+
+    def test_backup_files_non_irc_delegates_to_super_backup_files(
+        self, ethanol_molecule, opt_settings
+    ):
+        job = GaussianLinkJob(
+            molecule=ethanol_molecule,
+            settings=opt_settings,
+            label="link_test",
+        )
+        with patch.object(
+            GaussianJob, "_backup_files"
+        ) as mock_super_backup_files:
+            job.backup_files(backup_chk=True)
+        mock_super_backup_files.assert_called_once_with(True)

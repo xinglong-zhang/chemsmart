@@ -549,6 +549,7 @@ class TestPyMOLJobs:
         assert job_homo.label == "benzene"
         assert job_homo.mo_basename == "benzene_HOMO"
         assert job_homo.TYPE == "pymol_mo"
+        assert job_homo.job_basename == job_homo.mo_basename
 
         job_lumo = PyMOLMOJob(
             molecules,
@@ -621,6 +622,15 @@ class TestPyMOLJobs:
         assert job_spin_string.label == "benzene_spin"
         assert job_spin_string.spin_basename == "benzene_spin_spin"
         assert job_spin_string.TYPE == "pymol_spin"
+
+        job_spin_explicit_basename = PyMOLSpinJob(
+            molecules,
+            label="benzene_spin",
+            spin_basename="custom_spin_name",
+            npts=80,
+        )
+        assert job_spin_explicit_basename.spin_basename == "custom_spin_name"
+        assert job_spin_explicit_basename.job_basename == "custom_spin_name"
 
     def test_pymol_nci_job_parameters(
         self,
@@ -2695,6 +2705,29 @@ class TestPyMOLStyleCommandsContinued:
         assert "hide labels" not in base_command
         assert "hide labels" not in derived_command
         assert hasattr(ScientificStyle, "hide_distance_value_labels")
+
+
+class TestVisualizationJobLabelAndStyleNoneBranches:
+    """Direct construction tests (no jobrunner/run needed) exercising the
+    None-label/None-style skip branches, which every other test always
+    provides a real label/style for."""
+
+    def test_hybrid_visualization_job_with_no_label_leaves_label_none(self):
+        job = PyMOLHybridVisualizationJob(molecule=None, label=None)
+        assert job.label is None
+
+    def test_scientific_style_job_with_no_style_leaves_style_none(self):
+        job = PyMOLScientificStyleVisualizationJob(
+            molecule=None, label="mylabel", style=None
+        )
+        assert job.style is None
+        assert job.label == "mylabel"
+
+    def test_scientific_style_job_with_no_label_leaves_label_none(self):
+        job = PyMOLScientificStyleVisualizationJob(
+            molecule=None, label=None, style="comic"
+        )
+        assert job.label is None
 
 
 @pytest.mark.usefixtures("skip_if_no_pymol")

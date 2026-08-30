@@ -9,9 +9,7 @@ from chemsmart.io.gaussian import (
     GAUSSIAN_FUNCTIONALS,
     GAUSSIAN_SEMIEMPIRICAL,
 )
-from chemsmart.io.gaussian import (
-    GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models,
-)
+from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models
 
 logger = logging.getLogger(__name__)
 

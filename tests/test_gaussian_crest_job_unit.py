@@ -99,6 +99,15 @@ class TestGaussianCrestJobConstruction:
         )
         assert job.num_conformers == 2
 
+    def test_empty_tuple_molecules_raises_the_intended_valueerror(self):
+        """The only input that actually satisfies the buggy ``and``
+        guard: an empty, non-list iterable (e.g. an empty tuple) is
+        both ``not isinstance(x, list)`` (True) and ``len(x) == 0``
+        (True), so this is the one case where the documented
+        ``ValueError`` fires as intended."""
+        with pytest.raises(ValueError, match="must be a list"):
+            GaussianCrestJob(molecules=())
+
 
 class TestGaussianCrestJobProperties:
     def _job(self, conformers, gaussian_settings, **kwargs):
@@ -290,3 +299,24 @@ class TestGaussianCrestJobGrouping:
         mock_grouper.group.assert_called_once()
         assert job.all_conformers == unique_subset
         assert job.grouper is mock_grouper
+
+    def test_grouping_strategy_without_num_groups_uses_threshold_mode(
+        self, conformers, gaussian_settings
+    ):
+        unique_subset = conformers[:3]
+        mock_grouper = MagicMock()
+        mock_grouper.unique.return_value = unique_subset
+        with patch(
+            "chemsmart.utils.grouper.StructureGrouperFactory.create",
+            return_value=mock_grouper,
+        ) as mock_create:
+            job = GaussianCrestJob(
+                molecules=conformers,
+                settings=gaussian_settings,
+                label="crest_test",
+                jobrunner=None,
+                grouping_strategy="rmsd",
+            )
+        _, kwargs = mock_create.call_args
+        assert kwargs["num_groups"] is None
+        assert job.all_conformers == unique_subset

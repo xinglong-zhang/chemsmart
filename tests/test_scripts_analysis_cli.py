@@ -113,6 +113,71 @@ class TestFmoScript:
                     catch_exceptions=False,
                 )
 
+    def test_open_shell_system_all_sections_absent(self):
+        """With every open-shell descriptor missing, each of the
+        alpha/beta/SOMO/overall-gap sections is skipped entirely."""
+        from chemsmart.scripts.fmo import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fmo.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fmo.ORCAOutput") as mock_cls,
+        ):
+            mock_output = MagicMock()
+            mock_output.multiplicity = 2
+            mock_output.alpha_homo_energy = None
+            mock_output.alpha_lumo_energy = None
+            mock_output.beta_homo_energy = None
+            mock_output.beta_lumo_energy = None
+            mock_output.somo_energies = None
+            mock_output.highest_somo_energy = None
+            mock_output.lowest_somo_energy = None
+            mock_output.fmo_gap = None
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.out"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
+    def test_open_shell_somo_present_without_lowest_or_highest(self):
+        """SOMO energies present, but lowest/highest SOMO both missing --
+        skips the two optional per-extreme log lines inside that block."""
+        from chemsmart.scripts.fmo import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.fmo.get_program_type_from_file",
+                return_value="orca",
+            ),
+            patch("chemsmart.scripts.fmo.ORCAOutput") as mock_cls,
+        ):
+            mock_output = MagicMock()
+            mock_output.multiplicity = 2
+            mock_output.alpha_homo_energy = None
+            mock_output.alpha_lumo_energy = None
+            mock_output.beta_homo_energy = None
+            mock_output.beta_lumo_energy = None
+            mock_output.somo_energies = [-3.0]
+            mock_output.num_unpaired_electrons = 1
+            mock_output.highest_somo_energy = None
+            mock_output.lowest_somo_energy = None
+            mock_output.fmo_gap = None
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.out"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
 
 class TestFukuiScript:
     def test_requires_at_least_one_radical_file(self):
@@ -722,6 +787,45 @@ class TestStructureFilterScript:
                         ["-d", ".", "-t", "log"],
                         catch_exceptions=False,
                     )
+
+    def test_missing_filetype_defaults_to_log(self):
+        from chemsmart.scripts.structure_filter import entry_point
+
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with (
+                patch(
+                    "chemsmart.scripts.structure_filter.BaseFolder"
+                ) as mock_folder_cls,
+                patch(
+                    "chemsmart.scripts.structure_filter.Molecule.from_filepath"
+                ) as mock_from_filepath,
+                patch(
+                    "chemsmart.scripts.structure_filter.StructureGrouperFactory"
+                ) as mock_factory,
+            ):
+                mock_folder = MagicMock()
+                mock_folder.get_all_files_in_current_folder_by_suffix.return_value = [
+                    "mol_c1.log",
+                ]
+                mock_folder_cls.return_value = mock_folder
+                mock_from_filepath.return_value = MagicMock()
+
+                mock_grouper = MagicMock()
+                mock_grouper.group.return_value = ([[0]], [[0]])
+                mock_grouper.unique.return_value = [MagicMock()]
+                mock_factory.create.return_value = mock_grouper
+
+                result = runner.invoke(
+                    entry_point,
+                    ["-d", "."],
+                    catch_exceptions=False,
+                )
+
+            assert result.exit_code == 0, result.output
+            mock_folder.get_all_files_in_current_folder_by_suffix.assert_called_once_with(
+                filetype="log"
+            )
 
 
 class TestGenerateIsotopeData:

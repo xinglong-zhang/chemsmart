@@ -216,6 +216,24 @@ class TestWbiAnalysisScript:
         assert result.exit_code == 0, result.output
         mock_cls.assert_called_once_with(filename="some.log")
 
+    def test_entry_point_without_numbers_skips_per_atom_lookup(self):
+        from chemsmart.scripts.wbi_analysis import entry_point
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.scripts.wbi_analysis.Gaussian16WBIOutput"
+        ) as mock_cls:
+            mock_output = MagicMock()
+            mock_output.natural_charges = {"1Fe": -0.5, "2O": 0.3}
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.log"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+
 
 class TestWriteXyzScript:
     def test_single_structure_writes_single_file(self, tmp_path):
@@ -460,3 +478,45 @@ class TestMullikenScript:
                     ["-f", "some.out"],
                     catch_exceptions=False,
                 )
+
+    def test_unknown_program_raises(self):
+        from chemsmart.scripts.mulliken import entry_point
+
+        runner = CliRunner()
+        with patch(
+            "chemsmart.scripts.mulliken.get_program_type_from_file",
+            return_value="unknown",
+        ):
+            with pytest.raises(TypeError, match="unknown filetype"):
+                runner.invoke(
+                    entry_point,
+                    ["-f", "some.txt"],
+                    catch_exceptions=False,
+                )
+
+    def test_restricted_spin_with_numbers_skips_spin_density_lookup(self):
+        """-n with a restricted-spin output hits the "No Mulliken Spin
+        Densities Found" branch inside the per-atom-numbers block too,
+        not just the top-level one (test_restricted_spin_skips_densities
+        covers that one without -n)."""
+        from chemsmart.scripts.mulliken import entry_point
+
+        runner = CliRunner()
+        with (
+            patch(
+                "chemsmart.scripts.mulliken.get_program_type_from_file",
+                return_value="gaussian",
+            ),
+            patch("chemsmart.scripts.mulliken.Gaussian16Output") as mock_cls,
+        ):
+            mock_output = MagicMock()
+            mock_output.spin = "restricted"
+            mock_output.mulliken_atomic_charges = {"1C": 0.1}
+            mock_cls.return_value = mock_output
+            result = runner.invoke(
+                entry_point,
+                ["-f", "some.log", "-n", "1"],
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
