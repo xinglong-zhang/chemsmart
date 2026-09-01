@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
     type=click.Path(),
     default=None,
     help="Output file path (format is inferred from the extension). "
-    "Required when --input is used.",
+    "May be an extension only (e.g. .xyz or xyz) to keep the input "
+    "basename. When omitted with --input, writes {input_stem}.xyz.",
 )
 @click.option(
     "-d",
@@ -66,8 +67,8 @@ logger = logging.getLogger(__name__)
     type=str,
     default="xyz",
     show_default=True,
-    help="Output file type used in batch mode when --output is not "
-    "specified (e.g. xyz, com, pdb).",
+    help="Output file type when --output is not specified "
+    "(e.g. xyz, com, pdb). Used for single-file and batch conversion.",
 )
 @click.option(
     "-z/--no-z",
@@ -95,11 +96,12 @@ def convert(
     """
     Convert molecular structure files between formats.
 
-    Single-file conversion with an explicit output path:
+    Single-file conversion (defaults to {input_stem}.xyz):
 
     \b
+        chemsmart run convert -i molecule.pdb
+        chemsmart run convert -i molecule.pdb -o .mol2
         chemsmart run convert --input a.pdb --output a.xyz
-        chemsmart run convert -i molecule.log -o molecule.xyz
 
     Batch directory conversion:
 
@@ -111,18 +113,19 @@ def convert(
 
     if input_file is not None and directory is not None:
         raise click.UsageError(
-            "Provide either --input/--output (single-file) or "
+            "Provide either --input (single-file) or "
             "--directory/--filetype (batch), not both."
         )
 
     if input_file is not None:
-        if output_file is None:
-            raise click.UsageError(
-                "--output is required when --input is specified."
-            )
+        output_path = FileConverter.resolve_output_path(
+            input_file,
+            output=output_file,
+            output_filetype=output_filetype,
+        )
         FileConverter.convert_file(
             input_file,
-            output_file,
+            output_path,
             include_intermediate_structures=include_intermediate_structures,
         )
         return None
@@ -143,6 +146,6 @@ def convert(
         return None
 
     raise click.UsageError(
-        "Provide either --input/--output (single-file) or "
+        "Provide either --input (single-file) or "
         "--directory/--filetype (batch)."
     )

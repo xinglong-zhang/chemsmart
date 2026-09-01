@@ -4,9 +4,53 @@
 
 This page covers electronic structure visualization using PyMOL, including molecular orbitals and spin density plots.
 
-*****************************
- Molecular Orbital (MO) Jobs
-*****************************
+*************
+ PML Options
+*************
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-i, --isosurface-value``
+      -  float
+      -  Set isosurface value to be used in PyMOL .pml file (default: 0.05).
+
+   -  -  ``-tv, --transparency-value``
+      -  float
+      -  Set transparency value to be used in PyMOL .pml file. Value range: 0.0 - 1.0; 0.0 = fully opaque; 1.0 = fully
+         transparent (default: 0.2)
+
+   -  -  ``-sq, --surface-quality``
+      -  int
+      -  Set surface quality in PyMOL .pml file. Controls the quality of molecular surfaces. value range: 0 (Low
+         quality) - 4 (Ultra quality) (default: 3)
+
+   -  -  ``-a, --antialias-value``
+      -  int
+      -  Set antialias value in PyMOL .pml file. Controls smoothing of edges. value range: 0 (Off, jagged edges) - 4
+         (Ultra quality anti-aliasing) (default: 3)
+
+   -  -  ``-m, --ray-trace-mode``
+
+      -  int
+
+      -  Set ray trace mode in PyMOL .pml file. Controls quality of ray-traced images. value range: 0 (standard
+         photorealistic render), 1 (outlines around objects, like cell-shading), 2 (no shading, wireframe-like
+         appearance), 3 (for figures on dark backgrounds) (default: 1)
+
+.. note::
+
+   The ``.pml options`` can be added directly to the end of the MO or spin job command. Users can also modify the *.pml
+   file* after the *.pse file* and *.pml file* have been generated and then reapply the updated settings to the PyMOL
+   session.
+
+Molecular Orbital (MO) Jobs
+===========================
 
 Generate molecular orbital visualizations for frontier orbitals and other electronic states.
 
@@ -14,8 +58,9 @@ Generate molecular orbital visualizations for frontier orbitals and other electr
 
    chemsmart run [OPTIONS] mol [MOL_OPTIONS] mo [SUBCMD_OPTIONS]
 
-MO Options
-==========
+************
+ MO Options
+************
 
 .. list-table::
    :header-rows: 1
@@ -41,8 +86,9 @@ MO Options
 
    MO jobs inherit all visualization options including styling, ray tracing, and surface rendering.
 
-Basic Usage
-===========
+*************
+ Basic Usage
+*************
 
 Standard MO visualization:
 
@@ -66,11 +112,10 @@ Specific orbital:
 
 .. code:: bash
 
-   chemsmart run mol -f molecule.log mo -n 5
+   chemsmart run mol -f molecule.log mo -n 5 -m 2
 
-*******************
- Spin Density Jobs
-*******************
+Spin Density Jobs
+=================
 
 Generate spin density visualizations for open-shell systems.
 
@@ -86,8 +131,9 @@ Generate spin density visualizations for open-shell systems.
 
 Spin density jobs inherit all visualization options.
 
-Basic Usage
-===========
+*************
+ Basic Usage
+*************
 
 Standard spin density:
 

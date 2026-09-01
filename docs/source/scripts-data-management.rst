@@ -96,7 +96,8 @@ Prefer the built-in CLI for structure conversion:
 
 .. code:: bash
 
-   chemsmart run convert -i molecule.pdb -o molecule.xyz
+   chemsmart run convert -i molecule.pdb
+   chemsmart run convert -i molecule.pdb -o .mol2
    chemsmart run convert -d /path/to/dir -t log --output-filetype xyz
 
 See :doc:`convert-cli-options` and :doc:`molecule-input-formats` for convert options, supported formats, and the Open
