@@ -48,7 +48,7 @@ Use ``-g`` to specify grouping strategy before submission:
    # iRMSD grouping (recommended for symmetric molecules)
    chemsmart sub -s server gaussian -p proj -f conformers.xyz -c 0 -m 1 crest -g irmsd -N 15
 
-   # TFD grouping (good for flexible molecules)
+   # Torsion Fingerprint Deviation (TFD) grouping (good for flexible molecules)
    chemsmart sub -s server gaussian -p proj -f conformers.xyz -c 0 -m 1 crest -g tfd -T 0.1
 
    # Tanimoto similarity
@@ -86,9 +86,9 @@ Strategy-specific Options
    -  -  ``-ft, --fingerprint-type``
       -  For tanimoto: rdkit/morgan/maccs/usr/usrcat (default: rdkit)
    -  -  ``--use-weights/--no-use-weights``
-      -  For tfd: use torsion weights (default: True)
+      -  For TFD (Torsion Fingerprint Deviation): use torsion weights (default: True)
    -  -  ``--max-dev``
-      -  For tfd: equal/spec (default: equal)
+      -  For TFD (Torsion Fingerprint Deviation): equal/spec (default: equal)
 
 *********************
  Trajectory Workflow

@@ -115,7 +115,7 @@ and falls back to ``num_procs=1``.
  Fingerprint-based Strategies
 ******************************
 
-tfd (Torsion Fingerprint Deviation)
+TFD (Torsion Fingerprint Deviation)
 ===================================
 
 Compare conformers based on their torsion angle fingerprints (*J. Chem. Inf. Model. 2012, 52, 1499*).
@@ -143,11 +143,11 @@ Strategy-specific Options
 
    -  -  ``--use-weights/--no-use-weights``
       -  bool
-      -  Use torsion weights in TFD calculation (default: True)
+      -  Use torsion weights in TFD (Torsion Fingerprint Deviation) calculation (default: True)
 
    -  -  ``--max-dev``
       -  choice
-      -  Normalization method: equal (default) or spec
+      -  Normalization method in TFD (Torsion Fingerprint Deviation) calculation: equal (default) or spec
 
 tanimoto
 ========

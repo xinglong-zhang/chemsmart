@@ -230,6 +230,13 @@ class TorsionFingerprintGrouper(MatrixGrouper):
             )
             return float("inf")
 
+    def calculate_tfd_pair(self, i: int, j: int) -> float:
+        """Public API: calculate TFD value for one conformer pair by index."""
+        i_idx, j_idx = self._validate_pair_indices(i, j)
+        if i_idx == j_idx:
+            return 0.0
+        return float(self._calculate_tfd((i_idx, j_idx)))
+
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group conformers based on TFD similarity.
@@ -289,9 +296,9 @@ class TorsionFingerprintGrouper(MatrixGrouper):
 
         # Choose grouping strategy
         if self.num_groups is not None:
-            groups, index_groups = self._group_by_num_groups(tfd_matrix)
+            groups, index_groups = self.group_by_num_groups(tfd_matrix)
         else:
-            groups, index_groups = self._group_by_threshold(tfd_matrix)
+            groups, index_groups = self.group_by_threshold(tfd_matrix)
 
         grouping_time = time.time() - grouping_start_time
 

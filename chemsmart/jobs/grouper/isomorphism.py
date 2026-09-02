@@ -6,11 +6,9 @@ Groups molecules by graph isomorphism using RDKit.
 
 import logging
 from collections import defaultdict
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Tuple
 
 import pandas as pd
-from rdkit import Chem
-from rdkit.Chem import rdDetermineBonds, rdMolHash
 
 from chemsmart.io.molecules.structure import Molecule
 
@@ -67,51 +65,6 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         )
         self.ignore_hydrogens = ignore_hydrogens
 
-    def _mol_to_rdkit(self, mol: Molecule):
-        """Build an RDKit molecule using RDKit bond-order and aromaticity perception."""
-        try:
-            lines = [str(mol.num_atoms), ""]
-            for symbol, pos in zip(mol.chemical_symbols, mol.positions):
-                lines.append(
-                    f"{symbol} {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}"
-                )
-            xyz_string = "\n".join(lines) + "\n"
-
-            rdkit_mol = Chem.MolFromXYZBlock(xyz_string)
-            if rdkit_mol is None:
-                return None
-
-            charge = getattr(mol, "charge", 0)
-            if charge is None:
-                charge = 0
-
-            rdDetermineBonds.DetermineBonds(
-                rdkit_mol,
-                charge=int(charge),
-            )
-            Chem.SanitizeMol(rdkit_mol)
-
-            if self.ignore_hydrogens:
-                rdkit_mol = Chem.RemoveHs(rdkit_mol)
-
-            return rdkit_mol
-        except Exception as e:
-            logger.warning(
-                f"RDKit bond-order/aromaticity perception failed: {e}"
-            )
-            return None
-
-    def _get_mol_hash(self, rdkit_mol) -> Optional[str]:
-        """Get canonical hash for RDKit molecule."""
-        if rdkit_mol is None:
-            return None
-        try:
-            return rdMolHash.MolHash(
-                rdkit_mol, rdMolHash.HashFunction.CanonicalSmiles
-            )
-        except Exception:
-            return None
-
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules by RDKit graph isomorphism.
@@ -131,12 +84,16 @@ class RDKitIsomorphismGrouper(MoleculeGrouper):
         grouping_start_time = time.time()
 
         # Convert all molecules to RDKit and compute hashes
-        rdkit_mols = []
         mol_hashes = []
         for mol in self.molecules:
-            rdkit_mol = self._mol_to_rdkit(mol)
-            rdkit_mols.append(rdkit_mol)
-            mol_hashes.append(self._get_mol_hash(rdkit_mol))
+            try:
+                mol_hash = mol.get_rdkit_hash(
+                    ignore_hydrogens=self.ignore_hydrogens
+                )
+            except Exception as e:
+                logger.warning(f"RDKit molecular hashing failed: {e}")
+                mol_hash = None
+            mol_hashes.append(mol_hash)
 
         # Group by hash
         hash_groups = defaultdict(list)

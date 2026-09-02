@@ -141,6 +141,23 @@ class RMSDGrouper(MatrixGrouper):
         """Calculate RMSD between two molecules. Must be implemented by subclasses."""
         pass
 
+    def calculate_rmsd_pair(self, i: int, j: int) -> float:
+        """Public API: calculate RMSD for one molecule pair by index.
+
+        This wrapper keeps ``_calculate_rmsd`` as an internal subclass contract
+        while exposing a stable external method with shared validation and
+        consistent error messages.
+        """
+        i_idx, j_idx = self._validate_pair_indices(i, j)
+        if i_idx == j_idx:
+            logger.debug(
+                f"[{self.__class__.__name__}] RMSD requested for identical indices "
+                f"({i_idx}, {j_idx}); returning 0.0"
+            )
+            return 0.0
+
+        return float(self._calculate_rmsd((i_idx, j_idx)))
+
     def _calculate_pair_payload(self, idx_pair: Tuple[int, int]):
         """Worker payload for one pair; subclasses can return extra metadata."""
         return self._calculate_rmsd(idx_pair)
@@ -242,9 +259,9 @@ class RMSDGrouper(MatrixGrouper):
 
         # Choose grouping strategy based on parameters (do this first to set _auto_threshold)
         if self.num_groups is not None:
-            groups, index_groups = self._group_by_num_groups(rmsd_matrix)
+            groups, index_groups = self.group_by_num_groups(rmsd_matrix)
         else:
-            groups, index_groups = self._group_by_threshold(rmsd_matrix)
+            groups, index_groups = self.group_by_threshold(rmsd_matrix)
 
         # Calculate total grouping time
         grouping_end_time = time.time()
@@ -804,14 +821,14 @@ class IRMSDGrouper(RMSDGrouper):
         # external process and writing one temporary XYZ file for every pair.
         try:
             irmsd_module = importlib.import_module("irmsd.api.irmsd_exposed")
-            getattr(irmsd_module, "get_irmsd")
+            if not callable(irmsd_module.get_irmsd):
+                raise AttributeError("irmsd API does not provide get_irmsd")
             self._use_direct_api = True
             logger.info("Using direct irmsd Python/Fortran API")
         except (ImportError, OSError, AttributeError) as exc:
             logger.info(
-                "Direct irmsd Python API is unavailable (%s); "
-                "falling back to the external irmsd CLI",
-                exc,
+                f"Direct irmsd Python API is unavailable ({exc}); "
+                "falling back to the external irmsd CLI"
             )
             self._irmsd_cmd = find_irmsd_command()
 
@@ -855,7 +872,7 @@ class IRMSDGrouper(RMSDGrouper):
     def _calculate_rmsd_direct(self, mol_idx_pair: Tuple[int, int]) -> float:
         """Calculate one iRMSD pair through the in-process compiled API."""
         irmsd_module = importlib.import_module("irmsd.api.irmsd_exposed")
-        get_irmsd = getattr(irmsd_module, "get_irmsd")
+        get_irmsd = irmsd_module.get_irmsd
 
         i, j = mol_idx_pair
         mol1, mol2 = self.molecules[i], self.molecules[j]

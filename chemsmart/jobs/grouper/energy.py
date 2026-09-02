@@ -7,7 +7,7 @@ based on energy differences using a threshold or target number of groups.
 
 import logging
 import time
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
@@ -156,6 +156,18 @@ class EnergyGrouper(MatrixGrouper):
         relative_diff = energy_j - energy_i  # Positive if j has higher energy
         return relative_diff, abs(relative_diff)
 
+    def calculate_energy_diff_pair(
+        self, i: int, j: int
+    ) -> Tuple[float, float]:
+        """Public API: calculate relative/absolute energy difference for one pair."""
+        i_idx, j_idx = self._validate_pair_indices(i, j)
+        if i_idx == j_idx:
+            return 0.0, 0.0
+        relative_diff, absolute_diff = self._calculate_energy_diff(
+            (i_idx, j_idx)
+        )
+        return float(relative_diff), float(absolute_diff)
+
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group molecules by energy similarity using hierarchical
@@ -182,14 +194,12 @@ class EnergyGrouper(MatrixGrouper):
             f"[{self.__class__.__name__}] Starting calculation for {n} molecules ({total_pairs} pairs)"
         )
 
-        # Calculate energy differences (both relative and absolute)
-        energy_diff_relative = []  # For output matrix (with sign)
-        energy_diff_absolute = []  # For threshold comparison
+        # Calculate signed energy differences for the recorded output matrix.
+        energy_diff_relative = []
         next_progress = 10
         for idx, (i, j) in enumerate(indices):
-            rel_diff, abs_diff = self._calculate_energy_diff((i, j))
+            rel_diff, _ = self._calculate_energy_diff((i, j))
             energy_diff_relative.append(rel_diff)
-            energy_diff_absolute.append(abs_diff)
             next_progress = self._log_progress(
                 idx + 1, total_pairs, next_progress
             )
@@ -198,22 +208,18 @@ class EnergyGrouper(MatrixGrouper):
         # matrix[i,j] = E_j - E_i (positive means j has higher energy)
         # matrix[j,i] = E_i - E_j (negative of the above)
         energy_matrix = np.zeros((n, n))
-        energy_distance_matrix = np.zeros((n, n))
         for (i, j), rel_diff in zip(indices, energy_diff_relative):
             energy_matrix[i, j] = rel_diff  # E_j - E_i
             energy_matrix[j, i] = -rel_diff  # E_i - E_j
-        for (i, j), abs_diff in zip(indices, energy_diff_absolute):
-            energy_distance_matrix[i, j] = abs_diff
-            energy_distance_matrix[j, i] = abs_diff
 
         # Choose grouping strategy based on parameters
         if self.num_groups is not None:
-            groups, index_groups = self._group_by_num_groups(
-                energy_distance_matrix
+            groups, index_groups = self.group_by_num_groups(
+                energy_matrix * HARTREE_TO_KCAL
             )
         else:
-            groups, index_groups = self._group_by_threshold(
-                energy_distance_matrix
+            groups, index_groups = self.group_by_threshold(
+                energy_matrix * HARTREE_TO_KCAL
             )
 
         # Calculate total grouping time
@@ -229,19 +235,65 @@ class EnergyGrouper(MatrixGrouper):
 
         return groups, index_groups
 
-    def _group_by_threshold(
-        self, distance_matrix: np.ndarray
-    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        original_threshold = self.threshold
-        result: Tuple[List[List[Molecule]], List[List[int]]] | None = None
-        try:
-            self.threshold = self.threshold_hartree
-            result = super()._group_by_threshold(distance_matrix)
-        finally:
-            self.threshold = original_threshold
+    def _normalize_output_matrix_for_threshold(
+        self,
+        matrix: np.ndarray,
+        threshold: Optional[float],
+    ) -> Tuple[np.ndarray, float, Optional[List[int]], List[int]]:
+        """Normalize a recorded signed kcal/mol matrix for clustering.
 
-        assert result is not None, "Energy grouping failed to produce groups."
-        return result
+        ``matrix`` must use the EnergyGrouper output convention
+        ``matrix[i, j] = E_j - E_i`` in kcal/mol. It is converted to an
+        absolute energy-distance matrix before complete-linkage clustering.
+        """
+        distance_matrix = self._prepare_energy_output_distance_matrix(matrix)
+
+        effective_threshold = self._resolve_threshold(threshold)
+        return (
+            distance_matrix,
+            effective_threshold,
+            None,
+            [],
+        )
+
+    def _normalize_output_matrix_for_num_groups(
+        self,
+        matrix: np.ndarray,
+        num_groups: Optional[int],
+    ) -> Tuple[np.ndarray, int, Optional[List[int]], List[int]]:
+        """Normalize a recorded signed kcal/mol matrix for -N grouping."""
+        return (
+            self._prepare_energy_output_distance_matrix(matrix),
+            self._resolve_num_groups(num_groups),
+            None,
+            [],
+        )
+
+    def _prepare_energy_output_distance_matrix(
+        self,
+        matrix: np.ndarray,
+    ) -> np.ndarray:
+        """Validate signed energy output matrix and convert to distance matrix."""
+        energy_matrix = np.asarray(matrix, dtype=float)
+        if energy_matrix.ndim != 2:
+            raise ValueError("Energy matrix must be 2-dimensional.")
+        if energy_matrix.shape[0] != energy_matrix.shape[1]:
+            raise ValueError("Energy matrix must be square.")
+        if energy_matrix.shape[0] != len(self.molecules):
+            raise ValueError(
+                "Energy matrix dimensions must match the number of molecules."
+            )
+        if not np.all(np.isfinite(energy_matrix)):
+            raise ValueError("Energy matrix must contain only finite values.")
+        if not np.allclose(np.diag(energy_matrix), 0.0):
+            raise ValueError("Energy matrix diagonal must be zero.")
+        if not np.allclose(energy_matrix, -energy_matrix.T):
+            raise ValueError(
+                "Energy matrix must be antisymmetric with "
+                "matrix[i, j] = E_j - E_i."
+            )
+
+        return np.abs(energy_matrix)
 
     def _build_complete_linkage_tree(
         self, distance_matrix: np.ndarray
@@ -255,28 +307,6 @@ class EnergyGrouper(MatrixGrouper):
                     "Energy grouping requires all molecules to have finite energy values."
                 ) from exc
             raise
-
-    def _group_by_num_groups(
-        self, distance_matrix: np.ndarray
-    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        original_threshold = self.threshold
-        result: Tuple[List[List[Molecule]], List[List[int]]] | None = None
-        try:
-            self.threshold = self.threshold_hartree
-            result = super()._group_by_num_groups(distance_matrix)
-        finally:
-            self.threshold = original_threshold
-
-        assert (
-            result is not None
-        ), "Energy grouping failed to produce groups in num_groups mode."
-
-        groups, index_groups = result
-
-        if self._auto_threshold is not None:
-            self._auto_threshold *= HARTREE_TO_KCAL
-
-        return groups, index_groups
 
     def _record_results(
         self,

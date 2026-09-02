@@ -10,40 +10,12 @@ from typing import Iterable, List, Tuple
 import networkx as nx
 import pandas as pd
 from joblib import Parallel, delayed
-from rdkit import Chem
-from rdkit.Chem import rdDetermineBonds
 
 from chemsmart.io.molecules.structure import Molecule
 
 from .base import MoleculeGrouper
 
 logger = logging.getLogger(__name__)
-
-
-def _to_rdkit_connectivity_graph(mol: Molecule) -> nx.Graph:
-    """Build an element-labeled connectivity graph using RDKit perception."""
-    xyz_lines = [str(mol.num_atoms), ""]
-    xyz_lines.extend(
-        f"{symbol} {x:.10f} {y:.10f} {z:.10f}"
-        for symbol, (x, y, z) in zip(mol.chemical_symbols, mol.positions)
-    )
-    xyz_block = "\n".join(xyz_lines) + "\n"
-
-    rdkit_mol = Chem.MolFromXYZBlock(xyz_block)
-    if rdkit_mol is None:
-        raise ValueError(
-            "RDKit failed to create a molecule from XYZ coordinates."
-        )
-
-    rdDetermineBonds.DetermineConnectivity(rdkit_mol)
-
-    graph = nx.Graph()
-    for atom in rdkit_mol.GetAtoms():
-        graph.add_node(atom.GetIdx(), element=atom.GetSymbol())
-    for bond in rdkit_mol.GetBonds():
-        graph.add_edge(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
-
-    return graph
 
 
 class ConnectivityGrouper(MoleculeGrouper):
@@ -170,7 +142,7 @@ class ConnectivityGrouper(MoleculeGrouper):
         # Build connectivity graphs with RDKit. Bond order and aromaticity are
         # intentionally not part of ConnectivityGrouper's comparison.
         self.graphs = Parallel(n_jobs=self.num_procs)(
-            delayed(_to_rdkit_connectivity_graph)(mol)
+            delayed(mol.to_rdkit_connectivity_graph)()
             for mol in molecules_list
         )
 

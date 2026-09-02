@@ -60,7 +60,7 @@ THRESHOLD_SUPPORTED = {
     "irmsd",
     "pymolrmsd",
     "tanimoto",
-    "tfd",
+    "tfd",  # Torsion Fingerprint Deviation
     "energy",
 }
 
@@ -72,7 +72,7 @@ IGNORE_HYDROGENS_SUPPORTED = {
     "irmsd",
     "pymolrmsd",
     "connectivity",
-    "tfd",
+    "tfd",  # Torsion Fingerprint Deviation
     "tanimoto",
     "isomorphism",
 }
@@ -162,7 +162,7 @@ class StructureGrouperFactory:
             "irmsd",
             "pymolrmsd",
             "tanimoto",
-            "tfd",
+            "tfd",  # Torsion Fingerprint Deviation
             "energy",
         }
         if num_groups is not None and strategy not in num_groups_supported:

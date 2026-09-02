@@ -164,6 +164,23 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 
 
 class TestStructures:
+    def test_to_rdkit_connectivity_graph(self, methanol_molecule):
+        graph = methanol_molecule.to_rdkit_connectivity_graph()
+
+        assert isinstance(graph, nx.Graph)
+        assert graph.number_of_nodes() == methanol_molecule.num_atoms
+        assert nx.get_node_attributes(graph, "element") == {
+            index: symbol
+            for index, symbol in enumerate(methanol_molecule.chemical_symbols)
+        }
+        assert {frozenset(edge) for edge in graph.edges} == {
+            frozenset((0, 1)),
+            frozenset((0, 3)),
+            frozenset((0, 4)),
+            frozenset((0, 5)),
+            frozenset((1, 2)),
+        }
+
     def test_read_molecule_from_single_molecule_xyz_file(
         self, single_molecule_xyz_file
     ):

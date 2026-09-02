@@ -113,6 +113,43 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
                 tanimoto_skipped_indices.append(original_idx)
 
         self._tanimoto_skipped_indices = sorted(set(tanimoto_skipped_indices))
+        self._rdkit_molecule_by_original_index = {
+            original_idx: rdkit_mol
+            for rdkit_mol, original_idx in zip(
+                self.rdkit_molecules, self.rdkit_molecule_indices
+            )
+        }
+
+    def calculate_tanimoto_pair(self, i: int, j: int) -> float:
+        """Public API: calculate pairwise similarity between two molecules.
+
+        Returns NaN when either molecule cannot be prepared/fingerprinted for
+        the configured descriptor type.
+        """
+        i_idx, j_idx = self._validate_pair_indices(i, j)
+
+        rdkit_mol_i = self._rdkit_molecule_by_original_index.get(i_idx)
+        rdkit_mol_j = self._rdkit_molecule_by_original_index.get(j_idx)
+        if rdkit_mol_i is None or rdkit_mol_j is None:
+            logger.warning(
+                f"[{self.__class__.__name__}] Cannot compute similarity for pair "
+                f"({i_idx}, {j_idx}): one or both molecules failed RDKit preparation"
+            )
+            return float("nan")
+
+        fp_i = self._get_fingerprint(rdkit_mol_i)
+        fp_j = self._get_fingerprint(rdkit_mol_j)
+        if fp_i is None or fp_j is None:
+            logger.warning(
+                f"[{self.__class__.__name__}] Cannot compute similarity for pair "
+                f"({i_idx}, {j_idx}): fingerprint generation failed"
+            )
+            return float("nan")
+
+        if self.fingerprint_type in {"usr", "usrcat"}:
+            return float(rdMolDescriptors.GetUSRScore(fp_i, fp_j))
+
+        return float(DataStructs.FingerprintSimilarity(fp_i, fp_j))
 
     def _molecule_to_rdkit(self, mol: Molecule) -> Optional[Chem.Mol]:
         """Build an RDKit molecule using preparation appropriate to the descriptor."""
@@ -371,16 +408,20 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
         np.fill_diagonal(similarity_matrix, 1.0)
 
         # Choose grouping strategy based on parameters
-        distance_matrix = 1.0 - similarity_matrix
-        np.fill_diagonal(distance_matrix, 0.0)
+        full_similarity_matrix = np.full(
+            (n, n), np.nan, dtype=similarity_matrix.dtype
+        )
+        full_similarity_matrix[
+            np.ix_(valid_original_indices, valid_original_indices)
+        ] = similarity_matrix
 
         if self.num_groups is not None:
-            groups, index_groups = self._group_by_num_groups_for_valid_indices(
-                distance_matrix, valid_original_indices
+            groups, index_groups = self.group_by_num_groups(
+                full_similarity_matrix
             )
         else:
-            groups, index_groups = self._group_by_threshold_for_valid_indices(
-                distance_matrix, valid_original_indices
+            groups, index_groups = self.group_by_threshold(
+                full_similarity_matrix
             )
 
         # Calculate total grouping time
@@ -402,46 +443,141 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
 
         return groups, index_groups
 
-    def _group_by_threshold_for_valid_indices(
-        self, distance_matrix: np.ndarray, valid_indices: List[int]
-    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        original_threshold = self.threshold
-        try:
-            dtype = distance_matrix.dtype
-            distance_threshold = dtype.type(1.0) - dtype.type(
-                original_threshold
+    def _prepare_similarity_output_matrix(
+        self,
+        matrix: np.ndarray,
+    ) -> Tuple[np.ndarray, List[int], List[int], np.dtype]:
+        """Validate full recorded similarity matrix and convert to distance."""
+        similarity_matrix = np.asarray(matrix)
+        if similarity_matrix.ndim != 2:
+            raise ValueError(
+                "Tanimoto similarity matrix must be 2-dimensional."
             )
-            self.threshold = float(distance_threshold)
+        if similarity_matrix.shape != (
+            len(self.molecules),
+            len(self.molecules),
+        ):
+            raise ValueError(
+                "Tanimoto similarity matrix dimensions must match the number "
+                "of molecules."
+            )
+        if not np.issubdtype(similarity_matrix.dtype, np.number):
+            raise ValueError("Tanimoto similarity matrix must be numeric.")
 
-            return super()._group_by_threshold(
-                distance_matrix,
-                original_indices=valid_indices,
-            )
-        finally:
-            self.threshold = original_threshold
+        valid_mask = np.isfinite(np.diag(similarity_matrix))
+        valid_indices = np.flatnonzero(valid_mask).tolist()
+        skipped_indices = np.flatnonzero(~valid_mask).tolist()
 
-    def _group_by_num_groups_for_valid_indices(
-        self, distance_matrix: np.ndarray, valid_indices: List[int]
-    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        original_threshold = self.threshold
-        try:
-            dtype = distance_matrix.dtype
-            self.threshold = (
-                float(dtype.type(1.0) - dtype.type(original_threshold))
-                if original_threshold is not None
-                else None
-            )
-            groups, index_groups = super()._group_by_num_groups(
-                distance_matrix,
-                original_indices=valid_indices,
-            )
-            if self._auto_threshold is not None:
-                self._auto_threshold = float(
-                    dtype.type(1.0) - dtype.type(self._auto_threshold)
+        for index in skipped_indices:
+            if not (
+                np.all(np.isnan(similarity_matrix[index, :]))
+                and np.all(np.isnan(similarity_matrix[:, index]))
+            ):
+                raise ValueError(
+                    "Skipped Tanimoto entries must be represented by complete "
+                    "NaN rows and columns."
                 )
-            return groups, index_groups
-        finally:
-            self.threshold = original_threshold
+
+        if not valid_indices:
+            return (
+                np.zeros((0, 0), dtype=float),
+                [],
+                skipped_indices,
+                np.dtype(np.float64),
+            )
+
+        valid_similarity_matrix = similarity_matrix[
+            np.ix_(valid_indices, valid_indices)
+        ]
+        if not np.all(np.isfinite(valid_similarity_matrix)):
+            raise ValueError(
+                "Valid Tanimoto similarity entries must all be finite."
+            )
+        if not np.allclose(valid_similarity_matrix, valid_similarity_matrix.T):
+            raise ValueError("Tanimoto similarity matrix must be symmetric.")
+        if not np.allclose(np.diag(valid_similarity_matrix), 1.0):
+            raise ValueError(
+                "Tanimoto similarity matrix diagonal must be one."
+            )
+        if np.any(valid_similarity_matrix < 0.0) or np.any(
+            valid_similarity_matrix > 1.0
+        ):
+            raise ValueError(
+                "Tanimoto similarity values must be between 0.0 and 1.0."
+            )
+
+        dtype = valid_similarity_matrix.dtype
+        one = dtype.type(1.0)
+        distance_matrix = one - valid_similarity_matrix
+        np.fill_diagonal(distance_matrix, dtype.type(0.0))
+
+        return distance_matrix, valid_indices, skipped_indices, np.dtype(dtype)
+
+    def _normalize_output_matrix_for_threshold(
+        self,
+        matrix: np.ndarray,
+        threshold: Optional[float],
+    ) -> Tuple[np.ndarray, float, Optional[List[int]], List[int]]:
+        """Normalize a recorded Tanimoto similarity matrix for clustering.
+
+        The matrix must use the recorded full-size format: valid similarities
+        are finite with a diagonal of one, while skipped molecules are
+        represented by complete NaN rows and columns. ``threshold`` is a
+        similarity threshold in the inclusive range [0, 1].
+        """
+        (
+            distance_matrix,
+            valid_indices,
+            skipped_indices,
+            distance_dtype,
+        ) = self._prepare_similarity_output_matrix(matrix)
+
+        effective_threshold = self._resolve_threshold(threshold)
+        if effective_threshold > 1.0:
+            raise ValueError(
+                "Tanimoto similarity threshold must be between 0.0 and 1.0."
+            )
+
+        one = distance_dtype.type(1.0)
+        distance_threshold = float(
+            one - distance_dtype.type(effective_threshold)
+        )
+
+        return (
+            distance_matrix,
+            distance_threshold,
+            valid_indices,
+            skipped_indices,
+        )
+
+    def _normalize_output_matrix_for_num_groups(
+        self,
+        matrix: np.ndarray,
+        num_groups: Optional[int],
+    ) -> Tuple[np.ndarray, int, Optional[List[int]], List[int]]:
+        """Normalize a recorded Tanimoto similarity matrix for -N grouping."""
+        (
+            distance_matrix,
+            valid_indices,
+            skipped_indices,
+            distance_dtype,
+        ) = self._prepare_similarity_output_matrix(matrix)
+        self._num_groups_distance_dtype = distance_dtype
+
+        return (
+            distance_matrix,
+            self._resolve_num_groups(num_groups),
+            valid_indices,
+            skipped_indices,
+        )
+
+    def _postprocess_auto_threshold_for_num_groups(self) -> None:
+        """Convert auto threshold from distance back to similarity."""
+        if self._auto_threshold is None:
+            return
+        dtype = getattr(self, "_num_groups_distance_dtype", np.float64)
+        one = dtype.type(1.0)
+        self._auto_threshold = float(one - dtype.type(self._auto_threshold))
 
     def _record_results(
         self,

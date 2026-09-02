@@ -467,8 +467,8 @@ class MoleculeGrouper(ABC):
         requested_num_procs = int(max(1, num_procs))
         if requested_num_procs > 1 and not self.supports_multiprocessing:
             logger.warning(
-                "%s does not support multiprocessing; using num_procs=1.",
-                self.__class__.__name__,
+                f"{self.__class__.__name__} does not support multiprocessing; "
+                "using num_procs=1."
             )
             requested_num_procs = 1
         self.num_procs = requested_num_procs
@@ -588,6 +588,22 @@ class MoleculeGrouper(ABC):
             raise TypeError("Molecules must be an iterable collection")
         if not all(isinstance(m, Molecule) for m in self.molecules):
             raise TypeError("All items must be Molecule instances")
+
+    def _validate_pair_indices(self, i: int, j: int) -> Tuple[int, int]:
+        """Validate and normalize two molecule indices used for pairwise APIs."""
+        try:
+            i_idx = int(i)
+            j_idx = int(j)
+        except (TypeError, ValueError) as exc:
+            raise TypeError("Pair indices must be integers.") from exc
+
+        n = len(self.molecules)
+        if not (0 <= i_idx < n) or not (0 <= j_idx < n):
+            raise IndexError(
+                f"Pair indices out of range for {n} molecules: ({i_idx}, {j_idx})."
+            )
+
+        return i_idx, j_idx
 
     @abstractmethod
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
@@ -1142,12 +1158,167 @@ class MatrixGrouper(MoleculeGrouper):
         """Cut a hierarchical linkage tree at distance <= threshold."""
         return fcluster(linkage_matrix, t=threshold, criterion="distance")
 
-    def _group_by_threshold(
+    def _resolve_threshold(self, threshold: Optional[float]) -> float:
+        """Resolve and validate a configured or per-call threshold."""
+        effective_threshold = (
+            self.threshold if threshold is None else threshold
+        )
+        if effective_threshold is None:
+            raise ValueError(
+                "A threshold must be provided either when constructing the "
+                "grouper or when calling group_by_threshold()."
+            )
+
+        try:
+            effective_threshold = float(effective_threshold)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("threshold must be a finite number.") from exc
+
+        if not np.isfinite(effective_threshold):
+            raise ValueError("threshold must be a finite number.")
+        if effective_threshold < 0:
+            raise ValueError("threshold must be non-negative.")
+        return effective_threshold
+
+    def _resolve_num_groups(self, num_groups: Optional[int]) -> int:
+        """Resolve and validate a configured or per-call num_groups."""
+        effective_num_groups = (
+            self.num_groups if num_groups is None else num_groups
+        )
+        if effective_num_groups is None:
+            raise ValueError(
+                "num_groups must be provided either when constructing the "
+                "grouper or when calling group_by_num_groups()."
+            )
+
+        try:
+            effective_num_groups = int(effective_num_groups)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("num_groups must be an integer >= 1.") from exc
+
+        if effective_num_groups < 1:
+            raise ValueError("num_groups must be at least 1.")
+        return effective_num_groups
+
+    def group_by_threshold(
+        self,
+        matrix: np.ndarray,
+        threshold: Optional[float] = None,
+    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group a precomputed output distance matrix at a chosen threshold.
+
+        The base implementation accepts a symmetric, non-negative distance
+        matrix whose rows and columns follow ``self.molecules``. Subclasses
+        whose recorded matrices use different
+        semantics, such as similarity or signed energy differences, normalize
+        their matrices before delegating to the private clustering helper.
+
+        The most recent result replaces the grouping cache used by ``unique()``;
+        the input matrix and the grouper's configured threshold are not modified.
+        """
+        (
+            distance_matrix,
+            distance_threshold,
+            original_indices,
+            output_skipped_indices,
+        ) = self._normalize_output_matrix_for_threshold(matrix, threshold)
+
+        self._auto_threshold = None
+
+        groups, index_groups = self._cluster_distance_matrix_by_threshold(
+            distance_matrix,
+            distance_threshold,
+            original_indices=original_indices,
+        )
+        self._set_matrix_skipped_indices(
+            sorted(
+                set(output_skipped_indices) | set(self._matrix_skipped_indices)
+            )
+        )
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+        return groups, index_groups
+
+    def _normalize_output_matrix_for_threshold(
+        self,
+        matrix: np.ndarray,
+        threshold: Optional[float],
+    ) -> Tuple[np.ndarray, float, Optional[List[int]], List[int]]:
+        """Normalize a recorded output matrix for distance clustering."""
+        matrix_array = np.asarray(matrix)
+        if matrix_array.ndim == 2 and matrix_array.shape[0] != len(
+            self.molecules
+        ):
+            raise ValueError(
+                "Matrix dimensions must match the number of molecules."
+            )
+
+        return (
+            matrix_array,
+            self._resolve_threshold(threshold),
+            None,
+            [],
+        )
+
+    def group_by_num_groups(
+        self,
+        matrix: np.ndarray,
+        num_groups: Optional[int] = None,
+    ) -> Tuple[List[List[Molecule]], List[List[int]]]:
+        """Group a precomputed output matrix by requested group count."""
+        (
+            distance_matrix,
+            effective_num_groups,
+            original_indices,
+            output_skipped_indices,
+        ) = self._normalize_output_matrix_for_num_groups(matrix, num_groups)
+        groups, index_groups = self._cluster_distance_matrix_by_num_groups(
+            distance_matrix,
+            effective_num_groups,
+            original_indices=original_indices,
+        )
+        self._set_matrix_skipped_indices(
+            sorted(
+                set(output_skipped_indices) | set(self._matrix_skipped_indices)
+            )
+        )
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
+        self._postprocess_auto_threshold_for_num_groups()
+        return groups, index_groups
+
+    def _normalize_output_matrix_for_num_groups(
+        self,
+        matrix: np.ndarray,
+        num_groups: Optional[int],
+    ) -> Tuple[np.ndarray, int, Optional[List[int]], List[int]]:
+        """Normalize a recorded output matrix for num-groups clustering."""
+        matrix_array = np.asarray(matrix)
+        if matrix_array.ndim == 2 and matrix_array.shape[0] != len(
+            self.molecules
+        ):
+            raise ValueError(
+                "Matrix dimensions must match the number of molecules."
+            )
+
+        return (
+            matrix_array,
+            self._resolve_num_groups(num_groups),
+            None,
+            [],
+        )
+
+    def _postprocess_auto_threshold_for_num_groups(self) -> None:
+        """Hook for subclasses to transform auto threshold display units."""
+        return None
+
+    def _cluster_distance_matrix_by_threshold(
         self,
         distance_matrix: np.ndarray,
+        distance_threshold: float,
         original_indices: Optional[List[int]] = None,
     ) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        """Group by hierarchical complete linkage at distance <= threshold."""
+        """Cluster a normalized distance matrix by complete linkage."""
         clean_submatrix, valid_original_indices = (
             self._prepare_clustering_submatrix(
                 distance_matrix, original_indices=original_indices
@@ -1163,7 +1334,7 @@ class MatrixGrouper(MoleculeGrouper):
 
         linkage_matrix = self._build_complete_linkage_tree(clean_submatrix)
         cluster_labels = self._cut_tree_by_threshold(
-            linkage_matrix, self.threshold
+            linkage_matrix, distance_threshold
         )
         groups, index_groups = self._build_groups_from_cluster_labels(
             cluster_labels,
@@ -1175,9 +1346,10 @@ class MatrixGrouper(MoleculeGrouper):
             matrix_original_indices=valid_original_indices,
         )
 
-    def _group_by_num_groups(
+    def _cluster_distance_matrix_by_num_groups(
         self,
         distance_matrix: np.ndarray,
+        effective_num_groups: int,
         original_indices: Optional[List[int]] = None,
     ) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """Group by requested number of groups using complete-linkage levels."""
@@ -1197,9 +1369,9 @@ class MatrixGrouper(MoleculeGrouper):
             original_index = valid_original_indices[0]
             return [[self.molecules[original_index]]], [[original_index]]
 
-        if self.num_groups >= n:
+        if effective_num_groups >= n:
             logger.info(
-                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules are available. Creating {n} groups."
+                f"[{self.__class__.__name__}] Requested {effective_num_groups} groups but only {n} molecules are available. Creating {n} groups."
             )
             self._auto_threshold = None
             groups = [[self.molecules[idx]] for idx in valid_original_indices]
@@ -1218,22 +1390,22 @@ class MatrixGrouper(MoleculeGrouper):
             )
             num_groups = len(np.unique(cluster_labels))
 
-            if num_groups < self.num_groups:
+            if num_groups < effective_num_groups:
                 break
 
             best_labels = cluster_labels
             best_distance = float(distance)
 
-            if num_groups == self.num_groups:
+            if num_groups == effective_num_groups:
                 break
 
         self._auto_threshold = best_distance
 
         logger.info(
             f"[{self.__class__.__name__}] Selected complete-linkage distance level: "
-            f"{best_distance:.7f} to keep {len(np.unique(best_labels))} groups for requested={self.num_groups}"
+            f"{best_distance:.7f} to keep {len(np.unique(best_labels))} groups for requested={effective_num_groups}"
             if best_distance is not None
-            else f"[{self.__class__.__name__}] No linkage merges applied; retaining {n} groups for requested={self.num_groups}"
+            else f"[{self.__class__.__name__}] No linkage merges applied; retaining {n} groups for requested={effective_num_groups}"
         )
 
         groups, index_groups = self._build_groups_from_cluster_labels(
@@ -1243,7 +1415,7 @@ class MatrixGrouper(MoleculeGrouper):
         actual_groups = len(groups)
 
         logger.info(
-            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
+            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {effective_num_groups})"
         )
 
         return self._order_groups_by_representative_strategy(

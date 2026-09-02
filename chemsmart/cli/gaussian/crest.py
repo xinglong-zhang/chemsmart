@@ -32,7 +32,7 @@ def click_grouper_sub_options(f):
                 "irmsd",
                 "pymolrmsd",
                 "tanimoto",
-                "tfd",
+                "tfd",  # Torsion Fingerprint Deviation
                 "isomorphism",
                 "formula",
                 "connectivity",
@@ -73,13 +73,13 @@ def click_grouper_sub_options(f):
         "--use-weights/--no-use-weights",
         type=bool,
         default=True,
-        help="Whether to use torsion weights in TFD calculation.",
+        help="Whether to use torsion weights in TFD (Torsion Fingerprint Deviation) calculation.",
     )
     @click.option(
         "--max-dev",
         type=click.Choice(["equal", "spec"], case_sensitive=False),
         default="equal",
-        help="Normalization method for TFD: 'equal' (default) or 'spec'.",
+        help="Normalization method for TFD (Torsion Fingerprint Deviation) calculation: 'equal' (default) or 'spec'.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
