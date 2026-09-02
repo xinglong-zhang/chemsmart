@@ -682,7 +682,7 @@ class TestPyMOLJobs:
         assert job_esp_default.esp_basename == "benzene_ESP"
         assert job_esp_default.color_range == 0.04
         assert job_esp_default.isosurface_value == 0.001
-        assert job_esp_default.transparency_value == 0.2
+        assert job_esp_default.transparency_value == 0.5
         assert job_esp_default.TYPE == "pymol_esp"
         assert not job_esp_default.is_complete()
 
@@ -1010,7 +1010,7 @@ class TestPyMOLFileProcessingUsesSourceFilename:
             label="benzene",
             isosurface_value=0.001,
             color_range=0.08,
-            transparency_value=0.5,
+            transparency_value=0.2,
         )
         job.set_folder(tmpdir)
         runner = PyMOLESPJobRunner(server=pbs_server, scratch=False)
@@ -1029,7 +1029,7 @@ class TestPyMOLFileProcessingUsesSourceFilename:
             "[-0.08, -0.04, 0, 0.04, 0.08], [red, orange, yellow, green, blue]\n"
             in pml
         )
-        assert "set transparency, 0.5, esp_surface\n" in pml
+        assert "set transparency, 0.2, esp_surface\n" in pml
 
     def test_nci_uses_source_basename_for_cube_loading_and_command(
         self, tmpdir, gaussian_benzene_opt_outfile, pbs_server

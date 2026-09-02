@@ -16,6 +16,7 @@ class PyMOLESPJob(PyMOLJob):
         color_range=None,
         npts="-2",
         isosurface_value=None,
+        transparency_value=None,
         **kwargs,
     ):
         super().__init__(
@@ -24,15 +25,18 @@ class PyMOLESPJob(PyMOLJob):
             **kwargs,
         )
         # set defaults
-        if isosurface_value is None:
-            isosurface_value = 0.001
         if color_range is None:
             color_range = 0.04
         if npts is None:
             npts = "-2"
-        self.npts = npts
+        if isosurface_value is None:
+            isosurface_value = 0.001
+        if transparency_value is None:
+            transparency_value = 0.5
         self.color_range = color_range
+        self.npts = npts
         self.isosurface_value = isosurface_value
+        self.transparency_value = transparency_value
 
         if esp_basename is None:
             esp_basename = f"{self.label}_ESP"
