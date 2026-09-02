@@ -1787,6 +1787,78 @@ class PyMOLSpinJobRunner(PyMOLVisualizationJobRunner):
         return command
 
 
+class PyMOLESPJobRunner(PyMOLVisualizationJobRunner):
+    """PyMOL job runner for electrostatic potential visualization."""
+
+    JOBTYPES = ["pymol_esp"]
+
+    def _prerun(self, job):
+        self._assign_variables(job)
+        self._generate_fchk_file(job)
+        self._generate_esp_cube_files(job)
+        self._write_esp_pml(job)
+
+    def _generate_esp_cube_files(self, job):
+        gaussian_exe = self._get_gaussian_executable(job)
+        density_cube = f"{job.esp_basename}_density.cube"
+        esp_cube = f"{job.esp_basename}_esp.cube"
+
+        if not os.path.exists(density_cube):
+            run_command(
+                f"{gaussian_exe}/cubegen 0 density=scf "
+                f"{job.source_basename}.fchk {density_cube} {job.npts}"
+            )
+        else:
+            logger.info(f"cube file {density_cube} already exists.")
+
+        if not os.path.exists(esp_cube):
+            run_command(
+                f"{gaussian_exe}/cubegen 0 potential=scf "
+                f"{job.source_basename}.fchk {esp_cube} {job.npts}"
+            )
+        else:
+            logger.info(f"cube file {esp_cube} already exists.")
+
+    def _write_esp_pml(self, job):
+        pml_file = os.path.join(job.folder, f"{job.esp_basename}.pml")
+        if os.path.exists(pml_file):
+            logger.warning(f"PML file {pml_file} already exists. Overwriting.")
+        with open(pml_file, "w") as f:
+            f.write(f"load {job.esp_basename}_density.cube, density\n")
+            f.write(f"load {job.esp_basename}_esp.cube, esp\n")
+            f.write(
+                f"isosurface esp_surface, density, {job.isosurface_value}\n"
+            )
+            f.write(
+                f"ramp_new esp_ramp, esp, "
+                f"[{-job.color_range}, {-0.5 * job.color_range}, 0, "
+                f"{0.5 * job.color_range}, {job.color_range}], "
+                f"[red, orange, yellow, green, blue]\n"
+            )
+            f.write("color esp_ramp, esp_surface\n")
+            f.write(
+                f"set transparency, {job.transparency_value}, esp_surface\n"
+            )
+            f.write(f"set surface_quality, {job.surface_quality}\n")
+            f.write(f"set antialias, {job.antialias_value}\n")
+            f.write(f"set ray_trace_mode, {job.ray_trace_mode}\n")
+            logger.info(f"Wrote PML file: {pml_file}")
+
+    def _job_specific_commands(self, job, command):
+        command = self._hide_labels(job, command)
+        command = self._call_pml(job, command)
+        command = self._add_ray_command(job, command)
+        return command
+
+    def _offset_labels(self, job, command):
+        return command
+
+    def _call_pml(self, job, command):
+        pml_file = os.path.join(job.folder, f"{job.esp_basename}.pml")
+        command += f"; load {quote_path(pml_file)}"
+        return command
+
+
 class PyMOLAlignJobRunner(PyMOLJobRunner):
     JOBTYPES = ["pymol_align"]
     MAX_MOLECULES_PER_BATCH = 100  # Maximum molecules per batch

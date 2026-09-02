@@ -235,6 +235,34 @@ def click_pymol_nci_options(f):
     return wrapper_common_options
 
 
+def click_pymol_esp_options(f):
+    """Common click options for PyMOL ESP visualization."""
+
+    @click.option(
+        "--npts",
+        type=str,
+        default="-2",
+        help="Cubegen grid specification for Gaussian cube generation. "
+        "-2: coarse (3 points/Bohr); "
+        "-3: medium (6 points/Bohr); "
+        "-4: fine (12 points/Bohr). "
+        "Defaults to -2. Examples: 80, -2, '-2 h'.",
+    )
+    @click.option(
+        "-r",
+        "--color-range",
+        type=float,
+        default=0.04,
+        help="Maximum absolute ESP value for the PyMOL color ramp. "
+        "Defaults to 0.04.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
 def click_pymol_mo_options(f):
     """Common click options for PyMOL molecular orbital visualization."""
 

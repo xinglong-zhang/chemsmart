@@ -7,6 +7,7 @@ import pytest
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol import PyMOLHybridVisualizationJob
 from chemsmart.jobs.mol.align import PyMOLAlignJob
+from chemsmart.jobs.mol.esp import PyMOLESPJob
 from chemsmart.jobs.mol.irc import PyMOLIRCMovieJob
 from chemsmart.jobs.mol.mo import PyMOLMOJob
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
@@ -15,6 +16,7 @@ from chemsmart.jobs.mol.runner import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
     PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
     PyMOLAlignJobRunner,
+    PyMOLESPJobRunner,
     PyMOLJobRunner,
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
@@ -661,6 +663,38 @@ class TestPyMOLJobs:
         assert job_spin_string.spin_basename == "benzene_spin_spin"
         assert job_spin_string.TYPE == "pymol_spin"
 
+    def test_pymol_esp_job_parameters(
+        self,
+        tmpdir,
+        gaussian_benzene_opt_outfile,
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+
+        job_esp_default = PyMOLESPJob(
+            molecules,
+            label="benzene",
+        )
+        job_esp_default.set_folder(tmpdir)
+        assert job_esp_default.npts == "-2"
+        assert job_esp_default.label == "benzene"
+        assert job_esp_default.esp_basename == "benzene_ESP"
+        assert job_esp_default.color_range == 0.04
+        assert job_esp_default.isosurface_value == 0.001
+        assert job_esp_default.transparency_value == 0.2
+        assert job_esp_default.TYPE == "pymol_esp"
+        assert not job_esp_default.is_complete()
+
+        job_esp_custom = PyMOLESPJob(
+            molecules,
+            label="benzene",
+            color_range=0.08,
+            npts="-4 h",
+        )
+        assert job_esp_custom.npts == "-4 h"
+        assert job_esp_custom.color_range == 0.08
+
     def test_pymol_nci_job_parameters(
         self,
         tmpdir,
@@ -930,6 +964,72 @@ class TestPyMOLFileProcessingUsesSourceFilename:
         assert commands == [
             f"/gaussian/cubegen 0 spin benzene_opt.fchk spin_label_spin.cube {job.npts}"
         ]
+
+    def test_esp_cubegen_uses_source_basename_fchk(
+        self, tmpdir, gaussian_benzene_opt_outfile, pbs_server, monkeypatch
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+        job = PyMOLESPJob(
+            molecules,
+            label="esp_label",
+            source_basename="benzene_opt",
+        )
+        job.set_folder(tmpdir)
+        runner = PyMOLESPJobRunner(server=pbs_server, scratch=False)
+
+        commands = []
+        monkeypatch.setattr(
+            runner,
+            "_get_gaussian_executable",
+            lambda _job: "/gaussian",
+        )
+        monkeypatch.setattr(
+            "chemsmart.jobs.mol.runner.run_command",
+            lambda cmd: commands.append(cmd),
+        )
+
+        runner._generate_esp_cube_files(job)
+
+        assert commands == [
+            "/gaussian/cubegen 0 density=scf benzene_opt.fchk "
+            f"esp_label_ESP_density.cube {job.npts}",
+            "/gaussian/cubegen 0 potential=scf benzene_opt.fchk "
+            f"esp_label_ESP_esp.cube {job.npts}",
+        ]
+
+    def test_esp_pml_writes_expected_commands(
+        self, tmpdir, gaussian_benzene_opt_outfile, pbs_server
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+        job = PyMOLESPJob(
+            molecules,
+            label="benzene",
+            isosurface_value=0.001,
+            color_range=0.08,
+            transparency_value=0.5,
+        )
+        job.set_folder(tmpdir)
+        runner = PyMOLESPJobRunner(server=pbs_server, scratch=False)
+
+        runner._write_esp_pml(job)
+
+        pml_file = os.path.join(tmpdir, "benzene_ESP.pml")
+        with open(pml_file, "r") as f:
+            pml = f.read()
+
+        assert "load benzene_ESP_density.cube, density\n" in pml
+        assert "load benzene_ESP_esp.cube, esp\n" in pml
+        assert "isosurface esp_surface, density, 0.001\n" in pml
+        assert (
+            "ramp_new esp_ramp, esp, "
+            "[-0.08, -0.04, 0, 0.04, 0.08], [red, orange, yellow, green, blue]\n"
+            in pml
+        )
+        assert "set transparency, 0.5, esp_surface\n" in pml
 
     def test_nci_uses_source_basename_for_cube_loading_and_command(
         self, tmpdir, gaussian_benzene_opt_outfile, pbs_server

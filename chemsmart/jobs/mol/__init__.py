@@ -7,6 +7,7 @@ trajectories, NCI analysis, spin density, and general visualization.
 """
 
 from .align import PyMOLAlignJob
+from .esp import PyMOLESPJob
 from .irc import PyMOLIRCMovieJob
 from .job import PyMOLJob
 from .mo import PyMOLMOJob
@@ -25,6 +26,7 @@ jobs = PyMOLJob.subclasses()
 
 __all__ = [
     "PyMOLAlignJob",
+    "PyMOLESPJob",
     "PyMOLIRCMovieJob",
     "PyMOLVisualizationJob",
     "PyMOLHybridVisualizationJob",
