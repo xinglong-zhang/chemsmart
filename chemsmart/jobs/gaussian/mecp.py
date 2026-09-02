@@ -815,6 +815,7 @@ class GaussianMECPJob(GaussianJob):
 
                 energy_diff = ea - eb
 
+<<<<<<< Updated upstream
                 if self.settings.step_size_method == "harvey":
                     (
                         displacement,
@@ -845,6 +846,16 @@ class GaussianMECPJob(GaussianJob):
                         )
                     )
                     optimizer_gradient = projected_grad
+=======
+                displacement, projected_grad, seam_correction = (
+                    self._mecp_displacement(
+                        energy_diff=energy_diff,
+                        grad_a=grad_a,
+                        grad_b=grad_b,
+                        step_size=current_step_size,
+                    )
+                )
+>>>>>>> Stashed changes
 
                 if self.settings.step_size_method != "harvey":
                     displacement = self._apply_trust_radius(displacement)

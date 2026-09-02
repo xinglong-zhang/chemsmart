@@ -1217,12 +1217,36 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.convergence_preset = convergence_preset
         preset = self.CONVERGENCE_PRESETS[convergence_preset]
 
-        self.energy_diff_tol = energy_diff_tol if energy_diff_tol is not None else preset["energy_diff_tol"]
-        self.force_max_tol = force_max_tol if force_max_tol is not None else preset["force_max_tol"]
-        self.force_rms_tol = force_rms_tol if force_rms_tol is not None else preset["force_rms_tol"]
-        self.disp_max_tol = disp_max_tol if disp_max_tol is not None else preset["disp_max_tol"]
-        self.disp_rms_tol = disp_rms_tol if disp_rms_tol is not None else preset["disp_rms_tol"]
-        self.trust_radius = trust_radius if trust_radius is not None else preset["trust_radius"]
+        self.energy_diff_tol = (
+            energy_diff_tol
+            if energy_diff_tol is not None
+            else preset["energy_diff_tol"]
+        )
+        self.force_max_tol = (
+            force_max_tol
+            if force_max_tol is not None
+            else preset["force_max_tol"]
+        )
+        self.force_rms_tol = (
+            force_rms_tol
+            if force_rms_tol is not None
+            else preset["force_rms_tol"]
+        )
+        self.disp_max_tol = (
+            disp_max_tol
+            if disp_max_tol is not None
+            else preset["disp_max_tol"]
+        )
+        self.disp_rms_tol = (
+            disp_rms_tol
+            if disp_rms_tol is not None
+            else preset["disp_rms_tol"]
+        )
+        self.trust_radius = (
+            trust_radius
+            if trust_radius is not None
+            else preset["trust_radius"]
+        )
 
         self.adaptive_step_size = adaptive_step_size
         valid_step_size_methods = {"harvey", "bb", "grow_shrink"}

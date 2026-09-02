@@ -109,9 +109,8 @@ MECP Options
    -  -  ``--convergence``
       -  string
       -  ``"standard"``
-      -  Convergence preset: ``"standard"`` (default, general-purpose) or ``"tight"``
-         (publication-quality). See the :ref:`convergence-presets` section below.
-         Individual tolerance options override the preset.
+      -  Convergence preset: ``"standard"`` (default, general-purpose) or ``"tight"`` (publication-quality). See the
+         :ref:`convergence-presets` section below. Individual tolerance options override the preset.
 
    -  -  ``--trust-radius``
       -  float
@@ -181,11 +180,14 @@ MECP Options
       -  Resume an interrupted MECP optimization from ``<label>_state.npz``.
 
    -  -  ``--verify-seam-minimum / --no-verify-seam-minimum``
+
       -  bool
+
       -  False
-      -  After convergence, verify the MECP is a true minimum on the crossing seam via effective Hessian
-         analysis. Requires ~4×3N additional Gaussian sub-jobs.  Results are written to
-         ``<label>_seam_check.log``. See the :ref:`seam-minimum-verification` section below.
+
+      -  After convergence, verify the MECP is a true minimum on the crossing seam via effective Hessian analysis.
+         Requires ~4×3N additional Gaussian sub-jobs. Results are written to ``<label>_seam_check.log``. See the
+         :ref:`seam-minimum-verification` section below.
 
    -  -  ``--hess-step-size``
       -  float
@@ -283,8 +285,7 @@ Two built-in convergence presets are available via ``--convergence``:
          -  0.1
          -  Bohr/atom
 
-Individual options (``--energy-diff-tol``, ``--force-max-tol``, etc.) always override
-the preset values when provided.
+Individual options (``--energy-diff-tol``, ``--force-max-tol``, etc.) always override the preset values when provided.
 
 Convergence is declared when **all** five criteria are simultaneously satisfied.
 
@@ -387,9 +388,14 @@ MECP geometry. Temporary checkpoints are retained if verification fails.
 Output Files
 ============
 
+<<<<<<< Updated upstream
 Three output files are produced in the main job directory; Gaussian sub-job input/output files are stored in
 ``<label>_steps``. The
 third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
+=======
+Three output files are produced alongside the Gaussian sub-job input/output files; the third
+(``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
+>>>>>>> Stashed changes
 
 ``<label>_report.log``
    Step-by-step optimization log. The file header records the run settings; each subsequent line reports one step, using
@@ -406,14 +412,12 @@ third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`
    where:
 
    -  ``dE`` = :math:`E_A - E_B` — energy difference (drives toward the seam).
-   -  ``pgrad_max`` / ``pgrad_rms`` — max and RMS of the seam-tangent gradient
-      :math:`\mathbf{g}_\perp` (projection of :math:`\nabla E_A` onto the seam; drives
-      geometry to the minimum on the seam).
-   -  ``disp_max`` / ``disp_rms`` — max and RMS of the total Cartesian displacement
-      :math:`\mathbf{d} = \mathbf{d}_\text{seam} + \mathbf{d}_\text{seam-min}` after trust-radius scaling.
-   -  ``seam_max`` / ``seam_rms`` — max and RMS of the seam-correction component
-      :math:`\mathbf{d}_\text{seam} = -(\Delta E / \|\mathbf{g}_\Delta\|^2)\,\mathbf{g}_\Delta` that
-      moves the geometry toward the crossing surface.
+   -  ``pgrad_max`` / ``pgrad_rms`` — max and RMS of the seam-tangent gradient :math:`\mathbf{g}_\perp` (projection of
+      :math:`\nabla E_A` onto the seam; drives geometry to the minimum on the seam).
+   -  ``disp_max`` / ``disp_rms`` — max and RMS of the total Cartesian displacement :math:`\mathbf{d} =
+      \mathbf{d}_\text{seam} + \mathbf{d}_\text{seam-min}` after trust-radius scaling.
+   -  ``seam_max`` / ``seam_rms`` — max and RMS of the seam-correction component :math:`\mathbf{d}_\text{seam} =
+      -(\Delta E / \|\mathbf{g}_\Delta\|^2)\,\mathbf{g}_\Delta` that moves the geometry toward the crossing surface.
 
    The final line reads ``Converged at step N.`` on successful convergence. The presence of this ``Converged``
    marker is used by ``skip_completed`` to avoid re-running a finished job.
@@ -422,26 +426,26 @@ third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`
    Multi-frame XYZ trajectory of the MECP geometry at every optimization step (coordinates in Ångström).
 
 ``<label>_seam_check.log``
-   Written only when ``--verify-seam-minimum`` is requested. Reports the eigenvalues of the effective projected
-   Hessian :math:`H_\text{eff}` (translations, rotations, and gradient-difference direction removed) and whether
-   the MECP is a true minimum on the seam. See the :ref:`seam-minimum-verification` section below.
+   Written only when ``--verify-seam-minimum`` is requested. Reports the eigenvalues of the effective projected Hessian
+   :math:`H_\text{eff}` (translations, rotations, and gradient-difference direction removed) and whether the MECP is a
+   true minimum on the seam. See the :ref:`seam-minimum-verification` section below.
 
 .. _seam-minimum-verification:
 
 Seam Minimum Verification
-==========================
+=========================
 
-A converged MECP may be a crossing point anywhere on the crossing seam, not necessarily the **minimum energy**
-point on it.  To confirm that the MECP is a true minimum on the seam (analogous to verifying a transition state has
-exactly one imaginary frequency), ChemSmart implements an effective Hessian analysis.
+A converged MECP may be a crossing point anywhere on the crossing seam, not necessarily the **minimum energy** point on
+it. To confirm that the MECP is a true minimum on the seam (analogous to verifying a transition state has exactly one
+imaginary frequency), ChemSmart implements an effective Hessian analysis.
 
 Theory
 ------
 
-At the MECP the crossing seam is a :math:`(3N-1)`-dimensional hypersurface.  Motions along the gradient-difference
-direction :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B` take the molecule off the seam.  The remaining
-:math:`3N-1` directions span the seam tangent space; after further removal of translations (3) and rotations (up to 3)
-there are :math:`3N - 7` (or :math:`3N - 6` for linear molecules) internal seam degrees of freedom.
+At the MECP the crossing seam is a :math:`(3N-1)`-dimensional hypersurface. Motions along the gradient-difference
+direction :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B` take the molecule off the seam. The remaining :math:`3N-1`
+directions span the seam tangent space; after further removal of translations (3) and rotations (up to 3) there are
+:math:`3N - 7` (or :math:`3N - 6` for linear molecules) internal seam degrees of freedom.
 
 ChemSmart constructs a projector that removes these constrained directions:
 
@@ -450,21 +454,21 @@ ChemSmart constructs a projector that removes these constrained directions:
    P = I - \sum_i |\mathbf{v}_i\rangle\langle\mathbf{v}_i|
 
 where :math:`\{\mathbf{v}_i\}` is an orthonormal set spanning translations, rotations, and
-:math:`\hat{\mathbf{g}}_\Delta`.  The **effective Hessian** is
+:math:`\hat{\mathbf{g}}_\Delta`. The **effective Hessian** is
 
 .. math::
 
    H_\text{eff} = P\,\bar{H}\,P, \qquad \bar{H} = \tfrac{1}{2}(H_A + H_B)
 
-where :math:`H_A` and :math:`H_B` are the numerical Hessians of the two states, averaged to give a balanced
-description.  If all non-zero eigenvalues of :math:`H_\text{eff}` are positive, the point is confirmed as a seam
-minimum; any negative eigenvalue indicates a lower-energy MECP elsewhere on the seam.
+where :math:`H_A` and :math:`H_B` are the numerical Hessians of the two states, averaged to give a balanced description.
+If all non-zero eigenvalues of :math:`H_\text{eff}` are positive, the point is confirmed as a seam minimum; any negative
+eigenvalue indicates a lower-energy MECP elsewhere on the seam.
 
 .. note::
 
    A **standard Gaussian frequency analysis** at the MECP geometry is **not sufficient** for this check: it does not
-   project out the gradient-difference direction, so it will always show one near-zero or spurious mode whose sign
-   is ambiguous.  The effective Hessian analysis described here is the correct diagnostic (cf. ORCA manual, §9.40).
+   project out the gradient-difference direction, so it will always show one near-zero or spurious mode whose sign is
+   ambiguous. The effective Hessian analysis described here is the correct diagnostic (cf. ORCA manual, §9.40).
 
 Usage
 -----
@@ -476,10 +480,16 @@ Add ``--verify-seam-minimum`` to the MECP command after the optimization converg
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
        --convergence tight --verify-seam-minimum
 
+<<<<<<< Updated upstream
 The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states
 × 3N Cartesian coordinates), labelled ``<label>_check_step1_A``, ``<label>_check_step2_A``, etc. For a 10-atom molecule this is 120
 additional Gaussian calculations.  The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with
 ``--hess-step-size``.
+=======
+The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states × 3N Cartesian
+coordinates), each labelled ``<label>_step900000_A`` etc. For a 10-atom molecule this is 120 additional Gaussian
+calculations. The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with ``--hess-step-size``.
+>>>>>>> Stashed changes
 
 Results are written to ``<label>_seam_check.log``:
 
