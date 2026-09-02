@@ -44,8 +44,8 @@ This page documents the CLI options for molecular visualization and analysis usi
 
    -  -  ``-l, --label``
       -  string
-      -  Custom output filename. For ``mo``/``spin``/``nci``, this controls output naming only; processing input files
-         still use the source filename basename.
+      -  Custom output filename. For ``mo``/``spin``/``esp``/``nci``, this controls output naming only; processing input
+         files still use the source filename basename.
 
    -  -  ``-a, --append-label``
       -  string
@@ -122,6 +122,8 @@ Electronic Structure Analysis
       -  Generate molecular orbital visualizations
    -  -  ``spin``
       -  Generate spin density visualizations
+   -  -  ``esp``
+      -  Generate electrostatic potential surface visualizations
 
 Interaction Analysis
 ====================

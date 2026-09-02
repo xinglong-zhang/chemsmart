@@ -24,6 +24,15 @@
    :undoc-members:
    :show-inheritance:
 
+******************************
+ chemsmart.cli.mol.esp module
+******************************
+
+.. automodule:: chemsmart.cli.mol.esp
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 ********************************
  chemsmart.cli.mol.movie module
 ********************************

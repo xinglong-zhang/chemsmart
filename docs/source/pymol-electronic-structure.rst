@@ -2,7 +2,8 @@
  Electronic Structure Analysis (PyMOL)
 #######################################
 
-This page covers electronic structure visualization using PyMOL, including molecular orbitals and spin density plots.
+This page covers electronic structure visualization using PyMOL, including molecular orbitals, spin density plots, and
+electrostatic potential (ESP) surfaces.
 
 *************
  PML Options
@@ -45,9 +46,9 @@ This page covers electronic structure visualization using PyMOL, including molec
 
 .. note::
 
-   The ``.pml options`` can be added directly to the end of the MO or spin job command. Users can also modify the *.pml
-   file* after the *.pse file* and *.pml file* have been generated and then reapply the updated settings to the PyMOL
-   session.
+   The ``.pml options`` can be added directly to the end of the MO, spin, or ESP job command. Users can also modify the
+   *.pml file* after the *.pse file* and *.pml file* have been generated and then reapply the updated settings to the
+   PyMOL session.
 
 Molecular Orbital (MO) Jobs
 ===========================
@@ -155,3 +156,57 @@ With custom output label while still processing source files:
 
 This command processes ``output.log`` (and related ``output.chk``/``output.fchk``) and writes the spin session as
 ``new_name_new_spin_isovalue.pse``.
+
+Electrostatic Potential (ESP) Jobs
+==================================
+
+Generate electrostatic potential surface visualizations.
+
+.. code:: bash
+
+   chemsmart run [OPTIONS] mol [MOL_OPTIONS] esp [SUBCMD_OPTIONS]
+
+*************
+ ESP Options
+*************
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``--npts``
+      -  string
+      -  Cubegen grid specification (default: ``-2``). Use ``-2`` (coarse), ``-3`` (medium), or ``-4`` (fine), or an
+         explicit grid such as ``80`` or ``"-2 h"``.
+
+   -  -  ``-r, --color-range``
+      -  float
+      -  Maximum absolute ESP value for the PyMOL color ramp (default: 0.04). The color ramp uses five equally spaced
+         levels, ``[-r, -0.5r, 0, 0.5r, r]``, colored ``red, orange, yellow, green, blue``, respectively.
+
+.. note::
+
+   Requires both ``.log`` and ``.chk`` files in the same folder. CHEMSMART converts the checkpoint to ``.fchk``, runs
+   Gaussian ``cubegen`` for the SCF density and electrostatic potential cubes, then builds a PyMOL session. If
+   ``-l/--label`` is provided, output naming follows the custom label while cube generation still uses the source
+   filename basename (for example, ``output.log`` -> ``output.chk``/``output.fchk``).
+
+*************
+ Basic Usage
+*************
+
+Standard ESP visualization:
+
+.. code:: bash
+
+   chemsmart run mol -f molecule.log esp
+
+With custom grid, color range, and surface settings:
+
+.. code:: bash
+
+   chemsmart run mol -f molecule.log esp --npts "-4 h" -r 0.08 -i 0.001 -tv 0.5
