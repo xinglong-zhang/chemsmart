@@ -1185,6 +1185,9 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         step_size_shrink=0.7,  # dimensionless multiplier; stronger than 1/grow to damp oscillations
         step_size_min=1.0e-4,  # Bohr^2/Hartree
         step_size_max=1.0,  # Bohr^2/Hartree
+        harvey_initial_hessian=0.7,  # Angstrom^2/Hartree
+        harvey_max_component_step=0.1,  # Angstrom
+        harvey_max_condition=1.0e12,
         # broken-symmetry link-job mode
         use_link=False,
         stable="opt",  # stability analysis for link mode
@@ -1192,6 +1195,7 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         # seam-minimum verification via effective Hessian analysis
         verify_seam_minimum=False,
         hess_step_size=1.0e-3,  # Bohr; finite-difference displacement for numerical Hessian
+        restart=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1232,11 +1236,43 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.step_size_shrink = step_size_shrink
         self.step_size_min = step_size_min
         self.step_size_max = step_size_max
+        self.harvey_initial_hessian = harvey_initial_hessian
+        self.harvey_max_component_step = harvey_max_component_step
+        self.harvey_max_condition = harvey_max_condition
         self.use_link = use_link
         self.stable = stable
         self.guess = guess
         self.verify_seam_minimum = verify_seam_minimum
         self.hess_step_size = hess_step_size
+        self.restart = restart
+
+        positive_values = {
+            "max_steps": max_steps,
+            "step_size": step_size,
+            "energy_diff_tol": self.energy_diff_tol,
+            "force_max_tol": self.force_max_tol,
+            "force_rms_tol": self.force_rms_tol,
+            "disp_max_tol": self.disp_max_tol,
+            "disp_rms_tol": self.disp_rms_tol,
+            "trust_radius": self.trust_radius,
+            "step_size_min": step_size_min,
+            "step_size_max": step_size_max,
+            "harvey_initial_hessian": harvey_initial_hessian,
+            "harvey_max_component_step": harvey_max_component_step,
+            "harvey_max_condition": harvey_max_condition,
+            "hess_step_size": hess_step_size,
+        }
+        invalid = [name for name, value in positive_values.items() if value <= 0]
+        if invalid:
+            raise ValueError(
+                "MECP settings must be positive: " + ", ".join(invalid)
+            )
+        if step_size_min > step_size_max:
+            raise ValueError("step_size_min cannot exceed step_size_max.")
+        if multiplicity_a < 1 or multiplicity_b < 1:
+            raise ValueError("MECP multiplicities must be positive integers.")
+        if charge_a == charge_b and multiplicity_a == multiplicity_b:
+            raise ValueError("MECP states A and B must not be identical.")
 
     @classmethod
     def from_settings(cls, settings):

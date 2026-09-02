@@ -62,10 +62,21 @@ class GaussianMECPJob(GaussianJob):
             route,
             flags=re.IGNORECASE,
         )
-        route = re.sub(
-            r"\bguess\s*=\s*read\b", "", route, flags=re.IGNORECASE
-        )
+        route = re.sub(r"\bguess\s*=\s*read\b", "", route, flags=re.IGNORECASE)
         return " ".join(route.split())
+
+    @staticmethod
+    def _with_required_nosymm(route):
+        """Ensure Gaussian forces remain in the MECP Cartesian frame."""
+        route = route or ""
+        if re.search(r"\bnosymm\b", route, flags=re.IGNORECASE):
+            return route
+        if re.search(r"\bsymm(?:etry)?\b", route, flags=re.IGNORECASE):
+            raise ValueError(
+                "MECP requires nosymm so Cartesian forces remain aligned with "
+                "the optimization coordinates; remove the explicit symmetry option."
+            )
+        return f"{route} nosymm".strip()
 
     # MECP-specific attribute names that must be stripped when building
     # a GaussianLinkJobSettings for each sub-job (broken-symmetry mode).
@@ -91,10 +102,14 @@ class GaussianMECPJob(GaussianJob):
             "step_size_shrink",
             "step_size_min",
             "step_size_max",
+            "harvey_initial_hessian",
+            "harvey_max_component_step",
+            "harvey_max_condition",
             "use_link",
             "convergence_preset",
             "verify_seam_minimum",
             "hess_step_size",
+            "restart",
             # 'stable' and 'guess' are kept: they are valid GaussianLinkJobSettings
             # params and will be overridden with state-specific values anyway.
         }
@@ -128,6 +143,89 @@ class GaussianMECPJob(GaussianJob):
     @property
     def trajectory_file(self):
         return os.path.join(self.folder, f"{self.label}_traj.xyz")
+
+    @property
+    def state_file(self):
+        return os.path.join(self.folder, f"{self.label}_state.npz")
+
+    @staticmethod
+    def _optional_array(value):
+        return (
+            np.array([], dtype=float) if value is None else np.asarray(value)
+        )
+
+    @staticmethod
+    def _restore_optional_array(value):
+        return None if value.size == 0 else value
+
+    def _save_optimizer_state(self, **state):
+        """Atomically persist enough optimizer state to resume the next step."""
+        temporary_file = f"{self.state_file}.tmp.npz"
+        np.savez(
+            temporary_file,
+            version=np.array(1, dtype=int),
+            symbols=np.asarray(self.molecule.symbols, dtype="U4"),
+            step_size_method=np.array(self.settings.step_size_method),
+            next_step=np.array(state["next_step"], dtype=int),
+            positions_bohr=np.asarray(state["positions_bohr"], dtype=float),
+            current_step_size=np.array(
+                state["current_step_size"], dtype=float
+            ),
+            prev_merit=np.array(
+                np.nan if state["prev_merit"] is None else state["prev_merit"],
+                dtype=float,
+            ),
+            prev_positions=self._optional_array(state["prev_positions"]),
+            prev_proj_grad=self._optional_array(state["prev_proj_grad"]),
+            inv_hessian=self._optional_array(state["inv_hessian"]),
+            prev_eff_grad=self._optional_array(state["prev_eff_grad"]),
+            prev_positions_bfgs=self._optional_array(
+                state["prev_positions_bfgs"]
+            ),
+        )
+        os.replace(temporary_file, self.state_file)
+
+    def _load_optimizer_state(self):
+        """Load and validate a previously persisted optimizer state."""
+        with np.load(self.state_file, allow_pickle=False) as saved:
+            symbols = saved["symbols"].tolist()
+            method = str(saved["step_size_method"])
+            positions = np.asarray(saved["positions_bohr"], dtype=float)
+            if symbols != list(self.molecule.symbols):
+                raise RuntimeError(
+                    "Cannot restart MECP: atom symbols differ from saved state."
+                )
+            if method != self.settings.step_size_method:
+                raise RuntimeError(
+                    "Cannot restart MECP: optimizer method differs from saved state "
+                    f"({method!r} != {self.settings.step_size_method!r})."
+                )
+            if positions.shape != np.asarray(self.molecule.positions).shape:
+                raise RuntimeError(
+                    "Cannot restart MECP: coordinate shape differs from saved state."
+                )
+            prev_merit = float(saved["prev_merit"])
+            return {
+                "next_step": int(saved["next_step"]),
+                "positions_bohr": positions,
+                "current_step_size": float(saved["current_step_size"]),
+                "prev_merit": None if np.isnan(prev_merit) else prev_merit,
+                "prev_positions": self._restore_optional_array(
+                    saved["prev_positions"]
+                ),
+                "prev_proj_grad": self._restore_optional_array(
+                    saved["prev_proj_grad"]
+                ),
+                "inv_hessian": self._restore_optional_array(
+                    saved["inv_hessian"]
+                ),
+                "prev_eff_grad": self._restore_optional_array(
+                    saved["prev_eff_grad"]
+                ),
+                "prev_positions_bfgs": self._restore_optional_array(
+                    saved["prev_positions_bfgs"]
+                ),
+            }
 
     def _job_is_complete(self):
         """Check MECP completion by looking for a 'Converged' marker in the report file."""
@@ -190,6 +288,11 @@ class GaussianMECPJob(GaussianJob):
                     "link": True,
                 }
             )
+            link_kwargs["additional_route_parameters"] = (
+                self._with_required_nosymm(
+                    link_kwargs.get("additional_route_parameters")
+                )
+            )
             return GaussianLinkJobSettings(**link_kwargs)
 
         state_settings = self.settings.copy()
@@ -200,11 +303,14 @@ class GaussianMECPJob(GaussianJob):
         state_settings.charge = charge
         state_settings.multiplicity = multiplicity
         state_settings.title = title
+        state_settings.additional_route_parameters = (
+            self._with_required_nosymm(
+                state_settings.additional_route_parameters
+            )
+        )
         return state_settings
 
-    def _run_state(
-        self, positions_bohr, step_idx, state, checkpoint_tag=None
-    ):
+    def _run_state(self, positions_bohr, step_idx, state, checkpoint_tag=None):
         if state == "A":
             charge = self.settings.charge_a
             multiplicity = self.settings.multiplicity_a
@@ -254,9 +360,7 @@ class GaussianMECPJob(GaussianJob):
         job.set_folder(self.steps_folder)
         job.scratch_parent_folder = f"{self.label}_steps"
         checkpoint_part = f"{checkpoint_tag}_" if checkpoint_tag else ""
-        job.checkpoint_filename = (
-            f"{self.label}_{checkpoint_part}{state}.chk"
-        )
+        job.checkpoint_filename = f"{self.label}_{checkpoint_part}{state}.chk"
         job.oldchkfile = oldchkfile
         job.run()
         output = job._output()
@@ -275,6 +379,9 @@ class GaussianMECPJob(GaussianJob):
                 f"coordinate shape {np.array(mol.positions).shape}."
             )
         gradient = -forces
+        if not hasattr(self, "_last_spin_squared"):
+            self._last_spin_squared = {"A": None, "B": None}
+        self._last_spin_squared[state] = getattr(output, "spin_squared", None)
         if os.path.isfile(job.chkfile):
             self._state_checkpoint_files[checkpoint_key] = job.chkfile
         return energy, gradient
@@ -387,9 +494,11 @@ class GaussianMECPJob(GaussianJob):
 
         Returns:
             displacement: 位移 (Bohr)
-            eff_grad: 有效梯度 (用于收敛判断)
+            par_grad: seam 切向梯度 (用于收敛判断)
             seam_correction: seam 修正项 (用于日志)
             inv_hessian: 更新后的逆 Hessian
+            update_status, fac, fae: BFGS 更新诊断
+            eff_grad: Harvey 有效梯度 (用于 BFGS 历史更新)
         """
         n = grad_a.size
 
@@ -415,11 +524,14 @@ class GaussianMECPJob(GaussianJob):
         # Harvey 原版用 Angstrom, chemsmart 用 Bohr
         # 初始逆 Hessian: 0.7 Å²/Hartree -> 0.7 * (1/Bohr)² Bohr²/Hartree
         bohr_per_ang = 1.0 / units.Bohr
-        initial_hi_val = 0.7 * (bohr_per_ang ** 2)
+        initial_hi_val = self.settings.harvey_initial_hessian * (
+            bohr_per_ang**2
+        )
+        initial_inv_hessian = initial_hi_val * np.eye(n)
 
         if prev_positions is None or prev_eff_grad is None:
             # 第一步: 用对角逆 Hessian (Harvey Initialize 子程序)
-            inv_hess = initial_hi_val * np.eye(n)
+            inv_hess = initial_inv_hessian
             displacement_flat = -inv_hess @ eff_grad_flat
             update_status = "INITIAL"
             fac = float("nan")
@@ -427,7 +539,7 @@ class GaussianMECPJob(GaussianJob):
         else:
             # BFGS 更新 (Harvey UpdateX 子程序)
             delta_x = (curr_positions - prev_positions).ravel()  # DelX
-            delta_g = (eff_grad_flat - prev_eff_grad)  # DelG
+            delta_g = eff_grad_flat - prev_eff_grad  # DelG
 
             inv_hess, update_status, fac, fae = self._update_inverse_hessian(
                 inv_hessian,
@@ -436,18 +548,25 @@ class GaussianMECPJob(GaussianJob):
                 return_diagnostics=True,
             )
 
+            condition_number = float(np.linalg.cond(inv_hess))
+            if (
+                not np.isfinite(condition_number)
+                or condition_number > self.settings.harvey_max_condition
+            ):
+                inv_hess = initial_inv_hessian
+                update_status = "RESET_ILL_CONDITIONED"
+
             displacement_flat = -inv_hess @ eff_grad_flat
             if not np.all(np.isfinite(displacement_flat)):
                 raise RuntimeError("Harvey BFGS produced a non-finite step.")
+            if float(np.dot(displacement_flat, eff_grad_flat)) >= 0.0:
+                inv_hess = initial_inv_hessian
+                displacement_flat = -inv_hess @ eff_grad_flat
+                update_status = "RESET_NON_DESCENT"
 
         # 3. 位移限制 (Harvey UpdateX 中的 STPMX 逻辑)
         # STPMX = 0.1 Å -> 0.1 * (1/Bohr) Bohr
-        stpmx = 0.1 * bohr_per_ang
-        stpmax = stpmx * n  # 总位移向量最大范数
-
-        stpl = float(np.sqrt(np.sum(displacement_flat ** 2)))
-        if stpl > stpmax:
-            displacement_flat = displacement_flat / stpl * stpmax
+        stpmx = self.settings.harvey_max_component_step * bohr_per_ang
 
         lgstst = float(np.max(np.abs(displacement_flat)))
         if lgstst > stpmx:
@@ -460,27 +579,38 @@ class GaussianMECPJob(GaussianJob):
 
         return (
             displacement,
-            eff_grad,
+            par_grad,
             seam_correction,
             inv_hess,
             update_status,
             fac,
             fae,
+            eff_grad,
         )
+
+    _GROW_SHRINK_IMPROVEMENT_THRESHOLD = 0.10
+    _GROW_SHRINK_REGRESSION_THRESHOLD = 0.02
+    _BB_CURVATURE_COSINE_MIN = 1.0e-4
+    _BB_RELATIVE_STEP_MIN = 0.5
+    _BB_RELATIVE_STEP_MAX = 2.0
 
     def _adapt_step_size(self, current_step_size, prev_merit, current_merit):
         """
         Return an updated step size based on the merit function progress.
 
         The merit is dimensionless: ``|ΔE|/energy_diff_tol + RMS(g_perp)/force_rms_tol``.
-        If merit decreased (progress), the step size is grown by ``step_size_grow``.
-        If merit increased (overshoot/oscillation), it is shrunk by ``step_size_shrink``.
-        The result is clamped to ``[step_size_min, step_size_max]``.
+        A relative dead band prevents numerical noise from repeatedly growing and
+        shrinking the step. Only an improvement above 10% grows the step; a
+        regression above 2% shrinks it; otherwise the step is retained.
         """
-        if current_merit < prev_merit:
+        merit_scale = max(abs(prev_merit), np.finfo(float).tiny)
+        relative_progress = (prev_merit - current_merit) / merit_scale
+        if relative_progress > self._GROW_SHRINK_IMPROVEMENT_THRESHOLD:
             new_step = current_step_size * self.settings.step_size_grow
-        else:
+        elif relative_progress < -self._GROW_SHRINK_REGRESSION_THRESHOLD:
             new_step = current_step_size * self.settings.step_size_shrink
+        else:
+            new_step = current_step_size
         return float(
             np.clip(
                 new_step,
@@ -490,37 +620,59 @@ class GaussianMECPJob(GaussianJob):
         )
 
     def _bb_step_size(
-        self, prev_positions, curr_positions, prev_proj_grad, curr_proj_grad
+        self,
+        current_step_size,
+        prev_positions,
+        curr_positions,
+        prev_proj_grad,
+        curr_proj_grad,
+        constraint_gradient=None,
     ):
         """
-        Compute a Barzilai-Borwein (BB2) step size from the secant condition.
+        Compute a safeguarded Barzilai-Borwein step from the secant condition.
 
         Uses the formula ``α = ||Δr||² / (Δr · Δg_⊥)`` where
         ``Δr = r_n − r_{n−1}`` and ``Δg_⊥ = g_⊥,n − g_⊥,n−1``.
 
-        Falls back to the initial ``step_size`` when the denominator is
-        non-positive (negative curvature or numerically zero step).
-        The result is clamped to ``[step_size_min, step_size_max]``.
+        When supplied, ``constraint_gradient`` projects the displacement onto
+        the current seam tangent before pairing it with the projected-gradient
+        change. Unreliable curvature damps the current step instead of resetting
+        it. A relative safeguard also prevents a valid but noisy secant pair
+        from changing the step by more than a factor of two in one iteration.
         """
         delta_r = (curr_positions - prev_positions).ravel()
         delta_g = (curr_proj_grad - prev_proj_grad).ravel()
 
+        if constraint_gradient is not None:
+            normal = np.asarray(constraint_gradient, dtype=float).ravel()
+            normal_norm_sq = float(np.dot(normal, normal))
+            if normal_norm_sq > np.finfo(float).tiny:
+                delta_r = (
+                    delta_r
+                    - float(np.dot(delta_r, normal)) / normal_norm_sq * normal
+                )
+
         r_dot_r = float(np.dot(delta_r, delta_r))
         r_dot_g = float(np.dot(delta_r, delta_g))
+        g_dot_g = float(np.dot(delta_g, delta_g))
+        curvature_scale = np.sqrt(max(r_dot_r * g_dot_g, 0.0))
+        reliable_curvature = (
+            r_dot_r >= 1.0e-30
+            and g_dot_g >= 1.0e-30
+            and r_dot_g > self._BB_CURVATURE_COSINE_MIN * curvature_scale
+        )
 
-        if r_dot_r < 1e-30 or r_dot_g <= 0.0:
-            return float(
-                np.clip(
-                    self.settings.step_size,
-                    self.settings.step_size_min,
-                    self.settings.step_size_max,
-                )
-            )
+        if reliable_curvature:
+            candidate = r_dot_r / r_dot_g
+        else:
+            candidate = current_step_size * self.settings.step_size_shrink
 
-        bb_step = r_dot_r / r_dot_g
+        relative_min = current_step_size * self._BB_RELATIVE_STEP_MIN
+        relative_max = current_step_size * self._BB_RELATIVE_STEP_MAX
+        safeguarded_step = np.clip(candidate, relative_min, relative_max)
         return float(
             np.clip(
-                bb_step,
+                safeguarded_step,
                 self.settings.step_size_min,
                 self.settings.step_size_max,
             )
@@ -558,7 +710,15 @@ class GaussianMECPJob(GaussianJob):
         )
 
     def _log_step(
-        self, f, step_idx, ea, eb, projected_grad, displacement, seam_correction, step_size
+        self,
+        f,
+        step_idx,
+        ea,
+        eb,
+        projected_grad,
+        displacement,
+        seam_correction,
+        step_size,
     ):
         energy_diff = ea - eb
         pgrad_max = float(np.max(np.abs(projected_grad)))
@@ -597,17 +757,58 @@ class GaussianMECPJob(GaussianJob):
         self.steps_folder = os.path.join(self.folder, f"{self.label}_steps")
         os.makedirs(self.steps_folder, exist_ok=True)
         self._state_checkpoint_files = {}
+        self._last_spin_squared = {"A": None, "B": None}
 
-        with open(self.report_file, "w") as report:
-            report.write("CHEMSMART self-contained MECP optimization\n")
-            report.write(
-                f"max_steps={self.settings.max_steps} "
-                f"step_size={self.settings.step_size} "
-                f"trust_radius={self.settings.trust_radius} "
-                f"adaptive_step_size={self.settings.adaptive_step_size} "
-                f"step_size_method={self.settings.step_size_method}\n"
-            )
-            for step_idx in range(1, self.settings.max_steps + 1):
+        start_step = 1
+        restarting = self.settings.restart and os.path.isfile(self.state_file)
+        if restarting:
+            saved = self._load_optimizer_state()
+            start_step = saved["next_step"]
+            positions_bohr = saved["positions_bohr"]
+            current_step_size = saved["current_step_size"]
+            prev_merit = saved["prev_merit"]
+            prev_positions = saved["prev_positions"]
+            prev_proj_grad = saved["prev_proj_grad"]
+            inv_hessian = saved["inv_hessian"]
+            prev_eff_grad = saved["prev_eff_grad"]
+            prev_positions_bfgs = saved["prev_positions_bfgs"]
+            for state in ("A", "B"):
+                checkpoint_file = os.path.join(
+                    self.steps_folder, f"{self.label}_{state}.chk"
+                )
+                if os.path.isfile(checkpoint_file):
+                    self._state_checkpoint_files[(None, state)] = (
+                        checkpoint_file
+                    )
+
+        report_mode = "a" if restarting else "w"
+        converged_step = None
+        with open(self.report_file, report_mode) as report:
+            if restarting:
+                report.write(
+                    f"Restarting from saved state at step {start_step}.\n"
+                )
+            else:
+                report.write("CHEMSMART self-contained MECP optimization\n")
+            if self.settings.step_size_method == "harvey":
+                report.write(
+                    f"max_steps={self.settings.max_steps} "
+                    "step_size_method=harvey "
+                    "harvey_initial_hessian="
+                    f"{self.settings.harvey_initial_hessian} "
+                    "harvey_max_component_step="
+                    f"{self.settings.harvey_max_component_step} "
+                    f"harvey_max_condition={self.settings.harvey_max_condition}\n"
+                )
+            else:
+                report.write(
+                    f"max_steps={self.settings.max_steps} "
+                    f"step_size={self.settings.step_size} "
+                    f"trust_radius={self.settings.trust_radius} "
+                    f"adaptive_step_size={self.settings.adaptive_step_size} "
+                    f"step_size_method={self.settings.step_size_method}\n"
+                )
+            for step_idx in range(start_step, self.settings.max_steps + 1):
                 self._write_trajectory_frame(positions_bohr, step_idx)
                 ea, grad_a = self._run_state(positions_bohr, step_idx, "A")
                 eb, grad_b = self._run_state(positions_bohr, step_idx, "B")
@@ -623,6 +824,7 @@ class GaussianMECPJob(GaussianJob):
                         bfgs_status,
                         bfgs_fac,
                         bfgs_fae,
+                        optimizer_gradient,
                     ) = self._bfgs_displacement(
                         ea=ea,
                         eb=eb,
@@ -634,12 +836,15 @@ class GaussianMECPJob(GaussianJob):
                         inv_hessian=inv_hessian,
                     )
                 else:
-                    displacement, projected_grad, seam_correction = self._mecp_displacement(
-                        energy_diff=energy_diff,
-                        grad_a=grad_a,
-                        grad_b=grad_b,
-                        step_size=current_step_size,
+                    displacement, projected_grad, seam_correction = (
+                        self._mecp_displacement(
+                            energy_diff=energy_diff,
+                            grad_a=grad_a,
+                            grad_b=grad_b,
+                            step_size=current_step_size,
+                        )
                     )
+                    optimizer_gradient = projected_grad
 
                 if self.settings.step_size_method != "harvey":
                     displacement = self._apply_trust_radius(displacement)
@@ -660,30 +865,40 @@ class GaussianMECPJob(GaussianJob):
                         f"delta_g_dot_delta_x={bfgs_fac:+.8e} "
                         f"delta_g_dot_h_delta_g={bfgs_fae:+.8e}\n"
                     )
+                spin_a = self._last_spin_squared["A"]
+                spin_b = self._last_spin_squared["B"]
+                if spin_a is not None or spin_b is not None:
+                    value_a = "NA" if spin_a is None else f"{spin_a:.6f}"
+                    value_b = "NA" if spin_b is None else f"{spin_b:.6f}"
+                    report.write(
+                        f"spin_squared_A={value_a} spin_squared_B={value_b}\n"
+                    )
 
                 if self._is_converged(
                     energy_diff=energy_diff,
                     eff_grad=projected_grad,
                     displacement=displacement,
                 ):
-                    report.write(f"Converged at step {step_idx}.\n")
+                    report.write(
+                        f"Optimization converged at step {step_idx}.\n"
+                    )
+                    converged_step = step_idx
                     break
 
                 if self.settings.adaptive_step_size:
                     if self.settings.step_size_method == "bb":
                         if prev_positions is not None:
                             current_step_size = self._bb_step_size(
+                                current_step_size,
                                 prev_positions,
                                 positions_bohr,
                                 prev_proj_grad,
                                 projected_grad,
+                                grad_a - grad_b,
                             )
                         prev_positions = positions_bohr.copy()
                         prev_proj_grad = projected_grad.copy()
-                    elif self.settings.step_size_method == "harvey":
-                        # BFGS maintains its own step size via inverse Hessian
-                        pass
-                    else:  # "grow_shrink"
+                    elif self.settings.step_size_method == "grow_shrink":
                         current_merit = (
                             abs(energy_diff) / self.settings.energy_diff_tol
                             + self._rms(projected_grad)
@@ -697,9 +912,20 @@ class GaussianMECPJob(GaussianJob):
 
                 if self.settings.step_size_method == "harvey":
                     prev_positions_bfgs = positions_bohr.copy()
-                    prev_eff_grad = projected_grad.ravel().copy()
+                    prev_eff_grad = optimizer_gradient.ravel().copy()
 
                 positions_bohr = positions_bohr + displacement
+                self._save_optimizer_state(
+                    next_step=step_idx + 1,
+                    positions_bohr=positions_bohr,
+                    current_step_size=current_step_size,
+                    prev_merit=prev_merit,
+                    prev_positions=prev_positions,
+                    prev_proj_grad=prev_proj_grad,
+                    inv_hessian=inv_hessian,
+                    prev_eff_grad=prev_eff_grad,
+                    prev_positions_bfgs=prev_positions_bfgs,
+                )
             else:
                 raise RuntimeError(
                     "MECP optimization did not converge within max_steps."
@@ -709,6 +935,11 @@ class GaussianMECPJob(GaussianJob):
 
         if self.settings.verify_seam_minimum:
             self._run_seam_minimum_check(positions_bohr)
+
+        with open(self.report_file, "a", encoding="utf-8") as report:
+            report.write(f"Converged at step {converged_step}.\n")
+        if os.path.isfile(self.state_file):
+            os.remove(self.state_file)
 
     # ------------------------------------------------------------------
     # Seam-minimum verification via effective Hessian analysis
@@ -775,30 +1006,41 @@ class GaussianMECPJob(GaussianJob):
 
         return orthonormal
 
-    def _project_hessian(self, hessian, projection_vectors):
-        """
-        Apply the projector :math:`P = I - \\sum_i |v_i\\rangle\\langle v_i|`
-        to the Hessian from both sides: :math:`H_\\text{eff} = P H P`.
+    @staticmethod
+    def _reduced_hessian(hessian, projection_vectors):
+        """Return the Hessian represented in the unprojected subspace.
 
-        Args:
-            hessian (np.ndarray): Square Hessian matrix (3N × 3N),
-                Hartree/Bohr².
-            projection_vectors (list[np.ndarray]): Orthonormal vectors to
-                project out (each of length 3N).
-
-        Returns:
-            np.ndarray: Projected Hessian, same shape as input.
+        Diagonalising ``P @ H @ P`` leaves one numerical zero eigenvalue for
+        every projected vector.  Removing a fixed number of eigenvalues after
+        sorting is unsafe because genuine negative eigenvalues sort before the
+        projected zeros.  Building an explicit orthonormal complement avoids
+        that ambiguity.
         """
-        n = hessian.shape[0]
-        P = np.eye(n)
-        for v in projection_vectors:
-            P -= np.outer(v, v)
-        return P @ hessian @ P
+        if not projection_vectors:
+            return np.array(hessian, dtype=float, copy=True)
+        projected_basis = np.column_stack(projection_vectors)
+        q_full, _ = np.linalg.qr(projected_basis, mode="complete")
+        seam_basis = q_full[:, projected_basis.shape[1] :]
+        return seam_basis.T @ hessian @ seam_basis
+
+    @classmethod
+    def _lagrangian_hessian(cls, hessian_a, hessian_b, grad_a, grad_b):
+        """Return the constrained MECP Lagrangian Hessian and multiplier."""
+        diff_grad = np.asarray(grad_a).ravel() - np.asarray(grad_b).ravel()
+        diff_norm_sq = float(np.dot(diff_grad, diff_grad))
+        if diff_norm_sq < cls.MIN_DIFF_GRAD_NORM_SQ:
+            raise RuntimeError(
+                "Difference gradient is too small for seam verification."
+            )
+        multiplier = float(np.dot(np.asarray(grad_a).ravel(), diff_grad))
+        multiplier /= diff_norm_sq
+        hessian = (1.0 - multiplier) * hessian_a + multiplier * hessian_b
+        return hessian, multiplier
 
     def _compute_numerical_hessian(self, positions_bohr, h, step_prefix):
         """
-        Compute the average Hessian :math:`H = (H_A + H_B)/2` numerically
-        via central finite differences of the Cartesian forces.
+        Compute both state Hessians numerically via central finite differences
+        of the Cartesian forces.
 
         For each coordinate ``j`` (0 … 3N−1) the geometry is displaced by
         ``±h`` Bohr and both states are evaluated:
@@ -808,7 +1050,7 @@ class GaussianMECPJob(GaussianJob):
             H_{ij} \\approx \\frac{g_i(+h_j) - g_i(-h_j)}{2h}
 
         where :math:`g_i` denotes the gradient component (force negated).
-        The Hessian is symmetrised as :math:`(H + H^T)/2` before averaging.
+        Each Hessian is symmetrised as :math:`(H + H^T)/2`.
 
         .. warning::
 
@@ -823,8 +1065,8 @@ class GaussianMECPJob(GaussianJob):
             step_prefix (int): First check-specific sub-job step index.
 
         Returns:
-            np.ndarray: Average symmetrised Hessian, shape (3N, 3N),
-            Hartree/Bohr².
+            tuple[np.ndarray, np.ndarray]: Symmetrised ``(H_A, H_B)`` matrices,
+            each with shape (3N, 3N), in Hartree/Bohr².
         """
         n_atoms = len(self.molecule.symbols)
         n = 3 * n_atoms
@@ -863,32 +1105,24 @@ class GaussianMECPJob(GaussianJob):
 
         H_A = (H_A + H_A.T) / 2
         H_B = (H_B + H_B.T) / 2
-        return (H_A + H_B) / 2
+        return H_A, H_B
 
     def verify_seam_minimum(self, h=None, step_prefix=1):
         """
         Verify that the current MECP geometry is a **minimum on the crossing
         seam**, not merely a crossing point.
 
-        The method computes the average Hessian :math:`H = (H_A + H_B)/2`
-        numerically via central finite differences, then projects out
-        translational, rotational, and gradient-difference degrees of
-        freedom:
+        The method computes both state Hessians numerically and forms the
+        constrained Lagrangian Hessian. It then represents that Hessian in the
+        subspace orthogonal to translations, rotations, and the
+        gradient-difference direction:
 
         .. math::
 
-            H_\\text{eff} = P H P, \\quad
-            P = I - \\textstyle\\sum_i |v_i\\rangle\\langle v_i|
+            H_\\text{seam} = Q^T [(1-\\lambda)H_A + \\lambda H_B] Q
 
-        where :math:`\\{v_i\\}` spans translations (3), rotations (up to 3),
-        and the gradient-difference direction
-        :math:`\\mathbf{g}_\\Delta / \\|\\mathbf{g}_\\Delta\\|`.
-
-        The eigenvalues of :math:`H_\\text{eff}` are diagonalised after
-        discarding the (approximately) zero eigenvalues corresponding to
-        projected-out modes.  All remaining eigenvalues positive → confirmed
-        MECP minimum; any negative eigenvalue indicates a saddle point on the
-        seam.
+        The columns of the reduced-space basis span the seam tangent space.
+        Any negative eigenvalue indicates a saddle point on the seam.
 
         Results are written to ``<label>_seam_check.log``.
 
@@ -911,7 +1145,8 @@ class GaussianMECPJob(GaussianJob):
             dict: Keys ``"eigenvalues"`` (1-D array, non-projected modes),
             ``"n_negative"`` (int), ``"is_minimum"`` (bool),
             ``"energy_diff"`` (float, Hartree),
-            ``"n_projected"`` (int, modes removed).
+            ``"n_projected"`` (int, modes removed), and
+            ``"lagrange_multiplier"`` (float).
         """
         if h is None:
             h = self.settings.hess_step_size
@@ -935,16 +1170,18 @@ class GaussianMECPJob(GaussianJob):
             f"verify_seam_minimum: computing numerical Hessian for {self.label} "
             f"(h={h} Bohr, {4 * 3 * len(self.molecule.symbols)} sub-jobs)"
         )
-        H_avg = self._compute_numerical_hessian(
+        H_A, H_B = self._compute_numerical_hessian(
             positions_bohr, h=h, step_prefix=step_prefix + 1
         )
 
         proj_vecs = self._build_projection_vectors(positions_bohr, diff_grad)
-        H_eff = self._project_hessian(H_avg, proj_vecs)
+        H_lagrangian, lagrange_multiplier = self._lagrangian_hessian(
+            H_A, H_B, grad_a, grad_b
+        )
+        H_seam = self._reduced_hessian(H_lagrangian, proj_vecs)
 
-        eigenvalues = np.sort(np.linalg.eigvalsh(H_eff))
+        non_zero_evals = np.sort(np.linalg.eigvalsh(H_seam))
         n_proj = len(proj_vecs)
-        non_zero_evals = eigenvalues[n_proj:]
         n_negative = int(np.sum(non_zero_evals < -1.0e-6))
 
         result = {
@@ -953,6 +1190,7 @@ class GaussianMECPJob(GaussianJob):
             "is_minimum": n_negative == 0,
             "energy_diff": ea - eb,
             "n_projected": n_proj,
+            "lagrange_multiplier": lagrange_multiplier,
         }
 
         self._write_seam_check_log(result, h, step_prefix)
@@ -971,15 +1209,22 @@ class GaussianMECPJob(GaussianJob):
 
     def _run_seam_minimum_check(self, positions_bohr):
         """Called at the end of ``_run()`` when ``verify_seam_minimum`` is set."""
-        logger.info(
-            f"Starting seam-minimum verification for {self.label}"
-        )
+        logger.info(f"Starting seam-minimum verification for {self.label}")
         result = self.verify_seam_minimum()
-        status = "MINIMUM" if result["is_minimum"] else "NOT A MINIMUM (saddle point on seam)"
+        status = (
+            "MINIMUM"
+            if result["is_minimum"]
+            else "NOT A MINIMUM (saddle point on seam)"
+        )
         logger.info(
             f"Seam-minimum check for {self.label}: {status} "
             f"(n_negative={result['n_negative']})"
         )
+        if not result["is_minimum"]:
+            raise RuntimeError(
+                f"Converged crossing is not a minimum on the seam "
+                f"({result['n_negative']} negative eigenvalue(s))."
+            )
 
     def _write_seam_check_log(self, result, h, step_prefix):
         """Write the seam-minimum verification results to a log file."""
@@ -994,7 +1239,8 @@ class GaussianMECPJob(GaussianJob):
             )
             f.write(
                 f"energy_diff={result['energy_diff']:+.6e} Hartree "
-                f"n_projected={result['n_projected']}\n"
+                f"n_projected={result['n_projected']} "
+                f"lagrange_multiplier={result['lagrange_multiplier']:+.8e}\n"
             )
             n_neg = result["n_negative"]
             is_min = result["is_minimum"]

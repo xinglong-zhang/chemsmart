@@ -168,12 +168,17 @@ MECP Options
    -  -  ``--step-size-min``
       -  float
       -  1.0×10⁻⁴ Bohr²/Hartree
-      -  Floor for the adaptive step size (both methods).
+      -  Floor for the adaptive step size (``bb`` and ``grow_shrink``).
 
    -  -  ``--step-size-max``
       -  float
       -  1.0 Bohr²/Hartree
-      -  Ceiling for the adaptive step size (both methods).
+      -  Ceiling for the adaptive step size (``bb`` and ``grow_shrink``).
+
+   -  -  ``--restart / --no-restart``
+      -  bool
+      -  True
+      -  Resume an interrupted MECP optimization from ``<label>_state.npz``.
 
    -  -  ``--verify-seam-minimum / --no-verify-seam-minimum``
       -  bool
@@ -288,11 +293,14 @@ Adaptive Step Size
 
 When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated at the end of each
 iteration. The available algorithms are selected via ``--step-size-method``.
+For the default ``harvey`` optimizer, the inverse Hessian controls the step;
+``--adaptive-step-size`` and the scalar ``step-size-*`` controls apply only to
+``bb`` and ``grow_shrink``.
 
 Barzilai-Borwein (``"bb"``)
 -----------------------------
 
-The BB2 step size is derived from the secant condition and provides near-quadratic convergence near the MECP:
+The BB step size is derived from the secant condition and accelerates convergence near the MECP:
 
 .. math::
 
@@ -301,9 +309,14 @@ The BB2 step size is derived from the secant condition and provides near-quadrat
 where :math:`\Delta\mathbf{r} = \mathbf{r}_n - \mathbf{r}_{n-1}` and :math:`\Delta\mathbf{g}_\perp =
 \mathbf{g}_{\perp,n} - \mathbf{g}_{\perp,n-1}`.
 
-The denominator is the inner product of the position change and the seam-tangent gradient change; it approximates the
-local curvature. If the curvature is non-positive (negative-curvature region or first step), the algorithm falls back to
-the initial ``step_size``. The result is clamped to ``[step_size_min, step_size_max]``.
+Before applying the secant formula, the position change is projected onto the
+current seam tangent so that it is paired consistently with the seam-tangent
+gradient change. Curvature is accepted only when its normalized magnitude is
+reliably positive. An unreliable pair damps the current step by
+``step_size_shrink`` instead of resetting it. Even a valid BB estimate is limited
+to between 0.5 and 2 times the current step before the configured
+``[step_size_min, step_size_max]`` bounds are applied. These safeguards prevent
+small secant denominators from causing abrupt jumps to ``step_size_max``.
 
 Grow-Shrink (``"grow_shrink"``)
 -------------------------------
@@ -314,10 +327,15 @@ A dimensionless merit function tracks progress:
 
    M_n = \frac{|\Delta E_n|}{\epsilon_{\Delta E}} + \frac{\text{RMS}(\mathbf{g}_{\perp,n})}{\epsilon_{\text{rms}}}
 
--  If :math:`M_n < M_{n-1}` (progress): :math:`\alpha_{n+1} = \min(\alpha_n \times \texttt{step\_size\_grow},\,
-   \texttt{step\_size\_max})`
--  If :math:`M_n \geq M_{n-1}` (stall/overshoot): :math:`\alpha_{n+1} = \max(\alpha_n \times
-   \texttt{step\_size\_shrink},\, \texttt{step\_size\_min})`
+The update uses relative merit progress rather than reacting to every numerical
+change:
+
+-  Improvement greater than 10%: grow by ``step_size_grow``.
+-  Change between a 2% regression and a 10% improvement: keep the step.
+-  Regression greater than 2%: shrink by ``step_size_shrink``.
+
+The dead band prevents small SCF and gradient fluctuations from making the step
+size oscillate.
 
 The current step size is recorded on every line of ``<label>_report.log``.
 
@@ -326,8 +344,26 @@ Harvey inverse-BFGS (``"harvey"``, default)
 
 This method follows the inverse-BFGS update used by easyMECP: it builds a full
 inverse Hessian from successive effective-gradient and Cartesian-displacement
-pairs, including negative-curvature updates, and limits the total Cartesian
-step using Harvey's ``STPMX`` rule. Numerically singular updates are skipped.
+pairs, including negative-curvature updates, and limits the largest Cartesian
+component using Harvey's ``STPMX`` rule. Numerically singular updates are skipped.
+Ill-conditioned inverse Hessians and non-descent directions are reset to the
+configured diagonal initial inverse Hessian. The corresponding
+``bfgs_status=RESET_*`` reason is recorded in the report.
+
+Restarting interrupted calculations
+====================================
+
+MECP optimization state is written atomically after every completed step to
+``<label>_state.npz``. It contains the next geometry, inverse Hessian, previous
+effective gradient, and adaptive-step history. Re-running the same job resumes
+from that state by default. The saved atom sequence and optimizer method must
+match the new invocation; otherwise ChemSmart stops with an explicit error.
+Use ``--no-restart`` to deliberately start from the supplied input geometry.
+The state file is removed after successful convergence.
+
+MECP force calculations always include ``nosymm`` so that Gaussian Cartesian
+forces remain aligned with the optimizer coordinate frame. An explicit
+conflicting ``symmetry`` route option is rejected.
 
 Like easyMECP, ChemSmart maintains one rolling checkpoint per state
 (``<label>_A.chk`` and ``<label>_B.chk``) instead of one checkpoint per

@@ -297,6 +297,80 @@ def test_harvey_optimizer_converges_on_analytic_crossing(swap_states):
     np.testing.assert_allclose(positions, np.zeros((1, 3)), atol=1.0e-5)
 
 
+def _adaptive_step_job():
+    job = object.__new__(GaussianMECPJob)
+    job.settings = SimpleNamespace(
+        step_size=0.1,
+        step_size_grow=1.2,
+        step_size_shrink=0.5,
+        step_size_min=1.0e-4,
+        step_size_max=1.0,
+    )
+    return job
+
+
+@pytest.mark.parametrize(
+    ("previous_merit", "current_merit", "expected"),
+    [
+        (100.0, 80.0, 0.12),
+        (100.0, 95.0, 0.10),
+        (100.0, 101.0, 0.10),
+        (100.0, 103.0, 0.05),
+    ],
+)
+def test_grow_shrink_uses_relative_dead_band(
+    previous_merit, current_merit, expected
+):
+    job = _adaptive_step_job()
+
+    step = job._adapt_step_size(0.1, previous_merit, current_merit)
+
+    assert step == pytest.approx(expected)
+
+
+def test_bb_step_limits_abrupt_growth():
+    job = _adaptive_step_job()
+
+    step = job._bb_step_size(
+        0.1,
+        np.array([[0.0, 0.0, 0.0]]),
+        np.array([[1.0, 0.0, 0.0]]),
+        np.array([[0.0, 0.0, 0.0]]),
+        np.array([[0.1, 0.0, 0.0]]),
+    )
+
+    assert step == pytest.approx(0.2)
+
+
+def test_bb_step_damps_unreliable_curvature():
+    job = _adaptive_step_job()
+
+    step = job._bb_step_size(
+        0.1,
+        np.array([[0.0, 0.0, 0.0]]),
+        np.array([[1.0, 0.0, 0.0]]),
+        np.array([[0.0, 0.0, 0.0]]),
+        np.array([[-1.0, 0.0, 0.0]]),
+    )
+
+    assert step == pytest.approx(0.05)
+
+
+def test_bb_step_uses_only_seam_tangent_displacement():
+    job = _adaptive_step_job()
+
+    step = job._bb_step_size(
+        0.4,
+        np.array([[0.0, 0.0, 0.0]]),
+        np.array([[10.0, 1.0, 0.0]]),
+        np.array([[0.0, 0.0, 0.0]]),
+        np.array([[0.0, 2.0, 0.0]]),
+        np.array([[1.0, 0.0, 0.0]]),
+    )
+
+    assert step == pytest.approx(0.5)
+
+
 @pytest.mark.parametrize(
     ("label", "method", "expected"),
     [
