@@ -1804,9 +1804,7 @@ class PyMOLESPJobRunner(PyMOLVisualizationJobRunner):
         esp_cube = f"{job.esp_basename}_esp.cube"
 
         if not os.path.exists(density_cube):
-            logger.info(
-                f"Generating density cube file {density_cube} with cubegen"
-            )
+            logger.info(f"Generating density cube file {density_cube}")
             run_command(
                 f"{gaussian_exe}/cubegen 0 density=scf "
                 f"{job.source_basename}.fchk {density_cube} {job.npts}"
@@ -1815,7 +1813,7 @@ class PyMOLESPJobRunner(PyMOLVisualizationJobRunner):
             logger.info(f"cube file {density_cube} already exists.")
 
         if not os.path.exists(esp_cube):
-            logger.info(f"Generating ESP cube file {esp_cube} with cubegen")
+            logger.info(f"Generating ESP cube file {esp_cube}")
             run_command(
                 f"{gaussian_exe}/cubegen 0 potential=scf "
                 f"{job.source_basename}.fchk {esp_cube} {job.npts}"
