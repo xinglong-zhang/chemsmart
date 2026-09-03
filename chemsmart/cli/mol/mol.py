@@ -244,10 +244,12 @@ def click_pymol_esp_options(f):
         default="0",
         help="Cubegen grid specification for Gaussian cube generation. "
         "0: Gaussian default (80^3 points); "
+        "'-2 h': means what"
         "-2: coarse (3 points/Bohr); "
         "-3: medium (6 points/Bohr); "
         "-4: fine (12 points/Bohr). "
-        "Defaults to 0. Examples: 0, 80, -2, '-2 h'.",
+        "80: means what"
+        "Defaults to 0. Examples of available options: [0, '0', 80, -2, '-2 h'].",
     )
     @click.option(
         "-r",
