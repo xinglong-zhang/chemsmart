@@ -43,12 +43,12 @@ def _assert_progress_milestones(log_text: str) -> None:
         assert f"Matrix calculation progress: {milestone}%" in log_text
 
 
-class Test_grouper_cli_runner_and_strategy_edges:
+class TestGrouperCliRunner:
     """Cross-module CLI/runner wiring checks and strategy edge-case behavior."""
 
     # --- CLI wiring ---
     def test_tfd_cli_forwards_strategy_and_representative(
-        self, monkeypatch, multiple_molecules_xyz_file
+        self, monkeypatch, multiple_molecules_xyz_file, captured
     ):
         from click.testing import CliRunner
 
@@ -56,7 +56,6 @@ class Test_grouper_cli_runner_and_strategy_edges:
             "chemsmart.cli.grouper.grouper"
         )
         tfd_module = importlib.import_module("chemsmart.cli.grouper.tfd")
-        captured = {}
 
         def fake_create_grouper_job(ctx, **kwargs):
             captured.update(kwargs)
@@ -144,10 +143,8 @@ class Test_grouper_cli_runner_and_strategy_edges:
         assert job.grouping_strategy == "tfd"
 
     def test_grouper_runner_creates_tfd_with_representative(
-        self, methanol_molecules
+        self, methanol_molecules, captured
     ):
-        captured = {}
-
         class FakeTFDGrouper:
             def __init__(self, **kwargs):
                 captured.update(kwargs)
@@ -443,7 +440,7 @@ class Test_grouper_cli_runner_and_strategy_edges:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_BasicRMSD_grouper_and_basic_functionality:
+class TestBasicRMSDGrouperAndBasicFunctionality:
     NUM_PROCS = 4
 
     def test_rmsd_grouper(
@@ -742,7 +739,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_HungarianRMSD_grouper:
+class TestHungarianRMSDGrouper:
     NUM_PROCS = 4
 
     def test_hrmsd_grouper_for_rotated_molecules(
@@ -819,7 +816,7 @@ class Test_HungarianRMSD_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_SpyRMSD_grouper:
+class TestSpyRMSDGrouper:
     NUM_PROCS = 4
 
     def test_spyrmsd_grouper_for_rotated_molecules(
@@ -901,7 +898,7 @@ class Test_SpyRMSD_grouper:
     not _is_irmsd_available(), reason="irmsd API/command not available"
 )
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_IRMSD_grouper:
+class TestIRMSDGrouper:
     NUM_PROCS = 4
 
     def test_irmsd_grouper_for_rotated_molecules(
@@ -997,7 +994,7 @@ class Test_IRMSD_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_PymolRMSD_grouper:
+class TestPymolRMSDGrouper:
     NUM_PROCS = 1
 
     @classmethod
@@ -1157,7 +1154,7 @@ class Test_PymolRMSD_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_Tanimoto_similarity_grouper:
+class TestTanimotoSimilarityGrouper:
     NUM_PROCS = 4
 
     @pytest.mark.parametrize("threshold", (-0.1, 1.1))
@@ -1478,14 +1475,13 @@ class Test_Tanimoto_similarity_grouper:
         assert grouper._molecule_to_rdkit(methanol_molecules[0]) is None
 
     def test_tanimoto_num_groups_record_includes_actual_groups(
-        self, monkeypatch, methanol_molecules
+        self, monkeypatch, methanol_molecules, captured
     ):
         grouper = TanimotoSimilarityGrouper(
             methanol_molecules[:2], num_groups=2
         )
         grouper._cached_group_indices = [[0], [1]]
         grouper._auto_threshold = 0.8
-        captured = {}
 
         class Recorder:
             def get_labels(self, count):
@@ -1618,7 +1614,7 @@ class Test_Tanimoto_similarity_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_TorsionFingerprint_grouper:
+class TestTorsionFingerprintGrouper:
     NUM_PROCS = 4
 
     def test_torsionfingerprint_grouper_for_rotated_molecules(
@@ -1754,271 +1750,7 @@ class Test_TorsionFingerprint_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_other_groupers:
-    NUM_PROCS = 4
-
-    def test_base_record_template_method(self, methanol_molecules):
-        class DummyGrouper(MoleculeGrouper):
-            def group(self):
-                return [], []
-
-            def _record_results(self, **kwargs):
-                return kwargs
-
-        grouper = DummyGrouper(methanol_molecules)
-        payload = grouper.record(example_key="example_value")
-        assert payload["example_key"] == "example_value"
-
-    @pytest.mark.parametrize("energy_type", ["QHH", "QHG", "SP_QHG"])
-    def test_thermochemistry_parameters_header_for_qhg_energy_types(
-        self, methanol_molecules, energy_type
-    ):
-        """qhG and SP-qhG results must record the exact thermochemistry settings used."""
-        thermo_parameters = (
-            "temperature=298.15, concentration=1.0, pressure=1.0, "
-            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
-            "entropy_method=grimme, h_freq_cutoff=100.0, "
-            "energy_units=hartree, check_imaginary_frequencies=True, "
-            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
-        )
-        grouper = BasicRMSDGrouper(
-            methanol_molecules[:2],
-            threshold=0.5,
-            num_procs=1,
-            energy_type=energy_type,
-            thermo_parameters=thermo_parameters,
-        )
-
-        header_info = []
-        grouper._append_thermo_header(header_info)
-
-        assert header_info == [
-            ("Thermochemistry Parameters", thermo_parameters)
-        ]
-
-    @pytest.mark.parametrize("energy_type", ["E", "H", "G"])
-    def test_thermochemistry_parameters_header_not_written_for_other_energy_types(
-        self, methanol_molecules, energy_type
-    ):
-        """Thermochemistry parameter header is specific to qhG and SP-qhG."""
-        thermo_parameters = (
-            "temperature=298.15, concentration=1.0, pressure=1.0, "
-            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
-            "entropy_method=grimme, h_freq_cutoff=100.0, "
-            "energy_units=hartree, check_imaginary_frequencies=True, "
-            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
-        )
-        grouper = BasicRMSDGrouper(
-            methanol_molecules[:2],
-            threshold=0.5,
-            num_procs=1,
-            energy_type=energy_type,
-            thermo_parameters=thermo_parameters,
-        )
-
-        header_info = []
-        grouper._append_thermo_header(header_info)
-
-        assert not any(
-            key == "Thermochemistry Parameters" for key, _ in header_info
-        )
-
-    def test_record_writes_rmsd_matrix_with_headers(
-        self, methanol_molecules, temporary_working_dir
-    ):
-        """Detailed record test: verify matrix file and key header lines are written."""
-        from openpyxl import load_workbook
-
-        molecules = methanol_molecules[:2]
-        grouper = BasicRMSDGrouper(
-            molecules,
-            threshold=0.5,
-            num_procs=1,
-            label="record_detail",
-            energy_type="E",
-        )
-
-        # Populate cache first so Groups sheet can be generated.
-        groups, group_indices = grouper.group()
-        assert len(groups) >= 1
-        assert len(group_indices) >= 1
-
-        # Call unified record() explicitly to validate template-method path.
-        rmsd_matrix = np.zeros((len(molecules), len(molecules)))
-        grouper.record(rmsd_matrix=rmsd_matrix, grouping_time=0.01)
-
-        xlsx_file = os.path.join(
-            temporary_working_dir,
-            "record_detail_group_result",
-            "record_detail_BasicRMSDGrouper_T0.5.xlsx",
-        )
-        assert os.path.exists(xlsx_file)
-
-        wb = load_workbook(xlsx_file, data_only=True)
-        assert "RMSD_Matrix" in wb.sheetnames
-        assert "Groups" in wb.sheetnames
-
-        ws = wb["RMSD_Matrix"]
-        header_lines = [str(ws[f"A{i}"].value) for i in range(1, 25)]
-
-        assert any("Energy Type: E" in line for line in header_lines if line)
-        assert any(
-            "Used Molecules: 2" in line for line in header_lines if line
-        )
-        assert any(
-            "Skipped Molecules: 0" in line for line in header_lines if line
-        )
-        assert any("Grouping Time:" in line for line in header_lines if line)
-
-    def test_record_writes_formula_outputs_with_headers(
-        self, methanol_and_ethanol, temporary_working_dir
-    ):
-        """Detailed record test: verify non-matrix output sheet and header lines."""
-        from openpyxl import load_workbook
-
-        grouper = FormulaGrouper(
-            methanol_and_ethanol,
-            num_procs=1,
-            label="formula_record_detail",
-            energy_type="E",
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 2
-        assert len(group_indices) == 2
-
-        xlsx_file = os.path.join(
-            temporary_working_dir,
-            "formula_record_detail_group_result",
-            "formula_record_detail_FormulaGrouper.xlsx",
-        )
-        assert os.path.exists(xlsx_file)
-
-        wb = load_workbook(xlsx_file, data_only=True)
-        assert "Formulas" in wb.sheetnames
-        assert "Groups" in wb.sheetnames
-
-        ws = wb["Formulas"]
-        header_lines = [str(ws[f"A{i}"].value) for i in range(1, 25)]
-        assert any(
-            "Total Molecules: 2" in line for line in header_lines if line
-        )
-        assert any(
-            "Unique Formulas: 2" in line for line in header_lines if line
-        )
-        assert any("Energy Type: E" in line for line in header_lines if line)
-
-    def test_formula_grouper(
-        self,
-        methanol_molecules,
-        methanol_and_ethanol,
-        conformers_from_rdkit,
-    ):
-        grouper = FormulaGrouper(methanol_molecules)
-        groups, group_indices = grouper.group()
-        unique_structures = grouper.unique()
-        assert (
-            len(groups) == 1
-        ), "Molecules should form one group based on formula."
-
-        assert (
-            len(unique_structures) == 1
-        ), "Molecules should form one group based on formula."
-
-        grouper2 = FormulaGrouper(methanol_and_ethanol)
-        groups, group_indices = grouper2.group()
-        unique_structures = grouper2.unique()
-        assert (
-            len(groups) == 2
-        ), "Molecules should form two groups based on formula."
-        assert (
-            len(unique_structures) == 2
-        ), "Molecules should form two groups based on formula."
-
-        grouper3 = FormulaGrouper(conformers_from_rdkit)
-        # based on Formula, should all be the same even for 300 conformers
-        groups, group_indices = grouper3.group()
-        unique_structures = grouper3.unique()
-        assert len(groups) == 1
-        assert len(unique_structures) == 1
-
-    @pytest.mark.slow
-    def test_connectivity_grouper(
-        self, methanol_molecules, methanol_and_ethanol
-    ):
-        grouper = ConnectivityGrouper(methanol_molecules)
-        groups, group_indices = grouper.group()
-        assert (
-            len(groups) == 1
-        ), "Molecules should form one group based on connectivity."
-        assert (
-            len(group_indices) == 1
-        ), "Molecules should form one group based on connectivity."
-        unique_structures = grouper.unique()
-        assert (
-            len(unique_structures) == 1
-        ), "Molecules should form one group based on connectivity."
-
-        grouper2 = ConnectivityGrouper(methanol_and_ethanol)
-        groups, group_indices = grouper2.group()
-        assert (
-            len(groups) == 2
-        ), "Molecules should form two groups based on connectivity."
-        assert (
-            len(group_indices) == 2
-        ), "Molecules should form two groups based on connectivity."
-        unique_structures = grouper2.unique()
-        assert (
-            len(unique_structures) == 2
-        ), "Molecules should form two groups based on connectivity."
-
-    def test_connectivity_grouper_for_crest_conformers(
-        self, multiple_molecules_xyz_file
-    ):
-        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
-
-        molecules = xyz_file.get_molecules(index=":", return_list=True)
-        assert len(molecules) == 18
-        grouper = ConnectivityGrouper(
-            molecules,
-            num_procs=self.NUM_PROCS,
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 1
-        assert len(group_indices) == 1
-        unique_structures = grouper.unique()
-        assert len(unique_structures) == 1
-
-    def test_rdkit_isomorphism_grouper(
-        self, methanol_molecules, methanol_and_ethanol
-    ):
-        grouper = RDKitIsomorphismGrouper(methanol_molecules)
-        groups, group_indices = grouper.group()
-        assert (
-            len(groups) == 1
-        ), "Molecules should form one group based on RCM similarity."
-        assert (
-            len(group_indices) == 1
-        ), "Molecules should form one group based on RCM similarity."
-        unique_structures = grouper.unique()
-        assert (
-            len(unique_structures) == 1
-        ), "Molecules should form one group based on RCM similarity."
-        grouper2 = RDKitIsomorphismGrouper(methanol_and_ethanol)
-        groups, group_indices = grouper2.group()
-        assert (
-            len(groups) == 2
-        ), "Molecules should form two groups based on RCM similarity."
-        assert (
-            len(group_indices) == 2
-        ), "Molecules should form two groups based on RCM similarity."
-        unique_structures = grouper2.unique()
-        assert (
-            len(unique_structures) == 2
-        ), "Molecules should form two groups based on RCM similarity."
-
-
-@pytest.mark.usefixtures("temporary_working_dir")
-class Test_EnergyGrouper:
+class TestEnergyGrouper:
     NUM_PROCS = 4
 
     @pytest.mark.parametrize(
@@ -2307,7 +2039,271 @@ class Test_EnergyGrouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Testfactory:
+class TestOtherGroupers:
+    NUM_PROCS = 4
+
+    def test_base_record_template_method(self, methanol_molecules):
+        class DummyGrouper(MoleculeGrouper):
+            def group(self):
+                return [], []
+
+            def _record_results(self, **kwargs):
+                return kwargs
+
+        grouper = DummyGrouper(methanol_molecules)
+        payload = grouper.record(example_key="example_value")
+        assert payload["example_key"] == "example_value"
+
+    @pytest.mark.parametrize("energy_type", ["QHH", "QHG", "SP_QHG"])
+    def test_thermochemistry_parameters_header_for_qhg_energy_types(
+        self, methanol_molecules, energy_type
+    ):
+        """qhG and SP-qhG results must record the exact thermochemistry settings used."""
+        thermo_parameters = (
+            "temperature=298.15, concentration=1.0, pressure=1.0, "
+            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
+            "entropy_method=grimme, h_freq_cutoff=100.0, "
+            "energy_units=hartree, check_imaginary_frequencies=True, "
+            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
+        )
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2],
+            threshold=0.5,
+            num_procs=1,
+            energy_type=energy_type,
+            thermo_parameters=thermo_parameters,
+        )
+
+        header_info = []
+        grouper._append_thermo_header(header_info)
+
+        assert header_info == [
+            ("Thermochemistry Parameters", thermo_parameters)
+        ]
+
+    @pytest.mark.parametrize("energy_type", ["E", "H", "G"])
+    def test_thermochemistry_parameters_header_not_written_for_other_energy_types(
+        self, methanol_molecules, energy_type
+    ):
+        """Thermochemistry parameter header is specific to qhG and SP-qhG."""
+        thermo_parameters = (
+            "temperature=298.15, concentration=1.0, pressure=1.0, "
+            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
+            "entropy_method=grimme, h_freq_cutoff=100.0, "
+            "energy_units=hartree, check_imaginary_frequencies=True, "
+            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
+        )
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2],
+            threshold=0.5,
+            num_procs=1,
+            energy_type=energy_type,
+            thermo_parameters=thermo_parameters,
+        )
+
+        header_info = []
+        grouper._append_thermo_header(header_info)
+
+        assert not any(
+            key == "Thermochemistry Parameters" for key, _ in header_info
+        )
+
+    def test_record_writes_rmsd_matrix_with_headers(
+        self, methanol_molecules, temporary_working_dir
+    ):
+        """Detailed record test: verify matrix file and key header lines are written."""
+        from openpyxl import load_workbook
+
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+            label="record_detail",
+            energy_type="E",
+        )
+
+        # Populate cache first so Groups sheet can be generated.
+        groups, group_indices = grouper.group()
+        assert len(groups) >= 1
+        assert len(group_indices) >= 1
+
+        # Call unified record() explicitly to validate template-method path.
+        rmsd_matrix = np.zeros((len(molecules), len(molecules)))
+        grouper.record(rmsd_matrix=rmsd_matrix, grouping_time=0.01)
+
+        xlsx_file = os.path.join(
+            temporary_working_dir,
+            "record_detail_group_result",
+            "record_detail_BasicRMSDGrouper_T0.5.xlsx",
+        )
+        assert os.path.exists(xlsx_file)
+
+        wb = load_workbook(xlsx_file, data_only=True)
+        assert "RMSD_Matrix" in wb.sheetnames
+        assert "Groups" in wb.sheetnames
+
+        ws = wb["RMSD_Matrix"]
+        header_lines = [str(ws[f"A{i}"].value) for i in range(1, 25)]
+
+        assert any("Energy Type: E" in line for line in header_lines if line)
+        assert any(
+            "Used Molecules: 2" in line for line in header_lines if line
+        )
+        assert any(
+            "Skipped Molecules: 0" in line for line in header_lines if line
+        )
+        assert any("Grouping Time:" in line for line in header_lines if line)
+
+    def test_record_writes_formula_outputs_with_headers(
+        self, methanol_and_ethanol, temporary_working_dir
+    ):
+        """Detailed record test: verify non-matrix output sheet and header lines."""
+        from openpyxl import load_workbook
+
+        grouper = FormulaGrouper(
+            methanol_and_ethanol,
+            num_procs=1,
+            label="formula_record_detail",
+            energy_type="E",
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 2
+        assert len(group_indices) == 2
+
+        xlsx_file = os.path.join(
+            temporary_working_dir,
+            "formula_record_detail_group_result",
+            "formula_record_detail_FormulaGrouper.xlsx",
+        )
+        assert os.path.exists(xlsx_file)
+
+        wb = load_workbook(xlsx_file, data_only=True)
+        assert "Formulas" in wb.sheetnames
+        assert "Groups" in wb.sheetnames
+
+        ws = wb["Formulas"]
+        header_lines = [str(ws[f"A{i}"].value) for i in range(1, 25)]
+        assert any(
+            "Total Molecules: 2" in line for line in header_lines if line
+        )
+        assert any(
+            "Unique Formulas: 2" in line for line in header_lines if line
+        )
+        assert any("Energy Type: E" in line for line in header_lines if line)
+
+    def test_formula_grouper(
+        self,
+        methanol_molecules,
+        methanol_and_ethanol,
+        conformers_from_rdkit,
+    ):
+        grouper = FormulaGrouper(methanol_molecules)
+        groups, group_indices = grouper.group()
+        unique_structures = grouper.unique()
+        assert (
+            len(groups) == 1
+        ), "Molecules should form one group based on formula."
+
+        assert (
+            len(unique_structures) == 1
+        ), "Molecules should form one group based on formula."
+
+        grouper2 = FormulaGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        unique_structures = grouper2.unique()
+        assert (
+            len(groups) == 2
+        ), "Molecules should form two groups based on formula."
+        assert (
+            len(unique_structures) == 2
+        ), "Molecules should form two groups based on formula."
+
+        grouper3 = FormulaGrouper(conformers_from_rdkit)
+        # based on Formula, should all be the same even for 300 conformers
+        groups, group_indices = grouper3.group()
+        unique_structures = grouper3.unique()
+        assert len(groups) == 1
+        assert len(unique_structures) == 1
+
+    @pytest.mark.slow
+    def test_connectivity_grouper(
+        self, methanol_molecules, methanol_and_ethanol
+    ):
+        grouper = ConnectivityGrouper(methanol_molecules)
+        groups, group_indices = grouper.group()
+        assert (
+            len(groups) == 1
+        ), "Molecules should form one group based on connectivity."
+        assert (
+            len(group_indices) == 1
+        ), "Molecules should form one group based on connectivity."
+        unique_structures = grouper.unique()
+        assert (
+            len(unique_structures) == 1
+        ), "Molecules should form one group based on connectivity."
+
+        grouper2 = ConnectivityGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        assert (
+            len(groups) == 2
+        ), "Molecules should form two groups based on connectivity."
+        assert (
+            len(group_indices) == 2
+        ), "Molecules should form two groups based on connectivity."
+        unique_structures = grouper2.unique()
+        assert (
+            len(unique_structures) == 2
+        ), "Molecules should form two groups based on connectivity."
+
+    def test_connectivity_grouper_for_crest_conformers(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+        grouper = ConnectivityGrouper(
+            molecules,
+            num_procs=self.NUM_PROCS,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 1
+        assert len(group_indices) == 1
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 1
+
+    def test_rdkit_isomorphism_grouper(
+        self, methanol_molecules, methanol_and_ethanol
+    ):
+        grouper = RDKitIsomorphismGrouper(methanol_molecules)
+        groups, group_indices = grouper.group()
+        assert (
+            len(groups) == 1
+        ), "Molecules should form one group based on RCM similarity."
+        assert (
+            len(group_indices) == 1
+        ), "Molecules should form one group based on RCM similarity."
+        unique_structures = grouper.unique()
+        assert (
+            len(unique_structures) == 1
+        ), "Molecules should form one group based on RCM similarity."
+        grouper2 = RDKitIsomorphismGrouper(methanol_and_ethanol)
+        groups, group_indices = grouper2.group()
+        assert (
+            len(groups) == 2
+        ), "Molecules should form two groups based on RCM similarity."
+        assert (
+            len(group_indices) == 2
+        ), "Molecules should form two groups based on RCM similarity."
+        unique_structures = grouper2.unique()
+        assert (
+            len(unique_structures) == 2
+        ), "Molecules should form two groups based on RCM similarity."
+
+
+@pytest.mark.usefixtures("temporary_working_dir")
+class TestFactory:
 
     @pytest.mark.parametrize(
         ("parameter", "value"),
@@ -2406,7 +2402,7 @@ class Testfactory:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_grouper_utility_functions:
+class TestGrouperUtilityFunctions:
     """Test utility functions and helper methods in groupers."""
 
     NUM_PROCS = 1
@@ -2487,7 +2483,7 @@ class Test_grouper_utility_functions:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_grouper_complete_linkage_input_validation:
+class TestCompleteLinkageInput:
     """Input validation checks for complete-linkage based matrix groupers."""
 
     NUM_PROCS = 4
@@ -2598,7 +2594,7 @@ class Test_grouper_complete_linkage_input_validation:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_grouper_complete_linkage_output_behavior:
+class TestCompleteLinkageOutput:
     """Output/state behavior and clustering semantics for complete linkage."""
 
     NUM_PROCS = 4
@@ -3371,7 +3367,7 @@ class Test_grouper_complete_linkage_output_behavior:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_conformer_ids_functionality:
+class TestConformerIdsFunctionality:
     """Test conformer_ids parameter functionality."""
 
     NUM_PROCS = 1
@@ -3468,7 +3464,7 @@ class Test_conformer_ids_functionality:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_output_file_generation:
+class TestOutputFileGeneration:
     """Test that grouper generates correct output files."""
 
     NUM_PROCS = 1
@@ -3645,7 +3641,7 @@ class Test_output_file_generation:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_edge_cases:
+class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
     def test_two_molecules_grouping(self):
@@ -3755,7 +3751,7 @@ class Test_edge_cases:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_label_and_append_label:
+class TestLabelAndAppendLabel:
     """Test -l (label) and -a (append_label) parameter functionality."""
 
     NUM_PROCS = 1
@@ -4102,7 +4098,7 @@ class TestConformerIdExtraction:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_energy_extraction_function:
+class TestEnergyExtractionFunction:
     """Framework tests for energy extraction by file type."""
 
     def test_energy_extraction_gaussian(
@@ -4199,7 +4195,7 @@ class Test_energy_extraction_function:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_multiprocessing_support:
+class TestMultiprocessingSupport:
     def test_basic_rmsd_serial_parallel_equivalent(self, methanol_molecules):
         serial = BasicRMSDGrouper(
             methanol_molecules, threshold=0.5, num_procs=1
@@ -4420,7 +4416,7 @@ class Test_multiprocessing_support:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_grouper_representative_strategy:
+class TestRepresentativeStrategy:
     class DummyDistanceGrouper(MatrixGrouper):
         def __init__(self, molecules, distance_matrix, **kwargs):
             super().__init__(molecules, threshold=9.9, **kwargs)
