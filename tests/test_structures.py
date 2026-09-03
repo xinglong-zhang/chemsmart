@@ -164,6 +164,52 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 
 
 class TestStructures:
+    def test_to_rdkit_rejects_invalid_bond_method(self, methanol_molecule):
+        with pytest.raises(
+            ValueError,
+            match="bond_method must be either 'chemsmart' or 'rdkit'",
+        ):
+            methanol_molecule.to_rdkit(bond_method="invalid")
+
+    def test_to_rdkit_rejects_bondless_rdkit_method(self, methanol_molecule):
+        with pytest.raises(
+            ValueError,
+            match="add_bonds=False is incompatible",
+        ):
+            methanol_molecule.to_rdkit(
+                add_bonds=False,
+                bond_method="rdkit",
+            )
+
+    @pytest.mark.parametrize(
+        "method_name",
+        ("to_rdkit", "to_rdkit_connectivity_graph"),
+    )
+    def test_rdkit_xyz_conversion_failure(
+        self, monkeypatch, methanol_molecule, method_name
+    ):
+        monkeypatch.setattr(Chem, "MolFromXYZBlock", lambda xyz: None)
+
+        with pytest.raises(
+            ValueError,
+            match="RDKit failed to create a molecule from XYZ coordinates",
+        ):
+            method = getattr(methanol_molecule, method_name)
+            if method_name == "to_rdkit":
+                method(bond_method="rdkit")
+            else:
+                method()
+
+    def test_rdkit_hash_can_ignore_hydrogens(self, methanol_molecule):
+        hash_with_hydrogens = methanol_molecule.get_rdkit_hash()
+        hash_without_hydrogens = methanol_molecule.get_rdkit_hash(
+            ignore_hydrogens=True
+        )
+
+        assert hash_with_hydrogens
+        assert hash_without_hydrogens
+        assert hash_with_hydrogens != hash_without_hydrogens
+
     def test_to_rdkit_connectivity_graph(self, methanol_molecule):
         graph = methanol_molecule.to_rdkit_connectivity_graph()
 
