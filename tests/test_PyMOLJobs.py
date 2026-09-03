@@ -677,7 +677,7 @@ class TestPyMOLJobs:
             label="benzene",
         )
         job_esp_default.set_folder(tmpdir)
-        assert job_esp_default.npts == "-2"
+        assert job_esp_default.npts == "0"
         assert job_esp_default.label == "benzene"
         assert job_esp_default.esp_basename == "benzene_ESP"
         assert job_esp_default.color_range == 0.04

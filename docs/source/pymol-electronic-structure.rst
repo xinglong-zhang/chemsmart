@@ -180,8 +180,8 @@ Generate electrostatic potential surface visualizations.
 
    -  -  ``--npts``
       -  string
-      -  Cubegen grid specification (default: ``-2``). Use ``-2`` (coarse), ``-3`` (medium), or ``-4`` (fine), or an
-         explicit grid such as ``80`` or ``"-2 h"``.
+      -  Cubegen grid specification (default: ``0``, Gaussian default of ``80^3`` points). Use ``-2`` (coarse),
+         ``-3`` (medium), or ``-4`` (fine), or an explicit grid such as ``80`` or ``"-2 h"``.
 
    -  -  ``-r, --color-range``
       -  float

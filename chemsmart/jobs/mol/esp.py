@@ -14,7 +14,7 @@ class PyMOLESPJob(PyMOLJob):
         label,
         esp_basename=None,
         color_range=None,
-        npts="-2",
+        npts="0",
         isosurface_value=None,
         transparency_value=None,
         **kwargs,
@@ -28,7 +28,7 @@ class PyMOLESPJob(PyMOLJob):
         if color_range is None:
             color_range = 0.04
         if npts is None:
-            npts = "-2"
+            npts = "0"
         if isosurface_value is None:
             isosurface_value = 0.001
         if transparency_value is None:
