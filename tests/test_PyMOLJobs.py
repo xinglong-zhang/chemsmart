@@ -813,6 +813,22 @@ class TestPyMOLJobs:
             tmpdir, "model_opt_input_spin.pse"
         )
 
+    def test_pymol_esp_job_on_gaussian_com_file(
+        self,
+        tmpdir,
+        gaussian_opt_inputfile,
+        pymol_movie_jobrunner,
+    ):
+        job = PyMOLESPJob.from_filename(
+            gaussian_opt_inputfile,
+            jobrunner=pymol_movie_jobrunner,
+        )
+        job.set_folder(tmpdir)
+        assert job.job_basename == "model_opt_input_ESP"
+        assert job.outputfile == os.path.join(
+            tmpdir, "model_opt_input_ESP.pse"
+        )
+
 
 class TestPyMOLCLIFolderOptions:
     """Folder options (``-d``/``-t`` and ``-d``/``-p``) in the ``mol`` CLI."""
@@ -897,6 +913,41 @@ class TestPyMOLFileProcessingUsesSourceFilename:
         assert kwargs["source_basename"] == "benzene"
         assert kwargs["label"] == custom_label
         assert kwargs["spin_basename"] == custom_label
+
+    def test_esp_cli_custom_label_uses_source_basename_and_esp_options(
+        self, gaussian_benzene_opt_outfile, invoke_mol_cli
+    ):
+        from unittest.mock import patch
+
+        custom_label = "custom_esp_label"
+        with patch("chemsmart.jobs.mol.esp.PyMOLESPJob") as mock_esp_job:
+            result = invoke_mol_cli(
+                [
+                    "-f",
+                    gaussian_benzene_opt_outfile,
+                    "-l",
+                    custom_label,
+                    "esp",
+                    "-i",
+                    "0.1",
+                    "-r",
+                    "0.08",
+                    "--npts",
+                    "-4 h",
+                    "-c",
+                    "[[1, 2]]",
+                ]
+            )
+
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_esp_job.call_args
+        assert kwargs["source_basename"] == "benzene"
+        assert kwargs["label"] == custom_label
+        assert kwargs["esp_basename"] == custom_label
+        assert kwargs["isosurface_value"] == 0.1
+        assert kwargs["color_range"] == 0.08
+        assert kwargs["npts"] == "-4 h"
+        assert kwargs["coordinates"] == [[1, 2]]
 
     def test_generate_fchk_uses_source_basename_not_label(
         self,
@@ -1029,7 +1080,11 @@ class TestPyMOLFileProcessingUsesSourceFilename:
             "[-0.08, -0.04, 0, 0.04, 0.08], [red, orange, yellow, green, blue]\n"
             in pml
         )
+        assert "color esp_ramp, esp_surface\n" in pml
         assert "set transparency, 0.2, esp_surface\n" in pml
+        assert f"set surface_quality, {job.surface_quality}\n" in pml
+        assert f"set antialias, {job.antialias_value}\n" in pml
+        assert f"set ray_trace_mode, {job.ray_trace_mode}\n" in pml
 
     def test_nci_uses_source_basename_for_cube_loading_and_command(
         self, tmpdir, gaussian_benzene_opt_outfile, pbs_server
