@@ -143,7 +143,7 @@ or
 
 .. note::
 
-   If ``~/.bashrc`` already contains a chemsmart section (i.e. ``make configure`` has been run before), it will *not* be
+   If ``~/.bashrc`` already contains a CHEMSMART section (i.e. ``make configure`` has been run before), it will *not* be
    modified again to avoid duplicate entries.
 
 .. tip::

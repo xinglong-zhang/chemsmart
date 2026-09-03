@@ -8,6 +8,7 @@ from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.jobs.xtb.writer import XTBInputWriter
 
 
+@pytest.mark.usefixtures("temporary_working_dir")
 class TestXTBInputWriter:
     def test_write_distance_angle_dihedral_constraints(
         self, tmpdir, methane_molecule, xtb_jobrunner_no_scratch

@@ -57,11 +57,17 @@ These options are shared across all grouping strategies and must be placed BEFOR
 
    -  -  ``-N, --num-groups``
       -  int
-      -  Target number of groups (adaptive threshold finding)
+      -  Target number of groups using complete-linkage distance levels. Tied linkage levels are not split, so the
+         actual number of groups can be slightly larger than requested.
 
    -  -  ``-np, --num-procs``
+
       -  int
-      -  Number of processors for parallel calculation (default: 1)
+
+      -  Requested processor count (default: 1). Multiprocessing is strategy-dependent: ``rmsd``, ``hrmsd``,
+         ``spyrmsd``, and ``irmsd`` support it; ``pymolrmsd``, ``tfd``, ``tanimoto``, ``energy``, ``formula``,
+         ``connectivity``, and ``isomorphism`` are serial-only. For serial-only strategies, requesting ``num_procs > 1``
+         emits a warning and falls back to ``num_procs=1``.
 
    -  -  ``-ih, --ignore-hydrogens``
       -  flag
@@ -69,7 +75,19 @@ These options are shared across all grouping strategies and must be placed BEFOR
 
    -  -  ``-m, --matrix-format``
       -  string
-      -  Output format for group results (xlsx, csv, txt, default: xyz)
+      -  Output format for group results (xlsx, csv, txt, default: xlsx)
+
+   -  -  ``-r, --representative``
+
+      -  choice
+
+      -  Representative selection strategy (default: ``lowest``): ``lowest`` (all strategies; group ordered by ascending
+         energy, representative is ``group[0]``), ``center`` (matrix-based only; group ordered by increasing mean
+         distance centrality ``C_i = 1/(|G|-1) * sum(D_ij)``, tie-break: centrality, then energy, then original index),
+         ``top3`` (matrix-based only; choose representative from the three lowest-energy members by centrality to the
+         full group, then keep remaining members in ascending energy order; groups with fewer than 3 members fall back
+         to ``lowest``). Non-matrix strategies (``formula``, ``connectivity``, ``isomorphism``) reject ``center`` and
+         ``top3``.
 
    -  -  ``-E, --energy-type``
       -  string
@@ -272,7 +290,7 @@ Supported energy types:
 
 **Thermochemistry corrections:**
 
-When using ``qhH``, ``qhG``, or ``sp_qhG``, chemsmart leverages the internal thermochemistry module to compute corrected
+When using ``qhH``, ``qhG``, or ``sp_qhG``, CHEMSMART leverages the internal thermochemistry module to compute corrected
 thermodynamic values. Additional thermochemistry CLI options (e.g., temperature, concentration, frequency cutoffs,
 entropy method) become available.
 
@@ -312,7 +330,10 @@ Group XYZ Files
 
 Each file contains:
 
--  All molecules in that group, sorted by energy (lowest first)
+-  All molecules in that group in representative-defined order (first member is the representative): ``lowest`` keeps
+   energy order, ``center`` keeps centrality order, and ``top3`` keeps representative first with remaining members in
+   energy order
+
 -  Comment line with: Group number, Original_Index, Energy (Hartree)
 
 Example comment line:

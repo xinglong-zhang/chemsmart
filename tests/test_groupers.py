@@ -1,3 +1,4 @@
+import importlib
 import os
 import shutil
 
@@ -5,7 +6,7 @@ import numpy as np
 import pytest
 
 from chemsmart.io.xyz.xyzfile import XYZFile
-from chemsmart.jobs.grouper.base import MoleculeGrouper
+from chemsmart.jobs.grouper.base import MatrixGrouper, MoleculeGrouper
 from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
 from chemsmart.jobs.grouper.energy import EnergyGrouper
 from chemsmart.jobs.grouper.formula import FormulaGrouper
@@ -22,6 +23,22 @@ from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
 from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 from chemsmart.utils.grouper import StructureGrouperFactory
 from chemsmart.utils.utils import find_irmsd_command, kabsch_align
+
+
+def _is_irmsd_available() -> bool:
+    """Return True when either irmsd Python API or CLI is available."""
+    try:
+        irmsd_module = importlib.import_module("irmsd.api.irmsd_exposed")
+        getattr(irmsd_module, "get_irmsd")
+        return True
+    except (ImportError, OSError, AttributeError):
+        return bool(find_irmsd_command())
+
+
+def _assert_progress_milestones(log_text: str) -> None:
+    """Assert that progress milestones from 10% to 100% are present."""
+    for milestone in range(10, 101, 10):
+        assert f"Matrix calculation progress: {milestone}%" in log_text
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -43,12 +60,12 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         grouper = BasicRMSDGrouper(methanol_molecules)
         groups, group_indices = grouper.group()
 
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(
             rmsd, 0.0, rtol=1e-3
         ), "RMSD should be close to zero."
 
-        rmsd = grouper._calculate_rmsd((1, 2))
+        rmsd = grouper.calculate_rmsd_pair(1, 2)
         assert np.isclose(
             rmsd, 0.0, rtol=1e-3
         ), "RMSD should be close to zero."
@@ -75,21 +92,21 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         groups, group_indices = grouper2.group()
 
         assert (
-            len(groups) == 2
+            len(groups) == 1
         ), "Molecules should form two groups based on geometry."
         assert (
-            len(group_indices) == 2
+            len(group_indices) == 1
         ), "Molecules should form two groups based on geometry."
 
-        rmsd = grouper2._calculate_rmsd((0, 1))
+        rmsd = grouper2.calculate_rmsd_pair(0, 1)
         assert (
             rmsd is np.inf
         ), "RMSD is set to be infinity for different molecules."
 
         unique_structures = grouper2.unique()
         assert (
-            len(unique_structures) == 2
-        ), "Molecules should form two groups based on geometry."
+            len(unique_structures) == 1
+        ), "One incompatible structure should be skipped, leaving one unique structure."
 
     def test_rmsd_grouper_for_crest_conformers(
         self, multiple_molecules_xyz_file
@@ -108,7 +125,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         assert len(unique_structures) == 18
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.409, rtol=1e-3)
 
         _, _, _, _, rmsd = kabsch_align(
@@ -138,19 +155,19 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
             molecules, threshold=1.5, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper4.group()
-        assert len(groups) == 9
-        assert len(group_indices) == 9
+        assert len(groups) == 8
+        assert len(group_indices) == 8
         unique_structures = grouper4.unique()
-        assert len(unique_structures) == 9
+        assert len(unique_structures) == 8
 
         grouper5 = BasicRMSDGrouper(
             molecules, threshold=2.0, num_procs=self.NUM_PROCS
         )
         groups, group_indices = grouper5.group()
-        assert len(groups) == 8
-        assert len(group_indices) == 8
+        assert len(groups) == 7
+        assert len(group_indices) == 7
         unique_structures = grouper5.unique()
-        assert len(unique_structures) == 8
+        assert len(unique_structures) == 7
 
         grouper6 = BasicRMSDGrouper(
             molecules, threshold=2.5, num_procs=self.NUM_PROCS
@@ -193,7 +210,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
 
         energies = [mol.energy for mol in unique_structures]
         assert -126.2575508 in energies
-        assert -126.25153216 in energies
+        assert -126.25017833 in energies
         assert -126.24909661 in energies
 
     def test_rmsd_grouper_for_crest_conformers_ignore_Hs(
@@ -216,7 +233,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         assert len(unique_structures) == 17
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.301, rtol=1e-3)  # removed H atoms
 
         _, _, _, _, rmsd = kabsch_align(
@@ -279,10 +296,15 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
             ignore_hydrogens=True,
         )
         groups, group_indices = grouper6.group()
-        assert len(groups) == 5
-        assert len(group_indices) == 5
+        for indices in group_indices:
+            for i, idx_i in enumerate(indices):
+                for idx_j in indices[i + 1 :]:
+                    rmsd = grouper6.calculate_rmsd_pair(idx_i, idx_j)
+                    assert rmsd <= 2.5
+        assert len(groups) == 4
+        assert len(group_indices) == 4
         unique_structures = grouper6.unique()
-        assert len(unique_structures) == 5
+        assert len(unique_structures) == 4
 
     def test_rmsd_grouper_for_rotated_molecules(
         self, two_rotated_molecules_xyz_file
@@ -302,9 +324,16 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         unique_structures = grouper.unique()
         assert len(unique_structures) == 2
 
-        # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
-        assert np.isclose(rmsd, 0.611, rtol=1e-3)
+    def test_calculate_rmsd_pair_wrapper_validation(self, methanol_molecules):
+        grouper = BasicRMSDGrouper(methanol_molecules[:2])
+
+        assert np.isclose(grouper.calculate_rmsd_pair(0, 0), 0.0)
+
+        with pytest.raises(IndexError):
+            grouper.calculate_rmsd_pair(0, 3)
+
+        with pytest.raises(TypeError):
+            grouper.calculate_rmsd_pair("a", 1)  # type: ignore[arg-type]
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -330,7 +359,7 @@ class Test_HungarianRMSD_grouper:
         assert len(unique_structures) == 1
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.2294, rtol=1e-3)
 
     def test_hrmsd_grouper_for_crest_molecules(
@@ -352,11 +381,11 @@ class Test_HungarianRMSD_grouper:
         assert len(unique_structures) == 12
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.4091, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 2))
+        rmsd = grouper.calculate_rmsd_pair(0, 2)
         assert np.isclose(rmsd, 0.5899, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 3))
+        rmsd = grouper.calculate_rmsd_pair(0, 3)
         assert np.isclose(rmsd, 1.8891, rtol=1e-3)
 
     def test_ignore_hydrogen(self, multiple_molecules_xyz_file):
@@ -376,7 +405,7 @@ class Test_HungarianRMSD_grouper:
         assert len(unique_structures) == 12
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 4))
+        rmsd = grouper.calculate_rmsd_pair(0, 4)
         assert np.isclose(rmsd, 1.1915, rtol=1e-3)
 
 
@@ -403,7 +432,7 @@ class Test_SpyRMSD_grouper:
         assert len(unique_structures) == 1
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.2125, rtol=1e-3)
 
     def test_spyrmsd_grouper_for_crest_molecules(
@@ -425,15 +454,15 @@ class Test_SpyRMSD_grouper:
         assert len(unique_structures) == 12
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.4091, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 2))
+        rmsd = grouper.calculate_rmsd_pair(0, 2)
         assert np.isclose(rmsd, 1.3925, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 3))
+        rmsd = grouper.calculate_rmsd_pair(0, 3)
         assert np.isclose(rmsd, 2.1789, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 4))
+        rmsd = grouper.calculate_rmsd_pair(0, 4)
         assert np.isclose(rmsd, 1.8202, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 5))
+        rmsd = grouper.calculate_rmsd_pair(0, 5)
         assert np.isclose(rmsd, 2.0029, rtol=1e-3)
 
     def test_ignore_hydrogen(self, multiple_molecules_xyz_file):
@@ -453,14 +482,14 @@ class Test_SpyRMSD_grouper:
         assert len(unique_structures) == 3
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 5))
+        rmsd = grouper.calculate_rmsd_pair(0, 5)
         assert np.isclose(rmsd, 1.7034, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 6))
+        rmsd = grouper.calculate_rmsd_pair(0, 6)
         assert np.isclose(rmsd, 2.6183, rtol=1e-3)
 
 
 @pytest.mark.skipif(
-    not find_irmsd_command(), reason="irmsd command not available"
+    not _is_irmsd_available(), reason="irmsd API/command not available"
 )
 @pytest.mark.usefixtures("temporary_working_dir")
 class Test_IRMSD_grouper:
@@ -485,7 +514,7 @@ class Test_IRMSD_grouper:
         assert len(unique_structures) == 2
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.2294, rtol=1e-3)
 
     def test_irmsd_grouper_for_crest_molecules(
@@ -507,15 +536,15 @@ class Test_IRMSD_grouper:
         assert len(unique_structures) == 12
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.4091, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 2))
+        rmsd = grouper.calculate_rmsd_pair(0, 2)
         assert np.isclose(rmsd, 1.3925, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((2, 10))
+        rmsd = grouper.calculate_rmsd_pair(2, 10)
         assert np.isclose(rmsd, 2.2390, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((8, 16))
+        rmsd = grouper.calculate_rmsd_pair(8, 16)
         assert np.isclose(rmsd, 3.4209, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 13))
+        rmsd = grouper.calculate_rmsd_pair(0, 13)
         assert np.isclose(rmsd, 0.8411, rtol=1e-3)
 
     def test_ignore_hydrogen(self, two_rotated_molecules_xyz_file):
@@ -535,8 +564,27 @@ class Test_IRMSD_grouper:
         assert len(unique_structures) == 2
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.2294, rtol=1e-3)
+
+    def test_parallel_irmsd_preserves_actual_inversion_metadata(
+        self, two_rotated_molecules_xyz_file
+    ):
+        """Parallel iRMSD must propagate resolved inversion metadata to the parent."""
+        xyz_file = XYZFile(filename=two_rotated_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = IRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=self.NUM_PROCS,
+            ignore_hydrogens=False,
+            inversion="off",
+        )
+        grouper.group()
+
+        assert grouper.num_procs > 1
+        assert grouper._actual_inversion == "off"
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -586,7 +634,7 @@ class Test_PymolRMSD_grouper:
         assert len(unique_structures) == 1
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.0000, rtol=1e-3)
 
         # Explicitly cleanup to prevent __del__ from calling quit()
@@ -609,21 +657,25 @@ class Test_PymolRMSD_grouper:
             ignore_hydrogens=False,
         )
         groups, group_indices = grouper.group()
-        assert len(groups) == 7
-        assert len(group_indices) == 7
+        assert len(groups) == 8
+        assert len(group_indices) == 8
         unique_structures = grouper.unique()
-        assert len(unique_structures) == 7
-
+        assert len(unique_structures) == 8
+        for indices in group_indices:
+            for i, idx_i in enumerate(indices):
+                for idx_j in indices[i + 1 :]:
+                    rmsd = grouper.calculate_rmsd_pair(idx_i, idx_j)
+                    assert rmsd <= 0.5
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.074175, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((0, 2))
+        rmsd = grouper.calculate_rmsd_pair(0, 2)
         assert np.isclose(rmsd, 0.023745, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((3, 4))
+        rmsd = grouper.calculate_rmsd_pair(3, 4)
         assert np.isclose(rmsd, 1.725241, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((7, 8))
+        rmsd = grouper.calculate_rmsd_pair(7, 8)
         assert np.isclose(rmsd, 2.309451, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((14, 16))
+        rmsd = grouper.calculate_rmsd_pair(14, 16)
         assert np.isclose(rmsd, 1.837319, rtol=1e-3)
 
         # Explicitly cleanup to prevent __del__ from calling quit()
@@ -650,9 +702,9 @@ class Test_PymolRMSD_grouper:
         assert len(unique_structures) == 5
 
         # rmsd calculation from grouper
-        rmsd = grouper._calculate_rmsd((0, 2))
+        rmsd = grouper.calculate_rmsd_pair(0, 2)
         assert np.isclose(rmsd, 0.0211, rtol=1e-3)
-        rmsd = grouper._calculate_rmsd((1, 4))
+        rmsd = grouper.calculate_rmsd_pair(1, 4)
         assert np.isclose(rmsd, 0.7669, rtol=1e-3)
 
         # Explicitly cleanup to prevent __del__ from calling quit()
@@ -662,18 +714,26 @@ class Test_PymolRMSD_grouper:
             grouper._temp_dir = None
         grouper.cmd = None  # Prevent __del__ from calling quit()
 
-    def test_pymol_grouper_rejects_multiproc(self, methanol_molecules):
-        """Test that PyMOL grouper raises error when num_procs > 1."""
-        with pytest.raises(ValueError) as excinfo:
-            PymolRMSDGrouper(
-                methanol_molecules,
-                threshold=0.5,
-                num_procs=4,  # Should raise error
-            )
-        assert (
-            "single" in str(excinfo.value).lower()
-            or "num_procs" in str(excinfo.value).lower()
+    def test_pymol_grouper_falls_back_to_single_proc(
+        self, methanol_molecules, caplog
+    ):
+        """PyMOL grouper warns and falls back to num_procs=1 when >1 is requested."""
+        caplog.set_level("WARNING")
+        grouper = PymolRMSDGrouper(
+            methanol_molecules,
+            threshold=0.5,
+            num_procs=4,
         )
+        assert grouper.num_procs == 1
+        assert (
+            "PymolRMSDGrouper does not support multiprocessing; using num_procs=1."
+            in caplog.text
+        )
+
+        if hasattr(grouper, "_temp_dir") and grouper._temp_dir:
+            shutil.rmtree(grouper._temp_dir, ignore_errors=True)
+            grouper._temp_dir = None
+        grouper.cmd = None
 
     @classmethod
     def teardown_class(cls):
@@ -719,6 +779,21 @@ class Test_Tanimoto_similarity_grouper:
             len(unique_structures) == 2
         ), "Molecules should form two groups based on RCM similarity."
 
+    def test_calculate_tanimoto_pair_wrapper_validation(
+        self, methanol_molecules
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2], fingerprint_type="rdkit"
+        )
+
+        assert np.isclose(grouper.calculate_tanimoto_pair(0, 0), 1.0)
+
+        with pytest.raises(IndexError):
+            grouper.calculate_tanimoto_pair(0, 4)
+
+        with pytest.raises(TypeError):
+            grouper.calculate_tanimoto_pair("a", 1)  # type: ignore[arg-type]
+
     def test_tanimoto_grouper_for_crest_conformers(
         self, multiple_molecules_xyz_file
     ):
@@ -728,19 +803,7 @@ class Test_Tanimoto_similarity_grouper:
         assert len(molecules) == 18
         grouper = TanimotoSimilarityGrouper(
             molecules,
-            threshold=0.98,
-            fingerprint_type="usrcat",
-            num_procs=self.NUM_PROCS,
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 4
-        assert len(group_indices) == 4
-        unique_structures = grouper.unique()
-        assert len(unique_structures) == 4
-
-        grouper = TanimotoSimilarityGrouper(
-            molecules,
-            threshold=0.999,
+            threshold=0.8,
             fingerprint_type="usrcat",
             num_procs=self.NUM_PROCS,
         )
@@ -749,6 +812,51 @@ class Test_Tanimoto_similarity_grouper:
         assert len(group_indices) == 14
         unique_structures = grouper.unique()
         assert len(unique_structures) == 14
+
+        grouper = TanimotoSimilarityGrouper(
+            molecules,
+            threshold=0.9,
+            fingerprint_type="usrcat",
+            num_procs=self.NUM_PROCS,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 17
+        assert len(group_indices) == 17
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 17
+
+    def test_tanimoto_threshold_boundary_through_group(
+        self, methanol_molecules, monkeypatch
+    ):
+        molecules = methanol_molecules[:2]
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        for fingerprint_type in ("usr", "usrcat"):
+            for similarity, expected_num_groups in (
+                (0.90, 1),
+                (0.91, 1),
+                (0.89, 2),
+            ):
+                monkeypatch.setattr(
+                    tanimoto_module.rdMolDescriptors,
+                    "GetUSRScore",
+                    lambda *args, value=similarity, **kwargs: value,
+                )
+
+                grouper = TanimotoSimilarityGrouper(
+                    molecules,
+                    threshold=0.9,
+                    fingerprint_type=fingerprint_type,
+                    num_procs=1,
+                )
+                groups, group_indices = grouper.group()
+
+                assert len(groups) == expected_num_groups
+                assert len(group_indices) == expected_num_groups
+                if expected_num_groups == 1:
+                    assert set(group_indices[0]) == {0, 1}
+                else:
+                    assert all(len(group) == 1 for group in group_indices)
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -808,30 +916,44 @@ class Test_TorsionFingerprint_grouper:
         unique_structures = grouper.unique()
         assert len(unique_structures) == 15
 
-        tfd = grouper._calculate_tfd((0, 2))
+        tfd = grouper.calculate_tfd_pair(0, 2)
         assert np.isclose(tfd, 0.08229, rtol=1e-3)
-        tfd = grouper._calculate_tfd((0, 7))
+        tfd = grouper.calculate_tfd_pair(0, 7)
         assert np.isclose(tfd, 0.07727, rtol=1e-3)
 
-    def test_count_groups_matches_complete_linkage_iteration_order(
-        self, methanol_molecules
+    def test_tfd_num_groups_records_actual_group_count(
+        self, multiple_molecules_xyz_file, temporary_working_dir
     ):
+        from openpyxl import load_workbook
+
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
         grouper = TorsionFingerprintGrouper(
-            methanol_molecules[:3],
-            threshold=0.1,
+            molecules,
+            num_groups=5,
             num_procs=1,
             ignore_hydrogens=False,
+            label="tfd_actual_groups",
         )
+        groups, _ = grouper.group()
 
-        adj_matrix = np.zeros((3, 3), dtype=bool)
-        adj_matrix[0, 1] = adj_matrix[1, 0] = True
-        adj_matrix[1, 2] = adj_matrix[2, 1] = True
+        xlsx_file = os.path.join(
+            temporary_working_dir,
+            "tfd_actual_groups_group_result",
+            "tfd_actual_groups_TorsionFingerprintGrouper_N5.xlsx",
+        )
+        assert os.path.exists(xlsx_file)
 
-        _, index_groups = grouper._complete_linkage_grouping(adj_matrix, 3)
-        num_groups = grouper._count_groups(adj_matrix, 3)
+        wb = load_workbook(xlsx_file, data_only=True)
+        ws = wb["TFD_Matrix"]
+        header_lines = [str(ws[f"A{i}"].value) for i in range(1, 25)]
 
-        assert len(index_groups) == 2
-        assert num_groups == len(index_groups)
+        assert any(
+            f"Actual Groups: {len(groups)}" in line
+            for line in header_lines
+            if line
+        )
 
     def test_use_maxdev_parameter(self, multiple_molecules_xyz_file):
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
@@ -846,15 +968,31 @@ class Test_TorsionFingerprint_grouper:
             ignore_hydrogens=False,
         )
         groups, group_indices = grouper.group()
-        assert len(groups) == 2
-        assert len(group_indices) == 2
+        assert len(groups) == 3
+        assert len(group_indices) == 3
         unique_structures = grouper.unique()
-        assert len(unique_structures) == 2
+        assert len(unique_structures) == 3
 
-        tfd = grouper._calculate_tfd((0, 1))
+        tfd = grouper.calculate_tfd_pair(0, 1)
         assert np.isclose(tfd, 0.02027, rtol=1e-3)
-        tfd = grouper._calculate_tfd((3, 4))
+        tfd = grouper.calculate_tfd_pair(3, 4)
         assert np.isclose(tfd, 0.24365, rtol=1e-3)
+
+    def test_calculate_tfd_pair_wrapper_validation(
+        self, multiple_molecules_xyz_file
+    ):
+        molecules = XYZFile(
+            filename=multiple_molecules_xyz_file
+        ).get_molecules(index=":", return_list=True)
+        grouper = TorsionFingerprintGrouper(molecules[:3], threshold=0.1)
+
+        assert np.isclose(grouper.calculate_tfd_pair(1, 1), 0.0)
+
+        with pytest.raises(IndexError):
+            grouper.calculate_tfd_pair(0, 8)
+
+        with pytest.raises(TypeError):
+            grouper.calculate_tfd_pair("a", 1)  # type: ignore[arg-type]
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -872,6 +1010,60 @@ class Test_other_groupers:
         grouper = DummyGrouper(methanol_molecules)
         payload = grouper.record(example_key="example_value")
         assert payload["example_key"] == "example_value"
+
+    @pytest.mark.parametrize("energy_type", ["QHH", "QHG", "SP_QHG"])
+    def test_thermochemistry_parameters_header_for_qhg_energy_types(
+        self, methanol_molecules, energy_type
+    ):
+        """qhG and SP-qhG results must record the exact thermochemistry settings used."""
+        thermo_parameters = (
+            "temperature=298.15, concentration=1.0, pressure=1.0, "
+            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
+            "entropy_method=grimme, h_freq_cutoff=100.0, "
+            "energy_units=hartree, check_imaginary_frequencies=True, "
+            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
+        )
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2],
+            threshold=0.5,
+            num_procs=1,
+            energy_type=energy_type,
+            thermo_parameters=thermo_parameters,
+        )
+
+        header_info = []
+        grouper._append_thermo_header(header_info)
+
+        assert header_info == [
+            ("Thermochemistry Parameters", thermo_parameters)
+        ]
+
+    @pytest.mark.parametrize("energy_type", ["E", "H", "G"])
+    def test_thermochemistry_parameters_header_not_written_for_other_energy_types(
+        self, methanol_molecules, energy_type
+    ):
+        """Thermochemistry parameter header is specific to qhG and SP-qhG."""
+        thermo_parameters = (
+            "temperature=298.15, concentration=1.0, pressure=1.0, "
+            "use_weighted_mass=True, alpha=4, s_freq_cutoff=100.0, "
+            "entropy_method=grimme, h_freq_cutoff=100.0, "
+            "energy_units=hartree, check_imaginary_frequencies=True, "
+            "cutoff_entropy_grimme=100.0, cutoff_enthalpy=100.0"
+        )
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2],
+            threshold=0.5,
+            num_procs=1,
+            energy_type=energy_type,
+            thermo_parameters=thermo_parameters,
+        )
+
+        header_info = []
+        grouper._append_thermo_header(header_info)
+
+        assert not any(
+            key == "Thermochemistry Parameters" for key, _ in header_info
+        )
 
     def test_record_writes_rmsd_matrix_with_headers(
         self, methanol_molecules, temporary_working_dir
@@ -1033,10 +1225,10 @@ class Test_other_groupers:
             num_procs=self.NUM_PROCS,
         )
         groups, group_indices = grouper.group()
-        assert len(groups) == 4
-        assert len(group_indices) == 4
+        assert len(groups) == 1
+        assert len(group_indices) == 1
         unique_structures = grouper.unique()
-        assert len(unique_structures) == 4
+        assert len(unique_structures) == 1
 
     def test_rdkit_isomorphism_grouper(
         self, methanol_molecules, methanol_and_ethanol
@@ -1098,17 +1290,17 @@ class Test_EnergyGrouper:
             num_procs=self.NUM_PROCS,
         )
         groups, group_indices = grouper.group()
-        assert len(groups) == 7
-        assert len(group_indices) == 7
+        assert len(groups) == 8
+        assert len(group_indices) == 8
         unique_structures = grouper.unique()
-        assert len(unique_structures) == 7
+        assert len(unique_structures) == 8
 
         expected1 = -1.7839 / 627.509474
         expected2 = 1.4580 / 627.509474
 
-        relative_diff, abs_diff = grouper._calculate_energy_diff((1, 0))
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 0)
         assert np.isclose(relative_diff, expected1, rtol=1e-3)
-        relative_diff, abs_diff = grouper._calculate_energy_diff((1, 2))
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 2)
         assert np.isclose(abs_diff, expected2, rtol=1e-3)
 
         xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
@@ -1120,6 +1312,8 @@ class Test_EnergyGrouper:
         groups, group_indices = grouper.group()
         assert len(groups) == 5
         assert len(group_indices) == 5
+        assert grouper._auto_threshold is not None
+        assert grouper._auto_threshold > 0
 
     def test_energy_grouper_for_log_conformers(
         self, ts_conformers_log_directory
@@ -1179,9 +1373,27 @@ class Test_EnergyGrouper:
         expected1 = -4.1429 / 627.509474
         expected2 = 4.1429 / 627.509474
 
-        relative_diff, abs_diff = grouper._calculate_energy_diff((1, 4))
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 4)
         assert np.isclose(relative_diff, expected1, rtol=1e-2)
         assert np.isclose(abs_diff, expected2, rtol=1e-2)
+
+    def test_calculate_energy_diff_pair_wrapper_validation(
+        self, multiple_molecules_xyz_file
+    ):
+        molecules = XYZFile(
+            filename=multiple_molecules_xyz_file
+        ).get_molecules(index=":", return_list=True)
+        grouper = EnergyGrouper(molecules[:3], threshold=1.0)
+
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(2, 2)
+        assert np.isclose(relative_diff, 0.0)
+        assert np.isclose(abs_diff, 0.0)
+
+        with pytest.raises(IndexError):
+            grouper.calculate_energy_diff_pair(0, 5)
+
+        with pytest.raises(TypeError):
+            grouper.calculate_energy_diff_pair("a", 1)  # type: ignore[arg-type]
 
     def test_energy_extraction_from_xyz_file(
         self, multiple_molecules_xyz_file
@@ -1283,8 +1495,8 @@ class Testfactory:
         )
         assert isinstance(spyrmsd_grouper, RMSDGrouper)
 
-        # irmsd requires external command, skip if not available
-        if find_irmsd_command():
+        # irmsd requires either Python API or external command
+        if _is_irmsd_available():
             irmsd_grouper = factory.create(
                 methanol_molecules, strategy="irmsd"
             )
@@ -1305,10 +1517,8 @@ class Testfactory:
             pymolrmsd_grouper._temp_dir = None
         pymolrmsd_grouper.cmd = None  # Prevent __del__ from calling quit()
 
-        torsion_grouper = factory.create(
-            methanol_molecules, strategy="torsion"
-        )
-        assert isinstance(torsion_grouper, TorsionFingerprintGrouper)
+        tfd_grouper = factory.create(methanol_molecules, strategy="tfd")
+        assert isinstance(tfd_grouper, TorsionFingerprintGrouper)
         formula_grouper = factory.create(
             methanol_molecules, strategy="formula"
         )
@@ -1425,6 +1635,488 @@ class Test_grouper_complete_linkage:
 
     NUM_PROCS = 4
 
+    def test_public_group_by_threshold_reuses_distance_matrix_and_caches_result(
+        self, methanol_molecules
+    ):
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+        distance_matrix = np.array(
+            [
+                [0.0, 0.3, 0.8],
+                [0.3, 0.0, 0.7],
+                [0.8, 0.7, 0.0],
+            ]
+        )
+        original_matrix = distance_matrix.copy()
+
+        _, strict_indices = grouper.group_by_threshold(
+            distance_matrix, threshold=0.2
+        )
+        groups, relaxed_indices = grouper.group_by_threshold(
+            distance_matrix, threshold=0.5
+        )
+
+        assert strict_indices == [[0], [1], [2]]
+        assert {frozenset(group) for group in relaxed_indices} == {
+            frozenset({0, 1}),
+            frozenset({2}),
+        }
+        assert grouper.threshold == 0.5
+        assert np.array_equal(distance_matrix, original_matrix)
+        assert grouper._cached_groups == groups
+        assert grouper._cached_group_indices == relaxed_indices
+
+    def test_tfd_public_group_by_threshold_accepts_output_distance_matrix(
+        self, methanol_molecules
+    ):
+        grouper = TorsionFingerprintGrouper(
+            methanol_molecules[:2], threshold=0.1
+        )
+        tfd_matrix = np.array([[0.0, 0.15], [0.15, 0.0]])
+
+        _, strict_indices = grouper.group_by_threshold(
+            tfd_matrix, threshold=0.1
+        )
+        _, relaxed_indices = grouper.group_by_threshold(
+            tfd_matrix, threshold=0.2
+        )
+
+        assert strict_indices == [[0], [1]]
+        assert relaxed_indices == [[0, 1]]
+        assert grouper.threshold == 0.1
+
+    def test_energy_public_group_by_threshold_accepts_signed_kcal_output(
+        self, multiple_molecules_xyz_file
+    ):
+        molecules = XYZFile(
+            filename=multiple_molecules_xyz_file
+        ).get_molecules(index=":", return_list=True)[:3]
+        grouper = EnergyGrouper(molecules, threshold=1.0)
+        energy_matrix_kcal = np.array(
+            [
+                [0.0, 0.5, 2.0],
+                [-0.5, 0.0, 1.5],
+                [-2.0, -1.5, 0.0],
+            ]
+        )
+
+        _, index_groups = grouper.group_by_threshold(energy_matrix_kcal)
+
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({0, 1}),
+            frozenset({2}),
+        }
+        assert grouper.threshold == 1.0
+        assert np.array_equal(
+            energy_matrix_kcal,
+            np.array(
+                [
+                    [0.0, 0.5, 2.0],
+                    [-0.5, 0.0, 1.5],
+                    [-2.0, -1.5, 0.0],
+                ]
+            ),
+        )
+
+    def test_tanimoto_public_group_by_threshold_accepts_recorded_similarity(
+        self, methanol_molecules
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:3], threshold=0.9
+        )
+        similarity_matrix = np.array(
+            [
+                [1.0, np.nan, 0.7],
+                [np.nan, np.nan, np.nan],
+                [0.7, np.nan, 1.0],
+            ],
+            dtype=np.float32,
+        )
+
+        _, index_groups = grouper.group_by_threshold(
+            similarity_matrix, threshold=0.6
+        )
+
+        assert index_groups == [[0, 2]]
+        assert grouper._matrix_skipped_indices == [1]
+        assert grouper._cached_group_indices == index_groups
+        assert grouper.threshold == 0.9
+
+    def test_public_group_by_num_groups_reuses_distance_matrix_and_caches_result(
+        self, methanol_molecules
+    ):
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+        distance_matrix = np.array(
+            [
+                [0.0, 0.2, 0.9],
+                [0.2, 0.0, 0.8],
+                [0.9, 0.8, 0.0],
+            ]
+        )
+        original_matrix = distance_matrix.copy()
+
+        groups, index_groups = grouper.group_by_num_groups(
+            distance_matrix, num_groups=2
+        )
+
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({0, 1}),
+            frozenset({2}),
+        }
+        assert np.isclose(grouper._auto_threshold, 0.2)
+        assert grouper._cached_groups == groups
+        assert grouper._cached_group_indices == index_groups
+        assert np.array_equal(distance_matrix, original_matrix)
+
+    def test_tfd_public_group_by_num_groups_accepts_output_distance_matrix(
+        self, methanol_molecules
+    ):
+        grouper = TorsionFingerprintGrouper(
+            methanol_molecules[:3], threshold=0.1
+        )
+        tfd_matrix = np.array(
+            [
+                [0.0, 0.15, 0.8],
+                [0.15, 0.0, 0.7],
+                [0.8, 0.7, 0.0],
+            ]
+        )
+
+        _, index_groups = grouper.group_by_num_groups(tfd_matrix, num_groups=2)
+
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({0, 1}),
+            frozenset({2}),
+        }
+        assert np.isclose(grouper._auto_threshold, 0.15)
+
+    def test_energy_public_group_by_num_groups_accepts_signed_kcal_output(
+        self, multiple_molecules_xyz_file
+    ):
+        molecules = XYZFile(
+            filename=multiple_molecules_xyz_file
+        ).get_molecules(index=":", return_list=True)[:3]
+        grouper = EnergyGrouper(molecules, threshold=1.0)
+        energy_matrix_kcal = np.array(
+            [
+                [0.0, 0.5, 2.0],
+                [-0.5, 0.0, 1.5],
+                [-2.0, -1.5, 0.0],
+            ]
+        )
+
+        _, index_groups = grouper.group_by_num_groups(
+            energy_matrix_kcal, num_groups=2
+        )
+
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({0, 1}),
+            frozenset({2}),
+        }
+        assert np.isclose(grouper._auto_threshold, 0.5)
+
+    def test_tanimoto_public_group_by_num_groups_accepts_recorded_similarity(
+        self, methanol_molecules
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:3], threshold=0.9
+        )
+        similarity_matrix = np.array(
+            [
+                [1.0, np.nan, 0.95],
+                [np.nan, np.nan, np.nan],
+                [0.95, np.nan, 1.0],
+            ],
+            dtype=np.float32,
+        )
+
+        _, index_groups = grouper.group_by_num_groups(
+            similarity_matrix, num_groups=2
+        )
+
+        assert index_groups == [[0], [2]]
+        assert grouper._matrix_skipped_indices == [1]
+        assert grouper._auto_threshold is None
+
+    def test_threshold_grouping_clears_previous_auto_threshold(
+        self, methanol_molecules
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules, num_groups=2)
+        matrix = np.array(
+            [
+                [0.0, 0.1, 0.8],
+                [0.1, 0.0, 0.7],
+                [0.8, 0.7, 0.0],
+            ]
+        )
+
+        grouper.group_by_num_groups(matrix, num_groups=2)
+        assert grouper._auto_threshold is not None
+
+        old_threshold = grouper.threshold
+        groups, index_groups = grouper.group_by_threshold(
+            matrix, threshold=0.5
+        )
+
+        assert grouper._auto_threshold is None
+        assert grouper.threshold == old_threshold
+        assert index_groups == [[0, 1], [2]]
+        assert groups == [
+            [methanol_molecules[0], methanol_molecules[1]],
+            [methanol_molecules[2]],
+        ]
+
+    def test_hierarchical_complete_linkage_prevents_chaining(
+        self, methanol_molecules
+    ):
+        """A-B and B-C being close must not chain A and C together."""
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, 0.3, 0.8],
+                [0.3, 0.0, 0.3],
+                [0.8, 0.3, 0.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+
+        assert len(groups) == 2
+        assert sorted(len(group) for group in index_groups) == [1, 2]
+        assert not any(set(group) == {0, 1, 2} for group in index_groups)
+
+    def test_threshold_includes_equal_distance(self, methanol_molecules):
+        """Threshold mode uses complete-linkage distance <= threshold."""
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, 0.5],
+                [0.5, 0.0],
+            ]
+        )
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+        assert len(groups) == 1
+        assert index_groups == [[0, 1]]
+
+    def test_num_groups_keeps_previous_full_linkage_level(
+        self, methanol_molecules
+    ):
+        """-N must not split a tied linkage level just to force exact N."""
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(4)
+        ]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=None,
+            num_groups=3,
+            num_procs=1,
+        )
+        # At distance 0.1, two independent merges occur at the same linkage
+        # level, so the hierarchy jumps directly from 4 groups to 2 groups.
+        # Requested N=3 must therefore retain the previous 4-group level.
+        distance_matrix = np.array(
+            [
+                [0.0, 0.1, 1.0, 1.0],
+                [0.1, 0.0, 1.0, 1.0],
+                [1.0, 1.0, 0.0, 0.1],
+                [1.0, 1.0, 0.1, 0.0],
+            ]
+        )
+        groups, index_groups = grouper.group_by_num_groups(distance_matrix)
+        assert len(groups) == 4
+        assert len(index_groups) == 4
+        assert all(len(group) == 1 for group in index_groups)
+        assert grouper._auto_threshold is None
+
+    def test_num_groups_uses_exact_level_when_available(
+        self, methanol_molecules
+    ):
+        """-N should return exactly N when a full linkage level gives N groups."""
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(4)
+        ]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=None,
+            num_groups=3,
+            num_procs=1,
+        )
+
+        distance_matrix = np.array(
+            [
+                [0.0, 0.1, 1.0, 1.0],
+                [0.1, 0.0, 1.0, 1.0],
+                [1.0, 1.0, 0.0, 0.4],
+                [1.0, 1.0, 0.4, 0.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_num_groups(distance_matrix)
+
+        assert len(groups) == 3
+        assert len(index_groups) == 3
+        assert np.isclose(grouper._auto_threshold, 0.1)
+
+    def test_grouping_does_not_modify_distance_matrix(
+        self, methanol_molecules
+    ):
+        """Hierarchical grouping must not mutate the caller's distance matrix."""
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+
+        distance_matrix = np.array(
+            [
+                [0.0, 0.3, 0.8],
+                [0.3, 0.0, 0.3],
+                [0.8, 0.3, 0.0],
+            ]
+        )
+        original_matrix = distance_matrix.copy()
+
+        grouper.group_by_threshold(distance_matrix)
+
+        assert np.array_equal(distance_matrix, original_matrix)
+
+    def test_hierarchical_grouping_is_input_order_independent(
+        self, methanol_molecules
+    ):
+        """Permuting input order must not change the partition after remapping indices."""
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(4)
+        ]
+        distance_matrix = np.array(
+            [
+                [0.0, 0.2, 0.9, 1.0],
+                [0.2, 0.0, 0.8, 0.9],
+                [0.9, 0.8, 0.0, 0.3],
+                [1.0, 0.9, 0.3, 0.0],
+            ]
+        )
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        _, index_groups = grouper.group_by_threshold(distance_matrix)
+        expected_partition = {frozenset(group) for group in index_groups}
+
+        permutation = [2, 0, 3, 1]
+        permuted_molecules = [molecules[i] for i in permutation]
+        permuted_matrix = distance_matrix[np.ix_(permutation, permutation)]
+        permuted_grouper = BasicRMSDGrouper(
+            permuted_molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        _, permuted_groups = permuted_grouper.group_by_threshold(
+            permuted_matrix
+        )
+
+        remapped_partition = {
+            frozenset(permutation[i] for i in group)
+            for group in permuted_groups
+        }
+        assert remapped_partition == expected_partition
+
+    def test_infinite_distance_matrix_skips_minimum_problematic_structures(
+        self, methanol_molecules
+    ):
+        """Remove only the structure(s) needed to obtain a finite submatrix."""
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+
+        distance_matrix = np.array(
+            [
+                [0.0, 0.3, np.inf],
+                [0.3, 0.0, np.inf],
+                [np.inf, np.inf, 0.0],
+            ]
+        )
+        original_matrix = distance_matrix.copy()
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+
+        assert index_groups == [[0, 1]]
+        assert grouper._matrix_skipped_indices == [2]
+        assert np.array_equal(distance_matrix, original_matrix, equal_nan=True)
+
+    def test_nan_distance_matrix_raises(self, methanol_molecules):
+        """NaN pairwise distances must still fail clearly at runtime."""
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, np.nan],
+                [np.nan, 0.0],
+            ]
+        )
+
+        with pytest.raises(ValueError, match="non-finite"):
+            grouper.group_by_threshold(distance_matrix)
+
+    def test_tanimoto_threshold_uses_similarity_semantics(
+        self, methanol_molecules
+    ):
+        """A Tanimoto threshold of 0.9 means similarity >= 0.9."""
+        molecules = methanol_molecules[:3]
+        grouper = TanimotoSimilarityGrouper(
+            molecules,
+            threshold=0.9,
+            num_procs=1,
+        )
+
+        similarity_matrix = np.array(
+            [
+                [1.0, 0.90, 0.70],
+                [0.90, 1.0, 0.70],
+                [0.70, 0.70, 1.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_threshold(similarity_matrix)
+
+        assert len(groups) == 2
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({0, 1}),
+            frozenset({2}),
+        }
+        assert np.isclose(grouper.threshold, 0.9)
+
     def test_complete_linkage_prevents_chaining(
         self, multiple_molecules_xyz_file
     ):
@@ -1442,17 +2134,265 @@ class Test_grouper_complete_linkage:
         groups, group_indices = grouper.group()
 
         # Verify complete linkage property: within each group,
-        # all pairs should have RMSD < threshold
+        # all pairs should have RMSD <= threshold
         for group_idx, indices in enumerate(group_indices):
             if len(indices) > 1:
                 for i, idx_i in enumerate(indices):
                     for j, idx_j in enumerate(indices):
                         if i < j:
-                            rmsd = grouper._calculate_rmsd((idx_i, idx_j))
-                            assert rmsd < 1.0, (
+                            rmsd = grouper.calculate_rmsd_pair(idx_i, idx_j)
+                            assert rmsd <= 1.0, (
                                 f"Group {group_idx}: RMSD between {idx_i} and {idx_j} "
-                                f"is {rmsd}, exceeds threshold 1.0"
+                                f"is {rmsd}, is above threshold 1.0"
                             )
+
+    def test_infinite_pair_removes_one_structure_and_groups_remaining(
+        self, methanol_molecules
+    ):
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(4)
+        ]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, np.inf, 0.8, 0.9],
+                [np.inf, 0.0, 0.7, 0.8],
+                [0.8, 0.7, 0.0, 0.2],
+                [0.9, 0.8, 0.2, 0.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+
+        assert grouper._matrix_skipped_indices == [0]
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({1}),
+            frozenset({2, 3}),
+        }
+        assert len(groups) == 2
+
+    def test_multiple_infinite_pairs_remove_minimum_problematic_structures(
+        self, methanol_molecules
+    ):
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(5)
+        ]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, np.inf, 0.8, 0.9, 0.9],
+                [np.inf, 0.0, np.inf, 0.8, 0.8],
+                [0.8, np.inf, 0.0, 0.7, 0.7],
+                [0.9, 0.8, 0.7, 0.0, 0.2],
+                [0.9, 0.8, 0.7, 0.2, 0.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+
+        assert grouper._matrix_skipped_indices == [1]
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({0}),
+            frozenset({2}),
+            frozenset({3, 4}),
+        }
+        assert len(groups) == 3
+
+    def test_original_indices_are_preserved_after_skipping(
+        self, methanol_molecules
+    ):
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(5)
+        ]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, np.inf, 0.9, 0.9, 0.9],
+                [np.inf, 0.0, 0.9, 0.9, 0.9],
+                [0.9, 0.9, 0.0, 0.8, 0.2],
+                [0.9, 0.9, 0.8, 0.0, 0.8],
+                [0.9, 0.9, 0.2, 0.8, 0.0],
+            ]
+        )
+
+        _, index_groups = grouper.group_by_threshold(distance_matrix)
+
+        assert grouper._matrix_skipped_indices == [0]
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({1}),
+            frozenset({2, 4}),
+            frozenset({3}),
+        }
+
+    def test_num_groups_after_skipping_uses_valid_structure_count(
+        self, methanol_molecules
+    ):
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(5)
+        ]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=None,
+            num_groups=5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, np.inf, 0.9, 0.9, 0.9],
+                [np.inf, 0.0, 0.9, 0.9, 0.9],
+                [0.9, 0.9, 0.0, 0.4, 0.5],
+                [0.9, 0.9, 0.4, 0.0, 0.3],
+                [0.9, 0.9, 0.5, 0.3, 0.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_num_groups(distance_matrix)
+
+        assert grouper._matrix_skipped_indices == [0]
+        assert len(groups) == 4
+        assert index_groups == [[1], [2], [3], [4]]
+
+    def test_negative_distance_raises(self, methanol_molecules):
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+        distance_matrix = np.array([[0.0, -0.1], [-0.1, 0.0]])
+
+        with pytest.raises(ValueError, match="negative"):
+            grouper.group_by_threshold(distance_matrix)
+
+    def test_negative_infinity_raises(self, methanol_molecules):
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+        distance_matrix = np.array([[0.0, -np.inf], [-np.inf, 0.0]])
+
+        with pytest.raises(ValueError, match="negative"):
+            grouper.group_by_threshold(distance_matrix)
+
+    def test_asymmetric_distance_matrix_raises(self, methanol_molecules):
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+        distance_matrix = np.array([[0.0, 0.2], [0.3, 0.0]])
+
+        with pytest.raises(ValueError, match="symmetric"):
+            grouper.group_by_threshold(distance_matrix)
+
+    def test_nonzero_diagonal_raises(self, methanol_molecules):
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+        distance_matrix = np.array([[0.1, 0.2], [0.2, 0.0]])
+
+        with pytest.raises(ValueError, match="diagonal"):
+            grouper.group_by_threshold(distance_matrix)
+
+    def test_infinite_pair_tie_breaking_is_deterministic(
+        self, methanol_molecules
+    ):
+        """Equal +inf counts should use a deterministic tie-breaking rule."""
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+
+        distance_matrix = np.array(
+            [
+                [0.0, np.inf, 0.8],
+                [np.inf, 0.0, 0.8],
+                [0.8, 0.8, 0.0],
+            ]
+        )
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+        # Structures 0 and 1 have the same number of +inf entries.
+        # The current implementation deterministically removes the
+        # first maximum, i.e. original index 0.
+        assert grouper._matrix_skipped_indices == [0]
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({1}),
+            frozenset({2}),
+        }
+        assert len(groups) == 2
+
+    def test_infinite_distance_removal_is_iterative(self, methanol_molecules):
+        """Recount +inf involvement after each removal until the submatrix is finite."""
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(5)
+        ]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, np.inf, np.inf, 0.9, 0.9],
+                [np.inf, 0.0, 0.8, np.inf, 0.9],
+                [np.inf, 0.8, 0.0, np.inf, 0.9],
+                [0.9, np.inf, np.inf, 0.0, 0.2],
+                [0.9, 0.9, 0.9, 0.2, 0.0],
+            ]
+        )
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+        # Initial +inf counts:
+        # 0 -> 2
+        # 1 -> 2
+        # 2 -> 2
+        # 3 -> 2
+        # 4 -> 0
+        #
+        # Tie-breaking removes 0 first.
+        #
+        # Remaining +inf pairs:
+        # 1-3
+        # 2-3
+        #
+        # Recomputed counts:
+        # 1 -> 1
+        # 2 -> 1
+        # 3 -> 2
+        #
+        # Therefore 3 must be removed in the second iteration.
+        assert grouper._matrix_skipped_indices == [0, 3]
+        # Remaining original indices are 1, 2, and 4.
+        # All pairwise distances are > 0.5, so all are singleton groups.
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({1}),
+            frozenset({2}),
+            frozenset({4}),
+        }
+        assert len(groups) == 3
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -1520,9 +2460,9 @@ class Test_conformer_ids_functionality:
             excel_file
         ), f"Excel file not found: {excel_file}"
 
-        # Matrix data starts at row 8 (0-indexed: skiprows=13), first column is index
+        # Matrix data starts at row 8 (0-indexed: skiprows=15), first column is index
         df = pd.read_excel(
-            excel_file, sheet_name="RMSD_Matrix", skiprows=12, index_col=0
+            excel_file, sheet_name="RMSD_Matrix", skiprows=14, index_col=0
         )
         # Check that conformer IDs are used as labels
         assert "c1" in str(df.columns[0]) or "c1" in str(df.index[0])
@@ -1757,8 +2697,9 @@ class Test_edge_cases:
         )
         groups, group_indices = grouper.group()
 
-        # Should create one group per molecule (or fewer if some are identical)
-        assert len(groups) <= len(methanol_molecules)
+        # Requesting N equal to the number of molecules returns singleton groups.
+        assert len(groups) == len(methanol_molecules)
+        assert all(len(group) == 1 for group in group_indices)
 
     def test_num_groups_exceeds_num_molecules(self, methanol_molecules):
         """Test requesting more groups than molecules."""
@@ -1769,8 +2710,9 @@ class Test_edge_cases:
         )
         groups, group_indices = grouper.group()
 
-        # Should create at most n_mols groups
-        assert len(groups) <= n_mols
+        # More requested groups than molecules still returns singleton groups.
+        assert len(groups) == n_mols
+        assert all(len(group) == 1 for group in group_indices)
 
     def test_very_low_threshold(self, multiple_molecules_xyz_file):
         """Test with very low threshold (should create many groups)."""
@@ -1811,15 +2753,30 @@ class Test_edge_cases:
         )
         groups, group_indices = grouper.group()
 
-        # Methanol and ethanol should always be separate
-        assert len(groups) == 2
+        # Incompatible RMSD pairs are now skipped from clustering entirely.
+        assert len(groups) == 1
+        assert len(group_indices) == 1
+        assert grouper._matrix_skipped_indices == [0]
+        assert group_indices == [[1]]
 
     def test_rmsd_infinity_for_different_molecules(self, methanol_and_ethanol):
         """Test that RMSD returns infinity for molecules with different atom counts."""
         grouper = BasicRMSDGrouper(methanol_and_ethanol, threshold=0.5)
-        rmsd = grouper._calculate_rmsd((0, 1))
+        rmsd = grouper.calculate_rmsd_pair(0, 1)
 
         assert rmsd == np.inf or rmsd == float("inf")
+
+    def test_incompatible_rmsd_structures_are_skipped(
+        self, methanol_and_ethanol
+    ):
+        """Structures involved in RMSD=inf pairs should be skipped, not grouped."""
+        grouper = BasicRMSDGrouper(methanol_and_ethanol, threshold=0.5)
+        groups, group_indices = grouper.group()
+
+        assert len(groups) == 1
+        assert len(group_indices) == 1
+        assert grouper._matrix_skipped_indices == [0]
+        assert group_indices == [[1]]
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -2264,3 +3221,679 @@ class Test_energy_extraction_function:
         )
         extracted = _extract_energy_based_on_energy_type(thermo_qhg, "qhG")
         assert np.isclose(extracted, -1568.186619, rtol=1e-7)
+
+
+@pytest.mark.usefixtures("temporary_working_dir")
+class Test_multiprocessing_support:
+    def test_basic_rmsd_serial_parallel_equivalent(self, methanol_molecules):
+        serial = BasicRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=1
+        )
+        parallel = BasicRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=2
+        )
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-10, rtol=1e-10
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+    def test_hungarian_rmsd_serial_parallel_equivalent(
+        self, methanol_molecules
+    ):
+        serial = HungarianRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=1
+        )
+        parallel = HungarianRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=2
+        )
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-10, rtol=1e-10
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+    def test_spyrmsd_parallel_preserves_isomorphisms(self, methanol_molecules):
+        serial = SpyRMSDGrouper(methanol_molecules, threshold=0.5, num_procs=1)
+        parallel = SpyRMSDGrouper(
+            methanol_molecules, threshold=0.5, num_procs=2
+        )
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-8, rtol=1e-8
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+        assert serial.best_isomorphisms
+        assert parallel.best_isomorphisms
+        assert (0, 1) in serial.best_isomorphisms
+        assert (0, 1) in parallel.best_isomorphisms
+        assert serial.get_best_isomorphism(0, 1) is not None
+        assert parallel.get_best_isomorphism(0, 1) is not None
+
+    @pytest.mark.skipif(
+        not _is_irmsd_available(), reason="irmsd API/command not available"
+    )
+    def test_irmsd_serial_parallel_equivalent(self, methanol_molecules):
+        serial = IRMSDGrouper(methanol_molecules, threshold=0.5, num_procs=1)
+        parallel = IRMSDGrouper(methanol_molecules, threshold=0.5, num_procs=2)
+
+        serial_matrix = serial.calculate_full_rmsd_matrix()
+        parallel_matrix = parallel.calculate_full_rmsd_matrix()
+        assert np.allclose(
+            serial_matrix, parallel_matrix, atol=1e-8, rtol=1e-8
+        )
+
+        _, serial_idx = serial.group()
+        _, parallel_idx = parallel.group()
+        assert serial_idx == parallel_idx
+
+    def test_formula_grouper_falls_back_to_single_proc(
+        self, caplog, methanol_molecules
+    ):
+        """FormulaGrouper warns and falls back to num_procs=1 when >1 is requested."""
+        caplog.set_level("WARNING")
+        grouper = FormulaGrouper(methanol_molecules, num_procs=4)
+        assert grouper.num_procs == 1
+        assert (
+            "FormulaGrouper does not support multiprocessing; using num_procs=1."
+            in caplog.text
+        )
+
+        groups, group_indices = grouper.group()
+        assert len(groups) == 1
+        assert len(group_indices) == 1
+
+    def test_serial_only_strategy_warns_and_falls_back(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        """Serial-only grouper warns and falls back to num_procs=1."""
+        caplog.set_level("WARNING")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = EnergyGrouper(molecules, threshold=0.5, num_procs=4)
+        assert grouper.num_procs == 1
+        assert (
+            "EnergyGrouper does not support multiprocessing; using num_procs=1."
+            in caplog.text
+        )
+
+    def test_basic_rmsd_progress_logs_all_milestones_serial(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        caplog.set_level("INFO")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=1)
+
+        grouper.calculate_full_rmsd_matrix()
+
+        _assert_progress_milestones(caplog.text)
+
+    def test_basic_rmsd_progress_logs_all_milestones_parallel(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        caplog.set_level("INFO")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=2)
+
+        grouper.calculate_full_rmsd_matrix()
+
+        _assert_progress_milestones(caplog.text)
+
+    def test_energy_grouper_progress_logs_all_milestones(
+        self, caplog, multiple_molecules_xyz_file
+    ):
+        caplog.set_level("INFO")
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        grouper = EnergyGrouper(molecules, threshold=0.5, num_procs=1)
+
+        grouper.group()
+
+        _assert_progress_milestones(caplog.text)
+
+    def test_basic_rmsd_parallel_single_molecule_no_pair_no_crash(
+        self, methanol_molecules
+    ):
+        """Single-molecule RMSD run with num_procs>1 should safely skip pair workers."""
+        molecules = [methanol_molecules[0]]
+        grouper = BasicRMSDGrouper(molecules, threshold=0.5, num_procs=2)
+
+        matrix = grouper.calculate_full_rmsd_matrix()
+        assert matrix.shape == (1, 1)
+        assert matrix[0, 0] == 0.0
+
+        groups, index_groups = grouper.group()
+        assert len(groups) == 1
+        assert len(index_groups) == 1
+        assert index_groups == [[0]]
+
+    def test_matrix_grouper_log_progress(self, caplog):
+        """Test functionality of MatrixGrouper._log_progress method."""
+        import logging
+
+        from chemsmart.jobs.grouper.base import MatrixGrouper
+
+        class DummyGrouper(MatrixGrouper):
+            def _calculate_rmsd(self, idx_pair):
+                return 0.0
+
+            def group(self):
+                return [], []
+
+        # Create dummy grouper
+        grouper = DummyGrouper([], threshold=0.1)
+        with caplog.at_level(logging.INFO):
+            # Initial call, 0% complete, next_progress threshold at 10%
+            next_progress = 10
+            next_progress = grouper._log_progress(0, 100, next_progress)
+            assert next_progress == 10
+            assert len(caplog.records) == 0
+
+            # Call at 9%
+            next_progress = grouper._log_progress(9, 100, next_progress)
+            assert next_progress == 10
+            assert len(caplog.records) == 0
+
+            # Call at 10%
+            next_progress = grouper._log_progress(10, 100, next_progress)
+            assert next_progress == 20
+            assert len(caplog.records) == 1
+            assert (
+                "Matrix calculation progress: 10%"
+                in caplog.records[-1].message
+            )
+
+            # Call at 15% (no log, threshold is 20)
+            next_progress = grouper._log_progress(15, 100, next_progress)
+            assert next_progress == 20
+            assert len(caplog.records) == 1
+
+            # Call jumping from 15% to 35%
+            next_progress = grouper._log_progress(35, 100, next_progress)
+            assert next_progress == 40
+            assert len(caplog.records) == 3
+            assert (
+                "Matrix calculation progress: 20%"
+                in caplog.records[-2].message
+            )
+            assert (
+                "Matrix calculation progress: 30%"
+                in caplog.records[-1].message
+            )
+
+            # Test edge case with zero total
+            next_p = grouper._log_progress(10, 0, 10)
+            assert next_p == 10
+
+
+@pytest.mark.usefixtures("temporary_working_dir")
+class Test_representative_selection:
+    class DummyDistanceGrouper(MatrixGrouper):
+        def __init__(self, molecules, distance_matrix, **kwargs):
+            super().__init__(molecules, threshold=9.9, **kwargs)
+            self._distance_matrix = np.array(distance_matrix, dtype=float)
+
+        def group(self):
+            groups, index_groups = self.group_by_threshold(
+                self._distance_matrix
+            )
+            self._cached_groups = groups
+            self._cached_group_indices = index_groups
+            self.record(distance_matrix=self._distance_matrix)
+            return groups, index_groups
+
+        def _record_results(self, distance_matrix):
+            recorder = self._get_results_recorder()
+            labels = recorder.get_labels(distance_matrix.shape[0])
+            header_info = [("", "Dummy Distance Grouper")]
+            self._append_input_usage_header(header_info)
+            sheets_data = {}
+            if self._cached_group_indices is not None:
+                sheets_data["Groups"] = recorder.build_groups_dataframe(
+                    self._cached_group_indices, len(self.molecules)
+                )
+            recorder.record_results(
+                grouper_name=self.__class__.__name__,
+                header_info=header_info,
+                sheets_data=sheets_data,
+                matrix_data=("Distance", distance_matrix, labels),
+                suffix="test",
+                startrow=len(header_info) + 2,
+            )
+
+    @staticmethod
+    def _set_energies(molecules, energies):
+        for mol, energy in zip(molecules, energies):
+            mol.energy = energy
+
+    def test_default_representative_strategy_is_lowest(
+        self, methanol_molecules
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules[:2], threshold=0.5)
+        assert grouper.representative_strategy == "lowest"
+
+    def test_lowest_strategy_orders_group_by_energy(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:4]
+        self._set_energies(molecules, [5.0, 1.0, 3.0, None])
+        matrix = np.array(
+            [
+                [0.0, 0.1, 0.2, 0.3],
+                [0.1, 0.0, 0.2, 0.3],
+                [0.2, 0.2, 0.0, 0.3],
+                [0.3, 0.3, 0.3, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="lowest",
+        )
+        groups, index_groups = grouper.group()
+
+        assert index_groups[0][0] == 1
+        assert groups[0][0] is molecules[1]
+        assert index_groups[0] == [1, 2, 0, 3]
+
+    def test_center_strategy_orders_entire_group_by_centrality(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:5]
+        self._set_energies(molecules, [0.0, 0.1, 0.2, -1.0, 0.3])
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 0.0, 2.0, 2.0, 2.0],
+                [1.0, 2.0, 0.0, 2.0, 2.0],
+                [1.0, 2.0, 2.0, 0.0, 2.0],
+                [1.0, 2.0, 2.0, 2.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="center",
+        )
+        groups, index_groups = grouper.group()
+
+        assert set(index_groups[0]) == {0, 1, 2, 3, 4}
+        assert index_groups[0][0] == 0
+        assert groups[0][0] is molecules[0]
+        assert index_groups[0] == [0, 3, 1, 2, 4]
+
+    def test_top3_strategy_picks_most_central_among_three_lowest_energy(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:5]
+        self._set_energies(molecules, [0.0, 0.1, 0.2, -1.0, 0.3])
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 0.0, 2.0, 2.0, 2.0],
+                [1.0, 2.0, 0.0, 2.0, 2.0],
+                [1.0, 2.0, 2.0, 0.0, 2.0],
+                [1.0, 2.0, 2.0, 2.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="top3",
+        )
+        groups, index_groups = grouper.group()
+
+        assert index_groups[0][0] == 0
+        assert groups[0][0] is molecules[0]
+        assert index_groups[0] == [0, 3, 1, 2, 4]
+
+    def test_top3_falls_back_to_lowest_for_group_size_two(
+        self, methanol_molecules
+    ):
+        molecules = methanol_molecules[:2]
+        self._set_energies(molecules, [5.0, 1.0])
+        matrix = np.array([[0.0, 0.2], [0.2, 0.0]])
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="top3",
+        )
+        _, index_groups = grouper.group()
+        assert index_groups[0] == [1, 0]
+
+    def test_top3_falls_back_to_lowest_for_group_size_one(
+        self, methanol_molecules
+    ):
+        molecules = [methanol_molecules[0]]
+        molecules[0].energy = 3.0
+        matrix = np.array([[0.0]])
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="top3",
+        )
+        _, index_groups = grouper.group()
+        assert index_groups[0] == [0]
+
+    def test_non_matrix_lowest_orders_first_by_energy(
+        self, multiple_molecules_xyz_file
+    ):
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:4]
+        self._set_energies(molecules, [5.0, 2.0, 1.0, None])
+        grouper = FormulaGrouper(molecules, representative_strategy="lowest")
+        groups, index_groups = grouper.group()
+        assert index_groups[0] == [2, 1, 0, 3]
+        assert groups[0][0] is molecules[2]
+
+    def test_non_matrix_center_and_top3_raise(self, methanol_molecules):
+        with pytest.raises(
+            ValueError, match="requires a pairwise distance matrix"
+        ):
+            FormulaGrouper(
+                methanol_molecules[:2], representative_strategy="center"
+            )
+        with pytest.raises(
+            ValueError, match="requires a pairwise distance matrix"
+        ):
+            FormulaGrouper(
+                methanol_molecules[:2], representative_strategy="top3"
+            )
+
+    def test_groups_table_and_unique_and_xyz_use_representative_first(
+        self, multiple_molecules_xyz_file, temporary_working_dir
+    ):
+        from openpyxl import load_workbook
+
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:5]
+        self._set_energies(molecules, [0.0, 0.1, 0.2, -1.0, 0.3])
+        conformer_ids = ["c1", "c2", "c3", "c4", "c5"]
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 0.0, 2.0, 2.0, 2.0],
+                [1.0, 2.0, 0.0, 2.0, 2.0],
+                [1.0, 2.0, 2.0, 0.0, 2.0],
+                [1.0, 2.0, 2.0, 2.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="center",
+            label="rep_center",
+            conformer_ids=conformer_ids,
+        )
+        groups, index_groups = grouper.group()
+        assert index_groups[0][0] == 0
+
+        xlsx_file = os.path.join(
+            temporary_working_dir,
+            "rep_center_group_result",
+            "rep_center_DummyDistanceGrouper_test.xlsx",
+        )
+        wb = load_workbook(xlsx_file, data_only=True)
+        ws = wb["Groups"]
+        assert ws["B2"].value.startswith("c1")
+
+        unique_mols = grouper.unique()
+        assert unique_mols[0] is groups[0][0]
+
+        xyz_file = os.path.join(
+            temporary_working_dir,
+            "rep_center_group_result",
+            "rep_center_group_1.xyz",
+        )
+        with open(xyz_file, "r") as handle:
+            lines = handle.readlines()
+        assert "Original_Index: c1" in lines[1]
+
+    @staticmethod
+    def _partition(index_groups):
+        return {frozenset(group) for group in index_groups}
+
+    @staticmethod
+    def _center_score(matrix, group, idx):
+        others = [j for j in group if j != idx]
+        if not others:
+            return 0.0
+        return float(np.mean([matrix[idx, j] for j in others]))
+
+    def test_representative_strategy_does_not_change_group_membership(
+        self, multiple_molecules_xyz_file
+    ):
+        """lowest/center/top3 may reorder groups but must not change membership."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        partitions = []
+        for strategy in ("lowest", "center", "top3"):
+            grouper = BasicRMSDGrouper(
+                molecules,
+                threshold=2.0,
+                num_procs=1,
+                representative_strategy=strategy,
+            )
+            _, index_groups = grouper.group()
+            partitions.append(self._partition(index_groups))
+
+        assert partitions[0] == partitions[1] == partitions[2]
+
+    def test_center_puts_most_central_member_first(
+        self, multiple_molecules_xyz_file
+    ):
+        """center must place the member with minimum mean within-group distance first."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="center",
+        )
+        matrix = grouper.calculate_full_rmsd_matrix()
+        _, index_groups = grouper.group()
+
+        for group in index_groups:
+            if len(group) == 1:
+                continue
+            expected = min(
+                group,
+                key=lambda idx: (
+                    self._center_score(matrix, group, idx),
+                    (
+                        float("inf")
+                        if molecules[idx].energy is None
+                        else molecules[idx].energy
+                    ),
+                    idx,
+                ),
+            )
+            assert group[0] == expected
+
+    def test_top3_uses_only_three_lowest_energy_candidates(
+        self, multiple_molecules_xyz_file
+    ):
+        """top3 chooses the most central candidate among the three lowest energies."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="top3",
+        )
+        matrix = grouper.calculate_full_rmsd_matrix()
+        _, index_groups = grouper.group()
+
+        tested_large_group = False
+        for group in index_groups:
+            if len(group) < 3:
+                continue
+            tested_large_group = True
+            energy_order = sorted(
+                group,
+                key=lambda idx: (
+                    (
+                        float("inf")
+                        if molecules[idx].energy is None
+                        else molecules[idx].energy
+                    ),
+                    idx,
+                ),
+            )
+            candidates = energy_order[:3]
+            expected = min(
+                candidates,
+                key=lambda idx: (
+                    self._center_score(matrix, group, idx),
+                    (
+                        float("inf")
+                        if molecules[idx].energy is None
+                        else molecules[idx].energy
+                    ),
+                    idx,
+                ),
+            )
+            assert group[0] == expected
+            assert group[0] in candidates
+
+            expected_remaining = [
+                idx for idx in energy_order if idx != expected
+            ]
+            assert group[1:] == expected_remaining
+
+        assert (
+            tested_large_group
+        ), "Fixture must contain at least one group of size >= 3"
+
+    def test_top3_falls_back_to_lowest_for_two_member_group(self):
+        """top3 must use lowest-energy ordering when a group has fewer than 3 members."""
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        mol0 = Molecule.from_ase_atoms(ase_molecule("CH3OH"))
+        mol1 = mol0.copy()
+        mol0._energy = -100.0
+        mol1._energy = -101.0
+
+        grouper = BasicRMSDGrouper(
+            [mol0, mol1],
+            threshold=1.0,
+            num_procs=1,
+            representative_strategy="top3",
+        )
+        _, index_groups = grouper.group()
+
+        assert index_groups == [[1, 0]]
+
+    @pytest.mark.parametrize("strategy", ["center", "top3"])
+    def test_non_matrix_grouper_rejects_matrix_representative_strategy(
+        self, methanol_molecules, strategy
+    ):
+        """Non-matrix groupers must reject center/top3 instead of silently falling back."""
+        with pytest.raises(ValueError, match="pairwise distance matrix"):
+            grouper = FormulaGrouper(
+                methanol_molecules,
+                representative_strategy=strategy,
+            )
+            grouper.group()
+
+    def test_unique_uses_first_group_member_as_representative(
+        self, multiple_molecules_xyz_file
+    ):
+        """unique() must trust group[0] and must not re-select by energy."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="center",
+            label="center_unique_test",
+        )
+        groups, index_groups = grouper.group()
+        unique_molecules = grouper.unique()
+
+        assert len(unique_molecules) == len(groups)
+        for unique_mol, group, indices in zip(
+            unique_molecules, groups, index_groups
+        ):
+            assert indices[0] in range(len(molecules))
+            assert np.allclose(unique_mol.positions, group[0].positions)
+
+    def test_default_representative_matches_explicit_lowest(
+        self, multiple_molecules_xyz_file
+    ):
+        """The new option must preserve the historical lowest-energy default."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        default_grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+        )
+        explicit_grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=2.0,
+            num_procs=1,
+            representative_strategy="lowest",
+        )
+
+        _, default_indices = default_grouper.group()
+        _, explicit_indices = explicit_grouper.group()
+
+        assert default_indices == explicit_indices
+
+    def test_center_tie_breaks_by_energy_then_original_index(
+        self, multiple_molecules_xyz_file
+    ):
+        """center ties must resolve deterministically by energy, then original index."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)[:3]
+        self._set_energies(molecules, [1.0, 0.5, 0.5])
+
+        # All three members have identical mean centrality.
+        matrix = np.array(
+            [
+                [0.0, 1.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+            ]
+        )
+        grouper = self.DummyDistanceGrouper(
+            molecules,
+            matrix,
+            representative_strategy="center",
+        )
+        _, index_groups = grouper.group()
+
+        # 1 and 2 tie in centrality and energy, so original index 1 wins.
+        assert index_groups[0] == [1, 2, 0]

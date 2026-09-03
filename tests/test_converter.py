@@ -1913,7 +1913,7 @@ class TestConverterCoverageGaps:
         with open(sdf_path, "w") as f:
             f.write(
                 "methane\n"
-                "  ChemSmart\n"
+                "  CHEMSMART\n"
                 "\n"
                 "  1  0  0  0  0  0  0  0  0  0999 V2000\n"
                 "    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n"

@@ -505,24 +505,19 @@ class TestGaussianIRCJobs:
         assert job_custom._ircr_job().label == "label_ircr_flat"
 
 
-class TestGaussianCrestJobs:
-    def test_crest_job_creates_jobs_for_all_conformers(
+class TestGaussianCrestGroupingForwarding:
+    def test_crest_grouping_forwards_num_procs_and_representative(
         self,
         tmpdir,
         multiple_molecules_xyz_file,
         gaussian_yaml_settings_gas_solv_project_name,
         gaussian_jobrunner_no_scratch,
     ):
-        """Test that GaussianCrestJob creates
-        jobs for all conformers in the file."""
         from chemsmart.io.molecules.structure import Molecule
         from chemsmart.jobs.gaussian.crest import GaussianCrestJob
         from chemsmart.settings.gaussian import GaussianProjectSettings
 
-        # set scratch directory for jobrunner
         gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
-
-        # get project settings
         project_settings = GaussianProjectSettings.from_project(
             gaussian_yaml_settings_gas_solv_project_name
         )
@@ -530,75 +525,31 @@ class TestGaussianCrestJobs:
         settings.charge = 0
         settings.multiplicity = 1
 
-        # Read all molecules from the file
         molecules = Molecule.from_filepath(
             filepath=multiple_molecules_xyz_file, index=":", return_list=True
         )
-        num_conformers_in_file = len(molecules)
 
-        # Create CREST job with all molecules
-        job = GaussianCrestJob(
-            molecules=molecules,
-            settings=settings,
-            label="crest_test_opt",
-            jobrunner=gaussian_jobrunner_no_scratch,
-        )
+        mock_grouper = MagicMock()
+        mock_grouper.group.return_value = None
+        mock_grouper.unique.return_value = molecules[:1]
 
-        # Check that the job has the correct number of conformers
-        assert job.num_conformers == num_conformers_in_file
-
-        # Check that all conformer jobs are created
-        all_jobs = job.all_conformers_jobs
-        assert len(all_jobs) == num_conformers_in_file
-
-        # Check that all jobs have correct labels
-        for i, j in enumerate(all_jobs):
-            expected_label = f"crest_test_opt_c{i + 1}"
-            assert j.label == expected_label
-
-    def test_crest_job_with_limited_conformers(
-        self,
-        tmpdir,
-        multiple_molecules_xyz_file,
-        gaussian_yaml_settings_gas_solv_project_name,
-        gaussian_jobrunner_no_scratch,
-    ):
-        """Test that GaussianCrestJob respects num_confs_to_run parameter."""
-        from chemsmart.io.molecules.structure import Molecule
-        from chemsmart.jobs.gaussian.crest import GaussianCrestJob
-        from chemsmart.settings.gaussian import GaussianProjectSettings
-
-        # set scratch directory for jobrunner
-        gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
-
-        # get project settings
-        project_settings = GaussianProjectSettings.from_project(
-            gaussian_yaml_settings_gas_solv_project_name
-        )
-        settings = project_settings.opt_settings()
-        settings.charge = 0
-        settings.multiplicity = 1
-
-        # Read all molecules from the file
-        molecules = Molecule.from_filepath(
-            filepath=multiple_molecules_xyz_file, index=":", return_list=True
-        )
-        num_conformers_in_file = len(molecules)
-
-        # Create CREST job with limited number of conformers to run
-        job = GaussianCrestJob(
-            molecules=molecules,
-            settings=settings,
-            label="crest_limited_opt",
-            jobrunner=gaussian_jobrunner_no_scratch,
-            num_confs_to_run=5,
-        )
-
-        # Check that all conformers are loaded
-        assert job.num_conformers == num_conformers_in_file
-
-        # But only 5 are configured to run
-        assert job.num_confs_to_opt == 5
+        with patch(
+            "chemsmart.jobs.gaussian.crest.StructureGrouperFactory.create",
+            return_value=mock_grouper,
+        ) as mock_create:
+            GaussianCrestJob(
+                molecules=molecules,
+                settings=settings,
+                label="crest_forwarding_test",
+                jobrunner=gaussian_jobrunner_no_scratch,
+                grouping_strategy="rmsd",
+                num_procs=4,
+                representative_strategy="center",
+            )
+        mock_create.assert_called_once()
+        create_kwargs = mock_create.call_args.kwargs
+        assert create_kwargs["num_procs"] == 4
+        assert create_kwargs["representative_strategy"] == "center"
 
 
 class TestGaussianTrajJobs:
@@ -646,3 +597,48 @@ class TestGaussianTrajJobs:
 
         # When no grouping strategy is provided, all structures are unique
         assert job.num_unique_structures == num_molecules_in_file
+
+    def test_traj_grouping_forwards_num_procs_and_representative(
+        self,
+        tmpdir,
+        multiple_molecules_xyz_file,
+        gaussian_yaml_settings_gas_solv_project_name,
+        gaussian_jobrunner_no_scratch,
+    ):
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.gaussian.traj import GaussianTrajJob
+        from chemsmart.settings.gaussian import GaussianProjectSettings
+
+        gaussian_jobrunner_no_scratch.scratch_dir = tmpdir
+        project_settings = GaussianProjectSettings.from_project(
+            gaussian_yaml_settings_gas_solv_project_name
+        )
+        settings = project_settings.opt_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+
+        molecules = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index=":", return_list=True
+        )
+
+        mock_grouper = MagicMock()
+        mock_grouper.group.return_value = None
+
+        with patch(
+            "chemsmart.jobs.gaussian.traj.StructureGrouperFactory.create",
+            return_value=mock_grouper,
+        ) as mock_create:
+            GaussianTrajJob(
+                molecules=molecules,
+                settings=settings,
+                label="traj_forwarding_test",
+                jobrunner=gaussian_jobrunner_no_scratch,
+                grouping_strategy="rmsd",
+                num_procs=4,
+                representative_strategy="top3",
+                proportion_structures_to_use=1.0,
+            )
+        mock_create.assert_called_once()
+        create_kwargs = mock_create.call_args.kwargs
+        assert create_kwargs["num_procs"] == 4
+        assert create_kwargs["representative_strategy"] == "top3"

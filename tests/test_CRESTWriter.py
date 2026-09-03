@@ -1,10 +1,13 @@
 import os
 
+import pytest
+
 from chemsmart.jobs.crest.conformers import CRESTConformerSearchJob
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.crest.writer import CRESTInputWriter
 
 
+@pytest.mark.usefixtures("temporary_working_dir")
 class TestCRESTInputWriter:
     def test_write_reuses_xtb_constraints(
         self, tmpdir, methane_molecule, crest_jobrunner_no_scratch

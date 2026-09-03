@@ -62,20 +62,20 @@ Project and File Options
 
    -  -  ``--ri, --record-index``
       -  int
-      -  Select a record from a chemsmart database by its 1-based index
+      -  Select a record from a CHEMSMART database by its 1-based index
 
    -  -  ``--rid, --record-id``
       -  string
-      -  Select a record from a chemsmart database by its ID
+      -  Select a record from a CHEMSMART database by its ID
 
    -  -  ``--sid, --structure-id``
       -  string
-      -  Select a structure from a chemsmart database by its ID
+      -  Select a structure from a CHEMSMART database by its ID
 
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a chemsmart
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a CHEMSMART
       database ``.db`` file.
 
 Molecular Properties Options
@@ -261,7 +261,7 @@ They can also be specified at the **subcommand level** to override the group-lev
 
       -  Path to a solvent file for the ``cosmors`` model. Any file format is accepted — it does **not** have to be a
          ``.cosmorsxyz`` file. If the path points to a Gaussian output file (e.g. ``basename.log``) or an ORCA output
-         file (e.g. ``basename.out``), chemsmart automatically converts it to ``basename.cosmorsxyz`` (via
+         file (e.g. ``basename.out``), CHEMSMART automatically converts it to ``basename.cosmorsxyz`` (via
          ``Molecule.write_cosmorsxyz()``) before use. The ``.cosmorsxyz`` file is then copied to the running directory
          (scratch or job folder) and its basename (without the ``.cosmorsxyz`` extension) is written as
          ``solventfilename "name"`` inside the ``%cosmors`` block.
@@ -283,7 +283,7 @@ They can also be specified at the **subcommand level** to override the group-lev
 
          **ORCA 6.1 duplicate-keyword guard (openCOSMO-RS only):** ORCA raises an ``INPUT ERROR`` if
          ``COSMORS(solvent_id)`` is on the route line *and* ``solvent "solvent_id"`` also appears in the ``%cosmors``
-         block. When ``-si`` / ``solvent_id`` is set, chemsmart automatically filters out any ``solvent "..."`` lines
+         block. When ``-si`` / ``solvent_id`` is set, CHEMSMART automatically filters out any ``solvent "..."`` lines
          from the ``%cosmors`` block to prevent this error. Note that ``solventfilename "..."`` is a **different**
          keyword (it specifies the path to a ``.cosmorsxyz`` file) and is **not** filtered.
 

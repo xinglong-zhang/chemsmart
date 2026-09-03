@@ -2,7 +2,23 @@
  Grouping Strategies
 #####################
 
-This page provides detailed documentation for each molecular structure grouping strategy available in chemsmart.
+This page provides detailed documentation for each molecular structure grouping strategy available in CHEMSMART.
+
+***************************************
+ Matrix-based vs non-matrix strategies
+***************************************
+
+Matrix-based strategies: ``rmsd``, ``hrmsd``, ``spyrmsd``, ``irmsd``, ``pymolrmsd``, ``tfd``, ``tanimoto``, ``energy``.
+
+Non-matrix strategies: ``formula``, ``connectivity``, ``isomorphism``.
+
+For matrix-based strategies, CHEMSMART builds an ``N x N`` symmetric pairwise distance matrix with zero diagonal and
+applies complete-linkage clustering to that matrix. The same matrix is reused for ``center`` and ``top3`` representative
+selection. Matrix calculation progress is logged at roughly 10% intervals.
+
+Pairwise failures or incompatibilities may appear as ``+inf`` entries. Before clustering, CHEMSMART iteratively removes
+structures responsible for ``+inf`` pairs until a finite submatrix remains. Original conformer indices/IDs are preserved
+for reporting, and the recorded full output matrix is not modified by this clustering cleanup.
 
 ***********************
  RMSD-based Strategies
@@ -77,8 +93,8 @@ Strategy-specific Options
       -  choice
       -  Coordinate inversion checking: auto (default), on, off
 
-**Note:** Requires the external ``irmsd`` package installed in a separate conda environment with numpy>=2.0. See
-installation instructions in the README.
+**Note:** CHEMSMART prefers the direct Python API (``irmsd.api.irmsd_exposed.get_irmsd``) when available and falls back
+to the external ``irmsd`` CLI otherwise.
 
 pymolrmsd
 =========
@@ -92,13 +108,14 @@ Component, Version 1.8; 2015*).
 
 **Default threshold:** 0.5 Å
 
-Uses PyMOL's powerful alignment algorithm. Note that PyMOL only supports single-threaded operation (``-np 1``).
+Uses PyMOL's powerful alignment algorithm. PyMOL grouping is serial-only; if ``-np > 1`` is requested, CHEMSMART warns
+and falls back to ``num_procs=1``.
 
 ******************************
  Fingerprint-based Strategies
 ******************************
 
-tfd (Torsion Fingerprint Deviation)
+TFD (Torsion Fingerprint Deviation)
 ===================================
 
 Compare conformers based on their torsion angle fingerprints (*J. Chem. Inf. Model. 2012, 52, 1499*).
@@ -126,11 +143,11 @@ Strategy-specific Options
 
    -  -  ``--use-weights/--no-use-weights``
       -  bool
-      -  Use torsion weights in TFD calculation (default: True)
+      -  Use torsion weights in TFD (Torsion Fingerprint Deviation) calculation (default: True)
 
    -  -  ``--max-dev``
       -  choice
-      -  Normalization method: equal (default) or spec
+      -  Normalization method in TFD (Torsion Fingerprint Deviation) calculation: equal (default) or spec
 
 tanimoto
 ========
@@ -143,6 +160,8 @@ Group structures using Tanimoto similarity with molecular fingerprints.
    chemsmart run grouper -f conformers.xyz -T 0.85 tanimoto --fingerprint-type morgan
 
 **Default threshold:** 0.9
+
+Tanimoto similarity ``S`` is converted to distance for clustering as ``D = 1 - S``.
 
 Strategy-specific Options
 -------------------------
@@ -232,3 +251,6 @@ Similar to connectivity but uses RDKit's isomorphism checking.
 All threshold-based grouping strategies use **complete linkage clustering**, which ensures that all members within a
 group are within the threshold distance of each other. This prevents the "chaining effect" where dissimilar structures
 could end up in the same group through intermediate structures.
+
+When ``-N/--num-groups`` is used, CHEMSMART cuts only at existing complete-linkage distance levels. Because tied linkage
+distances are kept together, the final number of groups can be slightly larger than requested.

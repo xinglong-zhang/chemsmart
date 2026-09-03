@@ -106,7 +106,7 @@ Babel write fallback for non-native output types.
 The legacy ``file_converter.py`` script remains available for the same workflow.
 
 For directory-based conversion, ``-t/--filetype`` selects files by extension, while ``-p/--program`` is only needed when
-chemsmart must know which program-specific parser to use.
+CHEMSMART must know which program-specific parser to use.
 
 Usage
 =====

@@ -8,9 +8,7 @@ from chemsmart.io.gaussian import (
     GAUSSIAN_DIEZE_TAGS,
     GAUSSIAN_FUNCTIONALS,
     GAUSSIAN_SEMIEMPIRICAL,
-)
-from chemsmart.io.gaussian import (
-    GAUSSIAN_SOLVATION_MODELS as gaussian_solvation_models,
+    GAUSSIAN_SOLVATION_MODELS,
 )
 
 logger = logging.getLogger(__name__)
@@ -475,7 +473,7 @@ class GaussianRoute:
             # if none of the models are present, set
             # default model to pcm as in Gaussian
             if all(
-                model not in scrf_string for model in gaussian_solvation_models
+                model not in scrf_string for model in GAUSSIAN_SOLVATION_MODELS
             ):
                 solvent_model = "pcm"
             else:
@@ -511,7 +509,7 @@ class GaussianRoute:
                         while (
                             len(parts) > 1
                             and parts[-1] != "read"
-                            and parts[-1] not in gaussian_solvation_models
+                            and parts[-1] not in GAUSSIAN_SOLVATION_MODELS
                             and "=" not in parts[-1]
                             and "-" not in parts[-1]
                         ):
@@ -547,7 +545,7 @@ class GaussianRoute:
 
                     # Remove solvent model and solvent id
                     for element in scrf_line_elements:
-                        if element in gaussian_solvation_models:
+                        if element in GAUSSIAN_SOLVATION_MODELS:
                             elements_to_remove.add(element)
                         if element.startswith(
                             "solvent="

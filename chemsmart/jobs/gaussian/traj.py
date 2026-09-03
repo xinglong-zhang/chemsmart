@@ -54,8 +54,10 @@ class GaussianTrajJob(GaussianJob):
             conformations.
         num_structures_to_run (int): Number of structures to process.
         grouping_strategy (str): Method for structure grouping.
-        num_procs (int): Number of processes for execution
-            (currently not used).
+        num_procs (int): Number of processes used by supported
+            grouping strategies.
+        representative_strategy (str): Representative selection strategy
+            for grouped conformers.
         proportion_to_opt (float): Fraction of the trajectory tail used to
             build the `molecules` subset.
         skip_completed (bool): If True, completed jobs are not rerun.
@@ -74,6 +76,7 @@ class GaussianTrajJob(GaussianJob):
         num_structures_to_run=None,
         grouping_strategy=None,
         num_procs=1,
+        representative_strategy="lowest",
         proportion_structures_to_use=0.1,
         skip_completed=True,
         **kwargs,
@@ -93,8 +96,10 @@ class GaussianTrajJob(GaussianJob):
             num_structures_to_run (int, optional): Number of structures
                 to process. If None, process all unique structures.
             grouping_strategy (str): Structure grouping method.
-            num_procs (int): Number of processes for parallel execution
-                (currently not implemented).
+            num_procs (int): Number of processes used by supported
+                grouping strategies.
+            representative_strategy (str): Representative selection strategy
+                for grouped conformers.
             proportion_structures_to_use (float): Fraction of trajectory
                 end to use for structure extraction (default: 0.1).
             skip_completed (bool): Skip already completed jobs.
@@ -124,6 +129,7 @@ class GaussianTrajJob(GaussianJob):
         self.num_structures_to_run = num_structures_to_run
         self.grouping_strategy = grouping_strategy
         self.num_procs = num_procs
+        self.representative_strategy = representative_strategy
 
         # proportion of the traj from last portion to obtain structures
         self.proportion_to_opt = proportion_structures_to_use
@@ -152,6 +158,8 @@ class GaussianTrajJob(GaussianJob):
             self.grouper = StructureGrouperFactory.create(
                 self.molecules,
                 strategy=self.grouping_strategy,
+                num_procs=self.num_procs,
+                representative_strategy=self.representative_strategy,
                 label=label,
                 conformer_ids=self._original_conformer_ids,
                 **kwargs,
