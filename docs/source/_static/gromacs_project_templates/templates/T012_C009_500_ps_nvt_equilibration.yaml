@@ -1,0 +1,16 @@
+# Literature-grounded training target; NOT runnable as-is.
+# Local structure/topology paths are intentionally omitted.
+
+project:
+  name: c009_t012
+  type: gromacs
+  job_type: nvt
+  mode: prepared
+gromacs_settings:
+  force_field: opls-aa
+  water_model: spc
+  timestep: 0.002
+  temperature: 300.0
+  thermostat: v-rescale
+  tau_t: 0.1
+  nsteps: 250000

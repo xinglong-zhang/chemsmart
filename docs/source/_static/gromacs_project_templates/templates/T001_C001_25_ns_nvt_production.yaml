@@ -1,0 +1,18 @@
+# Literature-grounded training target; NOT runnable as-is.
+# Local structure/topology paths are intentionally omitted.
+
+project:
+  name: c001_t001
+  type: gromacs
+  job_type: nvt
+  mode: prepared
+gromacs_settings:
+  force_field: charmm36
+  water_model: tip3p
+  timestep: 0.002
+  temperature: 413.0
+  thermostat: v-rescale
+  constraints: h-bonds
+  constraint_algorithm: lincs
+  nsteps: 12500000
+  tau_t: 0.1

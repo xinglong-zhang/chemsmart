@@ -1,0 +1,11 @@
+# Literature-grounded training target; NOT runnable as-is.
+# Local structure/topology paths are intentionally omitted.
+
+project:
+  name: c005_t007
+  type: gromacs
+  job_type: em
+  mode: prepared
+gromacs_settings:
+  water_model: tip3p
+  nsteps: 50000

@@ -1,0 +1,21 @@
+# Literature-grounded training target; NOT runnable as-is.
+# Local structure/topology paths are intentionally omitted.
+
+project:
+  name: c004_t006
+  type: gromacs
+  job_type: md
+  mode: prepared
+gromacs_settings:
+  force_field: charmm22
+  water_model: spce
+  timestep: 0.002
+  temperature: 300.0
+  pressure: 1.0
+  thermostat: Nose-Hoover
+  barostat: Parrinello-Rahman
+  constraints: h-bonds
+  constraint_algorithm: lincs
+  nsteps: 25000000
+  tau_t: 2.0
+  tau_p: 2.0

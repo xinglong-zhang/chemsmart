@@ -1,0 +1,18 @@
+# Literature-grounded training target; NOT runnable as-is.
+# Local structure/topology paths are intentionally omitted.
+
+project:
+  name: c007_t010
+  type: gromacs
+  job_type: md
+  mode: prepared
+gromacs_settings:
+  force_field: opls-aa
+  timestep: 0.002
+  temperature: 300.0
+  pressure: 1.0
+  thermostat: Berendsen
+  barostat: Berendsen
+  tau_t: 0.1
+  tau_p: 2.0
+  nsteps: 50000000
