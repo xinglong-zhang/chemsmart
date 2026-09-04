@@ -144,3 +144,5 @@ dmypy.json
 
 # Local manual convert CLI scratch (not used by pytest)
 convert_test_files/
+
+.vscode/settings.json

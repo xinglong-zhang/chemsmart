@@ -112,8 +112,10 @@ class Molecule:
         The full set of 2D descriptors for a molecule.
     threed_descriptors: dict | None
         Descriptors derived from a molecule’s 3D structure
-    sterimol_parameter: dbstep.dbstep | None
-        A DBSTEP results object containing directional steric descriptors (L, Bmin, Bmax).
+    sterimol_parameter: dict | None
+        Directional steric descriptors (L, Bmin, Bmax).
+    soap: numpy.ndarray | None
+        3D structure representation for machine learning. 
     """
 
     def __init__(
@@ -946,6 +948,8 @@ class Molecule:
 
     @cached_property
     def sterimol_parameter(self):
+        if self._sterimol is None: 
+            self.calculate_sterimol_parameters(self)
         return self._sterimol
 
     def calculate_sterimol_parameters(self, atom1: int, atom2: int):
@@ -3085,6 +3089,13 @@ class Molecule:
     # =========================================================================
     # PUBLIC DESCRIPTOR INTERFACES
     # =========================================================================
+    @property
+    def soap(self):
+        """3D representation for machine learning"""
+        if self._soap is None:
+            self.compute_soap(self)
+        return self._soap
+
 
     def compute_soap(
         self,
@@ -3129,7 +3140,9 @@ class Molecule:
 
         # Add boundary validation for l_max
         if l_max < 0 or l_max > 6:
-            raise ValueError(f"l_max={l_max} is out of bounds. Must be between 0 and 6.")
+            raise ValueError(
+                f"l_max={l_max} is out of bounds. Must be between 0 and 6."
+            )
 
         # Build orthonormal radial basis and caching nodes
         basis = self._build_radial_basis(n_max, r_cut, n_quad=n_quad)
@@ -3138,7 +3151,9 @@ class Molecule:
             center_indices = list(range(len(self.symbols)))
         else:
             if any(c < 0 or c >= len(self.symbols) for c in centers):
-                raise IndexError(f"Center indices must be between 0 and {len(self.symbols) - 1}.")
+                raise IndexError(
+                    f"Center indices must be between 0 and {len(self.symbols) - 1}."
+                )
             center_indices = list(centers)
 
         rows = [
@@ -3153,7 +3168,8 @@ class Molecule:
             )
             for i in center_indices
         ]
-        return np.vstack(rows)
+        self._soap = np.vstack(rows)
+        return self._soap
 
     # =========================================================================
     # INTERNAL SOAP HELPER METHODS
@@ -3195,9 +3211,7 @@ class Molecule:
                 for l in range(l_max + 1):
                     for n in range(n_max):
                         n_prime_range = (
-                            range(n, n_max)
-                            if same_species
-                            else range(n_max)
+                            range(n, n_max) if same_species else range(n_max)
                         )
                         for n_prime in n_prime_range:
                             value = sum(
@@ -3230,30 +3244,39 @@ class Molecule:
         }
 
         for pos in neighbor_positions:
-            r_j, polar_j, azimuth_j = self._cartesian_to_spherical(pos - center)
+            r_j, polar_j, azimuth_j = self._cartesian_to_spherical(
+                pos - center
+            )
             if r_j >= r_cut or r_j < 1e-8:
                 continue
 
             f_cut = self._cosine_cutoff(r_j, r_cut)
 
             for l in range(l_max + 1):
-                bessel_arg = r_nodes * r_j / sigma ** 2
-                
+                bessel_arg = r_nodes * r_j / sigma**2
+
                 # Scaled modified spherical Bessel function: i_l_scaled = exp(-x) * i_l(x)
                 i_l_scaled = self._spherical_in_numpy(l, bessel_arg)
 
                 # Combine arguments in log-space/scaled form to eliminate floating point overflow
-                log_env = -((r_nodes - r_j) ** 2) / (2 * sigma ** 2)
+                log_env = -((r_nodes - r_j) ** 2) / (2 * sigma**2)
                 gaussian_envelope_scaled = np.exp(log_env)
 
-                integrand = g_nodes * gaussian_envelope_scaled * i_l_scaled * (r_nodes ** 2)
+                integrand = (
+                    g_nodes
+                    * gaussian_envelope_scaled
+                    * i_l_scaled
+                    * (r_nodes**2)
+                )
                 radial_integral_n = np.sum(integrand * weights, axis=1) * jac
 
                 for m in range(-l, l + 1):
                     y_lm_conj = np.conj(
                         self._sph_harm_numpy(m, l, azimuth_j, polar_j)
                     )
-                    contribution = 4 * np.pi * f_cut * y_lm_conj * radial_integral_n
+                    contribution = (
+                        4 * np.pi * f_cut * y_lm_conj * radial_integral_n
+                    )
                     for n in range(n_max):
                         coeffs[(n, l, m)] += contribution[n]
 
@@ -3266,7 +3289,7 @@ class Molecule:
     @staticmethod
     def _spherical_in_numpy(l, x):
         """Computes scaled modified spherical Bessel function exp(-x) * i_l(x).
-        
+
         Uses downward Miller recurrence for numerical stability across arbitrary l and x.
         """
         x = np.asarray(x, dtype=float)
@@ -3291,10 +3314,10 @@ class Molecule:
                 # Downward Miller Recurrence
                 # Estimate starting degree N_start > l to guarantee convergence
                 n_start = int(l + np.sqrt(40 * l + val) + 15)
-                
+
                 f_next = 0.0
                 f_curr = 1e-100  # Arbitrary tiny starting value
-                
+
                 i_l_unnorm = 0.0
                 i_0_unnorm = 0.0
 
@@ -3328,13 +3351,15 @@ class Molecule:
             # P_m^m(x) = (-1)^m * (2m-1)!! * (1-x^2)^(m/2)
             fact = 1.0
             for i in range(1, abs_m + 1):
-                fact *= (2 * i - 1)
-            p_curr = ((-1) ** abs_m) * fact * (sint ** abs_m)
+                fact *= 2 * i - 1
+            p_curr = ((-1) ** abs_m) * fact * (sint**abs_m)
 
         if l > abs_m:
             p_next = x * (2 * abs_m + 1) * p_curr
             for k in range(abs_m + 2, l + 1):
-                p_2 = ((2 * k - 1) * x * p_next - (k + abs_m - 1) * p_curr) / (k - abs_m)
+                p_2 = ((2 * k - 1) * x * p_next - (k + abs_m - 1) * p_curr) / (
+                    k - abs_m
+                )
                 p_curr = p_next
                 p_next = p_2
             p_lm = p_next
@@ -3363,14 +3388,17 @@ class Molecule:
         alphas = (np.arange(1, n_max + 1) / r_cut) ** 2
 
         prims = np.array(
-            [r_nodes ** (n + 1) * np.exp(-alphas[n] * r_nodes ** 2) for n in range(n_max)]
+            [
+                r_nodes ** (n + 1) * np.exp(-alphas[n] * r_nodes**2)
+                for n in range(n_max)
+            ]
         )
 
-        weighted = prims * (r_nodes ** 2) * w
+        weighted = prims * (r_nodes**2) * w
         overlap = (prims @ weighted.T) * jac
         eigval, eigvec = np.linalg.eigh(overlap)
         eigval = np.clip(eigval, 1e-12, None)
-        betas = eigvec @ np.diag(eigval ** -0.5) @ eigvec.T
+        betas = eigvec @ np.diag(eigval**-0.5) @ eigvec.T
 
         return {
             "n_max": n_max,
@@ -3396,6 +3424,7 @@ class Molecule:
         polar = np.arccos(np.clip(vec[2] / radius, -1.0, 1.0))
         azimuth = np.arctan2(vec[1], vec[0])
         return radius, polar, azimuth
+
 
 class CoordinateBlock:
     """
