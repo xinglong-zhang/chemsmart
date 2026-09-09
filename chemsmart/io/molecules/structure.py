@@ -952,15 +952,28 @@ class Molecule:
         Calculate the distance between two points.
         Use 1-based indexing for idx1 and idx2.
         """
+        self._validate_geometry_indices(idx1, idx2)
         return np.linalg.norm(
             self.positions[idx1 - 1] - self.positions[idx2 - 1]
         )
+
+    def _validate_geometry_indices(self, *indices):
+        """Validate public, 1-based atom indices used by geometry methods."""
+        for idx in indices:
+            if isinstance(idx, bool) or not isinstance(idx, (int, np.integer)):
+                raise TypeError("Atom indices must be integers.")
+            if idx < 1 or idx > self.num_atoms:
+                raise IndexError(
+                    f"Atom index {idx} is outside the valid 1-based range "
+                    f"1..{self.num_atoms}."
+                )
 
     def get_angle(self, idx1, idx2, idx3):
         """
         Calculate the angle between three points.
         Use 1-based indexing for idx1, idx2, and idx3.
         """
+        self._validate_geometry_indices(idx1, idx2, idx3)
         return self.get_angle_from_positions(
             self.positions[idx1 - 1],
             self.positions[idx2 - 1],
@@ -973,7 +986,13 @@ class Molecule:
         """
         v1 = position1 - position2
         v2 = position3 - position2
-        cos_theta = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        denominator = np.linalg.norm(v1) * np.linalg.norm(v2)
+        if np.isclose(denominator, 0.0):
+            raise ValueError(
+                "Angle is undefined when either vector has zero length."
+            )
+        cos_theta = np.dot(v1, v2) / denominator
+        cos_theta = np.clip(cos_theta, -1.0, 1.0)
         return np.degrees(np.arccos(cos_theta))
 
     def get_dihedral(self, idx1, idx2, idx3, idx4):
@@ -982,6 +1001,7 @@ class Molecule:
         points, about bond formed by idx2 and idx3.
         Use 1-based indexing for idx1, idx2, idx3, and idx4.
         """
+        self._validate_geometry_indices(idx1, idx2, idx3, idx4)
         return self.get_dihedral_from_positions(
             self.positions[idx1 - 1],
             self.positions[idx2 - 1],
@@ -995,13 +1015,35 @@ class Molecule:
         """
         Calculate the dihedral angle between four points.
         """
-        v1 = position1 - position2
-        v2 = position3 - position2
-        v3 = position4 - position3
-        n1 = np.cross(v1, v2)
-        n2 = np.cross(v2, v3)
-        x = np.dot(n1, n2)
-        y = np.dot(np.cross(n1, v2), n2)
+        position1, position2, position3, position4 = map(
+            lambda position: np.asarray(position, dtype=float),
+            (position1, position2, position3, position4),
+        )
+        bond1 = position1 - position2
+        central_bond = position3 - position2
+        bond3 = position4 - position3
+
+        central_bond_norm = np.linalg.norm(central_bond)
+        if central_bond_norm < 1e-12:
+            raise ValueError("Points 2 and 3 must be distinct.")
+        central_bond_unit = central_bond / central_bond_norm
+
+        # Project both outer bonds onto the plane perpendicular to the
+        # central bond.  Their signed angle is the molecular dihedral.
+        projected1 = (
+            bond1 - np.dot(bond1, central_bond_unit) * central_bond_unit
+        )
+        projected3 = (
+            bond3 - np.dot(bond3, central_bond_unit) * central_bond_unit
+        )
+        if (
+            np.linalg.norm(projected1) < 1e-12
+            or np.linalg.norm(projected3) < 1e-12
+        ):
+            raise ValueError("Dihedral is undefined for collinear points.")
+
+        x = np.dot(projected1, projected3)
+        y = np.dot(np.cross(central_bond_unit, projected1), projected3)
         return np.degrees(np.arctan2(y, x))
 
     def copy(self):

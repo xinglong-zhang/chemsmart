@@ -10,6 +10,7 @@ import pytest
 from ase import Atoms
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
+from rdkit.Chem import rdMolTransforms
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
 from chemsmart.io.file import CDXFile, PKaCDXFile
@@ -164,6 +165,52 @@ Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
 
 
 class TestStructures:
+    def test_to_rdkit_rejects_invalid_bond_method(self, methanol_molecule):
+        with pytest.raises(
+            ValueError,
+            match="bond_method must be either 'chemsmart' or 'rdkit'",
+        ):
+            methanol_molecule.to_rdkit(bond_method="invalid")
+
+    def test_to_rdkit_rejects_bondless_rdkit_method(self, methanol_molecule):
+        with pytest.raises(
+            ValueError,
+            match="add_bonds=False is incompatible",
+        ):
+            methanol_molecule.to_rdkit(
+                add_bonds=False,
+                bond_method="rdkit",
+            )
+
+    @pytest.mark.parametrize(
+        "method_name",
+        ("to_rdkit", "to_rdkit_connectivity_graph"),
+    )
+    def test_rdkit_xyz_conversion_failure(
+        self, monkeypatch, methanol_molecule, method_name
+    ):
+        monkeypatch.setattr(Chem, "MolFromXYZBlock", lambda xyz: None)
+
+        with pytest.raises(
+            ValueError,
+            match="RDKit failed to create a molecule from XYZ coordinates",
+        ):
+            method = getattr(methanol_molecule, method_name)
+            if method_name == "to_rdkit":
+                method(bond_method="rdkit")
+            else:
+                method()
+
+    def test_rdkit_hash_can_ignore_hydrogens(self, methanol_molecule):
+        hash_with_hydrogens = methanol_molecule.get_rdkit_hash()
+        hash_without_hydrogens = methanol_molecule.get_rdkit_hash(
+            ignore_hydrogens=True
+        )
+
+        assert hash_with_hydrogens
+        assert hash_without_hydrogens
+        assert hash_with_hydrogens != hash_without_hydrogens
+
     def test_to_rdkit_connectivity_graph(self, methanol_molecule):
         graph = methanol_molecule.to_rdkit_connectivity_graph()
 
@@ -515,8 +562,247 @@ class TestStructures:
         assert np.isclose(mol.get_distance(1, 2), 1.16)
         assert np.isclose(mol.get_distance(2, 3), 1.16)
         assert np.isclose(mol.get_angle(1, 2, 3), 180)
-        assert np.isclose(mol.get_dihedral(0, 1, 2, 0), 0)
         assert mol.is_linear
+
+    def test_get_distance_known_value_and_symmetry(self):
+        """Distance should match a 3-4-5 triangle in either direction."""
+        mol = Molecule(
+            symbols=["C", "C"],
+            positions=np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]]),
+        )
+
+        assert np.isclose(mol.get_distance(1, 2), 5.0)
+        assert np.isclose(mol.get_distance(2, 1), 5.0)
+
+    @pytest.mark.parametrize(
+        ("positions", "expected_angle"),
+        [
+            (
+                [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                90.0,
+            ),
+            (
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.5, np.sqrt(3.0) / 2.0, 0.0],
+                ],
+                60.0,
+            ),
+            (
+                [[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                180.0,
+            ),
+        ],
+    )
+    def test_get_angle_known_values(self, positions, expected_angle):
+        """Angle calculation should handle 60, 90, and 180 degrees."""
+        mol = Molecule(symbols=["C"] * 3, positions=np.array(positions))
+
+        assert np.isclose(mol.get_angle(1, 2, 3), expected_angle)
+
+    def test_get_angle_symmetry_and_position_method(self):
+        """Swapping endpoints should not change an angle."""
+        mol = Molecule(
+            symbols=["C"] * 3,
+            positions=np.array(
+                [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+            ),
+        )
+
+        angle = mol.get_angle(1, 2, 3)
+        assert np.isclose(angle, mol.get_angle(3, 2, 1))
+        assert np.isclose(
+            angle,
+            mol.get_angle_from_positions(*mol.positions),
+        )
+
+    @pytest.mark.parametrize(
+        ("position4", "expected_dihedral"),
+        [
+            ([1.0, 1.0, 0.0], 0.0),
+            ([0.0, 1.0, 1.0], -90.0),
+            ([-1.0, 1.0, 0.0], 180.0),
+        ],
+    )
+    def test_get_dihedral_known_values(self, position4, expected_dihedral):
+        """Dihedral calculation should handle 0, 90, and 180 degrees."""
+        positions = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                position4,
+            ]
+        )
+        mol = Molecule(symbols=["C"] * 4, positions=positions)
+
+        assert np.isclose(
+            mol.get_dihedral(1, 2, 3, 4),
+            expected_dihedral,
+        )
+
+    def test_get_dihedral_matches_position_method(self):
+        """Index- and position-based dihedral methods should agree."""
+        mol = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 1.0, 1.0],
+                ]
+            ),
+        )
+
+        assert np.isclose(
+            mol.get_dihedral(1, 2, 3, 4),
+            mol.get_dihedral_from_positions(*mol.positions),
+        )
+
+    @pytest.mark.parametrize(
+        ("atom_indices", "expected_dihedral"),
+        [
+            ((3, 1, 2, 4), -8.521144207014),
+            ((3, 1, 2, 6), 170.704142219877),
+            ((2, 1, 3, 7), 135.002352852818),
+            ((2, 1, 3, 8), -47.404418381592),
+        ],
+    )
+    def test_dihedral_for_file_backed_molecule_matches_rdkit(
+        self,
+        single_molecule_xyz_file,
+        atom_indices,
+        expected_dihedral,
+    ):
+        """Real-molecule torsions should match fixed and RDKit values."""
+        mol = Molecule.from_filepath(
+            single_molecule_xyz_file, return_list=False
+        )
+        conformer = mol.to_rdkit().GetConformer()
+        zero_based_indices = tuple(index - 1 for index in atom_indices)
+
+        rdkit_dihedral = rdMolTransforms.GetDihedralDeg(
+            conformer, *zero_based_indices
+        )
+        actual_dihedral = mol.get_dihedral(*atom_indices)
+
+        assert np.isclose(actual_dihedral, expected_dihedral, atol=1e-8)
+        assert np.isclose(actual_dihedral, rdkit_dihedral, atol=1e-8)
+
+    def test_dihedral_is_independent_of_central_bond_length(self):
+        """Changing only the central bond length must not change torsion."""
+        short_bond = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [1.0, 1.0, 1.0],
+                ]
+            ),
+        )
+        long_bond = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 3.0, 0.0],
+                    [1.0, 3.0, 1.0],
+                ]
+            ),
+        )
+
+        assert np.isclose(
+            short_bond.get_dihedral(1, 2, 3, 4),
+            long_bond.get_dihedral(1, 2, 3, 4),
+        )
+
+    @pytest.mark.parametrize("invalid_index", [0, -1, 3])
+    def test_geometry_methods_reject_invalid_indices(self, invalid_index):
+        """Geometry APIs should enforce their documented 1-based indices."""
+        mol = Molecule(
+            symbols=["C", "C"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        )
+
+        with pytest.raises(IndexError):
+            mol.get_distance(1, invalid_index)
+
+    def test_geometry_methods_reject_non_integer_indices(self):
+        """Atom indices must be integers rather than silently converted."""
+        mol = Molecule(
+            symbols=["C", "C"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        )
+
+        with pytest.raises(TypeError):
+            mol.get_distance(1, 2.0)
+
+    def test_angle_is_undefined_for_coincident_points(self):
+        """An angle with a zero-length arm has no meaningful value."""
+        mol = Molecule(
+            symbols=["C"] * 3,
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+            ),
+        )
+
+        with pytest.raises(ValueError, match="Angle is undefined"):
+            mol.get_angle(1, 2, 3)
+
+    def test_dihedral_is_undefined_for_collinear_points(self):
+        """Four collinear points do not define two planes."""
+        mol = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [-1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [2.0, 0.0, 0.0],
+                ]
+            ),
+        )
+
+        with pytest.raises(ValueError, match="Dihedral is undefined"):
+            mol.get_dihedral(1, 2, 3, 4)
+
+    def test_documented_geometry_examples(self):
+        """Keep the geometry examples in the user documentation executable."""
+        water = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.119],
+                    [0.0, 0.76, -0.477],
+                    [0.0, -0.76, -0.477],
+                ]
+            ),
+        )
+        documented_butane = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [-1.26, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [1.26, 0.35, 0.0],
+                    [2.52, 0.0, 0.0],
+                ]
+            ),
+        )
+
+        assert np.isclose(water.get_distance(1, 2), 0.965824, atol=1e-6)
+        assert np.isclose(water.get_distance(2, 3), 1.52)
+        assert np.isclose(water.get_angle(2, 1, 3), 103.792168, atol=1e-6)
+        assert np.isclose(
+            abs(documented_butane.get_dihedral(1, 2, 3, 4)), 180.0
+        )
+        assert len(water.get_all_distances()) == 3
+        assert water.distance_matrix.shape == (3, 3)
 
 
 class TestMoleculeAdvanced:

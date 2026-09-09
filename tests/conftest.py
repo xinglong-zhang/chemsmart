@@ -51,6 +51,12 @@ def temporary_working_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture()
+def captured():
+    """Return an empty dictionary for capturing mock call arguments."""
+    return {}
+
+
 ############ Thermochemistry Mock Fixtures ##################
 @pytest.fixture()
 def make_thermochemistry_mock():

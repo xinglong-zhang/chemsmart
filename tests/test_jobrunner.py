@@ -260,12 +260,13 @@ class TestScratchCLI:
         monkeypatch,
         single_molecule_xyz_file,
         gaussian_project_config_dir,
+        captured,
     ):
         monkeypatch.setenv(
             "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
         )
         fake_server = Server(name="dummy")
-        captured = {"cli_args": None}
+        captured["cli_args"] = None
         fake_server.submit = (
             lambda job, test=False, cli_args=None, **kw: captured.update(
                 cli_args=cli_args
@@ -483,6 +484,7 @@ class TestSubResourceOverrides:
         monkeypatch,
         single_molecule_xyz_file,
         gaussian_project_config_dir,
+        captured,
     ):
         monkeypatch.setenv(
             "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
@@ -495,7 +497,6 @@ class TestSubResourceOverrides:
             NUM_HOURS=1,
             QUEUE_NAME="normal",
         )
-        captured = {}
 
         def _capture_script(self, job, cli_args, **kwargs):
             captured.update(

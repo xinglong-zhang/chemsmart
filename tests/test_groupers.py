@@ -11,6 +11,7 @@ from chemsmart.jobs.grouper.connectivity import ConnectivityGrouper
 from chemsmart.jobs.grouper.energy import EnergyGrouper
 from chemsmart.jobs.grouper.formula import FormulaGrouper
 from chemsmart.jobs.grouper.isomorphism import RDKitIsomorphismGrouper
+from chemsmart.jobs.grouper.job import GrouperJob
 from chemsmart.jobs.grouper.rmsd import (
     BasicRMSDGrouper,
     HungarianRMSDGrouper,
@@ -19,6 +20,7 @@ from chemsmart.jobs.grouper.rmsd import (
     RMSDGrouper,
     SpyRMSDGrouper,
 )
+from chemsmart.jobs.grouper.runner import GrouperJobRunner
 from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
 from chemsmart.jobs.grouper.tfd import TorsionFingerprintGrouper
 from chemsmart.utils.grouper import StructureGrouperFactory
@@ -41,8 +43,404 @@ def _assert_progress_milestones(log_text: str) -> None:
         assert f"Matrix calculation progress: {milestone}%" in log_text
 
 
+class TestGrouperCliRunner:
+    """Cross-module CLI/runner wiring checks and strategy edge-case behavior."""
+
+    # --- CLI wiring ---
+    def test_tfd_cli_forwards_strategy_and_representative(
+        self, monkeypatch, multiple_molecules_xyz_file, captured
+    ):
+        from click.testing import CliRunner
+
+        grouper_module = importlib.import_module(
+            "chemsmart.cli.grouper.grouper"
+        )
+        tfd_module = importlib.import_module("chemsmart.cli.grouper.tfd")
+
+        def fake_create_grouper_job(ctx, **kwargs):
+            captured.update(kwargs)
+            captured["representative"] = ctx.obj["representative"]
+
+        monkeypatch.setattr(
+            tfd_module,
+            "create_grouper_job_from_context",
+            fake_create_grouper_job,
+        )
+
+        result = CliRunner().invoke(
+            grouper_module.grouper,
+            [
+                "-f",
+                multiple_molecules_xyz_file,
+                "--representative",
+                "center",
+                "tfd",
+                "--no-use-weights",
+                "--max-dev",
+                "spec",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert captured == {
+            "strategy": "tfd",
+            "use_weights": False,
+            "max_dev": "spec",
+            "representative": "center",
+        }
+
+    # --- Job and runner wiring ---
+    def test_grouper_job_stores_output_configuration(self, methanol_molecules):
+        thermo_parameters = "298.15,1.0,100.0"
+
+        job = GrouperJob(
+            molecules=methanol_molecules[:2],
+            grouping_strategy="tfd",
+            representative_strategy="center",
+            energy_type="QHG",
+            thermo_parameters=thermo_parameters,
+            use_weights=False,
+            max_dev="spec",
+        )
+
+        assert job.representative_strategy == "center"
+        assert job.energy_type == "QHG"
+        assert job.thermo_parameters == thermo_parameters
+        assert job.grouper_kwargs == {
+            "use_weights": False,
+            "max_dev": "spec",
+        }
+
+    def test_create_grouper_job_forwards_representative(
+        self, methanol_molecules
+    ):
+        from types import SimpleNamespace
+
+        from chemsmart.cli.grouper.grouper import (
+            create_grouper_job_from_context,
+        )
+
+        ctx = SimpleNamespace(
+            obj={
+                "molecules": methanol_molecules[:2],
+                "ignore_hydrogens": False,
+                "num_procs": 1,
+                "grouper_label": "conformers",
+                "num_groups": None,
+                "conformer_ids": ["c1", "c2"],
+                "skipped_ids": [],
+                "energy_type": "E",
+                "thermo_kwargs": None,
+                "threshold": 0.1,
+                "matrix_format": "csv",
+                "representative": "top3",
+            }
+        )
+
+        job = create_grouper_job_from_context(ctx, strategy="tfd")
+
+        assert job.representative_strategy == "top3"
+        assert job.grouping_strategy == "tfd"
+
+    def test_grouper_runner_creates_tfd_with_representative(
+        self, methanol_molecules, captured
+    ):
+        class FakeTFDGrouper:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        job = GrouperJob(
+            molecules=methanol_molecules[:2],
+            grouping_strategy="tfd",
+            threshold=0.2,
+            num_groups=None,
+            representative_strategy="center",
+            use_weights=False,
+        )
+        runner = object.__new__(GrouperJobRunner)
+        runner._get_grouper_classes = lambda: {"tfd": FakeTFDGrouper}
+
+        grouper = runner._create_grouper(job)
+
+        assert isinstance(grouper, FakeTFDGrouper)
+        assert captured["representative_strategy"] == "center"
+        assert captured["threshold"] == 0.2
+        assert captured["use_weights"] is False
+
+    def test_grouper_runner_preserves_representative_order(
+        self, methanol_molecules, temporary_working_dir
+    ):
+        molecules = methanol_molecules[:2]
+        molecules[0].energy = -2.0
+        molecules[1].energy = -1.0
+        job = GrouperJob(
+            molecules=molecules,
+            grouping_strategy="tfd",
+            label="ordered",
+            conformer_ids=["c1", "c2"],
+        )
+        os.makedirs(job.output_dir)
+
+        runner = object.__new__(GrouperJobRunner)
+        runner._write_outputs(job, [[molecules[1], molecules[0]]], [[1, 0]])
+
+        with open(job.outputfile) as output:
+            comments = [
+                line.strip() for line in output if "Original_Index" in line
+            ]
+
+        assert "Original_Index: c2" in comments[0]
+        assert "Original_Index: c1" in comments[1]
+
+    # --- Strategy/backend edge paths ---
+    def test_isomorphism_grouper_handles_hashing_failure(
+        self, monkeypatch, caplog, methanol_molecules
+    ):
+        molecules = methanol_molecules[:2]
+        molecule_type = type(molecules[0])
+        original_get_rdkit_hash = molecule_type.get_rdkit_hash
+
+        def get_rdkit_hash_with_failure(molecule, **kwargs):
+            if molecule is molecules[0]:
+                raise ValueError("invalid coordinates")
+            return original_get_rdkit_hash(molecule, **kwargs)
+
+        monkeypatch.setattr(
+            molecule_type,
+            "get_rdkit_hash",
+            get_rdkit_hash_with_failure,
+        )
+        grouper = RDKitIsomorphismGrouper(molecules)
+        monkeypatch.setattr(grouper, "record", lambda **kwargs: None)
+
+        with caplog.at_level("WARNING"):
+            groups, index_groups = grouper.group()
+
+        assert sorted(index_groups) == [[0], [1]]
+        assert len(groups) == 2
+        assert (
+            "RDKit molecular hashing failed: invalid coordinates"
+            in caplog.text
+        )
+
+    def test_rmsd_repr_and_explicit_matrix_output(
+        self, monkeypatch, methanol_molecules, temporary_working_dir
+    ):
+        threshold_grouper = BasicRMSDGrouper(
+            methanol_molecules[:2], threshold=0.5
+        )
+        num_groups_grouper = BasicRMSDGrouper(
+            methanol_molecules[:2], threshold=None, num_groups=2
+        )
+        recorded = {}
+        monkeypatch.setattr(
+            threshold_grouper,
+            "record",
+            lambda **kwargs: recorded.update(kwargs),
+        )
+
+        matrix = threshold_grouper.calculate_full_rmsd_matrix(
+            os.path.join(temporary_working_dir, "matrix", "rmsd.txt")
+        )
+
+        assert "threshold=0.5" in repr(threshold_grouper)
+        assert "num_groups=2" in repr(num_groups_grouper)
+        assert np.array_equal(recorded["rmsd_matrix"], matrix)
+
+    def test_spyrmsd_incompatible_inputs_and_payload_handling(
+        self, monkeypatch
+    ):
+        from spyrmsd import rmsd as spyrmsd_rmsd
+
+        grouper = object.__new__(SpyRMSDGrouper)
+        grouper._coords_list = [np.zeros((1, 3)), np.zeros((2, 3))]
+        grouper._anum_list = [np.array([6]), np.array([6, 1])]
+        grouper._adj_list = [np.zeros((1, 1)), np.zeros((2, 2))]
+        grouper.minimize = True
+        grouper.cache = True
+        grouper.best_isomorphisms = {}
+
+        assert grouper._calculate_rmsd_with_isomorphism((0, 1)) == (
+            np.inf,
+            None,
+        )
+
+        grouper._coords_list[1] = np.zeros((1, 3))
+        grouper._anum_list[1] = np.array([8])
+        grouper._adj_list[1] = np.zeros((1, 1))
+        assert grouper._calculate_rmsd_with_isomorphism((0, 1)) == (
+            np.inf,
+            None,
+        )
+
+        grouper._anum_list[1] = np.array([6])
+        monkeypatch.setattr(
+            spyrmsd_rmsd, "symmrmsd", lambda *args, **kwargs: 0.25
+        )
+        assert grouper._calculate_rmsd_with_isomorphism((0, 1)) == (0.25, None)
+
+        monkeypatch.setattr(
+            spyrmsd_rmsd,
+            "symmrmsd",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                ValueError("symmetry calculation failed")
+            ),
+        )
+        assert grouper._calculate_rmsd_with_isomorphism((0, 1)) == (
+            np.inf,
+            None,
+        )
+
+        grouper.best_isomorphisms[(1, 0)] = ([1, 0], [0, 1])
+        assert grouper.get_best_isomorphism(0, 1) == ([0, 1], [1, 0])
+        assert grouper.get_best_isomorphism(3, 4) is None
+
+    def test_irmsd_helpers_and_direct_api_failure(
+        self, monkeypatch, caplog, methanol_molecules
+    ):
+        from types import SimpleNamespace
+
+        from chemsmart.jobs.grouper import rmsd as rmsd_module
+
+        grouper = object.__new__(IRMSDGrouper)
+        grouper.molecules = methanol_molecules[:2]
+        grouper.ignore_hydrogens = True
+        grouper.inversion = "on"
+        grouper._actual_inversion = None
+        assert grouper._inversion_code("auto") == 0
+        assert grouper._inversion_code("on") == 1
+        assert grouper._inversion_code("off") == 2
+
+        numbers, positions = grouper._prepare_irmsd_arrays(
+            grouper.molecules[0]
+        )
+        assert len(numbers) == len(positions) == 2
+
+        failing_api = SimpleNamespace(
+            get_irmsd=lambda *args, **kwargs: (_ for _ in ()).throw(
+                ValueError("backend failed")
+            )
+        )
+        monkeypatch.setattr(
+            rmsd_module.importlib, "import_module", lambda name: failing_api
+        )
+        with caplog.at_level("WARNING"):
+            assert np.isinf(grouper._calculate_rmsd_direct((0, 1)))
+        assert "irmsd API calculation failed" in caplog.text
+
+        value, inversion = grouper._parse_irmsd_output(
+            "iRMSD: invalid\nInversion check: off"
+        )
+        assert np.isinf(value)
+        assert inversion == "off"
+
+    def test_irmsd_initialization_selects_api_cli_or_errors(
+        self, monkeypatch, methanol_molecules
+    ):
+        from types import SimpleNamespace
+
+        from chemsmart.jobs.grouper import rmsd as rmsd_module
+
+        direct_api = SimpleNamespace(
+            get_irmsd=lambda *args, **kwargs: (0.0,) * 5
+        )
+        monkeypatch.setattr(
+            rmsd_module.importlib, "import_module", lambda name: direct_api
+        )
+        direct = IRMSDGrouper(methanol_molecules[:2])
+        assert direct._use_direct_api is True
+        assert direct._irmsd_cmd is None
+
+        def unavailable_api(name):
+            raise ImportError("API unavailable")
+
+        monkeypatch.setattr(
+            rmsd_module.importlib, "import_module", unavailable_api
+        )
+        monkeypatch.setattr(
+            rmsd_module, "find_irmsd_command", lambda: "/bin/irmsd"
+        )
+        cli = IRMSDGrouper(methanol_molecules[:2])
+        assert cli._use_direct_api is False
+        assert cli._irmsd_cmd == "/bin/irmsd"
+
+        monkeypatch.setattr(rmsd_module, "find_irmsd_command", lambda: None)
+        with pytest.raises(RuntimeError, match="irmsd is not available"):
+            IRMSDGrouper(methanol_molecules[:2])
+
+    def test_irmsd_cli_handles_failure_and_timeout(
+        self, monkeypatch, methanol_molecules
+    ):
+        import subprocess
+        from types import SimpleNamespace
+
+        grouper = object.__new__(IRMSDGrouper)
+        grouper.molecules = methanol_molecules[:2]
+        grouper._irmsd_cmd = "/bin/irmsd"
+        grouper.inversion = "auto"
+        grouper.ignore_hydrogens = False
+        grouper._actual_inversion = None
+
+        failed = SimpleNamespace(returncode=1, stderr="failed", stdout="")
+        monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: failed)
+        assert np.isinf(grouper._calculate_rmsd_cli((0, 1)))
+
+        def timeout(*args, **kwargs):
+            raise subprocess.TimeoutExpired("irmsd", 60)
+
+        monkeypatch.setattr(subprocess, "run", timeout)
+        assert np.isinf(grouper._calculate_rmsd_cli((0, 1)))
+
+    def test_pymol_heavy_atom_xyz_and_repr(
+        self, methanol_molecules, temporary_working_dir
+    ):
+        grouper = object.__new__(PymolRMSDGrouper)
+        grouper.ignore_hydrogens = True
+        grouper.num_groups = None
+        grouper.threshold = 0.5
+        grouper.cmd = None
+        grouper._temp_dir = None
+        output = os.path.join(temporary_working_dir, "heavy.xyz")
+
+        grouper._write_xyz(methanol_molecules[0], output)
+
+        with open(output) as xyz_file:
+            lines = xyz_file.readlines()
+        assert lines[0].strip() == "2"
+        assert all(not line.startswith("H ") for line in lines[2:])
+        assert "threshold=0.5" in repr(grouper)
+
+        grouper.num_groups = 2
+        assert "num_groups=2" in repr(grouper)
+
+    def test_pymol_rmsd_handles_invalid_and_failed_alignment(self, caplog):
+        class Command:
+            def __init__(self):
+                self.result = (-1.0,)
+
+            def align(self, first, second):
+                if isinstance(self.result, Exception):
+                    raise self.result
+                return self.result
+
+        grouper = object.__new__(PymolRMSDGrouper)
+        grouper._mol_names = ["mol_0", "mol_1"]
+        grouper._alignment_cache = {}
+        grouper.cmd = Command()
+        grouper._temp_dir = None
+
+        assert np.isinf(grouper._calculate_rmsd((0, 1)))
+        grouper._alignment_cache.clear()
+        grouper.cmd.result = ValueError("align failed")
+        with caplog.at_level("WARNING"):
+            assert np.isinf(grouper._calculate_rmsd((0, 1)))
+        assert "PyMOL align failed" in caplog.text
+
+        grouper.cmd = None
+
+
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_BasicRMSD_grouper_and_basic_functionality:
+class TestBasicRMSDGrouperAndBasicFunctionality:
     NUM_PROCS = 4
 
     def test_rmsd_grouper(
@@ -328,6 +726,10 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
         grouper = BasicRMSDGrouper(methanol_molecules[:2])
 
         assert np.isclose(grouper.calculate_rmsd_pair(0, 0), 0.0)
+        assert np.isclose(
+            grouper.calculate_rmsd_pair(0, 1),
+            grouper.calculate_rmsd_pair(1, 0),
+        )
 
         with pytest.raises(IndexError):
             grouper.calculate_rmsd_pair(0, 3)
@@ -337,7 +739,7 @@ class Test_BasicRMSD_grouper_and_basic_functionality:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_HungarianRMSD_grouper:
+class TestHungarianRMSDGrouper:
     NUM_PROCS = 4
 
     def test_hrmsd_grouper_for_rotated_molecules(
@@ -361,6 +763,10 @@ class Test_HungarianRMSD_grouper:
         # rmsd calculation from grouper
         rmsd = grouper.calculate_rmsd_pair(0, 1)
         assert np.isclose(rmsd, 0.2294, rtol=1e-3)
+        assert np.isclose(
+            grouper.calculate_rmsd_pair(0, 1),
+            grouper.calculate_rmsd_pair(1, 0),
+        )
 
     def test_hrmsd_grouper_for_crest_molecules(
         self, multiple_molecules_xyz_file
@@ -410,7 +816,7 @@ class Test_HungarianRMSD_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_SpyRMSD_grouper:
+class TestSpyRMSDGrouper:
     NUM_PROCS = 4
 
     def test_spyrmsd_grouper_for_rotated_molecules(
@@ -492,7 +898,7 @@ class Test_SpyRMSD_grouper:
     not _is_irmsd_available(), reason="irmsd API/command not available"
 )
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_IRMSD_grouper:
+class TestIRMSDGrouper:
     NUM_PROCS = 4
 
     def test_irmsd_grouper_for_rotated_molecules(
@@ -588,7 +994,7 @@ class Test_IRMSD_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_PymolRMSD_grouper:
+class TestPymolRMSDGrouper:
     NUM_PROCS = 1
 
     @classmethod
@@ -748,13 +1154,361 @@ class Test_PymolRMSD_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_Tanimoto_similarity_grouper:
+class TestTanimotoSimilarityGrouper:
     NUM_PROCS = 4
+
+    @pytest.mark.parametrize("threshold", (-0.1, 1.1))
+    def test_rejects_out_of_range_threshold(
+        self, methanol_molecules, threshold
+    ):
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+            TanimotoSimilarityGrouper(
+                methanol_molecules[:2], threshold=threshold
+            )
+
+    @pytest.mark.parametrize(
+        "fingerprint_type",
+        ("rdk", "morgan", "maccs", "atompair", "torsion"),
+    )
+    def test_supported_topological_fingerprints(
+        self, methanol_molecules, fingerprint_type
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2], fingerprint_type=fingerprint_type
+        )
+
+        assert grouper._get_fingerprint(grouper.rdkit_molecules[0]) is not None
+
+    def test_all_failed_molecule_preparations_return_empty_groups(
+        self, monkeypatch, methanol_molecules
+    ):
+        monkeypatch.setattr(
+            TanimotoSimilarityGrouper,
+            "_molecule_to_rdkit",
+            lambda self, molecule: None,
+        )
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2], conformer_ids=["c1", "c2"]
+        )
+        recorded = {}
+        monkeypatch.setattr(
+            grouper, "record", lambda **kwargs: recorded.update(kwargs)
+        )
+
+        assert np.isnan(grouper.calculate_tanimoto_pair(0, 1))
+        groups, index_groups = grouper.group()
+
+        assert groups == []
+        assert index_groups == []
+        assert grouper._matrix_skipped_ids == ["c1", "c2"]
+        assert recorded["valid_indices"] == []
+
+    def test_pair_returns_nan_when_fingerprint_generation_fails(
+        self, monkeypatch, methanol_molecules, caplog
+    ):
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+        monkeypatch.setattr(grouper, "_get_fingerprint", lambda molecule: None)
+
+        with caplog.at_level("WARNING"):
+            similarity = grouper.calculate_tanimoto_pair(0, 1)
+
+        assert np.isnan(similarity)
+        assert "fingerprint generation failed" in caplog.text
+
+    @pytest.mark.parametrize(
+        ("matrix", "message"),
+        (
+            (np.array([1.0, 0.5]), "2-dimensional"),
+            (np.eye(3), "dimensions"),
+            (np.array([["a", "b"], ["b", "a"]]), "numeric"),
+            (
+                np.array([[1.0, np.nan], [0.5, np.nan]]),
+                "complete NaN rows and columns",
+            ),
+            (
+                np.array([[1.0, np.nan], [np.nan, 1.0]]),
+                "finite",
+            ),
+            (np.array([[1.0, 0.2], [0.3, 1.0]]), "symmetric"),
+            (np.array([[0.0, 0.2], [0.2, 1.0]]), "diagonal"),
+            (np.array([[1.0, 1.2], [1.2, 1.0]]), "between 0.0 and 1.0"),
+        ),
+    )
+    def test_similarity_output_matrix_validation(
+        self, methanol_molecules, matrix, message
+    ):
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+
+        with pytest.raises(ValueError, match=message):
+            grouper.group_by_threshold(matrix)
+
+    def test_all_nan_similarity_matrix_has_no_groups(self, methanol_molecules):
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+
+        groups, index_groups = grouper.group_by_threshold(
+            np.full((2, 2), np.nan)
+        )
+
+        assert groups == []
+        assert index_groups == []
+        assert grouper._matrix_skipped_indices == [0, 1]
+
+    def test_per_call_threshold_cannot_exceed_one(self, methanol_molecules):
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+        similarity_matrix = np.eye(2)
+
+        with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+            grouper.group_by_threshold(similarity_matrix, threshold=1.1)
+
+    def test_usr_preparation_handles_missing_rdkit_molecule(
+        self, monkeypatch, methanol_molecules
+    ):
+        molecule_type = type(methanol_molecules[0])
+        monkeypatch.setattr(molecule_type, "to_rdkit", lambda self: None)
+
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2], fingerprint_type="usr"
+        )
+
+        assert grouper.rdkit_molecules == []
+        assert grouper._tanimoto_skipped_indices == [0, 1]
+
+    def test_usr_hydrogen_removal_failure_uses_original_molecule(
+        self, monkeypatch, caplog, methanol_molecules
+    ):
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        monkeypatch.setattr(
+            tanimoto_module.Chem,
+            "RemoveHs",
+            lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad H")),
+        )
+
+        with caplog.at_level("WARNING"):
+            grouper = TanimotoSimilarityGrouper(
+                methanol_molecules[:2],
+                fingerprint_type="usr",
+                ignore_hydrogens=True,
+            )
+
+        assert len(grouper.rdkit_molecules) == 2
+        assert "Failed to remove hydrogens for usr: bad H" in caplog.text
+
+    def test_topological_preparation_failure_is_skipped(
+        self, monkeypatch, caplog, methanol_molecules
+    ):
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        monkeypatch.setattr(
+            tanimoto_module.Chem,
+            "MolFromXYZBlock",
+            lambda xyz: (_ for _ in ()).throw(ValueError("bad XYZ")),
+        )
+
+        with caplog.at_level("WARNING"):
+            grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+
+        assert grouper.rdkit_molecules == []
+        assert "RDKit molecule preparation failed" in caplog.text
+
+    def test_topological_fingerprint_can_ignore_hydrogens(
+        self, methanol_molecules
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2], ignore_hydrogens=True
+        )
+
+        assert len(grouper.rdkit_molecules) == 2
+        assert all(
+            atom.GetSymbol() != "H"
+            for molecule in grouper.rdkit_molecules
+            for atom in molecule.GetAtoms()
+        )
+
+    def test_unknown_and_failed_fingerprint_generation(
+        self, monkeypatch, caplog, methanol_molecules
+    ):
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+        rdkit_molecule = grouper.rdkit_molecules[0]
+        grouper.fingerprint_type = "unknown"
+        assert grouper._get_fingerprint(rdkit_molecule) is not None
+
+        monkeypatch.setattr(
+            tanimoto_module,
+            "GetRDKitFPGenerator",
+            lambda: (_ for _ in ()).throw(ValueError("bad fingerprint")),
+        )
+        with caplog.at_level("WARNING"):
+            assert grouper._get_fingerprint(rdkit_molecule) is None
+
+        assert "Fingerprint generation failed: bad fingerprint" in caplog.text
+
+    def test_tanimoto_num_groups_and_threshold_postprocessing(
+        self, monkeypatch, methanol_molecules
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:3], num_groups=2
+        )
+        monkeypatch.setattr(grouper, "record", lambda **kwargs: None)
+
+        _, index_groups = grouper.group()
+
+        assert len(index_groups) >= 2
+        assert "num_groups=2" in repr(grouper)
+
+        grouper._auto_threshold = 0.25
+        grouper._num_groups_distance_dtype = np.dtype(np.float32)
+        grouper._postprocess_auto_threshold_for_num_groups()
+        assert np.isclose(grouper._auto_threshold, 0.75)
+
+    def test_usr_pair_similarity_and_hydrogen_removal(
+        self, methanol_molecules
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2],
+            fingerprint_type="usr",
+        )
+
+        similarity = grouper.calculate_tanimoto_pair(0, 1)
+
+        assert 0.0 <= similarity <= 1.0
+
+        hydrogen_free_grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2],
+            fingerprint_type="usr",
+            ignore_hydrogens=True,
+        )
+        assert len(hydrogen_free_grouper.rdkit_molecules) == 2
+
+    def test_topological_preparation_retries_with_hueckel(
+        self, monkeypatch, methanol_molecules
+    ):
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+        calls = []
+
+        def determine_bonds(rdkit_molecule, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise ValueError("first perception failed")
+
+        monkeypatch.setattr(
+            tanimoto_module.rdDetermineBonds,
+            "DetermineBonds",
+            determine_bonds,
+        )
+        monkeypatch.setattr(
+            tanimoto_module.rdDetermineBonds,
+            "hueckelEnabled",
+            lambda: True,
+        )
+
+        rdkit_molecule = grouper._molecule_to_rdkit(methanol_molecules[0])
+
+        assert rdkit_molecule is not None
+        assert calls == [{"charge": 0}, {"useHueckel": True, "charge": 0}]
+
+    def test_topological_preparation_handles_unusable_xyz(
+        self, monkeypatch, methanol_molecules
+    ):
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+        monkeypatch.setattr(
+            tanimoto_module.Chem, "MolFromXYZBlock", lambda xyz: None
+        )
+
+        assert grouper._molecule_to_rdkit(methanol_molecules[0]) is None
+
+    def test_topological_preparation_stops_without_hueckel(
+        self, monkeypatch, methanol_molecules
+    ):
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+        monkeypatch.setattr(
+            tanimoto_module.rdDetermineBonds,
+            "DetermineBonds",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                ValueError("bond perception failed")
+            ),
+        )
+        monkeypatch.setattr(
+            tanimoto_module.rdDetermineBonds,
+            "hueckelEnabled",
+            lambda: False,
+        )
+
+        assert grouper._molecule_to_rdkit(methanol_molecules[0]) is None
+
+    def test_topological_hueckel_retry_handles_unusable_xyz(
+        self, monkeypatch, methanol_molecules
+    ):
+        from chemsmart.jobs.grouper import tanimoto as tanimoto_module
+
+        grouper = TanimotoSimilarityGrouper(methanol_molecules[:2])
+        original_from_xyz = tanimoto_module.Chem.MolFromXYZBlock
+        calls = 0
+
+        def from_xyz(xyz):
+            nonlocal calls
+            calls += 1
+            return original_from_xyz(xyz) if calls == 1 else None
+
+        monkeypatch.setattr(tanimoto_module.Chem, "MolFromXYZBlock", from_xyz)
+        monkeypatch.setattr(
+            tanimoto_module.rdDetermineBonds,
+            "DetermineBonds",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                ValueError("retry with Hueckel")
+            ),
+        )
+        monkeypatch.setattr(
+            tanimoto_module.rdDetermineBonds,
+            "hueckelEnabled",
+            lambda: True,
+        )
+
+        assert grouper._molecule_to_rdkit(methanol_molecules[0]) is None
+
+    def test_tanimoto_num_groups_record_includes_actual_groups(
+        self, monkeypatch, methanol_molecules, captured
+    ):
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules[:2], num_groups=2
+        )
+        grouper._cached_group_indices = [[0], [1]]
+        grouper._auto_threshold = 0.8
+
+        class Recorder:
+            def get_labels(self, count):
+                return [str(index + 1) for index in range(count)]
+
+            def build_groups_dataframe(self, index_groups, count):
+                return index_groups
+
+            def record_results(self, **kwargs):
+                captured.update(kwargs)
+
+        monkeypatch.setattr(grouper, "_get_results_recorder", Recorder)
+        grouper._record_results(
+            tanimoto_matrix=np.eye(2, dtype=np.float32),
+            valid_indices=[0, 1],
+            groups=[[methanol_molecules[0]], [methanol_molecules[1]]],
+            index_groups=[[0], [1]],
+        )
+
+        assert ("Actual Groups", 2) in captured["header_info"]
+        assert captured["suffix"] == "N2"
 
     def test_tanimoto_similarity_grouper(
         self, methanol_molecules, methanol_and_ethanol
     ):
         grouper = TanimotoSimilarityGrouper(methanol_molecules)
+        assert "threshold=0.9" in repr(grouper)
         groups, group_indices = grouper.group()
         assert (
             len(groups) == 1
@@ -860,7 +1614,7 @@ class Test_Tanimoto_similarity_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_TorsionFingerprint_grouper:
+class TestTorsionFingerprintGrouper:
     NUM_PROCS = 4
 
     def test_torsionfingerprint_grouper_for_rotated_molecules(
@@ -996,7 +1750,296 @@ class Test_TorsionFingerprint_grouper:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_other_groupers:
+class TestEnergyGrouper:
+    NUM_PROCS = 4
+
+    @pytest.mark.parametrize(
+        ("matrix", "message"),
+        (
+            (np.array([0.0, 1.0]), "2-dimensional"),
+            (np.zeros((2, 3)), "square"),
+            (np.zeros((2, 2)), "number of molecules"),
+            (
+                np.array(
+                    [
+                        [0.0, np.nan, 0.0],
+                        [np.nan, 0.0, 0.0],
+                        [0.0, 0.0, 0.0],
+                    ]
+                ),
+                "finite values",
+            ),
+            (np.diag([1.0, 0.0, 0.0]), "diagonal"),
+            (
+                np.array(
+                    [
+                        [0.0, 1.0, 0.0],
+                        [-0.5, 0.0, 0.0],
+                        [0.0, 0.0, 0.0],
+                    ]
+                ),
+                "antisymmetric",
+            ),
+        ),
+    )
+    def test_energy_output_matrix_validation(
+        self, methanol_molecules, matrix, message
+    ):
+        molecules = methanol_molecules[:3]
+        for index, molecule in enumerate(molecules):
+            molecule.energy = -100.0 + index * 0.001
+        grouper = EnergyGrouper(molecules, threshold=1.0)
+
+        with pytest.raises(ValueError, match=message):
+            grouper.group_by_threshold(matrix)
+
+    def test_energy_linkage_reports_non_finite_energy(
+        self, monkeypatch, methanol_molecules
+    ):
+        molecules = methanol_molecules[:2]
+        molecules[0].energy = -100.0
+        molecules[1].energy = -99.0
+        grouper = EnergyGrouper(molecules, threshold=1.0)
+
+        def raise_non_finite_error(self, distance_matrix):
+            raise ValueError("linkage received non-finite distances")
+
+        monkeypatch.setattr(
+            MatrixGrouper,
+            "_build_complete_linkage_tree",
+            raise_non_finite_error,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="Energy grouping requires all molecules to have finite energy",
+        ):
+            grouper._build_complete_linkage_tree(
+                np.array([[0.0, 1.0], [1.0, 0.0]])
+            )
+
+    def test_energy_linkage_preserves_other_validation_errors(
+        self, methanol_molecules
+    ):
+        molecules = methanol_molecules[:2]
+        molecules[0].energy = -100.0
+        molecules[1].energy = -99.0
+        grouper = EnergyGrouper(molecules, threshold=1.0)
+
+        with pytest.raises(ValueError, match="negative"):
+            grouper._build_complete_linkage_tree(
+                np.array([[0.0, -1.0], [-1.0, 0.0]])
+            )
+
+    def test_energy_grouper_raises_error_for_missing_energy(
+        self, methanol_molecules
+    ):
+        # methanol_molecules from pubchem don't have energy information
+        with pytest.raises(ValueError) as excinfo:
+            EnergyGrouper(methanol_molecules)
+        assert "missing energy information" in str(excinfo.value)
+
+    def test_energy_grouper_for_crest_conformers(
+        self, multiple_molecules_xyz_file
+    ):
+        """Test EnergyGrouper with molecules that have energy information."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+        assert len(molecules) == 18
+
+        # All CREST conformers should have energy
+        for mol in molecules:
+            assert mol.energy is not None
+
+        assert len(molecules) == 18
+        grouper = EnergyGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=self.NUM_PROCS,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 8
+        assert len(group_indices) == 8
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 8
+
+        expected1 = -1.7839 / 627.509474
+        expected2 = 1.4580 / 627.509474
+
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 0)
+        assert np.isclose(relative_diff, expected1, rtol=1e-3)
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 2)
+        assert np.isclose(abs_diff, expected2, rtol=1e-3)
+
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        grouper = EnergyGrouper(
+            molecules, num_groups=5, num_procs=self.NUM_PROCS
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 5
+        assert len(group_indices) == 5
+        assert grouper._auto_threshold is not None
+        assert grouper._auto_threshold > 0
+
+    def test_energy_grouper_for_log_conformers(
+        self, ts_conformers_log_directory
+    ):
+        """Test EnergyGrouper with molecules loaded from log files using Gibbs energy."""
+        import glob
+        import re
+
+        from chemsmart.io.gaussian.output import Gaussian16Output
+        from chemsmart.io.molecules.structure import Molecule
+
+        # Load molecules from log files and set Gibbs energy (like CLI does)
+        log_files = sorted(
+            glob.glob(os.path.join(ts_conformers_log_directory, "*.log"))
+        )
+        molecules = []
+        conformer_ids = []
+
+        for log_file in log_files:
+            mol = Molecule.from_filepath(
+                filepath=log_file, index="-1", return_list=False
+            )
+            if mol is not None:
+                # Extract and set Gibbs energy using gibbs_free_energy property
+                g16_output = Gaussian16Output(filename=log_file)
+                gibbs_energy = g16_output.gibbs_free_energy
+                if gibbs_energy is not None:
+                    mol._energy = gibbs_energy
+
+                molecules.append(mol)
+                basename = os.path.basename(log_file)
+                match = re.search(r"_c(\d+)\.log$", basename)
+                if match:
+                    conformer_ids.append(f"c{match.group(1)}")
+                else:
+                    conformer_ids.append(basename)
+
+        assert len(molecules) == 5
+        assert len(conformer_ids) == 5
+
+        # All log conformers should have Gibbs energy
+        for mol in molecules:
+            assert mol.energy is not None
+
+        grouper = EnergyGrouper(
+            molecules,
+            threshold=1.0,
+            num_procs=self.NUM_PROCS,
+            conformer_ids=conformer_ids,
+        )
+        groups, group_indices = grouper.group()
+        assert len(groups) == 2
+        assert len(group_indices) == 2
+        unique_structures = grouper.unique()
+        assert len(unique_structures) == 2
+
+        expected1 = -4.1429 / 627.509474
+        expected2 = 4.1429 / 627.509474
+
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 4)
+        assert np.isclose(relative_diff, expected1, rtol=1e-2)
+        assert np.isclose(abs_diff, expected2, rtol=1e-2)
+
+    def test_calculate_energy_diff_pair_wrapper_validation(
+        self, multiple_molecules_xyz_file
+    ):
+        molecules = XYZFile(
+            filename=multiple_molecules_xyz_file
+        ).get_molecules(index=":", return_list=True)
+        grouper = EnergyGrouper(molecules[:3], threshold=1.0)
+
+        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(2, 2)
+        assert np.isclose(relative_diff, 0.0)
+        assert np.isclose(abs_diff, 0.0)
+
+        with pytest.raises(IndexError):
+            grouper.calculate_energy_diff_pair(0, 5)
+
+        with pytest.raises(TypeError):
+            grouper.calculate_energy_diff_pair("a", 1)  # type: ignore[arg-type]
+
+    def test_energy_extraction_from_xyz_file(
+        self, multiple_molecules_xyz_file
+    ):
+
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        # Test specific energy value for 3rd structure (index 2)
+        expected_energy_mol3 = -126.25238449
+        actual_energy_mol3 = molecules[2].energy
+
+        assert actual_energy_mol3 is not None, "3rd molecule energy is None"
+        assert np.isclose(
+            actual_energy_mol3, expected_energy_mol3, rtol=1e-8
+        ), (
+            f"Energy mismatch for 3rd molecule: got {actual_energy_mol3}, "
+            f"expected {expected_energy_mol3}"
+        )
+
+    def test_gibbs_energy_extraction_function(
+        self, ts_conformers_log_directory
+    ):
+        """Test that Gaussian16Output.gibbs_free_energy extracts correct value."""
+        from chemsmart.io.gaussian.output import Gaussian16Output
+
+        log_file = os.path.join(
+            ts_conformers_log_directory, "ch_1c_para_c1.log"
+        )
+        g16_output = Gaussian16Output(filename=log_file)
+
+        # Known values
+        expected_scf = -1401.99431519
+        expected_gibbs_correction = 0.311863
+        expected_gibbs_energy = (
+            expected_scf + expected_gibbs_correction
+        )  # -1401.68245219
+
+        gibbs_energy = g16_output.gibbs_free_energy
+        assert np.isclose(gibbs_energy, expected_gibbs_energy, rtol=1e-6), (
+            f"Gibbs energy mismatch: got {gibbs_energy}, "
+            f"expected {expected_gibbs_energy}"
+        )
+
+    def test_energy_extraction_from_ts_log_files(
+        self, ts_conformers_log_directory
+    ):
+        """Test that energy is correctly extracted from TS log files as SCF Done energy."""
+        import glob
+
+        from chemsmart.io.gaussian.output import Gaussian16Output
+        from chemsmart.io.molecules.structure import Molecule
+
+        log_files = sorted(
+            glob.glob(os.path.join(ts_conformers_log_directory, "*.log"))
+        )
+
+        molecules = []
+        for log_file in log_files:
+            mol = Molecule.from_filepath(
+                filepath=log_file, index="-1", return_list=False
+            )
+            if mol is not None:
+                molecules.append(mol)
+                g16_output = Gaussian16Output(filename=log_file)
+                scf_energy = (
+                    g16_output.scf_energies[-1]
+                    if g16_output.scf_energies
+                    else None
+                )
+                assert np.isclose(mol.energy, scf_energy, rtol=1e-6), (
+                    f"Energy mismatch for {log_file}: "
+                    f"mol.energy={mol.energy}, expected SCF={scf_energy}"
+                )
+
+
+@pytest.mark.usefixtures("temporary_working_dir")
+class TestOtherGroupers:
     NUM_PROCS = 4
 
     def test_base_record_template_method(self, methanol_molecules):
@@ -1260,218 +2303,28 @@ class Test_other_groupers:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_EnergyGrouper:
-    NUM_PROCS = 4
+class TestFactory:
 
-    def test_energy_grouper_raises_error_for_missing_energy(
-        self, methanol_molecules
+    @pytest.mark.parametrize(
+        ("parameter", "value"),
+        (("use_weights", False), ("max_dev", "spec")),
+    )
+    def test_tfd_only_parameter_warns_for_other_strategy(
+        self, caplog, methanol_molecules, parameter, value
     ):
-        # methanol_molecules from pubchem don't have energy information
-        with pytest.raises(ValueError) as excinfo:
-            EnergyGrouper(methanol_molecules)
-        assert "missing energy information" in str(excinfo.value)
+        caplog.set_level("WARNING")
 
-    def test_energy_grouper_for_crest_conformers(
-        self, multiple_molecules_xyz_file
-    ):
-        """Test EnergyGrouper with molecules that have energy information."""
-        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
-        molecules = xyz_file.get_molecules(index=":", return_list=True)
-        assert len(molecules) == 18
-
-        # All CREST conformers should have energy
-        for mol in molecules:
-            assert mol.energy is not None
-
-        assert len(molecules) == 18
-        grouper = EnergyGrouper(
-            molecules,
-            threshold=0.5,
-            num_procs=self.NUM_PROCS,
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 8
-        assert len(group_indices) == 8
-        unique_structures = grouper.unique()
-        assert len(unique_structures) == 8
-
-        expected1 = -1.7839 / 627.509474
-        expected2 = 1.4580 / 627.509474
-
-        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 0)
-        assert np.isclose(relative_diff, expected1, rtol=1e-3)
-        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 2)
-        assert np.isclose(abs_diff, expected2, rtol=1e-3)
-
-        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
-        molecules = xyz_file.get_molecules(index=":", return_list=True)
-
-        grouper = EnergyGrouper(
-            molecules, num_groups=5, num_procs=self.NUM_PROCS
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 5
-        assert len(group_indices) == 5
-        assert grouper._auto_threshold is not None
-        assert grouper._auto_threshold > 0
-
-    def test_energy_grouper_for_log_conformers(
-        self, ts_conformers_log_directory
-    ):
-        """Test EnergyGrouper with molecules loaded from log files using Gibbs energy."""
-        import glob
-        import re
-
-        from chemsmart.io.gaussian.output import Gaussian16Output
-        from chemsmart.io.molecules.structure import Molecule
-
-        # Load molecules from log files and set Gibbs energy (like CLI does)
-        log_files = sorted(
-            glob.glob(os.path.join(ts_conformers_log_directory, "*.log"))
-        )
-        molecules = []
-        conformer_ids = []
-
-        for log_file in log_files:
-            mol = Molecule.from_filepath(
-                filepath=log_file, index="-1", return_list=False
-            )
-            if mol is not None:
-                # Extract and set Gibbs energy using gibbs_free_energy property
-                g16_output = Gaussian16Output(filename=log_file)
-                gibbs_energy = g16_output.gibbs_free_energy
-                if gibbs_energy is not None:
-                    mol._energy = gibbs_energy
-
-                molecules.append(mol)
-                basename = os.path.basename(log_file)
-                match = re.search(r"_c(\d+)\.log$", basename)
-                if match:
-                    conformer_ids.append(f"c{match.group(1)}")
-                else:
-                    conformer_ids.append(basename)
-
-        assert len(molecules) == 5
-        assert len(conformer_ids) == 5
-
-        # All log conformers should have Gibbs energy
-        for mol in molecules:
-            assert mol.energy is not None
-
-        grouper = EnergyGrouper(
-            molecules,
-            threshold=1.0,
-            num_procs=self.NUM_PROCS,
-            conformer_ids=conformer_ids,
-        )
-        groups, group_indices = grouper.group()
-        assert len(groups) == 2
-        assert len(group_indices) == 2
-        unique_structures = grouper.unique()
-        assert len(unique_structures) == 2
-
-        expected1 = -4.1429 / 627.509474
-        expected2 = 4.1429 / 627.509474
-
-        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(1, 4)
-        assert np.isclose(relative_diff, expected1, rtol=1e-2)
-        assert np.isclose(abs_diff, expected2, rtol=1e-2)
-
-    def test_calculate_energy_diff_pair_wrapper_validation(
-        self, multiple_molecules_xyz_file
-    ):
-        molecules = XYZFile(
-            filename=multiple_molecules_xyz_file
-        ).get_molecules(index=":", return_list=True)
-        grouper = EnergyGrouper(molecules[:3], threshold=1.0)
-
-        relative_diff, abs_diff = grouper.calculate_energy_diff_pair(2, 2)
-        assert np.isclose(relative_diff, 0.0)
-        assert np.isclose(abs_diff, 0.0)
-
-        with pytest.raises(IndexError):
-            grouper.calculate_energy_diff_pair(0, 5)
-
-        with pytest.raises(TypeError):
-            grouper.calculate_energy_diff_pair("a", 1)  # type: ignore[arg-type]
-
-    def test_energy_extraction_from_xyz_file(
-        self, multiple_molecules_xyz_file
-    ):
-
-        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
-        molecules = xyz_file.get_molecules(index=":", return_list=True)
-
-        # Test specific energy value for 3rd structure (index 2)
-        expected_energy_mol3 = -126.25238449
-        actual_energy_mol3 = molecules[2].energy
-
-        assert actual_energy_mol3 is not None, "3rd molecule energy is None"
-        assert np.isclose(
-            actual_energy_mol3, expected_energy_mol3, rtol=1e-8
-        ), (
-            f"Energy mismatch for 3rd molecule: got {actual_energy_mol3}, "
-            f"expected {expected_energy_mol3}"
+        grouper = StructureGrouperFactory.create(
+            methanol_molecules,
+            strategy="rmsd",
+            **{parameter: value},
         )
 
-    def test_gibbs_energy_extraction_function(
-        self, ts_conformers_log_directory
-    ):
-        """Test that Gaussian16Output.gibbs_free_energy extracts correct value."""
-        from chemsmart.io.gaussian.output import Gaussian16Output
-
-        log_file = os.path.join(
-            ts_conformers_log_directory, "ch_1c_para_c1.log"
+        assert isinstance(grouper, BasicRMSDGrouper)
+        assert (
+            f"Parameter '{parameter}={value}' is only effective for 'tfd' "
+            "strategy, ignored for 'rmsd'." in caplog.messages
         )
-        g16_output = Gaussian16Output(filename=log_file)
-
-        # Known values
-        expected_scf = -1401.99431519
-        expected_gibbs_correction = 0.311863
-        expected_gibbs_energy = (
-            expected_scf + expected_gibbs_correction
-        )  # -1401.68245219
-
-        gibbs_energy = g16_output.gibbs_free_energy
-        assert np.isclose(gibbs_energy, expected_gibbs_energy, rtol=1e-6), (
-            f"Gibbs energy mismatch: got {gibbs_energy}, "
-            f"expected {expected_gibbs_energy}"
-        )
-
-    def test_energy_extraction_from_ts_log_files(
-        self, ts_conformers_log_directory
-    ):
-        """Test that energy is correctly extracted from TS log files as SCF Done energy."""
-        import glob
-
-        from chemsmart.io.gaussian.output import Gaussian16Output
-        from chemsmart.io.molecules.structure import Molecule
-
-        log_files = sorted(
-            glob.glob(os.path.join(ts_conformers_log_directory, "*.log"))
-        )
-
-        molecules = []
-        for log_file in log_files:
-            mol = Molecule.from_filepath(
-                filepath=log_file, index="-1", return_list=False
-            )
-            if mol is not None:
-                molecules.append(mol)
-                g16_output = Gaussian16Output(filename=log_file)
-                scf_energy = (
-                    g16_output.scf_energies[-1]
-                    if g16_output.scf_energies
-                    else None
-                )
-                assert np.isclose(mol.energy, scf_energy, rtol=1e-6), (
-                    f"Energy mismatch for {log_file}: "
-                    f"mol.energy={mol.energy}, expected SCF={scf_energy}"
-                )
-
-
-@pytest.mark.usefixtures("temporary_working_dir")
-class Testfactory:
 
     def test_structure_grouper_factory_energy(
         self, multiple_molecules_xyz_file
@@ -1549,7 +2402,7 @@ class Testfactory:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_grouper_utility_functions:
+class TestGrouperUtilityFunctions:
     """Test utility functions and helper methods in groupers."""
 
     NUM_PROCS = 1
@@ -1630,10 +2483,123 @@ class Test_grouper_utility_functions:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_grouper_complete_linkage:
-    """Test complete linkage clustering behavior."""
+class TestCompleteLinkageInput:
+    """Input validation checks for complete-linkage based matrix groupers."""
 
     NUM_PROCS = 4
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        (
+            {"threshold": 0.5, "num_groups": 2},
+            {"threshold": -0.1},
+            {"threshold": None, "num_groups": 0},
+        ),
+    )
+    def test_matrix_grouper_rejects_invalid_grouping_configuration(
+        self, methanol_molecules, kwargs
+    ):
+        with pytest.raises(ValueError):
+            BasicRMSDGrouper(methanol_molecules[:2], **kwargs)
+
+    def test_matrix_grouper_rejects_unknown_representative_strategy(
+        self, methanol_molecules
+    ):
+        with pytest.raises(ValueError, match="Unsupported representative"):
+            BasicRMSDGrouper(
+                methanol_molecules[:2],
+                representative_strategy="random",
+            )
+
+    def test_energy_order_places_invalid_energies_last(
+        self, methanol_molecules
+    ):
+        molecules = methanol_molecules[:3]
+        molecules[0]._energy = -2.0
+        molecules[1]._energy = "invalid"
+        molecules[2]._energy = np.nan
+        grouper = BasicRMSDGrouper(molecules)
+
+        assert grouper._order_index_group_by_energy([2, 1, 0]) == [0, 1, 2]
+
+    def test_explicit_output_directory_is_used(
+        self, methanol_molecules, temporary_working_dir
+    ):
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2],
+            label="sample",
+            output_dir=temporary_working_dir,
+        )
+
+        assert grouper._get_output_dir() == os.path.join(
+            temporary_working_dir, "sample_group_result"
+        )
+
+    @pytest.mark.parametrize(
+        ("matrix", "message"),
+        (
+            (np.array([0.0, 1.0]), "2-dimensional"),
+            (np.zeros((2, 3)), "square"),
+        ),
+    )
+    def test_distance_matrix_shape_validation(
+        self, methanol_molecules, matrix, message
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules[:2])
+
+        with pytest.raises(ValueError, match=message):
+            grouper.group_by_threshold(matrix)
+
+    def test_clustering_submatrix_validates_original_indices(
+        self, methanol_molecules
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules[:2])
+
+        with pytest.raises(ValueError, match="original_indices"):
+            grouper._prepare_clustering_submatrix(
+                np.zeros((2, 2)), original_indices=[0]
+            )
+
+    def test_singleton_matrix_helpers(self, methanol_molecules):
+        grouper = BasicRMSDGrouper(
+            methanol_molecules[:2], conformer_ids=["c1", "c2"]
+        )
+
+        assert grouper._build_complete_linkage_tree(np.zeros((1, 1))) is None
+        assert grouper._get_original_index_label(1) == "c2"
+        assert (
+            grouper._mean_distance_to_group(0, [0], np.zeros((1, 1)), {0: 0})
+            == 0.0
+        )
+
+    @pytest.mark.parametrize("threshold", (None, "bad", np.nan, -1.0))
+    def test_threshold_resolution_validation(
+        self, methanol_molecules, threshold
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules[:2])
+        grouper.threshold = None
+
+        with pytest.raises(ValueError, match="threshold"):
+            grouper._resolve_threshold(threshold)
+
+    @pytest.mark.parametrize("num_groups", (None, "bad", 0))
+    def test_num_groups_resolution_validation(
+        self, methanol_molecules, num_groups
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules[:2])
+        grouper.num_groups = None
+
+        with pytest.raises(ValueError, match="num_groups"):
+            grouper._resolve_num_groups(num_groups)
+
+
+@pytest.mark.usefixtures("temporary_working_dir")
+class TestCompleteLinkageOutput:
+    """Output/state behavior and clustering semantics for complete linkage."""
+
+    NUM_PROCS = 4
+
+    # --- Threshold behavior ---
 
     def test_public_group_by_threshold_reuses_distance_matrix_and_caches_result(
         self, methanol_molecules
@@ -1742,6 +2708,134 @@ class Test_grouper_complete_linkage:
         assert grouper._cached_group_indices == index_groups
         assert grouper.threshold == 0.9
 
+    def test_threshold_grouping_clears_previous_auto_threshold(
+        self, methanol_molecules
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules, num_groups=2)
+        matrix = np.array(
+            [
+                [0.0, 0.1, 0.8],
+                [0.1, 0.0, 0.7],
+                [0.8, 0.7, 0.0],
+            ]
+        )
+
+        grouper.group_by_num_groups(matrix, num_groups=2)
+        assert grouper._auto_threshold is not None
+
+        old_threshold = grouper.threshold
+        groups, index_groups = grouper.group_by_threshold(
+            matrix, threshold=0.5
+        )
+
+        assert grouper._auto_threshold is None
+        assert grouper.threshold == old_threshold
+        assert index_groups == [[0, 1], [2]]
+        assert groups == [
+            [methanol_molecules[0], methanol_molecules[1]],
+            [methanol_molecules[2]],
+        ]
+
+    def test_hierarchical_complete_linkage_prevents_chaining(
+        self, methanol_molecules
+    ):
+        """A-B and B-C being close must not chain A and C together."""
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, 0.3, 0.8],
+                [0.3, 0.0, 0.3],
+                [0.8, 0.3, 0.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+
+        assert len(groups) == 2
+        assert sorted(len(group) for group in index_groups) == [1, 2]
+        assert not any(set(group) == {0, 1, 2} for group in index_groups)
+
+    def test_threshold_includes_equal_distance(self, methanol_molecules):
+        """Threshold mode uses complete-linkage distance <= threshold."""
+        molecules = methanol_molecules[:2]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        distance_matrix = np.array(
+            [
+                [0.0, 0.5],
+                [0.5, 0.0],
+            ]
+        )
+        groups, index_groups = grouper.group_by_threshold(distance_matrix)
+        assert len(groups) == 1
+        assert index_groups == [[0, 1]]
+
+    def test_tanimoto_threshold_uses_similarity_semantics(
+        self, methanol_molecules
+    ):
+        """A Tanimoto threshold of 0.9 means similarity >= 0.9."""
+        molecules = methanol_molecules[:3]
+        grouper = TanimotoSimilarityGrouper(
+            molecules,
+            threshold=0.9,
+            num_procs=1,
+        )
+
+        similarity_matrix = np.array(
+            [
+                [1.0, 0.90, 0.70],
+                [0.90, 1.0, 0.70],
+                [0.70, 0.70, 1.0],
+            ]
+        )
+
+        groups, index_groups = grouper.group_by_threshold(similarity_matrix)
+
+        assert len(groups) == 2
+        assert {frozenset(group) for group in index_groups} == {
+            frozenset({0, 1}),
+            frozenset({2}),
+        }
+        assert np.isclose(grouper.threshold, 0.9)
+
+    def test_complete_linkage_prevents_chaining(
+        self, multiple_molecules_xyz_file
+    ):
+        """Test that complete linkage prevents chaining effect in grouping."""
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        # With a moderate threshold, complete linkage should create
+        # groups where ALL members are within threshold of each other
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=1.0,
+            num_procs=self.NUM_PROCS,
+        )
+        groups, group_indices = grouper.group()
+
+        # Verify complete linkage property: within each group,
+        # all pairs should have RMSD <= threshold
+        for group_idx, indices in enumerate(group_indices):
+            if len(indices) > 1:
+                for i, idx_i in enumerate(indices):
+                    for j, idx_j in enumerate(indices):
+                        if i < j:
+                            rmsd = grouper.calculate_rmsd_pair(idx_i, idx_j)
+                            assert rmsd <= 1.0, (
+                                f"Group {group_idx}: RMSD between {idx_i} and {idx_j} "
+                                f"is {rmsd}, is above threshold 1.0"
+                            )
+
+    # --- Num-groups behavior ---
     def test_public_group_by_num_groups_reuses_distance_matrix_and_caches_result(
         self, methanol_molecules
     ):
@@ -1839,76 +2933,6 @@ class Test_grouper_complete_linkage:
         assert grouper._matrix_skipped_indices == [1]
         assert grouper._auto_threshold is None
 
-    def test_threshold_grouping_clears_previous_auto_threshold(
-        self, methanol_molecules
-    ):
-        grouper = BasicRMSDGrouper(methanol_molecules, num_groups=2)
-        matrix = np.array(
-            [
-                [0.0, 0.1, 0.8],
-                [0.1, 0.0, 0.7],
-                [0.8, 0.7, 0.0],
-            ]
-        )
-
-        grouper.group_by_num_groups(matrix, num_groups=2)
-        assert grouper._auto_threshold is not None
-
-        old_threshold = grouper.threshold
-        groups, index_groups = grouper.group_by_threshold(
-            matrix, threshold=0.5
-        )
-
-        assert grouper._auto_threshold is None
-        assert grouper.threshold == old_threshold
-        assert index_groups == [[0, 1], [2]]
-        assert groups == [
-            [methanol_molecules[0], methanol_molecules[1]],
-            [methanol_molecules[2]],
-        ]
-
-    def test_hierarchical_complete_linkage_prevents_chaining(
-        self, methanol_molecules
-    ):
-        """A-B and B-C being close must not chain A and C together."""
-        molecules = methanol_molecules[:3]
-        grouper = BasicRMSDGrouper(
-            molecules,
-            threshold=0.5,
-            num_procs=1,
-        )
-        distance_matrix = np.array(
-            [
-                [0.0, 0.3, 0.8],
-                [0.3, 0.0, 0.3],
-                [0.8, 0.3, 0.0],
-            ]
-        )
-
-        groups, index_groups = grouper.group_by_threshold(distance_matrix)
-
-        assert len(groups) == 2
-        assert sorted(len(group) for group in index_groups) == [1, 2]
-        assert not any(set(group) == {0, 1, 2} for group in index_groups)
-
-    def test_threshold_includes_equal_distance(self, methanol_molecules):
-        """Threshold mode uses complete-linkage distance <= threshold."""
-        molecules = methanol_molecules[:2]
-        grouper = BasicRMSDGrouper(
-            molecules,
-            threshold=0.5,
-            num_procs=1,
-        )
-        distance_matrix = np.array(
-            [
-                [0.0, 0.5],
-                [0.5, 0.0],
-            ]
-        )
-        groups, index_groups = grouper.group_by_threshold(distance_matrix)
-        assert len(groups) == 1
-        assert index_groups == [[0, 1]]
-
     def test_num_groups_keeps_previous_full_linkage_level(
         self, methanol_molecules
     ):
@@ -1976,75 +3000,7 @@ class Test_grouper_complete_linkage:
         assert len(index_groups) == 3
         assert np.isclose(grouper._auto_threshold, 0.1)
 
-    def test_grouping_does_not_modify_distance_matrix(
-        self, methanol_molecules
-    ):
-        """Hierarchical grouping must not mutate the caller's distance matrix."""
-        molecules = methanol_molecules[:3]
-        grouper = BasicRMSDGrouper(
-            molecules,
-            threshold=0.5,
-            num_procs=1,
-        )
-
-        distance_matrix = np.array(
-            [
-                [0.0, 0.3, 0.8],
-                [0.3, 0.0, 0.3],
-                [0.8, 0.3, 0.0],
-            ]
-        )
-        original_matrix = distance_matrix.copy()
-
-        grouper.group_by_threshold(distance_matrix)
-
-        assert np.array_equal(distance_matrix, original_matrix)
-
-    def test_hierarchical_grouping_is_input_order_independent(
-        self, methanol_molecules
-    ):
-        """Permuting input order must not change the partition after remapping indices."""
-        from ase.build import molecule as ase_molecule
-
-        from chemsmart.io.molecules.structure import Molecule
-
-        molecules = [
-            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(4)
-        ]
-        distance_matrix = np.array(
-            [
-                [0.0, 0.2, 0.9, 1.0],
-                [0.2, 0.0, 0.8, 0.9],
-                [0.9, 0.8, 0.0, 0.3],
-                [1.0, 0.9, 0.3, 0.0],
-            ]
-        )
-
-        grouper = BasicRMSDGrouper(
-            molecules,
-            threshold=0.5,
-            num_procs=1,
-        )
-        _, index_groups = grouper.group_by_threshold(distance_matrix)
-        expected_partition = {frozenset(group) for group in index_groups}
-
-        permutation = [2, 0, 3, 1]
-        permuted_molecules = [molecules[i] for i in permutation]
-        permuted_matrix = distance_matrix[np.ix_(permutation, permutation)]
-        permuted_grouper = BasicRMSDGrouper(
-            permuted_molecules,
-            threshold=0.5,
-            num_procs=1,
-        )
-        _, permuted_groups = permuted_grouper.group_by_threshold(
-            permuted_matrix
-        )
-
-        remapped_partition = {
-            frozenset(permutation[i] for i in group)
-            for group in permuted_groups
-        }
-        assert remapped_partition == expected_partition
+    # --- Inf/NaN and matrix-path edge handling ---
 
     def test_infinite_distance_matrix_skips_minimum_problematic_structures(
         self, methanol_molecules
@@ -2088,63 +3044,6 @@ class Test_grouper_complete_linkage:
 
         with pytest.raises(ValueError, match="non-finite"):
             grouper.group_by_threshold(distance_matrix)
-
-    def test_tanimoto_threshold_uses_similarity_semantics(
-        self, methanol_molecules
-    ):
-        """A Tanimoto threshold of 0.9 means similarity >= 0.9."""
-        molecules = methanol_molecules[:3]
-        grouper = TanimotoSimilarityGrouper(
-            molecules,
-            threshold=0.9,
-            num_procs=1,
-        )
-
-        similarity_matrix = np.array(
-            [
-                [1.0, 0.90, 0.70],
-                [0.90, 1.0, 0.70],
-                [0.70, 0.70, 1.0],
-            ]
-        )
-
-        groups, index_groups = grouper.group_by_threshold(similarity_matrix)
-
-        assert len(groups) == 2
-        assert {frozenset(group) for group in index_groups} == {
-            frozenset({0, 1}),
-            frozenset({2}),
-        }
-        assert np.isclose(grouper.threshold, 0.9)
-
-    def test_complete_linkage_prevents_chaining(
-        self, multiple_molecules_xyz_file
-    ):
-        """Test that complete linkage prevents chaining effect in grouping."""
-        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
-        molecules = xyz_file.get_molecules(index=":", return_list=True)
-
-        # With a moderate threshold, complete linkage should create
-        # groups where ALL members are within threshold of each other
-        grouper = BasicRMSDGrouper(
-            molecules,
-            threshold=1.0,
-            num_procs=self.NUM_PROCS,
-        )
-        groups, group_indices = grouper.group()
-
-        # Verify complete linkage property: within each group,
-        # all pairs should have RMSD <= threshold
-        for group_idx, indices in enumerate(group_indices):
-            if len(indices) > 1:
-                for i, idx_i in enumerate(indices):
-                    for j, idx_j in enumerate(indices):
-                        if i < j:
-                            rmsd = grouper.calculate_rmsd_pair(idx_i, idx_j)
-                            assert rmsd <= 1.0, (
-                                f"Group {group_idx}: RMSD between {idx_i} and {idx_j} "
-                                f"is {rmsd}, is above threshold 1.0"
-                            )
 
     def test_infinite_pair_removes_one_structure_and_groups_remaining(
         self, methanol_molecules
@@ -2394,9 +3293,81 @@ class Test_grouper_complete_linkage:
         }
         assert len(groups) == 3
 
+    # --- Immutability and order-independence ---
+
+    def test_grouping_does_not_modify_distance_matrix(
+        self, methanol_molecules
+    ):
+        """Hierarchical grouping must not mutate the caller's distance matrix."""
+        molecules = methanol_molecules[:3]
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+
+        distance_matrix = np.array(
+            [
+                [0.0, 0.3, 0.8],
+                [0.3, 0.0, 0.3],
+                [0.8, 0.3, 0.0],
+            ]
+        )
+        original_matrix = distance_matrix.copy()
+
+        grouper.group_by_threshold(distance_matrix)
+
+        assert np.array_equal(distance_matrix, original_matrix)
+
+    def test_hierarchical_grouping_is_input_order_independent(
+        self, methanol_molecules
+    ):
+        """Permuting input order must not change the partition after remapping indices."""
+        from ase.build import molecule as ase_molecule
+
+        from chemsmart.io.molecules.structure import Molecule
+
+        molecules = [
+            Molecule.from_ase_atoms(ase_molecule("CH3OH")) for _ in range(4)
+        ]
+        distance_matrix = np.array(
+            [
+                [0.0, 0.2, 0.9, 1.0],
+                [0.2, 0.0, 0.8, 0.9],
+                [0.9, 0.8, 0.0, 0.3],
+                [1.0, 0.9, 0.3, 0.0],
+            ]
+        )
+
+        grouper = BasicRMSDGrouper(
+            molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        _, index_groups = grouper.group_by_threshold(distance_matrix)
+        expected_partition = {frozenset(group) for group in index_groups}
+
+        permutation = [2, 0, 3, 1]
+        permuted_molecules = [molecules[i] for i in permutation]
+        permuted_matrix = distance_matrix[np.ix_(permutation, permutation)]
+        permuted_grouper = BasicRMSDGrouper(
+            permuted_molecules,
+            threshold=0.5,
+            num_procs=1,
+        )
+        _, permuted_groups = permuted_grouper.group_by_threshold(
+            permuted_matrix
+        )
+
+        remapped_partition = {
+            frozenset(permutation[i] for i in group)
+            for group in permuted_groups
+        }
+        assert remapped_partition == expected_partition
+
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_conformer_ids_functionality:
+class TestConformerIdsFunctionality:
     """Test conformer_ids parameter functionality."""
 
     NUM_PROCS = 1
@@ -2493,7 +3464,7 @@ class Test_conformer_ids_functionality:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_output_file_generation:
+class TestOutputFileGeneration:
     """Test that grouper generates correct output files."""
 
     NUM_PROCS = 1
@@ -2670,7 +3641,7 @@ class Test_output_file_generation:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_edge_cases:
+class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
     def test_two_molecules_grouping(self):
@@ -2780,7 +3751,7 @@ class Test_edge_cases:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_label_and_append_label:
+class TestLabelAndAppendLabel:
     """Test -l (label) and -a (append_label) parameter functionality."""
 
     NUM_PROCS = 1
@@ -3127,7 +4098,7 @@ class TestConformerIdExtraction:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_energy_extraction_function:
+class TestEnergyExtractionFunction:
     """Framework tests for energy extraction by file type."""
 
     def test_energy_extraction_gaussian(
@@ -3224,7 +4195,7 @@ class Test_energy_extraction_function:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_multiprocessing_support:
+class TestMultiprocessingSupport:
     def test_basic_rmsd_serial_parallel_equivalent(self, methanol_molecules):
         serial = BasicRMSDGrouper(
             methanol_molecules, threshold=0.5, num_procs=1
@@ -3445,7 +4416,7 @@ class Test_multiprocessing_support:
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
-class Test_representative_selection:
+class TestRepresentativeStrategy:
     class DummyDistanceGrouper(MatrixGrouper):
         def __init__(self, molecules, distance_matrix, **kwargs):
             super().__init__(molecules, threshold=9.9, **kwargs)
