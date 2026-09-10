@@ -388,14 +388,9 @@ MECP geometry. Temporary checkpoints are retained if verification fails.
 Output Files
 ============
 
-<<<<<<< Updated upstream
 Three output files are produced in the main job directory; Gaussian sub-job input/output files are stored in
 ``<label>_steps``. The
 third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
-=======
-Three output files are produced alongside the Gaussian sub-job input/output files; the third
-(``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
->>>>>>> Stashed changes
 
 ``<label>_report.log``
    Step-by-step optimization log. The file header records the run settings; each subsequent line reports one step, using
@@ -480,16 +475,10 @@ Add ``--verify-seam-minimum`` to the MECP command after the optimization converg
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
        --convergence tight --verify-seam-minimum
 
-<<<<<<< Updated upstream
 The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states
 × 3N Cartesian coordinates), labelled ``<label>_check_step1_A``, ``<label>_check_step2_A``, etc. For a 10-atom molecule this is 120
 additional Gaussian calculations.  The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with
 ``--hess-step-size``.
-=======
-The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states × 3N Cartesian
-coordinates), each labelled ``<label>_step900000_A`` etc. For a 10-atom molecule this is 120 additional Gaussian
-calculations. The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with ``--hess-step-size``.
->>>>>>> Stashed changes
 
 Results are written to ``<label>_seam_check.log``:
 
