@@ -50,36 +50,36 @@ logger = logging.getLogger(__name__)
 )
 # MECP-specific options (used when --jobtype mecp)
 @click.option(
-    "--multiplicity1",
-    "--m1",
+    "--multiplicity-1",
+    "-m1",
     "multiplicity1",
     type=int,
     default=None,
     help="[MECP] Spin multiplicity for state 1.",
 )
 @click.option(
-    "--multiplicity2",
-    "--m2",
+    "--multiplicity-2",
+    "-m2",
     "multiplicity2",
     type=int,
     default=None,
-    help="[MECP] Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
+    help="[MECP] Spin multiplicity for state 2. Defaults to multiplicity-1 + 2.",
 )
 @click.option(
-    "--charge1",
-    "--c1",
+    "--charge-1",
+    "-c1",
     "charge1",
     type=int,
     default=None,
     help="[MECP] Charge for state 1.",
 )
 @click.option(
-    "--charge2",
-    "--c2",
+    "--charge-2",
+    "-c2",
     "charge2",
     type=int,
     default=None,
-    help="[MECP] Charge for state 2. Defaults to charge1.",
+    help="[MECP] Charge for state 2. Defaults to charge-1.",
 )
 @click.option(
     "--max-steps",
@@ -400,7 +400,7 @@ def _link_mecp(
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
-            "Use gaussian -m/--multiplicity or link -j mecp --multiplicity1/--m1."
+            "Use gaussian -m/--multiplicity or link -j mecp --multiplicity-1/-m1."
         )
 
     if multiplicity2 is None:
@@ -415,7 +415,7 @@ def _link_mecp(
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
-            "Use gaussian -c/--charge or link -j mecp --charge1/--c1."
+            "Use gaussian -c/--charge or link -j mecp --charge-1/-c1."
         )
 
     if charge2 is None:
@@ -472,9 +472,12 @@ def _link_mecp(
         mecp_settings.functional = "u" + mecp_settings.functional
 
     molecule = ctx.obj["molecules"][-1]
-    label = add_mecp_method_suffix(
-        ctx.obj["label"], mecp_settings.step_size_method
-    ) + "_link"
+    label = (
+        add_mecp_method_suffix(
+            ctx.obj["label"], mecp_settings.step_size_method
+        )
+        + "_link"
+    )
 
     logger.info(
         f"Link MECP job settings from project: {mecp_settings.__dict__}"

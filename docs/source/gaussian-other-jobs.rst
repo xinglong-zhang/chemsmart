@@ -66,24 +66,24 @@ MECP Options
       -  Default
       -  Description
 
-   -  -  ``--multiplicity-a``
+   -  -  ``--multiplicity-1`` / ``-m1``
       -  int
       -  1 (singlet)
       -  Spin multiplicity of state A. Falls back to ``-m`` if not set.
 
-   -  -  ``--multiplicity-b``
+   -  -  ``--multiplicity-2`` / ``-m2``
       -  int
-      -  multiplicity-a + 2
+      -  multiplicity-1 + 2
       -  Spin multiplicity of state B.
 
-   -  -  ``--charge-a``
+   -  -  ``--charge-1`` / ``-c1``
       -  int
       -  0
       -  Charge of state A. Falls back to ``-c`` if not set.
 
-   -  -  ``--charge-b``
+   -  -  ``--charge-2`` / ``-c2``
       -  int
-      -  charge-a
+      -  charge-1
       -  Charge of state B.
 
    -  -  ``--title-a``
@@ -507,13 +507,13 @@ Set spin states explicitly (singlet ↔ triplet):
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity-a 1 --multiplicity-b 3
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity-1 1 --multiplicity-2 3
 
 Doublet/quartet MECP for an open-shell cation:
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity-a 2 --multiplicity-b 4
+   chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity-1 2 --multiplicity-2 4
 
 Use tight convergence (publication quality):
 

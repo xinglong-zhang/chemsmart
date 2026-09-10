@@ -19,36 +19,36 @@ logger = logging.getLogger(__name__)
 @gaussian.command("mecp", cls=MyCommand)
 @click_job_options
 @click.option(
-    "--multiplicity1",
-    "--m1",
+    "--multiplicity-1",
+    "-m1",
     "multiplicity1",
     type=int,
     default=None,
     help="Spin multiplicity for state 1.",
 )
 @click.option(
-    "--multiplicity2",
-    "--m2",
+    "--multiplicity-2",
+    "-m2",
     "multiplicity2",
     type=int,
     default=None,
-    help="Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
+    help="Spin multiplicity for state 2. Defaults to multiplicity-1 + 2.",
 )
 @click.option(
-    "--charge1",
-    "--c1",
+    "--charge-1",
+    "-c1",
     "charge1",
     type=int,
     default=None,
     help="Charge for state 1.",
 )
 @click.option(
-    "--charge2",
-    "--c2",
+    "--charge-2",
+    "-c2",
     "charge2",
     type=int,
     default=None,
-    help="Charge for state 2. Defaults to charge1.",
+    help="Charge for state 2. Defaults to charge-1.",
 )
 @click.option(
     "--title-a",
@@ -243,7 +243,7 @@ def mecp(
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
-            "Use gaussian -m/--multiplicity or mecp --multiplicity1/--m1."
+            "Use gaussian -m/--multiplicity or mecp --multiplicity-1/-m1."
         )
 
     if multiplicity2 is None:
@@ -260,7 +260,7 @@ def mecp(
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
-            "Use gaussian -c/--charge or mecp --charge1/--c1."
+            "Use gaussian -c/--charge or mecp --charge-1/-c1."
         )
     if charge2 is None:
         mecp_settings.charge_b = mecp_settings.charge_a

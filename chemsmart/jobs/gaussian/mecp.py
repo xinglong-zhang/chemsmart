@@ -474,35 +474,45 @@ class GaussianMECPJob(GaussianJob):
         inv_hessian,
     ):
         """
-        Harvey 原版 BFGS 准牛顿法位移计算。
+        Compute the displacement using Harvey's original BFGS
+        quasi-Newton method.
 
-        完整实现 J. N. Harvey (2003) 的 MECP 优化算法:
-        1. 计算有效梯度 G_eff = (Ea-Eb)*facPP*PerpG + facP*ParG
-        2. 维护逆 Hessian 矩阵并用 BFGS 公式更新
-        3. 位移 = -HI @ G_eff
-        4. 应用 STPMX 位移限制
+        This implements the MECP optimization algorithm of J. N. Harvey
+        (2003):
 
-        参考: easymecp 中的 MECP_FORTRAN UpdateX 子程序。
+        1. Compute the effective gradient
+           ``G_eff = (Ea-Eb)*facPP*PerpG + facP*ParG``.
+        2. Maintain and update the inverse Hessian using the BFGS formula.
+        3. Compute the displacement as ``-HI @ G_eff``.
+        4. Apply the STPMX displacement limit.
+
+        The implementation follows the ``UpdateX`` subroutine in
+        ``easymecp``'s ``MECP_FORTRAN`` code.
 
         Args:
-            ea, eb: 两个态的能量
-            grad_a, grad_b: 两个态的梯度 (Hartree/Bohr)
-            prev_positions: 前一步几何 (Bohr), 第一步为 None
-            curr_positions: 当前几何 (Bohr)
-            prev_eff_grad: 前一步有效梯度 (1-D), 第一步为 None
-            inv_hessian: 当前逆 Hessian (N×N), 第一步为 None
+            ea, eb: Energies of the two states.
+            grad_a, grad_b: Gradients of the two states (Hartree/Bohr).
+            prev_positions: Previous geometry (Bohr), or ``None`` on the
+                first step.
+            curr_positions: Current geometry (Bohr).
+            prev_eff_grad: Previous effective gradient as a one-dimensional
+                array, or ``None`` on the first step.
+            inv_hessian: Current inverse Hessian (N x N), or ``None`` on the
+                first step.
 
         Returns:
-            displacement: 位移 (Bohr)
-            par_grad: seam 切向梯度 (用于收敛判断)
-            seam_correction: seam 修正项 (用于日志)
-            inv_hessian: 更新后的逆 Hessian
-            update_status, fac, fae: BFGS 更新诊断
-            eff_grad: Harvey 有效梯度 (用于 BFGS 历史更新)
+            displacement: Cartesian displacement (Bohr).
+            par_grad: Gradient tangent to the seam, used for convergence.
+            seam_correction: Seam-correction term used for logging.
+            inv_hessian: Updated inverse Hessian.
+            update_status, fac, fae: BFGS update diagnostics.
+            eff_grad: Harvey effective gradient used for the next BFGS
+                history update.
         """
         n = grad_a.size
 
-        # 1. 计算有效梯度 (Harvey 原版 Effective_Gradient 子程序)
+        # 1. Compute the effective gradient following Harvey's original
+        # Effective_Gradient subroutine.
         diff_grad = grad_a - grad_b  # PerpG
         diff_norm_sq = float(np.sum(diff_grad * diff_grad))
         if diff_norm_sq < self.MIN_DIFF_GRAD_NORM_SQ:
@@ -513,16 +523,18 @@ class GaussianMECPJob(GaussianJob):
         pp = float(np.sum(grad_a * diff_grad)) / diff_norm
         par_grad = grad_a - diff_grad / diff_norm * pp  # ParG
 
-        # facPP=140: 经验值, 使沿 PerpG 方向逆 Hessian ≈ 1/140
-        # facP=1: ParG 方向用 BFGS 维护的逆 Hessian
+        # facPP=140 is an empirical value that gives an inverse-Hessian
+        # component of approximately 1/140 along PerpG. facP=1 uses the
+        # BFGS-maintained inverse Hessian along ParG.
         fac_pp = 140.0
         fac_p = 1.0
         eff_grad = (ea - eb) * fac_pp * diff_grad + fac_p * par_grad
         eff_grad_flat = eff_grad.ravel().copy()
 
-        # 2. BFGS 更新逆 Hessian 并计算位移
-        # Harvey 原版用 Angstrom, chemsmart 用 Bohr
-        # 初始逆 Hessian: 0.7 Å²/Hartree -> 0.7 * (1/Bohr)² Bohr²/Hartree
+        # 2. Update the inverse Hessian with BFGS and compute the displacement.
+        # Harvey's original code uses Angstrom, whereas ChemSmart uses Bohr.
+        # Initial inverse Hessian: 0.7 Angstrom^2/Hartree converted to
+        # Bohr^2/Hartree.
         bohr_per_ang = 1.0 / units.Bohr
         initial_hi_val = self.settings.harvey_initial_hessian * (
             bohr_per_ang**2
@@ -530,14 +542,15 @@ class GaussianMECPJob(GaussianJob):
         initial_inv_hessian = initial_hi_val * np.eye(n)
 
         if prev_positions is None or prev_eff_grad is None:
-            # 第一步: 用对角逆 Hessian (Harvey Initialize 子程序)
+            # First step: use the diagonal inverse Hessian from Harvey's
+            # Initialize subroutine.
             inv_hess = initial_inv_hessian
             displacement_flat = -inv_hess @ eff_grad_flat
             update_status = "INITIAL"
             fac = float("nan")
             fae = float("nan")
         else:
-            # BFGS 更新 (Harvey UpdateX 子程序)
+            # Apply the BFGS update from Harvey's UpdateX subroutine.
             delta_x = (curr_positions - prev_positions).ravel()  # DelX
             delta_g = eff_grad_flat - prev_eff_grad  # DelG
 
@@ -564,7 +577,8 @@ class GaussianMECPJob(GaussianJob):
                 displacement_flat = -inv_hess @ eff_grad_flat
                 update_status = "RESET_NON_DESCENT"
 
-        # 3. 位移限制 (Harvey UpdateX 中的 STPMX 逻辑)
+        # 3. Limit the displacement using the STPMX logic from Harvey's
+        # UpdateX subroutine.
         # STPMX = 0.1 Å -> 0.1 * (1/Bohr) Bohr
         stpmx = self.settings.harvey_max_component_step * bohr_per_ang
 
@@ -574,7 +588,7 @@ class GaussianMECPJob(GaussianJob):
 
         displacement = displacement_flat.reshape(grad_a.shape)
 
-        # seam_correction: 精确线性 seam 修正 (用于日志对比)
+        # Exact linear seam correction, retained for log comparisons.
         seam_correction = -(ea - eb) / diff_norm_sq * diff_grad
 
         return (

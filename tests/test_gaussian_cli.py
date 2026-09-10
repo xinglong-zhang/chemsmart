@@ -983,7 +983,7 @@ class TestGaussianCLIMecpCommand:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
-        """Default ``multiplicity2`` is inferred as ``multiplicity1 + 2``."""
+        """Default ``multiplicity-2`` is inferred as ``multiplicity-1 + 2``."""
         result, settings = run_gaussian_and_capture_settings(
             "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
             [
@@ -1026,13 +1026,13 @@ class TestGaussianCLIMecpCommand:
                 "-m",
                 "2",
                 "mecp",
-                "--m1",
+                "-m1",
                 "2",
-                "--m2",
+                "-m2",
                 "4",
-                "--c1",
+                "-c1",
                 "1",
-                "--c2",
+                "-c2",
                 "1",
                 "--max-steps",
                 "120",
@@ -1253,9 +1253,9 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--multiplicity1",
+                "--multiplicity-1",
                 "1",
-                "--multiplicity2",
+                "--multiplicity-2",
                 "3",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
@@ -1273,7 +1273,7 @@ class TestGaussianCLILinkMecpCommand:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
-        """Without ``--multiplicity2``, state 2 defaults to state 1 + 2."""
+        """Without ``--multiplicity-2``, state 2 defaults to state 1 + 2."""
         result, settings = run_gaussian_and_capture_settings(
             "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
             [
@@ -1288,7 +1288,7 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--multiplicity1",
+                "--multiplicity-1",
                 "1",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
@@ -1320,7 +1320,7 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--m1",
+                "-m1",
                 "1",
                 "--stable",
                 "qrhf",
@@ -1356,7 +1356,7 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--m1",
+                "-m1",
                 "1",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
