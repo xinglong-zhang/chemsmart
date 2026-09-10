@@ -13,7 +13,7 @@ A Minimum Energy Crossing Point (MECP) is a geometry where two potential energy 
 are degenerate. It is the spin-forbidden analogue of a transition state and is relevant to intersystem crossing,
 spin-state reactivity, and organometallic reaction mechanisms.
 
-ChemSmart provides a **self-contained MECP optimizer** that drives the search entirely in Python, calling Gaussian only
+CHEMSMART provides a **self-contained MECP optimizer** that drives the search entirely in Python, calling Gaussian only
 for single-point energies and Cartesian forces at each step. No external MECP code (e.g. MECP2, Harvey's code) is
 required.
 
@@ -358,7 +358,7 @@ MECP optimization state is written atomically after every completed step to
 ``<label>_state.npz``. It contains the next geometry, inverse Hessian, previous
 effective gradient, and adaptive-step history. Re-running the same job resumes
 from that state by default. The saved atom sequence and optimizer method must
-match the new invocation; otherwise ChemSmart stops with an explicit error.
+match the new invocation; otherwise CHEMSMART stops with an explicit error.
 Use ``--no-restart`` to deliberately start from the supplied input geometry.
 The state file is removed after successful convergence.
 
@@ -366,7 +366,7 @@ MECP force calculations always include ``nosymm`` so that Gaussian Cartesian
 forces remain aligned with the optimizer coordinate frame. An explicit
 conflicting ``symmetry`` route option is rejected.
 
-Like easyMECP, ChemSmart maintains one rolling checkpoint per state
+Like easyMECP, CHEMSMART maintains one rolling checkpoint per state
 (``<label>_A.chk`` and ``<label>_B.chk``) instead of one checkpoint per
 iteration. It does not add ``guess=read`` automatically: checkpoint orbitals
 are read only when that option is explicitly present in the Gaussian route.
@@ -432,7 +432,7 @@ Seam Minimum Verification
 
 A converged MECP may be a crossing point anywhere on the crossing seam, not necessarily the **minimum energy** point on
 it. To confirm that the MECP is a true minimum on the seam (analogous to verifying a transition state has exactly one
-imaginary frequency), ChemSmart implements an effective Hessian analysis.
+imaginary frequency), CHEMSMART implements an effective Hessian analysis.
 
 Theory
 ------
@@ -442,7 +442,7 @@ direction :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B` take the molecule 
 directions span the seam tangent space; after further removal of translations (3) and rotations (up to 3) there are
 :math:`3N - 7` (or :math:`3N - 6` for linear molecules) internal seam degrees of freedom.
 
-ChemSmart constructs a projector that removes these constrained directions:
+CHEMSMART constructs a projector that removes these constrained directions:
 
 .. math::
 
@@ -648,7 +648,7 @@ This sets ``guess=(mix,always)`` in the route string:
  Custom User Jobs
 ******************
 
-Run custom calculations not built into Chemsmart.
+Run custom calculations not built into CHEMSMART.
 
 .. code:: bash
 
