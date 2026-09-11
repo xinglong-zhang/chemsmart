@@ -9857,7 +9857,9 @@ class CommandCompiledToolHostV1:
         )
         return receipt
 
-    def _current_scientific_plan(self) -> ScientificWorkflowPlanV2 | None:
+    def _current_scientific_plan(
+        self, predicate=None
+    ) -> ScientificWorkflowPlanV2 | None:
         """The plan the session is standing on, for every reader.
 
         One function, because three readers asked this question by
@@ -9877,10 +9879,15 @@ class CommandCompiledToolHostV1:
         current = self.scientific_workflow_plans.get(
             getattr(self, "current_scientific_plan_sha256", "")
         )
-        if current is not None:
+        if current is not None and current in candidates:
             return current
-        plans = tuple(self.scientific_workflow_plans.values())
-        return plans[-1] if plans else None
+        # The single place in this host where insertion order is ever
+        # consulted, and only when the pointer names no admissible plan
+        # -- a host restored for preflight is built without running
+        # __init__. Every other reader calls this function, so a
+        # digest-keyed container is reduced to one entry in exactly one
+        # function and the lint can be absolute.
+        return candidates[-1] if candidates else None
 
     def _materialize_scientific_workflow(
         self, *, turn_id: str, node_id: str
@@ -9899,6 +9906,11 @@ class CommandCompiledToolHostV1:
             (
                 candidate
                 for candidate in candidates
+        candidates = tuple(
+            plan
+            for plan in self.scientific_workflow_plans.values()
+            if predicate is None or predicate(plan)
+        )
                 if any(node.node_id == node_id for node in candidate.nodes)
             ),
             None,
@@ -12791,12 +12803,23 @@ class CommandCompiledToolHostV1:
         run here, and a refusal names what it refused.
         """
 
-        plans = [
-            plan
-            for plan in self.scientific_workflow_plans.values()
-            if plan.nodes
-        ]
-        plan = plans[-1]
+        # The plan the session is standing on, through the one function
+        # every reader shares. This was
+        # `[p for p in ...values() if p.nodes][-1]`, a *fourth* reader
+        # resolving the question by insertion order -- and dd29df23
+        # repaired only the three spelled `tuple(...)[-1]`, so the
+        # eligibility loop below judged the plan a restoring amendment
+        # had abandoned while `build_execution_review` built the
+        # reviewed packet from the restored one. Proven by probe
+        # (2026-09-11): after A -> B -> A the gate answered B and the
+        # packet answered A, which puts an unchecked node into the
+        # single human decision.
+        plan = self._current_scientific_plan()
+        if plan is None or not plan.nodes:
+            raise ContractError(
+                "execution review requires a scientific workflow with "
+                "at least one node"
+            )
         ineligible = []
         for node in plan.nodes:
             reason = self.execution_review_ineligibility_reason(
@@ -13558,13 +13581,14 @@ class CommandCompiledToolHostV1:
         if envelope is None:
             raise ContractError("workflow has no approval or bounded envelope")
         self._require_bounded_launch_budget()
-        plans = tuple(
-            plan
-            for plan in self.scientific_workflow_plans.values()
-            if any(item.node_id == node_id for item in plan.nodes)
-            and (not plan_sha256 or plan.plan_sha256 == plan_sha256)
-        )
-        if not plans:
+
+        def _carries_node(candidate) -> bool:
+            return any(
+                item.node_id == node_id for item in candidate.nodes
+            ) and (not plan_sha256 or candidate.plan_sha256 == plan_sha256)
+
+        plan = self._current_scientific_plan(predicate=_carries_node)
+        if plan is None:
             raise ContractError(
                 "bounded execution requires a current scientific workflow "
                 "containing the requested node"
@@ -13573,7 +13597,16 @@ class CommandCompiledToolHostV1:
         # then require its own materialization.  Falling back to an older plan
         # with the same node name is what turned a missing identity/preparation
         # step in an edge-free diagnostic into an unrelated future-edge error.
-        plan = plans[-1]
+        #
+        # "The current exact plan" was implemented as `plans[-1]` --
+        # insertion order over a digest-keyed dict -- so the comment
+        # stated the requirement and the code approximated it. After an
+        # amendment restores an earlier plan, the restored key keeps its
+        # original position and this, the bounded *execution admission*
+        # path, would admit the node against the plan the session
+        # abandoned. Resolve through the one owner, and keep the
+        # filtered fallback for a host restored without the pointer.
+
         frozen = self.frozen_workflow_approval
         if frozen is not None:
             if frozen.plan_sha256 == plan.plan_sha256:
