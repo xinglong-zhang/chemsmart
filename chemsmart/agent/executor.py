@@ -991,6 +991,10 @@ class ApprovedWorkflowExecutor:
                     "use_weighted_mass": node.use_weighted_mass,
                     "frequency_scale_factor": node.frequency_scale_factor,
                 }
+                if int(getattr(node, "reaction_coordinate_mode", 0) or 0):
+                    arguments["reaction_coordinate_mode"] = int(
+                        node.reaction_coordinate_mode
+                    )
                 if node.concentration_mol_l is not None:
                     arguments["concentration_mol_l"] = node.concentration_mol_l
                 if node.entropy_cutoff_cm1 is not None:

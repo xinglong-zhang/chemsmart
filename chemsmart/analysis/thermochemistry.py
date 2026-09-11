@@ -89,6 +89,7 @@ class Thermochemistry:
         frequency_scale_factor=1.0,
         energy_units="hartree",
         check_imaginary_frequencies=True,
+        reaction_coordinate_mode=0,
         near_zero_frequency_tolerance_cm=None,
         rotational_mode="physical",
         **kwargs,
@@ -101,6 +102,18 @@ class Thermochemistry:
             self.molecule = Molecule.from_filepath(filename)
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
+        # Which printed mode the session says is the reaction coordinate,
+        # 1-based, 0 meaning "the first genuine imaginary one".
+        #
+        # The public schema has promised a mode *index* since it was
+        # added, and the analysis layer used it as a boolean: non-zero
+        # switched the strict frequency check off and the index was
+        # discarded, so the permissive branch below always removed
+        # `(genuine or all)[0]`. Selections 1 and 2 produced identical
+        # quantity vectors and identical receipt hashes. A selection that
+        # is secretly a flag tells a session it chose something it did
+        # not choose, on a structure with six imaginary modes.
+        self.reaction_coordinate_mode = int(reaction_coordinate_mode or 0)
         self.near_zero_frequency_tolerance_cm = (
             NEAR_ZERO_FREQUENCY_TOLERANCE_CM
             if near_zero_frequency_tolerance_cm is None
@@ -529,9 +542,26 @@ class Thermochemistry:
             # Permissive mode:
             # remove first imaginary frequency as reaction coordinate;
             # replace all remaining imaginary frequencies by cutoff.
-            reaction_coordinate_index = (
-                genuine_imaginary_indices or imaginary_indices
-            )[0]
+            available = genuine_imaginary_indices or imaginary_indices
+            if self.reaction_coordinate_mode:
+                wanted = self.reaction_coordinate_mode - 1
+                if wanted < 0 or wanted >= len(frequencies):
+                    raise ValueError(
+                        f"reaction_coordinate_mode "
+                        f"{self.reaction_coordinate_mode} is not a mode "
+                        f"this result printed ({len(frequencies)} modes)"
+                    )
+                if wanted not in available:
+                    raise ValueError(
+                        f"reaction_coordinate_mode "
+                        f"{self.reaction_coordinate_mode} names a real "
+                        "mode; the reaction coordinate must be one of the "
+                        "imaginary modes this result printed, which are "
+                        f"{[index + 1 for index in available]}"
+                    )
+                reaction_coordinate_index = wanted
+            else:
+                reaction_coordinate_index = available[0]
 
             return [
                 freq_cutoff if freq < 0.0 else freq

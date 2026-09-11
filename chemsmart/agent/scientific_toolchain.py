@@ -436,9 +436,18 @@ class AnalysisNodeIntentV1:
     alpha: int = 4
     use_weighted_mass: bool = False
     frequency_scale_factor: float = 1.0
+    #: Which printed mode the session names as the reaction coordinate,
+    #: 1-based. Absent from this schema entirely, so the selection could
+    #: not travel an approved DAG: it was reachable only from a direct
+    #: analysis call, and the executor had nothing to forward.
+    reaction_coordinate_mode: int = 0
 
     def __post_init__(self) -> None:
         _identifier(self.node_id, "analysis node_id")
+        if int(self.reaction_coordinate_mode or 0) < 0:
+            raise ContractError(
+                "reaction_coordinate_mode is a 1-based mode index"
+            )
         if self.analysis_kind not in ANALYSIS_INTENT_KINDS:
             raise ScientificToolchainContractError(
                 "unsupported analysis intent kind"

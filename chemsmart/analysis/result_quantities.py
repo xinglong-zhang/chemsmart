@@ -780,6 +780,11 @@ class ThermochemistryReceiptV1:
     receipt_sha256: str
     concentration_mol_l: float | None = None
     entropy_method: str = "rrho"
+    #: Which printed mode the session named as the reaction coordinate,
+    #: 1-based; 0 means the host removed the first genuine imaginary one.
+    #: The receipt carried no record of the selection, so two different
+    #: selections minted byte-identical receipts and a reader could not
+    #: ask which mode a free energy had been computed without.
     entropy_cutoff_cm1: float | None = None
     enthalpy_cutoff_cm1: float | None = None
     alpha: int = 4
@@ -818,16 +823,7 @@ class ThermochemistryReceiptV1:
             "assumptions": self.assumptions,
             "status": self.status,
         }
-        extended_body = {
-            **legacy_body,
-            "concentration_mol_l": self.concentration_mol_l,
-            "entropy_method": self.entropy_method,
-            "entropy_cutoff_cm1": self.entropy_cutoff_cm1,
-            "enthalpy_cutoff_cm1": self.enthalpy_cutoff_cm1,
-            "alpha": self.alpha,
-            "use_weighted_mass": self.use_weighted_mass,
-            "frequency_scale_factor": self.frequency_scale_factor,
-        }
+        extended_body = _extended_thermochemistry_body(legacy_body, self)
         extended_matches = self.receipt_sha256 == canonical_quantity_sha256(
             extended_body
         )
@@ -846,6 +842,42 @@ class ThermochemistryReceiptV1:
             raise QuantityContractError(
                 "thermochemistry receipt digest mismatch"
             )
+
+
+def _extended_thermochemistry_body(
+    legacy_body: Mapping[str, Any], controls: Any
+) -> dict[str, Any]:
+    """The digest body beyond the legacy contract, built in one place.
+
+    Two organs answer this question -- the mint and the receipt's own
+    revalidation -- so they call one function; they had already drifted
+    once, and the drift is only visible when a stored receipt is read
+    back.
+
+    Which vibrational mode was taken as the reaction coordinate is
+    deliberately *not* a key here, and not a field on the receipt. The
+    ``record`` a receipt event carries **is** this body, and the event
+    validator requires the two to hash alike, so a new key changes the
+    digest of every receipt already written to disk and the run streams
+    this laboratory has produced stop being evidence. The selection
+    rides ``assumptions`` instead, beside every other control that
+    changes what the numbers mean, and ``assumptions`` is inside this
+    body already: no mode selected leaves the digest exactly as history
+    recorded it, and two different selections still mint two different
+    receipts.
+    """
+
+    body = {
+        **legacy_body,
+        "concentration_mol_l": controls.concentration_mol_l,
+        "entropy_method": controls.entropy_method,
+        "entropy_cutoff_cm1": controls.entropy_cutoff_cm1,
+        "enthalpy_cutoff_cm1": controls.enthalpy_cutoff_cm1,
+        "alpha": controls.alpha,
+        "use_weighted_mass": controls.use_weighted_mass,
+        "frequency_scale_factor": controls.frequency_scale_factor,
+    }
+    return body
 
 
 def _validate_thermochemistry_controls(
@@ -1301,6 +1333,19 @@ def _thermochemistry_assumptions(
             "Truhlar quasi-harmonic vibrational entropy with frequencies "
             f"below {request.entropy_cutoff_cm1:g} cm^-1 raised to the cutoff"
         )
+    mode = int(getattr(request, "reaction_coordinate_mode", 0) or 0)
+    if mode:
+        # Which mode is the reaction coordinate is the scientist's
+        # judgement; that a judgement was made, and which way, is
+        # provenance the receipt owes its reader. It rides here rather
+        # than in a field of its own because ``assumptions`` is already
+        # inside the digest and inside the recorded record, so a
+        # selection changes the receipt without invalidating every
+        # receipt minted before the choice existed.
+        assumptions.append(
+            f"mode {mode} taken as the reaction coordinate and excluded "
+            "from the vibrational partition function"
+        )
     if request.enthalpy_cutoff_cm1 is not None:
         assumptions.append(
             "Head-Gordon quasi-RRHO vibrational enthalpy with "
@@ -1430,6 +1475,12 @@ def derive_result_thermochemistry(
         # permission bit: the default still refuses, because a saddle
         # nobody has characterised is a failed optimisation.
         check_imaginary_frequencies=not int(
+            getattr(request, "reaction_coordinate_mode", 0) or 0
+        ),
+        # The selection itself, not merely whether one was made. The
+        # index stopped here and the engine removed the first imaginary
+        # mode whatever the session named.
+        reaction_coordinate_mode=int(
             getattr(request, "reaction_coordinate_mode", 0) or 0
         ),
     )
@@ -1644,17 +1695,7 @@ def derive_result_thermochemistry(
         "status": "derived",
     }
     if not _uses_legacy_pyscf_thermochemistry_contract(request):
-        body.update(
-            {
-                "concentration_mol_l": request.concentration_mol_l,
-                "entropy_method": request.entropy_method,
-                "entropy_cutoff_cm1": request.entropy_cutoff_cm1,
-                "enthalpy_cutoff_cm1": request.enthalpy_cutoff_cm1,
-                "alpha": request.alpha,
-                "use_weighted_mass": request.use_weighted_mass,
-                "frequency_scale_factor": request.frequency_scale_factor,
-            }
-        )
+        body = _extended_thermochemistry_body(body, request)
     return ThermochemistryReceiptV1(
         **body, receipt_sha256=canonical_quantity_sha256(body)
     )
