@@ -4600,3 +4600,63 @@ class TestThermochemistryCLIFolderOptions:
             for call in mock_from_filename.call_args_list
         ]
         assert xtb_output in discovered_files
+
+
+class TestNamedReactionCoordinate:
+    """The permissive branch removes the mode the session named.
+
+    ``reaction_coordinate_mode`` was declared a 1-based index and used as
+    a boolean, so the branch always removed ``(genuine or all)[0]`` and
+    two different selections produced one answer.
+    """
+
+    def test_a_named_mode_is_the_one_removed(self, make_thermochemistry_mock):
+        mock = make_thermochemistry_mock(
+            vibrational_frequencies=[-300.0, -200.0, -100.0, 500.0],
+            jobtype="ts",
+            check_imaginary_frequencies=False,
+            reaction_coordinate_mode=2,
+        )
+        result = Thermochemistry.cleaned_frequencies.fget(mock)
+        # Mode 2 (-200) leaves; the other two imaginary modes are raised
+        # to the cutoff, which is why the *quantities* cannot tell two
+        # selections apart on such a structure.
+        assert result == [100.0, 100.0, 500.0]
+
+    def test_the_default_still_removes_the_first(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
+            vibrational_frequencies=[-300.0, -200.0, -100.0, 500.0],
+            jobtype="ts",
+            check_imaginary_frequencies=False,
+        )
+        assert Thermochemistry.cleaned_frequencies.fget(mock) == [
+            100.0,
+            100.0,
+            500.0,
+        ]
+
+    def test_a_real_mode_is_refused_naming_the_imaginary_ones(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
+            vibrational_frequencies=[-300.0, -200.0, 500.0],
+            jobtype="ts",
+            check_imaginary_frequencies=False,
+            reaction_coordinate_mode=3,
+        )
+        with pytest.raises(ValueError, match=r"names a real mode"):
+            Thermochemistry.cleaned_frequencies.fget(mock)
+
+    def test_a_mode_the_result_never_printed_is_refused(
+        self, make_thermochemistry_mock
+    ):
+        mock = make_thermochemistry_mock(
+            vibrational_frequencies=[-300.0, -200.0, 500.0],
+            jobtype="ts",
+            check_imaginary_frequencies=False,
+            reaction_coordinate_mode=9,
+        )
+        with pytest.raises(ValueError, match="is not a mode"):
+            Thermochemistry.cleaned_frequencies.fget(mock)

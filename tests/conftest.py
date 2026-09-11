@@ -58,6 +58,7 @@ def make_thermochemistry_mock():
         h_freq_cutoff_cm=None,
         rotational_mode="gaussian",
         near_zero_frequency_tolerance_cm=NEAR_ZERO_FREQUENCY_TOLERANCE_CM,
+        reaction_coordinate_mode=0,
     ):
         mock = MagicMock(spec=Thermochemistry)
         mock.vibrational_frequencies = vibrational_frequencies
@@ -71,6 +72,10 @@ def make_thermochemistry_mock():
         mock.near_zero_frequency_tolerance_cm = (
             near_zero_frequency_tolerance_cm
         )
+        # Which printed mode the session named as the reaction
+        # coordinate, 1-based; 0 means the first genuine imaginary one,
+        # which is what every permissive expectation below pins.
+        mock.reaction_coordinate_mode = reaction_coordinate_mode
         mock.filename = "dummy.log"
         mock.target = "dummy.log"
         return mock
