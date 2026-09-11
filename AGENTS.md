@@ -635,13 +635,30 @@ stopped the moment ORCA's ``INPUT FILE`` banner appears or a 20 s cap is
 reached, never inside a scheduler allocation, minting a typed receipt --
 passed, aborted, or not run, with ORCA's own lines -- that rides an
 ``input_check_probed`` event marked uncharged, joins the node's
-observations on the review, and is counted in the wake. It is never an
-engine call, because engine calls derive from execution receipts alone,
-and it never refuses: a green preview is ChemSmart's compile and the
-probe is ORCA's check, its word is an observation beside the node, and
-the decision stays the human's. Two live cycles had died at that check
-under green previews, one per rule ORCA states in its first tenth of a
-second.
+observations on the review **and the compile reply the model reads**,
+and reaches the wake with ORCA's own lines rather than only a count. It
+is never an engine call, because engine calls derive from execution
+receipts alone. Two live cycles had died at that check under green
+previews, one per rule ORCA states in its first tenth of a second.
+
+What the probe refuses is exactly one thing: spending an engine call on
+bytes the program has already rejected. It never refuses on scientific
+grounds -- a green preview is ChemSmart's compile, the probe is ORCA's
+check, and which of the legal repairs to make is a method decision the
+session owns. The sentence this replaces said the probe never refuses at
+all, because the decision stays the human's; that was written for the
+case where a human reads the review, and it was silently generalised to
+a goal's standing approval, where no human is present at that moment. So
+the probe's word had no consumer in the authority chain, and eight
+engine calls across two windows went to inputs whose abort the host had
+already recorded, for free, in a tenth of a second. A node is therefore
+not launched while the last check on its exact input digest aborted, and
+the refusal quotes the program's lines. The override is to re-probe:
+repair the field the program named and compile the node again, which
+mints a new check on the new bytes -- so an abort against an executable
+or environment that has since changed is superseded rather than
+permanent. Held by
+``tests/agent/test_an_input_check_probe_is_orcas_word_and_costs_nothing.py``.
 
 Runtime orchestration is provider-neutral. This release contains registered
 adapters for Alibaba Token Plan, DeepSeek, and OpenAI; an Anthropic profile

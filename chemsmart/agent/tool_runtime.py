@@ -8622,7 +8622,17 @@ class CommandCompiledToolHostV1:
                     or 0
                 ),
                 geometry=_geometry_for_observation(input_artifact),
-            ),
+            )
+            # The program's own word on the bytes just written, in the
+            # reply the model reads. It reached only the review page --
+            # which under a standing approval nobody reads -- so a
+            # 0.107 s uncharged probe that printed `RIJCOSX` by name
+            # informed no decision, eight nodes launched over aborted
+            # checks across two windows, and both cycles re-learned the
+            # identical `engine_lines` from the dead runs. Verified:
+            # po3-r18 cycle 2's model-visible transcript contains zero
+            # occurrences of `RIJCOSX` and zero of `aborting the run`.
+            + self._probe_observations_for(node.node_id),
             "next_action": (
                 "inspect the workflow frontier"
                 if preview_status == "previewed"
@@ -9757,6 +9767,21 @@ class CommandCompiledToolHostV1:
         )
         return receipt
 
+    def _probe_observations_for(self, node_id: str) -> tuple[str, ...]:
+        """The input-check probe's own lines for one node, if it ran.
+
+        One accessor, so the compile reply, the frontier and the review
+        all carry the same words instead of the review carrying them
+        alone.
+        """
+
+        probe = getattr(self, "_input_check_by_node", {}).get(node_id)
+        if probe is None:
+            return ()
+        from chemsmart.agent.input_check import probe_observation_lines
+
+        return tuple(probe_observation_lines(probe))
+
     def _probe_input_check(
         self,
         turn_id: str,
@@ -9876,6 +9901,11 @@ class CommandCompiledToolHostV1:
         # restored for preflight is built without running __init__, so
         # the pointer can be absent and insertion order is then all
         # there is.
+        candidates = tuple(
+            plan
+            for plan in self.scientific_workflow_plans.values()
+            if predicate is None or predicate(plan)
+        )
         current = self.scientific_workflow_plans.get(
             getattr(self, "current_scientific_plan_sha256", "")
         )
@@ -9906,11 +9936,6 @@ class CommandCompiledToolHostV1:
             (
                 candidate
                 for candidate in candidates
-        candidates = tuple(
-            plan
-            for plan in self.scientific_workflow_plans.values()
-            if predicate is None or predicate(plan)
-        )
                 if any(node.node_id == node_id for node in candidate.nodes)
             ),
             None,

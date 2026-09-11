@@ -1215,10 +1215,19 @@ def _session_dispositions(events_path: Path | None) -> tuple[dict, ...]:
     return tuple(dispositions)
 
 
-def _session_input_checks(events_path: Path | None) -> dict[str, int]:
-    """How the session's input-check probes concluded, by status."""
+def _session_input_checks(events_path: Path | None) -> dict[str, Any]:
+    """How the session's input-check probes concluded, and why.
 
-    counts = {"passed": 0, "aborted": 0, "not_run": 0}
+    The counts alone were the whole row, and that is half a repair:
+    843e04f2 restored the *number* to the ledger and left the *reason*
+    behind, so a wake could say `aborted: 2` without saying what the
+    program objected to. The engine's own lines are what a next cycle
+    can act on -- ORCA names the three legal keywords in its abort --
+    and re-learning them from a dead run costs an engine call per node.
+    """
+
+    counts: dict[str, Any] = {"passed": 0, "aborted": 0, "not_run": 0}
+    reasons: dict[str, list[str]] = {}
     if events_path is None:
         return counts
     try:
@@ -1232,9 +1241,21 @@ def _session_input_checks(events_path: Path | None) -> dict[str, int]:
             continue
         if event.get("kind") != "input_check_probed":
             continue
-        status = str((event.get("payload") or {}).get("status") or "")
+        payload = event.get("payload") or {}
+        status = str(payload.get("status") or "")
         if status in counts:
             counts[status] += 1
+        if status == "aborted":
+            node = str(payload.get("node_id") or "")
+            lines = [str(line) for line in (payload.get("engine_lines") or ())]
+            if lines:
+                reasons[node] = lines[:6]
+    if reasons:
+        # Keyed by node, because the repair is per node and the model
+        # needs to know which input the program refused.
+        counts["aborted_engine_lines"] = {
+            node: tuple(lines) for node, lines in sorted(reasons.items())
+        }
     return counts
 
 
@@ -1282,12 +1303,24 @@ def _recorded_input_checks(ledger: GoalLedger) -> dict[str, Any]:
     charged: engine calls derive from execution receipts alone."""
 
     total = {"passed": 0, "aborted": 0, "not_run": 0}
+    #: Why each abort happened, in the program's own words, carried into
+    #: the wake beside the count. A wake that says `aborted: 2` and
+    #: nothing else tells the next cycle that something is wrong and not
+    #: what -- so the diagnosis was re-bought from the dead run at one
+    #: engine call per node, twice, in two windows.
+    reasons: dict[str, tuple[str, ...]] = {}
     for entry in ledger.entries():
         if entry["kind"] != "input_checks_probed":
             continue
+        payload = entry["payload"]
         for key in total:
-            total[key] += int(entry["payload"].get(key) or 0)
-    return {**total, "charged": 0}
+            total[key] += int(payload.get(key) or 0)
+        for node, lines in (payload.get("aborted_engine_lines") or {}).items():
+            reasons[str(node)] = tuple(str(line) for line in lines)
+    summary: dict[str, Any] = {**total, "charged": 0}
+    if reasons:
+        summary["aborted_engine_lines"] = reasons
+    return summary
 
 
 def _session_approaches(events_path: Path | None) -> tuple[dict, ...]:

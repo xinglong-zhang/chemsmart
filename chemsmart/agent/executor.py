@@ -438,6 +438,7 @@ class ApprovedWorkflowExecutor:
             invocation_sha256=invocation_sha256,
             review=review,
         )
+        self._refuse_launch_the_program_already_refused(node_id)
         if self._bundle_claimed:
             return
         if self.claim_workspace_bundle:
@@ -465,6 +466,61 @@ class ApprovedWorkflowExecutor:
                     run_event_store=self.host.event_store,
                 )
         self._bundle_claimed = True
+
+    def _refuse_launch_the_program_already_refused(self, node_id: str) -> None:
+        """Do not spend an engine call on bytes the program rejected.
+
+        The input-check probe is an observation and never a verdict,
+        because the charter reserves the decision for the human reading
+        the review. Under a goal's standing approval there is no human at
+        this moment, so that category of host fact had no consumer at
+        all: ino3-r17 launched six nodes over six aborted checks and all
+        six died; po3-r18 launched two and both died with the error the
+        probe had printed, verbatim, 0.107 s and no charge earlier.
+        Eight engine calls across two windows.
+
+        This costs no scientific freedom. An aborted input check is not
+        a judgement about chemistry -- it is the program refusing its own
+        input, in its own words, on these exact bytes. What it costs is
+        the ability to spend the budget the human granted on a run that
+        cannot start.
+
+        The override is to re-probe: repair the field the program named,
+        recompile, and the new input gets its own check. That keeps the
+        model sovereign over the repair -- ORCA offers three legal
+        keywords and choosing among them is a method decision -- and it
+        is environment-safe, because a probe aborted on an executable
+        that has since changed is superseded by the new one rather than
+        standing forever.
+        """
+
+        observations = tuple(
+            getattr(self.execution_bundle, "node_observations", {}).get(
+                node_id, ()
+            )
+            or ()
+        )
+        aborted = [
+            str(line)
+            for line in observations
+            if str(line).startswith("input-check probe: aborted")
+        ]
+        if not aborted:
+            return
+        engine_lines = [
+            str(line).strip()
+            for line in observations
+            if str(line).lstrip().startswith("orca:")
+        ]
+        detail = "; ".join(engine_lines[:4]) or aborted[0]
+        raise ContractError(
+            f"node {node_id!r} is not launched: the program's own input "
+            f"check refused these exact bytes -- {detail}. This is the "
+            "program's word on its own input, not a judgement about the "
+            "chemistry. Repair the field it names and compile the node "
+            "again; the new input is probed on its own, and a passing "
+            "check admits the launch."
+        )
 
     def _input_artifact_id(self, binding: Any) -> str:
         if binding.input_mode == "initial":
