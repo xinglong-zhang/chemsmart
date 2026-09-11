@@ -8213,6 +8213,28 @@ class WorkflowExecutionApprovalBundleV1:
             raise ContractError("execution bundle has no unique node review")
         return matches[0]
 
+    def node_observation_lines(self, node_id: str) -> tuple[str, ...]:
+        """What the host observed about one node, as the lines it wrote.
+
+        ``node_observations`` is a tuple of ``{"node_id", "observations"}``
+        records, because it is displayed as rows and rides a canonical
+        body. A consumer that wants one node's lines therefore has to
+        reduce that tuple, and the first consumer to want them reduced it
+        by calling ``.get`` on it -- a mapping's method on a tuple -- which
+        raised ``AttributeError`` inside the executor's launch check and
+        killed a goal unsettled on the first live case after the repair
+        shipped (sm1-formaldehyde, 2026-09-11). The shape belongs to this
+        class, so the reduction lives here and every consumer asks one
+        function.
+        """
+
+        lines: list[str] = []
+        for record in self.node_observations:
+            if str(record.get("node_id", "")) != str(node_id):
+                continue
+            lines.extend(str(line) for line in record.get("observations", ()))
+        return tuple(lines)
+
 
 def approve_workflow_execution_review(
     review: WorkflowExecutionReviewV1,

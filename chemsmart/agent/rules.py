@@ -137,6 +137,12 @@ CODE_GATES: tuple[tuple[str, str], ...] = (
         "that rung per capability, rather than carrying one asserted "
         "string that cannot report unwired",
     ),
+    (
+        "executor.launch_refuses_a_refused_input",
+        "a node whose last input check on its exact bytes aborted is not "
+        "launched; the refusal quotes the program's own lines and the "
+        "route out is to repair the field and compile again",
+    ),
 )
 
 

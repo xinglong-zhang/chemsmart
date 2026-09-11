@@ -657,8 +657,14 @@ the refusal quotes the program's lines. The override is to re-probe:
 repair the field the program named and compile the node again, which
 mints a new check on the new bytes -- so an abort against an executable
 or environment that has since changed is superseded rather than
-permanent. Held by
-``tests/agent/test_an_input_check_probe_is_orcas_word_and_costs_nothing.py``.
+permanent. The probe's own receipt and its uncharged event are held by
+``tests/agent/test_an_input_check_probe_is_orcas_word_and_costs_nothing.py``;
+the launch refusal is held by
+``tests/agent/test_a_tuple_field_is_never_read_as_a_mapping.py``, which
+exists because the refusal first shipped with **no** test at all and
+read one node's observations by calling a mapping's method on a tuple --
+so the first goal to reach a launch after it died with an
+``AttributeError`` inside the check and settled nothing.
 
 Runtime orchestration is provider-neutral. This release contains registered
 adapters for Alibaba Token Plan, DeepSeek, and OpenAI; an Anthropic profile

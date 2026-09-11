@@ -494,12 +494,10 @@ class ApprovedWorkflowExecutor:
         standing forever.
         """
 
-        observations = tuple(
-            getattr(self.execution_bundle, "node_observations", {}).get(
-                node_id, ()
-            )
-            or ()
-        )
+        reader = getattr(self.execution_bundle, "node_observation_lines", None)
+        if not callable(reader):
+            return
+        observations = reader(node_id)
         aborted = [
             str(line)
             for line in observations
