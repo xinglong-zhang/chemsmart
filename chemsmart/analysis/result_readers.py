@@ -84,6 +84,7 @@ SELECTOR_UNITS = {
     "vpt2_fundamental_frequencies": "cm^-1",
     "vpt2_zero_point_rovibrational_energy": "cm^-1",
     "positions": "Angstrom",
+    "reached_positions": "Angstrom",
     "connectivity": "",
     "symbols": "",
     "charge": "",
@@ -555,6 +556,28 @@ def _xyz_trajectory_connectivity_changed(output: Any) -> int:
     )
 
 
+#: The molecular states one completed result can carry.
+#:
+#: A single ORCA output holds several: the geometry it was handed, the
+#: geometry the optimiser reached, the geometry the Hessian was computed
+#: at, and every frame in between. Quantities read from different ones
+#: are not interchangeable -- on a live unconverged OptTS the supplied
+#: and reached structures sat 1.23 A apart with energies 182.2 kcal/mol
+#: apart -- so a selector says which it reads and a consumer asks for
+#: the role it needs.
+#:
+#: ``stateless`` is the honest answer for a value no structure changes:
+#: the method name, the solvation model, the atom symbols.
+STRUCTURAL_STATES = (
+    "as_supplied",
+    "as_reached",
+    "thermochemistry_reference",
+    "trajectory_endpoint",
+    "scan_point",
+    "stateless",
+)
+
+
 @dataclass(frozen=True)
 class ResultReaderV1:
     """How one program's result file answers the shared selector vocabulary."""
@@ -573,6 +596,28 @@ class ResultReaderV1:
     #: chosen method/settings emit them. Missing coverage means unknown, never
     #: that the job produces no quantities.
     jobtype_selectors: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    #: Which structural state each selector reads, as
+    #: ``((selector, state), ...)``. A selector absent from this tuple is
+    #: ``stateless``.
+    #:
+    #: One ORCA result carries several molecular states, and two
+    #: selectors of the same result were serving different ones under
+    #: one receipt. Measured on a live unconverged ``OptTS``
+    #: (po3-r18 ``ts-ester-c4``, 2026-09-11): ``positions`` returns
+    #: ``thermochemistry_molecule``, the geometry the Hessian was
+    #: computed at, while ``energy`` returns the last of a hundred
+    #: printed ``FINAL SINGLE POINT ENERGY`` lines. The two describe
+    #: structures **1.231588 A** apart whose energies differ by
+    #: **182.2 kcal/mol**, and nothing on the receipt said which
+    #: structure either belonged to. ``build_reached_geometry`` then
+    #: asked for ``positions`` and wrote "the structure orca reached"
+    #: onto the *input* coordinates, so the recovery route the repair
+    #: menu offers for a non-converged run returned the seed.
+    #:
+    #: Which state a parser reads is a fact about the parser, not a
+    #: chemical judgement. Declaring it lets a consumer ask for the role
+    #: it needs and be refused rather than silently served another.
+    selector_structural_states: tuple[tuple[str, str], ...] = ()
     #: Native program outputs must prove normal termination.  A standalone
     #: geometry artifact is data rather than an engine run, so that format can
     #: opt out while retaining the same typed quantity path.
@@ -597,10 +642,78 @@ class ResultReaderV1:
                     f"{jobtype} selector declaration is not implemented: "
                     f"{sorted(undeclared)}"
                 )
+        named = tuple(item[0] for item in self.selector_structural_states)
+        if named != tuple(sorted(set(named))):
+            raise ValueError(
+                "selector structural states must be sorted and unique"
+            )
+        for selector, state in self.selector_structural_states:
+            if selector not in self.selectors:
+                raise ValueError(
+                    f"structural state declared for {selector!r}, which "
+                    "this reader does not implement"
+                )
+            if state not in STRUCTURAL_STATES:
+                raise ValueError(
+                    f"{selector}: {state!r} is not one of "
+                    f"{STRUCTURAL_STATES}"
+                )
 
     @property
     def selectors(self) -> frozenset[str]:
         return frozenset(self.accessors)
+
+    def structural_state(self, selector: str) -> str:
+        """Which molecular state this selector's value belongs to."""
+
+        for name, state in self.selector_structural_states:
+            if name == selector:
+                return state
+        return "stateless"
+
+    def selectors_in_state(self, state: str) -> tuple[str, ...]:
+        """Every selector this reader serves for one structural state."""
+
+        return tuple(
+            sorted(
+                name
+                for name in self.accessors
+                if self.structural_state(name) == state
+            )
+        )
+
+    def selectors_in_state_for_output(
+        self, output: Any, state: str
+    ) -> tuple[str, ...]:
+        """Selectors in one structural state that *this result* declares.
+
+        ``selectors_in_state`` answers for the program; a jobtype
+        declaration is the semantic claim about what a value means for
+        the job that actually ran, and the two questions had two
+        answers.  A host organ asking for a role must get the
+        intersection, or the role is served by a selector nobody audited
+        for this jobtype: ORCA's IRC log prints only its starting
+        structure, so no selector there can honestly answer
+        ``as_reached``, and the recovery route that asked the program-
+        level question alone would have been handed the transition state
+        labelled as the structure the path reached -- which is the defect
+        the IRC selector restriction exists to prevent, arriving through
+        a different door.
+
+        A reader that declares no jobtype coverage at all (the xyz
+        reader over registered geometry artifacts) is ungated here for
+        the same reason it is ungated at extraction: its values carry no
+        jobtype semantics to misread.
+        """
+
+        named = self.selectors_in_state(state)
+        if not self.jobtype_selectors:
+            return named
+        jobtype = str(getattr(output, "jobtype", "") or "").strip().lower()
+        declared = self.selectors_for_jobtype(jobtype)
+        if declared is None:
+            return ()
+        return tuple(name for name in named if name in declared)
 
     def selectors_for_jobtype(self, jobtype: str) -> tuple[str, ...] | None:
         """Return exact declared coverage, or ``None`` when it is unknown."""
@@ -983,6 +1096,37 @@ def _orca_positions(output: Any) -> list[list[float]]:
     return [[float(value) for value in row] for row in molecule.positions]
 
 
+def _orca_reached_positions(output: Any) -> list[list[float]]:
+    """The structure the run actually reached, not the one it was handed.
+
+    ``positions`` reads ``thermochemistry_molecule`` -- the geometry the
+    Hessian was computed at, which for an ``OptTS Freq`` is step 0,
+    because ChemSmart's ORCA ts writer computes the Hessian first. On a
+    live unconverged saddle search the two sat **1.231588 A** apart, and
+    ``build_reached_geometry`` -- the recovery route the repair menu
+    offers for exactly that ending -- asked for ``positions`` and wrote
+    "the structure orca reached" onto the seed coordinates. A session
+    caught it by measuring the bytes and recorded the route as spent.
+
+    ``output.molecule`` is the last printed structure, which is what
+    "reached" means for an optimiser that ran and did not converge.
+    """
+
+    molecule = output.molecule
+    if isinstance(molecule, (list, tuple)):
+        if not molecule:
+            raise MissingQuantityError(
+                "this ORCA result prints no structure to have reached"
+            )
+        molecule = molecule[-1]
+    positions = getattr(molecule, "positions", None)
+    if positions is None:
+        raise MissingQuantityError(
+            "this ORCA result prints no reached structure"
+        )
+    return [[float(value) for value in row] for row in positions]
+
+
 def _orca_symbols(output: Any) -> list[str]:
     return [
         str(item) for item in output.thermochemistry_molecule.chemical_symbols
@@ -1249,6 +1393,7 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
                 output.entropy_times_temperature
             ),
             "positions": _orca_positions,
+            "reached_positions": _orca_reached_positions,
             "connectivity": lambda output: _connectivity_matrix(
                 output.thermochemistry_molecule
             ),
@@ -1921,6 +2066,50 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         # SCF converges -- ``sp``, ``opt``, ``ts`` -- and deliberately not on
         # ``td``, where the ground-state orbitals are not what the job was run
         # to answer.
+        # What each selector's value belongs to. Read from the
+        # accessors, not asserted: `_orca_positions` calls
+        # `output.thermochemistry_molecule`, which is the geometry the
+        # Hessian was computed at -- step 0 for an `OptTS Freq`, because
+        # ChemSmart's own ORCA ts writer computes the Hessian first. So
+        # `positions` is `thermochemistry_reference`, and the structure
+        # the optimiser actually reached is `output.molecule`, which the
+        # four `trajectory_*` accessors expose and which no jobtype
+        # declared.
+        selector_structural_states=(
+            ("connectivity", "thermochemistry_reference"),
+            ("correlation_energy", "as_reached"),
+            ("dispersion_energy", "as_reached"),
+            ("energy", "as_reached"),
+            ("entropy_times_temperature", "thermochemistry_reference"),
+            ("gibbs_free_energy", "thermochemistry_reference"),
+            ("positions", "thermochemistry_reference"),
+            ("reached_positions", "as_reached"),
+            ("reference_energy", "as_reached"),
+            ("scan_coordinate_values", "scan_point"),
+            ("scan_energies", "scan_point"),
+            ("scan_point_indices", "scan_point"),
+            ("scf_energy", "as_reached"),
+            ("solvation_cavity_surface_area", "as_reached"),
+            ("solvation_electrostatic_energy", "as_reached"),
+            ("solvation_nonelectrostatic_energy", "as_reached"),
+            ("trajectory_connectivity_changed", "trajectory_endpoint"),
+            ("trajectory_end_connectivity", "trajectory_endpoint"),
+            ("trajectory_end_positions", "trajectory_endpoint"),
+            ("trajectory_start_connectivity", "as_supplied"),
+            ("trajectory_start_positions", "as_supplied"),
+            ("vibrational_frequencies", "thermochemistry_reference"),
+            (
+                "vibrational_mode_atom_participation",
+                "thermochemistry_reference",
+            ),
+            ("vibrational_mode_degeneracy_group", "thermochemistry_reference"),
+            ("vpt2_fundamental_frequencies", "thermochemistry_reference"),
+            ("vpt2_harmonic_frequencies", "thermochemistry_reference"),
+            (
+                "vpt2_zero_point_rovibrational_energy",
+                "thermochemistry_reference",
+            ),
+        ),
         jobtype_selectors=(
             (
                 "freq",
@@ -2044,6 +2233,15 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "mulliken_atomic_spin_populations",
                     "multiplicity",
                     "positions",
+                    # An optimiser that ran and stopped prints its
+                    # last structure; that is what "reached" means,
+                    # and it is not what ``positions`` answers.  Not
+                    # declared for ``irc`` (the log prints only the
+                    # starting point), ``scan`` (the last printed
+                    # structure is the last scan point, a different
+                    # state), or the fixed-geometry jobtypes, where
+                    # there is no second structure to distinguish.
+                    "reached_positions",
                     "reference_energy",
                     "scf_energy",
                     "solvation_cavity_surface_area",
@@ -2220,6 +2418,15 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "mulliken_atomic_spin_populations",
                     "multiplicity",
                     "positions",
+                    # An optimiser that ran and stopped prints its
+                    # last structure; that is what "reached" means,
+                    # and it is not what ``positions`` answers.  Not
+                    # declared for ``irc`` (the log prints only the
+                    # starting point), ``scan`` (the last printed
+                    # structure is the last scan point, a different
+                    # state), or the fixed-geometry jobtypes, where
+                    # there is no second structure to distinguish.
+                    "reached_positions",
                     "reference_energy",
                     "scf_energy",
                     "solvation_cavity_surface_area",
@@ -2480,6 +2687,7 @@ _SELECTOR_DIMENSIONS = {
     "vpt2_fundamental_frequencies": "FREQUENCY",
     "vpt2_zero_point_rovibrational_energy": "FREQUENCY",
     "positions": "LENGTH",
+    "reached_positions": "LENGTH",
     "connectivity": "DIMENSIONLESS",
     "symbols": "DIMENSIONLESS",
     "charge": "DIMENSIONLESS",

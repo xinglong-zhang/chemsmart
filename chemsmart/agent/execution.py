@@ -4204,9 +4204,55 @@ def build_reached_geometry(
             f"{reader.artifact_kind} artifact, not {result_artifact.kind!r}"
         )
     output = reader.open_output(Path(result_artifact.path))
+    # Ask for the *role*, not an accessor name. This called
+    # `accessors["positions"]` directly, and for ORCA that selector
+    # reads `thermochemistry_molecule` -- the geometry the Hessian was
+    # computed at, which for an `OptTS Freq` is step 0. So the tool
+    # whose own receipt says "the structure orca reached" returned the
+    # structure it was handed: measured 1.231588 A away from the
+    # reached one on a live unconverged saddle search, and a session
+    # caught it by comparing the bytes and recorded the recovery route
+    # as spent. Selecting by declared structural state means a reader
+    # that cannot serve the role refuses instead of substituting.
+    # ...and ask it of *this result's own jobtype*, through the same
+    # declaration gate extraction uses, because a program-level state map
+    # would offer ORCA's `reached_positions` for an IRC log whose only
+    # printed structure is where the path started.
+    available = reader.selectors_in_state_for_output(output, "as_reached")
+    geometry_selectors = [
+        name
+        for name in available
+        if name in {"reached_positions", "trajectory_end_positions"}
+    ]
+    if not geometry_selectors:
+        jobtype = str(getattr(output, "jobtype", "") or "") or "unknown"
+        raise ContractError(
+            f"{normalized} declares no geometry selector in the "
+            f"'as_reached' structural state for jobtype {jobtype!r}, so "
+            "this host cannot say which structure the run reached. A "
+            "jobtype whose log prints one structure has no reached "
+            "geometry to carry forward; where a trajectory artifact "
+            "exists, bind it as a geometry artifact instead. Selectors "
+            f"this jobtype declares in a structural state: "
+            + (
+                ", ".join(
+                    f"{name} ({reader.structural_state(name)})"
+                    for name in sorted(
+                        reader.selectors_for_jobtype(
+                            str(getattr(output, "jobtype", "") or "")
+                            .strip()
+                            .lower()
+                        )
+                        or ()
+                    )
+                    if reader.structural_state(name) != "stateless"
+                )
+                or "none"
+            )
+        )
     try:
         positions = np.asarray(
-            reader.accessors["positions"](output), dtype=float
+            reader.accessors[geometry_selectors[0]](output), dtype=float
         )
         symbols = [str(item) for item in reader.accessors["symbols"](output)]
     except Exception as error:

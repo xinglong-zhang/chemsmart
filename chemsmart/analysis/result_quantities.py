@@ -171,6 +171,13 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         # at step 2 of 12 and no tool could state either number.
         "scan_steps_planned",
         "scan_steps_reached",
+        # The structure an optimiser stopped on, which is not the
+        # structure ``positions`` answers with: for an ORCA ``OptTS Freq``
+        # that one is the geometry the Hessian was computed at, step 0.
+        # Declared for the jobtypes that print a second structure, so a
+        # session diagnosing an unconverged run can read the one it
+        # reached instead of re-reading its own seed.
+        "reached_positions",
         # The continuum solvation decomposition ORCA prints whenever a
         # continuum model is active.  The names are scheme-neutral but the
         # meanings are not interchangeable between programs, so only ORCA
