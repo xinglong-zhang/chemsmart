@@ -1188,6 +1188,10 @@ class ORCAOutput(ORCAFileMixin):
 
         # Truncate energies/forces to match number of structures
         num_structures_to_use = min(num_structures, len(energies), len(forces))
+        if num_structures_to_use == 0:
+            # Coordinates without an energy or a gradient to pair with
+            # are not structures this reader can vouch for.
+            return []
         orientations = orientations[:num_structures_to_use]
         orientations_pbc = orientations_pbc[:num_structures_to_use]
         energies = energies[:num_structures_to_use]
@@ -1201,7 +1205,10 @@ class ORCAOutput(ORCAFileMixin):
             for idx in optimized_indices:
                 if 0 <= idx < len(is_optimized):
                     is_optimized[idx] = True
-        elif self.normal_termination:
+        elif self.normal_termination and self.converged is True:
+            # Normal termination is not convergence: an optimisation that
+            # stopped at its iteration cap terminated normally and its last
+            # structure is not an optimised one.
             is_optimized[-1] = True
 
         # Create molecule list
@@ -1260,7 +1267,9 @@ class ORCAOutput(ORCAFileMixin):
             last_mol.rotational_symmetry_number = (
                 self.rotational_symmetry_number
             )
-            last_mol.rotational_constants = self.rotational_constants_in_Hz
+            rotational_constants = self.rotational_constants_in_Hz
+            if rotational_constants is not None:
+                last_mol.rotational_constants = rotational_constants
 
         logger.debug(
             f"Total number of structures located: {len(all_structures)}"
@@ -1448,10 +1457,14 @@ class ORCAOutput(ORCAFileMixin):
         cb = CoordinateBlock(coordinate_block=coordinate_lines)
         return cb.molecule
 
-    @property
+    @cached_property
     def final_structure(self):
         """
         Get the final structure from the ORCA output file.
+
+        Cached: every reader of the structure -- the basin sensors, the
+        bootstrap scan, the selectors -- shares one read, and a fallback
+        that had to be paid is paid once.
         """
         if self.optimized_output_lines:
             return self.optimized_structure
@@ -1495,9 +1508,7 @@ class ORCAOutput(ORCAFileMixin):
         # if sp output file contains line read from .xyz
         for line in self.contents:
             if "coordinates will be read from file:" in line:
-                xyz_file = line.strip().split("file: ")[
-                    -1
-                ]  # the lines here have all been converted to lower case
+                xyz_file = line.strip().split("file: ")[-1]
                 xyz_filepath = os.path.join(self.folder, xyz_file)
                 assert os.path.exists(
                     xyz_filepath
@@ -1505,10 +1516,15 @@ class ORCAOutput(ORCAFileMixin):
                 if os.path.exists(xyz_filepath):
                     molecule = Molecule.from_filepath(filepath=xyz_filepath)
                     break
-            else:
-                # If molecule is not found, get it from
-                # the input lines in the output file
-                molecule = self._get_input_structure_in_output()
+        if molecule is None:
+            # No coordinates file was named: read the structure echoed in
+            # the input block, once. This fallback used to run once per
+            # line of the output (an ``else`` attached to the ``if`` inside
+            # the loop), a full-file regex scan each time: 37 minutes on a
+            # 135 078-line unconverged saddle search (REACH-1 po3,
+            # 2026-09-06), paid twice by the executor and once at every
+            # wake.
+            molecule = self._get_input_structure_in_output()
         return molecule
 
     def _get_input_structure_in_output(self):
@@ -2263,7 +2279,64 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements[colon + 1]
                     )
                 all_mulliken_atomic_charges.append(mulliken_atomic_charges)
-        return all_mulliken_atomic_charges[-1]
+        return (
+            all_mulliken_atomic_charges[-1]
+            if all_mulliken_atomic_charges
+            else None
+        )
+
+    def _atomic_spin_populations(self, header: str):
+        """Per-atom spin populations from a two-column population block.
+
+        ORCA prints one column for a closed shell and two for an open
+        shell, charge first and spin second. The charge parsers read the
+        first by position and dropped the second in the same loop; a
+        session asked how the spin splits between nickel and two sulfurs
+        while the answer sat one token to the right (NOVEL-3 ino3,
+        2026-09-05). Returns None when the block has no spin column.
+        """
+
+        blocks = []
+        for i, line_i in enumerate(self.contents):
+            if header in line_i and "SPIN POPULATIONS" in line_i:
+                populations = {}
+                for line_j in self.contents[i + 2 :]:
+                    if "Sum of atomic" in line_j or not line_j.strip():
+                        break
+                    line_j_elements = line_j.split()
+                    if len(line_j_elements) < 3:
+                        break
+                    element = line_j_elements[1].strip(":")
+                    element = p.to_element(element)
+                    element_num = f"{element}{line_j_elements[0]}"
+                    element_num_1idx = increment_numbers(element_num, 1)
+                    colon = next(
+                        (
+                            index
+                            for index, token in enumerate(line_j_elements)
+                            if token.endswith(":")
+                        ),
+                        None,
+                    )
+                    if colon is None or len(line_j_elements) <= colon + 2:
+                        return None
+                    populations[element_num_1idx] = float(
+                        line_j_elements[colon + 2]
+                    )
+                blocks.append(populations)
+        return blocks[-1] if blocks else None
+
+    @property
+    def mulliken_atomic_spin_populations(self):
+        """Mulliken spin populations per atom (open shells only), 1-indexed."""
+
+        return self._atomic_spin_populations("MULLIKEN ATOMIC CHARGES")
+
+    @property
+    def loewdin_atomic_spin_populations(self):
+        """Loewdin spin populations per atom (open shells only), 1-indexed."""
+
+        return self._atomic_spin_populations("LOEWDIN ATOMIC CHARGES")
 
     @property
     def loewdin_atomic_charges(self):
@@ -2297,7 +2370,11 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements[colon + 1]
                     )
                 all_loewdin_atomic_charges.append(loewdin_atomic_charges)
-        return all_loewdin_atomic_charges[-1]
+        return (
+            all_loewdin_atomic_charges[-1]
+            if all_loewdin_atomic_charges
+            else None
+        )
 
     # ** ** ** ** ** ** ** ** ** ** ** ** ** ** *
     # * MAYER POPULATION ANALYSIS *
@@ -2662,7 +2739,11 @@ class ORCAOutput(ORCAFileMixin):
                             ]
                         )
                 all_dipole_moment_electric_contribution.append(dipole_moment)
-        return all_dipole_moment_electric_contribution[-1]
+        return (
+            all_dipole_moment_electric_contribution[-1]
+            if all_dipole_moment_electric_contribution
+            else None
+        )
 
     @property
     def dipole_moment_nuclear_contribution(self):
@@ -2683,7 +2764,11 @@ class ORCAOutput(ORCAFileMixin):
                             ]
                         )
                 all_dipole_moment_nuclear_contribution.append(dipole_moment)
-        return all_dipole_moment_nuclear_contribution[-1]
+        return (
+            all_dipole_moment_nuclear_contribution[-1]
+            if all_dipole_moment_nuclear_contribution
+            else None
+        )
 
     @property
     def has_dipole_moment(self):
@@ -2712,7 +2797,7 @@ class ORCAOutput(ORCAFileMixin):
                             ]
                         )
                 all_dipole_moment.append(dipole_moment)
-        return all_dipole_moment[-1]
+        return all_dipole_moment[-1] if all_dipole_moment else None
 
     @property
     def dipole_moment_in_debye(self):
@@ -2732,7 +2817,7 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements = line_j.split()
                         dipole_moment = float(line_j_elements[-1])
                 all_dipole_moment.append(dipole_moment)
-        return all_dipole_moment[-1]
+        return all_dipole_moment[-1] if all_dipole_moment else None
 
     @property
     def dipole_moment_magnitude_in_debye(self):
@@ -2747,7 +2832,7 @@ class ORCAOutput(ORCAFileMixin):
                         line_j_elements = line_j.split()
                         dipole_moment = float(line_j_elements[-1])
                 all_dipole_moment.append(dipole_moment)
-        return all_dipole_moment[-1]
+        return all_dipole_moment[-1] if all_dipole_moment else None
 
     @property
     def dipole_moment_along_axis_in_au(self):
@@ -2768,7 +2853,7 @@ class ORCAOutput(ORCAFileMixin):
                             ]
                         )
                 all_dipole_moment.append(dipole_moment)
-        return all_dipole_moment[-1]
+        return all_dipole_moment[-1] if all_dipole_moment else None
 
     @property
     def dipole_moment_along_axis_in_debye(self):
@@ -2789,7 +2874,7 @@ class ORCAOutput(ORCAFileMixin):
                             ]
                         )
                 all_dipole_moment.append(dipole_moment)
-        return all_dipole_moment[-1]
+        return all_dipole_moment[-1] if all_dipole_moment else None
 
     @property
     def rotational_symmetry_number(self):
@@ -2860,6 +2945,11 @@ class ORCAOutput(ORCAFileMixin):
                         all_rotational_constants_in_wavenumbers.append(
                             rotational_constants_in_wavenumbers
                         )
+        # A run that never reached a frequency stage prints no rotational
+        # spectrum; absence is None, never an IndexError that sends the
+        # structure reader down its slow fallback.
+        if not all_rotational_constants_in_wavenumbers:
+            return None
         return all_rotational_constants_in_wavenumbers[-1]
 
     @property
@@ -2881,6 +2971,8 @@ class ORCAOutput(ORCAFileMixin):
                         all_rotational_constants_in_MHz.append(
                             rotational_constants_in_MHz
                         )
+        if not all_rotational_constants_in_MHz:
+            return None
         return all_rotational_constants_in_MHz[-1]
 
     @cached_property

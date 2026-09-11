@@ -183,40 +183,79 @@ class ORCAInput(ORCAFileMixin):
             molecule.multiplicity = self.multiplicity
         return molecule
 
+    def _block_setting(self, block, key):
+        """Read one ``key`` from ORCA's ``%block``, and from nowhere else.
+
+        ORCA spells MaxIter in both ``%scf`` and ``%geom`` -- one caps
+        the SCF, the other caps the geometry optimiser -- so a
+        whole-file search for the word returns whichever appears first
+        and silently reports one as the other. Which block a line sits
+        in is decided by the nearest preceding ``%`` opener, which also
+        keeps a nested ``end`` (the one that closes a Constraints or
+        Scan list) from ending the outer block early.
+
+        Args:
+            block: block name without the leading ``%``, e.g. ``scf``.
+            key: setting name, matched case-insensitively.
+
+        Returns:
+            str | None: the token after the key, or None when the block
+            does not carry it.
+        """
+        target = f"%{block}".lower()
+        current = None
+        for raw_line in self.contents:
+            stripped = raw_line.strip()
+            low = stripped.lower()
+            if not low:
+                continue
+            if low.startswith("%"):
+                current = low.split()[0]
+                remainder = stripped[len(current) :].strip()
+            elif low == "end" and raw_line[:1] not in (" ", "\t"):
+                current = None
+                continue
+            else:
+                remainder = stripped
+            if current != target or not remainder:
+                continue
+            tokens = remainder.split()
+            for index, token in enumerate(tokens[:-1]):
+                if token.lower() == key.lower():
+                    return tokens[index + 1]
+        return None
+
     @property
     def scf_maxiter(self):
         """
-        Extract SCF maximum iteration count from input file.
+        Extract the SCF maximum iteration count from the input file.
 
-        Searches for 'maxiter' keyword in the input file to determine
-        the maximum number of SCF iterations allowed.
+        Read from ``%scf`` alone: before this was block-scoped it was a
+        whole-file search for "maxiter", which a ``%geom MaxIter`` in the
+        same input would have answered instead.
 
         Returns:
             int: Maximum SCF iterations or None if not specified
         """
-        for i, raw_line in enumerate(self.contents):
-            line = raw_line.lower()
-            if "maxiter" in line:
-                try:
-                    # Find the index of "maxiter" in the same line
-                    index = line.index("maxiter")
-                    # Find the substring immediately following "maxiter"
-                    num_maxiter = line[index + len("maxiter") :].split()[0]
-                    return int(num_maxiter)
-                except ValueError:
-                    # If "maxiter" is not found, search the next line for it
-                    next_lines = self.contents[i + 1 :]
-                    for line in next_lines:
-                        if "maxiter" in line:
-                            # Find the index of "maxiter" in the same line
-                            index = line.index("maxiter")
-                            # Find the substring immediately
-                            # following "maxiter"
-                            num_maxiter = line[
-                                index + len("maxiter") :
-                            ].split()[0]
-                            return int(num_maxiter)
-        return None
+        value = self._block_setting("scf", "maxiter")
+        try:
+            return None if value is None else int(value)
+        except ValueError:
+            return None
+
+    @property
+    def geom_maxiter(self):
+        """
+        Extract the geometry optimiser's iteration cap from ``%geom``.
+
+        Returns:
+            int: Maximum optimisation steps or None if not specified
+        """
+        value = self._block_setting("geom", "maxiter")
+        try:
+            return None if value is None else int(value)
+        except ValueError:
+            return None
 
     @property
     def scf_convergence(self):

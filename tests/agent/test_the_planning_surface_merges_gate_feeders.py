@@ -35,7 +35,13 @@ def test_the_planning_surface_exposes_the_merged_tools_only():
     }
     assert set(MERGED_PLANNING_TOOLS) <= planning
     assert not (withdrawn & planning), sorted(withdrawn & planning)
-    assert len(planning) == 16, "the stem"
+    # 16 -> 17 (2026-09-09): fetch_pubchem_geometry joined the stem. It
+    # belongs beside bind_scientific_identity rather than in the
+    # structure guide, because it is how a molecule *enters* a session
+    # and a guide the session never opens is an affordance it never
+    # sees. Its bytes were paid for by de-duplicating the identifier
+    # spelling rule, which the JSON pattern already states.
+    assert len(planning) == 17, "the stem"
     from chemsmart.agent.guides import GUIDES
 
     everything = _names(
@@ -43,7 +49,7 @@ def test_the_planning_surface_exposes_the_merged_tools_only():
             guides=tuple(guide.guide_id for guide in GUIDES)
         )
     )
-    assert len(everything) == 24, "the stem with every leaf open"
+    assert len(everything) == 28, "the stem with every leaf open"
 
 
 def test_the_executor_keeps_its_step_by_step_surface():
@@ -78,7 +84,7 @@ def test_project_yaml_names_what_each_action_needs(tmp_path):
 
 def test_inspect_run_needs_the_reader_for_a_result(tmp_path):
     host = _host(tmp_path)
-    with pytest.raises(ContractError, match="also needs program"):
+    with pytest.raises(ContractError, match="program beside artifact_id"):
         host._inspect_run("t1", {"artifact_id": "result.x.1"})
 
 

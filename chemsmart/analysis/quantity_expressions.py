@@ -94,6 +94,8 @@ _OPERATIONS = frozenset(
         "boltzmann_average",
         "imaginary_mode_count",
         "harmonic_zero_point_energy",
+        "wavenumber_to_energy",
+        "energy_to_wavenumber",
         "transition_state_crossover_temperature",
         "center_of_mass",
         "principal_moments_of_inertia",
@@ -231,6 +233,18 @@ OPERATION_DESCRIPTIONS: Mapping[str, str] = {
         "one -- but say which you asked, because the two disagree exactly "
         "where a structure is nearly, not quite, relaxed"
     ),
+    "wavenumber_to_energy": (
+        "restate a wavenumber (cm^-1) as a molar energy through h*c*N_A, "
+        "scalar or vector; target_unit names the energy unit (default "
+        "kJ/mol). Exchange couplings, zero-field splittings and spin-orbit "
+        "gaps are quoted in cm^-1 and computed as energy differences; this "
+        "operation owns the factor, so a declaration in cm^-1 is answered "
+        "by a claim in cm^-1 without inventing a conversion"
+    ),
+    "energy_to_wavenumber": (
+        "restate a molar energy as a wavenumber in cm^-1 through h*c*N_A, "
+        "scalar or vector; the inverse of wavenumber_to_energy"
+    ),
     "harmonic_zero_point_energy": (
         "harmonic zero-point vibrational energy from one frequency vector in "
         "cm^-1, returned as a molar energy. Owns both the factor of one half "
@@ -330,6 +344,8 @@ OPERATION_INPUT_COUNTS: Mapping[str, frozenset[int] | tuple[int, None]] = {
     "boltzmann_average": (3, None),
     "imaginary_mode_count": frozenset({1, 2}),
     "harmonic_zero_point_energy": frozenset({1}),
+    "wavenumber_to_energy": frozenset({1}),
+    "energy_to_wavenumber": frozenset({1}),
     "transition_state_crossover_temperature": frozenset({1}),
     "center_of_mass": frozenset({2}),
     "principal_moments_of_inertia": frozenset({2}),
@@ -393,6 +409,8 @@ CONVENTION_OPERATIONS = frozenset(
         "boltzmann_populations",
         "correlation_inverse_power_cbs_limit",
         "harmonic_zero_point_energy",
+        "wavenumber_to_energy",
+        "energy_to_wavenumber",
         "imaginary_mode_count",
         "transition_state_crossover_temperature",
         "distance",
@@ -614,6 +632,8 @@ _FIXED_DIMENSION_OPERATION_UNITS = {
     "imaginary_mode_count": "1",
     "connectivity_difference_count": "1",
     "harmonic_zero_point_energy": "hartree",
+    "wavenumber_to_energy": "hartree",
+    "energy_to_wavenumber": "cm^-1",
     "transition_state_crossover_temperature": "K",
 }
 
@@ -2277,6 +2297,60 @@ def _node_value(
             unit=canonical_unit,
             dimension=dimension,
             evidence_ref=evidence_ref,
+        )
+
+    if operation in {"wavenumber_to_energy", "energy_to_wavenumber"}:
+        # h*c*N_A, stated once: one hartree is 219474.6313705 cm^-1
+        # (CODATA 2018). A session asked four times to convert an
+        # exchange coupling from hartree to cm^-1 and was refused each
+        # time because the two dimensions never met in the vocabulary
+        # (NOVEL-3 ino2, 2026-09-05).
+        hartree_in_cm1 = 219474.6313705
+        if len(inputs) != 1:
+            raise QuantityExpressionError(
+                f"{operation} takes exactly one input; got {len(inputs)}"
+            )
+        source = inputs[0]
+        array = _numeric(source)
+        if operation == "wavenumber_to_energy":
+            if source.dimension != FREQUENCY:
+                raise QuantityExpressionError(
+                    "wavenumber_to_energy takes a wavenumber (cm^-1); got "
+                    f"dimension {canonical_unit_for_dimension(source.dimension)!r}"
+                )
+            unit = str(node.target_unit or "kJ/mol")
+            target_dimension, _target_unit, target_scale = _unit_spec(unit)
+            if target_dimension != ENERGY:
+                raise QuantityExpressionError(
+                    f"wavenumber_to_energy target_unit {unit!r} is not an "
+                    "energy unit"
+                )
+            converted = (array / hartree_in_cm1) / target_scale
+        else:
+            if source.dimension != ENERGY:
+                raise QuantityExpressionError(
+                    "energy_to_wavenumber takes a molar energy; got "
+                    f"dimension {canonical_unit_for_dimension(source.dimension)!r}"
+                )
+            unit = "cm^-1"
+            converted = array * hartree_in_cm1
+        payload = _payload(
+            float(converted.reshape(-1)[0])
+            if converted.size == 1 and source.data_kind == "scalar"
+            else converted
+        )
+        normalized, canonical_unit, dimension = normalize_numeric_value(
+            payload, unit
+        )
+        return make_quantity_value(
+            quantity_id=node.node_id,
+            source_value=payload,
+            source_unit=unit,
+            value=normalized,
+            unit=canonical_unit,
+            dimension=dimension,
+            evidence_ref=evidence_ref,
+            data_kind=source.data_kind,
         )
 
     if operation == "imaginary_mode_count":

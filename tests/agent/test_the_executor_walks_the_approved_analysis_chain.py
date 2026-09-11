@@ -15,6 +15,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from chemsmart.agent._contracts import TrustedArtifactRefV1, file_sha256
 from chemsmart.agent.executor import ApprovedWorkflowExecutor
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
@@ -801,6 +803,145 @@ def test_a_kernel_refusal_is_a_finding_not_a_crash(tmp_path, monkeypatch):
     assert "imaginary frequencies" in report
     # The extraction's receipt survives as evidence at its rung.
     assert "parsed" in report
+
+
+def test_no_analysis_node_may_end_the_goal(tmp_path, monkeypatch):
+    """Whatever a kernel raises, the node fails and the run continues.
+
+    Widening the caught tuple one exception class at a time was the
+    wrong repair, and the third strike proved it: a kernel reached into
+    a result's absent thermochemistry, ``float + None`` raised
+    TypeError, and the escape killed a goal outright -- three hours
+    twenty minutes of engine time, five converged spin states, a ledger
+    three entries long with no run_recorded and no settlement.
+
+    The invariant is not "these errors settle". It is that no analysis
+    node may end the goal, so this drives the exception classes that are
+    *not* typed refusals and asserts the same outcome for each.
+    """
+
+    import chemsmart.agent.tool_runtime as tool_runtime_module
+
+    for error in (
+        TypeError("unsupported operand type(s) for +: 'float' and 'NoneType'"),
+        KeyError("total_internal_energy"),
+        AttributeError("'NoneType' object has no attribute 'real'"),
+        ZeroDivisionError("float division by zero"),
+    ):
+        extraction = _analysis_node(
+            "extract-sp",
+            "result_extraction",
+            dependencies=("sp",),
+            inputs=(
+                AnalysisInputIntentV1(
+                    input_id="raw",
+                    source_kind="program_output",
+                    producer_node_id="sp",
+                    producer_output_id="sp-out",
+                ),
+            ),
+            selectors=(
+                AnalysisSelectorIntentV1(quantity_id="e", selector="energy"),
+            ),
+            outputs=(
+                AnalysisOutputIntentV1(
+                    output_id="e", quantity_kind="energy", unit="hartree"
+                ),
+            ),
+        )
+        thermo = _analysis_node(
+            "thermo",
+            "thermochemistry",
+            dependencies=("sp",),
+            inputs=(
+                AnalysisInputIntentV1(
+                    input_id="raw",
+                    source_kind="program_output",
+                    producer_node_id="sp",
+                    producer_output_id="sp-out",
+                ),
+            ),
+            outputs=(
+                AnalysisOutputIntentV1(
+                    output_id="gcorr",
+                    quantity_kind="thermal_gibbs_correction",
+                    unit="hartree",
+                ),
+            ),
+            temperature_k=298.15,
+            pressure_atm=1.0,
+        )
+        toolchain = build_scientific_toolchain_plan(
+            plan_id="p",
+            workflow_id="w",
+            command_workflow_draft_sha256="9" * 64,
+            calculation_nodes=(_calculation(),),
+            calculation_observables={"sp": ("sp-out",)},
+            analysis_nodes=(extraction, thermo),
+            required_output_ids=("gcorr",),
+        )
+        executor = _executor(
+            tmp_path / f"run-{type(error).__name__}", toolchain
+        )
+
+        def _raise(**_kwargs):
+            raise error
+
+        monkeypatch.setattr(
+            tool_runtime_module, "derive_trusted_thermochemistry", _raise
+        )
+        nodes, status, _completions, _report = executor._run_analysis_phase(
+            toolchain
+        )
+        states = {node.node_id: node.state for node in nodes}
+        assert states["thermo"] == "failed", type(error).__name__
+        # The sibling still ran: a failure settles its own node only.
+        assert states["extract-sp"] == "executed", type(error).__name__
+        assert status == "partial", type(error).__name__
+        record = next(n for n in nodes if n.node_id == "thermo")
+        # Recorded as a host defect, not dressed up as a scientific
+        # finding -- the reason carries the exception's own type.
+        assert "host defect" in record.reason, type(error).__name__
+        assert type(error).__name__ in record.reason
+
+
+def test_a_result_without_thermochemistry_is_refused_not_computed():
+    """A run that never reached its frequency step has no thermochemistry.
+
+    The kernel used to reach straight into the absent values, and
+    ``electronic_energy + total_internal_energy`` is a TypeError when
+    the second is None. Driven here on real archived output rather than
+    a fake: the refusal must name what is absent.
+    """
+
+    import hashlib
+
+    from chemsmart.analysis.result_quantities import (
+        QuantityExtractionError,
+        ThermochemistryRequestV1,
+        derive_result_thermochemistry,
+    )
+
+    # An archived optimisation with no frequency step: the same shape a
+    # run that hit its iteration cap leaves behind.
+    path = Path("tests/data/ORCATests/outputs/ethanol_fixed_bond.out")
+    request = ThermochemistryRequestV1(
+        schema_version="chemsmart.thermochemistry-request.v1",
+        artifact_id="orca-result-nonconverged",
+        artifact_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        program="orca",
+        temperature_k=298.15,
+        pressure_atm=1.0,
+        concentration_mol_l=None,
+        entropy_method="rrho",
+        entropy_cutoff_cm1=None,
+        enthalpy_cutoff_cm1=None,
+        alpha=4,
+        use_weighted_mass=True,
+        frequency_scale_factor=1.0,
+    )
+    with pytest.raises(QuantityExtractionError, match="no thermochemistry"):
+        derive_result_thermochemistry(request=request, artifact_path=str(path))
 
 
 def test_a_registered_result_input_resolves_from_the_workspace(tmp_path):

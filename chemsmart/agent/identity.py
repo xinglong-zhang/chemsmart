@@ -18,6 +18,7 @@ import yaml
 
 from chemsmart.agent._contracts import (
     ContractError,
+    RoutedContractError,
     canonical_data,
     canonical_sha256,
     file_sha256,
@@ -512,20 +513,39 @@ def refuse_impossible_electronic_state(
         # silently declining to check is better than inventing a verdict.
         return
     unpaired = int(multiplicity) - 1
+    diagnosis = ""
     if electrons < 0:
-        raise ContractError(
+        diagnosis = (
             f"{context} charge {charge:+d} implies a negative electron "
-            f"count for this molecule"
+            "count for this molecule."
         )
-    if unpaired > electrons:
-        raise ContractError(
+    elif unpaired > electrons:
+        diagnosis = (
             f"{context} multiplicity {multiplicity} implies {unpaired} "
-            f"unpaired electrons, but the species has only {electrons}"
+            f"unpaired electrons, but the species has only {electrons}."
         )
-    if (electrons - unpaired) % 2:
-        raise ContractError(
-            f"{context} charge {charge:+d} with multiplicity {multiplicity} "
-            f"is impossible: {electrons} electrons cannot leave {unpaired} "
-            f"unpaired. An even electron count needs an odd multiplicity and "
-            f"an odd count an even one; state the electronic state you mean"
+    elif (electrons - unpaired) % 2:
+        diagnosis = (
+            f"{context} charge {charge:+d} with multiplicity "
+            f"{multiplicity} is impossible: {electrons} electrons cannot "
+            f"leave {unpaired} unpaired."
+        )
+    if diagnosis:
+        raise RoutedContractError(
+            gate="identity.electronic_state_is_possible",
+            invariant=(
+                "charge and multiplicity describe a state the electron "
+                "count admits: no negative count, no more unpaired "
+                "electrons than electrons, and an even count pairs with "
+                "an odd multiplicity."
+            ),
+            diagnosis=diagnosis,
+            route=(
+                "rebind with the charge the species carries and a "
+                "multiplicity of the right parity (2S+1 odd for an even "
+                "electron count, even for an odd one); no state is "
+                "preferred, and which one is right is what the "
+                "calculation is for. A fragment still under construction "
+                "is not a species: finish the build, then bind the whole."
+            ),
         )

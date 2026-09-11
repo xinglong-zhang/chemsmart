@@ -127,8 +127,15 @@ def execute_safe_preview(
     ) = None,
     root: click.Command | None = None,
     runner: CliRunner | None = None,
+    retain_root: Path | None = None,
 ) -> SafePreviewReceiptV1:
-    """Execute one compiler-owned safe preview and observe actual artifacts."""
+    """Execute one compiler-owned safe preview and observe actual artifacts.
+
+    With ``retain_root`` the emitted files are also kept there under
+    their own content digest, so a later host step -- the program's
+    own input check -- can open exactly the bytes the receipt hashed.
+    The receipt body does not change.
+    """
 
     auxiliary_input_artifacts = dict(auxiliary_input_artifacts or {})
     auxiliary_bindings = _auxiliary_input_bindings(auxiliary_input_artifacts)
@@ -188,6 +195,8 @@ def execute_safe_preview(
         if result.exception is not None:
             exception_class = type(result.exception).__name__
         artifacts = _collect_preview_artifacts(Path(workspace))
+        if retain_root is not None:
+            _retain_preview_artifacts(Path(workspace), artifacts, retain_root)
         program_validation = validate_preview_workspace(
             expectation, Path(workspace)
         )
@@ -360,6 +369,35 @@ def _option_enabled(
         and not item.values
         for item in invocation.scoped_options
     )
+
+
+def _retain_preview_artifacts(
+    workspace: Path,
+    artifacts: tuple[PreviewArtifactV1, ...],
+    retain_root: Path,
+) -> None:
+    retain_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for artifact in artifacts:
+        target = retain_root / artifact.sha256
+        if target.exists():
+            continue
+        target.write_bytes((workspace / artifact.relative_path).read_bytes())
+        target.chmod(0o600)
+
+
+def retained_preview_artifact(
+    retain_root: Path | None, sha256: str
+) -> Path | None:
+    """The retained bytes of one preview artifact, verified by digest."""
+
+    if retain_root is None or not sha256:
+        return None
+    path = Path(retain_root) / sha256
+    if not path.is_file() or path.is_symlink():
+        return None
+    if file_sha256(path) != sha256:
+        return None
+    return path
 
 
 def _collect_preview_artifacts(

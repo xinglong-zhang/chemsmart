@@ -127,6 +127,8 @@ SELECTOR_UNITS = {
     "mulliken_atomic_charges": "e",
     "hirshfeld_atomic_charges": "e",
     "loewdin_atomic_charges": "e",
+    "mulliken_atomic_spin_populations": "1",
+    "loewdin_atomic_spin_populations": "1",
     "functional": "",
     "method": "",
     "ab_initio": "",
@@ -274,6 +276,40 @@ def _symbols(output: Any) -> list[str]:
 
 
 _ATOM_LABEL = re.compile(r"^([A-Za-z]{1,3})(\d+)$")
+
+
+def _orca_spin_populations(output: Any, *, quantity: str) -> list[float]:
+    """Per-atom spin populations of an open-shell ORCA result, in order.
+
+    Refused on a closed shell, where the block has one column and there
+    is no spin to partition; checked against 2S = multiplicity - 1, the
+    sum ORCA prints beneath the block, so a dropped or duplicated atom
+    cannot pass as a population.
+    """
+
+    labelled = getattr(output, quantity)
+    if labelled is None:
+        raise MissingQuantityError(
+            f"{quantity}: this result printed no spin populations -- the "
+            "population block has one column, as for a closed shell"
+        )
+    values = _per_atom_vector(
+        labelled, _orca_symbols(output), quantity=quantity
+    )
+    try:
+        multiplicity = int(output.multiplicity)
+    except (TypeError, ValueError):
+        multiplicity = None
+    if multiplicity is not None:
+        expected = float(multiplicity - 1)
+        total = sum(values)
+        if abs(total - expected) > 0.05:
+            raise MissingQuantityError(
+                f"{quantity} sums to {total:.3f} where 2S for multiplicity "
+                f"{multiplicity} is {expected:.1f}; the vector is not the "
+                "complete molecule in order"
+            )
+    return values
 
 
 def _per_atom_vector(
@@ -1247,6 +1283,19 @@ def _orca_accessors() -> dict[str, Callable[[Any], Any]]:
                 _orca_symbols(output),
                 quantity="loewdin_atomic_charges",
             ),
+            # Spin populations sit in the second column of the same block
+            # and were discarded for years; the sum is 2S by construction,
+            # which is the checksum that a per-atom vector is complete.
+            "mulliken_atomic_spin_populations": lambda output: (
+                _orca_spin_populations(
+                    output, quantity="mulliken_atomic_spin_populations"
+                )
+            ),
+            "loewdin_atomic_spin_populations": lambda output: (
+                _orca_spin_populations(
+                    output, quantity="loewdin_atomic_spin_populations"
+                )
+            ),
             # A partition of the density into atomic basins rather than
             # over basis functions, so it does not carry Mulliken's basis
             # sensitivity -- which is why the condensed-Fukui literature
@@ -1902,8 +1951,10 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "hirshfeld_atomic_charges",
                     "homo",
                     "loewdin_atomic_charges",
+                    "loewdin_atomic_spin_populations",
                     "lumo",
                     "mulliken_atomic_charges",
+                    "mulliken_atomic_spin_populations",
                     "multiplicity",
                     "positions",
                     "reference_energy",
@@ -1987,8 +2038,10 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "hirshfeld_atomic_charges",
                     "homo",
                     "loewdin_atomic_charges",
+                    "loewdin_atomic_spin_populations",
                     "lumo",
                     "mulliken_atomic_charges",
+                    "mulliken_atomic_spin_populations",
                     "multiplicity",
                     "positions",
                     "reference_energy",
@@ -2077,8 +2130,10 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "hirshfeld_atomic_charges",
                     "homo",
                     "loewdin_atomic_charges",
+                    "loewdin_atomic_spin_populations",
                     "lumo",
                     "mulliken_atomic_charges",
+                    "mulliken_atomic_spin_populations",
                     "multiplicity",
                     "positions",
                     "reference_energy",
@@ -2159,8 +2214,10 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "hirshfeld_atomic_charges",
                     "homo",
                     "loewdin_atomic_charges",
+                    "loewdin_atomic_spin_populations",
                     "lumo",
                     "mulliken_atomic_charges",
+                    "mulliken_atomic_spin_populations",
                     "multiplicity",
                     "positions",
                     "reference_energy",
@@ -2387,6 +2444,8 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
 
 #: Physical dimension of each selector, in the shared quantity vocabulary.
 _SELECTOR_DIMENSIONS = {
+    "mulliken_atomic_spin_populations": "DIMENSIONLESS",
+    "loewdin_atomic_spin_populations": "DIMENSIONLESS",
     "functional": "DIMENSIONLESS",
     "method": "DIMENSIONLESS",
     "ab_initio": "DIMENSIONLESS",

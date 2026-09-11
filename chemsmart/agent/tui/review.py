@@ -717,6 +717,65 @@ def _derivation_panels(review: "WorkflowExecutionReviewV1") -> list[Panel]:
     return panels
 
 
+def _pubchem_geometry_panels(
+    review: "WorkflowExecutionReviewV1",
+) -> list[Panel]:
+    """What arrived when a molecule entered by public identifier.
+
+    `pubchem_geometries` had no reader anywhere in the tree: the host
+    minted the receipt, returned the formula, atom count and fragment
+    count to the session, and none of it reached the page a human
+    approves from -- while a derived species carried its full panel. A
+    live session named two numeric CIDs from prior knowledge and got
+    two unrelated molecules, one of 102 atoms in 27 pieces, each
+    registered under a confident artifact id of the model's choosing.
+    Neither reached a plan, so nothing was approved on them; that was
+    the session reading the formula, not the review showing it.
+
+    These are measurements and never refusals. A salt, an ion pair, a
+    solvate and a metallocene as deposited are all legitimately more
+    than one piece, and `compose_molecular_arrangement` exists to
+    consume fragments -- so the count is stated and the scientist
+    judges it.
+    """
+
+    panels: list[Panel] = []
+    for item in review.node_reviews:
+        record = item.molecular_identity.get("pubchem_geometry")
+        if not isinstance(record, Mapping):
+            continue
+        pieces = record.get("fragment_count")
+        lines = [
+            f"requested identifier: {record.get('identifier')!r} "
+            f"({record.get('identifier_kind')})",
+            f"what arrived: {record.get('formula')} "
+            f"({record.get('atom_count')} atoms); "
+            f"{pieces} connected piece(s)",
+            "a depositor's conformer, not a relaxed structure, and it "
+            "carries that depositor's symmetry",
+            "electronic state was deliberately unbound at fetch; this "
+            f"node binds charge {item.molecular_identity.get('charge')}, "
+            f"multiplicity {item.molecular_identity.get('multiplicity')} "
+            "explicitly",
+        ]
+        if isinstance(pieces, int) and pieces > 1:
+            lines.append(
+                f"the record converted to {pieces} disconnected pieces -- "
+                "read as an observation, not a verdict: an ion pair or a "
+                "solvate is legitimately more than one"
+            )
+        panels.append(
+            Panel(
+                "\n".join(lines),
+                title=(
+                    f"{item.node_id} · molecule entered by identifier "
+                    "(covered by this approval)"
+                ),
+            )
+        )
+    return panels
+
+
 def _database_extraction_panels(
     review: "WorkflowExecutionReviewV1",
 ) -> list[Panel]:
@@ -831,6 +890,40 @@ def _declared_observable_panel(
             f"{item.get('observable_id', '?')} "
             f"[{item.get('unit', '?')}] -- {item.get('meaning', '')}"
         )
+        # The precision the task asked for, restated by the session and
+        # frozen at this decision. It reached no reviewer at all, so a
+        # model-proposed tolerance became a user-authorised one with no
+        # human ever seeing it -- and an *absent* tolerance, on a task
+        # that states a number in plain words, was the cheapest escape
+        # from the contract and the least visible. Both are rendered
+        # here, at the one moment a wrong premise is still cheap.
+        tolerance = item.get("required_tolerance")
+        if str(item.get("role") or "requested") == "requested":
+            if tolerance is None:
+                line += (
+                    "\n    required precision: none declared -- if the "
+                    "task states one, it is not on this contract"
+                )
+            else:
+                line += (
+                    f"\n    required precision: +/-{tolerance} "
+                    f"{item.get('unit', '')}".rstrip()
+                )
+                basis = str(item.get("tolerance_basis") or "").strip()
+                origin = str(item.get("tolerance_origin") or "").strip()
+                # "from the task" was printed over every tolerance,
+                # including one the session formulated for a decision of
+                # its own -- a host word that can be false about whose
+                # requirement the reader is approving.
+                whose = {
+                    "task": "from the task",
+                    "session": "the session's own reading (the task "
+                    "fixes none here)",
+                }.get(origin, "source not stated")
+                if basis:
+                    line += f"\n    {whose}: {basis}"
+                elif origin:
+                    line += f"\n    {whose}"
         low, high = item.get("expected_low"), item.get("expected_high")
         sign = item.get("expected_sign", "")
         if sign or low is not None:
@@ -847,8 +940,8 @@ def _declared_observable_panel(
     return Panel(
         Text("\n".join(lines)),
         title=(
-            "Requested observables declared "
-            "(expectations are displayed, never scored)"
+            "Requested observables declared (expectations are displayed, "
+            "never scored; a required precision is the contract)"
         ),
     )
 
@@ -955,6 +1048,35 @@ def _geometry_lineage_panels(
                     + " -- observations, not verdicts",
                 ]
                 title_kind = "mode displacement"
+            elif record.get("kind") == "symmetry_break":
+                contacts = list(record.get("close_contact_pairs") or ())
+                lines = [
+                    f"parent: {record.get('parent_artifact_id')} "
+                    f"({record.get('formula')}, "
+                    f"{record.get('atom_count')} atoms)",
+                    f"every atom perturbed by seed {record.get('seed')} "
+                    "within "
+                    f"{_shown_value(record.get('amplitude_angstrom'))} "
+                    "angstrom (largest step achieved "
+                    f"{_shown_value(record.get('max_displacement_angstrom'))}"
+                    ", rms "
+                    f"{_shown_value(record.get('rms_displacement_angstrom'))}"
+                    ")",
+                    f"point group estimate {record.get('point_group_before')}"
+                    f" -> {record.get('point_group_after')}; "
+                    f"{record.get('atom_order_note')}",
+                    "closest contact "
+                    f"{_shown_value(record.get('min_interatomic_distance_angstrom'))}"
+                    f" angstrom; {len(contacts)} pair(s) inside covalent "
+                    "contact; connectivity "
+                    + (
+                        "changed"
+                        if record.get("connectivity_changed")
+                        else "unchanged"
+                    )
+                    + " -- observations, not verdicts",
+                ]
+                title_kind = "symmetry break"
             else:
                 atoms = list(record.get("coordinate_atoms") or ())
                 symbols = list(record.get("coordinate_symbols") or ())
@@ -1028,6 +1150,7 @@ def render_review_blocks(
         blocks.append(_edges_table(review))
     blocks.extend(_composition_panels(review))
     blocks.extend(_derivation_panels(review))
+    blocks.extend(_pubchem_geometry_panels(review))
     blocks.extend(_database_extraction_panels(review))
     blocks.extend(_geometry_lineage_panels(review))
     blocks.append(_analysis_chain_renderable(review))
@@ -1068,6 +1191,19 @@ def render_review_blocks(
                 title=f"{item.node_id} · ChemSmart CLI operation",
             )
         )
+        stated = tuple(
+            line
+            for entry in getattr(review, "node_observations", ())
+            if entry.get("node_id") == item.node_id
+            for line in entry.get("observations", ())
+        )
+        if stated:
+            blocks.append(
+                Panel(
+                    Text("\n".join(f"- {line}" for line in stated)),
+                    title=f"{item.node_id} · host observations",
+                )
+            )
     blocks.append(_decision_panel(review))
     return tuple(blocks)
 

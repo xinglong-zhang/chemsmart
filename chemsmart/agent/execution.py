@@ -27,6 +27,7 @@ import numpy as np
 from chemsmart.agent._contracts import (
     AuxiliaryArtifactBindingV1,
     ContractError,
+    RoutedContractError,
     TrustedArtifactRefV1,
     canonical_data,
     canonical_json,
@@ -510,6 +511,154 @@ def _place_dual_contact(
     return placed(best[1])
 
 
+def _place_haptic_set(
+    positions_a,
+    coords_b,
+    *,
+    centre_a,
+    links_b,
+    distance,
+    min_dist_matrix,
+    ineq_mask,
+    axial_samples: int = 72,
+):
+    """Place B so every named atom sits at one distance from one centre.
+
+    Exact geometry, not a search over distances. For k rigid points on a
+    circle of radius r about their own centroid, a single distance d to
+    one external centre exists **iff d >= r**, and the centre then lies
+    on the ring axis at height sqrt(d^2 - r^2). So the placement is
+    solved analytically and the only freedom left is the rotation about
+    that axis and which face is presented; those are sampled and scored
+    by the tightest separation over the pairs the caller did not exempt.
+
+    Why this cannot be done by the existing contact solvers: they hold
+    one or two named pairs at a distance and push **every** other
+    interfragment pair outside covalent-radii-plus-buffer. For a
+    multi-centre contact the other members of the set must sit at the
+    *same* short distance, which that inequality forbids -- for Fe-C the
+    generic floor is 2.380 A against a real 2.06 A. A live session met
+    exactly this: it composed a formally accepted C10H10Fe whose ten
+    Fe-C distances were all 2.60 A (2026-09-10, ino3-r16).
+
+    Nothing here knows what a ring is. It is told which atoms, and it
+    reports what it achieved.
+    """
+
+    import numpy as np
+    from scipy.spatial.transform import Rotation
+
+    coords_b = np.asarray(coords_b, dtype=float)
+    named = coords_b[links_b]
+    centroid = named.mean(axis=0)
+    spokes = named - centroid
+    radii = np.linalg.norm(spokes, axis=1)
+    circumradius = float(radii.mean())
+    # The plane of the named set, by smallest singular direction.
+    _, _, vt = np.linalg.svd(spokes - spokes.mean(axis=0))
+    normal = vt[-1] / np.linalg.norm(vt[-1])
+    height_sq = distance * distance - circumradius * circumradius
+    if height_sq < 0.0:
+        return None
+    height = float(np.sqrt(height_sq))
+
+    centre = np.asarray(centre_a, dtype=float)
+    # Where the ring axis may point. The analytic solution fixes only
+    # the *distance* from the centre to the set's plane; the direction
+    # of that axis in space is free, and so is which side of the centre
+    # the set sits on. Fixing it at the global +z made the answer depend
+    # on how the incoming file happened to be oriented: a rigid rotation
+    # of fragment A changes no distance, no angle and no chemistry, and
+    # it changed the host's answer. The first ring of ino3-r17 placed
+    # only because fragment A was a lone iron atom, which is
+    # spherically symmetric; the second was refused in every frame
+    # tried, while the same solution with the axis free clears every
+    # non-exempt floor by 0.88 angstrom (2026-09-11).
+    #
+    # Candidates: first the direction that points from the rest of
+    # fragment A out through the centre, because that is where the room
+    # usually is, then a deterministic quasi-uniform sphere so the
+    # search is a search. Nothing here knows what a ring or a metal is.
+    axes = []
+    bulk = positions_a.mean(axis=0) - centre
+    if float(np.linalg.norm(bulk)) > 1e-6:
+        outward = -bulk / np.linalg.norm(bulk)
+        axes.extend([outward, -outward])
+    count = 96
+    golden = np.pi * (3.0 - np.sqrt(5.0))
+    for index in range(count):
+        z = 1.0 - 2.0 * index / float(count - 1)
+        radius_xy = np.sqrt(max(1.0 - z * z, 0.0))
+        theta = golden * index
+        axes.append(
+            np.array([radius_xy * np.cos(theta), radius_xy * np.sin(theta), z])
+        )
+
+    best = None
+    worst_pair = None
+    worst_slack = -np.inf
+    for axis in axes:
+        axis = np.asarray(axis, dtype=float)
+        norm = float(np.linalg.norm(axis))
+        if norm < 1e-9:
+            continue
+        axis = axis / norm
+        for face in (1.0, -1.0):
+            # Point the set's own normal along the axis, then offset the
+            # centroid by the analytic height on that axis.
+            rotation, _ = Rotation.align_vectors(
+                axis.reshape(1, 3), (normal * face).reshape(1, 3)
+            )
+            base = rotation.apply(coords_b - centroid)
+            for turn in range(axial_samples):
+                angle = 2.0 * np.pi * turn / axial_samples
+                spun = Rotation.from_rotvec(angle * axis).apply(base)
+                placed = spun + centre + height * axis
+                gaps = np.linalg.norm(
+                    placed[:, np.newaxis, :] - positions_a[np.newaxis, :, :],
+                    axis=2,
+                )
+                slack = gaps - min_dist_matrix
+                if not ineq_mask.any():
+                    return placed, {
+                        "axes_sampled": len(axes),
+                        "rotations_per_axis": axial_samples,
+                        "best_slack_angstrom": 0.0,
+                        "limiting_pair": None,
+                    }
+                masked = np.where(ineq_mask, slack, np.inf)
+                tightest = float(masked.min())
+                if tightest > worst_slack:
+                    worst_slack = tightest
+                    index_b, index_a = np.unravel_index(
+                        int(masked.argmin()), masked.shape
+                    )
+                    worst_pair = (int(index_b), int(index_a))
+                if tightest < 0.0:
+                    continue
+                if best is None or tightest > best[0]:
+                    best = (tightest, placed)
+                if tightest > 0.15:
+                    # Deterministic early exit, as the two-contact
+                    # solver uses: a comfortable margin serves and the
+                    # consuming relaxation owns the rest.
+                    return placed, {
+                        "axes_sampled": len(axes),
+                        "rotations_per_axis": axial_samples,
+                        "best_slack_angstrom": round(tightest, 6),
+                        "limiting_pair": worst_pair,
+                    }
+    report = {
+        "axes_sampled": len(axes),
+        "rotations_per_axis": axial_samples,
+        "best_slack_angstrom": (
+            round(float(worst_slack), 6) if np.isfinite(worst_slack) else None
+        ),
+        "limiting_pair": worst_pair,
+    }
+    return (None if best is None else best[1]), report
+
+
 def compose_trusted_molecular_arrangement(
     *,
     approved_workspace: str | Path,
@@ -524,6 +673,7 @@ def compose_trusted_molecular_arrangement(
     fragment_a_atom_2: int | None = None,
     fragment_b_atom_2: int | None = None,
     distance_angstrom_2: float | None = None,
+    fragment_b_atoms: Sequence[int] | None = None,
 ) -> tuple[TrustedArtifactRefV1, MolecularCompositionReceiptV1]:
     """Place fragment B against fragment A at one explicit atomic contact.
 
@@ -575,6 +725,46 @@ def compose_trusted_molecular_arrangement(
         )
     link_a = int(fragment_a_atom) - 1
     link_b = int(fragment_b_atom) - 1
+    # A model-declared set of B's atoms, all held at one distance from
+    # one centre of A. The host validates geometry and reports what it
+    # achieved; it never asks what the set means. Naming five carbons of
+    # a ring is the session's claim about hapticity, not the host's.
+    haptic = tuple(int(item) for item in (fragment_b_atoms or ()))
+    if haptic:
+        if len(set(haptic)) != len(haptic):
+            raise ContractError(
+                "fragment_b_atoms names the same atom twice: "
+                f"{list(haptic)}"
+            )
+        if len(haptic) < 2:
+            raise ContractError(
+                "fragment_b_atoms is for two or more atoms held at one "
+                "distance from one centre; a single contact is "
+                "fragment_b_atom"
+            )
+        outside = [i for i in haptic if not 1 <= i <= count_b]
+        if outside:
+            raise ContractError(
+                f"fragment_b_atoms must be 1..{count_b}; got {outside}"
+            )
+        if any(
+            field is not None
+            for field in (
+                fragment_a_atom_2,
+                fragment_b_atom_2,
+                distance_angstrom_2,
+            )
+        ):
+            raise ContractError(
+                "fragment_b_atoms and a second contact are two different "
+                "placements: give one or the other"
+            )
+        if int(fragment_b_atom) not in haptic:
+            raise ContractError(
+                f"fragment_b_atom {fragment_b_atom} is not in "
+                f"fragment_b_atoms {list(haptic)}: the named contact must "
+                "be one of the set held at that distance"
+            )
     second_fields = (fragment_a_atom_2, fragment_b_atom_2, distance_angstrom_2)
     dual_contact = any(field is not None for field in second_fields)
     if dual_contact and any(field is None for field in second_fields):
@@ -619,7 +809,100 @@ def compose_trusted_molecular_arrangement(
     )
     ineq_mask = np.ones((count_b, count_a), dtype=bool)
     ineq_mask[link_b, link_a] = False
-    if dual_contact:
+    if haptic:
+        links_b = [i - 1 for i in haptic]
+        # The exemption, and the whole point: the members of the declared
+        # set are held at the requested distance from the centre, so they
+        # are not also required to sit outside the generic
+        # covalent-radii-plus-buffer floor. Every other interfragment
+        # pair keeps that floor untouched, including every atom of B
+        # outside the set.
+        for index in links_b:
+            ineq_mask[index, link_a] = False
+        named = array_b[links_b, 1:4]
+        centroid = named.mean(axis=0)
+        spokes = named - centroid
+        spoke_lengths = np.linalg.norm(spokes, axis=1)
+        circumradius = float(spoke_lengths.mean())
+        radial_spread = float(spoke_lengths.max() - spoke_lengths.min())
+        _, singular, vt = np.linalg.svd(spokes - spokes.mean(axis=0))
+        out_of_plane = float(singular[-1] / np.sqrt(len(links_b)))
+        # Structural, not chemical: one distance from one centre to k
+        # rigid points requires those points to lie on a circle, and the
+        # host can measure whether they do. It does not ask what the
+        # circle is.
+        if radial_spread > 0.25:
+            raise ContractError(
+                "fragment_b_atoms are not equidistant from their own "
+                f"centroid: radii spread {radial_spread:.3f} angstrom "
+                f"about {circumradius:.3f}. One distance from one centre "
+                "to every named atom exists only for a set on a circle, "
+                "so no placement can satisfy this set -- name a set that "
+                "lies on one"
+            )
+        if out_of_plane > 0.25:
+            raise ContractError(
+                "fragment_b_atoms are not coplanar: out-of-plane "
+                f"deviation {out_of_plane:.3f} angstrom. A single "
+                "distance to one centre is a cone about the set's own "
+                "axis, which a non-planar set does not have"
+            )
+        if distance < circumradius:
+            raise ContractError(
+                f"distance_angstrom {distance:.3f} is shorter than the "
+                f"named set's own circumradius {circumradius:.3f} "
+                "angstrom, so the centre would have to lie inside the "
+                "ring plane and no real placement exists. The shortest "
+                f"reachable distance for this set is {circumradius:.3f}"
+            )
+        placed_positions = _place_haptic_set(
+            array_a[:, 1:4],
+            array_b[:, 1:4],
+            centre_a=array_a[link_a, 1:4],
+            links_b=links_b,
+            distance=distance,
+            min_dist_matrix=min_dist_matrix,
+            ineq_mask=ineq_mask,
+        )
+        placed_positions, placement_search = placed_positions
+        if placed_positions is None:
+            # The distance is reachable for the set on its own, so what
+            # failed is the clash floor on a pair the caller did NOT
+            # exempt. Name that pair and the domain actually searched:
+            # the old wording claimed "every orientation" while the
+            # search held the ring axis at the global +z, so the claim
+            # was false and a legal placement was refused (2026-09-11).
+            pair = placement_search.get("limiting_pair")
+            if pair is not None:
+                tightest = (
+                    f"atom {pair[1] + 1}(A) and atom {pair[0] + 1}(B) "
+                    "come closest"
+                )
+                shortfall = placement_search.get("best_slack_angstrom")
+                if shortfall is not None:
+                    tightest += (
+                        f", still {abs(float(shortfall)):.3f} angstrom "
+                        "inside their floor"
+                    )
+            else:
+                tightest = "no pair could be identified"
+            raise ContractError(
+                "the named set can sit at "
+                f"{distance:.3f} angstrom from atom {fragment_a_atom}(A), "
+                "but no orientation clears the clash floor on the pairs "
+                "outside the set. Searched "
+                f"{placement_search.get('axes_sampled')} axis directions "
+                f"x 2 faces x "
+                f"{placement_search.get('rotations_per_axis')} rotations; "
+                f"{tightest}. What blocks this is an atom neither named "
+                "as the centre nor listed in fragment_b_atoms -- a "
+                "substituent on either fragment. Name the atoms that "
+                "really coordinate, or compose a fragment that does not "
+                "carry the group in the way"
+            )
+        positions_a = array_a[:, 1:4]
+        positions_b = placed_positions
+    elif dual_contact:
         ineq_mask[link_b2, link_a2] = False
         placed_positions = _place_dual_contact(
             array_a[:, 1:4],
@@ -634,11 +917,21 @@ def compose_trusted_molecular_arrangement(
             ineq_mask=ineq_mask,
         )
         if placed_positions is None:
+            # This said the distances "may be geometrically incompatible
+            # -- adjust a distance", which invited a retry that cannot
+            # succeed when what actually blocks the placement is the
+            # clash floor on the pairs neither contact exempts. A live
+            # session retried four times against it (ino3-r16,
+            # 2026-09-10). Two contacts hold two pairs; if several atoms
+            # must sit at one short distance from one centre, that is
+            # fragment_b_atoms, not a third distance.
             raise ContractError(
-                "no clash-free arrangement satisfies both requested "
-                "contacts: the distances may be geometrically "
-                "incompatible with the fragments -- adjust a distance or "
-                "choose different contact atoms"
+                "no arrangement holds both contacts with every "
+                "un-named pair outside the clash floor. Two contacts "
+                "exempt exactly two pairs; if more than one atom of B "
+                "must sit at one distance from a single atom of A, "
+                "declare them in fragment_b_atoms instead of adding "
+                "contacts. Otherwise a substituent is in the way"
             )
         positions_a = array_a[:, 1:4]
         positions_b = placed_positions
@@ -657,12 +950,27 @@ def compose_trusted_molecular_arrangement(
         )
         if placed is None:
             raise ContractError(
-                "no clash-free arrangement satisfies the requested contact: "
-                "raise distance_angstrom or choose different contact atoms"
+                "no orientation holds the requested contact with every "
+                "other interfragment pair outside the clash floor. "
+                "Raising distance_angstrom moves the whole fragment out "
+                "and may help; if instead several atoms of B must sit "
+                "at one distance from one atom of A, that is "
+                "fragment_b_atoms and not a longer single contact"
             )
         positions_a = array_a[:, 1:4]
         positions_b = placed[:, 1:4]
     achieved = float(np.linalg.norm(positions_b[link_b] - positions_a[link_a]))
+    # Per named atom, because "the set is at 2.06" is a claim and the k
+    # numbers are the evidence. A live composition reported one contact
+    # distance while the other nine Fe-C pairs sat 0.54 A too long, and
+    # nothing on the receipt showed it (ino3-r16, 2026-09-10).
+    achieved_set = [
+        round(
+            float(np.linalg.norm(positions_b[i - 1] - positions_a[link_a])),
+            6,
+        )
+        for i in haptic
+    ]
     pair_distances = np.linalg.norm(
         positions_b[:, np.newaxis, :] - positions_a[np.newaxis, :, :],
         axis=2,
@@ -690,8 +998,16 @@ def compose_trusted_molecular_arrangement(
         str(len(symbols)),
         (
             "ChemSmart composed arrangement; fragment A atoms first; "
-            f"contact {fragment_a_atom}(A)-{fragment_b_atom}(B) at "
-            f"{achieved:.4f} angstrom"
+            + (
+                f"set {list(haptic)}(B) at "
+                f"{min(achieved_set):.4f}-{max(achieved_set):.4f} "
+                f"angstrom from {fragment_a_atom}(A)"
+                if haptic
+                else (
+                    f"contact {fragment_a_atom}(A)-{fragment_b_atom}(B) "
+                    f"at {achieved:.4f} angstrom"
+                )
+            )
             + second_note
             + "; electronic state deliberately unbound"
         ),
@@ -718,7 +1034,11 @@ def compose_trusted_molecular_arrangement(
     )
     placement = {
         "schema_version": "chemsmart.placement-spec.v1",
-        "mode": "dual_contact" if dual_contact else "contact",
+        "mode": (
+            "haptic_set"
+            if haptic
+            else ("dual_contact" if dual_contact else "contact")
+        ),
         "fragment_a_atom": int(fragment_a_atom),
         "fragment_b_atom": int(fragment_b_atom),
         "distance_angstrom": distance,
@@ -726,6 +1046,16 @@ def compose_trusted_molecular_arrangement(
         "sphere_direction_samples": 96,
         "axial_rotation_samples": 6,
     }
+    if haptic:
+        placement["fragment_b_atoms"] = [int(i) for i in haptic]
+        placement["achieved_set_distances_angstrom"] = achieved_set
+        placement["set_circumradius_angstrom"] = round(circumradius, 6)
+        placement["set_out_of_plane_angstrom"] = round(out_of_plane, 6)
+        placement["set_radial_spread_angstrom"] = round(radial_spread, 6)
+        placement["clash_floor_exempt_pairs"] = [
+            [int(fragment_a_atom), int(i)] for i in haptic
+        ]
+        placement["axial_rotation_samples"] = 72
     if dual_contact:
         # Present only in dual mode, so every single-contact receipt --
         # including all minted before the second contact existed --
@@ -968,6 +1298,201 @@ def derive_trusted_molecular_species(
         "status": "derived",
     }
     return artifact, MolecularDerivationReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class PubchemGeometryReceiptV1:
+    """Host-owned lineage of a molecule the workspace did not supply.
+
+    Every geometry an Agent session could reach began in the workspace:
+    a supplied file, a database record, a previous result, or a
+    derivation of one of those.  A session that needed a molecule nobody
+    had handed it -- a reference couple, a calibration standard, a
+    literature comparison -- had no route at all, while the human CLI
+    has carried ``-p/--pubchem`` and ``Molecule.from_pubchem`` for the
+    same programs all along (OPEN-2 ino3-qwen, 2026-09-07: the session
+    named a same-level ferrocene/ferrocenium pair as the route that
+    would cancel the systematic it was reporting, and declined it).
+
+    The hub invariant is untouched: the model names an identifier and
+    nothing else, the host fetches through the same library call the
+    human CLI uses, and the host owns the bytes.  No coordinates are
+    model-authored.  What arrives is a database conformer -- a starting
+    structure carrying the depositor's own symmetry and no electronic
+    state -- so charge and multiplicity are bound explicitly afterwards
+    and the consuming stage is a new workflow for review.
+    """
+
+    schema_version: str
+    artifact_id: str
+    artifact_sha256: str
+    identifier: str
+    identifier_kind: str
+    atom_count: int
+    formula: str
+    fragment_count: int
+    status: str
+    receipt_sha256: str
+
+
+def _pubchem_failure_route(error: BaseException) -> tuple[str, str]:
+    """Which PubChem failure this is, and the route that answers it."""
+
+    if isinstance(error, ImportError):
+        return (
+            "pubchem.converter_is_installed",
+            "this host cannot build 3D coordinates from a PubChem record; "
+            "supply the geometry in the workspace and use "
+            "bind_scientific_identity",
+        )
+    if isinstance(error, RuntimeError):
+        # PubChem stores many coordination compounds as separate
+        # components -- ferrocene is Fe(2+) beside two cyclopentadienide
+        # anions -- and the converter will not embed those as one
+        # molecule. That is a fact about the record, not about the
+        # network, and no retry changes it.
+        return (
+            "pubchem.record_converts_to_one_geometry",
+            "the record did not convert to a single 3D molecule (a "
+            "multi-component salt or coordination compound often will "
+            "not); name a single-component identifier or CID, build the "
+            "species from fragments with compose_molecular_arrangement, "
+            "or supply the geometry in the workspace and use "
+            "bind_scientific_identity",
+        )
+    if isinstance(error, ValueError):
+        return (
+            "pubchem.record_exists",
+            "the identifier did not resolve; try the exact CID, the IUPAC "
+            "name, or a SMILES string",
+        )
+    return (
+        "pubchem.record_is_reachable",
+        "the lookup did not complete; retry once if this is transient, "
+        "otherwise supply the geometry in the workspace and use "
+        "bind_scientific_identity, or record the observable as "
+        "unreachable naming this lookup",
+    )
+
+
+def fetch_trusted_pubchem_geometry(
+    *,
+    approved_workspace: str | Path,
+    artifact_id: str,
+    identifier: str,
+) -> tuple[TrustedArtifactRefV1, PubchemGeometryReceiptV1]:
+    """Write a PubChem record out as a new host-owned geometry artifact.
+
+    ``identifier`` is a name, a numeric CID, or a SMILES string, exactly
+    as the human CLI accepts.  Absence is a refusal rather than an empty
+    geometry: an unreachable network and an unknown compound are
+    different failures and are reported as different ones.
+    """
+
+    import networkx as nx
+
+    from chemsmart.io.molecules import DEFAULT_BUFFER as CONNECTIVITY_BUFFER
+    from chemsmart.io.molecules.structure import Molecule
+
+    wanted = str(identifier or "").strip()
+    if not wanted:
+        raise ContractError("a pubchem geometry needs a non-empty identifier")
+    identifier_kind = "cid" if wanted.isnumeric() else "name_or_smiles"
+
+    try:
+        molecule = Molecule.from_pubchem(wanted)
+    except Exception as error:
+        # Three different things fail here and they want three different
+        # routes: the network, the identifier, and the 2D-to-3D
+        # conversion. Classifying by exception type rather than by
+        # message keeps a cause from being reported as a consequence --
+        # the live probe that earned this found ferrocene failing on
+        # conversion, which read as "unreachable" under one flat gate
+        # and would have sent a session to retry a lookup that will
+        # never succeed. An unenumerated type still lands on a typed
+        # refusal rather than a crash.
+        gate, route = _pubchem_failure_route(error)
+        raise RoutedContractError(
+            gate=gate,
+            invariant=(
+                "a geometry the host writes comes from bytes the host "
+                "actually read; a failed lookup is never an empty molecule."
+            ),
+            diagnosis=(
+                f"the PubChem lookup for {wanted!r} failed: "
+                f"{type(error).__name__}: {error}"
+            ),
+            route=route,
+            cost="no engine call",
+        ) from error
+    if molecule is None:
+        raise RoutedContractError(
+            gate="pubchem.record_exists",
+            invariant=(
+                "the host writes a geometry only for a record it resolved."
+            ),
+            diagnosis=(
+                f"PubChem returned no compound for {wanted!r} as a "
+                f"{identifier_kind}."
+            ),
+            route=(
+                "try the exact CID, the IUPAC name, or a SMILES string; a "
+                "fragment name and a trade name often resolve to neither"
+            ),
+            cost="no engine call",
+        )
+
+    symbols = list(molecule.chemical_symbols)
+    positions = molecule.positions
+    lines = [
+        str(len(symbols)),
+        (
+            f"ChemSmart pubchem geometry; identifier {wanted!r} "
+            f"({identifier_kind}); database conformer, not relaxed; "
+            "electronic state deliberately unbound"
+        ),
+    ]
+    for symbol, position in zip(symbols, positions):
+        lines.append(
+            f"{symbol:<3} {position[0]:.10f} {position[1]:.10f} "
+            f"{position[2]:.10f}"
+        )
+    payload = ("\n".join(lines) + "\n").encode("utf-8")
+    target = _target_below(
+        _absolute_workspace(approved_workspace),
+        "artifacts",
+        f"{require_identifier(artifact_id, 'artifact_id')}.xyz",
+    )
+    _write_exact_once(target, payload)
+    artifact = TrustedArtifactRefV1(
+        artifact_id=artifact_id,
+        kind="geometry_xyz",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    body = {
+        "schema_version": "chemsmart.pubchem-geometry.v1",
+        "artifact_id": artifact.artifact_id,
+        "artifact_sha256": artifact.sha256,
+        "identifier": wanted,
+        "identifier_kind": identifier_kind,
+        "atom_count": len(symbols),
+        "formula": molecule.get_chemical_formula(),
+        # Observed, never judged: a SMILES for a salt resolves to two
+        # separated pieces, which is right for an ion pair and wrong for
+        # the neutral molecule someone meant.
+        "fragment_count": nx.number_connected_components(
+            molecule.to_graph(
+                bond_cutoff_buffer=CONNECTIVITY_BUFFER, adjust_H=True
+            )
+        ),
+        "status": "fetched",
+    }
+    return artifact, PubchemGeometryReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
     )
 
@@ -1532,11 +2057,11 @@ def transform_trusted_molecular_geometry(
     # failed.
     ring_refusal = (
         "; a ring coordinate is driven with a relaxed scan, which lets "
-        "the rest of the ring respond (a constrained optimisation, "
-        "modred, previews but does not execute in this release); a "
+        "the rest of the ring respond and executes in this release; a "
         "substituent is moved to the other side of a ring atom by "
         "derive_molecular_species removing it and append_molecular_atom "
-        "placing it back, with no engine run"
+        "placing it back, with no engine run; two separate fragments are "
+        "placed at a chosen contact by compose_molecular_arrangement"
     )
     if operation == "set_bond_length" and _in_ring(axis):
         raise ContractError(
@@ -1745,6 +2270,170 @@ def transform_trusted_molecular_geometry(
         "status": "edited",
     }
     return artifact, GeometryEditReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class SymmetryBreakReceiptV1:
+    """Host-owned lineage of one seeded perturbation of a whole geometry.
+
+    A source geometry carries its builder's symmetry, and an exactly
+    symmetric start converges to the nearest stationary point of that
+    symmetry.  The model names the seed and the amplitude; the host
+    draws the displacement, removes the net translation, records the
+    largest step it actually took, and owns the bytes.  Atom count,
+    order and formula are preserved; parent atom *i* is perturbed atom
+    *i*.  Nothing here judges the amplitude: the optimisation that
+    consumes the structure does.
+    """
+
+    schema_version: str
+    perturbed_artifact_id: str
+    perturbed_artifact_sha256: str
+    parent_artifact_id: str
+    parent_sha256: str
+    parent_identity_sha256: str
+    seed: int
+    amplitude_angstrom: float
+    max_displacement_angstrom: float
+    rms_displacement_angstrom: float
+    atom_count: int
+    formula: str
+    min_interatomic_distance_angstrom: float
+    close_contact_pairs: tuple[dict[str, Any], ...]
+    connectivity_changed: bool
+    point_group_before: str
+    point_group_after: str
+    atom_order_note: str
+    starting_structure_role: str
+    status: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.symmetry-break.v1":
+            raise ContractError("unsupported symmetry break receipt")
+        for name, digest in (
+            ("perturbed_artifact_sha256", self.perturbed_artifact_sha256),
+            ("parent_sha256", self.parent_sha256),
+            ("parent_identity_sha256", self.parent_identity_sha256),
+        ):
+            require_sha256(digest, name)
+        require_sha256(self.receipt_sha256, "receipt_sha256")
+        if self.receipt_sha256 != canonical_sha256(self._body()):
+            raise ContractError("symmetry break receipt digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in self.__dict__.items()
+            if key != "receipt_sha256"
+        }
+
+
+def break_trusted_molecular_symmetry(
+    *,
+    approved_workspace: str | Path,
+    perturbed_artifact_id: str,
+    parent: TrustedArtifactRefV1,
+    parent_identity_sha256: str,
+    seed: int,
+    amplitude_angstrom: float,
+) -> tuple[TrustedArtifactRefV1, SymmetryBreakReceiptV1]:
+    """Perturb every atom of an identity-bound geometry by seed.
+
+    Refusals are structural only: a seed that is not an integer, an
+    amplitude outside (0, 0.5] Å, fewer than two atoms.  The amplitude
+    is never refused on merit; whether the step escaped the saddle is
+    decided by the optimisation that consumes it.
+    """
+
+    from chemsmart.agent.symmetry import (
+        point_group_estimate,
+        seeded_perturbation,
+    )
+    from chemsmart.io.molecules.structure import Molecule
+
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ContractError("break_symmetry takes an integer seed")
+    amplitude = float(amplitude_angstrom)
+    if not 0.0 < amplitude <= 0.5:
+        raise ContractError(
+            "a symmetry-breaking amplitude lies in (0, 0.5] angstrom; got "
+            f"{amplitude}"
+        )
+    if parent.kind != "geometry_xyz":
+        raise ContractError("break_symmetry takes a geometry_xyz parent")
+    path = Path(parent.path)
+    if file_sha256(path) != parent.sha256:
+        raise ContractError("parent geometry bytes no longer match")
+    molecule = Molecule.from_filepath(str(path))
+    symbols = list(molecule.chemical_symbols)
+    positions = np.asarray(molecule.positions, dtype=float).copy()
+    if len(symbols) < 2:
+        raise ContractError("a symmetry to break needs at least two atoms")
+    before = point_group_estimate(symbols, positions)["point_group"]
+    moved, largest, rms = seeded_perturbation(
+        positions, seed=seed, amplitude_angstrom=amplitude
+    )
+    perturbed = Molecule(
+        symbols=list(symbols), positions=[list(row) for row in moved]
+    )
+    after = point_group_estimate(symbols, moved)["point_group"]
+    shortest, contacts = _close_contact_observations(symbols, moved)
+    connectivity_changed = set(
+        map(frozenset, _molecule_graph(molecule).edges)
+    ) != set(map(frozenset, _molecule_graph(perturbed).edges))
+    payload = _xyz_payload(
+        symbols,
+        moved,
+        (
+            f"ChemSmart symmetry break; seed {int(seed)}, amplitude "
+            f"{amplitude:.4f} A, largest step {largest:.4f} A; every atom "
+            "moved, net translation removed; starting structure, electronic "
+            "state deliberately unbound"
+        ),
+    )
+    target = _target_below(
+        _absolute_workspace(approved_workspace),
+        "artifacts",
+        f"{require_identifier(perturbed_artifact_id, 'artifact_id')}.xyz",
+    )
+    _write_exact_once(target, payload)
+    artifact = TrustedArtifactRefV1(
+        artifact_id=perturbed_artifact_id,
+        kind="geometry_xyz",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    body = {
+        "schema_version": "chemsmart.symmetry-break.v1",
+        "perturbed_artifact_id": artifact.artifact_id,
+        "perturbed_artifact_sha256": artifact.sha256,
+        "parent_artifact_id": parent.artifact_id,
+        "parent_sha256": parent.sha256,
+        "parent_identity_sha256": parent_identity_sha256,
+        "seed": int(seed),
+        "amplitude_angstrom": _reported(amplitude),
+        "max_displacement_angstrom": _reported(largest),
+        "rms_displacement_angstrom": _reported(rms),
+        "atom_count": len(symbols),
+        "formula": perturbed.get_chemical_formula(),
+        "min_interatomic_distance_angstrom": _reported(shortest),
+        "close_contact_pairs": contacts,
+        "connectivity_changed": bool(connectivity_changed),
+        "point_group_before": before,
+        "point_group_after": after,
+        "atom_order_note": (
+            "atom order and count are preserved; parent atom i is "
+            "perturbed atom i"
+        ),
+        "starting_structure_role": _EDIT_STARTING_STRUCTURE_ROLE,
+        "status": "perturbed",
+    }
+    return artifact, SymmetryBreakReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
     )
 
@@ -2440,10 +3129,22 @@ class ApprovedNodeBindingV1:
     #: The anomaly this node investigates, when it is an excursion; the
     #: launch charges it to the grant's own line. Omitted when empty.
     excursion: str = ""
+    #: The goal's original bound geometry behind a reached or displaced
+    #: input, so the executor's sensors can compare the result against
+    #: the structure the goal started from and a repair cannot extinguish
+    #: the anomaly it answers (NOVEL-3 ino3: a quartet restarted from a
+    #: distorted geometry; its 2.81 A S...S surfaced nowhere).  Empty for
+    #: an input that is the goal's own start; omitted from the digest body
+    #: when empty.
+    root_artifact_id: str = ""
+    root_artifact_sha256: str = ""
 
     def __post_init__(self) -> None:
         if self.excursion:
             require_sha256(self.excursion, "excursion")
+        if self.root_artifact_sha256:
+            require_sha256(self.root_artifact_sha256, "root_artifact_sha256")
+            require_identifier(self.root_artifact_id, "root_artifact_id")
         for name, value in (
             ("node_id", self.node_id),
             ("program", self.program),
@@ -2508,6 +3209,9 @@ def _approved_node_binding_body(
         )
     if binding.excursion:
         body["excursion"] = binding.excursion
+    if binding.root_artifact_sha256:
+        body["root_artifact_id"] = binding.root_artifact_id
+        body["root_artifact_sha256"] = binding.root_artifact_sha256
     return body
 
 
@@ -3219,6 +3923,352 @@ class AnomalyObservationV1:
         }
 
 
+@dataclass(frozen=True)
+class StationaryPointCharacterisationV1:
+    """What a result actually is, checked against its own printed modes.
+
+    A minimum search that lands on a saddle keeps its failure: the promise
+    it was launched under was not met, and no receipt here changes that.
+    What this records is the other true statement about the same bytes --
+    that the structure is a stationary point of the order the session
+    named, verified by the host against the frequencies the program
+    printed, under the same 20 cm-1 convention the validator uses.
+
+    Earned by the round that found twenty-four archived saddles and no
+    finding delivered from any of them (2026-09-04). It is an affordance,
+    never a precondition: the numbers of a failed result were always
+    readable, and this exists so that a claim standing on them can say
+    what the structure is with a receipt behind it.
+    """
+
+    schema_version: str
+    result_artifact_sha256: str
+    program: str
+    node_id: str
+    order_claimed: int
+    observed_imaginary_modes: int
+    anomaly_sha256: str
+    receipt_sha256: str
+    #: The lowest imaginary frequency, when the result printed one.
+    #: Omitted from the digest body when absent, so a characterisation of
+    #: a true minimum verifies under the same arithmetic.
+    lowest_imaginary_cm_1: float | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.schema_version
+            != "chemsmart.stationary-point-characterisation.v1"
+        ):
+            raise ContractError(
+                "unsupported stationary point characterisation schema"
+            )
+        require_sha256(self.result_artifact_sha256, "result_artifact_sha256")
+        require_identifier(self.program, "program")
+        if self.node_id:
+            require_identifier(self.node_id, "node_id")
+        if self.anomaly_sha256:
+            require_sha256(self.anomaly_sha256, "anomaly_sha256")
+        if self.order_claimed < 0 or self.observed_imaginary_modes < 0:
+            raise ContractError("a stationary point order is non-negative")
+        if self.receipt_sha256 != canonical_sha256(self._body()):
+            raise ContractError(
+                "stationary point characterisation digest mismatch"
+            )
+
+    def _body(self) -> dict[str, Any]:
+        body = {
+            "schema_version": self.schema_version,
+            "result_artifact_sha256": self.result_artifact_sha256,
+            "program": self.program,
+            "node_id": self.node_id,
+            "order_claimed": self.order_claimed,
+            "observed_imaginary_modes": self.observed_imaginary_modes,
+            "anomaly_sha256": self.anomaly_sha256,
+        }
+        if self.lowest_imaginary_cm_1 is not None:
+            body["lowest_imaginary_cm_1"] = self.lowest_imaginary_cm_1
+        return body
+
+
+def build_stationary_point_characterisation(
+    *,
+    result_artifact: TrustedArtifactRefV1,
+    program: str,
+    order_claimed: int,
+    node_id: str = "",
+    anomaly_sha256: str = "",
+) -> StationaryPointCharacterisationV1:
+    """Check a claimed stationary-point order against the printed modes.
+
+    The host owns the arithmetic and the convention; the session owns the
+    claim. A statement the frequencies do not support is refused here,
+    naming both numbers, and nothing about the node's own verdict moves
+    either way.
+    """
+
+    from chemsmart.agent.terminal_states import (
+        consequential_imaginary_mode_count,
+    )
+    from chemsmart.analysis.result_readers import reader_for
+
+    normalized = require_identifier(str(program).strip().lower(), "program")
+    expected_kind = f"{normalized}_output"
+    if result_artifact.kind != expected_kind:
+        raise ContractError(
+            "a stationary point characterisation on "
+            f"{normalized} requires a {expected_kind} artifact, not "
+            f"{result_artifact.kind!r}"
+        )
+    output = reader_for(normalized).open_output(str(result_artifact.path))
+    frequencies = tuple(
+        float(value) for value in (output.vibrational_frequencies or ())
+    )
+    observed = consequential_imaginary_mode_count(frequencies)
+    if observed is None:
+        raise ContractError(
+            "this result printed no frequencies, so it characterises no "
+            "stationary point; a frequency-bearing result is what carries "
+            "the order"
+        )
+    if int(order_claimed) != int(observed):
+        raise ContractError(
+            f"the result carries {observed} imaginary mode(s) beyond the "
+            "20 cm^-1 noise convention, not "
+            f"{int(order_claimed)}; the order a structure has is what its "
+            "own printed frequencies say"
+        )
+    imaginary = [value for value in frequencies if value < -20.0]
+    body = {
+        "schema_version": "chemsmart.stationary-point-characterisation.v1",
+        "result_artifact_sha256": result_artifact.sha256,
+        "program": normalized,
+        "node_id": node_id,
+        "order_claimed": int(order_claimed),
+        "observed_imaginary_modes": int(observed),
+        "anomaly_sha256": anomaly_sha256,
+    }
+    lowest = float(f"{min(imaginary):.2f}") if imaginary else None
+    if lowest is not None:
+        body["lowest_imaginary_cm_1"] = lowest
+    return StationaryPointCharacterisationV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
+@dataclass(frozen=True)
+class ReachedGeometryReceiptV1:
+    """The structure a run actually reached, carried forward as a start.
+
+    The repair menu had told sessions for the whole campaign to "restart
+    from the last geometry the run reached", and no route existed: the
+    workspace scan bars the node directories, no tool read a geometry out
+    of a result, and a producer edge needs a validated node. A live goal
+    hit the wall twice, wrote "a failed-run end structure cannot anchor a
+    bound geometry_xyz input in this host" into its own decision record,
+    and spent engine calls building starts by hand instead (NOVEL-1 ino1,
+    2026-09-04); across that goal the model asked for the reached
+    geometry five times in three different spellings.
+
+    What this is not: a way for a failed result to satisfy a producer
+    edge. Nothing about admission moves -- a failed node still fails
+    geometry handoff, still satisfies no edge, still blocks execution
+    readiness. This is the other thing, an explicit session act that
+    mints a new starting structure whose consuming stage is a new
+    workflow with its own review, exactly as ``bind_scan_point_geometry``
+    does for a point of a surface.
+
+    It binds no electronic state: what a reached geometry is depends on
+    the question asked next, so charge and multiplicity are bound
+    explicitly afterwards. And it claims no quantity -- a geometry is a
+    starting structure, graded by the optimisation that consumes it --
+    which is why the source run's own ending travels on the receipt and
+    in the file's comment line rather than being judged here.
+    """
+
+    schema_version: str
+    reached_artifact_id: str
+    reached_artifact_sha256: str
+    source_result_artifact_id: str
+    source_result_sha256: str
+    program: str
+    #: What this workspace's sealed streams recorded for the run that
+    #: wrote the source bytes, and the node it ran as. Empty when the
+    #: workspace holds no record of them, which is a fact about the
+    #: record and not about the geometry.
+    recorded_terminal_state: str
+    recorded_node_id: str
+    #: Whether the source program reported a normal termination. A run
+    #: that merely exhausted its iteration budget did; one that crashed
+    #: or was killed did not, and a reader deciding whether to trust a
+    #: starting structure wants to know which.
+    normal_termination: bool
+    atom_count: int
+    formula: str
+    receipt_sha256: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.reached-geometry.v1":
+            raise ContractError("unsupported reached geometry schema")
+        require_identifier(self.reached_artifact_id, "reached_artifact_id")
+        require_sha256(self.reached_artifact_sha256, "reached_artifact_sha256")
+        require_sha256(self.source_result_sha256, "source_result_sha256")
+        require_identifier(self.program, "program")
+        if self.recorded_node_id:
+            require_identifier(self.recorded_node_id, "recorded_node_id")
+        if self.atom_count < 1:
+            raise ContractError("a reached geometry has at least one atom")
+        if self.receipt_sha256 != canonical_sha256(self._body()):
+            raise ContractError("reached geometry digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "reached_artifact_id": self.reached_artifact_id,
+            "reached_artifact_sha256": self.reached_artifact_sha256,
+            "source_result_artifact_id": self.source_result_artifact_id,
+            "source_result_sha256": self.source_result_sha256,
+            "program": self.program,
+            "recorded_terminal_state": self.recorded_terminal_state,
+            "recorded_node_id": self.recorded_node_id,
+            "normal_termination": self.normal_termination,
+            "atom_count": self.atom_count,
+            "formula": self.formula,
+        }
+
+
+def _recorded_ending_for(
+    run_evidence_root: str | Path | None, result_sha256: str
+) -> tuple[str, str]:
+    """The node and ending this workspace recorded for those result bytes."""
+
+    if not run_evidence_root:
+        return ("", "")
+    try:
+        from chemsmart.agent.live_session import _recorded_terminal_states
+
+        recorded = _recorded_terminal_states(Path(run_evidence_root))
+    except Exception:  # pragma: no cover - a missing record is not an error
+        return ("", "")
+    node_id, state = recorded.get(result_sha256, ("", ""))
+    return (str(node_id or ""), str(state or ""))
+
+
+def build_reached_geometry(
+    *,
+    approved_workspace: str | Path,
+    reached_artifact_id: str,
+    result_artifact: TrustedArtifactRefV1,
+    program: str,
+    run_evidence_root: str | Path | None = None,
+) -> tuple[TrustedArtifactRefV1, ReachedGeometryReceiptV1]:
+    """Carry the geometry a result reached into a new starting structure.
+
+    Read through the shared selector plane rather than any one program's
+    sidecar convention, so every program that answers ``positions`` and
+    ``symbols`` answers this. Refusals are structural only -- a result of
+    the wrong kind, or one carrying no readable geometry -- because
+    whether the reached structure is a good place to restart from is
+    decided by the optimisation that consumes it, not here.
+    """
+
+    from chemsmart.analysis.result_readers import reader_for
+
+    normalized = require_identifier(str(program).strip().lower(), "program")
+    reader = reader_for(normalized)
+    if reader is None:
+        raise ContractError(
+            f"no result reader is registered for {normalized!r}"
+        )
+    if result_artifact.kind != reader.artifact_kind:
+        raise ContractError(
+            f"carrying a reached geometry out of {normalized} requires a "
+            f"{reader.artifact_kind} artifact, not {result_artifact.kind!r}"
+        )
+    output = reader.open_output(Path(result_artifact.path))
+    try:
+        positions = np.asarray(
+            reader.accessors["positions"](output), dtype=float
+        )
+        symbols = [str(item) for item in reader.accessors["symbols"](output)]
+    except Exception as error:
+        raise ContractError(
+            f"this {normalized} result carries no readable geometry, so "
+            "there is no reached structure to carry forward"
+        ) from error
+    if (
+        positions.ndim != 2
+        or positions.shape[1] != 3
+        or len(symbols) != positions.shape[0]
+        or not symbols
+    ):
+        raise ContractError(
+            "the reached geometry is not a complete structure: "
+            f"{len(symbols)} symbol(s) against {positions.shape} "
+            "coordinates"
+        )
+    if not np.all(np.isfinite(positions)):
+        raise ContractError(
+            "the reached geometry carries non-finite coordinates, so the "
+            "result was cut mid-structure"
+        )
+
+    node_id, state = _recorded_ending_for(
+        run_evidence_root, result_artifact.sha256
+    )
+    normal = getattr(output, "normal_termination", None) is True
+    counts: dict[str, int] = {}
+    for symbol in symbols:
+        counts[symbol] = counts.get(symbol, 0) + 1
+    formula = "".join(f"{symbol}{counts[symbol]}" for symbol in sorted(counts))
+    ending = state or "no ending recorded in this workspace"
+    payload = _xyz_payload(
+        symbols,
+        positions,
+        (
+            f"ChemSmart reached geometry; the structure {normalized} "
+            f"reached in {result_artifact.artifact_id}"
+            + (f" (node {node_id})" if node_id else "")
+            + f"; that run recorded {ending}; "
+            + (
+                "the program terminated normally"
+                if normal
+                else "the program did not terminate normally"
+            )
+            + "; starting structure, electronic state deliberately unbound"
+        ),
+    )
+    target = _target_below(
+        _absolute_workspace(approved_workspace),
+        "artifacts",
+        f"{require_identifier(reached_artifact_id, 'artifact_id')}.xyz",
+    )
+    _write_exact_once(target, payload)
+    artifact = TrustedArtifactRefV1(
+        artifact_id=reached_artifact_id,
+        kind="geometry_xyz",
+        sha256=file_sha256(target),
+        size_bytes=target.stat().st_size,
+        path=str(target),
+        cli_value=str(target),
+    )
+    body = {
+        "schema_version": "chemsmart.reached-geometry.v1",
+        "reached_artifact_id": artifact.artifact_id,
+        "reached_artifact_sha256": artifact.sha256,
+        "source_result_artifact_id": result_artifact.artifact_id,
+        "source_result_sha256": result_artifact.sha256,
+        "program": normalized,
+        "recorded_terminal_state": state,
+        "recorded_node_id": node_id,
+        "normal_termination": normal,
+        "atom_count": len(symbols),
+        "formula": formula,
+    }
+    return artifact, ReachedGeometryReceiptV1(
+        **body, receipt_sha256=canonical_sha256(body)
+    )
+
+
 def anomaly_standing(
     records: Sequence[Any],
 ) -> tuple[dict[str, Any], ...]:
@@ -3592,6 +4642,13 @@ class ProgramExecutionReceiptV1:
     started_at: str
     finished_at: str
     receipt_sha256: str
+    #: When the host finished reading and judging the outputs.  The
+    #: engine's window is started_at..finished_at; the host's own
+    #: post-processing used to sit inside it and was charged to the goal's
+    #: engine-wall budget -- 74 minutes of parser time on one node
+    #: (REACH-1 po3, 2026-09-06).  Omitted from the digest body when empty,
+    #: so every receipt minted before the field existed verifies.
+    evaluated_at: str = ""
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.program-execution-receipt.v1":
@@ -3711,6 +4768,8 @@ class ProgramExecutionReceiptV1:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
         }
+        if self.evaluated_at.strip():
+            body["evaluated_at"] = self.evaluated_at
         if self.receipt_sha256 != canonical_sha256(body):
             raise ContractError("program execution receipt digest mismatch")
 
@@ -3736,6 +4795,7 @@ def build_program_execution_receipt(
     findings: Sequence[str] = (),
     started_at: str,
     finished_at: str = "",
+    evaluated_at: str = "",
 ) -> ProgramExecutionReceiptV1:
     """Record wrapper transport, child completion, and validation separately.
 
@@ -3773,6 +4833,8 @@ def build_program_execution_receipt(
         "started_at": str(started_at).strip(),
         "finished_at": str(finished_at).strip(),
     }
+    if str(evaluated_at).strip():
+        body["evaluated_at"] = str(evaluated_at).strip()
     return ProgramExecutionReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
     )
@@ -6370,6 +7432,14 @@ class WorkflowExecutionReviewV1:
     #: execution and no declaration has ever been checked.  Empty
     #: declarations keep the original canonical body.
     requested_observable_declarations: tuple[dict[str, Any], ...] = ()
+    #: What the host could state about each executable node from the plan
+    #: alone -- a default the program will apply and the project field
+    #: that changes it.  Observations, never refusals.  ORCA's 3N geometry
+    #: iteration cap was stated 62 times in one goal's compile results and
+    #: reached no review, no bundle and no human (NOVEL-3 ino3,
+    #: 2026-09-05).  Displayed beside the node rows, outside their
+    #: projection digests; empty keeps the original canonical body.
+    node_observations: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.workflow-execution-review.v1":
@@ -6414,6 +7484,13 @@ class WorkflowExecutionReviewV1:
             tuple(
                 canonical_data(dict(item))
                 for item in self.requested_observable_declarations
+            ),
+        )
+        object.__setattr__(
+            self,
+            "node_observations",
+            tuple(
+                canonical_data(dict(item)) for item in self.node_observations
             ),
         )
         if self.request.workflow_id != self.scientific_plan.workflow_id:
@@ -6609,6 +7686,8 @@ class WorkflowExecutionReviewV1:
             body.pop("consulted_domain_knowledge", None)
         if not self.requested_observable_declarations:
             body.pop("requested_observable_declarations", None)
+        if not self.node_observations:
+            body.pop("node_observations", None)
         return body
 
 
@@ -6626,6 +7705,7 @@ def build_workflow_execution_review(
     scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None,
     consulted_domain_knowledge: Sequence[Mapping[str, Any]] = (),
     requested_observable_declarations: Sequence[Mapping[str, Any]] = (),
+    node_observations: Sequence[Mapping[str, Any]] = (),
 ) -> WorkflowExecutionReviewV1:
     """Assemble one self-verifying review packet without granting authority.
 
@@ -6664,6 +7744,13 @@ def build_workflow_execution_review(
     )
     if declared:
         body["requested_observable_declarations"] = declared
+    observed = tuple(
+        canonical_data(dict(item))
+        for item in node_observations
+        if tuple(item.get("observations", ()))
+    )
+    if observed:
+        body["node_observations"] = observed
     return WorkflowExecutionReviewV1(
         **body, review_sha256=canonical_sha256(body)
     )
@@ -6768,6 +7855,10 @@ class WorkflowExecutionApprovalBundleV1:
     #: session -- so without them the completion gate and the expectation
     #: rows read an empty declaration set and pass silently.
     requested_observable_declarations: tuple[dict[str, Any], ...] = ()
+    #: The host's per-node observations, verbatim from the reviewed packet,
+    #: so the run story and the executor's own review carry what the human
+    #: saw.  Empty keeps the original canonical body.
+    node_observations: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -6796,6 +7887,13 @@ class WorkflowExecutionApprovalBundleV1:
             tuple(
                 canonical_data(dict(item))
                 for item in self.requested_observable_declarations
+            ),
+        )
+        object.__setattr__(
+            self,
+            "node_observations",
+            tuple(
+                canonical_data(dict(item)) for item in self.node_observations
             ),
         )
         if self.resolution.decision != "approve":
@@ -7036,6 +8134,8 @@ class WorkflowExecutionApprovalBundleV1:
             body.pop("scientific_toolchain_plan", None)
         if not self.requested_observable_declarations:
             body.pop("requested_observable_declarations", None)
+        if not self.node_observations:
+            body.pop("node_observations", None)
         return body
 
     def node_review(self, node_id: str) -> WorkflowExecutionNodeReviewV1:
@@ -7137,6 +8237,8 @@ def approve_workflow_execution_review(
         body["requested_observable_declarations"] = (
             review.requested_observable_declarations
         )
+    if review.node_observations:
+        body["node_observations"] = review.node_observations
     return WorkflowExecutionApprovalBundleV1(
         **body, bundle_sha256=canonical_sha256(body)
     )

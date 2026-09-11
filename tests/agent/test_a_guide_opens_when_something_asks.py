@@ -52,7 +52,24 @@ def test_the_stem_hides_every_leaf_tool_and_operation():
     assert not (set(LEAF_TOOLS) & _names(stem))
     assert not (set(LEAF_OPERATIONS) & _operations(stem))
     assert "open_guide" in _names(stem)
-    assert len(json.dumps(stem.tool_definitions)) < 90_000
+    # Moved once, 90_000 -> 91_000 (2026-09-06): two owner-ruled
+    # point-of-use affordances joined the stem -- the diagnostic
+    # declaration (R3) and the input-check probe's sentence (R2) --
+    # after their texts were cut to the bone. The next growth trims
+    # something else, and did (2026-09-09): fetch_pubchem_geometry
+    # joined the stem and the cap held, because the identifier spelling
+    # rule stopped being repeated in prose on 45 fields whose JSON
+    # pattern already stated it.
+    # Not raised again. Stem headroom had fallen to 7 bytes, and the
+    # cause was leaf-family guidance sitting in the stem: the CBS
+    # exponent's ~500-character description lived on the shared
+    # expression-node schema every session reads, while the four CBS
+    # operations it serves are leaf operations the stem does not expose,
+    # and the `cbs` guide already said the exponent comes from the
+    # protocol. Moving it there recovered 834 bytes. What belongs in the
+    # stem is what a field IS and what the host records about it; when
+    # to reach for it belongs to the guide that opens for that family.
+    assert len(json.dumps(stem.tool_definitions)) < 91_000
 
 
 def test_every_guide_adds_exactly_its_tools_and_operations():
@@ -404,8 +421,11 @@ def test_a_falsified_expectation_is_an_observation_never_a_limitation(
     )
     (row,) = host._declared_observable_predictions(task_spec_sha256="a" * 64)
     assert row["agreement"] == "diverged"
+    # The policy identity is a digest, not a plan object: a delivery made
+    # directly from registered results has no plan and is certified from
+    # its own declarations instead.
     (digest,) = host._record_toolchain_completion(
-        SimpleNamespace(plan_sha256="b" * 64),
+        "b" * 64,
         task_spec_sha256="a" * 64,
         source_receipt_sha256s=("c" * 64,),
     )

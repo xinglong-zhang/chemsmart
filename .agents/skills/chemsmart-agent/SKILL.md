@@ -200,18 +200,18 @@ runs ``chemsmart agent wake`` to resume it at the outcome phase. A run
 that ended in a repairable state (wrong stationary point, convergence
 failure, timeout, memory limit, native error) opens a typed recovery
 whose wake carries a repair menu; one that ended unanswerably returns
-to the human. Every executed result is judged on the program-neutral
-stationary-point rule beside its program's validator, and the
-capability receipt's coverage cell says which typed axes and validity
-rules the host reaches for that program and jobtype. One driver runs every goal and the ``goal`` command,
-the ``plan`` command, and the terminal interface are views of it; with
-``--dispatch scheduler`` the approved run is submitted through the
-server profile's scheduler, the goal parks, and the job's own tail
-runs ``chemsmart agent wake`` to resume it at the outcome phase. A run
-that ended in a repairable state (wrong stationary point, convergence
-failure, timeout, memory limit, native error) opens a typed recovery
-whose wake carries a repair menu; one that ended unanswerably returns
-to the human. Every executed result is judged on the program-neutral
+to the human. Say what you did with each offered route in
+``record_scientific_decision``'s ``menu_route_dispositions`` (taken,
+rejected, deferred, with the mechanism and the receipts); the next wake
+shows them beside the menu. Declare your own prediction about the route
+with ``role: diagnostic`` and a ``failure_update_rule``: it is scored
+like any expectation and never owed. Every result the workspace record
+or a run stream names is registered by digest under
+``<program>-result-<sha16>`` and opens by that id in ``inspect_run`` and
+``extract_result_quantities``; a 64-hex value is a digest, not an id.
+Where the server profile names ORCA, preflight also runs ORCA's own
+input check on the previewed input, bounded and never charged, and its
+word appears beside the node on the review. Every executed result is judged on the program-neutral
 stationary-point rule beside its program's validator, and the
 capability receipt's coverage cell says which typed axes and validity
 rules the host reaches for that program and jobtype. How each executed node ended is one typed vocabulary

@@ -19,7 +19,7 @@ import os
 import re
 from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -186,6 +186,11 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         "mulliken_atomic_charges",
         "loewdin_atomic_charges",
         "hirshfeld_atomic_charges",
+        # The second column of the same population block, read for years
+        # and discarded one index from where a session needed it
+        # (NOVEL-3 ino3, 2026-09-05); open shells only, sum 2S.
+        "mulliken_atomic_spin_populations",
+        "loewdin_atomic_spin_populations",
     }
 )
 
@@ -692,6 +697,13 @@ class ThermochemistryRequestV1:
     alpha: int = 4
     use_weighted_mass: bool = False
     frequency_scale_factor: float = 1.0
+    #: Which printed mode the session names as the reaction coordinate,
+    #: 1-based, when the structure is a characterised saddle rather than
+    #: a minimum. Naming it is the scientific act; the kernel already
+    #: knows how to remove it and how to treat the remaining low modes
+    #: through ``entropy_method`` and the two cutoffs. Zero means the
+    #: structure is claimed as a minimum and the ordinary check applies.
+    reaction_coordinate_mode: int = 0
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.thermochemistry-request.v1":
@@ -700,6 +712,10 @@ class ThermochemistryRequestV1:
             )
         _require_identifier(self.artifact_id, "artifact_id")
         _require_sha256(self.artifact_sha256)
+        if int(self.reaction_coordinate_mode) < 0:
+            raise QuantityContractError(
+                "reaction_coordinate_mode is a 1-based mode index"
+            )
         normalized_program = str(self.program).strip().lower()
         object.__setattr__(self, "program", normalized_program)
         from chemsmart.analysis.result_readers import reader_for
@@ -1292,6 +1308,54 @@ def _thermochemistry_assumptions(
     return tuple(assumptions)
 
 
+#: Below this, a harmonic oscillator's entropy is dominated by a mode
+#: the harmonic model describes worst; the observation names them.
+LOW_FREQUENCY_MODE_THRESHOLD_CM1 = 50.0
+
+
+def low_frequency_mode_entropy(
+    frequencies_cm1: Sequence[float],
+    *,
+    temperature_k: float,
+    threshold_cm1: float = LOW_FREQUENCY_MODE_THRESHOLD_CM1,
+) -> dict[str, Any]:
+    """The RRHO entropy carried by the real modes below a threshold.
+
+    Two enantiomeric gauche rotamers, run in two sealed windows, differed
+    by 0.06 kJ/mol in electronic energy and 0.40 kJ/mol in Gibbs energy,
+    the difference coming entirely from harmonic-oscillator entropy of
+    modes between 8 and 16 cm-1 -- on a question whose design threshold
+    was 2 kJ/mol (NOVEL-1/2 po2, 2026-09-04). Per mode, with
+    x = h c nu / k T:  S = R [ x / (e^x - 1) - ln(1 - e^-x) ]. An
+    observation and never a verdict: the quasi-harmonic treatments the
+    derivation already exposes are the scientist's to choose.
+    """
+
+    import math
+
+    gas_constant = 8.314462618  # J mol^-1 K^-1
+    second_radiation = 1.438776877  # h c / k in cm K
+    temperature = float(temperature_k)
+    low = sorted(
+        float(value)
+        for value in frequencies_cm1
+        if 0.0 < float(value) < float(threshold_cm1)
+    )
+    entropy = 0.0
+    for nu in low:
+        x = second_radiation * nu / temperature
+        entropy += gas_constant * (
+            x / math.expm1(x) - math.log1p(-math.exp(-x))
+        )
+    return {
+        "threshold_cm1": float(threshold_cm1),
+        "temperature_k": temperature,
+        "low_modes_cm1": tuple(round(value, 2) for value in low),
+        "entropy_j_per_mol_k": round(entropy, 4),
+        "entropy_term_kj_per_mol": round(temperature * entropy / 1000.0, 4),
+    }
+
+
 def derive_result_thermochemistry(
     *,
     request: ThermochemistryRequestV1,
@@ -1341,14 +1405,76 @@ def derive_result_thermochemistry(
         ),
         h_freq_cutoff=request.enthalpy_cutoff_cm1,
         frequency_scale_factor=request.frequency_scale_factor,
-        check_imaginary_frequencies=True,
+        # A session that names the reaction coordinate has said what the
+        # structure is; the kernel then removes that mode and treats the
+        # rest through `entropy_method` and the two cutoffs, which is
+        # machinery it has always had and nothing could reach.
+        #
+        # The refusal this replaces rejected every free energy of
+        # activation -- the commonest thermochemistry in mechanism work
+        # -- and prevented nothing: a live session computed
+        # delta-E + delta-ZPE by hand instead, changing the rigour of a
+        # delivered number without changing whether it was delivered.
+        # The charter says outright that a wrong-stationary-point
+        # result's "energy, its modes and its thermochemistry are
+        # exactly where a finding lives". It is the same class of
+        # refusal f9c853d3 removed elsewhere (SUFFICIENCY-5,
+        # 2026-09-10). Naming the mode is a scientific act, not a
+        # permission bit: the default still refuses, because a saddle
+        # nobody has characterised is a failed optimisation.
+        check_imaginary_frequencies=not int(
+            getattr(request, "reaction_coordinate_mode", 0) or 0
+        ),
     )
     if engine.program != request.program:
         raise QuantityExtractionError(
             "trusted result program differs from the requested thermochemistry "
             f"program: expected {request.program!r}, observed {engine.program!r}"
         )
-    engine.check_frequencies()
+    # `check_frequencies` keys on the program job label: one imaginary
+    # mode is a correct transition state for a `ts` job and a refusal
+    # for the identical structure labelled `opt`. The label is the
+    # arbitrary part -- a saddle is a saddle whatever the input asked
+    # for -- and this refusal rejected every free energy of activation
+    # while preventing nothing, since a session can compute
+    # delta-E + delta-ZPE by hand and one did.
+    #
+    # A named reaction coordinate replaces the label with something
+    # stronger: the agent layer admits it only over a stationary-point
+    # characterisation this host minted, whose order it checked against
+    # the program's own printed frequencies. The human CLI's validator
+    # is untouched (SUFFICIENCY-5, 2026-09-10).
+    if not int(getattr(request, "reaction_coordinate_mode", 0) or 0):
+        engine.check_frequencies()
+    # A geometry optimisation that hit its iteration cap never reached
+    # its frequency step, so the result carries no Hessian and no
+    # thermochemistry -- and the arithmetic below was reaching straight
+    # into those absent values. `float + None` is a TypeError, which no
+    # caller was expecting from a kernel, so it escaped the analysis
+    # phase, killed the executor, and left a goal with three and a half
+    # hours of validated engine work unsettled (NOVEL-2 ino1,
+    # 2026-09-04: five converged spin states lost with the sixth).
+    # A missing quantity is a refusal, and the node that produced it is
+    # the finding.
+    absent = tuple(
+        name
+        for name in (
+            "electronic_energy",
+            "zero_point_energy",
+            "total_internal_energy",
+            "enthalpy",
+            "entropy_times_temperature",
+            "gibbs_free_energy",
+        )
+        if getattr(engine, name, None) is None
+    )
+    if absent:
+        raise QuantityExtractionError(
+            f"{request.program} result {request.artifact_id!r} carries no "
+            "thermochemistry: " + ", ".join(absent) + ". A run whose "
+            "optimisation did not converge never reached its frequency "
+            "step, so there is no Hessian to derive it from."
+        )
     evidence_ref = f"artifact:{request.artifact_id}#{request.artifact_sha256}"
     energy_values = {
         "electronic_energy": engine.electronic_energy,

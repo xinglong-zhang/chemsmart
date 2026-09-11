@@ -18,6 +18,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from chemsmart.agent._contracts import (
     ContractError,
+    RoutedContractError,
     TrustedArtifactRefV1,
     canonical_data,
     canonical_sha256,
@@ -72,6 +73,10 @@ from chemsmart.agent.commands import (
     inspect_command,
     native_coordinate_options,
 )
+from chemsmart.agent.delivery import _OPEN_STATES as _OPEN_SUFFICIENCY_STATES
+from chemsmart.agent.delivery import (
+    judge_sufficiency,
+)
 from chemsmart.agent.execution import (
     DEFERRABLE_GEOMETRY_PRODUCER_STAGES,
     AnomalyObservationV1,
@@ -88,7 +93,9 @@ from chemsmart.agent.execution import (
     ProgramExecutionReceiptV1,
     ProgramResultValidationReceiptV1,
     ProjectArtifactPromotionV1,
+    PubchemGeometryReceiptV1,
     ScientificDecisionRecordV1,
+    SymmetryBreakReceiptV1,
     WorkflowEnvironmentBindingV1,
     WorkflowExecutionApprovalV1,
     WorkflowExecutionNodeReviewV1,
@@ -98,14 +105,17 @@ from chemsmart.agent.execution import (
     anomaly_standing,
     append_trusted_molecular_atom,
     bind_project_promotion_validation,
+    break_trusted_molecular_symmetry,
     build_anomaly_observation,
     build_frozen_workflow_approval,
     build_producer_edge_rule,
     build_program_execution_invocation,
     build_program_execution_receipt,
     build_program_result_validation_receipt,
+    build_reached_geometry,
     build_real_execution_argv,
     build_scientific_decision_record,
+    build_stationary_point_characterisation,
     build_validated_data_edge_binding,
     build_workflow_approval_request,
     build_workflow_execution_approval,
@@ -119,6 +129,7 @@ from chemsmart.agent.execution import (
     execution_path_placeholder,
     execution_server_profile_sha256,
     extract_trusted_database_record_geometry,
+    fetch_trusted_pubchem_geometry,
     handoff_final_orca_ts_hessian,
     handoff_optimized_native_geometry,
     handoff_optimized_pyscf_geometry,
@@ -255,6 +266,7 @@ from chemsmart.analysis.literature_constants import (
 from chemsmart.analysis.quantity_expressions import (
     QuantityExpressionError,
     QuantityExpressionRequestV1,
+    canonical_unit_for_dimension,
     convert_normalized_value,
     expression_node_from_plan,
     normalize_numeric_value,
@@ -303,6 +315,9 @@ class _CommandContext:
     internal_coordinates: Mapping[str, Any] | None = None
     #: The anomaly this node investigates, when it is an excursion.
     excursion: str = ""
+    #: The goal's original bound geometry behind a reached or displaced
+    #: input; None when the input is the goal's own start.
+    root_artifact: TrustedArtifactRefV1 | None = None
 
 
 def _undeferrable_producer_finding(
@@ -1169,6 +1184,55 @@ def _xtb_log_frequencies(logs: tuple[Any, ...]) -> tuple[float, ...]:
     return ()
 
 
+def _scan_boundary_sensor(
+    profile: Sequence[Mapping[str, float]],
+) -> dict[str, Any] | None:
+    """An extremum of a scanned surface that sits on the grid's edge.
+
+    Four of four scan extrema in one window sat on a boundary: two
+    product-side ring-opening scans rose monotonically to their last
+    point and two hydrogen-transfer scans reached their edge, and every
+    "barrier position" the extremum operation returned was the end of
+    the grid. One session found it by hand four hours later; another
+    delivered the gap between two boundary points as an answer (NOVEL-3
+    po3 and po1, 2026-09-05). An observation with standing, never a
+    refusal: a boundary minimum is the right answer to a dissociation
+    curve, and only the scientist knows which end was asked for.
+    """
+
+    points = tuple(profile)
+    if len(points) < 3:
+        return None
+    energies = [float(point["energy"]) for point in points]
+    coordinates = [float(point["coordinate"]) for point in points]
+    last = len(points) - 1
+    index_max = max(range(len(points)), key=lambda i: energies[i])
+    index_min = min(range(len(points)), key=lambda i: energies[i])
+    if index_max not in (0, last) and index_min not in (0, last):
+        return None
+    steps = [b - a for a, b in zip(energies, energies[1:])]
+    monotone = all(step > 0 for step in steps) or all(
+        step < 0 for step in steps
+    )
+    kcal = 627.5094740631
+    return {
+        "signal_id": "scan.extremum_at_grid_boundary",
+        "points": len(points),
+        "grid_start": coordinates[0],
+        "grid_end": coordinates[-1],
+        "maximum_index": index_max,
+        "maximum_at_boundary": index_max in (0, last),
+        "maximum_coordinate": coordinates[index_max],
+        "minimum_index": index_min,
+        "minimum_at_boundary": index_min in (0, last),
+        "minimum_coordinate": coordinates[index_min],
+        "monotone": monotone,
+        "span_kcal_mol": round((max(energies) - min(energies)) * kcal, 3),
+        "last_step_kcal_mol": round(steps[-1] * kcal, 3),
+        "first_step_kcal_mol": round(steps[0] * kcal, 3),
+    }
+
+
 def _basin_sensor_inputs(
     input_artifact: TrustedArtifactRefV1 | None, output: Any, jobtype: str
 ) -> dict[str, Any]:
@@ -1229,6 +1293,103 @@ def _basin_sensor_inputs(
     except Exception:
         return inputs
     return inputs
+
+
+def _same_structure_observations(
+    receipts: Mapping[str, Any],
+    node_id: str,
+    output: Any,
+    input_sha256: str = "",
+    output_sha256s: Sequence[str] = (),
+) -> tuple[dict[str, Any], ...]:
+    """Whether this result is the same structure as one already validated.
+
+    A session that optimises twice and gets one answer reads the
+    agreement as convergence. Two live deliveries called two
+    twist-boats "degenerate chairs" and one dismissed a contradicting
+    1.85 kcal/mol as an artifact (E4', 2026-09-03), and nothing in the
+    host had compared the two structures to each other: the basin
+    sensor measures a node against its own input, never against a
+    sibling result. This measures it, and says nothing about what it
+    means -- two indistinguishable results may be an honest repeat, a
+    lost perturbation, or a defect, and only the scientist decides.
+
+    It fires only for INDEPENDENT starts that converged on one
+    structure. A single point on an optimisation's own geometry, and
+    two siblings launched from the same geometry, are one structure by
+    construction; recording those would bury the real observation
+    under the ordinary shape of a workflow.
+    """
+
+    if output is None:
+        return ()
+    try:
+        import numpy as np
+
+        from chemsmart.analysis.result_readers import reader_for
+        from chemsmart.utils.utils import kabsch_align
+
+        molecule = output.molecule
+        symbols = tuple(str(item) for item in molecule.chemical_symbols)
+        positions = np.asarray(molecule.positions, dtype=float)
+        energy = output.final_energy
+    except Exception:  # noqa: BLE001 - a reader without a geometry
+        return ()
+    heavy = [index for index, symbol in enumerate(symbols) if symbol != "H"]
+    if len(heavy) < 3:
+        return ()
+    found: list[dict[str, Any]] = []
+    for receipt in receipts.values():
+        other_id = str(getattr(receipt, "node_id", "") or "")
+        if not other_id or other_id == node_id:
+            continue
+        if str(getattr(receipt, "state", "")) != "valid":
+            continue
+        other_input = str(getattr(receipt, "input_artifact_sha256", "") or "")
+        other_outputs = {
+            str(getattr(item, "sha256", "") or "")
+            for item in getattr(receipt, "output_artifacts", ()) or ()
+        }
+        if input_sha256 and (
+            input_sha256 in other_outputs or input_sha256 == other_input
+        ):
+            continue
+        if other_input and other_input in set(output_sha256s):
+            continue
+        for artifact in getattr(receipt, "output_artifacts", ()) or ():
+            try:
+                other = reader_for(
+                    str(getattr(receipt, "program", ""))
+                ).open_output(str(artifact.path))
+                other_molecule = other.molecule
+                other_symbols = tuple(
+                    str(item) for item in other_molecule.chemical_symbols
+                )
+                if other_symbols != symbols:
+                    continue
+                other_positions = np.asarray(
+                    other_molecule.positions, dtype=float
+                )
+                *_rest, rmsd = kabsch_align(
+                    other_positions[heavy], positions[heavy]
+                )
+            except Exception:  # noqa: BLE001 - not a readable geometry
+                continue
+            if float(rmsd) >= 0.10:
+                break
+            record = {
+                "signal_id": "geometry.results_indistinguishable",
+                "other_node_id": other_id,
+                "heavy_atom_rmsd_angstrom": float(f"{float(rmsd):.4f}"),
+            }
+            try:
+                gap = (float(energy) - float(other.final_energy)) * 627.5095
+                record["energy_difference_kcal_mol"] = float(f"{gap:.4f}")
+            except (TypeError, ValueError):
+                pass
+            found.append(record)
+            break
+    return tuple(found)
 
 
 def _imaginary_mode_sensor_inputs(
@@ -1313,6 +1474,290 @@ def _observed_imaginary_mode_count(
     return int(value) if isinstance(value, int) else None
 
 
+#: A bond-forming saddle's imaginary mode is hundreds of wavenumbers; a
+#: mode inside this band is an intermolecular or torsional motion that
+#: happens to fall past the 20 cm-1 noise convention.
+SOFT_IMAGINARY_MODE_BAND_CM1 = 50.0
+
+
+def _observed_soft_imaginary_mode(
+    observation: Mapping[str, Any], program: str, *, jobtype: str
+) -> float | None:
+    """The one imaginary mode of a validated saddle when it lies inside
+    the soft band, else None.
+
+    REACH-1 po3 cycle 4 (2026-09-06): a transition-state search on a
+    dual-contact guess relaxed to a van der Waals complex with the
+    azide 2.9-3.3 A from an unreacted alkyne and one imaginary mode at
+    -22.8 cm-1, 2.8 cm-1 past the noise convention; the order rule
+    certified it and the word was `validated`. A rule at a threshold
+    certifies noise on the far side of the threshold, so the number is
+    recorded as an observation with standing, never as a verdict: the
+    session decides what a 22.8 cm-1 mode means.
+    """
+
+    if expected_imaginary_mode_count(jobtype) != 1:
+        return None
+    block = observation.get(program)
+    if not isinstance(block, Mapping):
+        return None
+    if program == "gaussian":
+        rows = tuple(block.get("outputs") or ())
+        if len(rows) != 1 or not isinstance(rows[0], Mapping):
+            return None
+        block = rows[0]
+    if block.get("consequential_imaginary_mode_count") != 1:
+        return None
+    modes = tuple(
+        float(value)
+        for value in (block.get("imaginary_frequencies_cm1") or ())
+        if float(value) <= -20.0
+    )
+    if len(modes) != 1:
+        return None
+    return modes[0] if abs(modes[0]) < SOFT_IMAGINARY_MODE_BAND_CM1 else None
+
+
+#: ORCA caps a geometry optimisation at 3N iterations by default. A
+#: 21-atom Fe(II) ammine complex hit that cap in two sealed windows while
+#: geom_maxiter sat, rendered and unused, on the project tool: the lever
+#: was visible and nothing said this system needed it (NOVEL-1/2 ino1,
+#: 2026-09-04). The host knows the program, the job type, the settings
+#: and the atom count at compile time, so it says so there.
+_ORCA_GEOMETRY_CAP_JOBTYPES = frozenset({"opt", "ts"})
+
+
+def _artifact_id_taken(
+    requested: Any, taken: list[str]
+) -> RoutedContractError:
+    """The refusal a re-used artifact id meets, stated once for every
+    surface that mints one. A live run collided five times in a row on
+    the bare message; a session under NOVEL-3 met it on a re-derived
+    species and re-promoted project alike."""
+
+    return RoutedContractError(
+        gate="artifact.id_is_unused",
+        invariant=(
+            "an artifact id stands for exactly one set of bytes for the "
+            "life of the workspace."
+        ),
+        diagnosis=(
+            f"artifact ID {requested!r} is already registered; taken ids: "
+            f"{taken}."
+        ),
+        route=(
+            "choose an id not in the taken list; a re-derived or "
+            "re-promoted artifact takes a fresh id and the earlier one "
+            "stays evidence."
+        ),
+    )
+
+
+def _is_restatement_of(written: float, exact: float) -> bool:
+    """Whether a written tolerance is the exact one, to its own digits.
+
+    A supersession corrects how an observable is named or measured and
+    never how good the answer has to be, so a replacement's tolerance
+    must be the retired one carried across. Exact equality is the wrong
+    test: 0.05 eV is 1.1530 kcal/mol and a scientist writes 1.15, which
+    is the same requirement written to fewer digits. A fixed percentage
+    band would be a magic number nobody could defend.
+
+    So the comparison is made at the precision the session actually
+    wrote: round the host's conversion to the written value's own
+    significant figures and require equality. 1.15 for 1.1530 is a
+    restatement; 200 for 2 is a new requirement, which is how a
+    2 kJ/mol obligation was relabelled as 200 kJ/mol under the same
+    meaning, the same unit and the same quoted source. Writing fewer
+    digits may loosen the number by less than one unit in its last
+    place, which is what rounding is; anything tighter is a stricter
+    obligation the session took on itself and is never an escape.
+    """
+
+    if written <= exact:
+        return True
+    return _reads_as(written, exact)
+
+
+def _reads_as(written: float, exact: float) -> bool:
+    """Whether a written number is an exact one, to its own digits.
+
+    Rounding the host's number to the digits the session wrote is the
+    comparison: 1.15 reads 1.1530 and 200 does not read 2. Unlike a
+    restated *tolerance*, a stated *uncertainty* is not free to be
+    smaller than its source -- understating what you measured is the
+    escape this check exists to close -- so the uncertainty comparison
+    uses this in both directions and never the looser rule above.
+    """
+
+    if exact == 0.0 or written == 0.0:
+        return written == exact
+    digits = (
+        len(
+            f"{abs(written):.12g}".replace(".", "")
+            .replace("-", "")
+            .lstrip("0")
+        )
+        or 1
+    )
+    return float(f"{abs(exact):.{digits}g}") == float(f"{abs(written):.12g}")
+
+
+def _restate_display_value(
+    value: float, from_unit: str, to_unit: str
+) -> float | None:
+    """A displayed number in another unit the host can reach.
+
+    Within one dimension through the unit table; between a wavenumber
+    and a molar energy through h*c*N_A. None where no conversion the
+    host owns applies.
+    """
+
+    from chemsmart.analysis.quantity_expressions import (
+        ENERGY,
+        FREQUENCY,
+        QuantityExpressionError,
+        _unit_spec,
+    )
+
+    try:
+        from_dimension, _from_canonical, from_scale = _unit_spec(from_unit)
+        to_dimension, _to_canonical, to_scale = _unit_spec(to_unit)
+    except QuantityExpressionError:
+        return None
+    hartree_in_cm1 = 219474.6313705
+    canonical = float(value) * from_scale
+    if from_dimension == to_dimension:
+        return canonical / to_scale
+    if from_dimension == FREQUENCY and to_dimension == ENERGY:
+        return (canonical / hartree_in_cm1) / to_scale
+    if from_dimension == ENERGY and to_dimension == FREQUENCY:
+        return (canonical * hartree_in_cm1) / to_scale
+    return None
+
+
+def compile_time_observations(
+    *,
+    program: str,
+    jobtype: str,
+    settings: Mapping[str, Any] | Sequence[tuple[str, Any]],
+    atom_count: int,
+    geometry: Any = None,
+) -> tuple[str, ...]:
+    """Facts the host can state about a compiled node before it runs.
+
+    Observations, never refusals: each names a default the program will
+    apply and the project field that changes it, computed from the plan
+    alone; with the input geometry in hand, its symmetry estimate too.
+    """
+
+    resolved = (
+        dict(settings) if not isinstance(settings, Mapping) else settings
+    )
+    observations: list[str] = []
+    if geometry is not None and jobtype in _ORCA_GEOMETRY_CAP_JOBTYPES | {
+        "opt",
+        "ts",
+        "hess",
+        "freq",
+    }:
+        try:
+            from chemsmart.agent.symmetry import symmetry_observation
+
+            observations.append(
+                symmetry_observation(
+                    tuple(geometry.chemical_symbols), geometry.positions
+                )
+            )
+        except Exception:
+            pass
+    if program == "orca" and jobtype in _ORCA_GEOMETRY_CAP_JOBTYPES:
+        if resolved.get("geom_maxiter") in (None, "", 0):
+            cap = 3 * int(atom_count)
+            observations.append(
+                "ORCA's default geometry-iteration cap for this "
+                f"{int(atom_count)}-atom input is 3N = {cap}; a floppy or "
+                "metal-centred system may need more, and geom_maxiter on "
+                "the project raises it (opt_convergence changes the "
+                "criterion, not the count)"
+            )
+    return tuple(observations)
+
+
+def _periodic_degrees(value: float) -> float:
+    """A dihedral is periodic: 285 is -75, and a refusal on the range
+    costs a call for nothing (REACH-1 ino3, one refusal)."""
+
+    return float(((value + 180.0) % 360.0) - 180.0)
+
+
+def _geometry_for_observation(artifact: Any) -> Any:
+    """The molecule behind a geometry_xyz artifact, or None."""
+
+    if getattr(artifact, "kind", "") != "geometry_xyz":
+        return None
+    try:
+        from chemsmart.io.molecules.structure import Molecule
+
+        return Molecule.from_filepath(str(artifact.path))
+    except Exception:
+        return None
+
+
+def promotion_field_observations(
+    render: Any, earlier: Sequence[tuple[str, Any]]
+) -> tuple[str, ...]:
+    """Fields an earlier promoted project of the same program set, in a
+    section this project also carries, that this project leaves unset.
+
+    A promoted project carries no field it does not state. A session under
+    NOVEL-3 promoted a quartet project with ``geom_maxiter: 150``, was
+    refused on another field, re-promoted a ``-v2`` without the cap, and
+    two nodes then stopped at ORCA's 3N default (2026-09-05). Nothing
+    said the lever had been lost. An observation, never a refusal: a
+    dropped field can be deliberate.
+    """
+
+    import yaml
+
+    def sections(text: str) -> dict[str, dict[str, Any]]:
+        try:
+            document = yaml.safe_load(text) or {}
+        except yaml.YAMLError:
+            return {}
+        if not isinstance(document, Mapping):
+            return {}
+        return {
+            str(name): dict(fields)
+            for name, fields in document.items()
+            if isinstance(fields, Mapping)
+        }
+
+    current = sections(str(getattr(render, "rendered_yaml", "") or ""))
+    observations: list[str] = []
+    for artifact_id, receipt in earlier:
+        if getattr(receipt, "program", None) != getattr(
+            render, "program", None
+        ):
+            continue
+        previous = sections(str(getattr(receipt, "rendered_yaml", "") or ""))
+        dropped = [
+            f"{section}.{key} ({value!r})"
+            for section, fields in sorted(previous.items())
+            if section in current
+            for key, value in sorted(fields.items())
+            if key not in current[section]
+        ]
+        if dropped:
+            observations.append(
+                f"against {artifact_id!r} ({render.program}): "
+                f"{', '.join(dropped)} set there and not here; a promoted "
+                "project carries no field it does not state, so a "
+                "re-promotion that means to keep one restates it"
+            )
+    return tuple(observations)
+
+
 class CommandCompiledToolHostV1:
     """Resolve every model ID against immutable host-held objects."""
 
@@ -1367,6 +1812,14 @@ class CommandCompiledToolHostV1:
         bounded_execution_envelope: BoundedExecutionEnvelopeV1 | None = None,
         engine_calls_remaining: int | None = None,
         excursion_calls_remaining: int | None = None,
+        offered_repair_routes: Sequence[str] = (),
+        preview_retention_root: Path | None = None,
+        input_check_executable: Path | None = None,
+        input_check_env: Mapping[str, str] | None = None,
+        input_check_cap_seconds: float = 20.0,
+        wall_seconds_remaining: float | None = None,
+        revisions_remaining: int | None = None,
+        goal_delivered_declared_ids: Sequence[str] = (),
         prior_anomaly_observations: Sequence[Mapping[str, Any]] = (),
         approved_environment_identities: tuple[str, ...] = (),
         materialized_workflow: MaterializedWorkflowV1 | None = None,
@@ -1386,8 +1839,24 @@ class CommandCompiledToolHostV1:
         execution_environment: Mapping[str, str] = {},
         execution_environment_remove: tuple[str, ...] = (),
         active_guides: Iterable[str] = (),
+        execute_analysis_only_plans: bool = False,
+        analysis_only_run_directory: str | Path = "",
+        analysis_only_workspace: str | Path = "",
     ) -> None:
         self.event_store = event_store
+        #: Under a goal wake with a previous run, a plan with no
+        #: calculation node is walked by the host the moment it is
+        #: planned (executor.execute_analysis_only_toolchain); outside a
+        #: goal a planned chain stays a plan, as before.
+        self.execute_analysis_only_plans = bool(execute_analysis_only_plans)
+        self.analysis_only_run_directory = (
+            Path(analysis_only_run_directory)
+            if analysis_only_run_directory
+            else None
+        )
+        self.analysis_only_workspace = (
+            Path(analysis_only_workspace) if analysis_only_workspace else None
+        )
         self.registry = registry or load_program_capabilities()
         self.live_schema = live_schema or build_live_click_schema()
         preview_overlay = build_command_compiled_preview_overlay(
@@ -1459,6 +1928,42 @@ class CommandCompiledToolHostV1:
             if excursion_calls_remaining is None
             else int(excursion_calls_remaining)
         )
+        #: The repair-menu routes the wake offered this session, keyed
+        #: as the menu keys them: the terminal states of the previous
+        #: run. A disposition names one of these or is refused.
+        self.offered_repair_routes = tuple(
+            str(route) for route in offered_repair_routes
+        )
+        #: Where a safe preview's emitted files are kept by digest, and
+        #: the program's own checker the host may run on them. Both come
+        #: from the host-owned server profile; neither is model-visible.
+        self.preview_retention_root = (
+            None
+            if preview_retention_root is None
+            else Path(preview_retention_root)
+        )
+        self.input_check_executable = (
+            None
+            if input_check_executable is None
+            else Path(input_check_executable)
+        )
+        self.input_check_env = (
+            None if input_check_env is None else dict(input_check_env)
+        )
+        self.input_check_cap_seconds = float(input_check_cap_seconds)
+        self._input_check_by_node: dict[str, Any] = {}
+        self.wall_seconds_remaining = (
+            None
+            if wall_seconds_remaining is None
+            else float(wall_seconds_remaining)
+        )
+        self.revisions_remaining = (
+            None if revisions_remaining is None else int(revisions_remaining)
+        )
+        self.goal_delivered_declared_ids = frozenset(
+            str(item) for item in goal_delivered_declared_ids
+        )
+        self.verified_unreachable_ids: set[str] = set()
         self.engine_calls_remaining = (
             None
             if engine_calls_remaining is None
@@ -1699,11 +2204,18 @@ class CommandCompiledToolHostV1:
         self.molecular_derivations: dict[str, MolecularDerivationReceiptV1] = (
             {}
         )
+        self.pubchem_geometries: dict[str, PubchemGeometryReceiptV1] = {}
         self.database_extractions: dict[
             str, DatabaseRecordExtractionReceiptV1
         ] = {}
         self.geometry_edits: dict[str, GeometryEditReceiptV1] = {}
         self.mode_displacements: dict[str, Any] = {}
+        self.symmetry_breaks: dict[str, SymmetryBreakReceiptV1] = {}
+        #: The review the loop built at "host readiness gates passed", or
+        #: the refusal it recorded, so the session runner reuses one and
+        #: never appends the other after the stream is sealed.
+        self.prepared_execution_review: WorkflowExecutionReviewV1 | None = None
+        self.execution_review_refusal: dict[str, str] = {}
         self.atom_appends: dict[str, AtomAppendReceiptV1] = {}
         self.invocations: dict[str, CanonicalCommandInvocationV1] = {}
         self.command_inspections: dict[str, CommandInspectionReceiptV1] = {}
@@ -1725,6 +2237,11 @@ class CommandCompiledToolHostV1:
             str, ScientificValidationReceiptV1
         ] = {}
         self.analysis_claim_records: dict[str, Any] = {}
+        self._declared_observable_join_fields = {}
+        self._reply_observations: tuple[dict[str, Any], ...] = ()
+        #: The current sufficiency assessment of each declared
+        #: requirement, by observable id.
+        self.requirement_assessments: dict[str, dict[str, Any]] = {}
         self.analysis_completion_receipts: dict[str, Any] = {}
         self.workflow_drafts: dict[str, CommandWorkflowDraftV1] = {}
         self.scientific_toolchain_plans: dict[
@@ -1751,10 +2268,25 @@ class CommandCompiledToolHostV1:
             self.materialized_workflows[
                 materialized_workflow.materialized_sha256
             ] = materialized_workflow
+        #: Which registered plan is the one the session is standing on.
+        #: The registry is keyed by digest, and a dict re-insertion keeps
+        #: a key in its original position -- so after plan A, plan B,
+        #: and an amendment back to A, ``values()[-1]`` is still B, the
+        #: plan the session abandoned. po3-r17 (2026-09-11) reverted a
+        #: change exactly that way: its readiness frontier reported the
+        #: restored nodes previewed and approvable, and the execution
+        #: review, reading the last-inserted plan, refused the workflow
+        #: over the superseded plan's red previews. Reverting a change
+        #: is self-correction, which this harness exists to support, so
+        #: the current plan is named rather than inferred from ordering.
+        self.current_scientific_plan_sha256: str = ""
         if scientific_workflow_plan is not None:
             self.scientific_workflow_plans[
                 scientific_workflow_plan.plan_sha256
             ] = scientific_workflow_plan
+            self.current_scientific_plan_sha256 = (
+                scientific_workflow_plan.plan_sha256
+            )
         self.project_promotions: dict[str, ProjectArtifactPromotionV1] = {}
         self.scientific_decisions: dict[str, ScientificDecisionRecordV1] = {}
         self.execution_receipts: dict[str, ProgramExecutionReceiptV1] = {}
@@ -1762,6 +2294,8 @@ class CommandCompiledToolHostV1:
             str, ProgramResultValidationReceiptV1
         ] = {}
         self.anomaly_observations: dict[str, AnomalyObservationV1] = {}
+        self.stationary_point_characterisations: dict[str, Any] = {}
+        self.reached_geometries: dict[str, Any] = {}
         #: Anomalies earlier cycles recorded, seeded from the wake so a
         #: claim-only cycle can cite and carry them.
         self.prior_anomaly_observations: tuple[Mapping[str, Any], ...] = tuple(
@@ -1932,6 +2466,17 @@ class CommandCompiledToolHostV1:
                 values["limitation_output_ids"] = tuple(
                     values.get("limitation_output_ids") or ()
                 )
+                # The fourth field, added after its three siblings and
+                # never threaded here. JSON returns a list and the
+                # dataclass compares against a tuple, so a host rebuilt
+                # over a stream that recorded any anomaly -- the exact
+                # streams worth reconstructing -- raised "anomaly output
+                # ids must be non-empty, sorted, unique" before doing
+                # anything. A hand-listed field set beside a dataclass
+                # that grew.
+                values["anomaly_output_ids"] = tuple(
+                    values.get("anomaly_output_ids") or ()
+                )
                 receipt = AnalysisCompletionReceiptV1(
                     **values, receipt_sha256=receipt_sha256
                 )
@@ -2022,9 +2567,13 @@ class CommandCompiledToolHostV1:
         "bind_scan_point_geometry": "_bind_scan_point_geometry",
         "compose_molecular_arrangement": "_compose_molecular_arrangement",
         "derive_molecular_species": "_derive_molecular_species",
+        "fetch_pubchem_geometry": "_fetch_pubchem_geometry",
         "edit_molecular_geometry": "_edit_molecular_geometry",
+        "break_symmetry": "_break_symmetry",
         "append_molecular_atom": "_append_molecular_atom",
         "displace_along_vibrational_mode": "_displace_along_vibrational_mode",
+        "bind_reached_geometry": "_bind_reached_geometry",
+        "characterise_stationary_point": "_characterise_stationary_point",
         "inspect_database_records": "_inspect_database_records",
         "extract_database_record_geometry": "_extract_database_record_geometry",
         "read_project_yaml": "_read_project_yaml",
@@ -2073,6 +2622,7 @@ class CommandCompiledToolHostV1:
         handler = handlers.get(tool_name)
         if handler is None:
             raise ContractError("tool is absent from command-compiled profile")
+        self._reply_observations = ()
         result = handler(turn_id, values)
         reply = {
             "schema_version": "chemsmart.tool-result.v1",
@@ -2080,6 +2630,12 @@ class CommandCompiledToolHostV1:
             "status": "ok",
             "result": _model_visible_data(canonical_data(result)),
         }
+        if self._reply_observations:
+            # A handler's observations about its own inputs ride beside
+            # the receipt rather than inside it, so the receipt's digest
+            # stays what the arithmetic makes it.
+            reply["observations"] = tuple(self._reply_observations)
+            self._reply_observations = ()
         # Every guide this call opened travels back with its body, whether
         # the call itself asked (a leaf tool by name) or the plan did.
         opened = tuple(opened_by_call) + tuple(
@@ -2234,6 +2790,86 @@ class CommandCompiledToolHostV1:
             f"{field_name} is required when multiple task specs are active"
         )
 
+    def _evidence_already_in_hand(self) -> bool:
+        """Whether this GOAL already holds numbers for this task.
+
+        A pre-registration predates the physics. OPEN-1 ino3 extracted
+        its spin populations, then declared six observables with bands
+        drawn around the values it had just read, and the completion
+        printed twelve rows saying `agreed` with nothing to separate
+        them from the two written before any number existed
+        (2026-09-07). The verdict does not change -- being right after
+        the fact is still being right -- but the reader is told.
+
+        The promise is task-wide and the check was process-wide, which
+        are the same thing only for a goal that never woke. A woken
+        cycle is a fresh host with every registry empty, so at cycle 3
+        of ino3-r15 a session declared a new tolerance-bearing
+        observable as its first act -- quoting the previous cycle's
+        delivered numbers verbatim in its own basis, and choosing the
+        tolerance after seeing the uncertainty it had to clear -- and
+        the host recorded it as a pre-registration. The goal's own
+        physics was on this object at that moment. Nothing is refused
+        and no verdict moves; the reader is told, which is the whole
+        point of the flag (SUFFICIENCY-5, 2026-09-10).
+
+        Deliberately NOT evidence: prior *declarations*. A cycle that
+        declared and delivered nothing produced no physics, and a
+        genuinely new prediction after a first molecule is ordinary
+        science that must stay possible.
+        """
+
+        return bool(
+            self.quantity_extractions
+            or self.thermochemistry_receipts
+            or self.quantity_expression_receipts
+            or self.analysis_claim_records
+            # Physics this cycle holds that the four above miss: a
+            # session carrying only a validation verdict, a
+            # characterisation or an anomaly has numbers in hand too.
+            or self.scientific_validation_receipts
+            or self.stationary_point_characterisations
+            or self.anomaly_observations
+            or self.reached_geometries
+            # And physics the GOAL holds from an earlier cycle: a
+            # delivered observable is a claim that was made.
+            or self.goal_delivered_declared_ids
+            or self._recorded_run_analysis()
+        )
+
+    def _recorded_run_analysis(self) -> bool:
+        """Whether a recorded run of this goal already produced numbers.
+
+        Read from the durable streams the host wrote, so a woken cycle
+        inherits the chronology instead of starting it again. Cached:
+        the declaration path may ask more than once per session.
+        """
+
+        cached = getattr(self, "_recorded_analysis_seen", None)
+        if cached is not None:
+            return bool(cached)
+        root = getattr(self, "run_evidence_root", None)
+        seen = False
+        if root:
+            marks = (
+                '"kind": "result_quantities_extracted"',
+                '"kind": "thermochemistry_derived"',
+                '"kind": "quantity_expression_evaluated"',
+                '"kind": "analysis_claims_recorded"',
+            )
+            for stream in sorted(
+                Path(root).glob(".chemsmart-agent/goals/*/runs/*/events.jsonl")
+            ):
+                try:
+                    text = stream.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+                if any(mark in text for mark in marks):
+                    seen = True
+                    break
+        self._recorded_analysis_seen = seen
+        return seen
+
     def _declare_requested_observable(self, turn_id: str, values: dict) -> Any:
         """Bind the session's restatement of what the task asks for.
 
@@ -2246,6 +2882,7 @@ class CommandCompiledToolHostV1:
 
         declared = []
         kept_prior: list[str] = []
+        declared_after_evidence = self._evidence_already_in_hand()
         for item in values["observables"]:
             observable_id = str(item["observable_id"])
             require_identifier(observable_id, "observable_id")
@@ -2258,11 +2895,23 @@ class CommandCompiledToolHostV1:
             try:
                 dimension = unit_dimension(unit)
             except QuantityExpressionError as exc:
-                raise ContractError(
-                    f"declared unit {unit!r} is not in the typed unit "
-                    f"vocabulary: {exc}. Declare the unit the answer will "
-                    "be reported in, e.g. 'kcal/mol', 'eV', 'angstrom', "
-                    "'1' for a count."
+                raise RoutedContractError(
+                    gate="declaration.unit_is_in_the_typed_vocabulary",
+                    invariant=(
+                        "a declared observable is joined to its claim by "
+                        "id and judged in its dimension, so its unit is "
+                        "one the typed plane measures."
+                    ),
+                    diagnosis=(
+                        f"declared unit {unit!r} is not in the typed unit "
+                        f"vocabulary: {exc}."
+                    ),
+                    route=(
+                        "declare the unit the answer will be reported in, "
+                        "from the typed vocabulary, e.g. 'kcal/mol', "
+                        "'kJ/mol', 'eV', 'cm^-1', 'angstrom', 'degree', "
+                        "'1' for a count."
+                    ),
                 ) from None
             # Both the committed declarations and the ones this call has
             # already accepted: the commit is deferred to the end, so a
@@ -2339,16 +2988,203 @@ class CommandCompiledToolHostV1:
                     "flip, and the record would carry it as though it were "
                     "reasoning"
                 )
+            # A diagnostic is the session's own prediction about the
+            # route, given standing (owner ruling R3, 2026-09-06): it is
+            # joined and scored like a requested expectation and it is
+            # never a deliverable, so it needs a prediction to score and
+            # a rule saying what its failure changes.
+            role = str(item.get("role") or "requested").strip().lower()
+            if role not in {"requested", "diagnostic"}:
+                raise ContractError(
+                    "role is 'requested' or 'diagnostic'; nothing else "
+                    "has standing"
+                )
+            update_rule = str(item.get("failure_update_rule", "")).strip()
+            resolution = item.get("method_resolution")
+            if role == "diagnostic" and not (expected_sign or low is not None):
+                raise ContractError(
+                    f"diagnostic {observable_id!r} predicts nothing: a "
+                    "diagnostic carries expected_sign or a band, or it "
+                    "cannot be scored"
+                )
+            if role == "diagnostic" and not update_rule:
+                raise ContractError(
+                    f"diagnostic {observable_id!r} needs "
+                    "failure_update_rule: what its falsification changes "
+                    "about the route. A prediction whose failure changes "
+                    "nothing is not a diagnostic"
+                )
+            if resolution is not None and float(resolution) < 0.0:
+                raise ContractError(
+                    "method_resolution is a magnitude in the observable's "
+                    "own unit and cannot be negative"
+                )
+            # The precision the task asks for. It is the one number in
+            # this record the model does not choose: it restates it, and
+            # the host holds it against the uncertainty a claim states.
+            # Nothing here held it before, so a session could deliver a
+            # number its own limitations said missed the requester's
+            # tolerance and the goal settled achieved over it (OPEN-2
+            # ino3-qwen, 2026-09-07).
+            tolerance = item.get("required_tolerance")
+            tolerance_basis = str(item.get("tolerance_basis", "")).strip()
+            tolerance_origin = str(item.get("tolerance_origin", "")).strip()
+            if tolerance is not None:
+                if float(tolerance) < 0.0:
+                    raise ContractError(
+                        "required_tolerance is a magnitude in the "
+                        "observable's own unit and cannot be negative"
+                    )
+                if not tolerance_basis:
+                    raise ContractError(
+                        f"observable {observable_id!r} states a "
+                        "required_tolerance without tolerance_basis: what "
+                        "in the task fixes it, or that the task fixes "
+                        "none and this is your reading. A tolerance with "
+                        "no source is a number nobody asked for"
+                    )
+                # Who set the precision is a fact about the
+                # obligation, not a judgement about it. A live session
+                # declared a margin with a self-chosen 0.4 V tolerance
+                # after seeing that its uncertainty was 0.25 V, said so
+                # honestly in prose, and the record could not join on
+                # it: `tolerance_basis` is free text and every reader
+                # that decides anything reads the number beside it. The
+                # route itself is one the host offers and stays legal;
+                # what changes is that a reader can tell the two apart
+                # (SUFFICIENCY-5, 2026-09-10).
+                if tolerance_origin not in {"task", "session"}:
+                    # Recorded as unstated, never refused. Requiring the
+                    # field would be a gate, and the ruling this repair
+                    # implements is to record the origin and gate
+                    # nothing: declaring the margin a decision turns on
+                    # is a route the host itself offers, and a
+                    # legitimate exploratory tolerance must not cost a
+                    # refusal. A reader sees the omission instead.
+                    tolerance_origin = "unstated"
+                if role == "diagnostic":
+                    raise ContractError(
+                        f"diagnostic {observable_id!r} carries a "
+                        "required_tolerance: a diagnostic is your own "
+                        "prediction about the route and is never owed, so "
+                        "no tolerance is owed on it either"
+                    )
             record = {
                 "observable_id": observable_id,
                 "unit": unit,
                 "dimension": tuple(int(value) for value in dimension),
                 "meaning": meaning,
             }
+            supersedes = str(item.get("supersedes_observable_id", "")).strip()
+            if supersedes:
+                if supersedes not in self.requested_observable_declarations:
+                    raise ContractError(
+                        f"supersedes_observable_id {supersedes!r} names no "
+                        "observable this session declared"
+                    )
+                if supersedes == observable_id:
+                    raise ContractError(
+                        "an observable cannot supersede itself"
+                    )
+                # Supersession corrects the observable -- its
+                # identifier, its unit -- and never retires the
+                # obligation the task set. A replacement needed only to
+                # name an existing id, so a tolerance-free declaration,
+                # or a diagnostic, could make a requested precision
+                # requirement vanish by relabelling. The host does not
+                # carry the number across, because supersession exists
+                # for a wrong unit and a tolerance is stated in the
+                # observable's own unit: the session restates it in the
+                # corrected unit, which is a judgement only it can make.
+                retired_record = self.requested_observable_declarations[
+                    supersedes
+                ]
+                if retired_record.get("required_tolerance") is not None:
+                    if role == "diagnostic":
+                        raise ContractError(
+                            f"observable {supersedes!r} carries a required "
+                            "tolerance the task asked for; a diagnostic is "
+                            "never owed and cannot retire it. Supersede it "
+                            "with a requested observable, or deliver it"
+                        )
+                    if tolerance is None:
+                        raise ContractError(
+                            f"observable {supersedes!r} carries a required "
+                            f"tolerance of "
+                            f"{retired_record['required_tolerance']} "
+                            f"{retired_record.get('unit')!r}; the "
+                            "declaration replacing it states none. Restate "
+                            "the tolerance in this observable's own unit -- "
+                            "the host will not convert it, because a "
+                            "supersession is often a unit correction"
+                        )
+                    # Requiring a tolerance preserved its presence and
+                    # not the obligation: 2 kJ/mol was replaced by
+                    # 200 kJ/mol under the same meaning, the same unit
+                    # and the same quoted source, and the host retired
+                    # the original. The model authored its finish line
+                    # one declaration later. Where the host owns the
+                    # conversion the physical tolerance is preserved by
+                    # arithmetic; where it does not -- the cross-
+                    # dimension correction this route exists for -- the
+                    # restatement stands and the record carries what it
+                    # replaced, so the change is visible rather than
+                    # silent.
+                    retired_tolerance = float(
+                        retired_record["required_tolerance"]
+                    )
+                    retired_unit = str(retired_record.get("unit") or "")
+                    converted = (
+                        _restate_display_value(
+                            retired_tolerance, retired_unit, unit
+                        )
+                        if retired_unit and unit
+                        else None
+                    )
+                    if converted is not None and not _is_restatement_of(
+                        float(tolerance), converted
+                    ):
+                        raise ContractError(
+                            f"observable {supersedes!r} carries a required "
+                            f"tolerance of {retired_tolerance} "
+                            f"{retired_unit!r}, which is {converted:g} "
+                            f"{unit!r}; this declaration states "
+                            f"{float(tolerance):g} {unit!r}. A supersession "
+                            "corrects how an observable is named or "
+                            "measured and never how good the answer has to "
+                            "be -- the task set that. State the same "
+                            "precision, or deliver the observable you "
+                            "declared"
+                        )
+                    record["superseded_required_tolerance"] = retired_tolerance
+                    record["superseded_tolerance_unit"] = retired_unit
+                record["supersedes_observable_id"] = supersedes
+            if role == "diagnostic":
+                record["role"] = role
+            if declared_after_evidence:
+                record["declared_after_evidence"] = True
+            if update_rule:
+                record["failure_update_rule"] = update_rule
+            if resolution is not None:
+                record["method_resolution"] = float(resolution)
+            if tolerance is not None:
+                record["required_tolerance"] = float(tolerance)
+                record["tolerance_basis"] = tolerance_basis
+                record["tolerance_origin"] = tolerance_origin
             if expected_sign or low is not None:
                 record["expectation_basis"] = basis
             if expected_sign:
                 record["expected_sign"] = expected_sign
+                # A sign the band already implies is not a prediction: a
+                # gap declared as next-minus-ground with band 0..60 and
+                # sign positive cannot fail its sign (NOVEL-2 ino1,
+                # 2026-09-04). Said on the record, so the row never
+                # prints agreed on it.
+                if low is not None and (
+                    (expected_sign == "positive" and float(low) >= 0.0)
+                    or (expected_sign == "negative" and float(high) <= 0.0)
+                ):
+                    record["sign_implied_by_band"] = True
             if low is not None:
                 record["expected_low"] = float(low)
                 record["expected_high"] = float(high)
@@ -2383,10 +3219,19 @@ class CommandCompiledToolHostV1:
                     )
                 ),
             )
+        reach_warnings = {
+            str(record["observable_id"]): warning
+            for record in declared
+            for warning in (
+                self._declaration_reach_warning(str(record["meaning"])),
+            )
+            if warning
+        }
         return {
             "declared": tuple(declared),
             "declared_total": len(self.requested_observable_declarations),
             "kept_prior": tuple(kept_prior),
+            **({"reach_warnings": reach_warnings} if reach_warnings else {}),
             "kept_prior_meaning": (
                 "the goal's first declaration of an observable stands; an "
                 "expectation written after the physics exists is not a "
@@ -2396,11 +3241,166 @@ class CommandCompiledToolHostV1:
             ),
             "completion_consequence": (
                 "the completion gate requires, for every declared "
-                "observable, a delivered claim carrying its id in its "
-                "dimension; values are never checked, and a declared "
-                "observable you cannot deliver is stated as a limitation"
+                "observable, a delivered claim carrying its id -- as the "
+                "claim's claim_id, or as the quantity id of the receipt "
+                "it stands on -- in its dimension; values are never "
+                "checked, and a declared observable you cannot deliver "
+                "is stated as a limitation"
             ),
         }
+
+    def termination_notice(self) -> dict[str, Any] | None:
+        """What the host says, once, when a goal session is about to end
+        with declared observables undelivered while budget remains.
+
+        Informational and never a demand (owner ruling, 2026-09-06). None
+        outside a goal, when nothing declared is undelivered, or when no
+        budget line remains -- ending is then the only thing left.
+        """
+
+        if self.engine_calls_remaining is None:
+            return None
+        undelivered: list[str] = []
+        for task_spec_sha256 in sorted(self.task_spec_sha256s):
+            _misses, limitations = self._declared_observable_completion(
+                task_spec_sha256=task_spec_sha256
+            )
+            for item in limitations:
+                observable_id = str(item).split(":", 1)[-1]
+                if (
+                    observable_id in self.goal_delivered_declared_ids
+                    or observable_id in self.verified_unreachable_ids
+                    or observable_id in undelivered
+                ):
+                    continue
+                undelivered.append(observable_id)
+        if not undelivered:
+            return None
+        budgets = {
+            "engine_calls_remaining": int(self.engine_calls_remaining),
+            "excursion_calls_remaining": int(
+                self.excursion_calls_remaining or 0
+            ),
+            "wall_seconds_remaining": float(
+                self.wall_seconds_remaining or 0.0
+            ),
+            "revisions_remaining": int(self.revisions_remaining or 0),
+        }
+        if not any(budgets.values()):
+            return None
+        from chemsmart.agent.rules import rules_by_id
+
+        text = (
+            rules_by_id()["wake.termination_notice"].text
+            + " Undelivered declared observables: "
+            + ", ".join(undelivered)
+            + ". Remaining: engine calls "
+            + str(budgets["engine_calls_remaining"])
+            + ", excursion calls "
+            + str(budgets["excursion_calls_remaining"])
+            + ", revisions "
+            + str(budgets["revisions_remaining"])
+            + ", engine wall "
+            + f"{budgets['wall_seconds_remaining']:.0f} s."
+        )
+        return {
+            "undelivered_declared_observable_ids": tuple(undelivered),
+            "budgets": budgets,
+            "text": text,
+        }
+
+    def _declaration_reach_warning(self, meaning: str) -> str:
+        """Say, at declaration, when a meaning names a quantity kind no
+        envelope program declares -- and the two routes.
+
+        The readers' own selector vocabulary defines the kinds: a
+        selector whose distinctive words appear in the meaning is what
+        the meaning names. A session declared the cation's spin
+        distribution as an observable, ran four cycles, and learned only
+        at the end that no route to it existed in the envelope (NOVEL-3
+        ino3, 2026-09-05). Warn and route, never refuse: the session may
+        compose the quantity or refuse it in a form the host verifies.
+        """
+
+        import re
+
+        from chemsmart.analysis.result_readers import (
+            registered_reader_selectors,
+        )
+
+        envelope = self.bounded_execution_envelope
+        if envelope is None:
+            return ""
+        programs = tuple(
+            str(program)
+            for program, _engines in envelope.allowed_program_engines
+        )
+        generic = {
+            "atomic",
+            "total",
+            "energy",
+            "energies",
+            "final",
+            "value",
+            "per",
+            "atom",
+            "of",
+            "the",
+            "and",
+            "in",
+            "on",
+            "last",
+            "first",
+            "count",
+            "number",
+            "list",
+            "table",
+            "block",
+            "printed",
+        }
+        words = {
+            token.rstrip("s")
+            for token in re.findall(r"[a-z0-9]+", meaning.lower())
+        }
+        matched: dict[str, set[str]] = {}
+        for program, selectors in registered_reader_selectors().items():
+            for selector in selectors:
+                parts = {
+                    part.rstrip("s") for part in selector.split("_")
+                } - generic
+                # Two distinctive words, always: a selector with one
+                # ("dipole") cannot be told from a passing mention, and a
+                # meaning that says "Gibbs" names no selector by it.
+                if len(parts) < 2 or len(parts & words) < 2:
+                    continue
+                matched.setdefault(selector, set()).add(str(program))
+        if not matched:
+            return ""
+        served = {
+            selector
+            for selector, owners in matched.items()
+            if owners & set(programs)
+        }
+        if served:
+            return ""
+        unserved = sorted(matched)
+        elsewhere = sorted({p for owners in matched.values() for p in owners})
+        return (
+            "the meaning names a quantity kind "
+            f"({', '.join(unserved)}) that no envelope program "
+            f"({', '.join(programs)}) declares"
+            + (
+                f"; declared by {', '.join(elsewhere)}, outside the "
+                "envelope"
+                if elsewhere
+                else ""
+            )
+            + ". Routes: compose it from selectors the envelope's programs "
+            "declare, or refuse it in record_scientific_decision's "
+            "unreachable_observable_ids with the receipts that show the "
+            "gap -- the host verifies a selector absence and settles "
+            "unreachable_from_evidence. Nothing is refused here."
+        )
 
     def _declared_observable_completion(
         self, *, task_spec_sha256: str
@@ -2414,6 +3414,10 @@ class CommandCompiledToolHostV1:
         without -- never a finding, because findings mean the chain
         itself broke.  Dimension vectors from different eras differ
         only by trailing bases, so both sides are compared zero-padded.
+        A diagnostic -- the session's own prediction about the route --
+        is joined when delivered and is never a miss: it is no
+        deliverable, so its absence is no limitation and never reaches
+        the notice or the settlement (owner ruling R3, 2026-09-06).
         Returns (human-readable misses for the event, limitation ids).
         """
 
@@ -2430,14 +3434,41 @@ class CommandCompiledToolHostV1:
         # had deliberately relabelled its number as a conformer difference
         # (live, 2026-09-03). A claim answers a declaration by carrying
         # its id; the dimension is then checked, never used to guess.
+        # The id a claim carries lives in two fields: claim_id, which the
+        # session or the executor names, and quantity_id, which the
+        # receipt the claim stands on was computed under. A live chain
+        # rendered six correct numbers with the declared id in
+        # quantity_id and the plan's short input label in claim_id, and
+        # this gate, reading claim_id alone, called all six undelivered
+        # three fields away from the id it wanted (NOVEL-2 po2,
+        # 2026-09-04). The host's word must be true of the record it
+        # holds: either field answers, claim_id first, and the join
+        # says which field it read.
         claims_by_id: dict[str, tuple[int, ...]] = {}
+        joined_on: dict[str, str] = {}
         for record in self.analysis_claim_records.values():
             if getattr(record, "task_spec_sha256", "") != task_spec_sha256:
                 continue
             for claim in getattr(record, "claims", ()):
-                claims_by_id.setdefault(
-                    str(claim.claim_id), _padded(claim.dimension)
-                )
+                for field in ("claim_id", "quantity_id"):
+                    key = str(getattr(claim, field, "") or "")
+                    if key:
+                        # The newest claim answers. This gate was
+                        # first-wins while the workspace record and the
+                        # settlement are last-wins, so a session that
+                        # corrected a wrong-dimension claim -- which is
+                        # exactly what this gate's own refusal tells it
+                        # to do -- was told "undelivered" for ever while
+                        # the settlement called it delivered. Two
+                        # readers, one record, opposite answers, in the
+                        # direction that hides the miss.
+                        claims_by_id[key] = _padded(claim.dimension)
+                        joined_on[key] = field
+        from chemsmart.agent.delivery import superseded_observable_ids
+
+        retired = superseded_observable_ids(
+            tuple(self.requested_observable_declarations.values())
+        )
         misses = []
         limitations = []
         for observable_id, record in sorted(
@@ -2447,19 +3478,43 @@ class CommandCompiledToolHostV1:
             if delivered is not None and delivered == _padded(
                 record["dimension"]
             ):
+                self._declared_observable_join_fields[observable_id] = (
+                    joined_on[observable_id]
+                )
+                continue
+            if record.get("role") == "diagnostic":
+                continue
+            if observable_id in retired:
+                # A later declaration named this one as its correction:
+                # the meaning moved to the new id and this one is not
+                # owed. Both stay on the record (OPEN-1 ino3 declared
+                # six spin observables in 'e' and corrected them).
                 continue
             misses.append(
                 f"declared observable {observable_id!r} "
                 f"({record['unit']}) has no delivered claim named "
                 f"{observable_id!r}"
                 + (
-                    " of matching dimension"
+                    " of matching dimension: the claim under that id is "
+                    f"in {canonical_unit_for_dimension(delivered)!r} and "
+                    f"the declaration in {record['unit']!r}; restate it "
+                    "with wavenumber_to_energy / energy_to_wavenumber "
+                    "(frequency and energy) or convert (one dimension) "
+                    "and claim it again under the id"
                     if delivered is not None
-                    else "; a claim answers a declaration by carrying its id"
+                    else "; a claim answers a declaration by carrying its "
+                    "id as its claim_id, or by standing on a receipt "
+                    "quantity of that id"
                 )
             )
             limitations.append(f"declared_observable:{observable_id}")
         return tuple(misses), tuple(limitations)
+
+    #: Which field answered each declared observable at the last
+    #: completion: ``claim_id`` or ``quantity_id``. Read by the completion
+    #: event so a reader can see a join that would have failed under the
+    #: old single-field rule.
+    _declared_observable_join_fields: dict[str, str]
 
     def _declared_observable_predictions(
         self, *, task_spec_sha256: str
@@ -2506,7 +3561,11 @@ class CommandCompiledToolHostV1:
             ):
                 continue
             for claim in getattr(claim_record, "claims", ()):
-                claims_by_id.setdefault(claim.claim_id, claim)
+                # Same two-field join as the completion gate above.
+                for field in ("claim_id", "quantity_id"):
+                    key = str(getattr(claim, field, "") or "")
+                    if key:
+                        claims_by_id.setdefault(key, claim)
 
         rows = []
         for observable_id, record in sorted(predicted.items()):
@@ -2520,7 +3579,17 @@ class CommandCompiledToolHostV1:
                 "delivered_value": "",
                 "delivered_unit": "",
                 "agreement": "not_comparable",
+                "role": str(record.get("role") or "requested"),
+                **(
+                    {"declared_after_evidence": True}
+                    if record.get("declared_after_evidence")
+                    else {}
+                ),
             }
+            if "failure_update_rule" in record:
+                row["failure_update_rule"] = record["failure_update_rule"]
+            if "method_resolution" in record:
+                row["method_resolution"] = record["method_resolution"]
 
             def _scalar(claim: Any) -> bool:
                 return isinstance(
@@ -2552,7 +3621,10 @@ class CommandCompiledToolHostV1:
                 # expectation never authorised.
                 verdicts = []
                 sign = record.get("expected_sign", "")
-                if sign:
+                if record.get("sign_implied_by_band"):
+                    # The band decides; the sign adds no prediction.
+                    row["sign_implied_by_band"] = True
+                elif sign:
                     verdicts.append(
                         value != 0.0
                         and (
@@ -2567,11 +3639,80 @@ class CommandCompiledToolHostV1:
                             <= record["expected_high"]
                         )
                     else:
-                        verdicts.append(None)
-                if verdicts and None not in verdicts:
-                    row["agreement"] = (
-                        "agreed" if all(verdicts) else "diverged"
+                        # A number in another unit is compared after the
+                        # host's own conversion -- within one dimension,
+                        # or across frequency and energy through h*c*N_A,
+                        # which is a definition and not a choice. A
+                        # sixfold-consistent ferromagnetic sign against a
+                        # declared antiferromagnetic band printed
+                        # not_comparable because the claim was in kcal/mol
+                        # and the declaration in cm^-1 (NOVEL-3 ino2).
+                        restated = _restate_display_value(
+                            value, claim.display_unit, record["unit"]
+                        )
+                        if restated is None:
+                            row["band_untestable"] = (
+                                f"delivered in {claim.display_unit!r}, "
+                                f"declared in {record['unit']!r}, no "
+                                "conversion the host owns"
+                            )
+                            verdicts.append(None)
+                        else:
+                            row["delivered_value_in_declared_unit"] = restated
+                            verdicts.append(
+                                record["expected_low"]
+                                <= restated
+                                <= record["expected_high"]
+                            )
+                # A falsified sign diverges whether or not the band could
+                # be tested; agreed needs every armed verdict.
+                # Within the method's own resolution the number carries
+                # no sign and no band: the row says indeterminate rather
+                # than grading noise either way.
+                comparable = (
+                    value
+                    if claim.display_unit == record["unit"]
+                    else row.get("delivered_value_in_declared_unit")
+                )
+                if comparable is None and claim.display_unit != record["unit"]:
+                    comparable = _restate_display_value(
+                        value, claim.display_unit, record["unit"]
                     )
+                resolution = record.get("method_resolution")
+                if (
+                    resolution is not None
+                    and comparable is not None
+                    and abs(float(comparable)) <= float(resolution)
+                ):
+                    row["agreement"] = "indeterminate"
+                    row["within_method_resolution"] = True
+                elif any(verdict is False for verdict in verdicts):
+                    row["agreement"] = "diverged"
+                elif verdicts and None not in verdicts:
+                    # An approximation the session declared answers the
+                    # question conditionally and must not be reported as
+                    # having met it outright. A live claim delivered a
+                    # zero-point-corrected electronic difference,
+                    # evaluated on a structure the host had typed a
+                    # first-order saddle, against a declaration about a
+                    # Gibbs difference between minima -- same id, same
+                    # dimension, different quantity -- and this row said
+                    # `agreed`. The number stays delivered and the word
+                    # carries the qualification (SUFFICIENCY-5).
+                    stands_in = getattr(claim, "approximates", None) or {}
+                    if str(stands_in.get("observable_id") or "") == str(
+                        record.get("observable_id") or ""
+                    ) and stands_in.get("relationship"):
+                        row["agreement"] = "agreed_as_approximation"
+                        row["approximation_relationship"] = str(
+                            stands_in.get("relationship")
+                        )
+                        if stands_in.get("basis"):
+                            row["approximation_basis"] = str(
+                                stands_in.get("basis")
+                            )
+                    else:
+                        row["agreement"] = "agreed"
             elif len(matches) > 1:
                 row["delivered_claim_id"] = ",".join(
                     sorted(claim.claim_id for claim in matches)
@@ -2776,6 +3917,11 @@ class CommandCompiledToolHostV1:
             fragment_a_atom=int(values["fragment_a_atom"]),
             fragment_b_atom=int(values["fragment_b_atom"]),
             distance_angstrom=float(values["distance_angstrom"]),
+            fragment_b_atoms=(
+                [int(item) for item in values["fragment_b_atoms"]]
+                if values.get("fragment_b_atoms")
+                else None
+            ),
             fragment_a_atom_2=(
                 int(values["fragment_a_atom_2"])
                 if values.get("fragment_a_atom_2") is not None
@@ -2857,10 +4003,21 @@ class CommandCompiledToolHostV1:
             for binding in self.scientific_identities.values()
         }
         if parent.sha256 not in identities:
-            raise ContractError(
-                f"parent ({parent.artifact_id!r}) carries no scientific "
-                "identity; derivation requires an identity-bound parent -- "
-                "call bind_scientific_identity for it first"
+            raise RoutedContractError(
+                gate="derivation.parent_is_identity_bound",
+                invariant=(
+                    "a derived geometry inherits what its parent is, so "
+                    "the parent carries a bound identity first."
+                ),
+                diagnosis=(
+                    f"parent ({parent.artifact_id!r}) carries no "
+                    "scientific identity."
+                ),
+                route=(
+                    "bind_scientific_identity on "
+                    f"{parent.artifact_id!r} (charge, multiplicity), then "
+                    "derive_molecular_species again."
+                ),
             )
         kept = values.get("kept_atoms")
         removed = values.get("removed_atoms")
@@ -2904,6 +4061,108 @@ class CommandCompiledToolHostV1:
             ),
         }
 
+    def _fetch_pubchem_geometry(self, turn_id: str, values: dict) -> Any:
+        """Bring in a molecule the workspace never supplied.
+
+        Every other origin needs the workspace to already hold the
+        molecule: a supplied file, a database record, a previous result,
+        or a derivation of one of those. So a session that needed a
+        reference couple, a calibration standard or a literature
+        comparison had no route, and the campaign read that as the model
+        declining on cost (OPEN-2 ino3-qwen, 2026-09-07). The human CLI
+        has carried -p/--pubchem for the same programs all along.
+
+        The hub invariant is untouched: the model names an identifier,
+        the host fetches through the same library call the CLI uses, and
+        the host owns the bytes. What arrives is a database conformer
+        with no electronic state, so the next act is an explicit
+        bind_scientific_identity and the consuming stage is a new
+        workflow for review.
+        """
+
+        if self.approved_workspace is None:
+            raise ContractError(
+                "a pubchem geometry requires an approved workspace to "
+                "write into"
+            )
+        artifact_id = str(values["artifact_id"])
+        if artifact_id in self.artifacts:
+            taken = sorted(self.artifacts)
+            raise ContractError(
+                f"artifact ID {artifact_id!r} is already registered; "
+                f"choose one not in {taken}"
+            )
+        artifact, receipt = fetch_trusted_pubchem_geometry(
+            approved_workspace=self.approved_workspace,
+            artifact_id=artifact_id,
+            identifier=values["identifier"],
+        )
+        self.artifacts[artifact.artifact_id] = artifact
+        self.pubchem_geometries[artifact.sha256] = receipt
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.PUBCHEM_GEOMETRY_FETCHED.value,
+            payload={
+                "receipt_sha256": receipt.receipt_sha256,
+                "artifact_id": artifact.artifact_id,
+                "artifact_sha256": artifact.sha256,
+                "identifier": receipt.identifier,
+                "identifier_kind": receipt.identifier_kind,
+                "atom_count": receipt.atom_count,
+                "formula": receipt.formula,
+                "fragment_count": receipt.fragment_count,
+            },
+            idempotency_key=("pubchem-geometry:" + receipt.receipt_sha256),
+        )
+        molecule = None
+        try:
+            from chemsmart.io.molecules.structure import Molecule
+
+            molecule = Molecule.from_filepath(artifact.path)
+        except Exception:
+            molecule = None
+        # What arrived, in the channel the session actually reads. The
+        # receipt carried `formula`, `atom_count` and `fragment_count`
+        # all along and the observations channel one line away returned
+        # only a point-group estimate -- so a 102-atom record in 27
+        # pieces was described to the session as "C1 within 0.1 A". A
+        # live session named two numeric CIDs from prior knowledge and
+        # got two unrelated molecules; the fact that refutes the label
+        # is the formula, and it belongs where the model looks.
+        #
+        # Measurements, never refusals: an ion pair, a salt, a solvate
+        # and a metallocene as deposited are all legitimately more than
+        # one piece, and `compose_molecular_arrangement` exists to
+        # consume fragments (SUFFICIENCY-5, 2026-09-10).
+        arrival = [
+            f"identifier {receipt.identifier!r} "
+            f"({receipt.identifier_kind}) returned {receipt.formula} "
+            f"with {receipt.atom_count} atoms in "
+            f"{receipt.fragment_count} connected piece(s); check the "
+            "formula against the molecule you meant"
+        ]
+        if int(getattr(receipt, "fragment_count", 1) or 1) > 1:
+            arrival.append(
+                f"this record converted to {receipt.fragment_count} "
+                "disconnected pieces -- an observation, not a verdict: "
+                "compose_molecular_arrangement consumes fragments, and "
+                "an ion pair or a solvate is legitimately more than one"
+            )
+        return {
+            "pubchem_geometry": receipt,
+            "artifact": artifact,
+            "observations": tuple(arrival)
+            + tuple(self._symmetry_observations(artifact, molecule)),
+            "next_action": (
+                "bind charge and multiplicity explicitly with "
+                "bind_scientific_identity -- a database record carries no "
+                "electronic state; this is a depositor's conformer and not "
+                "a relaxed structure, so measure it before assuming it, and "
+                "the stage that consumes it is a new workflow needing its "
+                "own review"
+            ),
+        }
+
     def _identity_bound_parent(
         self, artifact_id: Any, operation: str
     ) -> tuple[Any, str]:
@@ -2915,10 +4174,22 @@ class CommandCompiledToolHostV1:
             for binding in self.scientific_identities.values()
         }
         if parent.sha256 not in identities:
-            raise ContractError(
-                f"parent ({parent.artifact_id!r}) carries no scientific "
-                f"identity; {operation} requires an identity-bound parent -- "
-                "call bind_scientific_identity for it first"
+            raise RoutedContractError(
+                gate="derivation.parent_is_identity_bound",
+                invariant=(
+                    "an edited or composed geometry inherits what its "
+                    "parent is, so the parent carries a bound identity "
+                    "first."
+                ),
+                diagnosis=(
+                    f"parent ({parent.artifact_id!r}) carries no "
+                    "scientific identity."
+                ),
+                route=(
+                    "bind_scientific_identity on "
+                    f"{parent.artifact_id!r} (charge, multiplicity), then "
+                    f"{operation} again."
+                ),
             )
         return parent, identities[parent.sha256].binding_sha256
 
@@ -2927,11 +4198,7 @@ class CommandCompiledToolHostV1:
 
         value = str(artifact_id)
         if value in self.artifacts:
-            taken = sorted(self.artifacts)
-            raise ContractError(
-                f"artifact ID {value!r} is already registered; choose one "
-                f"not in {taken}"
-            )
+            raise _artifact_id_taken(value, sorted(self.artifacts))
         return value
 
     def _edit_molecular_geometry(self, turn_id: str, values: dict) -> Any:
@@ -2999,6 +4266,147 @@ class CommandCompiledToolHostV1:
                 "can be measured against the relaxed result"
             ),
         }
+
+    def _break_symmetry(self, turn_id: str, values: dict) -> Any:
+        """Perturb every atom of an identity-bound geometry by seed.
+
+        A source geometry carries its builder's symmetry (six live
+        cases: idealised D4h and threefold-rotor starts optimised onto
+        saddles). The model names the seed and amplitude; the host draws
+        the step, records the largest displacement it took, and owns the
+        bytes. Refusals are structural only.
+        """
+
+        if self.approved_workspace is None:
+            raise ContractError(
+                "a symmetry break requires an approved workspace to write "
+                "into"
+            )
+        perturbed_artifact_id = self._unused_artifact_id(
+            values["perturbed_artifact_id"]
+        )
+        parent, identity_sha256 = self._identity_bound_parent(
+            values["input_artifact_id"], "break_symmetry"
+        )
+        artifact, receipt = break_trusted_molecular_symmetry(
+            approved_workspace=self.approved_workspace,
+            perturbed_artifact_id=perturbed_artifact_id,
+            parent=parent,
+            parent_identity_sha256=identity_sha256,
+            seed=values["seed"],
+            amplitude_angstrom=float(values["amplitude_angstrom"]),
+        )
+        self.artifacts[artifact.artifact_id] = artifact
+        self.symmetry_breaks[artifact.sha256] = receipt
+        self.event_store.append(
+            turn_id=turn_id,
+            kind=EventKind.SYMMETRY_BROKEN.value,
+            payload={
+                "receipt_sha256": receipt.receipt_sha256,
+                "perturbed_artifact_id": artifact.artifact_id,
+                "perturbed_artifact_sha256": artifact.sha256,
+                "parent_artifact_id": parent.artifact_id,
+                "seed": receipt.seed,
+                "amplitude_angstrom": receipt.amplitude_angstrom,
+                "max_displacement_angstrom": (
+                    receipt.max_displacement_angstrom
+                ),
+                "point_group_before": receipt.point_group_before,
+                "point_group_after": receipt.point_group_after,
+                "connectivity_changed": receipt.connectivity_changed,
+            },
+            idempotency_key=("symmetry-break:" + receipt.receipt_sha256),
+        )
+        return {
+            "symmetry_break": receipt,
+            "artifact": artifact,
+            "next_action": (
+                "bind charge and multiplicity on the perturbed artifact, "
+                "then plan the optimisation that decides whether the step "
+                "escaped the saddle"
+            ),
+        }
+
+    def _bind_reached_geometry(self, turn_id: str, values: dict) -> Any:
+        """Carry a run's reached structure forward as a starting geometry.
+
+        The repair menu named this route for the whole campaign and no
+        tool walked it, so a session facing an optimisation that ran out
+        of iterations had to rebuild a start by hand and pay engine calls
+        for the difference. The host owns the bytes and the lineage; the
+        session owns whether restarting from there is the right science.
+        """
+
+        if self.approved_workspace is None:
+            raise ContractError(
+                "carrying a reached geometry requires an approved "
+                "workspace to write into"
+            )
+        reached_artifact_id = self._unused_artifact_id(
+            values["reached_artifact_id"]
+        )
+        artifact, receipt = build_reached_geometry(
+            approved_workspace=self.approved_workspace,
+            reached_artifact_id=reached_artifact_id,
+            result_artifact=self._artifact(values["artifact_id"]),
+            program=str(values["program"]),
+            run_evidence_root=self.run_evidence_root,
+        )
+        self.artifacts[artifact.artifact_id] = artifact
+        self.reached_geometries[receipt.receipt_sha256] = receipt
+        self._emit(
+            turn_id,
+            EventKind.REACHED_GEOMETRY_BOUND,
+            receipt.receipt_sha256,
+            reached_artifact_id=artifact.artifact_id,
+            source_result_artifact_id=receipt.source_result_artifact_id,
+            recorded_terminal_state=receipt.recorded_terminal_state,
+            record=canonical_data(receipt),
+        )
+        return {
+            "schema_version": "chemsmart.reached-geometry.v1",
+            "artifact": artifact,
+            "reached_geometry": canonical_data(receipt),
+            "next_action": (
+                "bind this geometry's charge and multiplicity with "
+                "bind_scientific_identity -- a reached structure carries "
+                "no electronic state -- then plan the stage that "
+                "optimises it as a new workflow for review"
+            ),
+        }
+
+    def _characterise_stationary_point(
+        self, turn_id: str, values: dict
+    ) -> Any:
+        """Say what a result is, checked against its own printed modes.
+
+        A search that missed its promise keeps the failure; this records
+        the other true statement about the same bytes, so a number taken
+        from them can be delivered as the stationary point it belongs to
+        rather than as the one that was asked for. The host owns the
+        convention and refuses a claim the frequencies do not support;
+        the session owns the claim and everything it means.
+        """
+
+        receipt = build_stationary_point_characterisation(
+            result_artifact=self._artifact(values["result_artifact_id"]),
+            program=str(values["program"]),
+            order_claimed=int(values["order_claimed"]),
+            node_id=str(values.get("node_id") or ""),
+            anomaly_sha256=str(values.get("anomaly_receipt_sha256") or ""),
+        )
+        self.stationary_point_characterisations[receipt.receipt_sha256] = (
+            receipt
+        )
+        self._emit(
+            turn_id,
+            EventKind.STATIONARY_POINT_CHARACTERISED,
+            receipt.receipt_sha256,
+            node_id=receipt.node_id,
+            order_claimed=receipt.order_claimed,
+            record=canonical_data(receipt),
+        )
+        return {"stationary_point_characterisation": canonical_data(receipt)}
 
     def _displace_along_vibrational_mode(
         self, turn_id: str, values: dict
@@ -3098,7 +4506,9 @@ class CommandCompiledToolHostV1:
             dihedral_atom=int(values["dihedral_atom"]),
             bond_length_angstrom=float(values["bond_length_angstrom"]),
             angle_degrees=float(values["angle_degrees"]),
-            dihedral_degrees=float(values["dihedral_degrees"]),
+            dihedral_degrees=_periodic_degrees(
+                float(values["dihedral_degrees"])
+            ),
         )
         self.artifacts[artifact.artifact_id] = artifact
         self.atom_appends[artifact.sha256] = receipt
@@ -3344,6 +4754,7 @@ class CommandCompiledToolHostV1:
             "binding_sha256": binding.binding_sha256,
             "binding": binding,
             "geometry": geometry_facts,
+            "observations": self._symmetry_observations(artifact, molecule),
             "measurement_route": (
                 "this geometry_xyz artifact is readable without any engine: "
                 "extract_result_quantities with program 'xyz' yields "
@@ -3352,6 +4763,211 @@ class CommandCompiledToolHostV1:
                 "positions -- measure a coordinate before assuming its value"
             ),
         }
+
+    def _root_artifact_for(
+        self, node_id: str, input_artifact: TrustedArtifactRefV1
+    ) -> TrustedArtifactRefV1 | None:
+        """The goal's original bound geometry behind this node's input.
+
+        Under a frozen approval the binding says which bytes; the
+        executor located them beside the initial artifacts. In a planning
+        host the lineage is walked: structural hops to their parents, and
+        a reached or displaced geometry to the input of the recorded run
+        that produced its source. None when the input is the goal's own
+        start or the root bytes are not in hand.
+        """
+
+        approval = getattr(self, "workflow_execution_approval", None)
+        if approval is not None:
+            for binding in approval.node_bindings:
+                if binding.node_id != node_id:
+                    continue
+                root_sha256 = str(
+                    getattr(binding, "root_artifact_sha256", "") or ""
+                )
+                if not root_sha256:
+                    return None
+                known = self.artifacts.get(
+                    str(getattr(binding, "root_artifact_id", "") or "")
+                )
+                if known is not None and known.sha256 == root_sha256:
+                    return known
+                return None
+            return None
+        return self._goal_root_of(input_artifact)
+
+    def _goal_root_of(
+        self, artifact: TrustedArtifactRefV1
+    ) -> TrustedArtifactRefV1 | None:
+        reached_by_sha = {
+            str(getattr(item, "reached_artifact_sha256", "")): item
+            for item in self.reached_geometries.values()
+        }
+        cursor = artifact.sha256
+        seen: set[str] = set()
+        root_sha256 = ""
+        while cursor and cursor not in seen and len(seen) < 64:
+            seen.add(cursor)
+            # The by-parent hops come from `_GEOMETRY_HOPS` rather than
+            # a second hand-list: this walk carried three of the four
+            # and the review walk carried all four, which is how they
+            # drifted. What stays local is the *purpose* -- this walk
+            # resolves a result-predecessor through the run that
+            # produced it, because it is looking for the goal's
+            # original bound geometry, not for a chain to display.
+            for kind, registry_name, predecessor in self._GEOMETRY_HOPS:
+                if predecessor != "parent_sha256":
+                    continue
+                registry = getattr(self, registry_name, None)
+                receipt = (
+                    registry.get(cursor)
+                    if isinstance(registry, dict)
+                    else None
+                )
+                if receipt is not None:
+                    cursor = str(getattr(receipt, predecessor, "") or "")
+                    break
+            else:
+                displaced = self.mode_displacements.get(cursor)
+                reached = reached_by_sha.get(cursor)
+                source = (
+                    str(getattr(displaced, "result_sha256", "") or "")
+                    if displaced is not None
+                    else (
+                        str(getattr(reached, "source_result_sha256", "") or "")
+                        if reached is not None
+                        else ""
+                    )
+                )
+                if not source:
+                    break
+                run_input = self._recorded_run_input_sha256(source)
+                if not run_input:
+                    break
+                cursor = run_input
+                root_sha256 = cursor
+        if not root_sha256 or root_sha256 == artifact.sha256:
+            return None
+        for known in self.artifacts.values():
+            if known.sha256 == root_sha256 and known.kind == "geometry_xyz":
+                return known
+        located = self._locate_workspace_bytes(root_sha256)
+        if located is None:
+            return None
+        return TrustedArtifactRefV1(
+            artifact_id=f"root-{root_sha256[:8]}",
+            kind="geometry_xyz",
+            sha256=root_sha256,
+            size_bytes=located.stat().st_size,
+            path=str(located),
+            cli_value=str(located),
+        )
+
+    def _recorded_run_input_sha256(self, result_sha256: str) -> str:
+        """The input digest of the recorded run whose outputs include the
+        given result, read from this workspace's own run streams."""
+
+        root = self.run_evidence_root
+        if root is None:
+            return ""
+        records = root / ".chemsmart-agent"
+        for pattern in (
+            "goals/*/runs/*/events.jsonl",
+            "runs/*/events.jsonl",
+            "executions/*/events.jsonl",
+        ):
+            for path in sorted(records.glob(pattern)):
+                if path.is_symlink() or not path.is_file():
+                    continue
+                try:
+                    lines = path.read_text(encoding="utf-8").splitlines()
+                except OSError:
+                    continue
+                for line in lines:
+                    if result_sha256 not in line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except ValueError:
+                        continue
+                    if event.get("kind") != EventKind.PROGRAM_EXECUTED.value:
+                        continue
+                    record = (event.get("payload") or {}).get("record") or {}
+                    outputs = record.get("output_artifacts") or ()
+                    if any(
+                        str((item or {}).get("sha256") or "") == result_sha256
+                        for item in outputs
+                        if isinstance(item, Mapping)
+                    ):
+                        return str(record.get("input_artifact_sha256") or "")
+        return ""
+
+    def _locate_workspace_bytes(self, sha256: str) -> Path | None:
+        roots = [
+            root
+            for root in (self.approved_workspace, self.run_evidence_root)
+            if root is not None
+        ]
+        for root in roots:
+            for candidate in sorted(Path(root).rglob("*.xyz")):
+                if candidate.is_symlink() or not candidate.is_file():
+                    continue
+                try:
+                    if file_sha256(candidate) == sha256:
+                        return candidate
+                except OSError:
+                    continue
+        return None
+
+    def _symmetry_observations(
+        self, artifact: Any, molecule: Any
+    ) -> tuple[str, ...]:
+        """What the host can say about a geometry's symmetry and its
+        builder's idealised coordinates, at the moment it is bound."""
+
+        from chemsmart.agent.symmetry import (
+            idealised_coordinate_observation,
+            idealised_internal_coordinate_count,
+            symmetry_observation,
+        )
+
+        observations: list[str] = []
+        if molecule is None:
+            return ()
+        try:
+            observations.append(
+                symmetry_observation(
+                    tuple(molecule.chemical_symbols), molecule.positions
+                )
+            )
+        except Exception:
+            return ()
+        appends = []
+        cursor = artifact.sha256
+        seen: set[str] = set()
+        while cursor and cursor not in seen:
+            seen.add(cursor)
+            edit_receipt = self.geometry_edits.get(cursor)
+            if edit_receipt is not None:
+                cursor = edit_receipt.parent_sha256
+                continue
+            append_receipt = self.atom_appends.get(cursor)
+            if append_receipt is not None:
+                appends.append(append_receipt)
+                cursor = append_receipt.parent_sha256
+                continue
+            symmetry_receipt = self.symmetry_breaks.get(cursor)
+            if symmetry_receipt is not None:
+                cursor = symmetry_receipt.parent_sha256
+                continue
+            break
+        if appends:
+            observations.append(
+                idealised_coordinate_observation(
+                    idealised_internal_coordinate_count(appends)
+                )
+            )
+        return tuple(observations)
 
     def _inspect_program(self, turn_id: str, values: dict) -> Any:
         """Capability and environment in one call; every receipt returned."""
@@ -3400,7 +5016,19 @@ class CommandCompiledToolHostV1:
 
         if values.get("artifact_id"):
             if not values.get("program"):
-                raise ContractError(
+                raise RoutedContractError(
+                    gate="inspect.result_needs_its_reader",
+                    invariant=(
+                        "a result's selectors are read by the reader of the "
+                        "program that wrote it."
+                    ),
+                    diagnosis="inspect_run named an artifact_id and no program.",
+                    route=(
+                        "pass program beside artifact_id (orca, gaussian, "
+                        "xtb or pyscf), or name a run to read its outcome."
+                    ),
+                )
+                raise ContractError(  # pragma: no cover - unreachable
                     "inspect_run with artifact_id also needs program, the "
                     "reader that opens the result"
                 )
@@ -3607,17 +5235,20 @@ class CommandCompiledToolHostV1:
             # Naming the taken IDs is what makes this actionable. Without them
             # a caller can only guess, and a live run collided five times in a
             # row on the same message.
-            taken = sorted(self.artifacts)
-            requested = values["artifact_id"]
-            raise ContractError(
-                f"artifact ID {requested!r} is already registered; "
-                f"choose one not in {taken}"
+            raise _artifact_id_taken(
+                values["artifact_id"], sorted(self.artifacts)
             )
         render = self._get(
             self.project_renders,
             values["render_receipt_sha256"],
             "project render receipt",
         )
+        earlier = tuple(
+            (artifact_id, self.project_renders[item.render_receipt_sha256])
+            for artifact_id, item in self.project_promotions.items()
+            if item.render_receipt_sha256 in self.project_renders
+        )
+        observations = promotion_field_observations(render, earlier)
         artifact, promotion = promote_project_candidate(
             render,
             approved_workspace=self.approved_workspace,
@@ -3632,7 +5263,11 @@ class CommandCompiledToolHostV1:
             status=promotion.status,
             artifact_id=artifact.artifact_id,
         )
-        return {"artifact": artifact, "promotion": promotion}
+        return {
+            "artifact": artifact,
+            "promotion": promotion,
+            "observations": observations,
+        }
 
     def _establish_project(self, turn_id: str, values: dict) -> Any:
         """Render, promote, and validate one project in a single turn.
@@ -3826,6 +5461,50 @@ class CommandCompiledToolHostV1:
             }
         return {"status": "no_scientific_workflow_planned"}
 
+    _RUN_RECEIPT_KINDS = frozenset(
+        {
+            "result_quantities_extracted",
+            "thermochemistry_derived",
+            "quantity_expression_evaluated",
+            "scientific_validation_evaluated",
+            "analysis_claims_recorded",
+        }
+    )
+
+    def _recorded_run_receipt(self, receipt_sha256: str) -> bool:
+        """Whether a recorded run of this workspace minted the receipt.
+
+        A woken session reads the previous cycle's executed chain through
+        inspect_run and was refused when its decision cited one of that
+        chain's receipts: the session host held only its own (NOVEL-3
+        po1 and ino2, 2026-09-05). The run streams are the host's own
+        durable record; a receipt they carry is one the host minted.
+        """
+
+        root = getattr(self, "run_evidence_root", None)
+        if not root:
+            return False
+        needle = f'"receipt_sha256": "{receipt_sha256}"'
+        for stream in sorted(
+            Path(root).glob(".chemsmart-agent/goals/*/runs/*/events.jsonl")
+        ):
+            try:
+                text = stream.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if needle not in text:
+                continue
+            for line in text.splitlines():
+                if needle not in line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("kind") in self._RUN_RECEIPT_KINDS:
+                    return True
+        return False
+
     def _record_scientific_decision(self, turn_id: str, values: dict) -> Any:
         task_spec_sha256 = self._resolve_task_spec_reference(
             values, "task_spec_sha256"
@@ -3834,13 +5513,10 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 "scientific decision targets an unknown task spec"
             )
-        postprocessing_registries = (
-            self.quantity_extractions,
-            self.thermochemistry_receipts,
-            self.quantity_expression_receipts,
-            self.scientific_validation_receipts,
-            self.analysis_claim_records,
-        )
+        # Derived from the one receipt authority rather than hand-listed
+        # a sixth time: the five copies had drifted and this gate refused
+        # receipts the host itself minted.
+        postprocessing_registries = tuple(self._receipt_registries().values())
         postprocessing_receipt_sha256s = tuple(
             str(item)
             for item in values.get("postprocessing_receipt_sha256s", ())
@@ -3850,9 +5526,27 @@ class CommandCompiledToolHostV1:
             if not any(
                 receipt_sha256 in receipts
                 for receipts in postprocessing_registries
-            ):
-                raise ContractError(
-                    "scientific decision cites an unknown postprocessing receipt"
+            ) and not self._recorded_run_receipt(receipt_sha256):
+                raise RoutedContractError(
+                    gate="decision.receipt_is_one_the_host_minted",
+                    invariant=(
+                        "a decision cites only receipts this session or a "
+                        "recorded run of this workspace minted."
+                    ),
+                    diagnosis=(
+                        f"{receipt_sha256[:8]} is "
+                        + (
+                            self._digest_names(receipt_sha256)
+                            or "no digest this host minted"
+                        )
+                        + ", so it cannot stand as postprocessing "
+                        "evidence here."
+                    ),
+                    route=(
+                        "cite the receipt_sha256 a tool returned in this "
+                        "session, or one inspect_run shows on a recorded "
+                        "run of this goal"
+                    ),
                 )
         evidence_refs = tuple(values["evidence_refs"]) + tuple(
             f"receipt:{receipt_sha256}"
@@ -3918,6 +5612,13 @@ class CommandCompiledToolHostV1:
             )
             if parsed_postprocessing_ref is not None:
                 receipt_kind, receipt_sha256 = parsed_postprocessing_ref
+                # A typed prefix names one role and stays narrow: a
+                # reader asking for a thermochemistry receipt means that
+                # kind. An untyped citation asks the authenticity
+                # question instead, and that one is the whole ledger --
+                # a completion receipt and a stationary-point
+                # characterisation are the host's own and were refused
+                # here (SUFFICIENCY-5, 2026-09-10).
                 registries = {
                     "quantity_extraction": self.quantity_extractions,
                     "thermochemistry": self.thermochemistry_receipts,
@@ -3928,16 +5629,34 @@ class CommandCompiledToolHostV1:
                     "analysis_claim": self.analysis_claim_records,
                 }
                 if receipt_kind == "generic":
-                    known = any(
-                        receipt_sha256 in receipts
-                        for receipts in registries.values()
-                    )
+                    known = self._resolve_receipt(receipt_sha256) is not None
                 else:
                     known = receipt_sha256 in registries[receipt_kind]
+                # A receipt an earlier cycle's executed chain minted is
+                # the host's own; the run stream carries it.
+                if not known and self._recorded_run_receipt(receipt_sha256):
+                    known = True
                 if not known:
-                    raise ContractError(
-                        "scientific decision cites an unknown "
-                        "postprocessing receipt"
+                    raise RoutedContractError(
+                        gate="decision.receipt_is_one_the_host_minted",
+                        invariant=(
+                            "a decision cites only receipts this session "
+                            "or a recorded run of this workspace minted."
+                        ),
+                        diagnosis=(
+                            f"{receipt_sha256[:8]} is "
+                            + (
+                                self._digest_names(receipt_sha256)
+                                or "no digest this host minted"
+                            )
+                            + f", and this citation asks for "
+                            f"{receipt_kind!r}."
+                        ),
+                        route=(
+                            "cite the receipt_sha256 a tool returned in "
+                            "this session, or one inspect_run shows on a "
+                            "recorded run of this goal"
+                        ),
                     )
                 continue
             prefix = "analysis_completion_policy:"
@@ -3978,6 +5697,17 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 "functional-convention claims require a host resolution receipt"
             )
+        unreachable = self._verify_unreachable_observables(
+            values.get("unreachable_observable_ids") or ()
+        )
+        self.verified_unreachable_ids.update(
+            str(item.get("observable_id") or "")
+            for item in unreachable
+            if item.get("verified")
+        )
+        dispositions = self._verify_menu_route_dispositions(
+            values.get("menu_route_dispositions") or ()
+        )
         record = build_scientific_decision_record(
             decision_id=values["decision_id"],
             task_spec_sha256=task_spec_sha256,
@@ -3992,6 +5722,11 @@ class CommandCompiledToolHostV1:
         self.scientific_decisions[record.record_sha256] = record
         record_body = canonical_data(record)
         record_body.pop("record_sha256")
+        extra: dict[str, Any] = {}
+        if unreachable:
+            extra["unreachable_observables"] = unreachable
+        if dispositions:
+            extra["menu_route_dispositions"] = dispositions
         self._emit(
             turn_id,
             EventKind.SCIENTIFIC_DECISION_RECORDED,
@@ -3999,8 +5734,530 @@ class CommandCompiledToolHostV1:
             status="recorded",
             decision_id=record.decision_id,
             record=record_body,
+            **extra,
         )
+        if dispositions and not unreachable:
+            return {**canonical_data(record), **extra}
+        if unreachable:
+            return {
+                **canonical_data(record),
+                **extra,
+                "settlement_consequence": (
+                    "a refusal the host verified settles the goal "
+                    "unreachable_from_evidence once every other declared "
+                    "observable is delivered by id; an unverified one "
+                    "returns the goal to the human naming it"
+                ),
+            }
         return record
+
+    def _verify_unreachable_observables(
+        self, entries: Sequence[Mapping[str, Any]]
+    ) -> tuple[dict[str, Any], ...]:
+        """Check each typed refusal against what the host can know.
+
+        Two sessions wrote honest refusals and neither reached the word:
+        po3 said "typed refusal" in prose and recorded nothing typed;
+        ino3 built five blocked nodes and the settlement joined
+        blocked-ness to required output ids, not observable ids (NOVEL-3,
+        2026-09-05). The owner ruled (2026-09-06) the refusal is host-
+        verified: the session names the observable, the producer it
+        would need and the receipts that show the gap; the host checks
+        what it can -- a selector no envelope program declares for the
+        job type, or a blocked_unsupported node in this session's plan
+        whose output is the observable -- and records the basis. A guard
+        against refusing one's way out stays: an unverified refusal
+        returns to the human, never settles.
+        """
+
+        from chemsmart.analysis.result_readers import (
+            reader_for,
+            registered_reader_programs,
+        )
+
+        declared = set(self.requested_observable_declarations)
+        envelope = self.bounded_execution_envelope
+        programs = (
+            tuple(
+                str(program)
+                for program, _engines in envelope.allowed_program_engines
+            )
+            if envelope is not None
+            else registered_reader_programs()
+        )
+        verified: list[dict[str, Any]] = []
+        for entry in entries:
+            observable_id = str(entry.get("observable_id") or "")
+            statement = str(entry.get("statement") or "").strip()
+            receipts = tuple(
+                str(item) for item in (entry.get("receipt_sha256s") or ())
+            )
+            if observable_id not in declared:
+                raise RoutedContractError(
+                    gate="decision.unreachable_id_is_declared",
+                    invariant=(
+                        "a typed refusal names an observable this goal "
+                        "declared."
+                    ),
+                    diagnosis=(
+                        f"{observable_id!r} is not among the declared "
+                        f"observables {sorted(declared)}."
+                    ),
+                    route=(
+                        "name the declared observable_id verbatim, or "
+                        "declare it first with declare_requested_observable"
+                    ),
+                )
+            if not statement or not receipts:
+                raise RoutedContractError(
+                    gate="decision.refusal_carries_its_evidence",
+                    invariant=(
+                        "a typed refusal states the producer it would need "
+                        "and cites at least one receipt that shows the gap."
+                    ),
+                    diagnosis=(
+                        f"{observable_id!r} was named with "
+                        + ("no statement" if not statement else "no receipt")
+                        + "."
+                    ),
+                    route=(
+                        "cite the receipt of the probe that showed the "
+                        "producer absent -- an inspect_run or "
+                        "extract_result_quantities receipt -- and say what "
+                        "producer the observable needs"
+                    ),
+                )
+            for receipt_sha256 in receipts:
+                require_sha256(receipt_sha256, "refusal receipt_sha256")
+                if not self._receipt_known(receipt_sha256):
+                    raise RoutedContractError(
+                        gate="decision.receipt_is_one_the_host_minted",
+                        invariant=(
+                            "a refusal cites only receipts this session or "
+                            "a recorded run of this workspace minted."
+                        ),
+                        diagnosis=(
+                            f"{receipt_sha256[:8]} is "
+                            + (
+                                self._digest_names(receipt_sha256)
+                                or "no digest this host minted"
+                            )
+                            + "."
+                        ),
+                        route=(
+                            "cite the receipt_sha256 a tool returned, or "
+                            "one inspect_run shows on a recorded run"
+                        ),
+                    )
+            selector = str(entry.get("selector") or "").strip()
+            jobtype = str(entry.get("jobtype") or "").strip().lower()
+            blocked_node_id = str(entry.get("blocked_node_id") or "").strip()
+            basis = ""
+            is_verified = False
+            if selector:
+                declaring = []
+                for program in programs:
+                    reader = reader_for(program)
+                    if reader is None:
+                        continue
+                    jobtypes = (
+                        (jobtype,)
+                        if jobtype
+                        else tuple(
+                            item[0] for item in reader.jobtype_selectors
+                        )
+                    )
+                    for candidate in jobtypes:
+                        declared_here = reader.selectors_for_jobtype(candidate)
+                        if (
+                            declared_here is not None
+                            and selector in declared_here
+                        ):
+                            declaring.append(f"{program}/{candidate}")
+                if declaring:
+                    basis = (
+                        f"selector {selector!r} is declared by "
+                        + ", ".join(sorted(declaring))
+                        + "; the observable is reachable and the refusal "
+                        "is not verified"
+                    )
+                else:
+                    is_verified = True
+                    basis = (
+                        f"no program in the envelope ({', '.join(programs)}) "
+                        f"declares selector {selector!r}"
+                        + (f" for jobtype {jobtype!r}" if jobtype else "")
+                    )
+            elif blocked_node_id:
+                found = False
+                for plan in self.scientific_toolchain_plans.values():
+                    for node in plan.analysis_nodes:
+                        if (
+                            node.node_id == blocked_node_id
+                            and node.support_state == "blocked_unsupported"
+                            and any(
+                                output.output_id == observable_id
+                                for output in node.outputs
+                            )
+                        ):
+                            found = True
+                if found:
+                    is_verified = True
+                    basis = (
+                        f"analysis node {blocked_node_id!r} is declared "
+                        "blocked_unsupported in this session's plan and "
+                        f"names {observable_id!r} as its output"
+                    )
+                else:
+                    basis = (
+                        f"no blocked_unsupported node {blocked_node_id!r} "
+                        f"with output {observable_id!r} exists in this "
+                        "session's plans; the refusal is not verified"
+                    )
+            else:
+                # A precision no method in this envelope can reach is the
+                # third way an observable is unreachable, and the only
+                # one where the producer exists and the number was
+                # computed. The verifier knew a missing selector and a
+                # blocked node and nothing else, so a session facing this
+                # would have had to invent an absence to say a true
+                # thing -- and the menu offered refusal as a route it
+                # could not walk. What the host checks is that the
+                # requirement exists and is open on this goal's own
+                # record; whether no conceivable calculation could reach
+                # it is not claimed, by the host or by the word.
+                assessment = self.requirement_assessments.get(observable_id)
+                declaration = self.requested_observable_declarations.get(
+                    observable_id, {}
+                )
+                state = str((assessment or {}).get("state") or "")
+                if (
+                    declaration.get("required_tolerance") is not None
+                    and state in _OPEN_SUFFICIENCY_STATES
+                ):
+                    is_verified = True
+                    basis = (
+                        "the requirement "
+                        f"{declaration['required_tolerance']} "
+                        f"{declaration.get('unit', '')} stands open on this "
+                        f"goal's own record ({state}) and the session "
+                        "states the available evidence does not establish "
+                        "it here; the host verifies the open requirement "
+                        "and never that no calculation could reach it"
+                    ).replace("  ", " ")
+                elif declaration.get("required_tolerance") is not None:
+                    basis = (
+                        f"observable {observable_id!r} carries a required "
+                        "tolerance and no open assessment stands against "
+                        "it; claim it with the uncertainty you attribute "
+                        "to it first, so what is refused is on the record"
+                    )
+                else:
+                    basis = (
+                        "no host-checkable producer was named (give "
+                        "selector and jobtype, or blocked_node_id); the "
+                        "refusal is stated, not verified"
+                    )
+            verified.append(
+                {
+                    "observable_id": observable_id,
+                    "statement": statement,
+                    "selector": selector,
+                    "jobtype": jobtype,
+                    "blocked_node_id": blocked_node_id,
+                    "receipt_sha256s": receipts,
+                    "verified": is_verified,
+                    "basis": basis,
+                }
+            )
+        return tuple(verified)
+
+    def _verify_menu_route_dispositions(
+        self, entries: Sequence[Mapping[str, Any]]
+    ) -> tuple[dict[str, Any], ...]:
+        """Check each menu disposition names an offered route and minted
+        receipts; the choice itself is never graded.
+
+        REACH-1 po3 cycle 3 (2026-09-06) rejected all four routes the
+        repair menu offered, each with a mechanism, in prose the next
+        cycle never saw: the wake carries the menu and not what was
+        done with it. The owner ruled (R3) the disposition is a typed
+        field of the decision. The host verifies only what it can
+        know -- the route was offered this cycle, the receipts are its
+        own -- and records the rest verbatim.
+        """
+
+        offered = tuple(self.offered_repair_routes)
+        verified: list[dict[str, Any]] = []
+        for entry in entries:
+            route = str(entry.get("route") or "")
+            disposition = str(entry.get("disposition") or "")
+            reason = str(entry.get("reason") or "").strip()
+            receipts = tuple(
+                str(item) for item in (entry.get("receipt_sha256s") or ())
+            )
+            if route not in offered:
+                raise RoutedContractError(
+                    gate="decision.route_is_one_the_menu_offered",
+                    invariant=(
+                        "a disposition names a route the wake's repair "
+                        "menu offered this cycle, by the menu's own key."
+                    ),
+                    diagnosis=(
+                        f"{route!r} is not among the offered routes "
+                        f"{list(offered)}."
+                        if offered
+                        else f"{route!r}: this wake carried no repair menu."
+                    ),
+                    route=(
+                        "name one of the offered routes, or carry the "
+                        "mechanism as an uncertainty of the decision."
+                    ),
+                )
+            for receipt_sha256 in receipts:
+                require_sha256(receipt_sha256, "disposition receipt_sha256")
+                if not self._receipt_known(receipt_sha256):
+                    raise RoutedContractError(
+                        gate="decision.receipt_is_one_the_host_minted",
+                        invariant=(
+                            "a disposition cites only receipts this "
+                            "session or a recorded run minted."
+                        ),
+                        diagnosis=(
+                            f"{receipt_sha256[:8]} is "
+                            + (
+                                self._digest_names(receipt_sha256)
+                                or "no digest this host minted"
+                            )
+                            + "."
+                        ),
+                        route=(
+                            "cite the receipt_sha256 a tool returned, or "
+                            "one inspect_run lists."
+                        ),
+                    )
+            verified.append(
+                {
+                    "route": route,
+                    "disposition": disposition,
+                    "reason": reason,
+                    "receipt_sha256s": receipts,
+                }
+            )
+        return tuple(verified)
+
+    #: Every registry the host keys by a receipt digest it minted. A
+    #: registry opts in here **by name**: reflection over ``__dict__``
+    #: would make a private cache keyed by a digest into citable
+    #: evidence, which is not the same question. Authenticity -- did
+    #: this host mint this digest -- is one predicate and lives here.
+    #: Whether a receipt is *admissible* for a particular role is a
+    #: second, narrower question each caller asks for itself.
+    #:
+    #: Five hand-written copies of a shorter version of this tuple had
+    #: drifted apart (the decision gate and ``_receipt_known`` carried
+    #: five names, the uncertainty resolver four, the post-hoc detector
+    #: a different four), and the decision gate refused five digests
+    #: this host had minted and printed -- a completion receipt, a
+    #: stationary-point characterisation, an anomaly observation --
+    #: while telling the session they were "no receipt of this
+    #: session". The model wrote that falsehood into its permanent
+    #: record. One authority, derived readers (SUFFICIENCY-5,
+    #: 2026-09-10).
+    _RECEIPT_REGISTRY_NAMES = (
+        "analysis_claim_records",
+        "analysis_completion_receipts",
+        "anomaly_observations",
+        "capabilities",
+        "command_inspections",
+        "environments",
+        "functional_resolutions",
+        "preflights",
+        "project_renders",
+        "project_validations",
+        "quantity_expression_receipts",
+        "quantity_extraction_bindings",
+        "quantity_extraction_selectors",
+        "quantity_extractions",
+        "reached_geometries",
+        "result_inspections",
+        "safe_previews",
+        "scientific_decisions",
+        "scientific_validation_receipts",
+        "stationary_point_characterisations",
+        "substitutions",
+        "thermochemistry_receipts",
+        "validators",
+    )
+
+    #: Registries keyed by something that is *not* a minted receipt, and
+    #: what they are keyed by. A digest found here is answered with what
+    #: it actually names rather than with "no receipt": a reader who
+    #: cites an artifact digest has made a different mistake from one who
+    #: invented a digest, and the old message could not tell them apart.
+    _NON_RECEIPT_REGISTRY_KEYS = {
+        "atom_appends": "artifact",
+        "consulted_skill_records": "document",
+        "consulted_skills": "document",
+        "database_extractions": "artifact",
+        "engine_bindings": "binding",
+        "geometry_edits": "artifact",
+        "invocations": "invocation",
+        "materialized_workflows": "plan",
+        "mode_displacements": "artifact",
+        "molecular_compositions": "artifact",
+        "molecular_derivations": "artifact",
+        "program_bindings": "binding",
+        "project_documents": "document",
+        "pubchem_geometries": "artifact",
+        "quantity_expression_requests": "receipt",
+        "scientific_identities": "binding",
+        "scientific_toolchain_plans": "plan",
+        "scientific_workflow_plans": "plan",
+        "symmetry_breaks": "artifact",
+        "workflow_drafts": "plan",
+    }
+
+    #: Every host-owned way a geometry can descend from another, and how
+    #: to reach its predecessor. Two walks hand-listed subsets of this
+    #: and disagreed: the review chain followed edits, appends,
+    #: displacements and symmetry breaks and anchored on derivations and
+    #: database extractions, while the original-bound-geometry walk
+    #: followed three of the four and anchored on neither -- so a
+    #: composed or fetched molecule reached the human page with no
+    #: origin hop at all, and the panel's own docstring says the hop
+    #: that decides what the molecule IS can sit at the root.
+    #:
+    #: A hop names the field carrying its predecessor's digest, because
+    #: they genuinely differ: an edit, an append and a symmetry break
+    #: come from a parent *geometry*, while a mode displacement comes
+    #: from a *result*. Getting that wrong is how the two walks drifted.
+    _GEOMETRY_HOPS: tuple[tuple[str, str, str], ...] = (
+        ("geometry_edit", "geometry_edits", "parent_sha256"),
+        ("atom_append", "atom_appends", "parent_sha256"),
+        ("mode_displacement", "mode_displacements", "result_sha256"),
+        ("symmetry_break", "symmetry_breaks", "parent_sha256"),
+    )
+
+    #: Origins anchor a chain: they have no predecessor geometry in this
+    #: workspace, so the walk ends on them and the review names them.
+    #: A composition is deliberately here rather than among the hops --
+    #: it merges two parents and a linear walk cannot follow it, so it
+    #: terminates the chain and reports both lineages instead of
+    #: silently picking one.
+    _GEOMETRY_ORIGINS: tuple[tuple[str, str], ...] = (
+        ("derivation", "molecular_derivations"),
+        ("database_extraction", "database_extractions"),
+        ("pubchem_geometry", "pubchem_geometries"),
+        ("composition", "molecular_compositions"),
+    )
+
+    def _geometry_provenance(
+        self, sha256: str
+    ) -> tuple[tuple[dict[str, Any], ...], tuple[str, Any] | None]:
+        """The hops a geometry descends through, and the origin anchoring it.
+
+        One reader for both walks. Returns the hops nearest-first and the
+        origin, if this workspace holds one.
+        """
+
+        hops: list[dict[str, Any]] = []
+        cursor = str(sha256 or "")
+        seen: set[str] = set()
+        while cursor and cursor not in seen and len(seen) < 64:
+            seen.add(cursor)
+            for kind, registry_name, predecessor in self._GEOMETRY_HOPS:
+                registry = getattr(self, registry_name, None)
+                receipt = (
+                    registry.get(cursor)
+                    if isinstance(registry, dict)
+                    else None
+                )
+                if receipt is None:
+                    continue
+                hops.append({"kind": kind, **canonical_data(receipt)})
+                cursor = str(getattr(receipt, predecessor, "") or "")
+                break
+            else:
+                break
+        origin: tuple[str, Any] | None = None
+        for kind, registry_name in self._GEOMETRY_ORIGINS:
+            registry = getattr(self, registry_name, None)
+            if isinstance(registry, dict) and cursor in registry:
+                origin = (kind, registry[cursor])
+                break
+        return tuple(hops), origin
+
+    def _receipt_registries(self) -> dict[str, Any]:
+        """Kind to registry, for every registry keyed by a receipt."""
+
+        found: dict[str, Any] = {}
+        for name in self._RECEIPT_REGISTRY_NAMES:
+            registry = getattr(self, name, None)
+            if isinstance(registry, dict):
+                found[name] = registry
+        return found
+
+    def _resolve_receipt(self, receipt_sha256: str) -> tuple[str, Any] | None:
+        """The registry a minted receipt lives in, and the receipt.
+
+        A registry keyed by something other than the receipt still holds
+        receipts: ``pubchem_geometries`` is keyed by the artifact digest,
+        so the receipt digest the host minted, emitted on its own event
+        and handed to the session was indexed nowhere -- and the gate
+        that refused it said, truthfully of the registry and falsely of
+        the ledger, that no receipt of that name existed. Whether a
+        digest was minted here cannot depend on which key its family
+        happens to use, so the value's own ``receipt_sha256`` answers
+        too (SUFFICIENCY-5, 2026-09-10).
+        """
+
+        for name, registry in self._receipt_registries().items():
+            if receipt_sha256 in registry:
+                return name, registry[receipt_sha256]
+        for name in self._NON_RECEIPT_REGISTRY_KEYS:
+            registry = getattr(self, name, None)
+            if not isinstance(registry, dict):
+                continue
+            for held in registry.values():
+                if (
+                    str(getattr(held, "receipt_sha256", "")) == receipt_sha256
+                    and receipt_sha256
+                ):
+                    return name, held
+        return None
+
+    def _digest_names(self, receipt_sha256: str) -> str:
+        """What a digest names here, for a refusal that tells the truth.
+
+        A gate whose message says a digest was never minted, about a
+        digest this host minted and returned, teaches the model a false
+        fact about the host's own ledger -- and a live session wrote
+        exactly that into its recorded decision. So the refusal names
+        what it found instead.
+        """
+
+        resolved = self._resolve_receipt(receipt_sha256)
+        if resolved is not None:
+            return f"a {resolved[0]} receipt"
+        for name, keyed_by in self._NON_RECEIPT_REGISTRY_KEYS.items():
+            registry = getattr(self, name, None)
+            if isinstance(registry, dict) and receipt_sha256 in registry:
+                # The key, not a receipt: an artifact digest is a real
+                # handle for a different question, and a reader who
+                # cited one has made a different mistake from a reader
+                # who invented a digest.
+                return f"a {keyed_by} digest ({name}), not a receipt"
+        if self._recorded_run_receipt(receipt_sha256):
+            return "a receipt a recorded run of this workspace minted"
+        return ""
+
+    def _receipt_known(self, receipt_sha256: str) -> bool:
+        """A receipt this session or a recorded run of the workspace minted."""
+
+        if self._resolve_receipt(receipt_sha256) is not None:
+            return True
+        return self._recorded_run_receipt(receipt_sha256)
 
     def _refuse_plan_beyond_engine_budget(self, plan: Any) -> None:
         """Refuse, at plan time, more executable nodes than calls remain.
@@ -4307,6 +6564,11 @@ class CommandCompiledToolHostV1:
             self.scientific_workflow_plans[scientific_plan.plan_sha256] = (
                 scientific_plan
             )
+            # The plan the session is now standing on, named rather than
+            # inferred from insertion order: an amendment that restores
+            # an earlier plan re-inserts its key in place, so ordering
+            # points at the abandoned one.
+            self.current_scientific_plan_sha256 = scientific_plan.plan_sha256
         context = self._workflow_context(
             draft,
             scientific_plan_sha256=(
@@ -4449,6 +6711,16 @@ class CommandCompiledToolHostV1:
                                 source_kind=item["source_kind"],
                                 producer_node_id=item["producer_node_id"],
                                 producer_output_id=item["producer_output_id"],
+                                uncertainty_producer_node_id=str(
+                                    item.get(
+                                        "uncertainty_producer_node_id", ""
+                                    )
+                                ),
+                                uncertainty_producer_output_id=str(
+                                    item.get(
+                                        "uncertainty_producer_output_id", ""
+                                    )
+                                ),
                             )
                             for item in raw_inputs
                         ),
@@ -4596,6 +6868,13 @@ class CommandCompiledToolHostV1:
                 "molecular identity."
             )
         self._bind_program_toolchain(plan, command_result)
+        host_executed = None
+        if (
+            self.execute_analysis_only_plans
+            and not draft.nodes
+            and plan.analysis_nodes
+        ):
+            host_executed = self._execute_analysis_only_plan(plan)
         frontier = project_scientific_toolchain_frontier(
             plan,
             actionable_calculation_node_ids=command_result[
@@ -4607,15 +6886,66 @@ class CommandCompiledToolHostV1:
             completed_calculation_node_ids=command_result.get(
                 "completed_node_ids", ()
             ),
+            completed_analysis_node_ids=tuple(
+                item["node_id"]
+                for item in (host_executed or {}).get("executed_nodes", ())
+                if item.get("state") == "executed"
+            ),
             non_executable_calculation_node_ids=self._non_executable_reasons(
                 command_result.get("scientific_workflow_plan")
             ),
         )
-        return {
+        result = {
             "scientific_toolchain_plan": plan,
             "calculation_plan": command_result,
             "workflow_frontier": frontier,
         }
+        if host_executed is not None:
+            result["host_executed_analysis"] = host_executed
+        return result
+
+    def _execute_analysis_only_plan(
+        self, plan: ScientificToolchainPlanV1
+    ) -> dict[str, Any]:
+        """Walk an analysis-only plan now, on this host, and say so.
+
+        Under a goal wake the plan's only inputs are results the goal's
+        decision already covers; nothing is previewable and nothing is
+        launched, so there is no review to wait for. A woken session that
+        planned exactly this and waited for one lost six computed numbers
+        (NOVEL-2 po2, 2026-09-04). The receipts land in this session's
+        stream, the completion gate runs, and the result names what was
+        delivered and what was not.
+        """
+
+        from chemsmart.agent.executor import execute_analysis_only_toolchain
+
+        run_directory = (
+            self.analysis_only_run_directory
+            or Path(self.event_store.path).parent
+        )
+        workspace = self.analysis_only_workspace or (
+            Path(self.run_evidence_root)
+            if getattr(self, "run_evidence_root", None)
+            else run_directory
+        )
+        record = execute_analysis_only_toolchain(
+            host=self,
+            toolchain=plan,
+            run_directory=run_directory,
+            task_spec_sha256=self._resolve_task_spec_reference(
+                {}, "task_spec_sha256"
+            ),
+            workspace=workspace,
+        )
+        record["meaning"] = (
+            "the host executed this analysis-only plan now, under the "
+            "goal's standing decision, with no engine call; its claims "
+            "and completion are in this session's receipts, so record "
+            "the scientific decision over them rather than waiting for "
+            "a review"
+        )
+        return record
 
     def _bind_program_toolchain(
         self,
@@ -4936,12 +7266,21 @@ class CommandCompiledToolHostV1:
                     for plan in self.scientific_toolchain_plans.values()
                 }
             )
-            raise ContractError(
-                f"unknown scientific workflow ID {workflow_id!r}; recorded "
-                f"workflow IDs: {', '.join(known) if known else 'none'}. A "
-                "rejected plan_scientific_workflow call records nothing, so "
-                "there is no workflow to amend -- submit the corrected plan "
-                "as a fresh plan_scientific_workflow call instead."
+            raise RoutedContractError(
+                gate="plan.amend_needs_a_recorded_plan",
+                invariant=(
+                    "a rejected plan_scientific_workflow call records "
+                    "nothing, so only a recorded plan can be amended."
+                ),
+                diagnosis=(
+                    f"unknown scientific workflow ID {workflow_id!r}; "
+                    "recorded workflow IDs: "
+                    f"{', '.join(known) if known else 'none'}."
+                ),
+                route=(
+                    "submit the corrected plan as a fresh "
+                    "plan_scientific_workflow call."
+                ),
             )
         current_plan = candidates[-1]
         current_result = self._scientific_toolchain_command_results[
@@ -5179,15 +7518,41 @@ class CommandCompiledToolHostV1:
             # cycle's workflow id twice in one goal, and the bare refusal
             # left it guessing (live, 2026-09-02).
             known = sorted(self._latest_program_workflows)
-            raise ContractError(
-                f"unknown scientific workflow ID {workflow_id!r}; this "
-                "session holds "
-                + (
-                    "workflow(s) " + ", ".join(repr(item) for item in known)
-                    if known
-                    else "no workflow yet -- plan one first; an earlier "
-                    "cycle's workflow is read through inspect_run"
+            if known:
+                raise ContractError(
+                    f"unknown scientific workflow ID {workflow_id!r}; this "
+                    "session holds workflow(s) "
+                    + ", ".join(repr(item) for item in known)
                 )
+            # Under a goal wake the only imperative here used to be
+            # "plan one first", and a woken session that held every
+            # number it needed obeyed it, planned a chain no review
+            # could carry, and lost six computed numbers (NOVEL-2 po2,
+            # 2026-09-04). The route depends on where the session stands.
+            route = (
+                "an earlier cycle's results are read through inspect_run "
+                "and its workflow through inspect_run's run outcome; to "
+                "deliver from receipts already in hand, call "
+                "extract_result_quantities, derive_thermochemistry, "
+                "evaluate_quantity_expression and record_analysis_claims "
+                "yourself, or plan_scientific_workflow with no "
+                "calculation_nodes -- the host executes that plan when "
+                "planned under the goal's standing decision"
+                if self.execute_analysis_only_plans
+                else "plan_scientific_workflow plans one; an earlier "
+                "cycle's workflow is read through inspect_run"
+            )
+            raise RoutedContractError(
+                gate="workflow.id_names_a_plan_this_session_holds",
+                invariant=(
+                    "a workflow id resolves only against a plan this "
+                    "session recorded."
+                ),
+                diagnosis=(
+                    f"{workflow_id!r} names no workflow in this session, "
+                    "which holds none yet."
+                ),
+                route=route,
             )
         if (
             self.workflow_drafts.get(resolved.draft.draft_sha256)
@@ -6172,6 +8537,9 @@ class CommandCompiledToolHostV1:
             project_artifact=project,
             project_validation=validation,
             input_artifact=input_artifact,
+            root_artifact=self._root_artifact_for(
+                proposal.node_id, input_artifact
+            ),
             scientific_identity=identity,
             job_artifact_options=job_artifact_options,
         )
@@ -6245,6 +8613,16 @@ class CommandCompiledToolHostV1:
             "command": compiled,
             "preview": preview,
             "preflight": preflight,
+            "observations": compile_time_observations(
+                program=node.program,
+                jobtype=node.jobtype,
+                settings=validation.settings,
+                atom_count=int(
+                    _review_molecule_identity(input_artifact).get("atom_count")
+                    or 0
+                ),
+                geometry=_geometry_for_observation(input_artifact),
+            ),
             "next_action": (
                 "inspect the workflow frontier"
                 if preview_status == "previewed"
@@ -6717,11 +9095,21 @@ class CommandCompiledToolHostV1:
             for edge in getattr(plan, "edges", ())
             if edge.edge_kind == "data"
         )
-        incoming_counts: dict[str, int] = {}
+        # Only the geometry edges are counted: admission keys each
+        # producer edge by its consumer role, so an ORCA IRC or TS node
+        # carrying a Hessian edge beside its geometry edge is one
+        # candidate, not two. This predicate counted every data edge and
+        # called po3's two IRC nodes blocking while the review resolved
+        # and ran them (REACH-1, 2026-09-06) -- the frontier disagreeing
+        # with the review in the other direction from ino3's. Whether
+        # the auxiliary edge has a legal shape is the resolver's word,
+        # which the frontier now asks before it calls a node deferred.
+        geometry_counts: dict[str, int] = {}
         for edge in data_edges:
-            incoming_counts[edge.target_node_id] = (
-                incoming_counts.get(edge.target_node_id, 0) + 1
-            )
+            if edge.artifact_class == "geometry_xyz":
+                geometry_counts[edge.target_node_id] = (
+                    geometry_counts.get(edge.target_node_id, 0) + 1
+                )
         deferred = set()
         for edge in data_edges:
             producer = nodes.get(edge.source_node_id)
@@ -6729,7 +9117,7 @@ class CommandCompiledToolHostV1:
             if (
                 producer is None
                 or target is None
-                or incoming_counts[edge.target_node_id] != 1
+                or geometry_counts.get(edge.target_node_id) != 1
                 or not is_validated_optimized_geometry_edge(plan, edge)
                 or producer.program not in {"gaussian", "orca", "pyscf", "xtb"}
                 or target.support_state
@@ -6760,6 +9148,20 @@ class CommandCompiledToolHostV1:
         )
         planned_ids = {node.node_id for node in getattr(plan, "nodes", ())}
         executable_ids = planned_ids - non_executable_ids
+        # The review resolves every deferred node to one project, one
+        # capability and one environment before it can be displayed. The
+        # frontier used to admit a deferred node by its edge shape alone,
+        # so it said approvable while the review then refused (REACH-1
+        # ino3, 2026-09-06: two organs, opposite answers, and the refusal
+        # never reached the session). The frontier now asks the review's
+        # own resolver, without binding, and a node it would refuse is a
+        # blocking node carrying that reason.
+        review_target_ids = {
+            edge.target_node_id
+            for edge in getattr(plan, "edges", ())
+            if getattr(edge, "edge_kind", "") == "data"
+            and edge.target_node_id not in non_executable_ids
+        }
         for node in getattr(plan, "nodes", ()):
             node_id = node.node_id
             previewed = self._node_is_previewed(
@@ -6771,6 +9173,18 @@ class CommandCompiledToolHostV1:
                 and not non_executable
                 and node_id in deferred_ids
             )
+            deferral_refusal = ""
+            if deferred:
+                try:
+                    self._bounded_node_context(
+                        plan=plan,
+                        planned_node=node,
+                        data_target_ids=review_target_ids,
+                        bind=False,
+                    )
+                except ContractError as exc:
+                    deferral_refusal = str(exc)
+                    deferred = False
             blocks_approval = (
                 not previewed and not deferred and not non_executable
             )
@@ -6782,6 +9196,11 @@ class CommandCompiledToolHostV1:
                     "program": getattr(node, "program", ""),
                     "previewed": previewed,
                     "deferred_admissible": deferred,
+                    **(
+                        {"deferral_refusal": deferral_refusal}
+                        if deferral_refusal
+                        else {}
+                    ),
                     "non_executable": non_executable,
                     "approval_state": (
                         "non_executable"
@@ -7038,6 +9457,9 @@ class CommandCompiledToolHostV1:
             project_artifact=project,
             project_validation=validation,
             input_artifact=input_artifact,
+            root_artifact=self._root_artifact_for(
+                proposal.node_id, input_artifact
+            ),
             scientific_identity=identity,
         )
         return self._record_compiled_command(turn_id, invocation, context)
@@ -7067,6 +9489,7 @@ class CommandCompiledToolHostV1:
             project_artifact=context.project_artifact,
             expectation=expectation,
             auxiliary_input_artifacts=dict(context.job_artifact_options),
+            retain_root=self.preview_retention_root,
         )
         validator = validator_receipt_from_safe_preview(
             node_id=context.proposal.node_id,
@@ -7294,6 +9717,16 @@ class CommandCompiledToolHostV1:
         )
         self.preflights[receipt.receipt_sha256] = receipt
         self._preflight_by_node[values["node_id"]] = receipt
+        self._probe_input_check(
+            turn_id,
+            node_id=values["node_id"],
+            program=str(
+                getattr(getattr(capability, "query", None), "program", "")
+                or getattr(capability, "program", "")
+                or ""
+            ),
+            safe_preview=safe_preview,
+        )
         completion = {
             capability.receipt_sha256,
             program_binding.binding_sha256,
@@ -7324,17 +9757,148 @@ class CommandCompiledToolHostV1:
         )
         return receipt
 
+    def _probe_input_check(
+        self,
+        turn_id: str,
+        *,
+        node_id: str,
+        program: str,
+        safe_preview: Any,
+    ) -> Any:
+        """Run the program's own input check on the previewed input.
+
+        Two REACH-1 cycles died at ORCA's input check under green
+        previews (2026-09-06). A green preview is ChemSmart's compile;
+        the probe is ORCA's check, bounded and never charged (owner
+        ruling R2). It runs only where the host-owned server profile
+        names an ORCA executable, never inside a scheduler allocation
+        -- the wake at a job's tail plans from one -- and only on a
+        previewed input the preview retained by digest. Its word is an
+        observation on the review beside the node, never a refusal.
+        """
+
+        from chemsmart.agent.input_check import (
+            not_run_receipt,
+            probe_orca_input_check,
+        )
+        from chemsmart.agent.preview import retained_preview_artifact
+
+        executable = getattr(self, "input_check_executable", None)
+        if program != "orca" or executable is None:
+            return None
+        if safe_preview is None or safe_preview.status != "previewed":
+            return None
+        inputs = tuple(
+            artifact
+            for artifact in safe_preview.artifacts
+            if str(artifact.relative_path).endswith(".inp")
+        )
+        input_sha256 = inputs[0].sha256 if len(inputs) == 1 else ""
+        cap = self.input_check_cap_seconds
+        if any(key in os.environ for key in ("SLURM_JOB_ID", "PBS_JOBID")):
+            receipt = not_run_receipt(
+                node_id=node_id,
+                program=program,
+                input_sha256=input_sha256,
+                reason="inside a scheduler allocation; the probe runs on "
+                "the controller only",
+                cap_seconds=cap,
+            )
+        elif len(inputs) != 1:
+            receipt = not_run_receipt(
+                node_id=node_id,
+                program=program,
+                input_sha256="",
+                reason=f"the preview emitted {len(inputs)} .inp files",
+                cap_seconds=cap,
+            )
+        else:
+            retained = retained_preview_artifact(
+                self.preview_retention_root, input_sha256
+            )
+            if retained is None:
+                receipt = not_run_receipt(
+                    node_id=node_id,
+                    program=program,
+                    input_sha256=input_sha256,
+                    reason="the previewed input was not retained by digest",
+                    cap_seconds=cap,
+                )
+            elif not executable.is_file():
+                receipt = not_run_receipt(
+                    node_id=node_id,
+                    program=program,
+                    input_sha256=input_sha256,
+                    reason=f"no executable at {executable}",
+                    cap_seconds=cap,
+                )
+            else:
+                receipt = probe_orca_input_check(
+                    node_id=node_id,
+                    input_path=retained,
+                    executable=executable,
+                    env=self.input_check_env,
+                    cap_seconds=cap,
+                )
+        self._input_check_by_node[node_id] = receipt
+        self._emit(
+            turn_id,
+            EventKind.INPUT_CHECK_PROBED,
+            receipt.receipt_sha256,
+            node_id=node_id,
+            program=program,
+            status=receipt.status,
+            reason=receipt.reason,
+            input_sha256=receipt.input_sha256,
+            engine_lines=receipt.engine_lines,
+            wall_seconds=receipt.wall_seconds,
+            cap_seconds=receipt.cap_seconds,
+            charged=False,
+        )
+        return receipt
+
+    def _current_scientific_plan(self) -> ScientificWorkflowPlanV2 | None:
+        """The plan the session is standing on, for every reader.
+
+        One function, because three readers asked this question by
+        taking the last value out of a digest-keyed dict and a dict
+        re-insertion keeps its key in place: an amendment restoring an
+        earlier plan left the frontier and the execution review
+        answering about different plans, and the review refused what
+        the frontier had just called approvable (po3-r17, 2026-09-11).
+        Insertion order remains the fallback for a host restored from a
+        record that predates the pointer.
+        """
+
+        # getattr, like the sibling registry a few readers below: a host
+        # restored for preflight is built without running __init__, so
+        # the pointer can be absent and insertion order is then all
+        # there is.
+        current = self.scientific_workflow_plans.get(
+            getattr(self, "current_scientific_plan_sha256", "")
+        )
+        if current is not None:
+            return current
+        plans = tuple(self.scientific_workflow_plans.values())
+        return plans[-1] if plans else None
+
     def _materialize_scientific_workflow(
         self, *, turn_id: str, node_id: str
     ) -> MaterializedWorkflowV1 | None:
-        """Ground the latest plan containing ``node_id`` from host receipts."""
+        """Ground the plan containing ``node_id`` from host receipts.
 
+        The session's current plan first; only then the other
+        registered plans, newest insertion first.
+        """
+
+        current = self._current_scientific_plan()
+        candidates = ((current,) if current is not None else ()) + tuple(
+            reversed(tuple(self.scientific_workflow_plans.values()))
+        )
         plan = next(
             (
                 candidate
-                for candidate in reversed(
-                    tuple(self.scientific_workflow_plans.values())
-                )
+                for candidate in candidates
                 if any(node.node_id == node_id for node in candidate.nodes)
             ),
             None,
@@ -7542,8 +10106,20 @@ class CommandCompiledToolHostV1:
         doubted_quantity_ids = self._claims_under_recorded_doubt(
             task_spec_sha256=draft.task_spec_id
         )
+        failed_criterion_ids = self._claims_on_a_failed_criterion(
+            plan, task_spec_sha256=draft.task_spec_id
+        )
         status = "passed"
         findings: tuple[str, ...] = ()
+        if failed_criterion_ids:
+            # The number stays delivered and the word says what it
+            # stands under: the plan's own acceptance criterion for the
+            # result this claim descends from did not hold.
+            status = "partial"
+            findings = findings + tuple(
+                f"analysis.claim_on_failed_criterion.{output_id}"
+                for output_id in failed_criterion_ids
+            )
         if doubted_quantity_ids:
             # A session that doubts a receipt and claims from it has said
             # both things in typed form; the completion word carries that
@@ -7554,13 +10130,98 @@ class CommandCompiledToolHostV1:
                 for quantity_id in doubted_quantity_ids
             )
         return self._record_toolchain_completion(
-            plan,
+            plan.plan_sha256,
             task_spec_sha256=draft.task_spec_id,
             source_receipt_sha256s=source_receipts,
             status=status,
             findings=findings,
             limitation_output_ids=limitation_output_ids,
         )
+
+    def _claims_on_a_failed_criterion(
+        self, plan: Any, *, task_spec_sha256: str
+    ) -> tuple[str, ...]:
+        """Claims that descend from a result whose own criterion failed.
+
+        A plan may carry scientific_validation nodes -- an imaginary-mode
+        count, a spin-manifold check, a scan ridge above the barrier it
+        brackets -- and their verdicts reached nothing: REACH-1 po3
+        planned exactly those rules and its delivery would have stood
+        whatever they said (2026-09-06). The join needs no new field:
+        both a claim and a criterion declare, in the plan the human
+        approved, which producers they read, and a claim whose producers
+        include one a failed criterion judged is named here.
+
+        Never a refusal and never a silent drop. A failed criterion is a
+        stated finding, the number stays delivered, and the reader is
+        told which criterion it stands under.
+        """
+
+        nodes = {node.node_id: node for node in plan.analysis_nodes}
+        if not nodes:
+            return ()
+
+        def producers(node_id: str, seen: frozenset[str] = frozenset()) -> set:
+            node = nodes.get(node_id)
+            if node is None or node_id in seen:
+                return set()
+            reached: set[str] = set()
+            for item in node.inputs:
+                producer = str(getattr(item, "producer_node_id", "") or "")
+                artifact = str(getattr(item, "artifact_id", "") or "")
+                if artifact:
+                    reached.add(artifact)
+                if not producer:
+                    continue
+                if producer in nodes:
+                    reached |= producers(producer, seen | {node_id})
+                else:
+                    reached.add(producer)
+            return reached
+
+        failed_producers: set[str] = set()
+        failed_by_node: dict[str, str] = {}
+        for receipt in self.scientific_validation_receipts.values():
+            if getattr(receipt, "all_rules_passed", True):
+                continue
+            node_id = str(getattr(receipt, "node_id", "") or "")
+            if node_id not in nodes:
+                continue
+            reached = producers(node_id)
+            failed_producers |= reached
+            for producer in reached:
+                failed_by_node[producer] = node_id
+        if not failed_producers:
+            return ()
+        # Per claim, not per node. A claim is rendered under its own
+        # input_id and the plan gate requires that id to be the node's
+        # output, so each claimed value has its own lineage -- and
+        # naming the whole node punished the ordinary, efficient shape
+        # of batching eleven claims into one rendering node by
+        # condemning all eleven for one.
+        named: set[str] = set()
+        for node in plan.analysis_nodes:
+            if node.analysis_kind != "claim_rendering":
+                continue
+            by_id = {str(item.input_id): item for item in node.inputs}
+            node_lineage = producers(node.node_id)
+            for output in node.outputs:
+                output_id = str(output.output_id)
+                # A claim is rendered under its own input_id, and the
+                # plan gate requires that id to be the node's output, so
+                # each claimed value has its own lineage. Where a plan
+                # does not pair them, the node's lineage still answers.
+                item = by_id.get(output_id)
+                if item is not None:
+                    producer = str(getattr(item, "producer_node_id", "") or "")
+                    lineage = (
+                        {producer} | producers(producer) if producer else set()
+                    )
+                else:
+                    lineage = node_lineage
+                if lineage & failed_producers:
+                    named.add(output_id)
+        return tuple(sorted(named))
 
     def _claims_under_recorded_doubt(
         self, *, task_spec_sha256: str
@@ -7655,6 +10316,21 @@ class CommandCompiledToolHostV1:
             supersedes_sha256=cited,
         )
 
+    @staticmethod
+    def _opened_result_output(receipt: Any) -> Any:
+        """The parsed output behind a validation receipt, or None."""
+
+        from chemsmart.analysis.result_readers import reader_for
+
+        for artifact in getattr(receipt, "output_artifacts", ()) or ():
+            try:
+                return reader_for(
+                    str(getattr(receipt, "program", ""))
+                ).open_output(str(artifact.path))
+            except Exception:  # noqa: BLE001 - not a readable result
+                continue
+        return None
+
     def _anomaly_output_ids(self) -> tuple[str, ...]:
         """Every anomaly the host recorded on this task, as output ids.
 
@@ -7686,7 +10362,7 @@ class CommandCompiledToolHostV1:
 
     def _record_toolchain_completion(
         self,
-        plan: ScientificToolchainPlanV1,
+        policy_sha256: str,
         *,
         task_spec_sha256: str,
         source_receipt_sha256s: tuple[str, ...],
@@ -7726,7 +10402,7 @@ class CommandCompiledToolHostV1:
             # A scientific toolchain is already a visible, typed output
             # contract.  Its digest fills the existing aggregate gate's
             # policy identity without inventing a parallel policy file.
-            "policy_sha256": plan.plan_sha256,
+            "policy_sha256": policy_sha256,
             "task_spec_sha256": task_spec_sha256,
             "source_receipt_sha256s": source_receipt_sha256s,
             "status": status,
@@ -7766,6 +10442,9 @@ class CommandCompiledToolHostV1:
                 "anomaly_output_ids": completion.anomaly_output_ids,
                 "declared_observable_misses": declared_misses,
                 "declared_observable_predictions": declared_predictions,
+                "declared_observable_join_fields": dict(
+                    sorted(self._declared_observable_join_fields.items())
+                ),
                 "completion_kind": "scientific_toolchain",
                 "record": completion_record,
             },
@@ -7811,7 +10490,7 @@ class CommandCompiledToolHostV1:
             {}, "task_spec_sha256"
         )
         return self._record_toolchain_completion(
-            plan,
+            plan.plan_sha256,
             task_spec_sha256=task_spec_sha256,
             source_receipt_sha256s=receipts,
         )
@@ -7855,13 +10534,90 @@ class CommandCompiledToolHostV1:
                 "a partial toolchain completion must name its findings"
             )
         return self._record_toolchain_completion(
-            plan,
+            plan.plan_sha256,
             task_spec_sha256=self._resolve_task_spec_reference(
                 {}, "task_spec_sha256"
             ),
             source_receipt_sha256s=tuple(sorted(set(source_receipt_sha256s))),
             status="partial",
             findings=tuple(findings),
+        )
+
+    def completion_receipts_for_delivered_claims(self) -> tuple[str, ...]:
+        """Certify a delivery made directly from registered results.
+
+        A session may answer a task from results already in the
+        workspace: extract, derive, evaluate, claim, decide. That route
+        is ordinary and the charter names it, but finalisation knew only
+        two ways to mint a certificate -- a task-owned analysis policy,
+        or a preflighted workflow -- so a session with neither ended
+        `blocked` however much it had delivered. SUFFICIENCY-1 recorded
+        seventy claims and its scientific decision and returned to the
+        human for want of a ceremony, which is the proximate reason that
+        window produced no settlement anyone could read.
+
+        The certificate is minted from what such a session actually has:
+        the requirements it declared and the receipts its claims stand
+        on. No plan is invented and no further model act is asked for --
+        the same declared requirements and the same receipt graph as
+        every other route, which is what makes the word comparable
+        across them.
+        """
+
+        records = [
+            record
+            for record in self.analysis_claim_records.values()
+            if getattr(record, "claims", ())
+        ]
+        if not records:
+            raise ContractError(
+                "no analysis claim has been recorded, so there is no "
+                "delivery to certify"
+            )
+        if not self.scientific_decisions:
+            raise ContractError(
+                "claims are recorded and no scientific decision stands "
+                "beside them; the delivery is not finished"
+            )
+        task_spec_sha256 = str(
+            getattr(records[-1], "task_spec_sha256", "") or ""
+        )
+        sources = tuple(
+            sorted(
+                {
+                    str(claim.source_receipt_sha256)
+                    for record in records
+                    for claim in record.claims
+                }
+            )
+        )
+        # The policy identity is the contract this delivery answers: the
+        # goal's own declarations, in the order they were first made.
+        policy_sha256 = canonical_sha256(
+            {
+                "schema_version": "chemsmart.delivered-claims-policy.v1",
+                "declarations": tuple(
+                    {
+                        "observable_id": str(
+                            record.get("observable_id") or ""
+                        ),
+                        "unit": str(record.get("unit") or ""),
+                        "required_tolerance": (
+                            float(record["required_tolerance"])
+                            if record.get("required_tolerance") is not None
+                            else -1.0
+                        ),
+                    }
+                    for record in (
+                        self.requested_observable_declarations.values()
+                    )
+                ),
+            }
+        )
+        return self._record_toolchain_completion(
+            policy_sha256,
+            task_spec_sha256=task_spec_sha256,
+            source_receipt_sha256s=sources,
         )
 
     def completion_receipts_for_latest_preflight(self) -> tuple[str, ...]:
@@ -8572,6 +11328,57 @@ class CommandCompiledToolHostV1:
                     "on different scales are not interchangeable even when "
                     "each is correct on its own."
                 )
+        # What the host made of each precision requirement, on the page a
+        # human reads. `grep -rn sufficiency chemsmart/agent/tui/`
+        # returned nothing and this report had no row either, so the
+        # 2026-09-10 boundary's claim that `met` is "auditable where a
+        # human meets it" held on the settlement's achieved branch and
+        # on no rendered surface at all (SUFFICIENCY-5).
+        if self.requirement_assessments:
+            lines.extend(
+                (
+                    "",
+                    "## Precision requirements",
+                    "",
+                    "| Observable | Required | Stated | Basis | Whose | "
+                    "Combined by | State | The host observed |",
+                    "|---|---:|---:|---|---|---|---|---|",
+                )
+            )
+            for observable_id, row in sorted(
+                self.requirement_assessments.items()
+            ):
+                observed = ", ".join(
+                    str(item)
+                    for item in row.get("uncertainty_observations") or ()
+                )
+                unquantified = tuple(row.get("unquantified_components") or ())
+                if unquantified:
+                    observed = (observed + "; " if observed else "") + (
+                        f"{len(unquantified)} term(s) named unquantified"
+                    )
+                unit = str(row.get("unit") or "")
+                stated = row.get("uncertainty")
+                lines.append(
+                    f"| {observable_id} "
+                    f"| {row.get('required_tolerance')} {unit} "
+                    f"| {'—' if stated is None else stated} {unit} "
+                    f"| {row.get('uncertainty_basis') or '—'} "
+                    f"| {row.get('tolerance_origin') or 'unstated'} "
+                    f"| {(row.get('uncertainty_combination') or {}).get('rule') or 'not stated'} "
+                    f"| {row.get('state')} "
+                    f"| {observed or '—'} |"
+                )
+            lines.extend(
+                (
+                    "",
+                    "Only `met` discharges a requirement, and it states "
+                    "that the host resolved a stated uncertainty inside a "
+                    "declared tolerance -- never that the estimate is "
+                    "adequate, which is the session's claim to defend.",
+                )
+            )
+
         for claims in claim_records:
             lines.extend(
                 (
@@ -9070,6 +11877,9 @@ class CommandCompiledToolHostV1:
             )
             + "\n",
         )
+        # The engine's window ends here; what follows is the host's own
+        # reading, timed separately and never charged to the engine wall.
+        finished = datetime.now(timezone.utc).isoformat()
         wrapper_exit_status = process_observation.returncode
         launch_ambiguous = process_observation.state.endswith("_ambiguous")
         outputs = self._execution_output_artifacts(
@@ -9101,6 +11911,7 @@ class CommandCompiledToolHostV1:
             multiplicity=context.scientific_identity.multiplicity,
             expected_settings=dict(context.project_validation.settings),
             expected_input_artifact=context.input_artifact,
+            expected_root_artifact=context.root_artifact,
             expected_project_artifact=context.project_artifact,
             output_artifacts=outputs,
             exit_status=wrapper_exit_status,
@@ -9180,7 +11991,26 @@ class CommandCompiledToolHostV1:
             node_id=node_id,
             record=canonical_data(result_validation_receipt),
         )
-        for anomaly in evaluation.anomalies:
+        sibling_observations = ()
+        if result_validation_receipt.state == "valid":
+            sibling_observations = _same_structure_observations(
+                self.result_validation_receipts,
+                node_id,
+                self._opened_result_output(result_validation_receipt),
+                input_sha256=str(
+                    getattr(
+                        result_validation_receipt,
+                        "input_artifact_sha256",
+                        "",
+                    )
+                    or ""
+                ),
+                output_sha256s=tuple(
+                    item.sha256
+                    for item in result_validation_receipt.output_artifacts
+                ),
+            )
+        for anomaly in (*evaluation.anomalies, *sibling_observations):
             observation_receipt = build_anomaly_observation(
                 node_id=node_id,
                 program=context.proposal.program,
@@ -9274,7 +12104,7 @@ class CommandCompiledToolHostV1:
                 )
             else:
                 execution_state = "validated"
-        finished = datetime.now(timezone.utc).isoformat()
+        evaluated = datetime.now(timezone.utc).isoformat()
         receipt = build_program_execution_receipt(
             execution_invocation,
             execution_state=execution_state,
@@ -9291,6 +12121,7 @@ class CommandCompiledToolHostV1:
             findings=findings,
             started_at=started,
             finished_at=finished,
+            evaluated_at=evaluated,
         )
         self.event_store.record_program_execution_receipt(
             turn_id=turn_id,
@@ -9928,6 +12759,72 @@ class CommandCompiledToolHostV1:
                 )
         return ""
 
+    def execution_review_wanted(self) -> bool:
+        """Whether this session's ending should carry the host's own review.
+
+        True when a bounded envelope requested an inert review, a
+        calculation plan exists and is materialised, and the host knows
+        the workspace the request is filed against.
+        """
+
+        if self.bounded_execution_envelope is None:
+            return False
+        if self.run_evidence_root is None:
+            return False
+        if not any(
+            plan.nodes for plan in self.scientific_workflow_plans.values()
+        ):
+            return False
+        return self.bounded_review_is_materialized()
+
+    def prepare_execution_review(self) -> WorkflowExecutionReviewV1:
+        """Build the review the readiness gates promise, while the runtime
+        stream is still open.
+
+        A planning session that reached "host readiness gates passed"
+        used to have its review built after the loop had sealed the
+        stream; when the builder refused, the refusal could not be
+        recorded (the store is absorbing), the ContractError escaped,
+        and the goal settled on a Python error with the reason lost --
+        with its whole grant unspent (REACH-1 ino3, 2026-09-06; the same
+        ending on 2026-09-03). The same checks the session runner made
+        run here, and a refusal names what it refused.
+        """
+
+        plans = [
+            plan
+            for plan in self.scientific_workflow_plans.values()
+            if plan.nodes
+        ]
+        plan = plans[-1]
+        ineligible = []
+        for node in plan.nodes:
+            reason = self.execution_review_ineligibility_reason(
+                plan=plan, planned_node=node
+            )
+            if reason:
+                ineligible.append(
+                    f"{node.node_id} ({node.program}/{node.engine}/"
+                    f"{node.stage}: {reason})"
+                )
+        try:
+            if ineligible:
+                raise ContractError(
+                    "execution review is not eligible: "
+                    + "; ".join(ineligible)
+                )
+            review = self.build_execution_review(
+                workspace=self.run_evidence_root
+            )
+        except ContractError as exc:
+            self.execution_review_refusal = {
+                "workflow_id": plan.workflow_id,
+                "reason": str(exc),
+            }
+            raise
+        self.prepared_execution_review = review
+        return review
+
     def bounded_review_is_materialized(self) -> bool:
         """Whether the plan a review would use has been materialised.
 
@@ -9945,11 +12842,11 @@ class CommandCompiledToolHostV1:
         budget -- still surfaces as before.
         """
 
-        plans = tuple(self.scientific_workflow_plans.values())
-        if not plans:
+        plan = self._current_scientific_plan()
+        if plan is None:
             return False
         return any(
-            workflow.plan_sha256 == plans[-1].plan_sha256
+            workflow.plan_sha256 == plan.plan_sha256
             for workflow in self.materialized_workflows.values()
         )
 
@@ -9977,12 +12874,11 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 "review resources differ from execution envelope"
             )
-        plans = tuple(self.scientific_workflow_plans.values())
-        if not plans:
+        plan = self._current_scientific_plan()
+        if plan is None:
             raise ContractError(
                 "execution review requires a scientific workflow"
             )
-        plan = plans[-1]
         if plan.task_spec_sha256 not in self.task_spec_sha256s:
             raise ContractError("review workflow belongs to another task")
         non_executable_ids = self._release_non_executable_node_ids(plan)
@@ -10100,6 +12996,7 @@ class CommandCompiledToolHostV1:
         node_bindings = []
         environment_bindings = []
         node_reviews: list[WorkflowExecutionNodeReviewV1] = []
+        node_observations: list[dict[str, Any]] = []
         unbindable: list[tuple[str, str]] = []
         for planned_node in executable_nodes:
             ineligibility = self.execution_review_ineligibility_reason(
@@ -10390,53 +13287,21 @@ class CommandCompiledToolHostV1:
             # follows parent digests through every edit and append and
             # attaches the whole chain root-first, ending on a derivation
             # or extraction when one anchors it.
-            geometry_lineage: list[dict] = []
-            cursor = context.input_artifact.sha256
-            while True:
-                edit_receipt = self.geometry_edits.get(cursor)
-                if edit_receipt is not None:
-                    geometry_lineage.append(
-                        {
-                            "kind": "geometry_edit",
-                            **canonical_data(edit_receipt),
-                        }
-                    )
-                    cursor = edit_receipt.parent_sha256
-                    continue
-                append_receipt = self.atom_appends.get(cursor)
-                if append_receipt is not None:
-                    geometry_lineage.append(
-                        {
-                            "kind": "atom_append",
-                            **canonical_data(append_receipt),
-                        }
-                    )
-                    cursor = append_receipt.parent_sha256
-                    continue
-                # A structure stepped off a saddle along one of its own
-                # modes is a hop like any other, and the one a re-optimised
-                # displaced structure's review had been missing: the walk
-                # ends on the result the step was taken from.
-                displacement_receipt = self.mode_displacements.get(cursor)
-                if displacement_receipt is not None:
-                    geometry_lineage.append(
-                        {
-                            "kind": "mode_displacement",
-                            **canonical_data(displacement_receipt),
-                        }
-                    )
-                    cursor = displacement_receipt.result_sha256
-                    continue
-                break
-            derivation_receipt = self.molecular_derivations.get(cursor)
-            if derivation_receipt is not None:
-                molecular_identity["derivation"] = canonical_data(
-                    derivation_receipt
-                )
-            extraction_receipt = self.database_extractions.get(cursor)
-            if extraction_receipt is not None:
-                molecular_identity["database_extraction"] = canonical_data(
-                    extraction_receipt
+            # Derived from `_GEOMETRY_HOPS` and `_GEOMETRY_ORIGINS`
+            # rather than hand-listed here, because the sibling walk
+            # hand-listed a different subset and they drifted: a
+            # composed or PubChem-fetched molecule reached this page
+            # with no origin hop, while a derived one carried its
+            # panel. `pubchem_geometries` had no reader anywhere in the
+            # tree (SUFFICIENCY-5, 2026-09-10).
+            hops, origin = self._geometry_provenance(
+                context.input_artifact.sha256
+            )
+            geometry_lineage = list(hops)
+            if origin is not None:
+                origin_kind, origin_receipt = origin
+                molecular_identity[origin_kind] = canonical_data(
+                    origin_receipt
                 )
             if geometry_lineage:
                 molecular_identity["geometry_lineage"] = tuple(
@@ -10474,6 +13339,42 @@ class CommandCompiledToolHostV1:
                 path_bindings[artifact.cli_value] = (
                     "auxiliary-" + auxiliary.parameter_name,
                     auxiliary.artifact_sha256,
+                )
+            review_atom_count = int(molecular_identity.get("atom_count") or 0)
+            if not review_atom_count:
+                try:
+                    review_atom_count = int(
+                        _review_molecule_identity(context.input_artifact).get(
+                            "atom_count"
+                        )
+                        or 0
+                    )
+                except Exception:
+                    review_atom_count = 0
+            stated: tuple[str, ...] = ()
+            if review_atom_count:
+                stated = compile_time_observations(
+                    program=planned_node.program,
+                    jobtype=planned_node.stage,
+                    settings=validation.settings,
+                    atom_count=review_atom_count,
+                    geometry=_geometry_for_observation(context.input_artifact),
+                )
+            probe = getattr(self, "_input_check_by_node", {}).get(
+                planned_node.node_id
+            )
+            if probe is not None:
+                from chemsmart.agent.input_check import (
+                    probe_observation_lines,
+                )
+
+                stated = tuple(stated) + probe_observation_lines(probe)
+            if stated:
+                node_observations.append(
+                    {
+                        "node_id": planned_node.node_id,
+                        "observations": stated,
+                    }
                 )
             node_reviews.append(
                 build_workflow_execution_node_review(
@@ -10528,6 +13429,16 @@ class CommandCompiledToolHostV1:
                     ),
                     internal_coordinates=context.internal_coordinates,
                     excursion=context.excursion,
+                    root_artifact_id=(
+                        context.root_artifact.artifact_id
+                        if context.root_artifact is not None
+                        else ""
+                    ),
+                    root_artifact_sha256=(
+                        context.root_artifact.sha256
+                        if context.root_artifact is not None
+                        else ""
+                    ),
                     auxiliary_input_bindings=(
                         self._latest_invocation_for_node(
                             planned_node.node_id,
@@ -10589,6 +13500,9 @@ class CommandCompiledToolHostV1:
                 for _observable_id, record in sorted(
                     self.requested_observable_declarations.items()
                 )
+            ),
+            node_observations=tuple(
+                sorted(node_observations, key=lambda item: item["node_id"])
             ),
             consulted_domain_knowledge=tuple(
                 sorted(
@@ -10880,6 +13794,16 @@ class CommandCompiledToolHostV1:
                     ),
                     internal_coordinates=context.internal_coordinates,
                     excursion=context.excursion,
+                    root_artifact_id=(
+                        context.root_artifact.artifact_id
+                        if context.root_artifact is not None
+                        else ""
+                    ),
+                    root_artifact_sha256=(
+                        context.root_artifact.sha256
+                        if context.root_artifact is not None
+                        else ""
+                    ),
                     auxiliary_input_bindings=(
                         self._latest_invocation_for_node(
                             planned_node.node_id,
@@ -10972,12 +13896,13 @@ class CommandCompiledToolHostV1:
         plan: ScientificWorkflowPlanV2,
         planned_node: ScientificWorkflowNodeV2,
         data_target_ids: set[str],
+        bind: bool = True,
     ) -> _CommandContext:
         """Resolve current or future context without model-carried receipts."""
 
         if planned_node.node_id not in data_target_ids:
             _invocation, context = self._plan_invocation_for_node(
-                plan=plan, node_id=planned_node.node_id
+                plan=plan, node_id=planned_node.node_id, bind=bind
             )
             return context
         draft = next(
@@ -11084,6 +14009,12 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 f"future node {planned_node.node_id!r} lacks unique project/environment evidence"
             )
+        # The producer edge is matched on the draft's own geometry input
+        # binding, never on a literal name: the executor hands the
+        # produced geometry to whatever binding the draft declared, and
+        # a resolver that answered only to one name was program-specific
+        # in a program-neutral layer.
+        geometry_binding_id = str(geometry_inputs[0].binding_id)
         producer = next(
             (
                 edge.source_node_id
@@ -11091,7 +14022,7 @@ class CommandCompiledToolHostV1:
                 if edge.edge_kind == "data"
                 and edge.target_node_id == planned_node.node_id
                 and edge.artifact_class == "geometry_xyz"
-                and edge.consumer_input_id == "filename"
+                and edge.consumer_input_id == geometry_binding_id
             ),
             None,
         )
@@ -11104,11 +14035,38 @@ class CommandCompiledToolHostV1:
             raise ContractError(
                 f"future node {planned_node.node_id!r} consumes a produced "
                 "geometry but the plan declares no geometry_xyz data edge "
-                "into its 'filename' input"
+                f"into its {geometry_binding_id!r} input"
             )
-        _producer_invocation, producer_context = (
-            self._plan_invocation_for_node(plan=plan, node_id=producer)
-        )
+        if producer in data_target_ids:
+            # A producer that is itself a deferred data target has no
+            # compiled invocation yet. The chain neutral opt -> cation
+            # opt -> single point is ordinary science, and REACH-1 ino3's
+            # review refused exactly its two second-hop nodes with "node
+            # has no compiled command invocation" while the frontier had
+            # called the same plan approvable (replayed 2026-09-06). The
+            # producer's context is resolved as its own would be; the
+            # plan is acyclic, so the recursion ends at a compiled root.
+            producer_node = next(
+                (item for item in plan.nodes if item.node_id == producer),
+                None,
+            )
+            if producer_node is None:
+                raise ContractError(
+                    f"future node {planned_node.node_id!r} names a producer "
+                    f"{producer!r} the plan does not carry"
+                )
+            producer_context = self._bounded_node_context(
+                plan=plan,
+                planned_node=producer_node,
+                data_target_ids=data_target_ids,
+                bind=bind,
+            )
+        else:
+            _producer_invocation, producer_context = (
+                self._plan_invocation_for_node(
+                    plan=plan, node_id=producer, bind=bind
+                )
+            )
         return _CommandContext(
             internal_coordinates=getattr(node, "internal_coordinates", None),
             excursion=str(getattr(node, "excursion", "") or ""),
@@ -11213,6 +14171,7 @@ class CommandCompiledToolHostV1:
         *,
         plan: ScientificWorkflowPlanV2,
         node_id: str,
+        bind: bool = True,
     ) -> tuple[CanonicalCommandInvocationV1, _CommandContext]:
         """Resolve and bind one invocation without cross-plan fallback."""
 
@@ -11230,7 +14189,8 @@ class CommandCompiledToolHostV1:
             )
         if not any(node.node_id == node_id for node in plan.nodes):
             raise ContractError("scientific workflow has no such node")
-        bindings[invocation.invocation_sha256] = plan.plan_sha256
+        if bind:
+            bindings[invocation.invocation_sha256] = plan.plan_sha256
         return invocation, context
 
     def _invocation_has_green_preflight(self, invocation_sha256: str) -> bool:
@@ -11470,6 +14430,7 @@ class CommandCompiledToolHostV1:
         multiplicity: int,
         expected_settings: Mapping[str, Any] | None = None,
         expected_input_artifact: TrustedArtifactRefV1 | None = None,
+        expected_root_artifact: TrustedArtifactRefV1 | None = None,
         expected_project_artifact: TrustedArtifactRefV1 | None = None,
         output_artifacts: tuple[TrustedArtifactRefV1, ...],
         exit_status: int | None,
@@ -11815,6 +14776,32 @@ class CommandCompiledToolHostV1:
                     sensor_inputs["basin"] = _basin_sensor_inputs(
                         expected_input_artifact, output, jobtype
                     )
+                    if expected_root_artifact is not None and (
+                        expected_input_artifact is None
+                        or expected_root_artifact.sha256
+                        != expected_input_artifact.sha256
+                    ):
+                        # The walk from the goal's own start, beside the
+                        # walk from this node's input: a repair that
+                        # restarts from a distorted geometry must not
+                        # extinguish the anomaly it answers.
+                        sensor_inputs["basin_root"] = {
+                            **_basin_sensor_inputs(
+                                expected_root_artifact, output, jobtype
+                            ),
+                            "reference": "goal_root",
+                            "reference_artifact_id": (
+                                expected_root_artifact.artifact_id
+                            ),
+                        }
+                    if jobtype == "scan":
+                        sensor_inputs["scan_profile"] = tuple(
+                            {
+                                "coordinate": float(point["coordinate"]),
+                                "energy": float(point["energy"]),
+                            }
+                            for point in (output.scan_profile or ())
+                        )
                     finite_frequencies = bool(frequencies) and all(
                         math.isfinite(float(value)) for value in frequencies
                     )
@@ -11834,6 +14821,11 @@ class CommandCompiledToolHostV1:
                             "energy_hartree": output.final_energy,
                             "vibrational_mode_count": len(frequencies),
                             "transition_count": len(transitions),
+                            "imaginary_frequencies_cm1": tuple(
+                                float(value)
+                                for value in frequencies
+                                if float(value) < 0.0
+                            ),
                             "consequential_imaginary_mode_count": (
                                 len(consequential_imaginary_modes)
                                 if frequencies
@@ -12175,6 +15167,11 @@ class CommandCompiledToolHostV1:
                                 "basis": output.basis,
                                 "energy_hartree": energy,
                                 "vibrational_mode_count": len(frequencies),
+                                "imaginary_frequencies_cm1": tuple(
+                                    float(value)
+                                    for value in frequencies
+                                    if float(value) < 0.0
+                                ),
                                 "consequential_imaginary_mode_count": (
                                     consequential_imaginary_mode_count(
                                         frequencies
@@ -12286,6 +15283,28 @@ class CommandCompiledToolHostV1:
             anomalies.append(
                 {"signal_id": "geometry.connectivity_changed", **basin}
             )
+        root = dict(sensor_inputs.pop("basin_root", {}) or {})
+        fired = {item["signal_id"] for item in anomalies}
+        root_rmsd = root.get("heavy_atom_rmsd_angstrom")
+        if (
+            root_rmsd is not None
+            and float(root_rmsd) >= 0.3
+            and "geometry.heavy_atom_rmsd_ge_0.3" not in fired
+        ):
+            anomalies.append(
+                {"signal_id": "geometry.heavy_atom_rmsd_ge_0.3", **root}
+            )
+        if (
+            root.get("bonds_made") or root.get("bonds_broken")
+        ) and "geometry.connectivity_changed" not in fired:
+            anomalies.append(
+                {"signal_id": "geometry.connectivity_changed", **root}
+            )
+        scan_boundary = _scan_boundary_sensor(
+            sensor_inputs.pop("scan_profile", ()) or ()
+        )
+        if scan_boundary is not None:
+            anomalies.append(scan_boundary)
         deviation = _observed_spin_deviation(observation, program)
         if deviation is not None and abs(deviation) >= 0.2:
             # ⟨S²⟩ is an observation, never a gate; a deviation this size
@@ -12310,6 +15329,19 @@ class CommandCompiledToolHostV1:
                     ),
                     "observed_imaginary_modes": observed_order,
                     **sensor_inputs,
+                }
+            )
+        soft_mode = _observed_soft_imaginary_mode(
+            observation, program, jobtype=jobtype
+        )
+        if soft_mode is not None:
+            anomalies.append(
+                {
+                    "signal_id": "stationary_point.imaginary_mode_lt_50",
+                    "imaginary_mode_cm1": float(f"{soft_mode:.2f}"),
+                    "noise_convention_cm1": 20.0,
+                    "soft_band_cm1": SOFT_IMAGINARY_MODE_BAND_CM1,
+                    "expected_imaginary_modes": 1,
                 }
             )
         normalized_findings = tuple(sorted(set(findings)))
@@ -12517,11 +15549,51 @@ class CommandCompiledToolHostV1:
                 ),
             }
         path = streams.get(requested)
+        resolved_from = ""
         if path is None:
-            raise ContractError(
-                f"this workspace records no run {requested!r}; "
-                f"recorded runs: {sorted(streams)}"
-            )
+            # The wake's previous_run_outcome names its run_id; the
+            # reference the stream is filed under ends in it. A session
+            # asked by run_id and was refused twice (NOVEL-3 ino3).
+            by_last_segment = [
+                reference
+                for reference in streams
+                if reference.rsplit("/", 1)[-1] == requested
+            ]
+            if len(by_last_segment) == 1:
+                resolved_from = requested
+                requested = by_last_segment[0]
+                path = streams[requested]
+            elif by_last_segment:
+                raise RoutedContractError(
+                    gate="inspect.run_reference_names_one_recorded_run",
+                    invariant=(
+                        "a run outcome is read from exactly one recorded "
+                        "stream."
+                    ),
+                    diagnosis=(
+                        f"run_id {requested!r} names "
+                        f"{len(by_last_segment)} recorded runs: "
+                        f"{sorted(by_last_segment)}."
+                    ),
+                    route="name one by its full reference.",
+                )
+            else:
+                raise RoutedContractError(
+                    gate="inspect.run_reference_names_one_recorded_run",
+                    invariant=(
+                        "a run outcome is read from exactly one recorded "
+                        "stream."
+                    ),
+                    diagnosis=(
+                        f"this workspace records no run {requested!r}; "
+                        f"recorded runs: {sorted(streams)}."
+                    ),
+                    route=(
+                        "name one of the recorded references, or a run_id "
+                        "that names exactly one of them; inspect_run with no "
+                        "arguments lists them."
+                    ),
+                )
         stream_bytes = path.read_bytes()
         outcome = derive_run_outcome(read_run_events(path))
         # A named read is a typed act: the durable event binds the run
@@ -12545,6 +15617,8 @@ class CommandCompiledToolHostV1:
         )
         record = outcome.public_record()
         record["run"] = requested
+        if resolved_from:
+            record["resolved_from"] = resolved_from
         record["nodes"] = tuple(
             {
                 **node.public_record(),
@@ -12679,6 +15753,9 @@ class CommandCompiledToolHostV1:
                 ),
                 alpha=int(values.get("alpha", 4)),
                 use_weighted_mass=bool(values.get("use_weighted_mass", False)),
+                reaction_coordinate_mode=self._reaction_coordinate_mode(
+                    values
+                ),
                 frequency_scale_factor=float(
                     values.get("frequency_scale_factor", 1.0)
                 ),
@@ -12690,8 +15767,14 @@ class CommandCompiledToolHostV1:
             # (-64.7 cm^-1), where a pure-RRHO Gibbs correction does not
             # exist. Typing the refusal here keeps the delivery envelope's
             # rule honest: typed errors settle the node and reach the
-            # partial report as findings, while a bare exception stays what
-            # it should be -- a defect that crashes.
+            # partial report as findings. The other half of this comment
+            # used to read "while a bare exception stays what it should
+            # be -- a defect that crashes", and that half is withdrawn.
+            # An escaping TypeError killed a goal unsettled and lost
+            # every sibling receipt with it, while its traceback went to
+            # a log nothing reads. The executor now settles an
+            # unexpected exception as a host defect, which is both
+            # louder and recoverable (executor._run_analysis_phase).
             raise ContractError(str(exc)) from exc
         self.thermochemistry_receipts[receipt.receipt_sha256] = receipt
         record = canonical_data(receipt)
@@ -12719,6 +15802,10 @@ class CommandCompiledToolHostV1:
             ):
                 for key in legacy_defaults:
                     record.pop(key, None)
+        low_modes = self._low_frequency_mode_observation(
+            artifact=artifact,
+            temperature_k=float(values["temperature_k"]),
+        )
         self._emit(
             turn_id,
             EventKind.THERMOCHEMISTRY_DERIVED,
@@ -12728,8 +15815,53 @@ class CommandCompiledToolHostV1:
             temperature_k=receipt.temperature_k,
             pressure_atm=receipt.pressure_atm,
             record=record,
+            **({"observations": (low_modes,)} if low_modes else {}),
         )
+        if low_modes:
+            self._reply_observations = (low_modes,)
         return receipt
+
+    def _low_frequency_mode_observation(
+        self, *, artifact: TrustedArtifactRefV1, temperature_k: float
+    ) -> dict[str, Any] | None:
+        """Name the modes below 50 cm-1 and the RRHO entropy they carry.
+
+        Read from the result's own printed frequencies with the same
+        engine the derivation used; an observation beside the receipt,
+        never inside it and never a verdict.
+        """
+
+        from chemsmart.analysis.result_quantities import (
+            low_frequency_mode_entropy,
+        )
+        from chemsmart.analysis.thermochemistry import Thermochemistry
+
+        try:
+            engine = Thermochemistry(
+                filename=str(artifact.path), temperature=temperature_k
+            )
+            frequencies = tuple(engine.real_frequencies or ())
+        except Exception:  # noqa: BLE001 -- an observation never fails a call
+            return None
+        summary = low_frequency_mode_entropy(
+            frequencies, temperature_k=temperature_k
+        )
+        if not summary["low_modes_cm1"]:
+            return None
+        return {
+            "kind": "low_frequency_modes_under_rrho",
+            **summary,
+            "meaning": (
+                f"{len(summary['low_modes_cm1'])} real mode(s) below "
+                f"{summary['threshold_cm1']:.0f} cm-1 contribute "
+                f"{summary['entropy_term_kj_per_mol']:.2f} kJ/mol of T*S "
+                "under the harmonic oscillator, which describes such modes "
+                "worst; two enantiomeric rotamers have differed by 0.4 "
+                "kJ/mol in Gibbs energy on this term alone. Compare it "
+                "with the difference you deliver; entropy_method and "
+                "entropy_cutoff_cm1 select a quasi-harmonic treatment"
+            ),
+        }
 
     def _evaluate_quantity_expression(self, turn_id: str, values: dict) -> Any:
         inputs: list[QuantityValueV1] = []
@@ -12778,6 +15910,9 @@ class CommandCompiledToolHostV1:
         self.quantity_expression_requests[receipt.receipt_sha256] = request
         record = canonical_data(receipt)
         record.pop("receipt_sha256")
+        geometry_observations = self._geometry_operation_observations(
+            values, nodes
+        )
         self._emit(
             turn_id,
             EventKind.QUANTITY_EXPRESSION_EVALUATED,
@@ -12786,8 +15921,110 @@ class CommandCompiledToolHostV1:
             output_ids=tuple(item.quantity_id for item in receipt.outputs),
             semantic_signature_sha256=receipt.semantic_signature_sha256,
             record=record,
+            **(
+                {"geometry_observations": geometry_observations}
+                if geometry_observations
+                else {}
+            ),
         )
+        if geometry_observations:
+            self._reply_observations = geometry_observations
         return receipt
+
+    def _geometry_operation_observations(
+        self, values: Mapping[str, Any], nodes: Sequence[Any]
+    ) -> tuple[dict[str, Any], ...]:
+        """Say when an internal coordinate was measured off a non-bond.
+
+        distance, angle and dihedral promise "bonded order a-b-c-d" and
+        nothing checked it. A woken session measured every F-C-C-S
+        torsion to refute its own rotamer labels -- exactly the right
+        move -- with the sulfone's indices one atom off, so it reported
+        the well at 78-82 deg (F-C-C-O) where F-C-C-S sits at 62-71
+        deg, and the number was relayed as a finding (NOVEL-2 po2,
+        2026-09-04). The adjacency the same receipt carried would have
+        caught it. An observation, never a refusal: a torsion over a
+        non-bonded chain is sometimes exactly what a scientist wants.
+        """
+
+        by_id = {node.node_id: node for node in nodes}
+        source_by_input: dict[str, str] = {}
+        for item in values.get("inputs") or ():
+            source_by_input[str(item.get("input_id") or "")] = str(
+                item.get("receipt_sha256") or ""
+            )
+
+        def _atom_of(node_id: str) -> tuple[str, int] | None:
+            node = by_id.get(node_id)
+            if node is None or node.operation != "ref":
+                return None
+            if len(node.indices) != 1:
+                return None
+            receipt = source_by_input.get(node.reference, "")
+            return (receipt, int(node.indices[0])) if receipt else None
+
+        observations: list[dict[str, Any]] = []
+        for node in nodes:
+            if node.operation not in {"distance", "angle", "dihedral"}:
+                continue
+            atoms = [_atom_of(input_id) for input_id in node.input_ids]
+            if any(atom is None for atom in atoms):
+                continue
+            receipts = {receipt for receipt, _index in atoms}
+            if len(receipts) != 1:
+                continue
+            extraction = self.quantity_extractions.get(next(iter(receipts)))
+            adjacency = getattr(extraction, "derived_adjacency", None)
+            if not isinstance(adjacency, Mapping):
+                continue
+            bonds = {
+                tuple(sorted((int(a), int(b))))
+                for a, b in adjacency.get("bond_atom_pairs") or ()
+            }
+            if not bonds:
+                continue
+            indices = [index for _receipt, index in atoms]
+            unbonded = [
+                [first, second]
+                for first, second in zip(indices, indices[1:])
+                if tuple(sorted((first, second))) not in bonds
+            ]
+            if not unbonded:
+                continue
+            symbols = ()
+            for quantity in getattr(extraction, "quantities", ()):
+                if getattr(quantity, "quantity_id", "") == "symbols" or (
+                    "symbols" in str(getattr(quantity, "evidence_ref", ""))
+                ):
+                    symbols = tuple(
+                        str(item) for item in (quantity.value or ())
+                    )
+                    break
+            observations.append(
+                {
+                    "kind": "geometry_operation_over_non_bond",
+                    "node_id": node.node_id,
+                    "operation": node.operation,
+                    "indices": list(indices),
+                    "elements": (
+                        [
+                            symbols[index] if index < len(symbols) else "?"
+                            for index in indices
+                        ]
+                        if symbols
+                        else []
+                    ),
+                    "unbonded_pairs": unbonded,
+                    "meaning": (
+                        f"{node.operation} promises bonded order and the "
+                        "receipt's own perceived bonds do not join "
+                        + ", ".join(f"{a}-{b}" for a, b in unbonded)
+                        + "; check the indices against the atom order "
+                        "before reading this as an internal coordinate"
+                    ),
+                }
+            )
+        return tuple(observations)
 
     def _typed_quantity_from_receipt(
         self,
@@ -13038,6 +16275,523 @@ class CommandCompiledToolHostV1:
         )
         return receipt
 
+    def _expression_is_model_authored(
+        self,
+        receipt_sha256: str,
+        quantity_id: str = "",
+        seen: set[str] | None = None,
+    ) -> bool:
+        """Whether an expression's value rests on a literal the model wrote.
+
+        An expression receipt is host-minted arithmetic, but its leaves
+        need not be host-owned: the vocabulary separates a ``literal``
+        the session supplies from a ``constant`` the registry owns, and
+        a second expression over a literal-rooted first inherits none of
+        that provenance. A value the model supplied stays the model's
+        however many receipts sit above it.
+
+        The answer is the expression layer's own, read off the receipt.
+        ``model_authored_constants`` already names every number a node
+        contributed that no measurement produced -- a ``literal``, a
+        ``power`` exponent, a ``scale_factor``, an extrapolation
+        exponent -- accumulated to each output through its own sources.
+        A second scan here read only ``literal`` operations, so a
+        registered constant multiplied by a model-authored
+        ``scale_factor`` of 1e-5 was called host-owned evidence and
+        discharged a tolerance, while the receipt beside it named that
+        factor as the model's. One part of ChemSmart must not call a
+        contribution model-authored while another treats its result as
+        wholly the host's. Reading the receipt also survives a restart,
+        which the request dictionary did not.
+        """
+
+        seen = set() if seen is None else seen
+        key = f"{receipt_sha256}:{quantity_id}"
+        if key in seen:
+            return False
+        seen.add(key)
+        receipt = self.quantity_expression_receipts.get(receipt_sha256)
+        if receipt is None:
+            return False
+        rows = tuple(getattr(receipt, "output_dependencies", ()) or ())
+        if quantity_id:
+            # The citation names an output; the receipt's other outputs
+            # are other numbers. Reading every row made one expression's
+            # provenance the whole receipt's: a session that put the
+            # task's own three oxidant potentials in the same expression
+            # as its uncertainty budget had a clean, fully derived
+            # functional term refused because those literals shared its
+            # receipt, and the remedy it learned was to partition
+            # receipts rather than to derive anything. Forty lines below,
+            # the two-source guard already scopes by output_id; these
+            # are two readers of one citation and only one was right.
+            rows = tuple(
+                row
+                for row in rows
+                if str(getattr(row, "output_id", "")) == quantity_id
+            )
+        for dependency in rows:
+            if getattr(dependency, "model_authored_constants", ()):
+                return True
+            for source in (
+                getattr(dependency, "source_receipt_sha256s", ()) or ()
+            ):
+                # Across receipts the constants are not accumulated, so
+                # the upstream walk stays receipt-scoped: conservative
+                # where the host cannot see which output was read.
+                if source in self.quantity_expression_receipts:
+                    if self._expression_is_model_authored(source, "", seen):
+                        return True
+        return False
+
+    def _cited_uncertainty_quantity(
+        self, receipt_sha256: str, quantity_id: str
+    ) -> Any | None:
+        """The typed quantity a citation names inside a receipt."""
+
+        registries = (
+            (self.quantity_extractions, "quantities"),
+            (self.thermochemistry_receipts, "quantities"),
+            (self.quantity_expression_receipts, "outputs"),
+            (self.scientific_validation_receipts, "outputs"),
+        )
+        for registry, attribute in registries:
+            receipt = registry.get(receipt_sha256)
+            if receipt is None:
+                continue
+            for quantity in getattr(receipt, attribute, ()) or ():
+                if str(getattr(quantity, "quantity_id", "")) == quantity_id:
+                    return quantity
+        return None
+
+    def _uncertainty_evidence(
+        self, reference: str, quantity_id: str = ""
+    ) -> tuple[bool, str]:
+        """Whether a stated uncertainty rests on evidence the host owns.
+
+        The reference names a receipt this host minted or a constant the
+        registry owns. Nothing here judges whether the number is a good
+        estimate of anything -- that is chemistry and it stays the
+        session's -- only whether the host can say where it came from.
+        """
+
+        ref = str(reference or "").strip()
+        if not ref:
+            return False, "no reference was given"
+        try:
+            from chemsmart.analysis.literature_constants import (
+                literature_constant,
+            )
+
+            literature_constant(ref)
+            return True, f"registered constant {ref!r}"
+        except Exception:
+            pass
+        registries = (
+            ("quantity_extraction", self.quantity_extractions),
+            ("thermochemistry", self.thermochemistry_receipts),
+            ("quantity_expression", self.quantity_expression_receipts),
+            ("scientific_validation", self.scientific_validation_receipts),
+        )
+        for kind, registry in registries:
+            if ref in registry:
+                # A literal-rooted chain used to be refused here. The
+                # refusal read spelling rather than value: the operation
+                # vocabulary is rational-complete over any non-zero
+                # quantity, so `divide(x, x)` summed to any integer
+                # reaches the same number a `literal` would, carrying no
+                # model-authored constant at all. Thirteen firings over
+                # six windows produced operand rewriting and receipt
+                # partitioning and not one derivation, while the same
+                # refusal rejected coefficients a definition fixes --
+                # the electron count of a one-electron couple, the half
+                # that makes a half-range. Provenance is what the host
+                # owns, so the authorship is recorded and reported by
+                # `_uncertainty_observations`; whether an equivalently
+                # spelled coefficient is worth less is a scientific
+                # judgement and it is not the host's to make (owner
+                # ruling, 2026-09-10).
+                return True, f"{kind} receipt"
+        return False, "no receipt or registered constant of that name"
+
+    def _expression_source_closure(
+        self,
+        receipt_sha256: str,
+        quantity_id: str = "",
+        seen: set[str] | None = None,
+    ) -> set[str]:
+        """Every receipt a cited output actually descends from.
+
+        Counting the immediate edge called a spread over eight receipts
+        a spread over one: the claim cited an output of a receipt whose
+        only job was restating hartree per electron as volts, so its
+        single dependency was the receipt that had done the comparing.
+        An algebraically identity transformation must not change what
+        the host says the evidence is (SUFFICIENCY-5, 2026-09-10).
+        """
+
+        seen = set() if seen is None else seen
+        key = f"{receipt_sha256}:{quantity_id}"
+        if key in seen:
+            return set()
+        seen.add(key)
+        receipt = self.quantity_expression_receipts.get(receipt_sha256)
+        if receipt is None:
+            return set()
+        rows = tuple(getattr(receipt, "output_dependencies", ()) or ())
+        if quantity_id:
+            rows = tuple(
+                row
+                for row in rows
+                if str(getattr(row, "output_id", "")) == quantity_id
+            )
+        closure: set[str] = set()
+        for dependency in rows:
+            for source in (
+                getattr(dependency, "source_receipt_sha256s", ()) or ()
+            ):
+                if source in self.quantity_expression_receipts:
+                    upstream = self._expression_source_closure(
+                        source, "", seen
+                    )
+                    # A restatement contributes its own parents; a real
+                    # comparison contributes itself as well.
+                    closure |= upstream or {source}
+                else:
+                    closure.add(source)
+        return closure
+
+    def _authored_constants_in_chain(
+        self,
+        receipt_sha256: str,
+        quantity_id: str = "",
+        seen: set[str] | None = None,
+    ) -> tuple[tuple[str, str, str], ...]:
+        """The coefficients the receipt itself names, with role and value.
+
+        The host resolved these and then reduced them to one bare id, so
+        a reader could not tell the one half that *defines* a half-range
+        from a 0.1 V solvation budget somebody typed. Both are the
+        session's; they are not the same statement, and the receipt has
+        the difference in hand.
+        """
+
+        seen = set() if seen is None else seen
+        key = f"{receipt_sha256}:{quantity_id}"
+        if key in seen:
+            return ()
+        seen.add(key)
+        receipt = self.quantity_expression_receipts.get(receipt_sha256)
+        if receipt is None:
+            return ()
+        rows = tuple(getattr(receipt, "output_dependencies", ()) or ())
+        if quantity_id:
+            rows = tuple(
+                row
+                for row in rows
+                if str(getattr(row, "output_id", "")) == quantity_id
+            )
+        found: list[tuple[str, str, str]] = []
+        for dependency in rows:
+            for constant in (
+                getattr(dependency, "model_authored_constants", ()) or ()
+            ):
+                node = str(getattr(constant, "node_id", "") or "")
+                role = str(getattr(constant, "role", "") or "")
+                value = str(getattr(constant, "value", "") or "")
+                if not (node or role or value):
+                    # A receipt that names a coefficient without the
+                    # three fields still names one; say so rather than
+                    # printing an empty pair.
+                    role = str(constant)
+                found.append((node, role, value))
+            for source in (
+                getattr(dependency, "source_receipt_sha256s", ()) or ()
+            ):
+                if source in self.quantity_expression_receipts:
+                    # Receipt-scoped upstream, because the edge records
+                    # which receipts were read and never which of their
+                    # outputs. That imprecision is reported rather than
+                    # hidden: see `uncertainty.upstream_scope`.
+                    found.extend(
+                        self._authored_constants_in_chain(source, "", seen)
+                    )
+        ordered = sorted(set(found))
+        return tuple(ordered)
+
+    def _reaction_coordinate_mode(self, values: Mapping[str, Any]) -> int:
+        """The mode a session names as the reaction coordinate.
+
+        Admitted only over a stationary-point characterisation this host
+        minted for the same bytes, so the order the treatment assumes is
+        one the host checked against the program's own printed
+        frequencies rather than one the session asserted. That receipt
+        became citable in the same round; this is the reader that makes
+        the charter's "a claim standing on the characterised result says
+        so" mean something.
+        """
+
+        mode = int(values.get("reaction_coordinate_mode", 0) or 0)
+        if mode <= 0:
+            return 0
+        artifact = self._artifact(values["artifact_id"])
+        characterised = tuple(
+            receipt
+            for receipt in self.stationary_point_characterisations.values()
+            if str(getattr(receipt, "result_artifact_sha256", ""))
+            == str(getattr(artifact, "sha256", ""))
+        )
+        if not characterised:
+            raise ContractError(
+                "naming a reaction coordinate says this structure is a "
+                "saddle, and the host will not take that on your word: "
+                "characterise_stationary_point on this result first, "
+                "which checks the order you state against the "
+                "program's own printed frequencies. Then name the mode"
+            )
+        orders = {
+            int(getattr(receipt, "order_claimed", 0))
+            for receipt in characterised
+        }
+        if orders and mode > max(orders):
+            raise ContractError(
+                f"mode {mode} is past the order the characterisation "
+                f"established for this result ({sorted(orders)}): name a "
+                "mode the structure actually has"
+            )
+        return mode
+
+    def _component_observations(
+        self, component: Mapping[str, Any], display_unit: str = ""
+    ) -> dict[str, Any]:
+        """What the host saw about one component's cited magnitude.
+
+        Including what the cited quantity actually reads. The claim's
+        own ``measured`` magnitude is checked against its citation, and
+        a component's is deliberately not -- a term restated at two
+        sigma from a one sigma receipt is ordinary and grading it would
+        be the host judging a statistical convention. But the reader
+        could not see the difference either: ino3-r17 cycle 3
+        (2026-09-10) stated a 0.214 V component whose cited quantity
+        holds -2.103 V, the SVP potential itself rather than any
+        spread, and nothing on the row said so. So the host reports
+        what it read and rules on none of it, which is the trade this
+        whole surface was rebuilt on (owner ruling, 2026-09-10).
+        """
+
+        reference = str(component.get("reference") or "")
+        if not reference:
+            return {}
+        receipt, _, quantity_id = reference.partition(":")
+        observed = list(self._uncertainty_observations(receipt, quantity_id))
+        if quantity_id and display_unit:
+            cited = self._cited_uncertainty_quantity(receipt, quantity_id)
+            if cited is not None:
+                try:
+                    reads = convert_normalized_value(
+                        cited.value, cited.dimension, display_unit
+                    )
+                except Exception:
+                    reads = None
+                if isinstance(reads, (int, float)):
+                    observed.append(
+                        f"uncertainty.cited_quantity_reads[{quantity_id}]"
+                        f"={reads:.6g} {display_unit}"
+                    )
+        return {"observations": observed} if observed else {}
+
+    def _uncertainty_observations(
+        self, reference: str, quantity_id: str = ""
+    ) -> tuple[str, ...]:
+        """What the host saw about a cited magnitude, and did not judge.
+
+        Three of these were refusals until 2026-09-10, and each was
+        removed for the same reason: it was computable and
+        scientifically arbitrary. A spread of exactly zero is a real
+        observation -- three treatments agreeing to printed precision,
+        an equality symmetry enforces -- and refusing it is the host
+        asserting that a measurement cannot be zero. A variance over
+        many samples inside one receipt compares plenty. And an
+        equivalent coefficient does not become worth less because
+        operators spelled it. None of the three stopped what it was
+        aimed at, because a substitution walks past all of them.
+
+        What replaced them was too coarse to pay for them, and the two
+        audits of that trade agreed on why: the ids named an
+        implementation feature rather than what the host saw. So each
+        now carries the numbers behind it -- which coefficients, what
+        role, what value, how many receipts the value really descends
+        from, how much of it the toolkit's own vocabulary produced --
+        and the report says where its own reading is imprecise.
+
+        The ids name a measurement and never a verdict, as an anomaly id
+        does. Nothing here is refused.
+        """
+
+        ref = str(reference or "").strip()
+        if not ref:
+            return ()
+        observations: list[str] = []
+        authored = self._authored_constants_in_chain(ref, quantity_id)
+        if authored:
+            named = "; ".join(
+                (
+                    f"{role or 'constant'}={value}@{node}"
+                    if node
+                    else f"{role or 'constant'}={value}"
+                )
+                for node, role, value in authored
+            )
+            observations.append(
+                f"uncertainty.model_authored_constants[{named}]"
+            )
+        composed = self.quantity_expression_receipts.get(ref)
+        if composed is not None and quantity_id:
+            closure = self._expression_source_closure(ref, quantity_id)
+            observations.append(f"uncertainty.source_receipts={len(closure)}")
+            for dependency in (
+                getattr(composed, "output_dependencies", ()) or ()
+            ):
+                if str(getattr(dependency, "output_id", "")) != quantity_id:
+                    continue
+                nodes = int(
+                    getattr(dependency, "arithmetic_node_count", 0) or 0
+                )
+                conventions = tuple(
+                    getattr(dependency, "convention_operations", ()) or ()
+                )
+                # The analysis layer already answers "did the toolkit's
+                # vocabulary produce this number, or did the model
+                # assemble it" and nothing outside that layer read the
+                # answer. It is a better-shaped question than any of the
+                # three ids above and it was already being computed.
+                observations.append(
+                    "uncertainty.arithmetic_nodes="
+                    f"{nodes} conventions="
+                    + (",".join(conventions) if conventions else "none")
+                )
+                if any(
+                    source in self.quantity_expression_receipts
+                    for source in (
+                        getattr(dependency, "source_receipt_sha256s", ()) or ()
+                    )
+                ):
+                    observations.append("uncertainty.upstream_scope=receipt")
+                break
+        if quantity_id:
+            cited = self._cited_uncertainty_quantity(ref, quantity_id)
+            value = getattr(cited, "value", None)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                if float(value) == 0.0:
+                    observations.append("uncertainty.zero_magnitude")
+        return tuple(observations)
+
+    def _declarations_for_claim(
+        self, claim_id: str, quantity_id: str
+    ) -> tuple[Mapping[str, Any], ...]:
+        """Every declaration this claim delivers, joined as the gate joins.
+
+        The gate credits a claim under both its ``claim_id`` and its
+        host-minted ``quantity_id``, and this join returned only the
+        first match. So a claim on a tolerance-bearing quantity, made
+        under a ``claim_id`` that names a second, tolerance-free
+        declaration, delivered *both* ids and was assessed against
+        neither: the completion certified, the record carried no
+        sufficiency row, and the requirement disappeared from the
+        question rather than standing open. Every obligation a claim
+        discharges is assessed, so a delivered tolerance-bearing
+        declaration with nothing said about it is ``unstated``.
+        """
+
+        found: list[Mapping[str, Any]] = []
+        seen: set[str] = set()
+        for key in (claim_id, quantity_id):
+            if not key or key in seen:
+                continue
+            declaration = self.requested_observable_declarations.get(key)
+            if declaration is None:
+                continue
+            seen.add(key)
+            found.append(declaration)
+        return tuple(found)
+
+    def _restated_sufficiency_row(
+        self,
+        declaration: Mapping[str, Any] | None,
+        *,
+        display_unit: str,
+        display_value: float,
+        uncertainty: Any,
+        uncertainty_basis: str,
+        evidence_backed: bool = False,
+        unquantified_components: tuple[str, ...] = (),
+        uncertainty_observations: tuple[str, ...] = (),
+        uncertainty_combination: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """The claim's numbers in the unit its declaration asked for.
+
+        A conversion the host cannot make is a refusal, not a silent
+        comparison: an uncertainty in a unit of another dimension says
+        nothing about a tolerance, and stating it would be a host word
+        that is false.
+        """
+
+        row = {
+            "display_value": display_value,
+            "uncertainty": uncertainty,
+            "uncertainty_basis": uncertainty_basis,
+            "uncertainty_evidence_backed": evidence_backed,
+            "unquantified_components": list(unquantified_components),
+            # What the host observed and did not rule on. It rides the
+            # assessment rather than only the claim because the
+            # assessment is what the session, the workspace record and
+            # the settlement all read: a fact computed where nothing
+            # consumes it is the pattern this laboratory has paid for
+            # five times, and three refusals became this report on the
+            # condition that a reader of `met` can see what it rests on
+            # (owner ruling, 2026-09-10).
+            "uncertainty_observations": list(uncertainty_observations),
+            # Carried, never graded: which rule produced the total is
+            # what decided the word in three windows running.
+            "uncertainty_combination": (
+                dict(uncertainty_combination)
+                if uncertainty_combination
+                else None
+            ),
+        }
+        if (
+            declaration is None
+            or declaration.get("required_tolerance") is None
+        ):
+            return row
+        declared_unit = str(declaration.get("unit") or "")
+        if not declared_unit or declared_unit == display_unit:
+            return row
+        # Only the uncertainty. The value was restated too, for a
+        # `decision_boundary` comparison that is retired, and
+        # judge_sufficiency never read it -- so a claim in the wrong
+        # dimension was refused outright when its declaration carried a
+        # tolerance and recorded when it did not, decided by a field
+        # nothing in the comparison uses. Under a tolerance the number
+        # never reached the record at all, which is where the charter's
+        # own repair route starts: declare the corrected observable and
+        # name the one it retires, with both on the record.
+        value = row["uncertainty"]
+        if value is None:
+            return row
+        restated = _restate_display_value(
+            float(value), display_unit, declared_unit
+        )
+        if restated is None:
+            raise ContractError(
+                f"claim {declaration.get('observable_id')!r} states its "
+                f"uncertainty in {display_unit!r} while its declaration "
+                f"asks for {declared_unit!r}, and the host owns no "
+                "conversion between them; state it in the declared unit"
+            )
+        row["uncertainty"] = restated
+        return row
+
     def _record_analysis_claims(self, turn_id: str, values: dict) -> Any:
         """Render reportable values from exact typed receipt outputs."""
 
@@ -13061,7 +16815,121 @@ class CommandCompiledToolHostV1:
             ),
         )
         claims = []
+        sufficiency_rows: list[Any] = []
         for item in values["claims"]:
+            # Shape before lookup: a pairing error in the claim itself is
+            # the model's to fix and costs nothing to find, so it is
+            # named before the receipt registry is searched.
+            if (
+                item.get("uncertainty") is not None
+                or str(item.get("uncertainty_reference", "")).strip()
+            ) and not str(item.get("uncertainty_basis", "")).strip():
+                raise ContractError(
+                    "an uncertainty needs uncertainty_basis: measured, "
+                    "inferred, or asserted. All three count in full; the "
+                    "word says which it is, and a reader cannot tell a "
+                    "computed spread from a recalled one without it"
+                )
+            # A word that names evidence must name the evidence. The
+            # basis was a free string, so "measured" cost nothing to
+            # write and the host could not tell it from a judgement.
+            shape_basis = str(item.get("uncertainty_basis", "")).strip()
+            shape_reference = str(
+                item.get("uncertainty_reference", "")
+            ).strip()
+            if shape_basis in {"measured", "inferred"} and not shape_reference:
+                raise ContractError(
+                    f"uncertainty_basis {shape_basis!r} names evidence, so "
+                    "it needs uncertainty_reference. For 'measured' that is "
+                    "'<receipt_sha256>:<quantity_id>' -- the host reads that "
+                    "quantity and checks your number against it, exactly as "
+                    "it copies the value you claim. For 'inferred' it is the "
+                    "receipt or registered constant your judgement rests on. "
+                    "State 'asserted' if it is your judgement alone -- an "
+                    "assertion is never penalised, it simply does not "
+                    "discharge a tolerance on its own"
+                )
+            if shape_basis == "asserted" and shape_reference:
+                raise ContractError(
+                    "uncertainty_basis 'asserted' is your own judgement and "
+                    "takes no uncertainty_reference; name the basis the "
+                    "reference supports instead"
+                )
+            for component in item.get("uncertainty_components") or ():
+                component_basis = str(component.get("basis", "")).strip()
+                component_reference = str(
+                    component.get("reference", "")
+                ).strip()
+                if component_basis in {"measured", "inferred"}:
+                    # The schema promises a reader that a component's
+                    # reference is "the receipt or registered constant",
+                    # and the host checked only that the string was not
+                    # empty -- so a component could name evidence that
+                    # does not exist under a word that claims it does.
+                    # A sentence at a point of use naming a check the
+                    # host does not make is a capability claim.
+                    if not component_reference:
+                        raise ContractError(
+                            "an uncertainty component with basis "
+                            f"{component_basis!r} needs its reference"
+                        )
+                    # A component may cite the quantity too, in the
+                    # same shape the claim's own reference uses; the
+                    # host resolves the receipt half. It does not check
+                    # a component's magnitude, because how the terms add
+                    # is the science and the total is what a tolerance
+                    # is compared against.
+                    component_receipt, _, component_quantity = (
+                        component_reference.partition(":")
+                    )
+                    resolved, detail = self._uncertainty_evidence(
+                        component_receipt, component_quantity
+                    )
+                    if resolved and component_quantity:
+                        # The schema promises a reader that a component's
+                        # reference is "resolved by the host as the
+                        # claim's own reference is", and the host
+                        # resolved only the receipt half -- so a
+                        # component could name a quantity that does not
+                        # exist under a word that says it does. The
+                        # magnitude is deliberately not graded: how the
+                        # terms add, and at what coverage each is
+                        # stated, is the science. Existence is
+                        # provenance and the host owns that.
+                        if (
+                            self._cited_uncertainty_quantity(
+                                component_receipt, component_quantity
+                            )
+                            is None
+                        ):
+                            resolved = False
+                            detail = (
+                                f"receipt {component_receipt[:8]} carries no "
+                                f"quantity {component_quantity!r}"
+                            )
+                    if not resolved:
+                        raise ContractError(
+                            "uncertainty component reference "
+                            f"{component_reference!r} does not resolve: "
+                            f"{detail}"
+                        )
+                elif component_basis == "asserted" and component_reference:
+                    raise ContractError(
+                        "an uncertainty component with basis 'asserted' "
+                        "is your own judgement and takes no reference"
+                    )
+                if component_basis == "unquantified":
+                    if component.get("magnitude") is not None:
+                        raise ContractError(
+                            "an unquantified component carries no "
+                            "magnitude; give it a basis that matches the "
+                            "number, or drop the number and keep the term"
+                        )
+                elif component.get("magnitude") is None:
+                    raise ContractError(
+                        "an uncertainty component needs a magnitude, or "
+                        "basis 'unquantified' if you cannot give one"
+                    )
             receipt_sha256 = str(item["receipt_sha256"])
             require_sha256(receipt_sha256, "analysis claim receipt_sha256")
             source_kind = ""
@@ -13104,6 +16972,219 @@ class CommandCompiledToolHostV1:
             display_value = convert_normalized_value(
                 quantity.value, quantity.dimension, display_unit
             )
+            uncertainty = item.get("uncertainty")
+            uncertainty_basis = str(item.get("uncertainty_basis", "")).strip()
+            uncertainty_reference = str(
+                item.get("uncertainty_reference", "")
+            ).strip()
+            # Only a magnitude the host can check discharges an
+            # evidence obligation (owner ruling, 2026-09-09). `met` had
+            # meant "a sufficiently small number stated beside a
+            # resolvable citation": an uncertainty of 0.01 kJ/mol citing
+            # a receipt whose quantity was an unrelated standard-state
+            # correction reached it. Binding a number to its numerical
+            # source is provenance and the host owns that; judging
+            # whether it estimates the relevant scientific error is
+            # chemistry and stays the session's. ChemSmart already draws
+            # that line for the claimed value, which the model never
+            # types -- the uncertainty is held to the same rule.
+            evidence_backed = False
+            uncertainty_observations: tuple[str, ...] = ()
+            approximates = item.get("approximates")
+            if approximates is not None and not isinstance(
+                approximates, Mapping
+            ):
+                raise ContractError(
+                    "approximates is a mapping naming the declared "
+                    "observable this number approximates, the "
+                    "relationship in your own words, and its basis"
+                )
+            approximates_record = (
+                {
+                    "observable_id": str(
+                        approximates.get("observable_id") or ""
+                    ),
+                    "relationship": str(
+                        approximates.get("relationship") or ""
+                    ),
+                    "basis": str(approximates.get("basis") or ""),
+                }
+                if isinstance(approximates, Mapping)
+                else None
+            )
+            if approximates_record is not None and not (
+                approximates_record["observable_id"]
+                and approximates_record["relationship"]
+            ):
+                raise ContractError(
+                    "approximates needs the observable_id it stands in "
+                    "for and the relationship in your own words: the "
+                    "host ships no vocabulary of approximation kinds and "
+                    "will not infer one from an identifier"
+                )
+            combination = item.get("uncertainty_combination")
+            if combination is not None and not isinstance(
+                combination, Mapping
+            ):
+                raise ContractError(
+                    "uncertainty_combination is a mapping stating the rule "
+                    "you combined your components with, what its inputs "
+                    "mean, the coverage the total claims, and what you "
+                    "assume about dependence between the terms"
+                )
+            combination_record = (
+                {
+                    "rule": str(combination.get("rule") or ""),
+                    "input_meaning": str(
+                        combination.get("input_meaning") or ""
+                    ),
+                    "coverage": str(combination.get("coverage") or ""),
+                    "dependence": str(combination.get("dependence") or ""),
+                }
+                if isinstance(combination, Mapping)
+                else None
+            )
+            if uncertainty_reference:
+                cited_receipt, _, cited_quantity = (
+                    uncertainty_reference.partition(":")
+                )
+                resolved, evidence_detail = self._uncertainty_evidence(
+                    cited_receipt, cited_quantity
+                )
+                if not resolved:
+                    raise ContractError(
+                        f"uncertainty_reference {uncertainty_reference!r} "
+                        f"does not resolve: {evidence_detail}. If a "
+                        "number of yours entered the chain, derive it "
+                        "instead of typing it -- an electron count is the "
+                        "difference of the two states' own charge "
+                        "selectors, a threshold the host owns is a "
+                        "convention rather than your value -- and the whole "
+                        "chain stays the host's. Otherwise name a receipt "
+                        "this host minted or a registered constant, or "
+                        "state the basis as 'asserted'"
+                    )
+                if uncertainty_basis == "measured":
+                    if not cited_quantity:
+                        raise ContractError(
+                            "uncertainty_basis 'measured' means the host can "
+                            "read your number where you got it, so the "
+                            "reference names the quantity too: "
+                            f"'{cited_receipt}:<quantity_id>'. Cite the "
+                            "quantity, or state 'inferred' if the number is "
+                            "your judgement standing on that receipt"
+                        )
+                    # Its own name: this loop's `quantity` is the one
+                    # being claimed, and rebinding it here made every
+                    # claim on the `measured` path record the
+                    # *uncertainty's* quantity_id, canonical value and
+                    # value digest -- so the claim said 0.219 eV and
+                    # 0.350 eV at once and its digest no longer hashed
+                    # the delivered number. The one path that can
+                    # discharge a tolerance was the one that corrupted
+                    # the claim.
+                    cited = self._cited_uncertainty_quantity(
+                        cited_receipt, cited_quantity
+                    )
+                    if cited is None:
+                        raise ContractError(
+                            f"receipt {cited_receipt} carries no quantity "
+                            f"{cited_quantity!r}; name one it does"
+                        )
+                    stated = convert_normalized_value(
+                        cited.value, cited.dimension, display_unit
+                    )
+                    if not isinstance(stated, (int, float)):
+                        raise ContractError(
+                            f"quantity {cited_quantity!r} is not a number "
+                            "this host can read as an uncertainty"
+                        )
+                    # A zero magnitude and a single-receipt spread
+                    # were refused here until the boundary was drawn.
+                    # Both checks were formal and neither was
+                    # scientifically defensible: a spread of exactly
+                    # zero is a real observation, a variance over many
+                    # samples inside one receipt compares plenty, and
+                    # neither refusal stopped the substitution it was
+                    # aimed at -- 1e-9 walks past the first and a split
+                    # receipt past the second. What replaces them is a
+                    # report: the host says what it saw about the number
+                    # and the session owns the claim that the number is
+                    # adequate (owner ruling, 2026-09-10). `met` is
+                    # therefore cheaper than it was, and it is now
+                    # auditable at the point a human reads it, which the
+                    # refusals never made it.
+                    if uncertainty is None:
+                        # Cite the quantity and the host supplies the
+                        # magnitude, exactly as it copies the value you
+                        # claim: the model never writes the number. This
+                        # is the route a planned estimator takes -- the
+                        # executor names the output its own analysis
+                        # chain produced and the host reads it.
+                        uncertainty = abs(float(stated))
+                    elif not (
+                        _reads_as(float(uncertainty), abs(stated))
+                        or _reads_as(abs(stated), float(uncertainty))
+                    ):
+                        raise ContractError(
+                            f"quantity {cited_quantity!r} reads {stated} "
+                            f"{display_unit} and your uncertainty states "
+                            f"{uncertainty}. 'measured' means the host reads "
+                            "your number where you got it; state that "
+                            "number, omit it and let the host copy it, or "
+                            "use 'inferred'"
+                        )
+                    evidence_backed = True
+                uncertainty_observations = self._uncertainty_observations(
+                    cited_receipt, cited_quantity
+                )
+            unquantified_components = tuple(
+                str(component.get("meaning") or "")
+                for component in item.get("uncertainty_components") or ()
+                if str(component.get("basis", "")).strip() == "unquantified"
+            )
+            # A tolerance is declared in the observable's own unit and a
+            # claim states its uncertainty in the claim's display unit,
+            # and nothing converted between them: a 2 kJ/mol tolerance
+            # certified a 1 kcal/mol uncertainty as met, and printed it
+            # as "1.0 kJ/mol". The comparison is the host's to own, so
+            # the numbers are restated into the declared unit here --
+            # through the same function the expectation row uses -- and
+            # judge_sufficiency stays a comparison over normalised
+            # inputs.
+            # Either field answers, claim_id first, exactly as the
+            # completion gate joins: a plan carries the host-minted
+            # quantity_id and its own short input label in claim_id, and
+            # a gate reading claim_id alone lost six observables three
+            # fields away from the id it wanted. Reading one field here
+            # while the gate reads two meant a legitimate alternate
+            # label delivered the observable and produced no assessment
+            # of it at all.
+            # Every declaration this claim delivers, not the first:
+            # the gate credits both ids, and assessing only one let a
+            # claim deliver a tolerance-bearing observable under a
+            # tolerance-free label and be assessed against neither.
+            for declaration in self._declarations_for_claim(
+                str(item["claim_id"]), str(quantity.quantity_id)
+            ):
+                sufficiency_rows.append(
+                    judge_sufficiency(
+                        declaration,
+                        self._restated_sufficiency_row(
+                            declaration,
+                            display_unit=display_unit,
+                            display_value=display_value,
+                            uncertainty=uncertainty,
+                            uncertainty_basis=uncertainty_basis,
+                            evidence_backed=evidence_backed,
+                            unquantified_components=unquantified_components,
+                            uncertainty_observations=(
+                                uncertainty_observations
+                            ),
+                            uncertainty_combination=combination_record,
+                        ),
+                    )
+                )
             claims.append(
                 AnalysisReportedQuantityV1(
                     claim_id=str(item["claim_id"]),
@@ -13117,6 +17198,42 @@ class CommandCompiledToolHostV1:
                     canonical_unit=quantity.unit,
                     dimension=quantity.dimension,
                     data_kind=quantity.data_kind,
+                    uncertainty=(
+                        None if uncertainty is None else float(uncertainty)
+                    ),
+                    uncertainty_basis=uncertainty_basis,
+                    uncertainty_reference=uncertainty_reference,
+                    uncertainty_observations=uncertainty_observations,
+                    uncertainty_combination=combination_record,
+                    approximates=approximates_record,
+                    uncertainty_components=tuple(
+                        {
+                            "meaning": str(component.get("meaning") or ""),
+                            "magnitude": (
+                                None
+                                if component.get("magnitude") is None
+                                else float(component["magnitude"])
+                            ),
+                            "basis": str(component.get("basis") or ""),
+                            "reference": str(component.get("reference") or ""),
+                            # The report reached the claim's own citation
+                            # and stopped there, so moving a magnitude
+                            # into a component escaped it entirely --
+                            # and a component is the shape the charter
+                            # actively encourages. A live claim carried
+                            # a 0.10 V solvation term as an `asserted`
+                            # component and a reference term composed
+                            # from three literature constants with no
+                            # engine output at all, and neither was
+                            # observed anywhere (SUFFICIENCY-5).
+                            **self._component_observations(
+                                component,
+                                str(item.get("display_unit") or ""),
+                            ),
+                        }
+                        for component in item.get("uncertainty_components")
+                        or ()
+                    ),
                 )
             )
         record = build_analysis_claim_record(
@@ -13144,9 +17261,33 @@ class CommandCompiledToolHostV1:
                 "claim_ids": tuple(claim.claim_id for claim in record.claims),
                 "critical_finding_count": 0,
                 "record": record_body,
+                # How each delivered number stands against the precision
+                # its declaration asked for. The driver reads this from
+                # the stream: the same judgement, from one function, for
+                # the gate and the settlement alike.
+                "sufficiency": tuple(
+                    row for row in sufficiency_rows if row is not None
+                ),
             },
             idempotency_key="analysis-claims:" + record.receipt_sha256,
         )
+        # And tell the session what the host made of its own numbers, in
+        # the turn it made them. The verdict was written to the stream
+        # and never to the reply, so a session could not learn in-turn
+        # that its number missed the tolerance it had itself declared --
+        # it had to spend a whole cycle to be told through the wake,
+        # while two of the three routes that answer cost no engine call
+        # at all. The refusal and the reply are where this model is
+        # actually taught.
+        self._reply_observations = tuple(
+            row for row in sufficiency_rows if row is not None
+        )
+        # The current assessment of each requirement, latest wins, so
+        # the refusal verifier can check that a precision a session
+        # says it cannot establish is one this goal actually has open.
+        for row in sufficiency_rows:
+            if row is not None and row.get("observable_id"):
+                self.requirement_assessments[str(row["observable_id"])] = row
         return record
 
     def _record_compiled_command(
@@ -13251,6 +17392,51 @@ class CommandCompiledToolHostV1:
                     f"bound {label} IDs include {known[:8]} "
                     f"and {len(known) - 8} more"
                 )
+            if label == "trusted artifact":
+                # The refusal a session meets when it names evidence the
+                # host printed: a digest off a run outcome, a node id off
+                # the record. Ten such refusals in 22 seconds named neither
+                # the id rule nor the nearest bound id (REACH-1 ino3,
+                # 2026-09-06).
+                import difflib
+
+                nearest = difflib.get_close_matches(
+                    str(key), [str(item) for item in known], n=3, cutoff=0.5
+                )
+                results = sorted(
+                    item for item in known if "-result-" in str(item)
+                )
+                if re.fullmatch(r"[0-9a-f]{64}", str(key) or ""):
+                    shape = (
+                        f"{key!r} is a content digest, not an id; a result "
+                        "registered from it carries the id "
+                        f"<program>-result-{str(key)[:16]}."
+                    )
+                else:
+                    shape = f"{key!r} is not a registered artifact id."
+                raise RoutedContractError(
+                    gate="artifact.id_is_registered",
+                    invariant=(
+                        "a reading tool opens only an artifact the host "
+                        "registered under its id; ids are host-minted, never "
+                        "typed from a digest or a node name."
+                    ),
+                    diagnosis=shape
+                    + (f" Nearest bound ids: {nearest}." if nearest else "")
+                    + (
+                        f" Registered results: {results[:8]}"
+                        + (" ..." if len(results) > 8 else "")
+                        + "."
+                        if results
+                        else " No result is registered in this session."
+                    ),
+                    route=(
+                        "open the result by the artifact_id the workspace "
+                        "record or inspect_run shows "
+                        "(<program>-result-<16 hex of its digest>); a digest "
+                        "is citable in a decision, never an argument."
+                    ),
+                ) from exc
             raise ContractError(
                 f"unknown {label} ID {key!r}; {detail}"
             ) from exc
@@ -13515,10 +17701,17 @@ def _collect_json_violations(
     if isinstance(value, str) and schema.get("pattern"):
         pattern = str(schema["pattern"])
         if re.fullmatch(pattern, value) is None:
-            findings.append(
+            finding = (
                 f"tool argument {name} is {_offending_text(value)}, which "
                 f"does not match the required pattern {pattern}"
             )
+            if re.fullmatch(r"[0-9a-f]{64}", value):
+                finding += (
+                    "; that is a content digest, and a result is opened by "
+                    f"its registered id <program>-result-{value[:16]}, which "
+                    "the workspace record and inspect_run show"
+                )
+            findings.append(finding)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if "minimum" in schema and value < float(schema["minimum"]):
             findings.append(

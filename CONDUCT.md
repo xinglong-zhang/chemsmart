@@ -87,6 +87,21 @@ reachability from the model is measured by a direct probe; a check the
 host already normalises away is not a gate and gets no sentence. A gate
 earned by a live loss names that loss in a comment.
 
+A refusal is a first-class output, and writing one is a design act.
+Measured over one round: the agent met 470 refusals, retried the
+refused tool in 60% of them, recovered within the session in 82%, and
+opened a guide in 2% -- the refusal message, not the guide, is where
+the model is taught. Three routes changed this round because a refusal
+named them. So a refusal states the invariant it protects and, where a
+legal route exists, names it; it does not script the science that
+follows. And it is never the mechanism by which an unexpected result
+is discarded: what contradicts an expectation is delivered as itself,
+and a refusal that would bury a finding is a defect in the refusal, not
+a fact about the finding. The live tension to watch is the quarantine
+of a result typed ``failed``: its numbers are exactly where inversion
+transition states and other surprises live, and today only the anomaly
+receipt carries them.
+
 ## 3. How large a change may be
 
 - One general commit per defect or affordance, at the smallest layer
@@ -104,6 +119,62 @@ earned by a live loss names that loss in a comment.
 - After every change: the fast suite with its exit code checked, then
   `ruff check chemsmart tests`, `black`, `isort`, and the docs linters as
   fixed points.
+- Before a window is issued, the witness bank runs green: small probes
+  of connected paths, program to artifact to selector to operation to
+  claim, each derived from a loss this laboratory actually paid for and
+  run through the public tool surface over archived evidence with no
+  provider and no engine. A composition discovered inside a
+  twelve-hour chemistry run is a composition nobody tested; the seal
+  records the bank's report digest. The bank names the tree it actually
+  imported: it once read the code under test from one clone and
+  reported the harness of another, which is the class of defect it
+  exists to catch, in the instrument that catches it. A new repair adds
+  its witness, and the witness is shown red on the tree before the
+  repair and green after -- a witness that was never red witnesses
+  nothing, and one that constructs its own intermediate state witnesses
+  nothing either: drive the public entry point and let the host build
+  the state. A repair is proven on the path it was built for. An
+  independent adversarial audit of the round's own implementation earns
+  its cost: the first one found a blocking defect, two disconnected
+  wires and three readers disagreeing about one state; the second found
+  two more blocking defects over a green suite and a green bank; and an
+  independent *scientific* review by a different model, asked to judge
+  the round against the charter's values rather than its commits, found
+  five more -- including an authority bypass in which
+  ``--initial-decision deny`` launched an engine, and a defect the
+  previous audit's own repair had introduced hours earlier. Three
+  reviewers, three kinds of eye, and the round's own author found none
+  of the fifteen.
+  Both audits reported one pattern, and it is now a thing to look for
+  by name: **the mechanism is right where it is computed and
+  unconnected where it is consumed.** A projection that removes
+  something needs a reader for what it removed -- subtracting a
+  verified refusal was correct and nothing read the difference, so the
+  refusal bought `achieved`. Two projections cannot each subtract the
+  other's facts; one must inherit explicitly. A value the host resolves
+  and then discards leaves a boolean nothing can audit. And in four of
+  five findings the test or witness that should have caught it built by
+  hand the exact state production fails to produce, which is why a
+  witness drives the public entry point and a test that asserts on
+  `inspect.getsource` is deleted on sight. One test went further and
+  *asserted the defect*, so read what a failing test was pinning before
+  changing the code to satisfy it. Two more rules earned by the third
+  review: **an explanation string never confers authority** -- a
+  mapping that describes both admitted and refused things must not be
+  the thing that grants them -- and **a record's existence is not a
+  grant**; a gate that asks whether state exists is asking the wrong
+  question when the invariant is whether a human decided. A fourth
+  review, asked to treat two live defects as probes rather than patch
+  requests, found a third blocking defect and a laundering channel
+  cheaper than the one the round had just closed -- so **use a defect
+  as a probe, not a ticket**: ask what class it belongs to and where
+  else that class lives, because the two lines it points at are rarely
+  the whole of it. Two more rules it earned: a name rebound inside a
+  branch of a long loop corrupts everything read after it, and it is
+  mechanically detectable; and **surviving an error and preserving what
+  the error interrupted are two different properties** -- a handler
+  that returns before the projection keeps the process and loses the
+  science.
 - A behavioural change to the Agent is followed by a sealed live
   observation on chemically different tasks. N runs are N observations;
   a rate lives inside one contiguous window; a weak run is never
@@ -117,6 +188,21 @@ earned by a live loss names that loss in a comment.
 - Errors are reported as loudly as wins, in the first section. An
   inferred mechanism reported as fact is corrected in place.
 - An insight is registered in the memory ledger the day it is read.
+- A session-ending mechanism is named by replaying the session's public
+  transcript on the commit that ran it, never inferred from the stream;
+  the same replay on the repaired tree is the repair's first probe.
+- Two host organs that answer one question call one function; a
+  frontier that admits what a review refuses is a defect in whichever
+  organ grew alone.
+- A literature constant is registered only from a source text read in
+  the session, and its provenance names what was read; a value recalled
+  from memory is not registered, however plausible, and a value whose
+  primary text could not be read is absent by name.
+- When a test disagrees with the host, the physics is checked before
+  the code: a planar triatomic is Cs and never C1, a triatomic with
+  equal bonds is C2v about its bisector however it is tilted, and a
+  uniform shift of every heavy atom is a translation that alignment
+  removes. Two failing tests in one day were wrong tests.
 - A planted gem is checked to survive the optimiser before issue, a
   planted false gem is checked to exist, and the task text never asks
   for the observation the change under test is meant to elicit (the

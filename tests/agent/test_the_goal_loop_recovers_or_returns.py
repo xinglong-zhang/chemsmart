@@ -105,9 +105,11 @@ def _engine_stream(
     shutil.copy(build_dir / "events.jsonl", target / "events.jsonl")
 
 
-def _loop(tmp_path, *, sessions, executes, calls=6, max_revisions=5):
+def _loop(
+    tmp_path, *, sessions, executes, calls=6, max_revisions=5, excursions=0
+):
     workspace = tmp_path / "ws"
-    workspace.mkdir(exist_ok=True)
+    workspace.mkdir(parents=True, exist_ok=True)
     session_iter = iter(sessions)
     execute_iter = iter(executes)
 
@@ -125,7 +127,9 @@ def _loop(tmp_path, *, sessions, executes, calls=6, max_revisions=5):
     return run_goal_loop(
         task="the goal task",
         workspace=workspace,
-        execution_envelope_file=_envelope_file(tmp_path, calls),
+        execution_envelope_file=_envelope_file(
+            tmp_path, calls, excursions=excursions
+        ),
         goal_id="goal-t1",
         granted_by="claude-owner-delegated-reviewer",
         max_revisions=max_revisions,
@@ -211,13 +215,17 @@ def test_every_cycle_sees_the_goal_terms(tmp_path):
     first, second = contexts
     assert first["schema_version"] == "chemsmart.goal-wake-context.v1"
     assert first["budgets"] == {
+        "binding_line": (
+            "nearest exhausted: engine calls 6 of 6 remaining (100%)"
+        ),
         "engine_calls_remaining": 6,
         "wall_seconds_remaining": 7200.0,
         "revisions_remaining": 1,
+        "excursion_calls_remaining": 0,
     }
     assert first["previous_run"] == ""
     assert first["trajectory"] == ()
-    assert "typed refusal" in first["authority"]
+    assert "unreachable_observable_ids" in first["authority"]
     assert "attempt to refute" in first["authority"]
     assert first["deliverables"] == {
         "delivered_quantity_ids": (),
@@ -227,11 +235,20 @@ def test_every_cycle_sees_the_goal_terms(tmp_path):
         "stale_quantity_ids": (),
         "unclaimed_output_ids": (),
         "undelivered_declared_observable_ids": (),
+        # The ninth gap (2026-09-09): a number delivered under its id
+        # can still miss the precision the task asked for, and the wake
+        # names that too, so the next action follows the gap.
+        "unresolved_requirement_ids": (),
+        "sufficiency": (),
         "flagged_quantity_ids": (),
+        "failed_source_quantity_ids": (),
+        "characterised_source_quantity_ids": (),
+        "uncharacterised_source_quantity_ids": (),
+        "expectation_rows": (),
     }
     assert second["previous_run"] == "goals/goal-t1/runs/cycle-1"
     assert second["previous_run_outcome"]
-    assert "typed refusal" in second["authority"]
+    assert "unreachable_observable_ids" in second["authority"]
     assert "attempt to refute" in second["authority"]
     # The wake states what the previous run's own stream delivered --
     # here an engine failure with no claims, so every list is empty but
@@ -251,8 +268,18 @@ def test_every_cycle_sees_the_goal_terms(tmp_path):
         # And what the host computed and no claim ever showed a reader.
         "unclaimed_output_ids",
         "undelivered_declared_observable_ids",
+        # And which requirement a delivered number has not answered
+        # yet, with the arithmetic behind that word.
+        "unresolved_requirement_ids",
+        "sufficiency",
         # And which delivered number stands on a result the host flagged.
         "flagged_quantity_ids",
+        # And which delivered number stands on a run that did not meet
+        # the promise it was launched under, checked or not.
+        "failed_source_quantity_ids",
+        "characterised_source_quantity_ids",
+        "uncharacterised_source_quantity_ids",
+        "expectation_rows",
     }
 
 
@@ -715,7 +742,16 @@ def test_the_wake_deliverables_come_from_the_previous_runs_stream(tmp_path):
         "stale_quantity_ids": (),
         "unclaimed_output_ids": (),
         "undelivered_declared_observable_ids": (),
+        # The ninth gap (2026-09-09): a number delivered under its id
+        # can still miss the precision the task asked for, and the wake
+        # names that too, so the next action follows the gap.
+        "unresolved_requirement_ids": (),
+        "sufficiency": (),
         "flagged_quantity_ids": (),
+        "failed_source_quantity_ids": (),
+        "characterised_source_quantity_ids": (),
+        "uncharacterised_source_quantity_ids": (),
+        "expectation_rows": (),
     }
 
 
@@ -1580,3 +1616,516 @@ def test_the_word_names_the_delivered_number_that_came_from_a_flagged_node(
     reasons = " ".join(settled["payload"]["reasons"])
     assert "geometry.heavy_atom_rmsd_ge_0.3" in reasons
     assert "delivered from the flagged result: gibbs-298" in reasons
+
+
+def _failed_source_rows(*, characterised: bool):
+    """A run whose delivered number was read off a node that missed its
+    promise, optionally with the host asked what that structure is."""
+
+    artifact = "7" * 64
+    rows = [
+        {
+            "kind": "program_result_verified",
+            "payload": {
+                "receipt_sha256": "b" * 64,
+                "node_id": "opt-a",
+                "record": {
+                    "state": "invalid",
+                    "output_artifacts": [{"sha256": artifact}],
+                },
+            },
+        },
+        {
+            "kind": "result_quantities_extracted",
+            "payload": {
+                "receipt_sha256": "e" * 64,
+                "artifact_sha256": artifact,
+                "status": "extracted",
+            },
+        },
+        {
+            "kind": "analysis_claims_recorded",
+            "payload": {
+                "receipt_sha256": "a1" + "a" * 62,
+                "status": "recorded",
+                "record": {
+                    "claims": (
+                        {
+                            "source_receipt_sha256": "e" * 64,
+                            "quantity_id": "barrier-kcal",
+                        },
+                    )
+                },
+            },
+        },
+        {
+            "kind": "analysis_completion_evaluated",
+            "payload": {
+                "receipt_sha256": "c1" + "c" * 62,
+                "status": "passed",
+                "limitation_output_ids": [],
+            },
+        },
+    ]
+    if characterised:
+        rows.insert(
+            1,
+            {
+                "kind": "stationary_point_characterised",
+                "payload": {
+                    "receipt_sha256": "d" * 64,
+                    "node_id": "opt-a",
+                    "order_claimed": 1,
+                    "record": {"result_artifact_sha256": artifact},
+                },
+            },
+        )
+    return rows
+
+
+def test_a_number_read_off_a_failed_node_is_named_by_the_settlement(tmp_path):
+    """Twenty-four archived saddles were readable all along and no
+    settlement ever said a delivered number came from one. The word says
+    it now, and says nothing about whether that was the right thing to
+    do."""
+
+    driver = _driver_after_run(
+        tmp_path,
+        calls=1,
+        failed=False,
+        rows=_failed_source_rows(characterised=False),
+    )
+    settled = driver.ledger.entries()[-1]
+    reasons = " ".join(settled["payload"]["reasons"])
+    assert settled["payload"]["state"] == "achieved"
+    assert "did not meet its promise, uncharacterised: barrier-kcal" in reasons
+
+
+def test_a_characterised_source_says_so_instead(tmp_path):
+    """With the host asked what the structure is, the same delivery reads
+    as a checked statement rather than an unexamined one."""
+
+    driver = _driver_after_run(
+        tmp_path,
+        calls=1,
+        failed=False,
+        rows=_failed_source_rows(characterised=True),
+    )
+    reasons = " ".join(driver.ledger.entries()[-1]["payload"]["reasons"])
+    assert "delivered from a characterised result: barrier-kcal" in reasons
+    assert "uncharacterised" not in reasons
+
+
+def test_a_denial_holds_when_the_first_cycle_only_read_results(tmp_path):
+    """A goal record's existence is not an execution grant.
+
+    An analysis-only first cycle creates the goal record in `_plan`
+    with an empty initial review, so a later cycle's first executable
+    review found `self.goal` already set, took the revision path, and
+    resolved its own review with decision="approve". The initial
+    decision was never consulted. Observed live before this repair:
+    `--initial-decision deny`, one engine partition launched, settled
+    `achieved`. The gate now reads the grant the human gave.
+    """
+
+    from chemsmart.agent.driver import run_goal_loop
+
+    analysis_only = [
+        {
+            "kind": "requested_observable_declared",
+            "payload": {
+                "observables": [
+                    {
+                        "observable_id": "dg_solv",
+                        "unit": "kJ/mol",
+                        "meaning": "solvation free energy",
+                        "dimension": [1, 0, 0, 0, 0, 0],
+                    }
+                ]
+            },
+        },
+        {
+            "kind": "result_quantities_extracted",
+            "payload": {"receipt_sha256": "e" * 64},
+        },
+        {
+            "kind": "analysis_claims_recorded",
+            "payload": {
+                "receipt_sha256": "3" * 64,
+                "record": {
+                    "claims": [
+                        {
+                            "claim_id": "q",
+                            "quantity_id": "q",
+                            "display_value": 1.0,
+                            "display_unit": "kJ/mol",
+                            "dimension": [1, 0, 0, 0, 0, 0],
+                            "source_receipt_sha256": "4" * 64,
+                        }
+                    ]
+                },
+            },
+        },
+        {"kind": "scientific_decision_recorded", "payload": {}},
+    ]
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True, exist_ok=True)
+    sessions = iter(
+        [
+            _planning_session(
+                "live-1", terminal="planned", wake_rows=analysis_only
+            ),
+            _planning_session(
+                "live-2", review=_review_payload(), wake_rows=analysis_only
+            ),
+            _planning_session(
+                "live-3", terminal="planned", wake_rows=analysis_only
+            ),
+        ]
+    )
+    executes = iter([_execute(tmp_path, failed=False, status="completed")])
+    decisions: list[str] = []
+    launched: list[str] = []
+
+    def plan_session(**kwargs):
+        return next(sessions)(workspace, kwargs)
+
+    def resolve_review(**kwargs):
+        decisions.append(str(kwargs.get("decision")))
+        return ("d" * 64, tmp_path / "bundle.json")
+
+    def execute_bundle(*, approval_file, workspace, run_directory):
+        launched.append(str(run_directory))
+        return next(executes)(run_directory)
+
+    result = run_goal_loop(
+        task="the goal task",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path, 6),
+        goal_id="goal-t1",
+        granted_by="claude-owner-delegated-reviewer",
+        max_revisions=3,
+        plan_session=plan_session,
+        resolve_review=resolve_review,
+        execute_bundle=execute_bundle,
+        initial_decision="deny",
+    )
+
+    assert result.settlement == "returned_to_human"
+    assert decisions == []
+    assert launched == []
+
+
+def test_a_typed_error_still_records_what_the_cycle_delivered(tmp_path):
+    """Surviving an error and preserving what it interrupted differ.
+
+    SUFFICIENCY-2's session recorded 57 claims, 11 declarations, a
+    sufficiency assessment and a scientific decision, then hit a red
+    completion gate on its terminal event. `_typed_error_settlement`
+    caught it and the goal settled -- and the ledger held one line and
+    the workspace record none, because the projection runs after the
+    planning session returns and the error returned first. The evidence
+    was never destroyed; it was made unreachable, which is the same
+    thing to every later reader.
+    """
+
+    import json as _json
+
+    from chemsmart.agent._contracts import ContractError
+    from chemsmart.agent.driver import run_goal_loop
+
+    rows = [
+        {
+            "kind": "requested_observable_declared",
+            "payload": {
+                "observables": [
+                    {
+                        "observable_id": "dg_solv",
+                        "unit": "kJ/mol",
+                        "meaning": "solvation free energy",
+                        "dimension": [1, 0, 0, 0, 0, 0],
+                    }
+                ]
+            },
+        },
+        {
+            "kind": "analysis_claims_recorded",
+            "payload": {
+                "receipt_sha256": "3" * 64,
+                "record": {
+                    "claims": [
+                        {
+                            "claim_id": "dg_solv",
+                            "quantity_id": "dg_solv",
+                            "display_value": 1.0,
+                            "display_unit": "kJ/mol",
+                            "dimension": [1, 0, 0, 0, 0, 0],
+                            "source_receipt_sha256": "4" * 64,
+                        }
+                    ]
+                },
+            },
+        },
+    ]
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    def plan_session(**kwargs):
+        _write_session_stream(workspace, "live-1", rows)
+        raise ContractError("a required completion gate is red")
+
+    result = run_goal_loop(
+        task="the goal task",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path, 6),
+        goal_id="goal-t1",
+        granted_by="claude-owner-delegated-reviewer",
+        max_revisions=3,
+        plan_session=plan_session,
+        resolve_review=lambda **kw: ("d" * 64, tmp_path / "bundle.json"),
+        execute_bundle=lambda **kw: None,
+    )
+    assert result.settlement == "returned_to_human"
+
+    ledger = (
+        workspace / ".chemsmart-agent" / "goals" / "goal-t1" / "ledger.jsonl"
+    )
+    kinds = [
+        _json.loads(line)["kind"]
+        for line in ledger.read_text(encoding="utf-8").splitlines()
+    ]
+    # A ledger holding only its own settlement is a malformed story.
+    assert "goal_created" in kinds
+    assert "observables_declared" in kinds
+
+    record = workspace / ".chemsmart-agent" / "workspace-record.jsonl"
+    claims = [
+        _json.loads(line)
+        for line in record.read_text(encoding="utf-8").splitlines()
+        if _json.loads(line).get("kind") == "claim"
+    ]
+    assert [row["claim_id"] for row in claims] == ["dg_solv"]
+
+
+def test_a_re_woken_cycle_records_what_it_delivered(tmp_path):
+    """The one cycle the mechanism exists to produce was the one lost.
+
+    A cycle that re-wakes returned before the projection, so its
+    delivery never reached the record. SUFFICIENCY-3 lost 26 rows that
+    way, including its own `attested` assessment -- and had its next
+    cycle delivered anything else, the goal-grain join would have
+    fallen back to a staler, worse row from two cycles earlier.
+    """
+
+    import json as _json
+
+    rows = [
+        {
+            "kind": "requested_observable_declared",
+            "payload": {
+                "observables": [
+                    {
+                        "observable_id": "dg_solv",
+                        "unit": "kJ/mol",
+                        "meaning": "solvation free energy",
+                        "dimension": [1, 0, 0, 0, 0, 0],
+                        "required_tolerance": 2.0,
+                        "tolerance_basis": "the author asked for 2 kJ/mol",
+                    }
+                ]
+            },
+        },
+        {
+            "kind": "analysis_claims_recorded",
+            "payload": {
+                "receipt_sha256": "3" * 64,
+                "record": {
+                    "claims": [
+                        {
+                            "claim_id": "dg_solv",
+                            "quantity_id": "dg_solv",
+                            "display_value": 1.0,
+                            "display_unit": "kJ/mol",
+                            "dimension": [1, 0, 0, 0, 0, 0],
+                            "source_receipt_sha256": "4" * 64,
+                            "uncertainty": 1.0,
+                            "uncertainty_basis": "asserted",
+                        }
+                    ]
+                },
+                "sufficiency": [
+                    {
+                        "observable_id": "dg_solv",
+                        "unit": "kJ/mol",
+                        "required_tolerance": 2.0,
+                        "uncertainty": 1.0,
+                        "uncertainty_basis": "asserted",
+                        "uncertainty_evidence_backed": False,
+                        "meets_tolerance": True,
+                        "state": "attested",
+                    }
+                ],
+            },
+        },
+        {"kind": "scientific_decision_recorded", "payload": {}},
+    ]
+    result = _loop(
+        tmp_path,
+        sessions=[
+            _planning_session("live-1", terminal="planned", wake_rows=rows),
+            _planning_session("live-2", terminal="planned", wake_rows=rows),
+            _planning_session("live-3", terminal="planned", wake_rows=rows),
+        ],
+        executes=[],
+        max_revisions=3,
+    )
+    assert result.settlement
+
+    record = tmp_path / "ws" / ".chemsmart-agent" / "workspace-record.jsonl"
+    claims = [
+        _json.loads(line)
+        for line in record.read_text(encoding="utf-8").splitlines()
+        if _json.loads(line).get("kind") == "claim"
+    ]
+    # The re-woken cycle's own delivery, and its assessment, are on the
+    # record: one row per cycle that delivered, and each cycle recorded
+    # once rather than once per path that projects.
+    cycles = sorted(row["cycle"] for row in claims)
+    assert cycles == sorted(set(cycles))
+    assert len(cycles) > 1, "the re-woken cycle projected nothing"
+    assert {row["claim_id"] for row in claims} == {"dg_solv"}
+    assert all(row["sufficiency"]["state"] == "attested" for row in claims)
+
+
+def test_a_transport_loss_does_not_block_the_requirement_wake(tmp_path):
+    """The previous cycle's failure report belongs to the previous cycle.
+
+    `self.failure_report` is set when a wake opens and was never
+    cleared, so the guard in `_rewake` that reads it blocked every later
+    wake unconditionally. A12 taught the *ledger* scan to ignore a
+    transport continuation and left this reader, two lines above it,
+    asking the same question by different means. Observed live:
+    SUFFICIENCY-4 arm A lost cycle 1 to four inter-event timeouts,
+    delivered an `attested` requirement at cycle 2, and settled with
+    forty engine calls and every revision unspent -- so the arm that
+    was supposed to receive the sufficiency consequence never did, and
+    the window was void.
+    """
+
+    import json as _json
+
+    from chemsmart.agent.driver import run_goal_loop
+    from chemsmart.agent.terminal_states import (
+        PROVIDER_TRANSPORT_TERMINAL_REASON,
+    )
+
+    declared = {
+        "kind": "requested_observable_declared",
+        "payload": {
+            "observables": [
+                {
+                    "observable_id": "dg_solv",
+                    "unit": "kJ/mol",
+                    "meaning": "solvation free energy",
+                    "dimension": [1, 0, 0, 0, 0, 0],
+                    "required_tolerance": 2.0,
+                    "tolerance_basis": "the author asked for 2 kJ/mol",
+                }
+            ]
+        },
+    }
+    attested = [
+        declared,
+        {
+            "kind": "analysis_claims_recorded",
+            "payload": {
+                "receipt_sha256": "3" * 64,
+                "record": {
+                    "claims": [
+                        {
+                            "claim_id": "dg_solv",
+                            "quantity_id": "dg_solv",
+                            "display_value": 1.0,
+                            "display_unit": "kJ/mol",
+                            "dimension": [1, 0, 0, 0, 0, 0],
+                            "source_receipt_sha256": "4" * 64,
+                            "uncertainty": 1.0,
+                            "uncertainty_basis": "asserted",
+                        }
+                    ]
+                },
+                "sufficiency": [
+                    {
+                        "observable_id": "dg_solv",
+                        "unit": "kJ/mol",
+                        "required_tolerance": 2.0,
+                        "uncertainty": 1.0,
+                        "uncertainty_basis": "asserted",
+                        "uncertainty_evidence_backed": False,
+                        "meets_tolerance": True,
+                        "state": "attested",
+                    }
+                ],
+            },
+        },
+        {"kind": "scientific_decision_recorded", "payload": {}},
+    ]
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True, exist_ok=True)
+    sessions = iter(
+        [
+            _planning_session(
+                "live-1",
+                terminal="failed",
+                wake_rows=[
+                    declared,
+                    {
+                        "kind": "runtime_terminated",
+                        "payload": {
+                            "reason": PROVIDER_TRANSPORT_TERMINAL_REASON,
+                            "terminal_state": "failed",
+                        },
+                    },
+                ],
+            ),
+        ]
+        + [
+            _planning_session(
+                f"live-{index}", terminal="planned", wake_rows=attested
+            )
+            for index in range(2, 6)
+        ]
+    )
+    run_goal_loop(
+        task="the goal task",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path, 6),
+        goal_id="goal-t1",
+        granted_by="claude-owner-delegated-reviewer",
+        max_revisions=5,
+        plan_session=lambda **kwargs: next(sessions)(workspace, kwargs),
+        resolve_review=lambda **kwargs: ("d" * 64, tmp_path / "b.json"),
+        execute_bundle=lambda **kwargs: None,
+    )
+    gates = [
+        (
+            (_json.loads(line)["payload"].get("failure_report") or {}).get(
+                "gate"
+            ),
+            _json.loads(line)["payload"].get("transport_continuation"),
+        )
+        for line in (
+            workspace
+            / ".chemsmart-agent"
+            / "goals"
+            / "goal-t1"
+            / "ledger.jsonl"
+        )
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if _json.loads(line)["kind"] == "rewake_opened"
+    ]
+    assert ("goal.cycle_delivers_or_returns", True) in gates
+    assert any(
+        gate == "goal.requirement_is_resolved" for gate, _ in gates
+    ), f"the requirement wake never fired: {gates}"

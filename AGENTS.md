@@ -147,12 +147,43 @@ executor runs the chain and renders a completed-analysis report. The model
 never writes those numbers; interpretation and the recorded scientific
 decision remain a session act.
 
+A plan's own acceptance criteria reach the numbers that stand on them.
+A ``scientific_validation`` node judges the producers its inputs
+descend from, and a claim whose producer closure includes one of those
+producers is named in the completion when that criterion did not hold;
+the completion turns partial and the settlement carries the word. The
+join is read from the approved plan, so it costs the model no new
+field. It is never a refusal and never a silent drop: the number stays
+delivered and the reader is told which criterion it stands under,
+because a criterion that would bury a finding is a defect in the
+criterion.
+
 ``compose_molecular_arrangement`` places two identity-bound geometry
 artifacts into one arrangement at an explicit atomic contact. The host owns
 the placement mathematics and the composed bytes with full parent lineage;
 the model owns the fragment, contact, and distance choices, must bind the
 arrangement's charge and multiplicity explicitly, and the consuming stage is
 a new workflow for review.
+
+A molecule may enter that the workspace never held. Every other
+geometry origin requires the workspace to already contain it -- a
+supplied file, a database record, a previous result, or a derivation,
+composition, edit or append of one of those -- so a question needing a
+reference computed at the session's own level, a calibration standard,
+or a literature comparison had no route. The model names a public
+identifier (a name, a numeric CID, or a SMILES string) and nothing
+else; the host fetches the record through the same library call the
+human CLI uses, owns the bytes, and records the identifier as lineage.
+No coordinate is model-authored. What arrives is a depositor's
+conformer carrying that depositor's symmetry rather than a relaxed
+structure, so the point-group estimate is stated as for any other
+origin, and it binds no electronic state: charge and multiplicity are
+bound explicitly afterwards and the consuming stage is a new workflow
+for review. A lookup that fails is a typed refusal naming its cause,
+because the network, the identifier, and the two-dimensional record
+that will not convert to one three-dimensional molecule are different
+failures with different routes -- many coordination compounds are
+stored as separate components and no retry changes that.
 
 ``derive_molecular_species`` is its mirror: it takes an ordered subset of one
 identity-bound parent's atoms, which is the single operation underneath
@@ -310,6 +341,28 @@ the consuming stage is a new workflow, and the displayed review
 renders every hop of a built geometry's chain root-first, because the
 hop that decides what the molecule is can sit at the root.
 
+A source geometry carries its builder's symmetry, and an exactly
+symmetric start converges to the nearest stationary point of that
+symmetry, which is a saddle whenever the minimum lies lower: six live
+saddles in two goals came from an idealised D4h start and from methyl
+rotors appended at torsions of exactly 60, 180 and 300 degrees. The
+host therefore states, on every identity binding and every compiled
+node, a point-group estimate found within 0.01 Å from the molecule's
+own atoms (and within 0.1 Å when the two differ) together with the
+count of appended atoms placed on the exact 60° torsion lattice or at
+exactly idealised angles; the estimate rides the review beside the
+node's CLI operation as a host observation and never as a refusal.
+``break_symmetry`` is the fourth starting-structure operation: it
+perturbs every atom of an identity-bound geometry by a seed and an
+amplitude the model names, so the same request gives the same bytes,
+removes the net translation, rescales so no atom exceeds the
+amplitude, and records the largest step it actually took and the
+point-group estimate before and after; refusals are structural only
+and an amplitude is never refused on merit. It is declared and
+previewable; no approved workflow has yet consumed a perturbed
+geometry, and this release does not describe it as completed Agent
+execution.
+
 This surface is qualified through completed Agent executions in which
 requested-versus-relaxed is the delivered observable: an
 N-methylacetamide rotamer study whose cis form is reachable only by a
@@ -383,7 +436,19 @@ selection can be deliberate. A family says nothing about standard state,
 and that limit is stated where a session reads it: the purpose phrase
 says which entry belongs beside which, and where a finished composed
 value is registered it says to prefer it. Values never reach the model;
-a choice is made from a name, a unit, a family and a use.
+a choice is made from a name, a unit, a family and a use. A constant is
+registered only from a source text read at registration: the ferrocene
+reference in acetonitrile is three entries -- the computed absolute
+Fc+/Fc potential with its source's stated accuracy, whose purpose
+prefers a ferrocene pair computed at the same level, and the
+experimental construction the same source benchmarked against, as one
+family that adds to it -- and the table value against the aqueous
+standard hydrogen electrode is deliberately absent because no primary
+text for it was read, which the registered entry says. A wavenumber
+becomes an energy only through ``wavenumber_to_energy`` and its
+inverse, which own h·c·N_A; an exchange coupling declared in cm⁻¹ and
+claimed in kcal/mol is restated by the host in the expectation row and
+the completion miss names the two dimensions and the route.
 
 Two refusals move to where the human decides rather than where the
 engine finds out. An electronic state that no molecule can have — a
@@ -563,6 +628,21 @@ Product support never asserts that an engine is installed on the current host.
 Every real operation must pass its normal environment probe and appear in the
 human review before it can run.
 
+Where the active server profile names an ORCA executable, preflight also
+runs ORCA's own input check on the materialised input that the safe
+preview retained by digest: a bounded probe launch on the controller,
+stopped the moment ORCA's ``INPUT FILE`` banner appears or a 20 s cap is
+reached, never inside a scheduler allocation, minting a typed receipt --
+passed, aborted, or not run, with ORCA's own lines -- that rides an
+``input_check_probed`` event marked uncharged, joins the node's
+observations on the review, and is counted in the wake. It is never an
+engine call, because engine calls derive from execution receipts alone,
+and it never refuses: a green preview is ChemSmart's compile and the
+probe is ORCA's check, its word is an observation beside the node, and
+the decision stays the human's. Two live cycles had died at that check
+under green previews, one per rule ORCA states in its first tenth of a
+second.
+
 Runtime orchestration is provider-neutral. This release contains registered
 adapters for Alibaba Token Plan, DeepSeek, and OpenAI; an Anthropic profile
 is accepted as configuration and refuses execution until its adapter is
@@ -619,6 +699,32 @@ line and marks each excursion node, the tag rides the reviewed plan and
 the one-shot bundle, and no second approval exists. The default stays
 zero until a sealed observation decides otherwise.
 
+A recorded result is evidence wherever its bytes still hash to the
+digest the record carries. At bootstrap the host registers every result
+the workspace record and the goal run streams name -- in this workspace
+or in an earlier window's -- under its content-derived id,
+``<program>-result-<sha16>``, admitting a file only when it still hashes
+to the recorded digest, parsing nothing at registration, and marking a
+result the run recorded as not valid inspectable-only. The run's
+terminal record and the rendered workspace record name each result by
+that id beside its digest, so the handle the host prints is a handle its
+tools accept; a reading tool refused an id names the nearest registered
+ones and says that a 64-hex value is a digest, not an id.
+
+The execution review is built inside the planning loop before the
+runtime seals: a refusal is an event before the terminal one and the
+session ends ``planned`` with its reason, and a cycle-1 session that
+ends without a review or a plan is woken once more with that reason
+rather than returned. The readiness frontier asks the review's own
+resolver, without binding, before it calls a node deferred, so the
+frontier never says approvable over a review that will refuse; and a
+deferred node whose producer is itself deferred resolves by the same
+rule through its chain, because neutral opt, cation opt, single point is
+ordinary science. Engine wall time is the engine's: a receipt stamps when
+the process finished and, separately, when the host finished evaluating
+it, and host seconds are recorded per node and per run and shown beside
+the engine lines, charged to none of them.
+
 Every executed result is judged on one program-neutral rule beside its
 program's own validator: the approved jobtype promises a count of
 imaginary modes -- one for a transition-state search, none for a minimum
@@ -631,11 +737,25 @@ and recorded as an observation beside the bound multiplicity, never as
 a gate; a deviation of 0.2 or more from S(S+1) is an anomaly
 observation carrying its number, ``spin.s2_deviation_ge_0.2``, named
 for the measurement and not for an expectation, because a requested
-broken-symmetry state is not a surprise. That observation had been
+broken-symmetry state is not a surprise. A saddle whose one imaginary
+mode lies inside 50 cm-1 -- past the convention and still far from the
+hundreds of wavenumbers a forming bond carries -- is an anomaly
+observation carrying its number, ``stationary_point.imaginary_mode_lt_50``,
+because a rule at a threshold certifies noise on the far side of it: a
+live search relaxed to a van der Waals complex at -22.8 cm-1 and the
+word was ``validated``. The observation stands beside the verdict and
+the session, not the host, says what the mode is. That observation had been
 empty on every ORCA and Gaussian result until this round -- the readers
 expose the table as a property and the host called it as a method -- so
 a charter sentence with no consumer is treated as an unverified claim
-until something reads it. Capability is measured as
+until something reads it. Per-atom spin populations, Mulliken and
+Löwdin, are declared for ORCA ``sp``, ``opt``, ``ts`` and ``freq``:
+ORCA prints them in the second column of the same table as the
+charges, the reader had parsed and discarded that column for years,
+and a session that asked where a radical cation's spin lives was
+answered by nothing while the number sat in its output. They are read
+by column position, checked against 2S to 0.05, and refused for a
+closed-shell result rather than served as zeros. Capability is measured as
 filled coverage cells rather than CLI verbs: the capability receipt
 names, per program and jobtype, which typed axes -- electronic,
 geometry, identity, spin, thermochemistry -- are readable or validated,
@@ -692,6 +812,220 @@ with, so an expectation re-declared after the physics exists is kept
 as the first and the reply says so; a declared sign the declared band
 excludes is refused where it is written, because a zero has no sign.
 
+The wake also carries what the goal has already attempted:
+``approaches_tried`` names every node that did not deliver with the
+sensor numbers that typed it, and every alternative a previous cycle's
+decision rejected, verbatim, because the session's own sentence carries
+the mechanism. Nothing new is asked of the model; the host keeps words
+the model already wrote where the next cycle reads them, since a cycle
+that cannot see a diagnosis re-seeds the approach the diagnosis
+condemned. Repeating an attempted approach is activity and eliminating
+an explanation is progress, and a deliberate repeat says what is
+different.
+
+A goal whose first cycle answered from results already registered has
+displayed no executable partition, and therefore has no molecular scope
+to preserve. It also holds no execution grant: a goal record's
+existence is not evidence that a human approved anything, and the
+initial decision is read from the grant rather than from the record, so
+a denial holds over a goal whose first cycle only read results. Its
+first executable revision **establishes** the identity
+and the conditions rather than being compared against nothing, and
+every revision after that is held to what was established: drift and a
+change of solvent both still return to the human. The check is not
+waived, and because the goal record is digest-bound and never
+rewritten, the binding is a durable ledger entry that any later process
+reads. Without this a goal that began by reading results could never
+launch its first calculation.
+
+A declaration may carry ``role: diagnostic``: the session's own
+prediction about the route -- which stationary point a search reaches,
+which spin state lies lower -- with a ``failure_update_rule`` naming what
+its falsification changes and an optional ``method_resolution`` below
+which the method cannot resolve sign or band. A diagnostic is joined by
+id and scored like a requested expectation and is never a deliverable:
+undelivered it is no limitation and holds nothing open, diverged it
+mints the falsified-expectation observation the settlement word
+carries, and a delivered value inside the resolution prints
+indeterminate rather than grading noise either way. When a wake carries
+a repair menu, the recorded decision may carry
+``menu_route_dispositions`` -- taken, rejected, or deferred per offered
+route, with the mechanism and the receipts it rests on -- verified
+against that menu and the host's own receipts and never graded; the next
+wake shows them beside the menu it re-offers, so a cycle inherits the
+argument and not only the list.
+
+A declared observable is delivered when a claim carries its id **and**
+its dimension, and one predicate says so for every reader: the
+completion gate that certifies a run and the settlement that reads the
+goal's whole record call the same function, because they disagreed and
+the settlement won -- six observables declared in one unit were counted
+delivered by claims in another, and a goal settled achieved over a
+contract its own completion record called unmet. A claim row in the
+workspace record therefore carries the dimension beside the value, and
+a row written before this carried it resolves its display unit through
+the same unit table the analysis layer uses; a unit the table does not
+know satisfies nothing. Because a declaration is a contract about
+meaning rather than about the answer, a mistaken unit is repaired by
+declaring the corrected observable and naming the one it retires
+(``supersedes_observable_id``), never by re-running physics: both stay
+on the record and the retired id stops being owed. What a supersession
+never corrects is how good the answer has to be, because the task set
+that: the replacement carries the retired tolerance, compared at the
+precision the session wrote it to, so a restatement in a corrected unit
+is admitted and a relabelled requirement is refused. Every obligation a
+claim delivers is assessed, under either id the gate credits it by; a
+delivered tolerance-bearing declaration with nothing said about it is
+``unstated`` rather than silent.
+
+Delivery is not sufficiency, and the question's own precision is
+part of the contract. A declaration may restate the tolerance the task
+states, with the words that fix it, and a claim may state the
+uncertainty it attributes to its own number together with whether that
+uncertainty was measured here, inferred from a cited receipt, or
+asserted. One function judges the pair and every reader calls it. A
+requirement is **met** when the uncertainty is inside the tolerance and
+rests on evidence the host resolved with no component left
+unquantified; **attested** when it is inside the tolerance on the
+session's own word, or leaves a term unquantified; **short** when the
+uncertainty exceeds the tolerance; and **unstated** when a claim on a
+tolerance-bearing observable says nothing, because silence is not
+sufficiency. Only **met** discharges the requirement. Nothing here
+checks a value and nothing grades chemistry -- it is arithmetic on
+numbers the model wrote and the host copied, and on provenance the host
+resolved.
+
+An estimate cannot predate its results; its estimator can. A planned
+claim carries no uncertainty of its own -- a plan pre-declaring the
+number it expects is a prediction wearing an assessment's clothes --
+but it may name the analysis output that will compute the spread, and
+the host evaluates that output in the same provider-free walk and
+copies the number into the claim, which is therefore ``measured`` and
+cites the output it came from. The executor names the number and never
+writes it, exactly as for the claimed value. An estimator built from a
+coefficient of the session's own is recorded as carrying that
+coefficient, and the assessment says so rather than refusing it: what
+a spread is -- a difference, a range, an absolute value over
+quantities the host computed -- is the session's claim to make and the
+reader's to weigh. A claim
+planned without an estimator still arrives ``unstated`` and the goal
+reopens once to assess it, at no engine call.
+
+A word that names evidence must name the evidence, and only a
+magnitude the host can check discharges an obligation. ``measured``
+names the receipt **and the quantity within it**; the host reads that
+quantity, converts it, and either checks the number the session stated
+or -- when the session states none -- copies it in, exactly as it
+copies the value being claimed. Binding a number to its numerical
+source is provenance and the host owns it; judging whether that number
+estimates the relevant scientific error is chemistry and stays the
+session's. ``inferred`` carries the receipt or registered constant a
+judgement rests on and attests rather than discharges, because the
+inference is the session's.
+
+What the host checks about a ``measured`` magnitude is exactly this:
+that the citation resolves to a receipt this host minted or a constant
+its registry owns, that the named quantity exists inside it, that its
+dimension converts to the claim's display unit, and that the number
+the session stated is the number that is there -- or, when the session
+states none, that the host copies it in. What the host does **not**
+decide is whether that magnitude estimates the relevant scientific
+error, whether a spread of exactly zero is credible, whether one
+receipt is enough to compare, or whether a coefficient constructed
+from operators is worth less than one written down. Those are
+scientific judgements and they stay the session's, answerable to the
+human who reads the claim.
+
+Three refusals used to stand there and each is now a report. A
+composed magnitude no longer has to descend from more than one
+measurement, and no longer has to be non-zero, and a chain naming a
+number the session supplied no longer fails to resolve. Every one of
+those checks was computable and none was defensible: a spread of
+exactly zero is a real observation where three treatments agree to
+printed precision or a symmetry enforces an equality, a variance over
+many samples inside one receipt compares plenty, and the operation
+vocabulary is rational-complete over any non-zero quantity -- so the
+authored-constant rule read spelling rather than value, and the
+coefficients it rejected included the ones a definition fixes, the
+electron count of a one-electron couple among them. None of the three
+prevented what it was aimed at, because an equivalent spelling walks
+past all of them. So the host reports what it saw -- a chain carrying a
+coefficient of the session's own, a spread over a single receipt, a
+magnitude of zero -- as named observations beside the assessment, on
+the row the session, the workspace record and the settlement all read,
+and it refuses none of them. The obligation can be discharged by such
+a number and the reader of that word is told what it rests on. Where
+the host already holds a number the model would otherwise type -- the
+electron count of a couple is the difference of the two states' own
+bound charges -- deriving it keeps the whole chain the host's, and the
+schema names that route beside ``asserted``. The host resolves every
+reference -- a component's exactly as the claim's own -- and follows an
+expression to its roots by reading the expression's own receipt, which
+names every number a node contributed that no measurement produced --
+a literal, a scale factor, an exponent -- so a value the session
+supplied is recorded as the session's however many receipts sit above
+it. One part of ChemSmart never calls a contribution model-authored
+while another treats its result as wholly the host's. What it resolves it keeps: the reference, the observations and the components
+ride inside the claim's own digest, so a reader can ask which receipt
+backed the number that discharged the contract, and re-claiming with a
+corrected budget mints a second receipt rather than colliding with the
+first. ``asserted`` carries none and is never penalised: it is
+often the honest number, and a session that declines a small measured
+spread for a larger judged one is doing the better science. It simply
+does not discharge an evidence obligation alone, which is ``attested``:
+the number stands, the requirement stays open.
+
+A session may set out the terms its uncertainty is made of. Each
+component is a sentence of the session's own, a magnitude, and one
+provenance; the host reads provenance and never meaning, never combines
+components, imposes no vocabulary of error kinds, and takes the total
+the session states -- how they add is the science and the science is
+not the host's. A term that cannot be quantified is named rather than
+omitted, and holds the requirement open, which is what such a term
+means.
+
+A requirement left unresolved while budget remains re-opens the goal
+once, and the wake names the route that fits the state it found: assess
+what came back, back an assertion with the receipt behind it or measure
+the term you could not, or narrow the term you named. A decision
+question is a quantity with a tolerance and needs no special field: a
+session that must know whether a number clears a threshold declares
+that margin as its own observable, which travels through the ordinary
+machinery with the provenance a hand-typed threshold never had. Two of
+the routes cost no engine call, and a state without a route is a
+refusal rather than a fallback.
+
+The obligation is to *resolve* a requirement and never to meet one. A
+precision no method in the envelope can reach is the third way an
+observable is unreachable -- the one where the producer exists and the
+number was computed -- and it settles ``unreachable_from_evidence``,
+which is a deliverable. An undelivered observable the session refused
+and a delivered observable whose precision it refused reach that word
+by one rule, because the host verified both. The host verifies what it
+can: that the observable declared a tolerance and that its assessment
+stands open on this goal's own record. It never claims that no calculation could reach
+the precision, and refusing is no shortcut past claiming: a number
+nobody has assessed cannot have its precision refused. A requirement
+still open when the budget is spent returns the goal to the human
+naming it, the same word a claim the session's own decision doubts
+already carries; the numbers stay delivered and only the word changes.
+
+The required precision, its source, and its *absence* are displayed in
+the one human decision. A session restates the tolerance the task
+states and the host freezes it, and that only means anything if the
+human sees the restatement -- and an undeclared precision, on a task
+that states one in plain words, is the cheapest and least visible
+escape from the contract.
+
+A prediction is a prediction only if it predates the physics. A
+declaration made while this task already has extraction,
+thermochemistry, expression or claim receipts is recorded
+``declared_after_evidence`` and shown that way beside the delivered
+value, in the expectation row and in the settlement's provenance.
+Nothing is refused and no verdict moves -- being right after the fact
+is still being right, and a diverged post-hoc row is still a result --
+but a restatement is never displayed as a pre-registration.
+
 A goal settles into one typed state. It is achieved when the host
 completion gate certified the delivery and the host recorded nothing it
 could not explain; achieved with observations when the certified
@@ -712,17 +1046,82 @@ typed refusal is a deliverable, not a failure; exhausted when the
 granted budgets are spent; and returned to the human otherwise, with the
 reason naming what is missing. A completion receipt states the required
 outputs it delivered without, so a full delivery and a delivery with
-stated limitations never share one word.
+stated limitations never share one word. A session ends on the word its
+own certificate supports: ``complete`` is admitted only over green
+receipts, so a partial completion ends the session as the delivery with
+limitations it is, and the settlement reads it from the receipts rather
+than meeting it as an exception. Every route that ends a cycle --
+including a typed error -- records what that cycle delivered before the
+goal settles, because evidence that survives on disk and reaches no
+projection is unreachable to every later reader, which is the same as
+lost.
+
+Delivery is judged at the goal grain and refusal is host-verified. A
+declared observable is delivered when any cycle of the goal claimed it
+by id, read from the host-written workspace record, so a claim made at
+cycle two survives settlement at cycle four; the re-wake fires when
+declared observables remain undelivered while budget remains, never on
+the presence of some other claim. A session that cannot reach a
+declared observable refuses it in ``record_scientific_decision``'s
+``unreachable_observable_ids``, naming the producer it would need and
+the receipts that show the gap; the host verifies what it can -- a
+selector no envelope program declares, or a blocked node in the
+session's own plan whose output is the observable -- and only a
+verified refusal settles ``unreachable_from_evidence``; an unverified
+one returns the goal to the human naming it. The declaration tool says
+at declaration when a meaning names a quantity kind no envelope program
+declares, with the two routes, and refuses nothing. Under a goal the
+planning prompt states the goal's authority in place of the sentence
+that execution is not exposed, the budget block leads with the line
+nearest exhaustion and with how many nodes like the slowest one this
+goal ran the engine wall remaining fits, and ``inspect_run`` resolves
+the run id the outcome record names. When a goal session is about to
+end with declared observables undelivered while budget remains, the
+host says so once, as an informational notice that demands nothing, and
+allows one further turn (owner ruling, 2026-09-06). Every routed
+refusal reaches the durable stream as a failure report -- gate,
+invariant, diagnosis, route, cost -- and the refusals sessions actually
+met are routed. A scan whose extremum lies on the grid's edge, a
+result that walked from the goal's original bound geometry even when
+its immediate input was a reached or displaced structure, and a
+re-promoted project that drops a field an earlier promotion of the
+same program carried are recorded as observations with their numbers.
 
 Every executed node settles into one typed terminal record drawn from a
 shared program-neutral vocabulary, carrying the program-native findings
 and structured facts beneath it; the verbatim engine text is attached
 evidence, never the interface. A result that failed is nameable and
-inspectable with its terminal record, and is never admitted for quantity
-extraction or geometry handoff. The human may cancel execution at any
+inspectable with its terminal record, and its printed quantities stay
+readable: a search that converged onto the wrong kind of stationary
+point terminated normally and its energy, its modes and its
+thermochemistry are exactly where a finding lives. What it may never do
+is pass itself off as something it is not. It is never admitted for
+geometry handoff, it never satisfies a producer edge, and a completion
+that carries a number standing on it is never certified in silence: the
+partial completion names that node, and the delivery names the
+quantities that descend from it. A session may state the order the
+structure actually meets and the host checks that statement against the
+program's own printed frequencies, minting a characterisation receipt
+beside the failure rather than in place of it; the node keeps its
+terminal state, and a claim standing on the characterised result says
+so. The structure such a run reached is likewise carried forward by an
+explicit act and never by an edge: an optimisation stopped by its
+iteration limit or by the clock did not fail to move, and restarting
+from the coordinates it began at repeats the same path. The host reads
+that structure through the same selector plane every quantity uses,
+owns the bytes, and records which result they came from, the ending
+this workspace recorded for that run, and whether the program
+terminated normally. Nothing about the source moves: it still satisfies
+no producer edge and is still refused for geometry handoff. What comes
+back is a starting structure with no electronic state bound — what the
+structure is depends on the question asked next — so charge and
+multiplicity are bound explicitly afterwards and the consuming stage is
+a new workflow for review. The human may cancel execution at any
 node boundary; the withdrawal is a typed terminal fact on every node it
 stopped, never an absence, and an engine already launched is never
-killed by it — timeouts and signals own that.
+killed by it — timeouts and signals own that. The stop file reaches the
+executor through every entry point that runs one, so the withdrawal is
+exercisable and not merely promised.
 
 The terminal UI is a view and controller for this chain. It is not a second
 permission engine. Internal receipts and content digests preserve provenance

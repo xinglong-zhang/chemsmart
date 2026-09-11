@@ -83,6 +83,7 @@ def derive_trusted_thermochemistry(
     alpha: int = 4,
     use_weighted_mass: bool = False,
     frequency_scale_factor: float = 1.0,
+    reaction_coordinate_mode: int = 0,
 ) -> ThermochemistryReceiptV1:
     """Evaluate shared RRHO or quasi-harmonic thermochemistry."""
 
@@ -103,6 +104,7 @@ def derive_trusted_thermochemistry(
         concentration_mol_l=concentration_mol_l,
         entropy_method=entropy_method,
         entropy_cutoff_cm1=entropy_cutoff_cm1,
+        reaction_coordinate_mode=int(reaction_coordinate_mode or 0),
         enthalpy_cutoff_cm1=enthalpy_cutoff_cm1,
         alpha=alpha,
         use_weighted_mass=use_weighted_mass,

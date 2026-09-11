@@ -65,8 +65,47 @@ TOOLCHAIN_REFUSAL_CAUSES = frozenset(
         "expression_read_order",
         "extraction_unit_dimension",
         "expression_unit_dimension",
+        "required_output_has_no_producer",
+        "claim_output_unrendered",
     }
 )
+
+
+#: The invariant each typed cause protects, stated once. A refusal that
+#: types its cause is a failure report (gate, invariant, diagnosis,
+#: route, cost) and rides the tool rejection as ``failure_report``; in
+#: NOVEL-3 the reports rendered 0 of 31 times because the causes typed
+#: here never reached that field (2026-09-05).
+TOOLCHAIN_REFUSAL_INVARIANTS: Mapping[str, str] = {
+    "expression_shape": (
+        "an expression node takes the input count and shape its "
+        "operation's arity table admits."
+    ),
+    "unregistered_constant": (
+        "a literature constant is selected by a registered name the host "
+        "resolves; a value the model types is a literal, never a constant."
+    ),
+    "expression_read_order": (
+        "expression nodes evaluate in the order given; a node reads only "
+        "what an earlier node or an analysis input provides."
+    ),
+    "extraction_unit_dimension": (
+        "an extracted selector carries the dimension its reader declares; "
+        "a unit of another dimension names a different quantity."
+    ),
+    "expression_unit_dimension": (
+        "arithmetic across the analysis DAG is dimension-checked; an "
+        "operation combines only what its dimension rules admit."
+    ),
+    "required_output_has_no_producer": (
+        "every required output id is produced by some node of the plan, or "
+        "declared blocked by a node naming the producer it would need."
+    ),
+    "claim_output_unrendered": (
+        "a claim node renders only what one of its inputs carries; a claim "
+        "output no input carries would be a number the host never computed."
+    ),
+}
 
 
 class ScientificToolchainContractError(ContractError):
@@ -97,6 +136,32 @@ class ScientificToolchainContractError(ContractError):
         super().__init__(message)
         self.cause = cause
         self.next_legal_route = next_legal_route
+        if cause:
+            self.failure_report = {
+                "gate": cause,
+                "invariant": TOOLCHAIN_REFUSAL_INVARIANTS[cause],
+                "diagnosis": message,
+                "route": next_legal_route
+                or "no route is named; the diagnosis says what the plan "
+                "must change",
+                "cost": "no engine call",
+            }
+        else:
+            # Sixty-six admission refusals type no cause; a session still
+            # meets them as failure reports, under one general gate, so
+            # the stream counts them and the reply carries the shape
+            # (REACH-1: 21 of 26 refusals were bare).
+            self.failure_report = {
+                "gate": "plan.admission",
+                "invariant": (
+                    "a scientific workflow is admitted only when every "
+                    "node, edge, output and unit resolves against the "
+                    "host's typed vocabulary."
+                ),
+                "diagnosis": message,
+                "route": "change the plan as the diagnosis says.",
+                "cost": "no engine call",
+            }
 
 
 def _identifier(value: str, field: str) -> str:
@@ -198,6 +263,17 @@ class AnalysisInputIntentV1:
     source_kind: str
     producer_node_id: str
     producer_output_id: str
+    #: For a claim, the analysis output that computes this number's
+    #: uncertainty. An estimate cannot be known before the results
+    #: exist; its *estimator* can, so a plan may name the expression
+    #: that will produce the spread and the host evaluates it after
+    #: execution like any other. The claim it renders is `measured` and
+    #: cites that output by id, which is host-checkable by
+    #: construction -- the number is the host's own. Without it an
+    #: executed delivery arrives `unstated` and costs a further cycle
+    #: to assess (owner ruling, 2026-09-09).
+    uncertainty_producer_node_id: str = ""
+    uncertainty_producer_output_id: str = ""
 
     def __post_init__(self) -> None:
         _identifier(self.input_id, "analysis input_id")
@@ -207,6 +283,23 @@ class AnalysisInputIntentV1:
             )
         _identifier(self.producer_node_id, "analysis producer_node_id")
         _identifier(self.producer_output_id, "analysis producer_output_id")
+        named = bool(self.uncertainty_producer_node_id) + bool(
+            self.uncertainty_producer_output_id
+        )
+        if named == 1:
+            raise ScientificToolchainContractError(
+                "a planned uncertainty names both its producer node and "
+                "its output, or neither"
+            )
+        if named:
+            _identifier(
+                self.uncertainty_producer_node_id,
+                "uncertainty_producer_node_id",
+            )
+            _identifier(
+                self.uncertainty_producer_output_id,
+                "uncertainty_producer_output_id",
+            )
 
 
 @dataclass(frozen=True)
@@ -409,6 +502,37 @@ class AnalysisNodeIntentV1:
                 "it can never render a claim; bind each claimed value as an "
                 "input naming its producer node and output"
             )
+        if (
+            self.analysis_kind == "claim_rendering"
+            and self.support_state == "planned"
+        ):
+            # The executor names each claim after the input that binds
+            # it, and a claim node's outputs are the claims it renders,
+            # so an output id no input carries is a claim nothing will
+            # ever render under that name. A live plan declared the six
+            # declared observable ids as this node's outputs and bound
+            # them under six short input labels; the plan-time gate
+            # accepted the outputs, the executor rendered the labels,
+            # and the completion gate found none of the six (NOVEL-2
+            # po2, 2026-09-04). Provable from the node alone.
+            input_ids = {item.input_id for item in self.inputs}
+            output_ids = {item.output_id for item in self.outputs}
+            unrendered = sorted(output_ids.difference(input_ids))
+            if unrendered:
+                raise ScientificToolchainContractError(
+                    f"claim rendering node {self.node_id!r} declares "
+                    f"output(s) {unrendered} that no input of the node "
+                    "carries; a claim is rendered under its input_id, "
+                    "so name each input by the id the claim must carry "
+                    "-- for a declared observable, its observable_id "
+                    "verbatim -- and declare that same id as the output",
+                    cause="claim_output_unrendered",
+                    next_legal_route=(
+                        "rename the claim node's input_id to the id the "
+                        "claim must carry and keep the output_id equal to "
+                        "it; no engine call"
+                    ),
+                )
         if self.analysis_kind == "result_extraction":
             # The executor already refuses an extraction output that names no
             # selector, and it is right to: with more than one selector the
@@ -1177,8 +1301,29 @@ def build_scientific_toolchain_plan(
     required = tuple(sorted(set(required_output_ids)))
     missing = sorted(set(required).difference(all_output_ids))
     if missing:
+        # A refusal names the route. A live session declared the ground
+        # state's multiplicity as a required output, met this refusal
+        # bare, and built the label itself from min, typed all_equal
+        # verdicts and a one-hot sum -- correctly, and at the cost of a
+        # plan (NOVEL-2 ino1, 2026-09-04); coordinate_at_minimum was in
+        # the vocabulary and nothing said so.
         raise ScientificToolchainContractError(
-            f"required output(s) have no producer: {missing}"
+            f"required output(s) have no producer: {missing}; every "
+            "required output id is an output_id of some node in this "
+            "plan",
+            cause="required_output_has_no_producer",
+            next_legal_route=(
+                "declare each missing id as an output of the node that "
+                "computes it -- for a declared observable, the claim "
+                "node's input_id and output_id, verbatim; for a label "
+                "such as which state lies lowest, an expression node "
+                "using coordinate_at_minimum over (energies, labels), or "
+                "min with all_equal verdicts; for an observable no "
+                "producer can deliver, a blocked_unsupported analysis node "
+                "whose output_id is that id, with blocked_reason naming the "
+                "producer it would need, so the refusal is typed; no "
+                "engine call"
+            ),
         )
     observable_rows = tuple(
         sorted(
@@ -1209,6 +1354,19 @@ def build_scientific_toolchain_plan(
     return ScientificToolchainPlanV1(
         **body, plan_sha256=canonical_sha256(body)
     )
+
+
+#: The tool a session calls to execute each analysis kind. The frontier
+#: names it on every actionable analysis node, so "actionable" never
+#: reads as "awaiting approval"; under a goal wake the host executes an
+#: analysis-only plan itself and these nodes arrive completed.
+ANALYSIS_NEXT_TOOL: Mapping[str, str] = {
+    "result_extraction": "extract_result_quantities",
+    "thermochemistry": "derive_thermochemistry",
+    "quantity_expression": "evaluate_quantity_expression",
+    "scientific_validation": "evaluate_scientific_validation",
+    "claim_rendering": "record_analysis_claims",
+}
 
 
 def project_scientific_toolchain_frontier(
@@ -1338,10 +1496,17 @@ def project_scientific_toolchain_frontier(
                 reason = f"await {named}"
             else:
                 state = "actionable"
+                # Name who acts. A woken session read "execute the
+                # registered analysis operation" on fourteen thermochemistry
+                # nodes, took it for a stage awaiting approval, and stopped
+                # with every number in hand (NOVEL-2 po2, 2026-09-04). The
+                # host knows the tool each kind is executed with.
                 reason = (
-                    "evaluate the planned scientific validation"
-                    if node.analysis_kind == "scientific_validation"
-                    else "execute the registered analysis operation"
+                    "this session calls "
+                    + ANALYSIS_NEXT_TOOL.get(
+                        node.analysis_kind, "the registered analysis tool"
+                    )
+                    + " for this node"
                 )
         states[node_id] = state
         entry: dict[str, object] = {
@@ -1357,10 +1522,11 @@ def project_scientific_toolchain_frontier(
         if (
             node_id not in plan.calculation_node_ids
             and state == "actionable"
-            and analysis_by_id[node_id].analysis_kind
-            == "scientific_validation"
+            and analysis_by_id[node_id].analysis_kind in ANALYSIS_NEXT_TOOL
         ):
-            entry["next_tool"] = "evaluate_scientific_validation"
+            entry["next_tool"] = ANALYSIS_NEXT_TOOL[
+                analysis_by_id[node_id].analysis_kind
+            ]
         nodes.append(entry)
     return {
         "schema_version": "chemsmart.scientific-toolchain-frontier.v1",

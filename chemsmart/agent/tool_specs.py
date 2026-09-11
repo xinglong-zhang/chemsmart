@@ -252,6 +252,25 @@ def _legacy_tool_definitions(
             ),
         ),
         _tool(
+            "fetch_pubchem_geometry",
+            (
+                "Bring in a molecule this workspace does not hold, by name, "
+                "CID, or SMILES: you name the identifier, the host fetches "
+                "the record and owns the bytes. Use it for a molecule the "
+                "question needs and nobody supplied -- a reference computed "
+                "at your own level so its systematic cancels, a calibration "
+                "standard. What arrives is a depositor's conformer carrying "
+                "that depositor's symmetry, not a relaxed structure, and it "
+                "binds no electronic state: bind charge and multiplicity "
+                "explicitly, and the consuming stage is a new workflow."
+            ),
+            {
+                "artifact_id": _string(),
+                "identifier": _string(),
+            },
+            ("artifact_id", "identifier"),
+        ),
+        _tool(
             "bind_scientific_identity",
             (
                 "Bind an explicit charge and multiplicity to the exact host "
@@ -357,6 +376,20 @@ def _legacy_tool_definitions(
                         "angstrom."
                     ),
                 },
+                "fragment_b_atoms": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1},
+                    "minItems": 2,
+                    "description": (
+                        "1-based atoms of B all held at "
+                        "distance_angstrom from fragment_a_atom, and "
+                        "exempt from the clash floor for that pair "
+                        "only. For a contact spread over several atoms "
+                        "at once. Include fragment_b_atom. The set must "
+                        "lie on a circle and be coplanar; the receipt "
+                        "reports the distance achieved per atom."
+                    ),
+                },
                 "fragment_a_atom_2": {
                     "type": "integer",
                     "minimum": 1,
@@ -451,6 +484,68 @@ def _legacy_tool_definitions(
                 },
             },
             ("derived_artifact_id", "parent_artifact_id"),
+        ),
+        _tool(
+            "break_symmetry",
+            (
+                "Perturb every atom of an identity-bound geometry by a "
+                "seed you name, by at most the amplitude you name, so an "
+                "exactly symmetric starting structure can relax away from "
+                "the saddle its symmetry pins it to. The host draws the "
+                "displacement deterministically from the seed, removes the "
+                "net translation, records the largest step it actually "
+                "took beside the one asked, and states the point-group "
+                "estimate before and after. Atom count, order and formula "
+                "are unchanged, so "
+                "parent atom i is perturbed atom i. The result is a "
+                "STARTING structure with no electronic state bound; bind "
+                "charge and multiplicity afterwards, and let the "
+                "optimisation that consumes it decide whether the step "
+                "escaped the saddle -- an amplitude is never refused on "
+                "merit. Refusals are structural: a non-integer seed, an "
+                "amplitude outside (0, 0.5] Å, a parent with no bound "
+                "identity. An amplitude of 0.02-0.05 Å is a perturbation; "
+                "0.2 Å and above is a different starting guess."
+            ),
+            {
+                "perturbed_artifact_id": {
+                    **_public_identifier(),
+                    "description": (
+                        "Workspace-unique identifier for the perturbed "
+                        "geometry artifact."
+                    ),
+                },
+                "input_artifact_id": {
+                    **_string(),
+                    "description": (
+                        "Identity-bound geometry_xyz artifact to perturb."
+                    ),
+                },
+                "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": (
+                        "Integer seed of the displacement; the same seed "
+                        "and amplitude on the same parent give the same "
+                        "bytes, and a second seed is a second perturbation."
+                    ),
+                },
+                "amplitude_angstrom": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 0.5,
+                    "description": (
+                        "Largest displacement any atom may take, in "
+                        "angstrom; the receipt records the largest it did."
+                    ),
+                },
+            },
+            (
+                "perturbed_artifact_id",
+                "input_artifact_id",
+                "seed",
+                "amplitude_angstrom",
+            ),
         ),
         _tool(
             "edit_molecular_geometry",
@@ -548,6 +643,113 @@ def _legacy_tool_definitions(
                 "moving_side_atom",
                 "target_value",
             ),
+        ),
+        _tool(
+            "bind_reached_geometry",
+            (
+                "Carry the structure a run actually reached into a new "
+                "geometry input. This is the ordinary answer to an "
+                "optimisation that ran out of iterations or wall time: a "
+                "fresh start from the original coordinates repeats the "
+                "same path, while the reached structure is many steps "
+                "further down the surface. The host reads the geometry "
+                "through the same selector plane every quantity uses, "
+                "writes the bytes itself, and records which result it "
+                "came from, what ending this workspace recorded for that "
+                "run, and whether the program terminated normally. It "
+                "binds no electronic state -- what the structure is "
+                "depends on the question you ask next -- so bind charge "
+                "and multiplicity explicitly afterwards, and the stage "
+                "that optimises it is a new workflow needing its own "
+                "review. Nothing here upgrades the source: a node that "
+                "failed still satisfies no producer edge, and this "
+                "geometry is a starting structure, graded by the "
+                "optimisation that consumes it."
+            ),
+            {
+                "artifact_id": {
+                    **_public_identifier(),
+                    "description": (
+                        "The result whose reached geometry you want, "
+                        "already registered in this workspace."
+                    ),
+                },
+                "reached_artifact_id": {
+                    **_public_identifier(),
+                    "description": (
+                        "The id to give the new geometry artifact."
+                    ),
+                },
+                "program": {
+                    **_string(),
+                    "description": (
+                        "The program that wrote the result; its geometry "
+                        "is read with that program's reader."
+                    ),
+                },
+            },
+            ("artifact_id", "reached_artifact_id", "program"),
+        ),
+        _tool(
+            "characterise_stationary_point",
+            (
+                "State what kind of stationary point a completed result "
+                "actually is, and have the host check that statement "
+                "against the frequencies the program itself printed. Reach "
+                "for this when a search converged onto something other "
+                "than what it promised and you judge the structure it "
+                "found to be worth reporting: a minimum search that lands "
+                "on a first-order saddle has found a transition state, and "
+                "its energy and thermochemistry are readable like any "
+                "other result's. The node keeps its own verdict -- the "
+                "promise it was launched under was still not met -- and "
+                "this receipt stands beside that, so a number you deliver "
+                "from those bytes can say which structure it belongs to. "
+                "The host refuses an order the printed modes do not "
+                "support, counting a mode as imaginary below -20 cm^-1, "
+                "the same convention the validator uses. What the "
+                "structure means is yours to say."
+            ),
+            {
+                "result_artifact_id": {
+                    **_public_identifier(),
+                    "description": (
+                        "The completed, frequency-bearing result to "
+                        "characterise."
+                    ),
+                },
+                "program": {
+                    **_string(),
+                    "description": (
+                        "The program that wrote the result; its "
+                        "frequencies are read with that program's reader."
+                    ),
+                },
+                "order_claimed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": (
+                        "The number of imaginary modes you say this "
+                        "structure has: 0 for a minimum, 1 for a "
+                        "transition state, more for a higher-order saddle."
+                    ),
+                },
+                "node_id": {
+                    **_string(),
+                    "description": (
+                        "Optional: the workflow node whose run produced "
+                        "this result, when you know it."
+                    ),
+                },
+                "anomaly_receipt_sha256": {
+                    **_string(),
+                    "description": (
+                        "Optional: the anomaly observation this answers, "
+                        "by its receipt digest."
+                    ),
+                },
+            },
+            ("result_artifact_id", "program", "order_claimed"),
         ),
         _tool(
             "displace_along_vibrational_mode",
@@ -700,8 +902,6 @@ def _legacy_tool_definitions(
                 },
                 "dihedral_degrees": {
                     "type": "number",
-                    "minimum": -180.0,
-                    "maximum": 180.0,
                     "description": (
                         "Torsion about the anchor-angle bond, in degrees, "
                         "signed by the IUPAC convention."
@@ -864,9 +1064,11 @@ def _legacy_tool_definitions(
                 "typed act, before planning: an identifier, the unit the "
                 "answer will be reported in, and one sentence of meaning "
                 "each. The host verifies the unit parses; the completion "
-                "gate later requires a delivered claim of matching "
-                "dimension for every declared observable -- kind and "
-                "unit are checked, values never are -- and an "
+                "gate later requires, for every declared observable, a "
+                "delivered claim carrying its id -- as the claim's "
+                "claim_id, or as the quantity id of the receipt it stands "
+                "on -- in the declared dimension; values are never "
+                "checked -- and an "
                 "undelivered declared observable is named in the "
                 "completion receipt like a plan output the chain could "
                 "not fulfil. A declaration cannot be rebound to a "
@@ -876,11 +1078,13 @@ def _legacy_tool_definitions(
                 "a reader sees both, and grades neither. To print them "
                 "beside each other the host must know which claim "
                 "answers which observable, and it joins them on the "
-                "claim's ``claim_id``: give the claim that answers an "
-                "observable that observable's own id as its claim_id. "
-                "Without that it falls back to matching the dimension, "
-                "which cannot separate two energies or three potentials "
-                "-- the ordinary shape of a comparison -- and the row "
+                "claim's ``claim_id`` or on the receipt quantity id the "
+                "claim stands on: give the claim that answers an "
+                "observable that observable's own id as its claim_id "
+                "(in a planned claim node, as the input_id that binds "
+                "it). A dimension is never used to guess: two energies "
+                "or three potentials -- the ordinary shape of a "
+                "comparison -- cannot be told apart by it, and the row "
                 "reports the expectation with no number beside it "
                 "rather than guess."
             ),
@@ -969,6 +1173,99 @@ def _legacy_tool_definitions(
                                     "measured fact). An expectation "
                                     "without a reason is a coin flip "
                                     "and is refused."
+                                ),
+                            },
+                            "supersedes_observable_id": {
+                                **_public_identifier(),
+                                "description": (
+                                    "Optional: an earlier declaration of "
+                                    "yours whose unit was wrong, retired by "
+                                    "this one. Both stay on the record and "
+                                    "the retired id stops being owed."
+                                ),
+                            },
+                            "role": {
+                                "type": "string",
+                                "enum": ["requested", "diagnostic"],
+                                "description": (
+                                    "Optional, default requested. A "
+                                    "diagnostic is your own prediction "
+                                    "about the route -- which stationary "
+                                    "point a search reaches, which spin "
+                                    "state lies lower -- scored like any "
+                                    "expectation and never owed: "
+                                    "undelivered is no limitation, "
+                                    "diverged is an observation the word "
+                                    "carries."
+                                ),
+                            },
+                            "failure_update_rule": {
+                                **_string(),
+                                "description": (
+                                    "Required with role diagnostic: what "
+                                    "you change about the route if this "
+                                    "is falsified. A prediction whose "
+                                    "failure changes nothing is not a "
+                                    "diagnostic."
+                                ),
+                            },
+                            "required_tolerance": {
+                                "type": "number",
+                                "minimum": 0,
+                                "description": (
+                                    "The error the task says it can "
+                                    "tolerate, in this unit -- 'good to "
+                                    "about 0.2 V' is 0.2. Restate it here "
+                                    "when the task states one; the host "
+                                    "compares it with the uncertainty your "
+                                    "claim states, and never with the "
+                                    "value. It is frozen at this "
+                                    "declaration."
+                                ),
+                            },
+                            "tolerance_basis": {
+                                **_string(),
+                                "description": (
+                                    "Required with required_tolerance: the "
+                                    "task's own words that fix it, or that "
+                                    "the task fixes none and this is your "
+                                    "reading of what the answer must "
+                                    "support."
+                                ),
+                            },
+                            "tolerance_origin": {
+                                "type": "string",
+                                "enum": ["task", "session"],
+                                "description": (
+                                    "State it with required_tolerance. "
+                                    "'task' means you restated a precision "
+                                    "the task states; 'session' means the "
+                                    "task fixes none for this quantity and "
+                                    "the tolerance is your own reading of "
+                                    "what the decision needs. Both are "
+                                    "legitimate -- declaring the margin a "
+                                    "decision actually turns on is a route "
+                                    "the host offers -- and neither is "
+                                    "refused, and omitting it is recorded "
+                                    "as 'unstated' rather than refused. It "
+                                    "is asked because a "
+                                    "reader cannot otherwise tell a "
+                                    "requirement the requester set from "
+                                    "one you set, and a session tolerance "
+                                    "chosen after the number is known is "
+                                    "a different thing from a restated "
+                                    "one."
+                                ),
+                            },
+                            "method_resolution": {
+                                "type": "number",
+                                "description": (
+                                    "Optional. A deadband on the delivered "
+                                    "magnitude: a value smaller than this "
+                                    "prints indeterminate instead of "
+                                    "agreeing or diverging. It is not your "
+                                    "answer's uncertainty -- that goes on "
+                                    "the claim."
                                 ),
                             },
                         },
@@ -1149,6 +1446,26 @@ def _legacy_tool_definitions(
                                     "properties": {
                                         "input_id": _string(),
                                         "producer_output_id": _string(),
+                                        "uncertainty_producer_output_id": {
+                                            **_string(),
+                                            "description": (
+                                                "On a claim: the analysis "
+                                                "output that computes this "
+                                                "number's uncertainty. You "
+                                                "cannot know an estimate "
+                                                "before the results exist, "
+                                                "but you can plan its "
+                                                "estimator; the host "
+                                                "evaluates it after "
+                                                "execution and the claim "
+                                                "carries it as measured, "
+                                                "cited to that output. "
+                                                "Without one the delivery "
+                                                "states no uncertainty and "
+                                                "the goal reopens to assess "
+                                                "it."
+                                            ),
+                                        },
                                     },
                                     "required": [
                                         "input_id",
@@ -1293,6 +1610,73 @@ def _legacy_tool_definitions(
                 "diagnostics": {"type": "array", "items": _string()},
                 "stage_order": {"type": "array", "items": _string()},
                 "evidence_refs": {"type": "array", "items": _string()},
+                "unreachable_observable_ids": {
+                    "type": "array",
+                    "maxItems": 32,
+                    "description": (
+                        "The typed refusal: each declared observable this "
+                        "goal cannot deliver from admissible evidence, with "
+                        "the producer it would need and the receipts that "
+                        "show the gap. The host verifies what it can -- a "
+                        "selector no program in the envelope declares for "
+                        "the job type, or a blocked_unsupported analysis "
+                        "node in this session's plan whose output_id is the "
+                        "observable -- and only a verified refusal settles "
+                        "the goal unreachable_from_evidence; an unverified "
+                        "one returns to the human naming it. Never a "
+                        "shortcut past computing what can be computed."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "observable_id": _public_identifier(),
+                            "statement": _string(),
+                            "selector": _public_identifier(),
+                            "jobtype": _public_identifier(),
+                            "blocked_node_id": _public_identifier(),
+                            "receipt_sha256s": {
+                                "type": "array",
+                                "items": digest,
+                                "minItems": 1,
+                                "maxItems": 16,
+                            },
+                        },
+                        "required": [
+                            "observable_id",
+                            "statement",
+                            "receipt_sha256s",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "menu_route_dispositions": {
+                    "type": "array",
+                    "description": (
+                        "What you did with each route the wake's "
+                        "repair_menu offered -- taken, rejected or deferred "
+                        "-- with the mechanism and its receipts. The host "
+                        "verifies the route was offered and the receipts "
+                        "are its own, never the choice; the next wake shows "
+                        "them."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "route": _public_identifier(),
+                            "disposition": {
+                                "type": "string",
+                                "enum": ["taken", "rejected", "deferred"],
+                            },
+                            "reason": _string(),
+                            "receipt_sha256s": {
+                                "type": "array",
+                                "items": digest,
+                            },
+                        },
+                        "required": ["route", "disposition", "reason"],
+                        "additionalProperties": False,
+                    },
+                },
                 "postprocessing_receipt_sha256s": {
                     "type": "array",
                     "items": digest,
@@ -1406,8 +1790,8 @@ def _legacy_tool_definitions(
             "derive_thermochemistry",
             (
                 "Derive harmonic RRHO and, when requested, Grimme/Truhlar "
-                "quasi-harmonic thermochemistry from a trusted frequency result "
-                "using ChemSmart's common engine. A supplied concentration "
+                "quasi-harmonic thermochemistry from a trusted frequency "
+                "result. A supplied concentration "
                 "defines the translational standard state instead of pressure. "
                 "Grimme or Truhlar requires entropy_cutoff_cm1; an enthalpy "
                 "cutoff independently enables Head-Gordon qRRHO enthalpy. The "
@@ -1477,17 +1861,24 @@ def _legacy_tool_definitions(
                 "use_weighted_mass": {
                     "type": "boolean",
                     "description": (
-                        "Use natural-abundance weighted isotope masses; omitted "
-                        "means the backward-compatible most-abundant masses."
+                        "Use natural-abundance weighted isotope masses; "
+                        "omitted means most-abundant masses."
                     ),
                 },
                 "frequency_scale_factor": {
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "description": (
-                        "Positive multiplicative scale applied to every "
-                        "vibrational frequency before harmonic or "
-                        "quasi-harmonic thermochemistry; omitted means 1.0."
+                        "Positive scale applied to every vibrational "
+                        "frequency before thermochemistry; omitted is 1.0."
+                    ),
+                },
+                "reaction_coordinate_mode": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": (
+                        "1-based reaction-coordinate mode of a "
+                        "characterised saddle; omit for a minimum."
                     ),
                 },
             },
@@ -1605,6 +1996,166 @@ def _legacy_tool_definitions(
                             "display_unit": _unit_string(
                                 "Unit to display the bound quantity in."
                             ),
+                            "uncertainty": {
+                                "type": "number",
+                                "minimum": 0,
+                                "description": (
+                                    "The error you attribute to this "
+                                    "number, in its display unit: every "
+                                    "term you would state as a limitation, "
+                                    "together. State it whenever the "
+                                    "observable declared a "
+                                    "required_tolerance -- silence is not "
+                                    "sufficiency, and the host reads the "
+                                    "two together."
+                                ),
+                            },
+                            "uncertainty_basis": {
+                                "type": "string",
+                                "enum": [
+                                    "measured",
+                                    "inferred",
+                                    "asserted",
+                                ],
+                                "description": (
+                                    "Required with uncertainty. measured "
+                                    "or inferred name evidence and need "
+                                    "uncertainty_reference; asserted is "
+                                    "your judgement and takes none. An "
+                                    "assertion is never penalised and is "
+                                    "often the honest number, but it does "
+                                    "not on its own discharge a tolerance "
+                                    "the task set -- it routes you to "
+                                    "measure it, to show the decision does "
+                                    "not turn on it, or to say it cannot "
+                                    "be established here."
+                                ),
+                            },
+                            "uncertainty_reference": {
+                                **_string(),
+                                "description": (
+                                    "Required with basis measured or "
+                                    "inferred. For measured, "
+                                    "'<receipt_sha256>:<quantity_id>': the "
+                                    "host reads that quantity and checks "
+                                    "your number against it, as it copies "
+                                    "the value you claim. For inferred, the "
+                                    "receipt or registered constant your "
+                                    "judgement rests on. Only a magnitude "
+                                    "the host can check discharges a "
+                                    "tolerance. The host follows an "
+                                    "expression to its roots and reports "
+                                    "what it finds -- a coefficient of "
+                                    "yours in the chain, a spread over one "
+                                    "receipt, a magnitude of zero -- "
+                                    "beside the assessment, and refuses "
+                                    "none of them: whether such a number "
+                                    "is the right uncertainty for this "
+                                    "claim is yours to argue and the "
+                                    "reader's to judge."
+                                ),
+                            },
+                            "approximates": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "observable_id": _string(),
+                                    "relationship": _string(),
+                                    "basis": _string(),
+                                },
+                                "description": (
+                                    "State this when your number "
+                                    "approximates a declared observable "
+                                    "rather than being it -- a 0 K gap "
+                                    "for a Gibbs one. Name the id and "
+                                    "the relationship, in your words. "
+                                    "Never refused, still delivered; the "
+                                    "expectation row stops reading as an "
+                                    "exact match."
+                                ),
+                            },
+                            "uncertainty_combination": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "rule": _string(),
+                                    "input_meaning": _string(),
+                                    "coverage": _string(),
+                                    "dependence": _string(),
+                                },
+                                "description": (
+                                    "How you combined your components: "
+                                    "the rule, what its inputs mean, the "
+                                    "coverage the total claims, what you "
+                                    "assume about dependence. Copied and "
+                                    "never graded, but it rides the "
+                                    "verdict: the same components can "
+                                    "fall inside or outside one tolerance "
+                                    "on this choice alone."
+                                ),
+                            },
+                            "uncertainty_components": {
+                                "type": "array",
+                                "maxItems": 16,
+                                "description": (
+                                    "Optional: the terms your uncertainty "
+                                    "is made of, in your own words. The "
+                                    "host reads their provenance, never "
+                                    "their meaning, and never combines "
+                                    "them: how they add is your judgement "
+                                    "and the total is the one you state. "
+                                    "Name a term you cannot quantify "
+                                    "rather than omitting it -- it holds "
+                                    "the requirement open, which is what "
+                                    "such a term means."
+                                ),
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "meaning": {
+                                            **_string(),
+                                            "description": (
+                                                "What this term is, in one "
+                                                "sentence of your own."
+                                            ),
+                                        },
+                                        "magnitude": {
+                                            "type": "number",
+                                            "minimum": 0,
+                                            "description": (
+                                                "Its size in the display "
+                                                "unit; omit when "
+                                                "unquantified."
+                                            ),
+                                        },
+                                        "basis": {
+                                            "type": "string",
+                                            "enum": [
+                                                "measured",
+                                                "inferred",
+                                                "asserted",
+                                                "unquantified",
+                                            ],
+                                        },
+                                        "reference": {
+                                            **_string(),
+                                            "description": (
+                                                "Required with measured or "
+                                                "inferred: the receipt, or "
+                                                "'<receipt>:<quantity_id>' "
+                                                "to name the number itself. "
+                                                "The host resolves what you "
+                                                "name and never grades the "
+                                                "magnitude: how the terms "
+                                                "add, and at what coverage "
+                                                "each is stated, is yours."
+                                            ),
+                                        },
+                                    },
+                                    "required": ["meaning", "basis"],
+                                    "additionalProperties": False,
+                                },
+                            },
                         },
                         "required": [
                             "claim_id",
@@ -2367,9 +2918,14 @@ def _public_identifier(
         _IDENTIFIER_SPELLING_RULE
         if spelling_rule
         else (
-            "Lower-case identifier: a letter first, then letters, digits, "
-            "dots, dashes, underscores; case folded (the full spelling "
-            "rule is on plan_scientific_workflow.workflow_id)."
+            # The pattern below states the shape machine-readably on
+            # every one of these fields, require_identifier's refusal
+            # quotes the full rule when one is malformed, and the rule
+            # itself lives on plan_scientific_workflow.workflow_id. A
+            # prose restatement on all 46 of them, and then even a
+            # pointer to it, were paying 7.6 kB and 2.5 kB of a surface
+            # at its ceiling for what the schema already enforces.
+            "Lower-case id, case folded."
         )
     )
     if joins:
@@ -2796,6 +3352,21 @@ def _analysis_intent_node_schema(
                             "refused when planned, because the edge is "
                             "resolved against the producer's own list."
                         ),
+                        "uncertainty_producer_node_id": _string(),
+                        "uncertainty_producer_output_id": _describe_string(
+                            "On a claim_rendering input: the analysis "
+                            "output that computes this number's "
+                            "uncertainty, with its node in "
+                            "uncertainty_producer_node_id. You cannot "
+                            "know an estimate before the results exist, "
+                            "but you can plan its estimator -- a spread "
+                            "over methods, a conformer range -- and the "
+                            "host evaluates it in the same run and "
+                            "records the claim as measured, cited to "
+                            "that output. Leave it out and the delivery "
+                            "states no uncertainty, which reopens the "
+                            "goal to assess it."
+                        ),
                     },
                     "required": [
                         "input_id",
@@ -3202,17 +3773,9 @@ def _quantity_expression_node_schema(
                 "type": "number",
                 "exclusiveMinimum": 0,
                 "description": (
-                    "Method/protocol-derived positive exponent for a two-point "
-                    "SCF exponential, SCF inverse-power, or correlation "
-                    "inverse-power CBS limit. "
-                    "This is a number you supply, not one the host measured, "
-                    "so the receipt records it as model-authored and it is "
-                    "auditable as such. Supply it only when the protocol you "
-                    "are reproducing states it; when the protocol just says "
-                    "the energy was extrapolated exponentially and you have "
-                    "three successive cardinal numbers, prefer "
-                    "exponential_cbs_limit, which fits the decay from the "
-                    "data and introduces no constant of your own."
+                    "Positive exponent for a two-point CBS limit. You "
+                    "supply it, so the receipt records it as "
+                    "model-authored; the cbs guide says when to."
                 ),
             },
         },

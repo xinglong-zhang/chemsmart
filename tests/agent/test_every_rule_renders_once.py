@@ -66,12 +66,17 @@ def test_the_retired_sentences_are_gone():
 def test_wake_rules_render_in_the_wake_and_not_the_prompt():
     prompt = _system_prompt({})
     wake_text = (
-        driver._OBSERVABLE_RESTATEMENT_ASK
+        driver._GOAL_AUTHORITY
+        + driver._OBSERVABLE_RESTATEMENT_ASK
         + driver._ADVERSARIAL_CLOSE
         + driver._REFUSAL_AFFORDANCE
         + driver._RECOVERY_ROUTE
         + driver._DISPOSITION_BRANCH
+        + driver._APPROACHES_TRIED
+        + driver._MENU_DISPOSITIONS
         + driver._CLAIM_BY_ID
+        + driver._WORKSPACE_RECORD_RULE
+        + driver._EXCURSION_REPLICATION
     )
     for rule in rules_for("wake") + rules_for("wake:recovery"):
         assert rule.text.strip() in wake_text, rule.rule_id

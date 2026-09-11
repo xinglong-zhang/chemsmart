@@ -1961,6 +1961,14 @@ class ORCAFileMixin(FileMixin):
             relativistic=self.relativistic,
             scf_maxiter=self.scf_maxiter,
             scf_convergence=self.scf_convergence,
+            # The optimiser's own controls. The writer emits %geom MaxIter
+            # for every geometry-driving stage and nothing read it back,
+            # so the preview verifier compared a declared cap against None
+            # and refused a correct input; a session then deleted the cap
+            # it needed (NOVEL-3 ino3 on opt; REACH-1 po3 on ts). Readers
+            # without the property (an output) contribute None.
+            geom_maxiter=getattr(self, "geom_maxiter", None),
+            opt_convergence=getattr(self, "opt_convergence", None),
             reference=self.reference,
             frozen_core=self.frozen_core,
             frozen_core_electrons=self.frozen_core_electrons,

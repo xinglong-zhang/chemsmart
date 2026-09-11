@@ -842,6 +842,68 @@ def test_bounded_readiness_defers_exact_optimized_geometry_consumer(tmp_path):
         invocation.invocation_sha256: plan.plan_sha256
     }
 
+    # The frontier now asks the review's resolver before it calls a
+    # node deferred, so the host carries what the review reads: the
+    # draft's producer input, one project, one capability, one
+    # environment, and a root context with its geometry and identity.
+    root_context = host._command_contexts[invocation.invocation_sha256]
+    root_context.input_artifact = SimpleNamespace(
+        artifact_id="geometry.initial", sha256="c" * 64
+    )
+    root_context.scientific_identity = SimpleNamespace(
+        binding_sha256="b" * 64, charge=0, multiplicity=1
+    )
+    hess_capability = SimpleNamespace(
+        receipt_sha256="d" * 64,
+        status=SimpleNamespace(value="supported"),
+        query=SimpleNamespace(program="xtb", jobtype="hess", engine="cpu"),
+    )
+    hess_engine = SimpleNamespace(
+        program="xtb",
+        selected_engine="cpu",
+        state="resolved",
+        execution_ready=True,
+        capability_receipt_sha256=hess_capability.receipt_sha256,
+        program_binding_sha256="e" * 64,
+        environment_receipt_sha256="f" * 64,
+    )
+    host.workflow_drafts = {
+        "draft": SimpleNamespace(
+            workflow_id=plan.workflow_id,
+            nodes=(
+                SimpleNamespace(
+                    node_id="hess-optimized",
+                    project_role="project.hess",
+                    inputs=(
+                        SimpleNamespace(
+                            binding_id="geometry",
+                            artifact_class="geometry_xyz",
+                            producer_node_id="opt-initial",
+                            producer_output_id="optimized-geometry",
+                        ),
+                    ),
+                ),
+            ),
+        )
+    }
+    host.artifacts = {
+        "project.hess": SimpleNamespace(
+            artifact_id="project.hess", sha256="1" * 64
+        )
+    }
+    host.project_validations = {
+        "hess": SimpleNamespace(
+            project_artifact_id="project.hess",
+            project_sha256="1" * 64,
+            capability_receipt_sha256=hess_capability.receipt_sha256,
+            program="xtb",
+            jobtype="hess",
+            status="valid",
+        )
+    }
+    host.engine_bindings = {"hess": hess_engine}
+    host.capabilities = {hess_capability.receipt_sha256: hess_capability}
+    host.program_bindings = {"e" * 64: SimpleNamespace()}
     readiness = host._approval_readiness(plan)
 
     assert readiness["approvable"] is True

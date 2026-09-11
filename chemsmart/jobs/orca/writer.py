@@ -178,6 +178,7 @@ class ORCAInputWriter(InputWriter):
         self._write_mdci_block(f)
         self._write_elprop_block(f)
         self._write_qmmm_block(f)
+        self._write_geom_block(f)
         self._write_modred_block(f)
         self._write_hessian_block(f)
         self._write_irc_block(f)
@@ -354,6 +355,53 @@ class ORCAInputWriter(InputWriter):
         electrons = getattr(self.settings, "frozen_core_electrons", None)
         if electrons is not None:
             f.write(f"  NCore {int(electrons)}\n")
+        f.write("end\n")
+
+    def _other_writer_opens_geom(self):
+        """Whether another writer already opens ORCA's %geom block.
+
+        ORCA reads one %geom block, so the optimiser controls ride
+        inside whichever block opens rather than opening a second one.
+        The three writers that open it are named here, in one place, so
+        a fourth is a change at one site rather than four.
+        """
+        return bool(
+            getattr(self.settings, "modred", None)
+            or isinstance(self.settings, ORCATSJobSettings)
+            or getattr(self.job.molecule, "frozen_atoms", None)
+        )
+
+    def _write_geom_maxiter_line(self, f):
+        """Write the optimiser iteration cap inside an open %geom block.
+
+        MaxIter is not a route-line keyword, which an agent session
+        discovered the expensive way: told to "consider the optimiser
+        settings the project exposes" and finding none, it passed MAXITER
+        through additional_route_parameters, ORCA rejected the input, and
+        two engine calls died in a second (NOVEL-1 ino1, 2026-09-04).
+        ORCA's own default is max(3N, 60) steps, which a floppy complex
+        reaches while still descending.
+
+        Args:
+            f: File object to write to
+        """
+        geom_maxiter = getattr(self.settings, "geom_maxiter", None)
+        if geom_maxiter is not None:
+            f.write(f"  MaxIter {int(geom_maxiter)}\n")
+
+    def _write_geom_block(self, f):
+        """Open %geom for the optimiser controls when nothing else does.
+
+        Args:
+            f: File object to write to
+        """
+        if getattr(self.settings, "geom_maxiter", None) is None:
+            return
+        if self._other_writer_opens_geom():
+            return
+        logger.debug("Writing geometry optimiser block")
+        f.write("%geom\n")
+        self._write_geom_maxiter_line(f)
         f.write("end\n")
 
     def _write_scf_maxiter(self, f):
@@ -662,6 +710,7 @@ class ORCAInputWriter(InputWriter):
         """
         if self.settings.modred:
             f.write("%geom\n")
+            self._write_geom_maxiter_line(f)
             self._write_modred(f, modred=self.settings.modred)
             f.write("end\n")
 
@@ -781,6 +830,7 @@ class ORCAInputWriter(InputWriter):
         """
         # write orca block for hessian options
         f.write("%geom\n")
+        self._write_geom_maxiter_line(f)
 
         # Read initial Hessian from file if desired
         if self.settings.inhess:
@@ -1124,6 +1174,7 @@ class ORCAInputWriter(InputWriter):
         molecule = self.job.molecule
         if molecule.frozen_atoms:
             f.write("%geom\n")
+            self._write_geom_maxiter_line(f)
             for i, val in enumerate(molecule.frozen_atoms):
                 if val == -1:
                     f.write(f"  {{ C {i} C }}\n")  # ORCA is 0-indexed

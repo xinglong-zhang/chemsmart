@@ -257,6 +257,78 @@ _ENTRIES: tuple[LiteratureConstantV1, ...] = (
             "source for one could be obtained"
         ),
     ),
+    # Namazian, Lin and Coote, J. Chem. Theory Comput. 2010, 6, 2721,
+    # Table 4.  A session asked to quote nickel thiolate potentials against
+    # ferrocene in acetonitrile had no registered ferrocene reference and
+    # typed one as a literal, twice (NOVEL-3 ino3, 2026-09-05).  Read from
+    # the paper's own text: the computed value, its stated accuracy, and
+    # the experimental construction it was benchmarked against.
+    LiteratureConstantV1(
+        name="ferrocene_absolute_reduction_potential_acetonitrile_namazian2010",
+        purpose=(
+            "quote an absolute acetonitrile potential against Fc+/Fc; a same-level computed ferrocene pair is preferred"
+        ),
+        value=4.988,
+        unit="V",
+        convention_family="namazian2010_g3mp2rad_cosmors_acetonitrile",
+        convention=(
+            "absolute reduction potential of Fc+/Fc in acetonitrile at "
+            "298.15 K, G3(MP2)-RAD-Full-TZ gas-phase energies with COSMO-RS "
+            "solvation, electron at rest in the gas phase; the source states "
+            "a likely accuracy of 0.05-0.1 V"
+        ),
+        note=(
+            "the same source's SMD value is 4.964 V and its experimental "
+            "estimate 4.980 V, built from 0.380 V versus the saturated "
+            "calomel electrode (Pavlishchuk and Addison 2000) and 4.60 V "
+            "for that electrode's absolute potential in acetonitrile; a "
+            "potential computed at another level and quoted against this "
+            "value carries both methods' errors"
+        ),
+    ),
+    # Pavlishchuk and Addison, Inorg. Chim. Acta 2000, 298, 97, as read in
+    # Namazian, Lin and Coote 2010 (their reference 41).
+    LiteratureConstantV1(
+        name="ferrocene_vs_sce_acetonitrile_pavlishchuk2000",
+        purpose=(
+            "acetonitrile potential vs SCE onto the ferrocene scale; pairs with this family's SCE absolute entry"
+        ),
+        value=0.380,
+        unit="V",
+        convention_family="namazian2010_acetonitrile_sce_scale",
+        convention=(
+            "reduction potential of Fc+/Fc in acetonitrile at 25 C relative "
+            "to the aqueous saturated calomel electrode, as tabulated by "
+            "Pavlishchuk and Addison; the liquid-junction potential between "
+            "the aqueous reference and acetonitrile is inside the number"
+        ),
+        note=(
+            "read from the secondary source's citation of the table, not "
+            "from the table itself; the same table's value against the "
+            "aqueous standard hydrogen electrode is not registered because "
+            "no primary text for it was read"
+        ),
+    ),
+    LiteratureConstantV1(
+        name="sce_absolute_potential_acetonitrile_as_used_namazian2010",
+        purpose=(
+            "acetonitrile potential vs SCE to an absolute one; pairs with this family's ferrocene-vs-SCE entry"
+        ),
+        value=4.60,
+        unit="V",
+        convention_family="namazian2010_acetonitrile_sce_scale",
+        convention=(
+            "absolute potential of the aqueous saturated calomel electrode "
+            "when used as the reference in acetonitrile, as used by "
+            "Namazian, Lin and Coote 2010 (their reference 9); electron at "
+            "rest in the gas phase"
+        ),
+        note=(
+            "0.380 V plus this value is the source's experimental 4.980 V; "
+            "the primary determination behind the 4.60 V was not read, so "
+            "the entry is named for the paper that used it"
+        ),
+    ),
 )
 
 LITERATURE_CONSTANTS: MappingProxyType[str, LiteratureConstantV1] = (

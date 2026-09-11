@@ -116,7 +116,17 @@ class ProviderAttemptReceiptV1:
     reported_cost_usd: str
     retry_ordinal: int
     nonsecret_error_class: str
-    receipt_sha256: str
+    #: How large the request this attempt carried was, in bytes of the
+    #: serialised body. A failed attempt reports input_tokens 0 because
+    #: the provider never billed it, so three inter-event timeouts in a
+    #: sealed window recorded nothing about what they were asked to
+    #: carry -- and the cause, a context that had grown past what the
+    #: silence deadline tolerated, was invisible until the last
+    #: *successful* attempt beside them was read by hand. A failure that
+    #: says nothing about its own request cannot calibrate the deadline
+    #: that killed it.
+    request_bytes: int = 0
+    receipt_sha256: str = ""
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.provider-attempt-receipt.v1":
@@ -152,6 +162,7 @@ class ProviderAttemptReceiptV1:
                 self.output_tokens,
                 self.reasoning_tokens,
                 self.retry_ordinal,
+                self.request_bytes,
             )
             < 0
         ):
@@ -187,6 +198,7 @@ def build_provider_attempt_receipt(**values: Any) -> ProviderAttemptReceiptV1:
         "nonsecret_error_class": str(
             values.get("nonsecret_error_class") or ""
         ),
+        "request_bytes": int(values.get("request_bytes", 0)),
     }
     return ProviderAttemptReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)

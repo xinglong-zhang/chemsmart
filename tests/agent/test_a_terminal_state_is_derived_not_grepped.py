@@ -114,7 +114,7 @@ def test_the_scan_classification_needs_the_observed_facts():
         _classify_failure(
             jobtype="scan",
             findings=("execution.process.nonzero_or_unknown",),
-            native_class="native_runtime",
+            native_class="",
             converged=False,
             reached=2,
             planned=12,
@@ -143,6 +143,145 @@ def test_the_scan_classification_needs_the_observed_facts():
         )
         == "failed_nonconverged_scf"
     )
+
+
+@pytest.mark.capability("rule:terminal_state_vocabulary")
+def test_a_recorded_cause_outranks_the_convergence_it_leaves_behind():
+    """Every native class a program can report, against a dead run's flag.
+
+    A crashed run leaves ``converged is False`` behind exactly as a
+    genuinely unconverged one does, so a classification that reads the
+    flag first cannot tell them apart. Only two classes are themselves
+    convergence statements; the rest name a cause, and the cause wins.
+    The table is walked from the program rule sets rather than from the
+    two classes that were observed failing, because the next crash will
+    be a third one.
+    """
+
+    from chemsmart.agent.terminal_states import (
+        _CONVERGENCE_FAILURE_CLASSES,
+        _UNDIAGNOSED_FAILURE_CLASSES,
+        _classify_failure,
+    )
+    from chemsmart.io.native_failure import (
+        _GAUSSIAN_RULES,
+        _ORCA_RULES,
+        _PYSCF_STAGE_CLASSES,
+        _XTB_RULES,
+    )
+
+    classes = {
+        *(name for name, _patterns in _ORCA_RULES),
+        *(name for name, _patterns in _GAUSSIAN_RULES),
+        *(name for name, _patterns in _XTB_RULES),
+        *_PYSCF_STAGE_CLASSES.values(),
+        "native_runtime",
+        "incomplete_output",
+        "driver_exception",
+    }
+    assert _CONVERGENCE_FAILURE_CLASSES < classes, (
+        "the convergence classes must be drawn from the same vocabulary "
+        "the programs actually report"
+    )
+
+    named = classes - _CONVERGENCE_FAILURE_CLASSES
+    named -= _UNDIAGNOSED_FAILURE_CLASSES
+    for native_class in sorted(named):
+        for jobtype, reached, planned in (
+            ("opt", None, None),
+            ("scan", 2, 12),
+        ):
+            assert (
+                _classify_failure(
+                    jobtype=jobtype,
+                    findings=(
+                        "execution.process.nonzero_or_unknown",
+                        f"orca.native_failure.{native_class}",
+                        "orca.result.optimization_not_converged",
+                    ),
+                    native_class=native_class,
+                    converged=False,
+                    reached=reached,
+                    planned=planned,
+                )
+                == "failed_native"
+            ), f"{native_class} on a {jobtype} was read as a convergence "
+
+    # And the two that are convergence statements keep their meaning, so
+    # the branch above is a narrowing and not a new blanket.
+    assert (
+        _classify_failure(
+            jobtype="opt",
+            findings=("xtb.native_failure.geometry_optimization",),
+            native_class="geometry_optimization",
+            converged=False,
+            reached=None,
+            planned=None,
+        )
+        == "failed_nonconverged_geometry"
+    )
+    assert (
+        _classify_failure(
+            jobtype="sp",
+            findings=("orca.native_failure.scf_convergence",),
+            native_class="scf_convergence",
+            converged=False,
+            reached=None,
+            planned=None,
+        )
+        == "failed_nonconverged_scf"
+    )
+    # A run that merely hit its iteration cap terminates normally and so
+    # reports no class at all: the ordinary non-convergence is untouched.
+    assert (
+        _classify_failure(
+            jobtype="opt",
+            findings=("orca.result.optimization_not_converged",),
+            native_class="",
+            converged=False,
+            reached=None,
+            planned=None,
+        )
+        == "failed_nonconverged_geometry"
+    )
+
+    # And the classes that name no cause do not get to speak over one.
+    # ORCA reports a non-converged relaxed scan step by failing to store
+    # the step's geometry and aborting inside its property module, which
+    # matches no rule and lands on native_runtime. Reproduced at one
+    # rank with no MPI in the run, so it is neither an MPI defect nor
+    # non-deterministic: the same input fails at the same step, and the
+    # output says "The optimization did not converge but reached the
+    # maximum number of" steps.
+    for fallback in sorted(_UNDIAGNOSED_FAILURE_CLASSES):
+        assert (
+            _classify_failure(
+                jobtype="scan",
+                findings=(
+                    "execution.process.nonzero_or_unknown",
+                    f"orca.native_failure.{fallback}",
+                    "orca.result.optimization_not_converged",
+                ),
+                native_class=fallback,
+                converged=False,
+                reached=2,
+                planned=9,
+            )
+            == "failed_nonconverged_scan_step"
+        ), fallback
+        # With nothing saying anything about convergence, the same
+        # fallback still ends as a native failure.
+        assert (
+            _classify_failure(
+                jobtype="sp",
+                findings=("execution.process.nonzero_or_unknown",),
+                native_class=fallback,
+                converged=None,
+                reached=None,
+                planned=None,
+            )
+            == "failed_native"
+        ), fallback
 
 
 def test_a_withdrawn_grant_survives_the_process(tmp_path):

@@ -89,6 +89,29 @@ def _normalize_orca_grid(value):
     return literal
 
 
+#: ORCA's optimisation convergence presets, as route-line words. The
+#: default is what ORCA calls NormalOpt, so "normal" writes nothing.
+ORCA_OPT_CONVERGENCE_KEYWORDS = {
+    "tight": "TightOpt",
+    "normal": "",
+    "loose": "LooseOpt",
+}
+
+
+def _normalize_orca_opt_convergence(value):
+    """Map a project's optimisation convergence word to ORCA's own."""
+
+    if value is None:
+        return None
+    key = str(value).strip().lower()
+    if key not in ORCA_OPT_CONVERGENCE_KEYWORDS:
+        raise ValueError(
+            f"Unsupported opt_convergence {value!r}; expected one of "
+            f"{sorted(ORCA_OPT_CONVERGENCE_KEYWORDS)}"
+        )
+    return key
+
+
 def _normalize_orca_scf_convergence(value):
     """Normalize human and simple-input spellings of ORCA SCF convergence.
 
@@ -395,6 +418,8 @@ class ORCAJobSettings(MolecularJobSettings):
         scf_algorithm=None,
         scf_maxiter=None,
         scf_convergence=None,
+        geom_maxiter=None,
+        opt_convergence=None,
         charge=None,
         multiplicity=None,
         gbw=True,
@@ -537,6 +562,18 @@ class ORCAJobSettings(MolecularJobSettings):
         self.scf_algorithm = scf_algorithm
         self.scf_maxiter = scf_maxiter
         self.scf_convergence = _normalize_orca_scf_convergence(scf_convergence)
+        # ORCA caps a geometry optimisation at max(3N, 60) steps of
+        # its own accord. A floppy 21-atom complex hit that cap three
+        # times in one live goal and no typed field could raise it,
+        # so the session recorded "no legal lever exists" and paid
+        # engine calls working around it (NOVEL-1 ino1, 2026-09-04).
+        self.geom_maxiter = None if geom_maxiter is None else int(geom_maxiter)
+        if self.geom_maxiter is not None and self.geom_maxiter < 1:
+            raise ValueError(
+                f"Unsupported geom_maxiter {geom_maxiter!r}; a "
+                "geometry optimisation runs at least one step"
+            )
+        self.opt_convergence = _normalize_orca_opt_convergence(opt_convergence)
         self.gbw = gbw
         self.mdci_cutoff = _normalize_choice(
             mdci_cutoff, ORCA_MDCI_CUTOFF_KEYWORDS, "mdci_cutoff"
@@ -984,6 +1021,8 @@ class ORCAJobSettings(MolecularJobSettings):
             scf_algorithm=None,
             scf_maxiter=None,
             scf_convergence=None,
+            geom_maxiter=None,
+            opt_convergence=None,
             charge=None,
             multiplicity=None,
             gbw=True,
@@ -1140,6 +1179,20 @@ class ORCAJobSettings(MolecularJobSettings):
         # write convergence algorithm if not default
         if self.scf_algorithm is not None:
             route_string += f" {self.scf_algorithm}"
+
+        # Geometry convergence is ORCA's own route-line preset, and only
+        # a job that optimises a geometry has one. "normal" is ORCA's
+        # default and writes nothing, so a project may state it without
+        # changing the input.
+        if self.opt_convergence is not None and self.jobtype in (
+            "opt",
+            "modred",
+            "scan",
+            "ts",
+        ):
+            preset = ORCA_OPT_CONVERGENCE_KEYWORDS[self.opt_convergence]
+            if preset:
+                route_string += f" {preset}"
 
         # write solvent if solvation is turned on
         route_kw = self._get_solvent_route_keyword()
@@ -1697,6 +1750,8 @@ class ORCApKaJobSettings(ORCAJobSettings):
             scf_algorithm=self.scf_algorithm,
             scf_maxiter=self.scf_maxiter,
             scf_convergence=self.scf_convergence,
+            geom_maxiter=self.geom_maxiter,
+            opt_convergence=self.opt_convergence,
             semiempirical=self.semiempirical,
             additional_route_parameters=self.additional_route_parameters,
             gen_genecp_file=self.gen_genecp_file,

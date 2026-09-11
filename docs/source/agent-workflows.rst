@@ -52,7 +52,12 @@ mathematics (for example ``gibbs_to_pka`` owns pKa = ΔG/(RT ln 10)). The review
 a Literature-constants table whenever a chain selects one. Workflows composed this way — for example an aqueous pKa from
 solvated optimisations, a derived conjugate base, thermochemistry at an explicit 1 mol/L standard state, and a registry
 proton constant — need no task-specific code, and completed registered results may feed a later workflow's analysis as
-typed inputs.
+typed inputs. A wavenumber becomes an energy only through ``wavenumber_to_energy`` and ``energy_to_wavenumber``, which
+own the h·c·N_A factor, so an exchange coupling declared in cm⁻¹ is answered in cm⁻¹; when a claim carries its declared
+id in another dimension, the completion miss names both dimensions and this route, and the expectation row compares the
+sign and the host-restated band rather than printing ``not_comparable``. The registry also holds a ferrocene reference
+for acetonitrile: a computed absolute Fc⁺/Fc potential with its source's stated accuracy, whose purpose phrase prefers a
+ferrocene pair computed at the same level, and the experimental construction it was benchmarked against as one family.
 
 A batch is N enumerated records under the one displayed approval. A workspace chemsmart ``.db`` database is an
 inspectable artifact: ``inspect_database_records`` enumerates records with their stored fields as observations (a record
@@ -84,6 +89,14 @@ atom indices unchanged. Both operations write starting structures with electroni
 hydrogen gives a cation or a radical depending on whether it brought an electron), so charge and multiplicity are bound
 explicitly afterwards and the consuming stage is a new workflow; the displayed review renders every hop of a built chain
 in the order it was performed, so the edit that decides what the molecule is stays on the decision surface.
+
+A built or idealised start carries its builder's symmetry and relaxes to the nearest stationary point of that symmetry,
+which is a saddle whenever the true minimum lies lower. Every identity binding and every compiled node therefore states
+a point-group estimate found within 0.01 Å from the molecule's own atoms (and within 0.1 Å when the two differ), with
+the count of appended atoms placed on the exact 60° torsion lattice or at idealised angles, as a host observation on the
+review. ``break_symmetry`` perturbs every atom of an identity-bound geometry by a seed and an amplitude you name, so the
+same request gives the same bytes; the receipt carries the largest step actually taken and the point-group estimate
+before and after, and the perturbed geometry is a starting structure with no electronic state bound.
 
 A vibrational frequency says how fast a mode moves, never which atoms move in it.
 ``vibrational_mode_atom_participation`` answers the second question: each atom's share of a mode's squared displacement,
@@ -293,11 +306,38 @@ timeout, a memory limit, a program error -- opens a typed recovery when budget r
 context carries a repair menu naming the ordinary route for each such ending. A run that ended in a state no revision
 can stand on returns the goal to the human.
 
+The recorded decision may say what was done with each route the menu offered (``menu_route_dispositions``: taken,
+rejected or deferred, with the mechanism and the receipts); the host checks that the route was offered and the receipts
+are its own, and the next wake shows the dispositions beside the menu it re-offers. A declaration may carry ``role:
+diagnostic``, the session's own prediction about the route with a ``failure_update_rule`` and an optional
+``method_resolution``; it is scored like any expectation and never owed, and a value inside the resolution prints
+``indeterminate``.
+
 A surprise the host detects on a completed node -- a stationary point of the wrong order, a walk to another basin, a
 spin expectation value far from the bound state -- is recorded as an anomaly observation with its numbers beneath the
 verdict, whether or not it was asked for. A certified delivery that carries one settles ``achieved_with_observations``
 and its report names each observation; an excursion that re-runs the sensor marks the observation ``replicated`` or
-``refuted``, and the latest receipt speaks for it.
+``refuted``, and the latest receipt speaks for it. A scan whose extremum lies on the grid's edge, and a result that
+walked from the goal's original bound geometry even when its immediate input was a reached or displaced structure, are
+recorded the same way.
+
+A declared observable is delivered when any cycle of the goal claimed it by id, and a goal whose declared observables
+remain undelivered while budget remains is woken once more. A session that cannot reach a declared observable refuses it
+in ``record_scientific_decision``'s ``unreachable_observable_ids``, naming the producer it would need and the receipts
+that show the gap; the host verifies a selector no envelope program declares or a blocked node in the session's own
+plan, and only a verified refusal settles ``unreachable_from_evidence``. The declaration reply says at once when a
+meaning names a quantity kind no envelope program declares, with the routes, and refuses nothing. When a goal session is
+about to end with declared observables undelivered while budget remains, the host says so once, as an informational
+notice that demands nothing, and allows one further turn. Every routed refusal reaches the durable stream as a failure
+report naming its gate, invariant, diagnosis, route and cost.
+
+Every result the workspace record or a goal's run streams name is registered at bootstrap under
+``<program>-result-<sha16>`` when its bytes still hash to the recorded digest, in this workspace or an earlier one, so
+``inspect_run`` and ``extract_result_quantities`` open it by that id; a refused id is answered with the nearest
+registered ones. Where the active server profile names an ORCA executable, preflight also runs ORCA's own input check on
+the previewed input, bounded to 20 s and stopped at the ``INPUT FILE`` banner; its word (passed, aborted with ORCA's
+lines, or not run) appears beside the node on the review and is never an engine call. The wake's budgets show
+``host_seconds_spent`` beside the engine lines and the goal's ``input_check_probes`` counts.
 
 *************************
  Guides and capabilities

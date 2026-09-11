@@ -47,11 +47,14 @@ class EventKind(str, Enum):
     COMMAND_COMPILED = "command_compiled"
     COMMAND_INSPECTED = "command_inspected"
     SAFE_PREVIEWED = "safe_preview_observed"
+    INPUT_CHECK_PROBED = "input_check_probed"
     VALIDATOR_OBSERVED = "program_validator_observed"
     PROGRAM_PREFLIGHTED = "program_node_preflighted"
     SUBSTITUTION_ASSESSED = "program_substitution_assessed"
     RESULT_VERIFIED = "program_result_verified"
     ANOMALY_OBSERVED = "anomaly_observed"
+    STATIONARY_POINT_CHARACTERISED = "stationary_point_characterised"
+    REACHED_GEOMETRY_BOUND = "reached_geometry_bound"
     RESULT_QUANTITIES_EXTRACTED = "result_quantities_extracted"
     THERMOCHEMISTRY_DERIVED = "thermochemistry_derived"
     QUANTITY_EXPRESSION_EVALUATED = "quantity_expression_evaluated"
@@ -61,6 +64,7 @@ class EventKind(str, Enum):
     WORKFLOW_ANALYSIS_NODE_SETTLED = "workflow_analysis_node_settled"
     MOLECULAR_ARRANGEMENT_COMPOSED = "molecular_arrangement_composed"
     MOLECULAR_SPECIES_DERIVED = "molecular_species_derived"
+    PUBCHEM_GEOMETRY_FETCHED = "pubchem_geometry_fetched"
     DATABASE_RECORD_EXTRACTED = "database_record_extracted"
     MOLECULAR_GEOMETRY_EDITED = "molecular_geometry_edited"
     MOLECULAR_ATOM_APPENDED = "molecular_atom_appended"
@@ -68,6 +72,7 @@ class EventKind(str, Enum):
     DOMAIN_SKILL_CONSULTED = "domain_skill_consulted"
     RUN_OUTCOME_INSPECTED = "run_outcome_inspected"
     WORKFLOW_ANALYSIS_REPORT_RENDERED = "workflow_analysis_report_rendered"
+    ANALYSIS_ONLY_PLAN_EXECUTED = "analysis_only_plan_executed"
     WORKFLOW_ANALYSIS_COMPLETION_REFUSED = (
         "workflow_analysis_completion_refused"
     )
@@ -92,6 +97,9 @@ class EventKind(str, Enum):
     HOST_CONTEXT_REINJECTED = "host_context_reinjected"
     GUIDE_ACTIVATED = "guide_activated"
     RUNTIME_TERMINATED = "runtime_terminated"
+    TERMINATION_NOTICE_DELIVERED = "termination_notice_delivered"
+    SYMMETRY_BROKEN = "symmetry_broken"
+    EXECUTION_REVIEW_PREPARED = "execution_review_prepared"
 
 
 CAPABILITY_QUERIED = EventKind.CAPABILITY_QUERIED.value
@@ -105,11 +113,14 @@ WORKFLOW_PLANNED = EventKind.WORKFLOW_PLANNED.value
 COMMAND_COMPILED = EventKind.COMMAND_COMPILED.value
 COMMAND_INSPECTED = EventKind.COMMAND_INSPECTED.value
 SAFE_PREVIEWED = EventKind.SAFE_PREVIEWED.value
+INPUT_CHECK_PROBED = EventKind.INPUT_CHECK_PROBED.value
 VALIDATOR_OBSERVED = EventKind.VALIDATOR_OBSERVED.value
 PROGRAM_PREFLIGHTED = EventKind.PROGRAM_PREFLIGHTED.value
 SUBSTITUTION_ASSESSED = EventKind.SUBSTITUTION_ASSESSED.value
 RESULT_VERIFIED = EventKind.RESULT_VERIFIED.value
 ANOMALY_OBSERVED = EventKind.ANOMALY_OBSERVED.value
+STATIONARY_POINT_CHARACTERISED = EventKind.STATIONARY_POINT_CHARACTERISED.value
+REACHED_GEOMETRY_BOUND = EventKind.REACHED_GEOMETRY_BOUND.value
 RESULT_QUANTITIES_EXTRACTED = EventKind.RESULT_QUANTITIES_EXTRACTED.value
 THERMOCHEMISTRY_DERIVED = EventKind.THERMOCHEMISTRY_DERIVED.value
 QUANTITY_EXPRESSION_EVALUATED = EventKind.QUANTITY_EXPRESSION_EVALUATED.value
@@ -153,11 +164,14 @@ _RECEIPT_EVENTS = frozenset(
         COMMAND_COMPILED,
         COMMAND_INSPECTED,
         SAFE_PREVIEWED,
+        INPUT_CHECK_PROBED,
         VALIDATOR_OBSERVED,
         PROGRAM_PREFLIGHTED,
         SUBSTITUTION_ASSESSED,
         RESULT_VERIFIED,
         ANOMALY_OBSERVED,
+        STATIONARY_POINT_CHARACTERISED,
+        REACHED_GEOMETRY_BOUND,
         RESULT_QUANTITIES_EXTRACTED,
         THERMOCHEMISTRY_DERIVED,
         QUANTITY_EXPRESSION_EVALUATED,
@@ -430,6 +444,7 @@ def _validate_typed_receipt_payload(
         COMMAND_COMPILED: ("status", {"compiled"}),
         COMMAND_INSPECTED: ("status", {"valid", "invalid"}),
         SAFE_PREVIEWED: ("status", {"previewed", "failed"}),
+        INPUT_CHECK_PROBED: ("status", {"passed", "aborted", "not_run"}),
         VALIDATOR_OBSERVED: ("status", {"valid", "invalid"}),
         PROGRAM_PREFLIGHTED: (
             "plan_state",
@@ -879,6 +894,7 @@ __all__ = [
     "OPTIMIZED_GEOMETRY_HANDED_OFF",
     "RUNTIME_TERMINATED",
     "SAFE_PREVIEWED",
+    "INPUT_CHECK_PROBED",
     "VALIDATOR_OBSERVED",
     "WORKFLOW_PLANNED",
     "WORKFLOW_APPROVAL_CONSUMED",

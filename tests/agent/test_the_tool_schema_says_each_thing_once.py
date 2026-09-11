@@ -46,4 +46,23 @@ def test_nothing_was_lost_and_the_surface_fits_the_budget():
     # 139,229 bytes before de-duplication, 110,525 after, 100,408 after
     # the merge; with every leaf open the ceiling keeps the whole tree in
     # bounds, and the stem alone is pinned below 90,000 in the guides test.
-    assert len(text) < 115_000, len(text)
+    # Raised from 115,000 in ROUND 8 for two affordances REACH-1 earned
+    # (the result-id rule and break_symmetry), not for duplication.
+    # Not raised in ROUND 10: fetch_pubchem_geometry was paid for out of
+    # the identifier spelling rule's 46 copies.
+    # Raised to 118,400 in ROUND 12 for `approximates` and
+    # `uncertainty_combination`, then **returned to 118,000 in the same
+    # round** and not raised again. The next round was authorised to
+    # expand this budget and found it did not need to: the provenance
+    # work it carried (the lineage authority, the PubChem review panel,
+    # the arrival observations) cost the model-visible surface exactly
+    # zero bytes, because host-internal readers, human-facing panels and
+    # runtime replies are not schema. What the measurement did show was
+    # 7 bytes of stem headroom -- and the cause was misallocation, not
+    # insufficiency: a ~500-character CBS `extrapolation_exponent`
+    # description sat in the shared expression-node schema every session
+    # reads, duplicating guidance the `cbs` guide already carried, for a
+    # family whose operations the stem does not even expose. Moving it
+    # to its guide recovered 834 bytes on both surfaces. A ceiling is
+    # paid for, never banked.
+    assert len(text) < 118_000, len(text)

@@ -313,7 +313,17 @@ class _LoggedResultObservation:
     input_artifact_sha256: str
     validation_receipt_sha256: str
     scientific_validation_state: str
-    provenance_status: str = "workspace_exact_validated_native_result"
+    #: What this record can honestly say about bytes it found by
+    #: scanning: they are exactly the file, they parsed, and they are
+    #: native program output. It used to say "validated", which no
+    #: rescanned file has ever earned from this host -- a run typed a
+    #: failure in one cycle came back a validated native result in the
+    #: next, and nothing carried the failure across (2026-09-04).
+    provenance_status: str = "workspace_exact_parsed_native_result"
+    #: The ending this workspace's own sealed streams recorded for the
+    #: run that wrote these bytes, when they hold one. Empty when the
+    #: workspace records nothing about them.
+    recorded_terminal_state: str = ""
     provenance_limitations: tuple[str, ...] = ()
     #: The dispersion correction the run actually applied, when the native
     #: output names one.  A functional and its dispersion correction are not
@@ -342,6 +352,7 @@ class _LoggedResultObservation:
             "validation_receipt_sha256": self.validation_receipt_sha256,
             "scientific_validation_state": self.scientific_validation_state,
             "provenance_status": self.provenance_status,
+            "recorded_terminal_state": self.recorded_terminal_state,
             "provenance_limitations": self.provenance_limitations,
         }
 
@@ -877,6 +888,46 @@ def run_live_agent_session(
     )
     if excursions_remaining is not None:
         host_kwargs["excursion_calls_remaining"] = int(excursions_remaining)
+    goal_budgets = (goal_context or {}).get("budgets") or {}
+    if goal_budgets.get("wall_seconds_remaining") is not None:
+        host_kwargs["wall_seconds_remaining"] = float(
+            goal_budgets["wall_seconds_remaining"]
+        )
+    if goal_budgets.get("revisions_remaining") is not None:
+        host_kwargs["revisions_remaining"] = int(
+            goal_budgets["revisions_remaining"]
+        )
+    goal_deliverables = (goal_context or {}).get("deliverables") or {}
+    goal_declared_ids = {
+        str(item.get("observable_id") or "")
+        for item in ((goal_context or {}).get("declared_observables") or ())
+        if isinstance(item, Mapping)
+    }
+    goal_undelivered_ids = {
+        str(item)
+        for item in (
+            goal_deliverables.get("undelivered_declared_observable_ids") or ()
+        )
+    }
+    if goal_declared_ids:
+        host_kwargs["goal_delivered_declared_ids"] = tuple(
+            sorted(goal_declared_ids - goal_undelivered_ids)
+        )
+    host_kwargs["preview_retention_root"] = run_directory / "previews"
+    try:
+        probe_executable, probe_env = local_orca_input_check()
+    except Exception:
+        probe_executable, probe_env = None, None
+    if probe_executable is not None:
+        host_kwargs["input_check_executable"] = probe_executable
+        host_kwargs["input_check_env"] = probe_env
+    offered_routes = tuple(
+        sorted(
+            str(key) for key in ((goal_context or {}).get("repair_menu") or {})
+        )
+    )
+    if offered_routes:
+        host_kwargs["offered_repair_routes"] = offered_routes
     prior_anomalies = tuple(
         {**dict(anomaly), "node_id": str(node.get("node_id") or "")}
         for node in (
@@ -907,6 +958,13 @@ def run_live_agent_session(
         host_kwargs
     ):
         host_kwargs["approved_requested_observable_declarations"] = declared
+    if (goal_context or {}).get("previous_run"):
+        # A woken cycle's analysis-only plan reads only results the
+        # goal's decision covers; the host walks it when planned rather
+        # than leaving a chain no review can carry (NOVEL-2 po2).
+        host_kwargs["execute_analysis_only_plans"] = True
+        host_kwargs["analysis_only_run_directory"] = run_directory
+        host_kwargs["analysis_only_workspace"] = workspace_path
     host = CommandCompiledToolHostV1(**host_kwargs)
     # Guides open before the first turn are opened on the host, so each
     # leaves the same event as one opened mid-session -- with its signal.
@@ -1068,8 +1126,17 @@ def run_live_agent_session(
         # is rather than losing the transcript to an unhandled refusal.
         and host.bounded_review_is_materialized()
     ):
+        prepared = getattr(host, "prepared_execution_review", None)
+        recorded_refusal = dict(
+            getattr(host, "execution_review_refusal", {}) or {}
+        )
         try:
-            review = host.build_execution_review(workspace=workspace_path)
+            if prepared is not None:
+                review = prepared
+            elif recorded_refusal:
+                raise ContractError(str(recorded_refusal.get("reason", "")))
+            else:
+                review = host.build_execution_review(workspace=workspace_path)
         except ContractError as exc:
             # The refusal itself is correct -- a plan that exceeds the engine
             # budget, or reaches a stage this release cannot execute, must not
@@ -1086,14 +1153,21 @@ def run_live_agent_session(
             # (live, 2026-09-02).
             from chemsmart.agent.runtime.events import EventKind
 
-            host.event_store.append(
-                turn_id="session-review",
-                kind=EventKind.EXECUTION_REVIEW_REFUSED.value,
-                payload={
-                    "workflow_id": latest_calculation_plan.workflow_id,
-                    "reason": str(exc),
-                },
-            )
+            # The loop records the refusal while the stream is open; a
+            # refusal found only here is appended only if the stream is
+            # not yet sealed, because an append after the terminal event
+            # raises and would turn a stated refusal into a crash.
+            if not recorded_refusal and not (
+                host.event_store.state().terminal_state
+            ):
+                host.event_store.append(
+                    turn_id="session-review",
+                    kind=EventKind.EXECUTION_REVIEW_REFUSED.value,
+                    payload={
+                        "workflow_id": latest_calculation_plan.workflow_id,
+                        "reason": str(exc),
+                    },
+                )
             execution_ineligible_nodes = execution_ineligible_nodes + (
                 f"workflow ({latest_calculation_plan.workflow_id}: {exc})",
             )
@@ -1295,6 +1369,7 @@ def _coordinator_base_messages(
     active_guides: tuple[str, ...] = (),
 ) -> list[dict[str, str]]:
     _, documents = activated_skill_documents(task)
+    goal_record = context.get("goal") if isinstance(context, Mapping) else None
     messages = [
         {
             "role": "system",
@@ -1303,11 +1378,11 @@ def _coordinator_base_messages(
                 bounded_review_requested=bounded_review_requested,
                 skill_index=tuple(item.index_entry() for item in documents),
                 active_guides=active_guides,
+                goal_record=goal_record,
             ),
         },
         {"role": "user", "content": canonical_json(context)},
     ]
-    goal_record = context.get("goal") if isinstance(context, Mapping) else None
     if goal_record:
         # Alphabetical canonical JSON lands the goal block mid-context,
         # in the attention trough. Restate the goal's terms as the final
@@ -1710,6 +1785,12 @@ def _scan_orca_result_artifacts(
         try:
             resolved.relative_to(workspace)
             output = ORCAOutput(filename=resolved)
+            if not output.normal_termination:
+                # The cheapest disqualifier first: a failed output is
+                # named elsewhere and is never registered here, so its
+                # structure is not read (an unconverged saddle search
+                # cost every wake 37 minutes here, REACH-1 po3).
+                continue
             energy = output.final_energy
             molecule = output.molecule
             positions = molecule.positions
@@ -1832,6 +1913,8 @@ def _scan_gaussian_result_artifacts(
         try:
             resolved.relative_to(workspace)
             output = Gaussian16Output(filename=str(resolved))
+            if not output.normal_termination:
+                continue
             energies = tuple(output.energies or ())
             molecule = output.molecule
             positions = molecule.positions
@@ -1899,22 +1982,286 @@ def _scan_gaussian_result_artifacts(
     )
 
 
+#: The file a program's reader opens, by suffix, because the executor files
+#: every native output under one kind ("program_output") and the reader
+#: demands its own.
+_READER_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "orca": (".out",),
+    "gaussian": (".log", ".out"),
+    "xtb": (".out",),
+    "pyscf": (".h5",),
+}
+
+
+def _recorded_result_artifacts(
+    workspace: Path,
+) -> tuple[_LoggedResultObservation, ...]:
+    """Every result this workspace's records name, registered by digest.
+
+    The record and the sealed run streams name results by content digest
+    and record where the bytes were written -- in this workspace or in
+    an earlier window's. A session read those digests off inspect_run,
+    passed them to extract_result_quantities, and was refused ten times
+    in 22 seconds while the author's answer sat in one of the files
+    (REACH-1 ino3, 2026-09-06). Owner ruling: host-owned evidence reaches
+    any recorded result, verified by digest. A result is admitted only
+    when the recorded file still hashes to the recorded digest; nothing
+    is parsed at registration -- the level, the state, the energy come
+    from the records -- and a result the run recorded as not valid is
+    registered inspectable-only, which the readers already enforce.
+    """
+
+    import json as _json
+
+    from chemsmart.agent.workspace_record import read_workspace_record
+    from chemsmart.analysis.result_readers import reader_for
+
+    root = workspace / ".chemsmart-agent"
+    if not root.is_dir():
+        return ()
+    levels: dict[str, dict[str, Any]] = {}
+    try:
+        for row in read_workspace_record(workspace):
+            if row.get("kind") != "result":
+                continue
+            for digest in row.get("output_artifact_sha256s") or ():
+                levels.setdefault(str(digest), dict(row.get("level") or {}))
+    except Exception:  # noqa: BLE001 - a record that will not read
+        levels = {}
+    observations: dict[str, _LoggedResultObservation] = {}
+    for stream in sorted(root.rglob("events.jsonl")):
+        try:
+            lines = stream.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            text = line.strip()
+            if not text or "program_result_verified" not in text:
+                continue
+            try:
+                event = _json.loads(text)
+            except ValueError:
+                continue
+            if event.get("kind") != "program_result_verified":
+                continue
+            record = (event.get("payload") or {}).get("record") or {}
+            program = str(record.get("program") or "").strip().lower()
+            reader = reader_for(program)
+            if reader is None:
+                continue
+            suffixes = _READER_SUFFIXES.get(program, ())
+            chosen = None
+            for item in record.get("output_artifacts") or ():
+                if not isinstance(item, Mapping):
+                    continue
+                kind = str(item.get("kind") or "")
+                path_text = str(item.get("path") or "")
+                if kind == reader.artifact_kind or (
+                    kind == "program_output"
+                    and any(path_text.endswith(s) for s in suffixes)
+                ):
+                    chosen = item
+                    break
+            if chosen is None:
+                continue
+            digest = str(chosen.get("sha256") or "")
+            if not digest or digest in observations:
+                continue
+            path = Path(str(chosen.get("path") or ""))
+            if (
+                not path.is_absolute()
+                or path.is_symlink()
+                or not path.is_file()
+            ):
+                continue
+            try:
+                if file_sha256(path) != digest:
+                    continue
+                size = path.stat().st_size
+            except OSError:
+                continue
+            state = str(record.get("state") or "")
+            facts = (record.get("observations") or {}).get(program) or {}
+            level = levels.get(digest, {})
+            charge = facts.get("charge")
+            multiplicity = facts.get("multiplicity")
+            limitations = [
+                "registered from this workspace's run record; the bytes "
+                "were verified by digest and not parsed at registration"
+            ]
+            if state not in {"valid", "validated"}:
+                limitations.append(
+                    f"inspectable only: the run recorded state {state!r} "
+                    "for these bytes"
+                )
+            artifact = TrustedArtifactRefV1(
+                artifact_id=f"{program}-result-{digest[:16]}",
+                kind=reader.artifact_kind,
+                sha256=digest,
+                size_bytes=size,
+                path=str(path),
+                cli_value=str(path),
+            )
+            observations[digest] = _LoggedResultObservation(
+                artifact=artifact,
+                program=program,
+                jobtype=str(
+                    facts.get("jobtype") or record.get("jobtype") or ""
+                ),
+                method=str(
+                    level.get("functional")
+                    or level.get("ab_initio")
+                    or level.get("semiempirical")
+                    or ""
+                ),
+                basis=str(level.get("basis") or "") or None,
+                dispersion=str(level.get("dispersion") or "") or None,
+                engine=str(record.get("engine") or "cpu"),
+                charge=int(charge) if isinstance(charge, int) else 0,
+                multiplicity=(
+                    int(multiplicity) if isinstance(multiplicity, int) else 1
+                ),
+                project_yaml_sha256=str(
+                    record.get("project_artifact_sha256") or ""
+                ),
+                input_artifact_sha256=str(
+                    record.get("input_artifact_sha256") or ""
+                ),
+                validation_receipt_sha256=str(
+                    record.get("receipt_sha256") or ""
+                ),
+                scientific_validation_state=f"recorded_{state or 'unknown'}",
+                provenance_status="recorded_run_result_by_digest",
+                provenance_limitations=tuple(limitations),
+            )
+    return tuple(
+        sorted(
+            observations.values(), key=lambda item: item.artifact.artifact_id
+        )
+    )
+
+
+def _recorded_terminal_states(workspace: Path) -> dict[str, tuple[str, str]]:
+    """What this workspace's sealed streams say about result bytes.
+
+    Keyed by output-artifact digest, valued by the node and the ending
+    its run recorded. A run typed a failure in one cycle used to come
+    back in the next as an ordinary registered result, because the
+    typing is a property of the run and the rescan only ever saw the
+    file. This is how the two meet: the terminal state where the stream
+    derives one, the validation state otherwise, and nothing at all
+    where the workspace holds no record.
+    """
+
+    import json as _json
+
+    from chemsmart.agent.terminal_states import (
+        derive_run_outcome,
+        read_run_events,
+    )
+
+    recorded: dict[str, tuple[str, str]] = {}
+    root = workspace / ".chemsmart-agent"
+    if not root.is_dir():
+        return recorded
+    for stream in sorted(root.rglob("events.jsonl")):
+        artifacts_by_node: dict[str, set[str]] = {}
+        validation_state: dict[str, str] = {}
+        try:
+            lines = stream.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            text = line.strip()
+            if not text or "output_artifacts" not in text:
+                continue
+            try:
+                event = _json.loads(text)
+            except ValueError:
+                continue
+            payload = event.get("payload") or {}
+            record = payload.get("record") or {}
+            node_id = str(
+                record.get("node_id") or payload.get("node_id") or ""
+            )
+            if not node_id:
+                continue
+            digests = {
+                str((item or {}).get("sha256") or "")
+                for item in record.get("output_artifacts") or ()
+            }
+            digests.discard("")
+            if digests:
+                artifacts_by_node.setdefault(node_id, set()).update(digests)
+            if event.get("kind") == "program_result_verified":
+                validation_state[node_id] = str(record.get("state") or "")
+        if not artifacts_by_node:
+            continue
+        endings: dict[str, str] = {}
+        try:
+            outcome = derive_run_outcome(read_run_events(stream))
+            endings = {node.node_id: node.state for node in outcome.nodes}
+        except Exception:  # noqa: BLE001 - a stream that derives no run
+            endings = {}
+        for node_id, digests in artifacts_by_node.items():
+            state = endings.get(node_id) or validation_state.get(node_id, "")
+            if not state:
+                continue
+            for digest in digests:
+                recorded[digest] = (node_id, state)
+    return recorded
+
+
 def _scan_result_artifacts(
     workspace: Path, excluded_roots: tuple[Path, ...] = ()
 ) -> tuple[_ResultObservation, ...]:
-    """Collect every registered, analysis-ready program result."""
+    """Collect every registered, analysis-ready program result.
 
-    return tuple(
-        sorted(
-            (
-                *_scan_pyscf_result_artifacts(workspace, excluded_roots),
-                *_scan_xtb_result_artifacts(workspace, excluded_roots),
-                *_scan_orca_result_artifacts(workspace, excluded_roots),
-                *_scan_gaussian_result_artifacts(workspace, excluded_roots),
-            ),
-            key=lambda item: item.artifact.artifact_id,
-        )
+    A result the workspace's own streams recorded as not valid keeps
+    that ending here: it stays readable and claimable, and it stops
+    presenting itself as though nothing had been said about it.
+    """
+
+    from dataclasses import replace as _replace
+
+    recorded = _recorded_terminal_states(workspace)
+    observations = (
+        *_scan_pyscf_result_artifacts(workspace, excluded_roots),
+        *_scan_xtb_result_artifacts(workspace, excluded_roots),
+        *_scan_orca_result_artifacts(workspace, excluded_roots),
+        *_scan_gaussian_result_artifacts(workspace, excluded_roots),
     )
+    # What the records name and the scans did not reach: an earlier
+    # window's outputs, and results this workspace's runs recorded as
+    # failed. A scanned, parsed entry wins over a record-derived one for
+    # the same bytes.
+    scanned = {item.artifact.sha256 for item in observations}
+    observations = (
+        *observations,
+        *(
+            item
+            for item in _recorded_result_artifacts(workspace)
+            if item.artifact.sha256 not in scanned
+        ),
+    )
+    stamped = []
+    for item in observations:
+        node_id, state = recorded.get(item.artifact.sha256, ("", ""))
+        settled = state not in {"", "valid", "validated"}
+        if settled and hasattr(item, "provenance_status"):
+            limitation = (
+                f"this workspace recorded {state!r} for the run that wrote "
+                f"these bytes" + (f" (node {node_id!r})" if node_id else "")
+            )
+            item = _replace(
+                item,
+                recorded_terminal_state=state,
+                provenance_limitations=tuple(
+                    sorted({*item.provenance_limitations, limitation})
+                ),
+            )
+        stamped.append(item)
+    return tuple(sorted(stamped, key=lambda item: item.artifact.artifact_id))
 
 
 def discover_registered_result_artifacts(
@@ -2662,6 +3009,29 @@ def _active_server_program_blocks() -> dict[str, dict[str, Any]]:
     }
 
 
+def local_orca_input_check() -> tuple[Path | None, dict[str, str] | None]:
+    """The ORCA executable and environment the active server profile
+    names, resolved exactly as a real run resolves them; None when the
+    profile names no ORCA."""
+
+    from chemsmart.settings.executable import ORCAExecutable
+
+    block = _active_server_program_blocks().get("ORCA") or {}
+    folder = block.get("EXEFOLDER")
+    if not folder:
+        return None, None
+    executable = ORCAExecutable(
+        executable_folder=str(folder), envars=block.get("ENVARS")
+    )
+    path = executable.get_executable()
+    if not path:
+        return None, None
+    env = dict(os.environ)
+    for key, value in (executable.env or {}).items():
+        env[str(key)] = os.path.expanduser(str(value))
+    return Path(os.path.expanduser(str(path))), env
+
+
 def _preview_server_profile(
     *, resources: ExecutionResourceSpecV1 | None = None
 ) -> str:
@@ -3131,18 +3501,36 @@ def _system_prompt(
     bounded_review_requested: bool = False,
     skill_index: tuple[str, ...] = (),
     active_guides: tuple[str, ...] = (),
+    goal_record: Mapping[str, Any] | None = None,
 ) -> str:
     # A planning session never holds an approved workflow: execution is the
     # provider-free executor's, so the prompt states that and nothing more.
+    # Under a goal the host executes what the session plans, and the
+    # prompt says so instead of contradicting the wake context beneath
+    # it (NOVEL-3 ino3: two woken cycles ended "planned").
+    from chemsmart.agent.rules import rules_by_id
+
     bounded_review = bool(bounded_review_requested)
     execution_sentence = (
-        "Execution is not exposed. Finish with a useful planned or "
-        "previewed state."
+        rules_by_id()["wake.goal_authority"].text
+        if goal_record
+        else (
+            "Execution is not exposed. Finish with a useful planned or "
+            "previewed state."
+        )
     )
+    # The bounded-review sentence used to add "they do not expose engine
+    # execution or human approval to the provider", and called the review
+    # "inert". Under a goal both halves are false: the host executes what
+    # the session plans. OPEN-2's ino3-qwen read that sentence beside the
+    # goal authority and gave "engine execution was not exposed to this
+    # session" as its reason for spending zero of forty engine calls
+    # (2026-09-07). What the clause protected is said elsewhere for every
+    # session -- stem.no_engine_before_approval -- and, when no goal is
+    # granted, by the execution_sentence above.
     approval_readiness_sentence = (
-        "The supplied operating bounds request an inert exact workflow review "
-        "after this planning turn; they do not expose engine execution or "
-        "human approval to the provider. Every initially runnable node needs "
+        "The supplied operating bounds request an exact workflow review "
+        "after this planning turn. Every initially runnable node needs "
         "a green preview before bounded "
         "execution. An exact producer-data target may instead appear as "
         "deferred_admissible until its validated upstream geometry exists; "

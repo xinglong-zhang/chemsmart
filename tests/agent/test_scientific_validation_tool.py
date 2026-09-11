@@ -93,13 +93,13 @@ def _plan(host, *, expected_count):
                     "dependencies": ["derive-count", "validate-count"],
                     "inputs": [
                         {
-                            "input_id": "count_claim",
+                            "input_id": "imaginary_mode_count",
                             "source_kind": "analysis_output",
                             "producer_node_id": "derive-count",
                             "producer_output_id": "imaginary_mode_count",
                         },
                         {
-                            "input_id": "verdict_claim",
+                            "input_id": "minimum_verdict",
                             "source_kind": "analysis_output",
                             "producer_node_id": "validate-count",
                             "producer_output_id": "minimum_verdict",

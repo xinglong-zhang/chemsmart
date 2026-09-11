@@ -67,6 +67,7 @@ GUIDES: tuple[GuideV1, ...] = (
             "edit_molecular_geometry",
             "append_molecular_atom",
             "displace_along_vibrational_mode",
+            "break_symmetry",
         ),
         activation_terms=(
             "complex",
@@ -114,7 +115,14 @@ GUIDES: tuple[GuideV1, ...] = (
         title="relaxed coordinate scans and what to do with the surface",
         tier="T2",
         tools=("bind_scan_point_geometry",),
-        operations=("coordinate_at_minimum", "coordinate_at_maximum"),
+        # coordinate_at_minimum and coordinate_at_maximum used to be this
+        # guide's operations. "Which of these is lowest" is every
+        # comparison question, not a scan question: a spin-state task
+        # declared the ground state's multiplicity as a required output,
+        # could not open this guide by any of its terms, was refused for
+        # want of a producer, and built the label itself (NOVEL-2 ino1,
+        # 2026-09-04). They are stem operations now.
+        operations=(),
         activation_terms=(
             "scan",
             "profile",
@@ -180,7 +188,12 @@ GUIDES: tuple[GuideV1, ...] = (
             "gibbs_to_redox_potential owns E = -dG/(nF) with the IUPAC sign, "
             "so a favourable reduction has a negative free energy and a "
             "positive potential, and referencing an electrode stays ordinary "
-            "subtraction so the electrode you chose stays visible. Continuum "
+            "subtraction so the electrode you chose stays visible. Its n is "
+            "the electron count, and you can derive it instead of typing "
+            "it: subtract the two states' own charge selectors. A typed n "
+            "is a number of yours, so nothing downstream of it can serve as "
+            "measured evidence for an uncertainty; a derived one keeps the "
+            "whole chain the host's. Continuum "
             "solvation of a small localised anion carries a documented "
             "systematic of roughly ten kcal/mol; state it beside the number "
             "and license no accuracy claim."
@@ -212,7 +225,13 @@ GUIDES: tuple[GuideV1, ...] = (
             "respectively -- so extrapolate them separately and add, never "
             "the total energy under one law. The cardinal numbers must be "
             "consecutive and the exponent, where one is required, comes from "
-            "the method's own protocol and is recorded as such."
+            "the method's own protocol and is recorded as such -- supply "
+            "extrapolation_exponent only when the protocol you are "
+            "reproducing states it. When the protocol just says the "
+            "energy was extrapolated exponentially and you have three "
+            "successive cardinal numbers, prefer exponential_cbs_limit: "
+            "it fits the decay from the data and introduces no constant "
+            "of your own."
         ),
     ),
     GuideV1(
@@ -342,6 +361,7 @@ GUIDES: tuple[GuideV1, ...] = (
         title="answering a run that failed or landed on the wrong stationary point",
         tier="T4",
         terminal_states=tuple(sorted(_RECOVERY_STATES)),
+        tools=("bind_reached_geometry",),
         body=(
             "A failed run is evidence, and the wake context's repair_menu "
             "names, for each way a node ended, the ordinary route that "
@@ -381,6 +401,7 @@ GUIDES: tuple[GuideV1, ...] = (
         guide_id="saddle",
         title="transition states, imaginary modes, and intrinsic reaction coordinates",
         tier="T5",
+        tools=("characterise_stationary_point",),
         operations=("transition_state_crossover_temperature",),
         activation_terms=(
             "transition state",

@@ -242,6 +242,34 @@ def _approved_initial_artifacts(
             path=str(geometry_path),
             cli_value=str(geometry_path),
         )
+    # The goal's original geometry behind a reached or displaced input,
+    # located the same way, so the sensors can walk from the root.  Bytes
+    # the workspace no longer holds leave the node without a root
+    # comparison rather than without a run.
+    for binding in approval.node_bindings:
+        root_sha256 = str(getattr(binding, "root_artifact_sha256", "") or "")
+        root_id = str(getattr(binding, "root_artifact_id", "") or "")
+        if not root_sha256 or not root_id:
+            continue
+        existing = artifacts.get(root_id)
+        if existing is not None:
+            if existing.sha256 != root_sha256:
+                raise ContractError(
+                    "one approved root artifact ID names different bytes"
+                )
+            continue
+        try:
+            root_path = _locate_by_digest(workspace, root_sha256)
+        except ContractError:
+            continue
+        artifacts[root_id] = TrustedArtifactRefV1(
+            artifact_id=root_id,
+            kind="geometry_xyz",
+            sha256=root_sha256,
+            size_bytes=root_path.stat().st_size,
+            path=str(root_path),
+            cli_value=str(root_path),
+        )
     if not artifacts:
         raise ContractError(
             "no approved node takes an initial geometry, so the workflow has "
@@ -1023,14 +1051,43 @@ class ApprovedWorkflowExecutor:
                             "claim input names an output with no declared "
                             f"unit: {item.producer_output_id!r}"
                         )
-                    claims.append(
-                        {
-                            "claim_id": item.input_id,
-                            "receipt_sha256": digest,
-                            "quantity_id": quantity_id,
-                            "display_unit": unit,
-                        }
+                    claim = {
+                        "claim_id": item.input_id,
+                        "receipt_sha256": digest,
+                        "quantity_id": quantity_id,
+                        "display_unit": unit,
+                    }
+                    # The estimator the plan named, evaluated in this
+                    # same provider-free walk. An estimate cannot
+                    # predate its results and its estimator can, so a
+                    # precision-bearing delivery no longer arrives
+                    # `unstated` by construction and no longer costs a
+                    # further cycle to say what it already computed.
+                    # The number is the host's own, cited to the output
+                    # that produced it, which is what `measured` means.
+                    estimator_node = getattr(
+                        item, "uncertainty_producer_node_id", ""
                     )
+                    estimator_output = getattr(
+                        item, "uncertainty_producer_output_id", ""
+                    )
+                    if estimator_node and estimator_output:
+                        key = (estimator_node, estimator_output)
+                        if key not in outputs:
+                            raise ContractError(
+                                "a planned uncertainty names an output the "
+                                f"walk has not produced: {key!r}"
+                            )
+                        spread_digest, spread_quantity = outputs[key]
+                        # The executor names the number and never
+                        # writes it, exactly as it does for the claimed
+                        # value: the host reads the cited quantity and
+                        # copies it in.
+                        claim["uncertainty_basis"] = "measured"
+                        claim["uncertainty_reference"] = (
+                            f"{spread_digest}:{spread_quantity}"
+                        )
+                    claims.append(claim)
                 receipt = self._call(
                     "record_analysis_claims",
                     task_spec_sha256=self.task_spec_sha256,
@@ -1124,6 +1181,37 @@ class ApprovedWorkflowExecutor:
                     analysis_kind=node.analysis_kind,
                     state="failed",
                     reason=str(exc),
+                )
+            except Exception as exc:  # noqa: BLE001
+                # This overturns a deliberate decision, so it states the
+                # argument. The rule was "typed errors settle the node,
+                # a bare exception stays what it should be -- a defect
+                # that crashes" (tool_runtime._derive_thermochemistry).
+                # The intent was to keep host defects loud. Measured
+                # against a live run, crashing does not make a defect
+                # loud: a kernel reached into a result's absent
+                # thermochemistry, `float + None` raised TypeError, and
+                # the escape killed the goal. Three hours twenty minutes
+                # of engine time and five converged spin states were
+                # lost; the ledger ended three entries long with no
+                # run_recorded and no settlement, so a resume would have
+                # believed the budget unspent. The traceback went to a
+                # driver.log nothing reads (NOVEL-2 ino1, 2026-09-04).
+                #
+                # Loud and settled are not in conflict, and this is the
+                # louder of the two: the failure is recorded with its
+                # exception type in the durable stream the driver and
+                # the human both read, marked a host defect rather than
+                # a scientific finding, while every sibling node's
+                # receipt survives and the goal settles.
+                record = ExecutedAnalysisNodeV1(
+                    node_id=node.node_id,
+                    analysis_kind=node.analysis_kind,
+                    state="failed",
+                    reason=(
+                        "host defect, not a scientific finding: "
+                        f"{type(exc).__name__}: {exc}"
+                    ),
                 )
             _emit(record)
             ledger.extend(record.receipt_sha256s)
@@ -1223,8 +1311,11 @@ class ApprovedWorkflowExecutor:
             # The partial-failure envelope: bind the receipts that DID land
             # plus findings naming every node that did not execute, and
             # render them as evidence at their rung.  A reader gets what was
-            # validated with its limitation stated instead of nothing; no
-            # unvalidated number gains claim standing by appearing here.
+            # validated with its limitation stated instead of nothing.  What
+            # this enforces is disclosure, not exclusion: a number read off
+            # a node that did not validate is in the claim record either
+            # way, and the comment used to say it was kept out, which the
+            # code has never done (2026-09-04).
             # A calculation node that never validated is disclosed in the
             # fixed shape the host's partial-completion gate demands, so a
             # batch record's failed engine run appears in the delivered
@@ -2070,6 +2161,95 @@ def _execute_workflow_bundle(
             (lambda: stop_file.exists()) if stop_file is not None else None
         ),
     ).run()
+
+
+def execute_analysis_only_toolchain(
+    *,
+    host: Any,
+    toolchain: Any,
+    run_directory: Path,
+    task_spec_sha256: str,
+    workspace: Path,
+) -> dict[str, Any]:
+    """Walk a toolchain that plans no calculation, on the host that holds
+    the results it reads.
+
+    A woken session that had every number in hand planned a correct
+    seventeen-node analysis-only chain naming the declared ids verbatim
+    and then stopped, writing that approval was required before the
+    analysis operations could execute. No review is built for a plan with
+    zero calculation nodes, so the session ended ``planned`` and the goal
+    returned to the human with sixteen engine calls unspent (NOVEL-2 po2,
+    2026-09-04). Such a plan changes no identity, no state, no condition,
+    and launches no engine: the goal's one decision already covers the
+    results it reads. The owner ruled it is admitted and executed with no
+    displayed review. The walker is the executor's own analysis phase --
+    the same kernels, the same receipts, the same completion gate -- run
+    without an approval bundle, because there is nothing to approve.
+    """
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.runtime.events import EventKind
+
+    if tuple(getattr(toolchain, "calculation_node_ids", ())):
+        raise ContractError(
+            "an analysis-only walk takes a toolchain with no calculation "
+            "node; this plan names "
+            f"{list(toolchain.calculation_node_ids)}"
+        )
+    if not tuple(getattr(toolchain, "analysis_nodes", ())):
+        raise ContractError("an analysis-only walk needs an analysis node")
+    # The completion renderer keys on the plan the host holds; the plan
+    # tool stores it under its digest, and a walker reached another way
+    # registers the same plan under the same digest.
+    host.scientific_toolchain_plans.setdefault(
+        toolchain.plan_sha256, toolchain
+    )
+    walker = ApprovedWorkflowExecutor(
+        host=host,
+        plan=SimpleNamespace(
+            workflow_id=toolchain.workflow_id,
+            plan_sha256=toolchain.plan_sha256,
+            nodes=(),
+        ),
+        approval=SimpleNamespace(node_bindings=()),
+        frozen_approval=SimpleNamespace(approval_sha256=""),
+        initial_artifacts={},
+        project_artifacts=(),
+        task_spec_sha256=task_spec_sha256,
+        run_directory=Path(run_directory),
+        execution_bundle=SimpleNamespace(non_executable_node_ids=()),
+        approval_workspace=Path(workspace),
+        claim_workspace_bundle=False,
+    )
+    nodes, status, completions, report_path = walker._run_analysis_phase(
+        toolchain
+    )
+    record = {
+        "toolchain_plan_sha256": toolchain.plan_sha256,
+        "workflow_id": toolchain.workflow_id,
+        "analysis_status": status,
+        "executed_nodes": tuple(
+            {
+                "node_id": node.node_id,
+                "analysis_kind": node.analysis_kind,
+                "state": node.state,
+                "reason": node.reason,
+            }
+            for node in nodes
+        ),
+        "completion_receipt_sha256s": tuple(completions),
+        "report_path": report_path,
+        "engine_calls_consumed": 0,
+    }
+    host.event_store.append(
+        turn_id="analysis-only-plan",
+        kind=EventKind.ANALYSIS_ONLY_PLAN_EXECUTED.value,
+        payload=record,
+        idempotency_key="analysis-only-plan:" + toolchain.plan_sha256,
+    )
+    return record
 
 
 def execute_approved_workflow(

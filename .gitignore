@@ -162,3 +162,6 @@ api.env
 /*.com
 /*_fake.inp
 /*_fake.out
+
+# Owner scratch: never tracked (CONDUCT.md section 6).
+experiments/

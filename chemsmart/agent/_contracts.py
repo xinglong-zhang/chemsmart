@@ -35,6 +35,49 @@ class ContractError(ValueError):
     """Raised when an agent contract is internally inconsistent."""
 
 
+class RoutedContractError(ContractError):
+    """A refusal that is a failure report.
+
+    Measured over one round the agent met 470 refusals, retried the
+    refused tool in 60% of them and opened a guide in 2%: the refusal
+    message is where the model is taught. A woken session that had every
+    number it needed met one refusal whose only imperative named a route
+    its own code had decided could never be walked, obeyed it, and lost
+    six computed numbers (NOVEL-2 po2, 2026-09-04). A refusal therefore
+    states the gate and the invariant it protects, diagnoses the cause
+    from the host's own state, names a route the model was handed, and
+    says what the route costs. The fields ride the tool rejection as
+    ``failure_report`` so a session can act on them, and the message
+    renders them in one fixed shape.
+    """
+
+    def __init__(
+        self,
+        *,
+        gate: str,
+        invariant: str,
+        diagnosis: str,
+        route: str,
+        cost: str = "no engine call",
+    ) -> None:
+        if not (gate and invariant and diagnosis and route):
+            raise ContractError(
+                "a routed refusal names its gate, invariant, diagnosis "
+                "and route"
+            )
+        self.failure_report = {
+            "gate": gate,
+            "invariant": invariant,
+            "diagnosis": diagnosis,
+            "route": route,
+            "cost": cost,
+        }
+        super().__init__(
+            f"[{gate}] {invariant} Diagnosis: {diagnosis} Route: {route} "
+            f"Cost: {cost}"
+        )
+
+
 def require_identifier(value: str, field_name: str) -> str:
     """Return a normalized public identifier or raise ``ContractError``."""
 

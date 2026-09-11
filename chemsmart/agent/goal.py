@@ -295,7 +295,10 @@ class GoalLedger:
                 wall -= float(
                     entry["payload"].get("engine_wall_seconds") or 0.0
                 )
-            elif entry["kind"] == "revision_admitted":
+            elif entry["kind"] in {"revision_admitted", "rewake_opened"}:
+                # A re-wake after a cycle that delivered nothing is
+                # charged as the revision it consumes (owner ruling,
+                # 2026-09-05).
                 revisions -= 1
         return GoalBudgetsV1(
             engine_calls_remaining=max(calls, 0),
@@ -379,6 +382,32 @@ class RevisionAdmissionV1:
     checks: Mapping[str, bool]
     reasons: tuple[str, ...] = ()
     cited_evidence_event_hashes: tuple[str, ...] = ()
+    #: The scope this admission established, when the goal had none to
+    #: preserve. Empty on every later revision, which compares instead.
+    bound_scientific_identity_sha256: str = ""
+    bound_conditions: Mapping[str, Any] | None = None
+
+
+def goal_scope_is_unbound(goal: GoalRecordV1) -> bool:
+    """True when no executable review has ever fixed this goal's scope.
+
+    A goal created from an analysis-only first cycle carries
+    ``initial_review_sha256 == ""`` and, with it, an empty identity and
+    empty conditions -- not because the human approved "no molecule and
+    no solvent", but because no plan with a molecule in it had been
+    displayed yet. Comparing a later executable plan against those empty
+    values refuses it for changing a scope that was never set, so a goal
+    whose first cycle read registered results could never launch its
+    first calculation (OPEN-2 ino3-qwen would have hit this the moment
+    it was woken; found in review 2026-09-09, before it cost a window).
+
+    The emptiness of ``conditions`` cannot carry this by itself, because
+    a genuine gas-phase plan is empty too. The absence of an initial
+    review digest can: it says no executable partition was ever
+    displayed under this goal.
+    """
+
+    return not str(goal.initial_review_sha256 or "").strip()
 
 
 def admit_revision(
@@ -391,6 +420,8 @@ def admit_revision(
     prior_outcome_evidence_hashes: tuple[str, ...],
     previous_run_reference: str,
     wake_embedded_run: str = "",
+    bound_scientific_identity_sha256: str | None = None,
+    bound_conditions: Mapping[str, Any] | None = None,
 ) -> RevisionAdmissionV1:
     """Admit or return one revision, deterministically.
 
@@ -399,31 +430,58 @@ def admit_revision(
     named reason -- it never silently narrows, never retries, and never
     grades the science: whether the revised route is *wise* is what
     execution, validation, and the reading scientist are for.
+
+    ``bound_*`` carry the scope a previous cycle established when the
+    goal record itself had none; the driver reads them from the ledger.
+    Absent them, an unbound goal's first executable revision *sets* the
+    identity and conditions instead of comparing against nothing, and
+    every revision after it compares against what was set.
     """
 
     checks: dict[str, bool] = {}
     reasons: list[str] = []
 
-    checks["identity_preserved"] = (
-        revision_scientific_identity_sha256 == goal.scientific_identity_sha256
+    effective_identity = (
+        goal.scientific_identity_sha256
+        if bound_scientific_identity_sha256 is None
+        else str(bound_scientific_identity_sha256)
     )
-    if not checks["identity_preserved"]:
-        reasons.append(
-            "the revision binds different molecular identities or "
-            "electronic states than the goal approved"
-        )
+    effective_conditions = (
+        goal.conditions if bound_conditions is None else bound_conditions
+    )
+    binds_scope = (
+        goal_scope_is_unbound(goal)
+        and not str(effective_identity or "").strip()
+    )
 
     revision_conditions = canonical_data(
         conditions_from_review(revision_review)
     )
-    checks["conditions_preserved"] = revision_conditions == canonical_data(
-        goal.conditions
-    )
-    if not checks["conditions_preserved"]:
-        reasons.append(
-            "the revision changes physical conditions (solvent or "
-            "thermochemical state) the goal approved"
+
+    if binds_scope:
+        # Nothing to preserve: this revision is the first executable
+        # partition this goal has ever displayed, so it fixes the scope
+        # that every later revision is held to.
+        checks["identity_preserved"] = True
+        checks["conditions_preserved"] = True
+        checks["scope_bound_here"] = True
+    else:
+        checks["identity_preserved"] = (
+            revision_scientific_identity_sha256 == effective_identity
         )
+        if not checks["identity_preserved"]:
+            reasons.append(
+                "the revision binds different molecular identities or "
+                "electronic states than the goal approved"
+            )
+        checks["conditions_preserved"] = revision_conditions == canonical_data(
+            effective_conditions
+        )
+        if not checks["conditions_preserved"]:
+            reasons.append(
+                "the revision changes physical conditions (solvent or "
+                "thermochemical state) the goal approved"
+            )
 
     goal_envelope = dict(goal.envelope)
     review_envelope = dict(revision_review.get("execution_envelope") or {})
@@ -522,10 +580,21 @@ def admit_revision(
         cited_evidence_event_hashes=(
             tuple(prior_outcome_evidence_hashes) if admitted else ()
         ),
+        bound_scientific_identity_sha256=(
+            str(revision_scientific_identity_sha256)
+            if admitted and binds_scope
+            else ""
+        ),
+        bound_conditions=(
+            conditions_from_review(revision_review)
+            if admitted and binds_scope
+            else None
+        ),
     )
 
 
 __all__ = [
+    "goal_scope_is_unbound",
     "GOAL_SCHEMA_VERSION",
     "GOAL_SETTLEMENTS",
     "GoalBudgetsV1",

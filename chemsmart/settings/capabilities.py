@@ -179,6 +179,8 @@ _CURRENT_HARNESS_PROJECT_PARAMETERS = (
     "dispersion",
     "extrapolation_basis",
     "functional",
+    "geom_maxiter",
+    "opt_convergence",
     "scf_algorithm",
     "scf_convergence",
     "scf_maxiter",

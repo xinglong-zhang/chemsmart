@@ -67,8 +67,10 @@ logger = logging.getLogger(__name__)
     "-s",
     "--recalc-hess",
     type=int,
-    default=5,
-    help="Number of steps to recalculate Hessian.",
+    default=None,
+    help="Number of steps to recalculate Hessian. Unset leaves the "
+    "project's own value, which is what the block below preserves; the "
+    "settings class supplies 5 when no project declares one.",
 )
 @click.option(
     "-t",
@@ -109,7 +111,15 @@ def ts(
     hybrid_hess=False,
     hybrid_hess_atoms=None,
     numhess=False,
-    recalc_hess=5,
+    # None, like every sibling in this signature: the guard below reads
+    # "did the user type it", and a non-None default made that guard
+    # always true, so the project's own value was overwritten by a flag
+    # nobody passed. po3-r17 (2026-09-11) declared recalc_hess 999 in
+    # project YAML to bound a 12 h envelope, the written input carried
+    # 5, the preview went red on "expected 999, observed 5", and the
+    # window ended with no calculation. ORCATSJobSettings still
+    # supplies 5 when no project declares one.
+    recalc_hess=None,
     trust_radius=None,
     tssearch_type=None,
     full_scan=False,

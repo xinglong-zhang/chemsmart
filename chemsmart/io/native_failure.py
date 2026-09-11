@@ -101,6 +101,20 @@ class NativeFailureSummaryV1:
 
 
 _ORCA_RULES = (
+    # ORCA's input check aborts before any chemistry: a route the program
+    # refuses (RIJK with an analytical Hessian; bare RI with a hybrid
+    # functional) dies in main_input_check.cpp within a second. Six
+    # engine calls in one goal ended this way and were typed as geometry
+    # non-convergence because the class was undiagnosed and fell through
+    # (REACH-1 po3, 2026-09-06). First, so the abort line outranks any
+    # later pattern the same output might match.
+    (
+        "input_check",
+        (
+            re.compile(r"\bmain_input_check\.cpp\b", re.I),
+            re.compile(r"\bError \(ORCA_MAIN\)\b.*\baborting the run\b", re.I),
+        ),
+    ),
     (
         "auxiliary_basis",
         (
@@ -225,6 +239,8 @@ _XTB_RULES = (
 _ORCA_NORMAL = re.compile(r"ORCA TERMINATED NORMALLY", re.I)
 _ORCA_ERROR = re.compile(r"ORCA finished by error termination", re.I)
 _ORCA_ABORT = re.compile(r"\bError \(ORCA_MAIN\):.*\baborting the run\b", re.I)
+#: The line ORCA prints when its input check refuses the run.
+ORCA_INPUT_CHECK_ABORT = _ORCA_ABORT
 _GAUSSIAN_NORMAL = re.compile(r"Normal termination of Gaussian", re.I)
 _GAUSSIAN_ERROR = re.compile(r"Error termination via", re.I)
 _XTB_NORMAL = re.compile(r"\*\s*finished run on", re.I)
@@ -232,6 +248,10 @@ _XTB_ERROR = re.compile(r"\[ERROR\]|\babnormal termination of xtb\b", re.I)
 
 _CANONICAL_DIAGNOSTICS = {
     "orca": {
+        "input_check": (
+            "ORCA's input check rejected the input before any calculation "
+            "started; the engine's own lines name the field.",
+        ),
         "auxiliary_basis": (
             "ORCA rejected the auxiliary basis for a correlated method.",
         ),

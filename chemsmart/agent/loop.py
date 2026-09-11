@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from chemsmart.agent._contracts import (
     ContractError,
@@ -29,6 +29,9 @@ from chemsmart.agent.runtime.deepseek import (
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
+from chemsmart.agent.terminal_states import (
+    PROVIDER_TRANSPORT_TERMINAL_REASON,
+)
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 
 
@@ -180,6 +183,32 @@ def _unapprovable_reason(summary: Mapping[str, Any]) -> str:
     return "workflow recorded but not approvable"
 
 
+def _completion_is_green(host: Any, receipt_sha256s: Iterable[str]) -> bool:
+    """Whether every required completion receipt the host minted passed.
+
+    The same question ``terminate`` asks before it admits the word
+    ``complete``, asked here so the caller chooses a word the gate will
+    accept rather than asserting one and meeting a ContractError from
+    the last statement of the loop.
+    """
+
+    required = tuple(receipt_sha256s or ())
+    if not required:
+        return False
+    registry = getattr(host, "analysis_completion_receipts", {}) or {}
+    for digest in required:
+        receipt = registry.get(digest)
+        if receipt is None:
+            # Not an analysis completion -- a command preflight, which
+            # terminate grades on its own findings. Leave that to it.
+            continue
+        if str(getattr(receipt, "status", "")) != "passed":
+            return False
+        if tuple(getattr(receipt, "findings", ()) or ()):
+            return False
+    return True
+
+
 class ToolLoopRunner:
     """Drive provider-native turns through the only approved dispatcher."""
 
@@ -265,6 +294,7 @@ class ToolLoopRunner:
         total_provider_failures = 0
         tool_turns_completed = 0
         reinjection_ordinal = 0
+        termination_notice_delivered = False
         while True:
             if should_stop is not None and should_stop():
                 # The human withdrew the planning request.  Cancellation lands
@@ -328,7 +358,18 @@ class ToolLoopRunner:
             )
             # Provider-private reasoning continuation must not influence any
             # persisted evidence, including request digests.
-            request_sha256 = canonical_sha256(public_provider_request(request))
+            public_request = public_provider_request(request)
+            request_sha256 = canonical_sha256(public_request)
+            # What this attempt is asked to carry, from the same public
+            # projection the digest is taken from, so a failed attempt
+            # -- which the provider never bills and which therefore
+            # reports zero tokens -- still says how large it was. It
+            # rides the successful attempt too: the diagnosis that
+            # earned this field needed the last success beside the three
+            # timeouts, and recording only the failures leaves the
+            # distribution a deadline must be calibrated against
+            # half-observed.
+            request_bytes = len(canonical_json(public_request).encode("utf-8"))
             context_limit = min(
                 envelope.budget.max_input_tokens_per_request,
                 provider_budget.max_input_tokens_per_request,
@@ -385,6 +426,7 @@ class ToolLoopRunner:
                     <= _PROVIDER_FAILURE_SESSION_BUDGET
                 )
                 attempt = self._failed_attempt(
+                    request_bytes=request_bytes,
                     envelope=envelope,
                     request_context=request_context,
                     provider_budget=provider_budget,
@@ -430,7 +472,7 @@ class ToolLoopRunner:
                     continue
                 terminal_state = "failed"
                 final_text = str(exc)
-                terminal_reason = "provider transport or protocol failed"
+                terminal_reason = PROVIDER_TRANSPORT_TERMINAL_REASON
                 break
             provider_receipts.append(provider_receipt)
             consecutive_provider_failures = 0
@@ -443,6 +485,7 @@ class ToolLoopRunner:
                 request_sha256=request_sha256,
                 response_sha256=canonical_sha256(response),
                 status="succeeded",
+                request_bytes=request_bytes,
                 latency_ms=max(0, int((self.clock() - attempt_start) * 1000)),
                 input_tokens=provider_receipt.input_tokens,
                 output_tokens=provider_receipt.output_tokens,
@@ -563,6 +606,40 @@ class ToolLoopRunner:
                 terminal_reason = final_text
                 break
             if not decoded_tool_calls:
+                # The session is ending its turn without a tool call. Under
+                # a goal, once, the host says what is undelivered and what
+                # remains -- informational, never a demand (owner ruling
+                # 2026-09-06) -- and allows one further turn; a second
+                # no-tool turn ends the session as it always did.
+                notice_source = getattr(self.host, "termination_notice", None)
+                notice = (
+                    notice_source()
+                    if callable(notice_source)
+                    and not termination_notice_delivered
+                    and callable(
+                        getattr(session, "append_host_user_message", None)
+                    )
+                    else None
+                )
+                if notice:
+                    termination_notice_delivered = True
+                    session.append_host_user_message(notice["text"])
+                    self.event_store.append(
+                        turn_id=envelope.turn_id,
+                        kind=EventKind.TERMINATION_NOTICE_DELIVERED.value,
+                        payload={
+                            "undelivered_declared_observable_ids": list(
+                                notice["undelivered_declared_observable_ids"]
+                            ),
+                            "budgets": dict(notice["budgets"]),
+                            "content_sha256": canonical_sha256(notice["text"]),
+                            "rule_ids": ("wake.termination_notice",),
+                        },
+                        idempotency_key=(
+                            "termination-notice:" + envelope.turn_id
+                        ),
+                    )
+                    continue
                 final_text = str(assistant.get("content") or "")
                 analysis_policy = self.host.analysis_completion_policy
                 if analysis_policy is not None:
@@ -613,12 +690,155 @@ class ToolLoopRunner:
                     # above reports its own unmet obligations.
                     unapproved = self.host.unapproved_workflow_summary()
                     try:
-                        completion_required = (
-                            self.host.completion_receipts_for_latest_preflight()
-                        )
+                        try:
+                            completion_required = (
+                                self.host.completion_receipts_for_latest_preflight()
+                            )
+                        except ContractError:
+                            # A delivery made directly from registered
+                            # results has no preflight and no analysis
+                            # policy, and finalisation knew only those
+                            # two ways to mint a certificate:
+                            # SUFFICIENCY-1 recorded seventy claims and
+                            # its scientific decision and ended
+                            # `blocked` for want of a ceremony. The same
+                            # declared requirements and receipt graph
+                            # certify it here; anything else falls
+                            # through to the handler below unchanged.
+                            deliver = getattr(
+                                self.host,
+                                "completion_receipts_for_delivered_claims",
+                                None,
+                            )
+                            if not callable(deliver):
+                                raise
+                            completion_required = deliver()
+                            # And nothing more. Overwriting `unapproved`
+                            # here made a session whose newest plan the
+                            # host itself calls unapprovable terminate
+                            # "complete -- host readiness gates passed",
+                            # discarding the blocking node ids: a false
+                            # host word, and the ordinary shape of a
+                            # woken cycle that answers from registered
+                            # results while drafting a follow-up. What
+                            # the host said about the plan stands.
                         if unapproved is None:
-                            terminal_state = "complete"
-                            terminal_reason = "host readiness gates passed"
+                            # Ask the certificate the host just minted
+                            # what word it supports. `complete` is a
+                            # gated word -- terminate admits it only
+                            # over green receipts -- and finalisation
+                            # asserted it unconditionally, so a session
+                            # whose own completion came back `partial`
+                            # raised "a required completion gate is red"
+                            # out of the last statement of run(). The
+                            # stream was left non-terminal, the goal
+                            # settled by a typed-error path that derives
+                            # nothing from the delivery, and 57 claims,
+                            # 11 declarations, an assessment and a
+                            # scientific decision became unreadable
+                            # (SUFFICIENCY-2, 2026-09-09). The gate is
+                            # shared with approved execution and is not
+                            # loosened; the caller asks the right
+                            # question instead. A partial completion is
+                            # a delivery with stated limitations, which
+                            # the settlement reads from the receipts.
+                            if _completion_is_green(
+                                self.host, completion_required
+                            ):
+                                terminal_state = "complete"
+                                terminal_reason = "host readiness gates passed"
+                            else:
+                                terminal_state = "planned"
+                                terminal_reason = (
+                                    "the analysis completion is partial; "
+                                    "the delivery stands with the "
+                                    "limitations it names"
+                                )
+                            # Under a bounded review the host builds the
+                            # review now, while the stream is open, so a
+                            # refusal is an event the goal settles on and
+                            # never an exception after the seal (REACH-1
+                            # ino3 lost its whole grant to that order).
+                            wanted = getattr(
+                                self.host, "execution_review_wanted", None
+                            )
+                            prepare = getattr(
+                                self.host, "prepare_execution_review", None
+                            )
+                            if (
+                                callable(wanted)
+                                and callable(prepare)
+                                and wanted()
+                            ):
+                                try:
+                                    review = prepare()
+                                except ContractError as exc:
+                                    refusal = dict(
+                                        getattr(
+                                            self.host,
+                                            "execution_review_refusal",
+                                            {},
+                                        )
+                                        or {}
+                                    )
+                                    self.event_store.append(
+                                        turn_id=envelope.turn_id,
+                                        kind=(
+                                            EventKind.EXECUTION_REVIEW_REFUSED.value
+                                        ),
+                                        payload={
+                                            "workflow_id": refusal.get(
+                                                "workflow_id", ""
+                                            ),
+                                            "reason": str(exc),
+                                            "readiness_gate": (
+                                                "host readiness gates passed"
+                                            ),
+                                        },
+                                        idempotency_key=(
+                                            "execution-review-refused:"
+                                            + envelope.turn_id
+                                        ),
+                                    )
+                                    terminal_reason = (
+                                        f"execution review refused: {exc}"
+                                    )
+                                    try:
+                                        completion_required = (
+                                            self.host.latest_workflow_draft_receipt(),
+                                        )
+                                        terminal_state = "planned"
+                                    except ContractError:
+                                        terminal_state = "blocked"
+                                else:
+                                    self.event_store.append(
+                                        turn_id=envelope.turn_id,
+                                        kind=(
+                                            EventKind.EXECUTION_REVIEW_PREPARED.value
+                                        ),
+                                        payload={
+                                            "workflow_id": (
+                                                review.scientific_plan.workflow_id
+                                            ),
+                                            "review_sha256": (
+                                                review.review_sha256
+                                            ),
+                                            "readiness_gate": (
+                                                "host readiness gates passed"
+                                            ),
+                                        },
+                                        idempotency_key=(
+                                            "execution-review-prepared:"
+                                            + review.review_sha256
+                                        ),
+                                    )
+                                    terminal_state = "waiting_for_approval"
+                                    terminal_reason = (
+                                        "host readiness gates passed; the "
+                                        "execution review was built by the "
+                                        "host under the goal's standing "
+                                        "decision"
+                                    )
                         else:
                             # A green preflight with an unapprovable workflow
                             # is a planned stop, and the event store requires
@@ -744,6 +964,15 @@ class ToolLoopRunner:
                         tool_event_payload["cause"] = refusal_cause
                     if refusal_route:
                         result["next_legal_route"] = refusal_route
+                    # A routed refusal is a failure report: gate,
+                    # invariant, diagnosis, route and cost ride the
+                    # rejection and the durable event as one record.
+                    failure_report = getattr(exc, "failure_report", None)
+                    if isinstance(failure_report, Mapping):
+                        result["failure_report"] = dict(failure_report)
+                        tool_event_payload["failure_report"] = dict(
+                            failure_report
+                        )
                     tool_event_kind = EventKind.TOOL_FAILED.value
                     tool_event_key = "tool-failed:" + call_id
                 if wait_emitted and wait_started is not None:
@@ -930,6 +1159,9 @@ class ToolLoopRunner:
             "provider_budget_sha256": attempt.provider_budget_sha256,
             "latency_ms": attempt.latency_ms,
             "input_tokens": attempt.input_tokens,
+            # A failed attempt is never billed, so its token counts are
+            # zero and say nothing about what it was asked to carry.
+            "request_bytes": attempt.request_bytes,
             "output_tokens": attempt.output_tokens,
             "reasoning_tokens": attempt.reasoning_tokens,
             "nonsecret_error_class": attempt.nonsecret_error_class,
@@ -951,6 +1183,7 @@ class ToolLoopRunner:
     def _failed_attempt(
         self,
         *,
+        request_bytes: int = 0,
         envelope: TaskEnvelopeV1,
         request_context: RequestContextProvenanceV1,
         provider_budget: ProviderNetworkBudgetV1,
@@ -995,6 +1228,7 @@ class ToolLoopRunner:
             latency_ms=max(0, int((self.clock() - started) * 1000)),
             retry_ordinal=0,
             nonsecret_error_class=str(error_class),
+            request_bytes=int(request_bytes),
         )
 
 

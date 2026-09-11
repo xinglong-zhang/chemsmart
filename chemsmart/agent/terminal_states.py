@@ -54,6 +54,34 @@ REPAIRABLE_NODE_STATES = frozenset(
     }
 )
 
+#: The only two native failure classes that are themselves statements
+#: about convergence. A class that names a cause outranks the
+#: convergence flag it leaves behind; these two keep their own meaning.
+_CONVERGENCE_FAILURE_CLASSES = frozenset(
+    {"scf_convergence", "geometry_optimization"}
+)
+
+#: What a program's output falls back to when no rule matched: "it ended
+#: badly" and "it stopped". Both are the ``next()`` default in
+#: ``io/native_failure._summarize``, so neither is a diagnosis, and
+#: neither may outrank one.
+#:
+#: Earned by getting this wrong. ORCA reports a non-converged relaxed
+#: scan step by failing to store the step's geometry and then aborting
+#: inside its property module with "ERROR (SHARK): Failed to read input
+#: file", which matches no rule and lands on ``native_runtime``. Read as
+#: a cause, that turned a convergence failure into a crash. Probed at
+#: one rank with no MPI in the run at all, the same input fails at the
+#: same step, and the output says why in words: "The optimization did
+#: not converge but reached the maximum number of" steps.
+#:
+#: PySCF's ``driver_exception`` is deliberately not here: it is a
+#: ``.get()`` default for an unrecognised stage rather than this
+#: fallback, and no run has shown it masking a convergence failure.
+_UNDIAGNOSED_FAILURE_CLASSES = frozenset(
+    {"native_runtime", "incomplete_output"}
+)
+
 #: Modes above this magnitude below zero are imaginary in earnest;
 #: smaller ones are the rotor and translation noise thermochemistry
 #: already treats as zero.
@@ -157,12 +185,19 @@ class NodeTerminalStateV1:
     scan_steps_reached: int | None = None
     scan_steps_planned: int | None = None
     wall_seconds: float | None = None
+    #: The host's own post-processing after the engine exited, from the
+    #: receipt's evaluated_at; None for receipts minted before the stamp.
+    host_seconds: float | None = None
     wrapper_exit_status: int | None = None
     child_exit_status: int | None = None
     #: Event hashes and artifact digests this derivation read -- the
     #: citation a revision carries.
     evidence_event_hashes: tuple[str, ...] = ()
     evidence_artifact_sha256s: tuple[str, ...] = ()
+    #: The registered-result ids those digests carry when their bytes are
+    #: bound (<program>-result-<sha16>): a digest an outcome names must
+    #: either resolve or say how it would.
+    evidence_artifact_ids: tuple[str, ...] = ()
     #: Host-detected surprises recorded beneath this node's verdict:
     #: signal id, status, the numbers that tripped it, the receipt
     #: digest. Empty for streams that predate the sensor.
@@ -190,10 +225,12 @@ class NodeTerminalStateV1:
             "scan_steps_reached": self.scan_steps_reached,
             "scan_steps_planned": self.scan_steps_planned,
             "wall_seconds": self.wall_seconds,
+            "host_seconds": self.host_seconds,
             "wrapper_exit_status": self.wrapper_exit_status,
             "child_exit_status": self.child_exit_status,
             "evidence_event_hashes": self.evidence_event_hashes,
             "evidence_artifact_sha256s": self.evidence_artifact_sha256s,
+            "evidence_artifact_ids": self.evidence_artifact_ids,
             "anomalies": tuple(dict(item) for item in self.anomalies),
         }
 
@@ -210,6 +247,7 @@ class RunOutcomeV1:
     nodes: tuple[NodeTerminalStateV1, ...] = ()
     engine_calls_consumed: int = 0
     engine_wall_seconds: float = 0.0
+    host_seconds: float = 0.0
     stream_head_hash: str = ""
     stream_tail_hash: str = ""
     #: Launches charged to the excursion grant, counted apart so the
@@ -224,6 +262,7 @@ class RunOutcomeV1:
             "nodes": tuple(item.public_record() for item in self.nodes),
             "engine_calls_consumed": self.engine_calls_consumed,
             "engine_wall_seconds": self.engine_wall_seconds,
+            "host_seconds": self.host_seconds,
             "excursion_calls_consumed": self.excursion_calls_consumed,
         }
 
@@ -364,6 +403,35 @@ def _classify_failure(
         )
     if "execution.process.launch_failed" in findings:
         return "launch_failed"
+    # A crash is not a convergence statement. ``converged is False`` is
+    # what a dead run leaves behind, not what it was, so testing it
+    # before the program's own error class typed an ORCA input-syntax
+    # death (``maxiter`` written on the route line, one second of
+    # runtime) as ``failed_nonconverged_geometry``, and a property-module
+    # abort (``ERROR (SHARK): Failed to read input file``) as
+    # ``failed_nonconverged_scan_step``. The repair menu then prescribed
+    # chemistry for a broken input file. Both were live in one goal
+    # (NOVEL-1 ino1, 2026-09-04) and four archived scans on this host
+    # carry the same SHARK signature, so the word had been calling engine
+    # crashes chemistry for the whole campaign.
+    #
+    # This branch cannot swallow a genuine non-convergence: a run that
+    # merely hit its iteration cap terminates normally, so it carries no
+    # native failure class at all, and the two classes that *are*
+    # convergence statements keep their meaning -- ``scf_convergence``
+    # here, ``geometry_optimization`` in the derivation below. Reading
+    # the flag first cost that too: an SCF failure carrying
+    # ``converged is False`` was typed ``failed_nonconverged_geometry``
+    # even on a single point, which has no geometry to converge. That
+    # second case was found by the general test rather than by a run.
+    if native_class == "scf_convergence":
+        return "failed_nonconverged_scf"
+    if (
+        native_class
+        and native_class not in _CONVERGENCE_FAILURE_CLASSES
+        and native_class not in _UNDIAGNOSED_FAILURE_CLASSES
+    ):
+        return "failed_native"
     nonconverged = (
         converged is False
         or any(
@@ -377,8 +445,6 @@ def _classify_failure(
         if jobtype == "scan" or (reached is not None and planned is not None):
             return "failed_nonconverged_scan_step"
         return "failed_nonconverged_geometry"
-    if native_class == "scf_convergence":
-        return "failed_nonconverged_scf"
     # A search that converged cleanly onto the wrong kind of stationary
     # point is not a generic native failure, and calling it one loses the
     # only thing a reader can act on. A transition-state search that
@@ -492,6 +558,7 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
     engine_calls = 0
     excursion_calls = 0
     engine_wall = 0.0
+    host_total = 0.0
     for row in node_rows:
         node_id = str(row.get("node_id") or "")
         node_state = str(row.get("state") or "")
@@ -520,6 +587,7 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
         )
         jobtype = str(validation.get("jobtype") or "")
         wall = None
+        host = None
         if execution:
             if node_id in excursion_nodes:
                 excursion_calls += 1
@@ -531,6 +599,12 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
             )
             if wall:
                 engine_wall += wall
+            host = _wall_seconds(
+                execution.get("finished_at") or "",
+                execution.get("evaluated_at") or "",
+            )
+            if host:
+                host_total += host
 
         # A receipt is the stronger fact than the state row: a stream
         # can hold a terminal receipt before (or without) the row's own
@@ -615,12 +689,18 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
                 scan_steps_reached=reached,
                 scan_steps_planned=planned,
                 wall_seconds=wall,
+                host_seconds=host,
                 wrapper_exit_status=execution.get("wrapper_exit_status"),
                 child_exit_status=execution.get("child_exit_status"),
                 evidence_event_hashes=tuple(
                     event_hashes_by_node.get(node_id, ())
                 ),
                 evidence_artifact_sha256s=artifact_digests,
+                evidence_artifact_ids=tuple(
+                    f"{program}-result-{digest[:16]}"
+                    for digest in artifact_digests
+                    if program and digest
+                ),
                 anomalies=tuple(anomalies_by_node.get(node_id, ())),
             )
         )
@@ -635,13 +715,29 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
         engine_calls_consumed=engine_calls,
         excursion_calls_consumed=excursion_calls,
         engine_wall_seconds=engine_wall,
+        host_seconds=host_total,
         stream_head_hash=events[0].event_hash if events else "",
         stream_tail_hash=events[-1].event_hash if events else "",
     )
 
 
+#: A session the provider's transport or protocol ended, rather than
+#: the science. The loop writes it and the driver reads it, so it is
+#: one word in one place: a cycle lost this way produced no scientific
+#: evidence and must not spend the goal's scientific opportunity.
+PROVIDER_TRANSPORT_TERMINAL_REASON = "provider transport or protocol failed"
+
+
+def is_provider_transport_terminal(reason: str) -> bool:
+    """True when a cycle ended on the provider rather than the science."""
+
+    return str(reason or "").strip() == PROVIDER_TRANSPORT_TERMINAL_REASON
+
+
 __all__ = [
     "NODE_TERMINAL_STATES",
+    "PROVIDER_TRANSPORT_TERMINAL_REASON",
+    "is_provider_transport_terminal",
     "NodeTerminalStateV1",
     "RunOutcomeV1",
     "derive_run_outcome",

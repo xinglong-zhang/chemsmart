@@ -197,6 +197,25 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "alternative.",
     ),
     _r(
+        "project.convergence_is_not_a_result",
+        "tool:project_yaml",
+        "T0",
+        "ORCA's optimiser controls are geom_maxiter and opt_convergence "
+        "(tight/normal/loose), and they answer two different problems. A "
+        "run cut off while still descending wants more iterations; a "
+        "loosened criterion does not buy those, it lowers the bar the "
+        "same walk has to clear, and the structure it stops on can be "
+        "worse than one you already hold. Observed: a cis Fe(II) triplet "
+        "that would not converge did converge under LooseOpt, and its "
+        "energy came out 4.7 kJ/mol ABOVE a constrained scan point the "
+        "same goal had already computed -- the only node the host marked "
+        "validated was the worst of the three. If you loosen, compare "
+        "what comes back against the numbers you have before you deliver "
+        "it.",
+        "NOVEL-1 ino1 cycle 5: converged at +66.5 against a scan point "
+        "at +61.8 and a capped run at +65.0",
+    ),
+    _r(
         "project.stage_keys_and_phases",
         "tool:project_yaml",
         "T0",
@@ -304,6 +323,17 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "deleting the node that carries a finding is the cheapest way to clear it",
     ),
     _r(
+        "analysis.result_ids_are_host_minted",
+        "tool:extract_result_quantities",
+        "T1",
+        "A result opens by the id the host bound it under, "
+        "<program>-result-<16 hex of its digest>, shown as artifact_id on "
+        "the workspace record and as evidence_artifact_ids on a run outcome; "
+        "a bare digest is citable evidence, never an argument.",
+        "REACH-1 ino3: ten refusals in 22 seconds on digests and node ids "
+        "the host itself had printed",
+    ),
+    _r(
         "analysis.result_functional_resolution",
         "tool:extract_result_quantities",
         "T1",
@@ -365,8 +395,10 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "T0",
         "As this cycle's first typed act, restate the requested observable "
         "through declare_requested_observable -- identifier, reporting "
-        "unit, one sentence of meaning; the completion gate checks the "
-        "delivery against that declaration by kind and unit, never value.",
+        "unit, one sentence of meaning; the completion gate joins the "
+        "delivery to that declaration by id -- the claim's claim_id, or "
+        "the receipt quantity id it stands on -- then checks the "
+        "dimension, never the value.",
     ),
     _r(
         "wake.adversarial_close",
@@ -377,14 +409,124 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "a finding to deliver, not a failure.",
     ),
     _r(
+        "wake.excursion_buys_replication",
+        "wake:recovery",
+        "T2",
+        "The excursion line (max_excursion_calls) buys replication before "
+        "belief: re-run the node an anomaly receipt flags under a named "
+        "perturbation -- a perturbed start, another basis, a "
+        "quasi-harmonic entropy treatment -- as a node tagged with that "
+        "anomaly's digest; the same sensor then either trips again "
+        "(replicated) or stays silent (refuted) and the receipt "
+        "supersedes. A tagged node feeds no required output, so the "
+        "asked observable is never bought with the grant; re-running "
+        "identical input is not a perturbation and replicates nothing.",
+        "E4 windows: a live line bought nothing because the only "
+        "investigation on the gem was the deliverable; the design note "
+        "names replication as the class payable by construction",
+    ),
+    _r(
+        "wake.workspace_record",
+        "wake",
+        "T1",
+        "workspace_record lists what earlier goals in this workspace "
+        "computed for the same inputs and the claims they delivered, "
+        "host-written from receipts and named by digest; a divergence "
+        "line names two delivered values of one claim that disagree. A "
+        "disagreement you can explain or replicate is a finding to "
+        "deliver with its numbers, never a note; the host states it and "
+        "never why.",
+        "NOVEL-1/2 po2: the sulfone's gauche preference crossed the "
+        "author's cutoff between two windows and no session could see it",
+    ),
+    _r(
+        "leaf.structure.builders_symmetry",
+        "leaf:structure",
+        "T3",
+        "A built or idealised start carries its builder's symmetry and "
+        "converges to the nearest stationary point of that symmetry: a "
+        "methyl placed at torsions of exactly 60/180/300 starts on its "
+        "rotor saddle, and an idealised D4h complex on a degenerate pair. "
+        "Read the symmetry estimate the binding and the review state; "
+        "break_symmetry perturbs every atom by a seed you name, so the "
+        "same request gives the same bytes; and when a result prints a "
+        "pair of near-equal imaginary modes, "
+        "vibrational_mode_degeneracy_group says whether they are one "
+        "degenerate mode before you name the motion.",
+        "NOVEL-2/3 ino1 and ino3: three exactly threefold rotors and an "
+        "idealised D4h start were six saddles in two goals",
+    ),
+    _r(
+        "leaf.structure.each_hop_is_bound",
+        "leaf:structure",
+        "T3",
+        "A built geometry is a chain and every hop is a new artifact: bind "
+        "charge and multiplicity on each intermediate before the next "
+        "append, derive, edit or break_symmetry, or the next hop is "
+        "refused for an unbound parent (a 24-atom build met that refusal "
+        "three times).",
+        "REACH-1 ino3: three derivation.parent_is_identity_bound refusals "
+        "inside one sanctioned build",
+    ),
+    _r(
+        "leaf.saddle.seed_a_bimolecular_saddle",
+        "leaf:saddle",
+        "T3",
+        "A bimolecular saddle is seeded from the optimised fragments at "
+        "contacts near the forming bonds (2.0-2.3 A), never from a loose "
+        "arrangement on the flat long-range region, where the lowest modes "
+        "are fragment separations and a saddle search follows them apart; "
+        "hessmode names the mode to follow when the guess has one, and a "
+        "relaxed scan of one forming bond brackets the ridge when it does "
+        "not.",
+        "REACH-1 po3: two searches from 2.10/2.45 A guesses drifted to a "
+        "vdW minimum and to two soft intermolecular modes",
+    ),
+    _r(
+        "wake.goal_authority",
+        "wake",
+        "T0",
+        "This session runs under an approved goal: a revision that cites "
+        "the previous run's typed evidence, keeps every molecular "
+        "identity, electronic state and physical condition, and stays "
+        "inside the budgets is admitted and executed by the host without "
+        "a returning human action; one that changes any of them, or "
+        "exceeds a budget, returns to the human. Finish with a "
+        "host-executed plan, a decision recorded with claims by id, or a "
+        "refusal the host can verify -- a planned or previewed state is "
+        "not an ending.",
+        "NOVEL-3 ino3: the woken cycle's system prompt said execution "
+        "is not exposed while the goal's authority said the opposite; "
+        "two cycles ended planned",
+    ),
+    _r(
+        "wake.termination_notice",
+        "wake:close",
+        "T0",
+        "Informational, from the host, once: you are about to end this "
+        "session with declared observables undelivered while budget "
+        "remains. Nothing is required -- ending now is a legitimate "
+        "settlement, a claim by id costs no engine call, and a refusal "
+        "the host can verify is a deliverable. The undelivered ids and "
+        "the remaining lines follow.",
+        "owner ruling 2026-09-06: never force a session to spend the "
+        "remaining budget; when it is about to terminate, provide the "
+        "remaining budget purely as informational context",
+    ),
+    _r(
         "wake.refusal_is_a_deliverable",
         "wake",
         "T0",
-        "If the requested observable is unreachable from the admissible "
-        "evidence, deliver what is reachable, retain the unreachable "
-        "observable as a blocked analysis intent naming its required "
-        "producer, and record the scientific decision citing its receipts; "
-        "the goal then settles as a typed refusal, which is a deliverable.",
+        "If a declared observable is unreachable from the admissible "
+        "evidence, deliver every other one by its id and refuse this one "
+        "in a form the host can verify: record_scientific_decision's "
+        "unreachable_observable_ids names the observable, the producer it "
+        "would need -- a selector and jobtype no envelope program declares, "
+        "or a blocked_unsupported analysis node in your plan whose "
+        "output_id is the observable -- and the receipts that show the "
+        "gap. A refusal the host verifies settles the goal "
+        "unreachable_from_evidence, which is a deliverable; a refusal in "
+        "prose alone settles nothing.",
         "the first live goal round's honest refusal was invisible",
     ),
     _r(
@@ -417,15 +559,53 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "R1 0/3 -> 3/3; the stale-number live run",
     ),
     _r(
+        "recovery.restart_from_what_it_reached",
+        "leaf:recovery",
+        "T4",
+        "An optimisation that ran out of iterations or wall time did not "
+        "fail to move -- it moved and was cut off, and the structure it "
+        "reached is many steps further down the surface than the "
+        "coordinates it started from. bind_reached_geometry carries that "
+        "structure into a new geometry input with the source result, the "
+        "ending this workspace recorded for it, and whether the program "
+        "terminated normally on the receipt. Bind charge and "
+        "multiplicity afterwards; the stage that optimises it is a new "
+        "workflow. It upgrades nothing: a node that failed still "
+        "satisfies no producer edge, and the reached structure is a "
+        "starting point that the next optimisation grades.",
+        "the menu named this route campaign-long with no tool behind it; "
+        "NOVEL-1 ino1 asked for it 5 times in 3 spellings",
+    ),
+    _r(
+        "saddle.characterise_what_it_is",
+        "leaf:saddle",
+        "T5",
+        "A search that converged onto a stationary point of a different "
+        "order than it promised keeps that failure, and its printed "
+        "numbers are readable exactly as they stand. If you judge the "
+        "structure it found worth reporting, say what it is with "
+        "characterise_stationary_point: the host checks the order you "
+        "name against the frequencies the program printed and mints a "
+        "receipt beside the failure, so a barrier or a free energy you "
+        "deliver from those bytes says which structure it belongs to. "
+        "This is an affordance, not a toll: nothing here is required "
+        "before you may report what you found.",
+        "24 archived saddles, 0 delivered as findings (E1 audit)",
+    ),
+    _r(
         "plan.claim_carries_declared_id",
         "tool:plan_scientific_workflow",
         "T1",
-        "A declared observable is answered only by a claim whose claim id "
-        "is exactly the declared observable_id. Give the claim node's "
-        "claim ids the declared ids, verbatim; a claim under any other "
-        "name, however right its number, leaves the declaration "
+        "A declared observable is answered by a claim carrying its "
+        "observable_id: a planned claim node renders one claim per input, "
+        "named by that input's input_id, so give the input that answers a "
+        "declared observable the observable_id verbatim and declare the "
+        "same id as the node's output; the host also joins on the "
+        "quantity id of the receipt the claim stands on. A claim under any "
+        "other name, however right its number, leaves the declaration "
         "undelivered and the goal cannot settle achieved.",
-        "E4 window: 9/9 first-cycle completions missed on ids",
+        "E4 window: 9/9 first-cycle completions missed on ids; NOVEL-2 "
+        "po2: six correct claims lost to the plan's input labels",
     ),
     _r(
         "declare.claim_carries_declared_id",
@@ -437,13 +617,85 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "E4 window: 6/11 goals never claimed a declared id",
     ),
     _r(
+        "compile.the_probe_is_the_programs_check",
+        "tool:compile_command",
+        "T1",
+        "A green preview is ChemSmart's compile; where the server "
+        "profile names ORCA, preflight also runs ORCA's own input check, "
+        "bounded and never charged. The review shows its word beside the "
+        "node, and an aborted check names the field to change.",
+        "REACH-1 po3 (2026-09-06): two cycles died at ORCA's input check "
+        "under green previews -- RIJK with an analytical Hessian, bare RI "
+        "with a hybrid",
+    ),
+    _r(
+        "declare.predict_before_the_number",
+        "tool:declare_requested_observable",
+        "T1",
+        "Declare before you compute. A declaration written once the "
+        "numbers are in hand is recorded as declared_after_evidence and "
+        "shown beside the delivered value: never refused, but a reader "
+        "must not mistake a restatement for a prediction.",
+        "OPEN-1 ino3 2026-09-06: twelve rows read agreed, at least eight "
+        "written with the extracted values already in hand",
+    ),
+    _r(
+        "declare.diagnostic_has_standing",
+        "tool:declare_requested_observable",
+        "T1",
+        "A prediction about the route itself -- which stationary point a "
+        "search reaches, which spin state lies lower -- is declared with "
+        "role diagnostic, a sign or band, and failure_update_rule saying "
+        "what its falsification changes. It is scored beside the "
+        "requested observables and never owed: an undelivered diagnostic "
+        "is no limitation, a diverged one is an observation the word "
+        "carries, and one within method_resolution prints indeterminate.",
+        "owner ruling R3 2026-09-06: the agent's own predictions get "
+        "standing; REACH-1 po3 cycle 3 diagnosed the saddle from "
+        "receipts and had nowhere to commit the diagnosis",
+    ),
+    _r(
+        "wake.approaches_already_tried",
+        "wake:recovery",
+        "T1",
+        "approaches_tried is what this goal has already attempted: each "
+        "node that did not deliver with the sensor numbers under it, and "
+        "each route a previous cycle rejected in its own words. Repeating "
+        "one of them is activity; eliminating an explanation is progress. "
+        "If you do repeat one, say in the decision what is different this "
+        "time.",
+        "REACH-1 po3 2026-09-06: cycle 3 diagnosed a dual-contact seed as "
+        "the failure and cycle 4 seeded a structurally identical one",
+    ),
+    _r(
+        "wake.menu_dispositions_are_recorded",
+        "wake:recovery",
+        "T1",
+        "When this wake carries a repair_menu, say what you did with "
+        "each route it offered in record_scientific_decision's "
+        "menu_route_dispositions -- taken, rejected or deferred, the "
+        "mechanism in one sentence, the receipts it rests on. The next "
+        "wake shows them beside the menu, so a cycle inherits the "
+        "argument and not only the list; repair_menu_dispositions is "
+        "what the previous cycle already decided.",
+        "REACH-1 po3 cycle 3 (2026-09-06): four routes rejected with "
+        "mechanisms in prose the next cycle never saw",
+    ),
+    _r(
         "wake.claim_by_id_costs_no_engine_call",
         "wake:recovery",
         "T1",
         "If deliverables names undelivered_declared_observable_ids, those "
         "observables were declared and no claim carries their id. Claim "
         "each by that exact id from the receipts already in hand -- that "
-        "costs no engine call, and this cycle may have none to spend.",
+        "costs no engine call, and this cycle may have none to spend. "
+        "Two routes deliver: call extract_result_quantities, "
+        "derive_thermochemistry, evaluate_quantity_expression and "
+        "record_analysis_claims yourself, or plan the chain with "
+        "plan_scientific_workflow and no calculation_nodes -- the host "
+        "then executes that plan the moment it is planned, under the "
+        "goal's standing decision, and returns its claims; no review "
+        "is built for it and none is needed.",
         "E4 window: two goals settled exhausted with every receipt on disk",
     ),
     _r(

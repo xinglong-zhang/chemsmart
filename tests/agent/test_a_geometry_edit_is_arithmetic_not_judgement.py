@@ -342,9 +342,11 @@ def test_the_refusal_points_at_the_routes_that_work(tmp_path):
     message = str(caught.value)
     # The executable driver of a ring coordinate.
     assert "relaxed scan" in message
-    # modred may be mentioned only with its execution status attached.
-    assert "modred" in message
-    assert "does not execute in this release" in message
+    # A route the release cannot execute is not a route: modred is not
+    # named at all, and the composition that places separate fragments is
+    # (ROUND 8; a session obeyed the preview-only route in NOVEL-2).
+    assert "modred" not in message
+    assert "compose_molecular_arrangement" in message
     # The engine-free composition for substituent positions is named by
     # both of its operations.
     assert "derive_molecular_species" in message
@@ -767,3 +769,129 @@ def test_a_mode_step_is_a_hop_on_the_decision_surface():
     assert "by 0.3 angstrom" in text
     assert "9 atom(s) moved; leading atoms 7, 3" in text
     assert "connectivity unchanged" in text
+
+
+def test_one_authority_answers_which_hops_a_geometry_descends_through(
+    tmp_path,
+):
+    """Three hand-listed chain walks disagreed; now one table answers.
+
+    The review chain followed edits, appends, mode displacements and
+    symmetry breaks; the original-bound-geometry walk followed three of
+    the four; and the symmetry observations walked a third list. A
+    composed or identifier-fetched molecule therefore reached the human
+    page with no origin hop at all, while a derived one carried its
+    panel -- and the panel's own docstring says the hop that decides
+    what the molecule IS can sit at the root.
+    """
+
+    host = _host_with(tmp_path, _NMA, "nma")
+    first = _edit(
+        host,
+        "t1",
+        edited_artifact_id="hop-one",
+        input_artifact_id="nma",
+        operation="set_dihedral",
+        atoms=[1, 2, 4, 5],
+        moving_side_atom=5,
+        target_value=0.0,
+    )
+    host.dispatch(
+        turn_id="t1b",
+        tool_name="bind_scientific_identity",
+        arguments={
+            "input_artifact_id": "hop-one",
+            "charge": 0,
+            "multiplicity": 1,
+        },
+    )
+    second = _edit(
+        host,
+        "t2",
+        edited_artifact_id="hop-two",
+        input_artifact_id="hop-one",
+        operation="set_bond_length",
+        atoms=[2, 4],
+        moving_side_atom=4,
+        target_value=1.40,
+    )
+    hops, origin = host._geometry_provenance(second["artifact"]["sha256"])
+    # Nearest first, every hop kinded, and the walk stops at the
+    # workspace geometry rather than inventing an origin for it.
+    assert [item["kind"] for item in hops] == [
+        "geometry_edit",
+        "geometry_edit",
+    ]
+    assert [item["edited_artifact_id"] for item in hops] == [
+        "hop-two",
+        "hop-one",
+    ]
+    assert origin is None
+    del first
+
+    # Every registry the three former hand-lists named is covered by the
+    # one table, so a future hop cannot be added to one walk and missed
+    # by another.
+    named = {name for _, name, _ in host._GEOMETRY_HOPS}
+    assert named == {
+        "geometry_edits",
+        "atom_appends",
+        "mode_displacements",
+        "symmetry_breaks",
+    }
+    # A mode displacement reaches its predecessor through the result it
+    # was stepped from, not through a parent geometry. Conflating those
+    # two fields is how the walks drifted.
+    fields = dict((name, field) for _, name, field in host._GEOMETRY_HOPS)
+    assert fields["mode_displacements"] == "result_sha256"
+    assert fields["geometry_edits"] == "parent_sha256"
+    origins = {name for _, name in host._GEOMETRY_ORIGINS}
+    assert "pubchem_geometries" in origins
+    assert "molecular_compositions" in origins
+
+
+def test_a_molecule_fetched_by_identifier_reaches_the_decision_surface():
+    """`pubchem_geometries` had no reader anywhere in the tree.
+
+    The host minted the receipt, handed the session the formula, atom
+    count and fragment count, and none of it reached the page a human
+    approves from. A live session named two numeric CIDs from prior
+    knowledge and got two unrelated molecules, one of 102 atoms in 27
+    pieces, each registered under a confident artifact id of its own
+    choosing.
+    """
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.tui.review import _pubchem_geometry_panels
+
+    review = _duck_review(
+        (
+            SimpleNamespace(
+                node_id="opt-ref",
+                molecular_identity={
+                    "charge": 0,
+                    "multiplicity": 1,
+                    "pubchem_geometry": {
+                        "identifier": "6320993",
+                        "identifier_kind": "cid",
+                        "formula": "C36H55NO10",
+                        "atom_count": 102,
+                        "fragment_count": 27,
+                    },
+                },
+            ),
+        )
+    )
+    panels = _pubchem_geometry_panels(review)
+    assert len(panels) == 1
+    text = _rendered(panels[0])
+    # The identifier the model named, and what actually came back.
+    assert "'6320993'" in text and "cid" in text
+    assert "C36H55NO10" in text and "102 atoms" in text
+    assert "27 connected piece(s)" in text
+    # An observation, never a refusal: a salt or a solvate is
+    # legitimately more than one piece.
+    assert "not a verdict" in text
+    assert "depositor's conformer" in text
+    assert "binds charge 0, multiplicity 1 explicitly" in text
