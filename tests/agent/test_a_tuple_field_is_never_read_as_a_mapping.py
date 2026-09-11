@@ -162,28 +162,35 @@ def test_no_tuple_field_is_read_with_get():
 
 
 @pytest.mark.capability("gate:executor.launch_refuses_a_refused_input")
-def test_the_lint_catches_a_planted_offender(tmp_path):
-    """A lint that cannot fail is not a lint."""
+def test_the_lint_catches_a_planted_offender():
+    """A lint that cannot fail is not a lint -- proven on the real scanner.
+
+    The first version of this test rebuilt the matching predicate inline
+    with its own ``ast.walk`` over a file in ``tmp_path``. That proves a
+    predicate *written in the test* fires; it says nothing about the
+    production scanner, and the scanner only looks inside the package.
+    It is the same antipattern the commit introducing it was criticising,
+    committed one commit later, and an independent reviewer caught it
+    (2026-09-11).
+    """
 
     wanted = sorted(
         _tuple_typed_field_names() - _names_that_are_ever_a_mapping()
     )
-    planted = tmp_path / "offender.py"
+    assert wanted, "no field is in scope, so nothing can be planted"
+    planted = PACKAGE / "_planted_mapping_read.py"
     planted.write_text(
-        f"def read(bundle):\n" f'    return bundle.{wanted[0]}.get("node")\n',
+        "def read(bundle):\n" f'    return bundle.{wanted[0]}.get("node")\n',
         encoding="utf-8",
     )
-    tree = ast.parse(planted.read_text(encoding="utf-8"))
-    hits = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "get"
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr in set(wanted)
-    ]
-    assert hits, "the planted mapping read was not detected"
+    try:
+        offenders = _mapping_reads_of_tuple_fields()
+    finally:
+        planted.unlink(missing_ok=True)
+    assert any("_planted_mapping_read.py" in item for item in offenders), (
+        "the production scanner did not report the planted mapping read, "
+        f"so this lint cannot fail: {offenders}"
+    )
 
 
 @pytest.mark.capability("gate:executor.launch_refuses_a_refused_input")

@@ -23,7 +23,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from chemsmart.io.molecules import DEFAULT_BUFFER
+from chemsmart.io.molecules.perception import (
+    BOND_PERCEPTION_POLICY_ID,
+    molecule_adjacency_matrix,
+    perceive_pairs,
+)
 
 __all__ = [
     "RESULT_READERS",
@@ -441,24 +445,23 @@ def _connectivity_matrix(molecule: Any) -> list[list[int]]:
     path ends have different molecular graphs while leaving chemical
     interpretation to the scientist.
 
-    Perception uses the shared molecular-graph tolerance
-    :data:`chemsmart.io.molecules.DEFAULT_BUFFER` so that typed analysis and
-    the rest of ChemSmart answer the bonded/not-bonded question the same way.
-    ``adjust_H`` keeps the tighter hydrogen tolerances, so the shared buffer
-    applies to heavy-atom pairs, where a tighter tolerance would drop real
-    bonds between small electronegative atoms.
+    Perception is delegated to the one declared convention
+    (:mod:`chemsmart.io.molecules.perception`), so this plane and the
+    execution plane cannot answer the same question differently. They did:
+    this function passed ``adjust_H=True``, which shrank every X-H
+    tolerance to 0.05 A and *ignored the buffer argument above it*, while
+    the execution plane passed ``adjust_H=False``. The bond/no-bond line
+    for C-H therefore sat at 1.120 A here and 1.370 A there, and a
+    converged B3LYP/def2-SVP formaldehyde (C-H 1.1215 A) was delivered
+    with **neither** C-H bond while the same molecule at def2-TZVP
+    (1.1078 A) had both -- a molecular graph that changed with the basis
+    set, in a claim (live, ``sm1-formaldehyde``, 2026-09-11).
+
+    The docstring this replaces asserted the opposite of what the code
+    did, which is why it read as safe for a year.
     """
 
-    graph = molecule.to_graph(
-        bond_cutoff_buffer=DEFAULT_BUFFER,
-        adjust_H=True,
-    )
-    size = int(molecule.num_atoms)
-    matrix = [[0 for _ in range(size)] for _ in range(size)]
-    for first, second in graph.edges:
-        matrix[int(first)][int(second)] = 1
-        matrix[int(second)][int(first)] = 1
-    return matrix
+    return molecule_adjacency_matrix(molecule)
 
 
 def _irc_structures(output: Any) -> list[Any]:
@@ -2795,7 +2798,44 @@ def _derived_adjacency(reader: Any, output: Any) -> Any:
     )
     if not formula:
         return ()
-    return {"formula": formula, "bond_atom_pairs": bonds}
+    delivered = {
+        "formula": formula,
+        "bond_atom_pairs": bonds,
+        # Which convention decided, and by how much. A bond list alone is
+        # a boolean per pair, and a boolean from a threshold cannot be
+        # told from a structural fact: a converged formaldehyde lost both
+        # C-H bonds by 1.5 mA and the reader had no way to see that. The
+        # policy id makes the convention nameable; the margins make the
+        # near-threshold decisions legible. Neither asserts chemistry --
+        # the host says what its rule did and how narrowly, and the
+        # scientist draws the conclusion.
+        "adjacency_policy_id": BOND_PERCEPTION_POLICY_ID,
+    }
+    try:
+        positions, _unit = reader.read(output, "positions")
+    except Exception:
+        return delivered
+    try:
+        pairs = perceive_pairs(symbols, positions, include_rejected=True)
+    except Exception:
+        return delivered
+    rows = []
+    for pair in pairs:
+        near_miss = not pair.adjacent and abs(pair.relative_margin) <= 0.10
+        if not pair.adjacent and not near_miss:
+            continue
+        rows.append(
+            {
+                "atoms": (pair.first_index, pair.second_index),
+                "distance_angstrom": round(pair.distance_angstrom, 6),
+                "cutoff_angstrom": round(pair.cutoff_angstrom, 6),
+                "margin_angstrom": round(pair.margin_angstrom, 6),
+                "adjacent": bool(pair.adjacent),
+            }
+        )
+    if rows:
+        delivered["adjacency_margins"] = tuple(rows)
+    return delivered
 
 
 def extract_logged_quantities(

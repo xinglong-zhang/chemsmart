@@ -31,6 +31,7 @@ CAPABILITY_KINDS = (
     "signal",
     "gate",
     "constant",
+    "policy",
     "skill",
     "guide",
     "rule",
@@ -216,7 +217,7 @@ def build_capability_registry(
     from chemsmart.agent.capabilities import load_program_capabilities
     from chemsmart.agent.execution import ANOMALY_SIGNALS
     from chemsmart.agent.guides import GUIDES, LEAF_OPERATIONS, LEAF_TOOLS
-    from chemsmart.agent.rules import CODE_GATES, POLICY_RULES
+    from chemsmart.agent.rules import CODE_GATES, HOST_POLICIES, POLICY_RULES
     from chemsmart.agent.scientific_toolchain import (
         ANALYSIS_VALIDATION_PREDICATES,
     )
@@ -436,6 +437,28 @@ def build_capability_registry(
                 tested_by=tested(f"gate:{gate_id}"),
                 family_tested_by=family_tested(f"gate:{gate_id}"),
                 qualified_by=qualified(f"gate:{gate_id}"),
+            )
+        )
+
+    # Host numeric policies. `wired_by` names the module that owns the
+    # number, so a policy declared here and defined nowhere reports
+    # itself unwired. A legacy policy is advertised as legacy: the host
+    # does not present it as interchangeable, which is what keeps the
+    # differential oracle a defect detector rather than a convention
+    # police.
+    for policy_id, owner, meaning, legacy in HOST_POLICIES:
+        records.append(
+            CapabilityV1(
+                kind="policy",
+                id=policy_id,
+                family="legacy" if legacy else "shared",
+                tier="T0",
+                declared_by="chemsmart.agent.rules.HOST_POLICIES",
+                wired_by=owner,
+                advertised_in=meaning,
+                tested_by=tested(f"policy:{policy_id}"),
+                family_tested_by=family_tested(f"policy:{policy_id}"),
+                qualified_by=qualified(f"policy:{policy_id}"),
             )
         )
 

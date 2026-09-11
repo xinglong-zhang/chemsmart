@@ -639,16 +639,54 @@ class QuantityExtractionReceiptV1:
                 tuple(int(index) for index in pair)
                 for pair in adjacency.get("bond_atom_pairs", ())
             )
-            if set(adjacency) != {"formula", "bond_atom_pairs"} or not (
-                isinstance(adjacency.get("formula"), str)
-                and adjacency["formula"]
-                and all(len(pair) == 2 for pair in pairs)
+            # An allow-list, not an exact set. The line this enforces is
+            # that no perceived *label* may ride here; it is not that a
+            # measurement may carry nothing about itself. A bond list
+            # alone is one boolean per pair, and a boolean produced by a
+            # threshold cannot be distinguished from a structural fact --
+            # a converged formaldehyde lost both C-H bonds by 1.5 mA and
+            # the reader had no way to see it (sm1, 2026-09-11). The
+            # convention's id and the per-pair margin are provenance and
+            # arithmetic about the same measurement, so they are
+            # admitted; anything not named here is still refused.
+            permitted = {
+                "formula",
+                "bond_atom_pairs",
+                "adjacency_policy_id",
+                "adjacency_margins",
+            }
+            unknown = sorted(set(adjacency) - permitted)
+            if (
+                unknown
+                or "formula" not in adjacency
+                or "bond_atom_pairs" not in adjacency
+                or not (
+                    isinstance(adjacency.get("formula"), str)
+                    and adjacency["formula"]
+                    and all(len(pair) == 2 for pair in pairs)
+                )
             ):
                 raise QuantityContractError(
-                    "derived adjacency carries exactly a formula and "
-                    "bond atom pairs"
+                    "derived adjacency carries a formula, bond atom pairs, "
+                    "and optionally the perception policy id and per-pair "
+                    "margins; a perceived label -- isomer, conformer, "
+                    "species, ring class, stereo descriptor -- is the "
+                    "scientist's judgement and is never attached here"
+                    + (f" (offending field(s): {unknown})" if unknown else "")
                 )
             adjacency["bond_atom_pairs"] = pairs
+            margins = adjacency.get("adjacency_margins")
+            if margins:
+                adjacency["adjacency_margins"] = tuple(
+                    {
+                        "atoms": tuple(int(i) for i in row["atoms"]),
+                        "distance_angstrom": float(row["distance_angstrom"]),
+                        "cutoff_angstrom": float(row["cutoff_angstrom"]),
+                        "margin_angstrom": float(row["margin_angstrom"]),
+                        "adjacent": bool(row["adjacent"]),
+                    }
+                    for row in margins
+                )
             object.__setattr__(self, "derived_adjacency", adjacency)
         if self.schema_version != "chemsmart.quantity-extraction-receipt.v1":
             raise QuantityContractError(

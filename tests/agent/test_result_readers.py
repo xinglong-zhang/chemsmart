@@ -926,6 +926,23 @@ def test_geometry_connectivity_recognizes_a_peroxide_bond():
 
 
 def test_geometry_connectivity_keeps_separated_atoms_disconnected():
+    """Genuinely separated atoms stay disconnected.
+
+    The fixture is re-derived from chemistry, because the previous one was
+    geometrically impossible and its assertion was true only by accident.
+    It placed O-O at 2.000 A -- far longer than a peroxide bond (1.45) and
+    far shorter than any real non-bonded O...O contact (2.7+) -- and O-H
+    at **1.200 A**, which is a proton in transit between two oxygens, not
+    a separated atom. The all-zeros assertion held only because the
+    perceiver shrank every X-H tolerance to 0.05 A, so the suite had
+    encoded that defect as a requirement: the same 1.200 A O-H that a
+    proton-transfer saddle carries was pinned as *not a bond*.
+
+    These distances are ones no convention should call bonded: an O...O
+    contact at 3.000 A and an O...H at 2.000 A, both well beyond a
+    forming bond.
+    """
+
     from types import SimpleNamespace
 
     import numpy as np
@@ -935,7 +952,7 @@ def test_geometry_connectivity_keeps_separated_atoms_disconnected():
     molecule = Molecule(
         symbols=["O", "O", "H"],
         positions=np.array(
-            [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.2, 0.0, 0.0]]
+            [[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [5.0, 0.0, 0.0]]
         ),
     )
 
@@ -944,6 +961,68 @@ def test_geometry_connectivity_keeps_separated_atoms_disconnected():
     )
 
     assert connectivity == [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+
+
+def test_geometry_connectivity_sees_a_proton_in_transit():
+    """The case the old fixture asserted away.
+
+    An O-H of 1.200 A is what a proton-transfer transition state carries,
+    and this laboratory computes aqueous pKa cycles. Perceiving it is the
+    point: a convention that drops it reports a transferring hydrogen as
+    bonded to nothing.
+    """
+
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from chemsmart.io.molecules.structure import Molecule
+
+    # O-H...O, the hydrogen 1.200 A from one oxygen and 1.300 A from the
+    # other: both partial bonds, as a transfer saddle has.
+    molecule = Molecule(
+        symbols=["O", "H", "O"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [1.2, 0.0, 0.0], [2.5, 0.0, 0.0]]
+        ),
+    )
+
+    connectivity, _ = reader_for("xyz").read(
+        SimpleNamespace(molecule=molecule), "connectivity"
+    )
+
+    assert connectivity[0][1] == 1, (
+        "the transferring hydrogen is not perceived as bonded to the "
+        "oxygen it is leaving, so a transfer saddle would be delivered "
+        "with a hydrogen bonded to nothing"
+    )
+    # The two oxygens are 2.500 A apart, which is no O-O bond.
+    assert connectivity[0][2] == 0
+
+    # And the other half of the transfer, stated as it is rather than as
+    # one would wish. The O-H cutoff is 1.261 A, so the approaching side
+    # at 1.300 A falls outside by 3.1%. No distance convention resolves a
+    # proton in transit -- that is the irreducible case -- so what the
+    # host owes the reader is the number, not a verdict dressed as one.
+    from chemsmart.io.molecules.perception import perceive_pairs
+
+    pairs = {
+        (pair.first_index, pair.second_index): pair
+        for pair in perceive_pairs(
+            molecule.chemical_symbols,
+            molecule.positions,
+            include_rejected=True,
+        )
+    }
+    approaching = pairs[(1, 2)]
+    assert not approaching.adjacent
+    assert approaching.margin_angstrom < 0.0
+    assert abs(approaching.relative_margin) < 0.05, (
+        "the approaching O-H is rejected by more than 5% of the cutoff, "
+        "so the host is no longer reporting a near-threshold decision as "
+        f"near: margin {approaching.margin_angstrom:+.4f} A of cutoff "
+        f"{approaching.cutoff_angstrom:.4f} A"
+    )
 
 
 def test_irc_trajectory_selectors_report_observed_endpoint_topology():

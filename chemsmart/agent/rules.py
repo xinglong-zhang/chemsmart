@@ -72,6 +72,98 @@ def _r(
 #: nowhere. This tuple is that law applied to the charter's own
 #: gate list: each gate is declared here, and the ladder computes
 #: whether anything in the source actually raises it.
+#: Numeric scientific policies the host decides for itself.
+#:
+#: Every one of these is a number the host chooses and then reports a
+#: scientific fact through -- a convention, not a measurement and not a
+#: literature constant. Seven of them existed as bare module constants
+#: with no registry, no rung and no oracle, which is why the capability
+#: ladder could not report that one of them was wrong: it had no kind
+#: that could hold the thing. A bond-perception tolerance of 0.05 A for
+#: X-H then put the bond/no-bond line at 1.120 A for C-H and 0.740 A for
+#: H-H, so H2 at its experimental length had no perceived bond and a
+#: converged formaldehyde had no C-H bonds, delivered into a claim
+#: (sm1-formaldehyde, 2026-09-11).
+#:
+#: ``legacy`` marks a policy the host does **not** present as
+#: interchangeable with the others. Its disagreement with them is a
+#: difference between named conventions -- a scientific observation --
+#: rather than the silent contradiction the differential oracle exists
+#: to refuse.
+HOST_POLICIES: tuple[tuple[str, str, str, bool], ...] = (
+    (
+        "bond_perception",
+        "chemsmart.io.molecules.perception.BOND_PERCEPTION_POLICY_ID",
+        "which atoms are adjacent: min(1.3 x sum of covalent radii, "
+        "sum + 0.45 A), delivered with each pair's distance, cutoff and "
+        "signed margin",
+        False,
+    ),
+    (
+        "near_zero_frequency",
+        "chemsmart.analysis.thermochemistry."
+        "NEAR_ZERO_FREQUENCY_TOLERANCE_CM",
+        "20 cm-1: below this a printed imaginary frequency is numerical "
+        "noise rather than a mode, the convention thermochemistry uses",
+        False,
+    ),
+    (
+        "consequential_imaginary_mode",
+        "chemsmart.agent.terminal_states.CONSEQUENTIAL_IMAGINARY_MODE_CM1",
+        "-20 cm-1: the stationary-point rule's threshold for an "
+        "imaginary mode that counts",
+        False,
+    ),
+    (
+        "soft_imaginary_mode_band",
+        "chemsmart.agent.tool_runtime.SOFT_IMAGINARY_MODE_BAND_CM1",
+        "50 cm-1: a saddle inside this band is an anomaly observation "
+        "carrying its number, because a rule at a threshold certifies "
+        "noise on the far side of it",
+        False,
+    ),
+    (
+        "mode_degeneracy",
+        "chemsmart.analysis.result_readers.MODE_DEGENERACY_TOLERANCE_CM1",
+        "1 cm-1: modes within this share a frequency, so a reader can "
+        "see that a mode has company before assigning motion to it",
+        False,
+    ),
+    (
+        "low_frequency_mode",
+        "chemsmart.analysis.result_quantities."
+        "LOW_FREQUENCY_MODE_THRESHOLD_CM1",
+        "50 cm-1: below this a harmonic oscillator's entropy is "
+        "dominated by a mode the harmonic model describes worst",
+        False,
+    ),
+    (
+        "divergence_relative_tolerance",
+        "chemsmart.agent.workspace_record.DIVERGENCE_RELATIVE_TOLERANCE",
+        "0.05: the relative agreement two records must reach before the "
+        "host stops calling them divergent",
+        False,
+    ),
+    (
+        "legacy_grouper_adjacency",
+        "chemsmart.jobs.grouper.connectivity",
+        "buffer 0.0 on covalent radii, so ethane's C-C (1.535 A against "
+        "1.520) is not perceived. Human-CLI conformer grouping only; "
+        "quarantined, not agent-reachable, and deliberately not "
+        "interchangeable with bond_perception",
+        True,
+    ),
+    (
+        "legacy_rdkit_adjacency",
+        "chemsmart.io.molecules.structure.Molecule.to_rdkit",
+        "X-H 0.1 / H-H 0.2 additive, and the caller's buffer is "
+        "discarded when adjust_H is false. Human-CLI rdkit export only; "
+        "quarantined, and bond order there is rdkit's own perception",
+        True,
+    ),
+)
+
+
 CODE_GATES: tuple[tuple[str, str], ...] = (
     (
         "execution.cancelled.human",

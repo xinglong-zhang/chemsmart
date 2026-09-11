@@ -1180,7 +1180,7 @@ def derive_trusted_molecular_species(
     # The connectivity buffer, not the placement clash buffer composition
     # uses: this asks which atoms are bonded, not how close two fragments may
     # sit.  They happen to share a value today.
-    from chemsmart.io.molecules import DEFAULT_BUFFER as CONNECTIVITY_BUFFER
+    from chemsmart.io.molecules.perception import molecule_adjacency_graph
     from chemsmart.io.molecules.structure import Molecule
 
     if parent.kind != "geometry_xyz":
@@ -1285,9 +1285,7 @@ def derive_trusted_molecular_species(
         # wrong for making a radical.  Recording the count puts that fact in
         # front of the human review instead of deciding it here.
         "fragment_count": nx.number_connected_components(
-            derived.to_graph(
-                bond_cutoff_buffer=CONNECTIVITY_BUFFER, adjust_H=True
-            )
+            molecule_adjacency_graph(derived)
         ),
         "atom_order_note": (
             "parent order preserved among the kept atoms"
@@ -1393,7 +1391,7 @@ def fetch_trusted_pubchem_geometry(
 
     import networkx as nx
 
-    from chemsmart.io.molecules import DEFAULT_BUFFER as CONNECTIVITY_BUFFER
+    from chemsmart.io.molecules.perception import molecule_adjacency_graph
     from chemsmart.io.molecules.structure import Molecule
 
     wanted = str(identifier or "").strip()
@@ -1486,9 +1484,7 @@ def fetch_trusted_pubchem_geometry(
         # separated pieces, which is right for an ion pair and wrong for
         # the neutral molecule someone meant.
         "fragment_count": nx.number_connected_components(
-            molecule.to_graph(
-                bond_cutoff_buffer=CONNECTIVITY_BUFFER, adjust_H=True
-            )
+            molecule_adjacency_graph(molecule)
         ),
         "status": "fetched",
     }
@@ -1761,18 +1757,18 @@ def _molecule_graph(molecule: Any) -> Any:
 
     import networkx as nx
 
-    from chemsmart.io.molecules import DEFAULT_BUFFER as CONNECTIVITY_BUFFER
+    from chemsmart.io.molecules.perception import molecule_adjacency_graph
 
-    # adjust_H shrinks every X-H buffer to 0.05 A, which puts an
-    # equilibrium P-H bond (1.430 A; cutoff 1.07+0.31+0.05) outside
-    # "bonded" and a mode-displaced start's stretched X-H likewise, so
-    # the basin sensor reported bonds broken on every PH3 minimum and
-    # bonds made on every repaired NH3 (E4 window, 2026-09-03). The
-    # sensor asks whether topology changed, not how a drawing looks:
-    # hydrogens get the same buffer as every other atom.
-    zero_based = molecule.to_graph(
-        bond_cutoff_buffer=CONNECTIVITY_BUFFER, adjust_H=False
-    )
+    # One declared convention, shared with the typed analysis plane. This
+    # used to flip `adjust_H` to False here and nowhere else: the E4 window
+    # (2026-09-03) found that the 0.05 A X-H tolerance called an
+    # equilibrium P-H bond broken on 6/6 repaired phosphine minima, and
+    # the repair was applied to this call site while its commit message
+    # claimed "the one graph every host perception shares". Three other
+    # callers kept the tight tolerance, including the declared
+    # `connectivity` selector, which then delivered a formaldehyde with
+    # no C-H bonds into a claim.
+    zero_based = molecule_adjacency_graph(molecule)
     # ``to_graph`` numbers its nodes from zero while every scientific atom
     # index the model, the review and the receipts speak is one-based.  The
     # conversion happens here, once, rather than at each use.
@@ -2014,13 +2010,43 @@ def transform_trusted_molecular_geometry(
         axis = (indices[1], indices[2])
 
     def _require_bond(pair: tuple[int, int]) -> None:
-        if not graph.has_edge(*pair):
-            raise ContractError(
-                f"atoms {pair[0]} ({symbols[pair[0] - 1]}) and {pair[1]} "
-                f"({symbols[pair[1] - 1]}) are not bonded in the perceived "
-                "connectivity, so there is no side of the coordinate to move; "
-                "compose_molecular_arrangement places unbound fragments"
+        if graph.has_edge(*pair):
+            return
+        # The refusal carries the numbers behind it. A perception
+        # convention is a host decision about chemistry, and when it
+        # blocks an action the session is entitled to see how narrowly:
+        # [FHF]-, B-H-B bridges, agostic interactions and every
+        # proton-transfer saddle sit near the line by their nature, and a
+        # bare "not bonded" told a session its structure was impossible
+        # when the host meant its threshold was close.
+        from chemsmart.io.molecules.perception import (
+            BOND_PERCEPTION_POLICY_ID,
+            bond_cutoff,
+        )
+
+        first, second = pair[0] - 1, pair[1] - 1
+        measured = float(
+            np.linalg.norm(
+                np.asarray(positions[first], dtype=float)
+                - np.asarray(positions[second], dtype=float)
             )
+        )
+        cutoff = bond_cutoff(symbols[first], symbols[second])
+        raise ContractError(
+            f"atoms {pair[0]} ({symbols[first]}) and {pair[1]} "
+            f"({symbols[second]}) are not bonded in the perceived "
+            f"connectivity: {measured:.4f} A apart, outside the "
+            f"{cutoff:.4f} A adjacency cutoff of "
+            f"{BOND_PERCEPTION_POLICY_ID} by "
+            f"{measured - cutoff:.4f} A "
+            f"({(measured - cutoff) / cutoff * 100:.1f}%), so this host "
+            "perceives no bond to define a side of the coordinate. That is "
+            "a threshold, not a fact about your molecule: if the pair is "
+            "bonded in the chemistry you are doing, move the atoms you "
+            "mean with edit_molecular_geometry's own moving-side atom on a "
+            "coordinate the perception does carry, or place the fragments "
+            "explicitly with compose_molecular_arrangement"
+        )
 
     if operation == "set_bond_length":
         _require_bond(axis)
