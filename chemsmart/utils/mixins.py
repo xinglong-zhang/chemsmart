@@ -951,6 +951,16 @@ class GaussianFileMixin(FileMixin):
 
         title = f"Job prepared from Gaussian file {filename}"
 
+        # Gaussian output files expose custom SMD parameters as a dictionary
+        # for convenient programmatic inspection, whereas job settings use
+        # the free-form text that is written back to a Gaussian input file.
+        # Convert only at this boundary so both APIs keep their intended type.
+        custom_solvent = self.custom_solvent
+        if isinstance(custom_solvent, dict):
+            custom_solvent = "\n".join(
+                f"{key}={value}" for key, value in custom_solvent.items()
+            )
+
         return GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
@@ -975,7 +985,7 @@ class GaussianFileMixin(FileMixin):
             heavy_elements=self.heavy_elements,
             heavy_elements_basis=self.heavy_elements_basis,
             light_elements_basis=self.light_elements_basis,
-            custom_solvent=self.custom_solvent,
+            custom_solvent=custom_solvent,
             append_additional_info=None,
             forces=False,
         )
