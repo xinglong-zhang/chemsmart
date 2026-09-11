@@ -81,7 +81,7 @@ def _offenders() -> list[str]:
     return found
 
 
-@pytest.mark.capability("rule:cli.project_value_outranks_option_default")
+@pytest.mark.capability("setting:orca:recalc_hess")
 def test_no_cli_option_default_defeats_its_own_guard():
     """The guard means "the caller typed this", so the default is None."""
 
@@ -92,7 +92,7 @@ def test_no_cli_option_default_defeats_its_own_guard():
     )
 
 
-@pytest.mark.capability("rule:cli.project_value_outranks_option_default")
+@pytest.mark.capability("setting:orca:recalc_hess")
 def test_the_scan_finds_a_planted_offender():
     """The scan is falsifiable: it must catch the shape it forbids.
 
@@ -121,7 +121,7 @@ def test_the_scan_finds_a_planted_offender():
     assert re.search(r"\.recalc_hess\s*=\s*recalc_hess\b", body)
 
 
-@pytest.mark.capability("tool:orca_ts")
+@pytest.mark.capability("program_jobtype:orca:cpu:ts")
 def test_a_project_recalc_hess_reaches_the_job(tmp_path):
     """The live loss, driven through the real command.
 

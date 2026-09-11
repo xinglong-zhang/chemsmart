@@ -72,12 +72,12 @@ def _signals(tmp_path, atoms):
     return {item["signal_id"]: item for item in evaluation.anomalies}
 
 
-@pytest.mark.capability("predicate:geometry.heavy_atom_rmsd_ge_0.3")
+@pytest.mark.capability("signal:geometry.heavy_atom_rmsd_ge_0.3")
 def test_a_result_at_its_own_start_walks_nowhere(tmp_path):
     assert _signals(tmp_path, _final_geometry()) == {}
 
 
-@pytest.mark.capability("predicate:geometry.heavy_atom_rmsd_ge_0.3")
+@pytest.mark.capability("signal:geometry.heavy_atom_rmsd_ge_0.3")
 def test_a_heavy_atom_walk_is_measured(tmp_path):
     atoms = _final_geometry()
     heavy = [index for index, (symbol, _) in enumerate(atoms) if symbol != "H"]
@@ -92,7 +92,7 @@ def test_a_heavy_atom_walk_is_measured(tmp_path):
     )
 
 
-@pytest.mark.capability("predicate:geometry.connectivity_changed")
+@pytest.mark.capability("signal:geometry.connectivity_changed")
 def test_a_bond_made_or_broken_is_recorded_with_its_atoms(tmp_path):
     atoms = _final_geometry()
     hydrogens = [i for i, (symbol, _) in enumerate(atoms) if symbol == "H"]
@@ -107,7 +107,7 @@ def test_a_bond_made_or_broken_is_recorded_with_its_atoms(tmp_path):
     assert heavy  # the fixture carries heavy atoms to align on
 
 
-@pytest.mark.capability("predicate:geometry.connectivity_changed")
+@pytest.mark.capability("signal:geometry.connectivity_changed")
 def test_an_equilibrium_bond_to_hydrogen_is_a_bond_to_the_perceiver():
     """The perceiver shrank every X-H buffer to 0.05 A, so the PH3
     minimum's 1.430 A P-H bond (cutoff 1.07+0.31+0.05) was "broken" on

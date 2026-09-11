@@ -15,7 +15,7 @@ import pytest
 
 from chemsmart.agent.driver import _achieved_word, _analysis_delivery
 
-pytestmark = pytest.mark.capability("rule:stationary_point_order")
+pytestmark = pytest.mark.capability("gate:stationary_point_order")
 
 
 def _stream(tmp_path, *, mode_count, jobtype="opt"):

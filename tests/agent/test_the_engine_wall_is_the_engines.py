@@ -33,7 +33,7 @@ def _receipt(invocation, **timing):
     )
 
 
-@pytest.mark.capability("rule:terminal_state_vocabulary")
+@pytest.mark.capability("gate:terminal_state_vocabulary")
 def test_an_old_receipt_keeps_its_digest_and_a_new_one_carries_host_time(
     tmp_path,
 ):

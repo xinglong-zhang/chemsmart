@@ -181,7 +181,7 @@ def _two_hop_host():
     return host, plan, sp_capability, sp_engine, identity
 
 
-@pytest.mark.capability("rule:plan.deferred_producer_resolves")
+@pytest.mark.capability("gate:plan.deferred_producer_resolves")
 def test_a_second_hop_node_resolves_through_its_deferred_producer():
     host, plan, sp_capability, sp_engine, identity = _two_hop_host()
     context = host._bounded_node_context(
@@ -195,7 +195,7 @@ def test_a_second_hop_node_resolves_through_its_deferred_producer():
     assert context.proposal.input_artifact_id == "geometry.root"
 
 
-@pytest.mark.capability("rule:plan.deferred_producer_resolves")
+@pytest.mark.capability("gate:plan.deferred_producer_resolves")
 def test_the_frontier_blocks_what_the_review_would_refuse():
     host, plan, *_ = _two_hop_host()
     host.bounded_execution_envelope = SimpleNamespace()
@@ -218,7 +218,7 @@ def test_the_frontier_blocks_what_the_review_would_refuse():
     )
 
 
-@pytest.mark.capability("rule:plan.deferred_producer_resolves")
+@pytest.mark.capability("gate:plan.deferred_producer_resolves")
 def test_a_node_with_a_hessian_edge_beside_its_geometry_is_a_candidate():
     """po3's IRC nodes carried a geometry edge and a Hessian edge from one
     transition-state producer; the frontier counted two incoming edges

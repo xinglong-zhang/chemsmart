@@ -145,7 +145,7 @@ def test_the_scan_classification_needs_the_observed_facts():
     )
 
 
-@pytest.mark.capability("rule:terminal_state_vocabulary")
+@pytest.mark.capability("gate:terminal_state_vocabulary")
 def test_a_recorded_cause_outranks_the_convergence_it_leaves_behind():
     """Every native class a program can report, against a dead run's flag.
 

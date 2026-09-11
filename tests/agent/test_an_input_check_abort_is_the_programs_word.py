@@ -31,7 +31,7 @@ _RIJK_HESSIAN = (
 )
 
 
-@pytest.mark.capability("rule:terminal_state_vocabulary")
+@pytest.mark.capability("gate:terminal_state_vocabulary")
 @pytest.mark.parametrize("tail", (_BARE_RI, _RIJK_HESSIAN))
 def test_the_abort_is_classified_and_the_engines_line_is_quoted(tail):
     summary = summarize_orca_native_failure(tail)

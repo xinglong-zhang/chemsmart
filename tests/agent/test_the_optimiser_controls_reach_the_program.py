@@ -65,7 +65,7 @@ def _written(**overrides):
     return buffer.getvalue(), ORCAInput(str(path))
 
 
-@pytest.mark.capability("setting:geom_maxiter")
+@pytest.mark.capability("setting:orca:geom_maxiter")
 def test_the_iteration_cap_is_written_into_geom_and_read_back():
     text, parsed = _written(geom_maxiter=300)
     assert "%geom" in text
@@ -76,7 +76,7 @@ def test_the_iteration_cap_is_written_into_geom_and_read_back():
     assert "maxiter" not in text.splitlines()[0].lower()
 
 
-@pytest.mark.capability("setting:geom_maxiter")
+@pytest.mark.capability("setting:orca:geom_maxiter")
 def test_orcas_two_maxiters_never_answer_for_each_other():
     """One caps the SCF, the other the optimiser; the reader separates them.
 
@@ -98,7 +98,7 @@ def test_orcas_two_maxiters_never_answer_for_each_other():
     assert only_geom.scf_maxiter is None
 
 
-@pytest.mark.capability("setting:opt_convergence")
+@pytest.mark.capability("setting:orca:opt_convergence")
 def test_the_convergence_preset_is_orcas_own_route_word():
     text, _parsed = _written(opt_convergence="tight")
     assert "TightOpt" in text.splitlines()[0]
@@ -111,7 +111,7 @@ def test_the_convergence_preset_is_orcas_own_route_word():
     assert "normalopt" not in text.splitlines()[0].lower()
 
 
-@pytest.mark.capability("setting:opt_convergence")
+@pytest.mark.capability("setting:orca:opt_convergence")
 def test_an_unknown_preset_is_refused_where_it_is_written():
     with pytest.raises(ValueError, match="opt_convergence"):
         ORCAJobSettings.default().copy().__class__(opt_convergence="verytight")
@@ -119,7 +119,7 @@ def test_an_unknown_preset_is_refused_where_it_is_written():
         ORCAJobSettings.default().copy().__class__(geom_maxiter=0)
 
 
-@pytest.mark.capability("setting:geom_maxiter")
+@pytest.mark.capability("setting:orca:geom_maxiter")
 def test_only_one_geom_block_is_ever_opened():
     """ORCA reads one %geom block, so the cap rides inside whichever opens.
 
@@ -148,7 +148,7 @@ def test_only_one_geom_block_is_ever_opened():
     assert "MaxIter 300" in text
 
 
-@pytest.mark.capability("setting:geom_maxiter")
+@pytest.mark.capability("setting:orca:geom_maxiter")
 def test_the_cap_survives_the_verifiers_own_round_trip(tmp_path):
     """The preview verifier reads a written input back through
     ORCAJobSettings.from_inpfile; that path dropped geom_maxiter for

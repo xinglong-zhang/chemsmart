@@ -48,7 +48,7 @@ def _shifted(atoms, dx):
     return moved
 
 
-@pytest.mark.capability("predicate:geometry.heavy_atom_rmsd_ge_0.3")
+@pytest.mark.capability("signal:geometry.heavy_atom_rmsd_ge_0.3")
 def test_a_silent_input_walk_still_fires_against_the_root(tmp_path):
     final = _final_geometry()
     # The node's input is the result's own geometry: no walk from it.

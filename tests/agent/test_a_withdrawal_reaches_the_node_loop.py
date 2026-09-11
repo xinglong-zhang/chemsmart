@@ -18,7 +18,7 @@ import pytest
 from chemsmart.agent import driver as driver_module
 
 
-@pytest.mark.capability("rule:execution.cancelled.human")
+@pytest.mark.capability("gate:execution.cancelled.human")
 def test_the_default_execute_hook_carries_the_stop_file():
     parameters = inspect.signature(driver_module._default_execute).parameters
     assert "stop_file" in parameters
@@ -26,7 +26,7 @@ def test_the_default_execute_hook_carries_the_stop_file():
     assert "stop_file=stop_file" in source
 
 
-@pytest.mark.capability("rule:execution.cancelled.human")
+@pytest.mark.capability("gate:execution.cancelled.human")
 def test_the_driver_offers_the_withdrawal_to_a_hook_that_takes_it(tmp_path):
     seen: dict[str, object] = {}
 
@@ -43,7 +43,7 @@ def test_the_driver_offers_the_withdrawal_to_a_hook_that_takes_it(tmp_path):
     assert driver_module._execute_hook_takes_stop_file(lambda **kw: None)
 
 
-@pytest.mark.capability("rule:execution.cancelled.human")
+@pytest.mark.capability("gate:execution.cancelled.human")
 def test_the_executor_stops_before_the_next_node():
     from chemsmart.agent import executor as executor_module
 

@@ -214,7 +214,7 @@ def _write_auditable_scratch_xtb_receipt(
     return receipt_path, receipt, original_input, durable_input
 
 
-@pytest.mark.capability("rule:xtb.result.requested_settings")
+@pytest.mark.capability("gate:xtb.result.requested_settings")
 @pytest.mark.parametrize(("charge", "multiplicity"), [(-1, 1), (0, 2), (1, 2)])
 def test_xtb_audit_lets_the_bound_identity_outrank_project_defaults(
     tmp_path, charge, multiplicity

@@ -41,7 +41,7 @@ def _output(name: str):
     return reader_for("orca").open_output(str(_OUT / name))
 
 
-@pytest.mark.capability("predicate:geometry.results_indistinguishable")
+@pytest.mark.capability("signal:geometry.results_indistinguishable")
 def test_two_independent_starts_on_one_structure_are_recorded():
     (found,) = _same_structure_observations(
         {"a": _receipt("phenol_pka_B.out", "opt-a", inp="start.a")},
@@ -56,7 +56,7 @@ def test_two_independent_starts_on_one_structure_are_recorded():
     assert "energy_difference_kcal_mol" in found
 
 
-@pytest.mark.capability("predicate:geometry.results_indistinguishable")
+@pytest.mark.capability("signal:geometry.results_indistinguishable")
 def test_two_different_structures_say_nothing():
     assert (
         _same_structure_observations(
@@ -70,7 +70,7 @@ def test_two_different_structures_say_nothing():
     )
 
 
-@pytest.mark.capability("predicate:geometry.results_indistinguishable")
+@pytest.mark.capability("signal:geometry.results_indistinguishable")
 def test_a_single_point_on_its_own_optimisation_is_no_surprise():
     """The commonest shape in the release: opt, then sp on that geometry."""
 
@@ -87,7 +87,7 @@ def test_a_single_point_on_its_own_optimisation_is_no_surprise():
     )
 
 
-@pytest.mark.capability("predicate:geometry.results_indistinguishable")
+@pytest.mark.capability("signal:geometry.results_indistinguishable")
 def test_two_siblings_from_one_geometry_are_no_surprise():
     """Three single points at three electronic states on one geometry."""
 

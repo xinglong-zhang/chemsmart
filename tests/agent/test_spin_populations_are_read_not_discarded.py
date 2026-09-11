@@ -17,7 +17,7 @@ import pytest
 from chemsmart.io.orca.output import ORCAOutput
 
 pytestmark = pytest.mark.capability(
-    "selector:mulliken_atomic_spin_populations"
+    "selector:orca:sp:mulliken_atomic_spin_populations"
 )
 
 _QUARTET = Path("tests/data/ORCATests/outputs/fe3_quartet.out")

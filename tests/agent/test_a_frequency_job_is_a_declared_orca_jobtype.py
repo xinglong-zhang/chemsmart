@@ -22,7 +22,7 @@ _FREQ = (
 )
 
 
-@pytest.mark.capability("selector:vibrational_frequencies")
+@pytest.mark.capability("selector:orca:freq:vibrational_frequencies")
 def test_freq_declares_what_opt_declares_minus_the_optimisation_claim():
     reader = RESULT_READERS["orca"]
     freq = set(reader.selectors_for_jobtype("freq"))
@@ -31,7 +31,7 @@ def test_freq_declares_what_opt_declares_minus_the_optimisation_claim():
     assert {"energy", "positions", "vibrational_frequencies"} <= freq
 
 
-@pytest.mark.capability("selector:vibrational_frequencies")
+@pytest.mark.capability("selector:orca:freq:vibrational_frequencies")
 def test_an_archived_frequency_output_reads_as_freq():
     reader = RESULT_READERS["orca"]
     output = reader.open_output(str(_FREQ))

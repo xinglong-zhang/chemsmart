@@ -55,7 +55,7 @@ def _evaluate(jobtype: str):
     )
 
 
-@pytest.mark.capability("predicate:stationary_point.unexpected_order")
+@pytest.mark.capability("signal:stationary_point.unexpected_order")
 def test_a_saddle_where_a_minimum_was_promised_is_an_observation():
     evaluation = _evaluate("opt")
     assert "result.stationary_point_order" in evaluation.findings
@@ -68,14 +68,14 @@ def test_a_saddle_where_a_minimum_was_promised_is_an_observation():
     assert 0.0 < anomaly["heavy_atom_share"] <= 1.0
 
 
-@pytest.mark.capability("predicate:stationary_point.unexpected_order")
+@pytest.mark.capability("signal:stationary_point.unexpected_order")
 def test_a_kept_promise_is_no_anomaly():
     evaluation = _evaluate("ts")
     assert "result.stationary_point_order" not in evaluation.findings
     assert evaluation.anomalies == ()
 
 
-@pytest.mark.capability("predicate:stationary_point.unexpected_order")
+@pytest.mark.capability("signal:stationary_point.unexpected_order")
 def test_the_verdict_receipt_never_carries_the_anomaly():
     """The validation receipt is built from observations and findings
     alone, so a sensor can never move a verdict or a stored digest."""

@@ -3854,6 +3854,25 @@ def build_program_execution_invocation(
 
 ANOMALY_STATUSES = ("unreplicated", "replicated", "refuted")
 
+#: Every signal a host sensor may raise. "The anomaly has standing" is a
+#: charter mechanism -- what the host detects it records with the numbers
+#: that tripped it, whether or not it was asked for -- and until now the
+#: signal ids existed only as string literals at their emitting sites,
+#: declared nowhere. Six tests carried ``predicate:`` markers for them,
+#: which matched nothing, because ``predicate`` is the expression
+#: vocabulary (``all_equal``, ``all_finite``) and these are sensors. So
+#: the mechanism the charter leans on hardest was the one with no
+#: declaration and no measurable coverage.
+ANOMALY_SIGNALS = (
+    "geometry.connectivity_changed",
+    "geometry.heavy_atom_rmsd_ge_0.3",
+    "geometry.results_indistinguishable",
+    "scan.extremum_at_grid_boundary",
+    "spin.s2_deviation_ge_0.2",
+    "stationary_point.imaginary_mode_lt_50",
+    "stationary_point.unexpected_order",
+)
+
 
 @dataclass(frozen=True)
 class AnomalyObservationV1:

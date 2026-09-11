@@ -59,14 +59,14 @@ def _signals(evaluation) -> dict[str, dict]:
     return {item["signal_id"]: item for item in evaluation.anomalies}
 
 
-@pytest.mark.capability("predicate:stationary_point.imaginary_mode_lt_50")
+@pytest.mark.capability("signal:stationary_point.imaginary_mode_lt_50")
 def test_a_bond_forming_saddle_is_no_soft_mode_anomaly():
     signals = _signals(_evaluate(_SN2))
     assert "stationary_point.imaginary_mode_lt_50" not in signals
     assert "stationary_point.unexpected_order" not in signals
 
 
-@pytest.mark.capability("predicate:stationary_point.imaginary_mode_lt_50")
+@pytest.mark.capability("signal:stationary_point.imaginary_mode_lt_50")
 def test_a_saddle_inside_the_band_is_observed_with_its_number(tmp_path):
     text = _SN2.read_text()
     assert text.count(_HARD) == 1

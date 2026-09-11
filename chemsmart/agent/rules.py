@@ -57,6 +57,89 @@ def _r(
     )
 
 
+#: The refusals that live in code rather than in a placed sentence.
+#:
+#: ``CONDUCT.md`` section 2 enumerates this category in prose -- the
+#: terminal-state vocabulary, the stationary-point rule, the single
+#: human decision, no model-authored native input, units and dimensions,
+#: credentials -- and prose is not a registry. Seven tests already
+#: carried ``rule:`` markers for gates in this list, and every one of
+#: them matched nothing, because ``POLICY_RULES`` is the registry of
+#: *sentences the model reads* and a gate is its sibling, not a member.
+#:
+#: "A mechanism named in prose is not reached" is a law this laboratory
+#: registered after saying "typed refusal" in a charter and recording it
+#: nowhere. This tuple is that law applied to the charter's own
+#: gate list: each gate is declared here, and the ladder computes
+#: whether anything in the source actually raises it.
+CODE_GATES: tuple[tuple[str, str], ...] = (
+    (
+        "execution.cancelled.human",
+        "a human withdrawal is a typed terminal fact on every node it "
+        "stopped, never an absence",
+    ),
+    (
+        "plan.deferred_producer_resolves",
+        "a deferred node whose producer is itself deferred resolves "
+        "through its chain, so the frontier never says approvable over "
+        "a review that will refuse",
+    ),
+    (
+        "review.displays_host_observations",
+        "every host observation on a node rides the displayed review, "
+        "because the single human decision is made over what is shown",
+    ),
+    (
+        "stationary_point_order",
+        "the approved jobtype promises a count of imaginary modes and "
+        "the program's own printed frequencies deliver one",
+    ),
+    (
+        "terminal_state_vocabulary",
+        "terminal words are derived from the shared program-neutral "
+        "vocabulary, never grepped from engine text",
+    ),
+    (
+        "tool.dispatch.rejected",
+        "a routed refusal reaches the durable stream as a failure "
+        "report naming gate, invariant, diagnosis, route and cost",
+    ),
+    (
+        "xtb.result.requested_settings",
+        "the bound identity is the only authority for charge and "
+        "multiplicity in a result audit; a project field participates "
+        "only when it is explicit",
+    ),
+    # The instrument's own gates. An instrument that cannot fail lies,
+    # and these are what hold it to that.
+    (
+        "capability.marker_names_a_capability",
+        "every capability marker a test carries names a capability the "
+        "registry actually holds, and is not a bare token scooped from "
+        "an unrelated call site",
+    ),
+    (
+        "capability.wildcard_is_not_sole_coverage",
+        "a family wildcard never lifts a capability to tested on its "
+        "own: 557 of 712 capabilities reported tested from nine "
+        "blanket markers, and selector:* certified all 393 selectors",
+    ),
+    (
+        "resolver.one_answer_per_question",
+        "two host organs that answer one question call one function; a "
+        "reader that resolves an ambiguous container itself is the "
+        "defect that put the eligibility gate and the reviewed packet "
+        "on two different plans",
+    ),
+    (
+        "capability.rung_is_computed",
+        "a kind whose members can each be wired or unwired computes "
+        "that rung per capability, rather than carrying one asserted "
+        "string that cannot report unwired",
+    ),
+)
+
+
 #: In reading order. The stem is the universal prompt; leaf rules render
 #: in the stem until the leaf mechanism activates them by family.
 POLICY_RULES: tuple[PolicyRuleV1, ...] = (

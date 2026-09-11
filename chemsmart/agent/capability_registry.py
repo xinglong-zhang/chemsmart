@@ -25,8 +25,11 @@ CAPABILITY_KINDS = (
     "program_jobtype",
     "tool",
     "selector",
+    "setting",
     "operation",
     "predicate",
+    "signal",
+    "gate",
     "constant",
     "skill",
     "guide",
@@ -40,7 +43,13 @@ HOST_QUALIFICATION_STORE = (
     Path.home() / ".chemsmart" / "agent" / "qualification.jsonl"
 )
 
-_MARKER = re.compile(r"capability\(([^)]*)\)")
+#: ``@pytest.mark.capability(...)`` and nothing else. The bare form
+#: matched ``program_capability(...)`` and ``engine_capability(...)``
+#: too, so the ladder's own input carried sixteen tokens no capability
+#: could ever have -- ``cpu``, ``opt``, ``ts``, ``xtb``, ``2``, ``3`` --
+#: scooped out of unrelated call sites. An instrument whose input is
+#: polluted reports coverage it never measured.
+_MARKER = re.compile(r"(?<!\w)capability\(([^)]*)\)")
 
 
 @dataclass(frozen=True)
@@ -53,6 +62,13 @@ class CapabilityV1:
     wired_by: str = ""
     advertised_in: str = ""
     tested_by: tuple[str, ...] = ()
+    #: Files whose coverage of this capability comes only from a family
+    #: wildcard (``selector:*``). Deliberately does NOT lift `status` to
+    #: `tested`: nine blanket markers were reporting tested for 557 of
+    #: 712 capabilities, and `selector:*` alone certified all 393
+    #: selectors from two files. A family test is real evidence about
+    #: the family and no evidence about any one member.
+    family_tested_by: tuple[str, ...] = ()
     qualified_by: tuple[str, ...] = ()
 
     @property
@@ -88,6 +104,52 @@ def test_markers(tests_root: Path | None) -> dict[str, tuple[str, ...]]:
             for token in re.findall(r"['\"]([^'\"]+)['\"]", match.group(1)):
                 found.setdefault(token, []).append(str(path.name))
     return {token: tuple(sorted(set(files))) for token, files in found.items()}
+
+
+_SIGNAL_EMISSION = re.compile(r'"signal_id":\s*"([a-z_.0-9]+)"')
+
+
+def _signal_emitters(package_root: Path) -> dict[str, tuple[str, ...]]:
+    """Which module raises each anomaly signal, read from the source.
+
+    Derived rather than declared, for the same reason ``tested_by`` is:
+    a rung that is asserted cannot fail, and a sensor nobody raises must
+    be able to report itself unwired.
+    """
+
+    found: dict[str, list[str]] = {}
+    for path in sorted(Path(package_root).rglob("*.py")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for signal in set(_SIGNAL_EMISSION.findall(text)):
+            found.setdefault(signal, []).append(path.name)
+    return {
+        signal: tuple(sorted(set(names))) for signal, names in found.items()
+    }
+
+
+def _gate_raisers(
+    package_root: Path, gates: tuple[tuple[str, str], ...]
+) -> dict[str, tuple[str, ...]]:
+    """Which module raises each code gate, read from the source."""
+
+    ids = {gate_id for gate_id, _ in gates}
+    found: dict[str, list[str]] = {}
+    for path in sorted(Path(package_root).rglob("*.py")):
+        if path.name == "rules.py":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for gate_id in ids:
+            if gate_id in text:
+                found.setdefault(gate_id, []).append(path.name)
+    return {
+        gate_id: tuple(sorted(set(names))) for gate_id, names in found.items()
+    }
 
 
 def _matches(pattern: str, key: str) -> bool:
@@ -152,8 +214,9 @@ def build_capability_registry(
     """Every capability, from the registries that already own each kind."""
 
     from chemsmart.agent.capabilities import load_program_capabilities
+    from chemsmart.agent.execution import ANOMALY_SIGNALS
     from chemsmart.agent.guides import GUIDES, LEAF_OPERATIONS, LEAF_TOOLS
-    from chemsmart.agent.rules import POLICY_RULES
+    from chemsmart.agent.rules import CODE_GATES, POLICY_RULES
     from chemsmart.agent.scientific_toolchain import (
         ANALYSIS_VALIDATION_PREDICATES,
     )
@@ -172,9 +235,20 @@ def build_capability_registry(
     host = load_host_qualifications(host_store) if host_store else {}
 
     def tested(key: str) -> tuple[str, ...]:
+        """Files naming this capability exactly. Wildcards excluded."""
+
         files: list[str] = []
         for pattern, names in markers.items():
-            if _matches(pattern, key):
+            if not pattern.endswith("*") and _matches(pattern, key):
+                files.extend(names)
+        return tuple(sorted(set(files)))
+
+    def family_tested(key: str) -> tuple[str, ...]:
+        """Files covering this capability only through a wildcard."""
+
+        files: list[str] = []
+        for pattern, names in markers.items():
+            if pattern.endswith("*") and _matches(pattern, key):
                 files.extend(names)
         return tuple(sorted(set(files)))
 
@@ -212,6 +286,7 @@ def build_capability_registry(
                         "inspect_program" if executable else "preview only"
                     ),
                     tested_by=tested(key),
+                    family_tested_by=family_tested(key),
                     qualified_by=qualified(key) if executable else (),
                 )
             )
@@ -253,11 +328,13 @@ def build_capability_registry(
                 ),
                 advertised_in=", ".join(advertised),
                 tested_by=tested(key),
+                family_tested_by=family_tested(key),
                 qualified_by=qualified(key),
             )
         )
 
     for program, reader in sorted(RESULT_READERS.items()):
+        accessors = set(getattr(reader, "accessors", ()) or ())
         for jobtype, selectors in reader.jobtype_selectors:
             for selector in selectors:
                 key_id = f"{program}:{jobtype}:{selector}"
@@ -268,12 +345,99 @@ def build_capability_registry(
                         family=program,
                         tier="T0",
                         declared_by="chemsmart.analysis.result_readers",
-                        wired_by="reader accessor",
+                        # Computed, not asserted. This was the constant
+                        # string "reader accessor" for every selector,
+                        # so the ladder reported `wired` for a selector
+                        # whose accessor had been deleted -- a rung that
+                        # cannot fail measures nothing.
+                        wired_by=(
+                            f"{program} accessor {selector}"
+                            if selector in accessors
+                            else ""
+                        ),
                         advertised_in="extract_result_quantities",
                         tested_by=tested(f"selector:{key_id}"),
+                        family_tested_by=family_tested(f"selector:{key_id}"),
                         qualified_by=qualified(f"selector:{key_id}"),
                     )
                 )
+
+    # Project-owned settings are the load-bearing surface of the hub
+    # thesis -- the model's whole method vocabulary travels through
+    # project YAML -- and they were not a capability kind at all, so two
+    # tests already carried `setting:` markers that matched nothing and
+    # `opt_convergence` could be advertised, accepted, normalised and
+    # read back while the reader had no property for it.
+    for program in registry.programs:
+        parameters = tuple(
+            sorted(getattr(program, "project_owned_parameters", ()) or ())
+        )
+        domains = dict(getattr(program, "project_parameter_domains", ()) or ())
+        for parameter in parameters:
+            key_id = f"{program.program}:{parameter}"
+            records.append(
+                CapabilityV1(
+                    kind="setting",
+                    id=key_id,
+                    family=program.program,
+                    tier="T0",
+                    declared_by="chemsmart.settings.capabilities",
+                    # A declared domain is what makes the round trip
+                    # generable without a human writing chemistry into
+                    # a test, so it is the rung, not a decoration.
+                    wired_by=(
+                        f"domain {len(domains[parameter])} values"
+                        if parameter in domains
+                        else ""
+                    ),
+                    advertised_in="inspect_program",
+                    tested_by=tested(f"setting:{key_id}")
+                    + tested(f"setting:{parameter}"),
+                    family_tested_by=family_tested(f"setting:{key_id}"),
+                    qualified_by=qualified(f"setting:{key_id}"),
+                )
+            )
+
+    # Anomaly sensors. `wired_by` is computed by looking for the id at
+    # an emitting site, the same way `tested_by` is computed by looking
+    # for a marker in a test: a signal nothing raises is declared and
+    # not wired, and the ladder must be able to say so.
+    emitters = _signal_emitters(Path(__file__).parent)
+    for signal in ANOMALY_SIGNALS:
+        records.append(
+            CapabilityV1(
+                kind="signal",
+                id=signal,
+                family=signal.split(".", 1)[0],
+                tier="T0",
+                declared_by="chemsmart.agent.execution.ANOMALY_SIGNALS",
+                wired_by=", ".join(emitters.get(signal, ())),
+                advertised_in="anomalies_observed / settlement word",
+                tested_by=tested(f"signal:{signal}"),
+                family_tested_by=family_tested(f"signal:{signal}"),
+                qualified_by=qualified(f"signal:{signal}"),
+            )
+        )
+
+    # Code gates. `wired_by` is the source that raises the gate id, so
+    # a gate declared in the charter's list and raised by nothing
+    # reports itself declared-and-unwired instead of passing silently.
+    raisers = _gate_raisers(Path(__file__).parent, CODE_GATES)
+    for gate_id, invariant in CODE_GATES:
+        records.append(
+            CapabilityV1(
+                kind="gate",
+                id=gate_id,
+                family=gate_id.split(".", 1)[0],
+                tier="T0",
+                declared_by="chemsmart.agent.rules.CODE_GATES",
+                wired_by=", ".join(raisers.get(gate_id, ())),
+                advertised_in=invariant,
+                tested_by=tested(f"gate:{gate_id}"),
+                family_tested_by=family_tested(f"gate:{gate_id}"),
+                qualified_by=qualified(f"gate:{gate_id}"),
+            )
+        )
 
     for name in sorted(OPERATION_DESCRIPTIONS):
         leaf = LEAF_OPERATIONS.get(name)
@@ -291,6 +455,7 @@ def build_capability_registry(
                     else "evaluate_quantity_expression (stem)"
                 ),
                 tested_by=tested(f"operation:{name}"),
+                family_tested_by=family_tested(f"operation:{name}"),
                 qualified_by=qualified(f"operation:{name}"),
             )
         )
@@ -305,6 +470,7 @@ def build_capability_registry(
                 wired_by="evaluate_scientific_validation",
                 advertised_in="plan_scientific_workflow.validation_rules",
                 tested_by=tested(f"predicate:{name}"),
+                family_tested_by=family_tested(f"predicate:{name}"),
                 qualified_by=qualified(f"predicate:{name}"),
             )
         )
@@ -319,6 +485,7 @@ def build_capability_registry(
                 wired_by="constant operation",
                 advertised_in="evaluate_quantity_expression (leaf constants)",
                 tested_by=tested(f"constant:{name}"),
+                family_tested_by=family_tested(f"constant:{name}"),
                 qualified_by=qualified(f"constant:{name}"),
             )
         )
@@ -333,6 +500,7 @@ def build_capability_registry(
                 wired_by="open_guide",
                 advertised_in="system prompt skill index",
                 tested_by=tested(f"skill:{name}"),
+                family_tested_by=family_tested(f"skill:{name}"),
                 qualified_by=qualified(f"skill:{name}"),
             )
         )
@@ -347,6 +515,7 @@ def build_capability_registry(
                 wired_by="activate_guides",
                 advertised_in="system prompt guide index; open_guide",
                 tested_by=tested(f"guide:{guide.guide_id}"),
+                family_tested_by=family_tested(f"guide:{guide.guide_id}"),
                 qualified_by=qualified(f"guide:{guide.guide_id}"),
             )
         )
@@ -361,6 +530,7 @@ def build_capability_registry(
                 wired_by="render_rules",
                 advertised_in=rule.placement,
                 tested_by=tested(f"rule:{rule.rule_id}"),
+                family_tested_by=family_tested(f"rule:{rule.rule_id}"),
                 qualified_by=qualified(f"rule:{rule.rule_id}"),
             )
         )

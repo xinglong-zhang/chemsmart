@@ -56,7 +56,7 @@ def _spin_anomalies(evaluation):
     ]
 
 
-@pytest.mark.capability("predicate:spin.s2_deviation_ge_0.2")
+@pytest.mark.capability("signal:spin.s2_deviation_ge_0.2")
 def test_the_spin_expectation_value_is_recorded_beside_the_bound_state():
     observation = _evaluate(_ORCA / "fe3_sextet.out", 6).observations["orca"]
     assert observation["spin_square_expected"] == pytest.approx(8.75)
@@ -66,7 +66,7 @@ def test_the_spin_expectation_value_is_recorded_beside_the_bound_state():
     )
 
 
-@pytest.mark.capability("predicate:spin.s2_deviation_ge_0.2")
+@pytest.mark.capability("signal:spin.s2_deviation_ge_0.2")
 def test_a_large_deviation_is_an_observation_with_its_number():
     evaluation = _evaluate(_ORCA / "fe3_doublet.out", 2)
     (anomaly,) = _spin_anomalies(evaluation)
@@ -76,12 +76,12 @@ def test_a_large_deviation_is_an_observation_with_its_number():
     assert not any("spin" in finding for finding in evaluation.findings)
 
 
-@pytest.mark.capability("predicate:spin.s2_deviation_ge_0.2")
+@pytest.mark.capability("signal:spin.s2_deviation_ge_0.2")
 def test_a_small_deviation_is_no_anomaly():
     assert _spin_anomalies(_evaluate(_ORCA / "fe3_sextet.out", 6)) == []
 
 
-@pytest.mark.capability("predicate:spin.s2_deviation_ge_0.2")
+@pytest.mark.capability("signal:spin.s2_deviation_ge_0.2")
 def test_the_sensor_reads_every_program_whose_spin_the_host_reads():
     """Gaussian records the value before and after annihilation and
     keeps it per output row; the sensor reads the wavefunction's own

@@ -40,7 +40,7 @@ def _rebuilt(review, node_observations):
     )
 
 
-@pytest.mark.capability("rule:review.displays_host_observations")
+@pytest.mark.capability("gate:review.displays_host_observations")
 def test_node_observations_ride_the_review_the_display_and_the_bundle(
     tmp_path,
 ):

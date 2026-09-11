@@ -83,7 +83,7 @@ class _RefusingHost(_DispatchSpyHost):
         )
 
 
-@pytest.mark.capability("rule:tool.dispatch.rejected")
+@pytest.mark.capability("gate:tool.dispatch.rejected")
 def test_a_routed_refusal_rides_the_tool_failed_event(tmp_path):
     """Production path: provider turn, host refusal, durable event."""
 

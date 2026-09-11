@@ -14,7 +14,14 @@ import pytest
 
 from chemsmart.agent.tool_runtime import _scan_boundary_sensor
 
-pytestmark = pytest.mark.capability("selector:scan_energies")
+pytestmark = [
+    pytest.mark.capability("selector:orca:scan:scan_energies"),
+    # The sensor this test is about: a scan whose extremum sits on the
+    # grid's own edge has standing as an observation. It was pinned by
+    # nothing, because the anomaly signals were string literals with no
+    # declaration to name.
+    pytest.mark.capability("signal:scan.extremum_at_grid_boundary"),
+]
 
 
 def _profile(energies, start=1.4, step=0.1):

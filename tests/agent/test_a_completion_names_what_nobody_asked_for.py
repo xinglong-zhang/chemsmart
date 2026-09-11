@@ -29,7 +29,7 @@ def _body(**extra):
     }
 
 
-@pytest.mark.capability("predicate:stationary_point.unexpected_order")
+@pytest.mark.capability("signal:stationary_point.unexpected_order")
 def test_observations_ride_a_passed_completion_without_moving_its_digest():
     plain = AnalysisCompletionReceiptV1(
         **_body(), receipt_sha256=canonical_sha256(_body())
