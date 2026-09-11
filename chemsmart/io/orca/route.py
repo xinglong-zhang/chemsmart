@@ -256,6 +256,32 @@ class ORCARoute:
         return None
 
     @property
+    def opt_convergence(self):
+        """Extract the geometry convergence preset from the route.
+
+        ORCA states it as a route keyword -- ``TightOpt``, ``LooseOpt``
+        -- and its own default writes nothing, so "no preset" and
+        "normal" are the same route and both read back as ``normal``.
+
+        Nothing read it back, so the preview validator compared the
+        project's ``tight`` against ``None`` and reported a correct
+        project as invalid. po3-r18 (2026-09-11) then concluded in its
+        recorded decision that "ORCA's OptTS renderer emitted no such
+        keyword" and deleted the control -- the same shape as the
+        ``ri_approximation`` loss below, where a session deleted the key
+        and let ORCA's default back in. The harness argued a model out
+        of a setting its own rule had recommended.
+        """
+
+        for route_keyword in self.route_keywords:
+            word = route_keyword.strip().casefold()
+            if word == "tightopt":
+                return "tight"
+            if word == "looseopt":
+                return "loose"
+        return "normal"
+
+    @property
     def ri_approximation(self):
         """Extract the resolution-of-the-identity choice from the route.
 

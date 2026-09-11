@@ -378,6 +378,21 @@ def _normalized_domain(values) -> tuple[str, ...]:
     )
 
 
+def _orca_opt_convergence_words() -> tuple[str, ...]:
+    """The words ORCA's own convergence table accepts, read from it.
+
+    A declared domain that is re-typed is a second source of truth; this
+    reads the table the writer uses, so adding a preset there publishes
+    it to the model in the same edit.
+    """
+
+    from chemsmart.jobs.orca.settings import (
+        ORCA_OPT_CONVERGENCE_KEYWORDS,
+    )
+
+    return tuple(sorted(ORCA_OPT_CONVERGENCE_KEYWORDS))
+
+
 def orca_method_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
     """Method vocabulary projected from the single-source ORCA io tables.
 
@@ -632,6 +647,26 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 sorted(
                     (
                         *orca_method_domains(),
+                        # Derived from the writer's own keyword table
+                        # rather than re-typed, so the declaration
+                        # cannot drift from what the route accepts.
+                        #
+                        # This was the one code-level ORCA enum with no
+                        # declared domain: `ORCA_OPT_CONVERGENCE_KEYWORDS`
+                        # has existed in jobs/orca/settings.py while the
+                        # model was told only that `opt_convergence` is
+                        # settable, never what it may be set to. po3-r18
+                        # declared `tight`, the validator reported
+                        # `expected 'tight', observed None` because the
+                        # input *reader* has no property for it, and the
+                        # session then deleted the control the host's own
+                        # rule had recommended. Publishing the domain is
+                        # FUNDAMENTAL 1 directly: the model should not
+                        # have to memorise a program's vocabulary.
+                        (
+                            "opt_convergence",
+                            tuple(sorted(_orca_opt_convergence_words())),
+                        ),
                         (
                             "ab_initio",
                             (

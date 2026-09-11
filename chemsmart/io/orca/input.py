@@ -258,6 +258,42 @@ class ORCAInput(ORCAFileMixin):
             return None
 
     @property
+    def opt_convergence(self):
+        """
+        Extract the geometry convergence preset from the route line.
+
+        ORCA states this as a route keyword rather than a block setting:
+        ``TightOpt`` and ``LooseOpt``, with its own default writing
+        nothing at all. So "the route carries no preset" and "the
+        project asked for normal" are the same input, and both read
+        back as ``normal``.
+
+        This property did not exist, and its absence was not silent. The
+        writer emits the preset correctly from
+        ``ORCA_OPT_CONVERGENCE_KEYWORDS``; the preview validator
+        compares every declared field against the input parsed back, and
+        ``getattr(reader, "opt_convergence", None)`` therefore returned
+        ``None`` for a field the route did carry. po3-r18 (2026-09-11)
+        declared ``tight``, met ``expected 'tight', observed None``,
+        concluded in its own recorded decision that "ORCA's OptTS
+        renderer emitted no such keyword", and deleted the control --
+        a false fact about the harness, written into the scientific
+        record by a model reasoning correctly from what it was shown.
+
+        Returns:
+            str: 'tight', 'loose', or 'normal' -- never None for a job
+                 that optimises a geometry, because absence is ORCA's
+                 own default rather than missing information.
+        """
+        route = self.route_string or ""
+        words = {word.lower() for word in route.split()}
+        if "tightopt" in words:
+            return "tight"
+        if "looseopt" in words:
+            return "loose"
+        return "normal"
+
+    @property
     def scf_convergence(self):
         """
         Extract SCF convergence criteria from %scf block.

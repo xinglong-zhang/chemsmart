@@ -67,6 +67,12 @@ def test_a_declared_route_parameter_reads_back_as_itself(name, value):
         # fitting (AuxC) space; AutoAux is explicit here so this round-trip
         # test does not depend on any silent writer default.
         project["aux_basis"] = "AutoAux"
+    if name == "opt_convergence":
+        # ORCA states this preset only for a job that optimises a
+        # geometry, so the probe must be such a job. The domain is
+        # declared per program while applicability is per jobtype --
+        # recorded here as the scoping gap it is, not papered over.
+        project["jobtype"] = "opt"
     settings = ORCAJobSettings.from_dict(project)
     route = ORCARoute(settings.route_string)
     recovered = getattr(route, name, None)
