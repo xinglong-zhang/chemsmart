@@ -140,7 +140,29 @@ class BasePreprocessor:
 
         if not branches:
             return []
-        return min(branches, key=lambda branch: (len(branch), branch[0]))
+        return min(
+            branches,
+            key=lambda branch: self._branch_sort_key(
+                graph, link_index, branch
+            ),
+        )
+
+    def _branch_sort_key(self, graph, link_index, branch_atom_indices):
+        """Rank by size, actual bonded start's atomic number, then index."""
+        branch_atom_count = len(branch_atom_indices)
+        branch_start_index = next(
+            neighbor_index
+            for neighbor_index in graph.neighbors(link_index)
+            if neighbor_index in branch_atom_indices
+        )
+        branch_start_atomic_number = Chem.GetPeriodicTable().GetAtomicNumber(
+            self.molecule.chemical_symbols[branch_start_index]
+        )
+        return (
+            branch_atom_count,
+            branch_start_atomic_number,
+            branch_start_index,
+        )
 
     def _extract_molecule(self, indices: list[int]) -> Molecule:
         """Return a molecule containing selected 0-based atom indices."""
@@ -247,7 +269,9 @@ class SkeletonPreprocessor(BasePreprocessor):
 
         selected = min(
             candidates,
-            key=lambda branch: (len(branch), min(branch)),
+            key=lambda branch: self._branch_sort_key(
+                graph, link_index, branch
+            ),
         )
         if len(candidates) > 1:
             logger.debug(
@@ -266,8 +290,12 @@ class SkeletonPreprocessor(BasePreprocessor):
         skeleton_set = set(self.skeleton_indices or [])
         branches: list[list[int]] = []
         for neighbor in sorted(graph.neighbors(link_index)):
-            branch = self._collect_branch(graph, neighbor, link_index)
-            if not skeleton_set.intersection(branch):
+            graph_copy = graph.copy()
+            graph_copy.remove_edge(link_index, neighbor)
+            branch = sorted(nx.node_connected_component(graph_copy, neighbor))
+            if link_index not in branch and not skeleton_set.intersection(
+                branch
+            ):
                 branches.append(branch)
         return branches
 
@@ -294,5 +322,64 @@ class SkeletonPreprocessor(BasePreprocessor):
 class SubstituentPreprocessor(BasePreprocessor):
     """Prepare one substituent using the shared one-site preprocessing path."""
 
-    def __init__(self, molecule: Molecule, link_index: int):
+    def __init__(
+        self,
+        molecule: Molecule,
+        link_index: int,
+        remove_branch_start: int | None = None,
+        skip_cleanup: bool = False,
+        label: str = "unnamed",
+    ):
+        self.label = label
+        self.remove_branch_start = remove_branch_start
+        self.skip_cleanup = skip_cleanup
         super().__init__(molecule, [link_index])
+        context = f"Substituent '{label}' (link atom {link_index})"
+        if skip_cleanup and remove_branch_start is not None:
+            raise ValueError(
+                f"{context}: skip_cleanup conflicts with remove_branch_start "
+                f"{remove_branch_start}."
+            )
+        if remove_branch_start is not None and (
+            type(remove_branch_start) is not int
+            or not 1 <= remove_branch_start <= len(molecule)
+            or remove_branch_start == link_index
+        ):
+            raise ValueError(
+                f"{context}: invalid remove_branch_start {remove_branch_start}; "
+                "must be an original 1-based atom index different from the link atom."
+            )
+
+    def run(self) -> tuple[Molecule, dict[int, int]]:
+        if self.skip_cleanup:
+            return self.molecule.copy(), {
+                i: i for i in range(1, len(self.molecule) + 1)
+            }
+        try:
+            return super().run()
+        except ValueError as exc:
+            raise ValueError(f"Substituent '{self.label}': {exc}") from exc
+
+    def _has_available_bonding_position(self, graph, link_index):
+        if self.remove_branch_start is not None:
+            return False
+        return super()._has_available_bonding_position(graph, link_index)
+
+    def _select_removal_branch(self, graph, link_index):
+        if self.remove_branch_start is None:
+            return super()._select_removal_branch(graph, link_index)
+        start = self.remove_branch_start - 1
+        context = (
+            f"link atom {link_index + 1}, remove_branch_start {start + 1}"
+        )
+        if not graph.has_edge(link_index, start):
+            raise ValueError(f"{context}: atoms are not bonded.")
+        graph_copy = graph.copy()
+        graph_copy.remove_edge(link_index, start)
+        branch = nx.node_connected_component(graph_copy, start)
+        if link_index in branch:
+            raise ValueError(
+                f"{context}: cutting this bond cannot separate the branch "
+                "because an alternative path connects it to the link atom."
+            )
+        return sorted(branch)

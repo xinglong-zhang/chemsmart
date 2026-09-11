@@ -74,6 +74,8 @@ substituents:
     label: "methyl"
     link_index: 1
     groups: [1]          # available for group 1 (skeleton1)
+    # remove_branch_start: null  # original 1-based atom bonded to link_index
+    # skip_cleanup: false       # true keeps all atoms; conflicts with a branch start
 
   # - file_path: "/path/to/ethyl.xyz"
   #   label: "ethyl"

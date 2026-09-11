@@ -22,6 +22,8 @@ ALLOWED_SKELETON_KEYS = {
     "slots",
 }
 ALLOWED_SUBSTITUENT_KEYS = {
+    "remove_branch_start",
+    "skip_cleanup",
     "file_path",
     "label",
     "link_index",
@@ -109,6 +111,8 @@ substituents:
     label: "methyl"
     link_index: 1
     groups: [1]          # available for group 1 (skeleton1)
+    # remove_branch_start: null  # original 1-based atom bonded to link_index
+    # skip_cleanup: false       # true keeps all atoms; conflicts with a branch start
 
   # - file_path: "/path/to/ethyl.xyz"
   #   label: "ethyl"
@@ -772,6 +776,33 @@ def _validate_substituent_entry(
         "link_index",
         param_hint,
     )
+
+    remove_branch_start = entry.get("remove_branch_start")
+    skip_cleanup = entry.get("skip_cleanup", False)
+    context = (
+        f"Substituent entry {sub_idx + 1} (label='{normalized['label']}', "
+        f"link_index={normalized['link_index']}, "
+        f"remove_branch_start={remove_branch_start})"
+    )
+    if remove_branch_start is not None and (
+        type(remove_branch_start) is not int or remove_branch_start < 1
+    ):
+        raise click.BadParameter(
+            f"{context}: 'remove_branch_start' must be a positive integer or null.",
+            param_hint=param_hint,
+        )
+    if type(skip_cleanup) is not bool:
+        raise click.BadParameter(
+            f"{context}: 'skip_cleanup' must be a boolean.",
+            param_hint=param_hint,
+        )
+    if skip_cleanup and remove_branch_start is not None:
+        raise click.BadParameter(
+            f"{context}: skip_cleanup conflicts with remove_branch_start.",
+            param_hint=param_hint,
+        )
+    normalized["remove_branch_start"] = remove_branch_start
+    normalized["skip_cleanup"] = skip_cleanup
 
     # Handle groups field
     groups_raw = entry.get("groups")

@@ -17,11 +17,11 @@ The ``iterate`` command is organized into two independent layers:
 
 .. code:: bash
 
-      chemsmart run [--num-cores N] iterate yaml -f <CONFIG_FILE> [INPUT_OPTIONS] \
-         [ALGORITHM [ALGORITHM_OPTIONS]]
+   chemsmart run [--num-cores N] iterate yaml -f <CONFIG_FILE> [INPUT_OPTIONS] \
+      [ALGORITHM [ALGORITHM_OPTIONS]]
 
-      chemsmart run [--num-cores N] iterate direct [DIRECT_INPUT_OPTIONS] [INPUT_OPTIONS] \
-       [ALGORITHM [ALGORITHM_OPTIONS]]
+   chemsmart run [--num-cores N] iterate direct [DIRECT_INPUT_OPTIONS] [INPUT_OPTIONS] \
+    [ALGORITHM [ALGORITHM_OPTIONS]]
 
 If no algorithm subcommand is given, YAML input uses the algorithm declared in the YAML ``algorithm`` block, falling
 back to the built-in default (``etkdg``). Direct input has no configuration file algorithm block, so it falls back
@@ -110,6 +110,27 @@ to the same standard Iterate configuration used by YAML input. It does not accep
 template generation belongs to the YAML tooling path. It accepts the same execution, output and algorithm options as
 YAML input, including ``-t/--timeout``, ``-cm/--combination-mode``, ``-ms/--max-substituted-sites``,
 ``-o/--outputfile``, ``--separate-outputs`` and the ``etkdg``/``jlgo`` algorithm subcommands.
+
+Each substituent optionally accepts ``remove_branch_start`` (default ``null``) and ``skip_cleanup`` (default ``false``)
+in YAML. The branch start is a 1-based atom number in the original input structure, directly bonded to its link atom.
+Cutting that bond removes the component containing the start; nonadjacent atoms and bonds that cannot separate a ring
+raise an error. Explicit removal runs even when the link atom already has an available bonding position.
+
+``skip_cleanup: true`` keeps every substituent atom and its original numbering. It cannot be combined with a non-null
+``remove_branch_start``. Skeleton preprocessing and structure generation still run normally. When both fields are
+omitted, existing automatic cleanup applies: a branch is removed only at a saturated link atom, ordered by branch size,
+then the atomic number of the directly bonded branch start, then its atom index. Skeleton-core and ring protection
+apply.
+
+Direct input provides ``--substituent-remove-branch-start`` and ``--substituent-skip-cleanup``. Each option can be
+omitted entirely; if supplied, repeat it once per substituent in the same order as ``--substituent-file``. Use ``none``
+as a placeholder for the default, and explicit ``true`` or ``false`` for skip cleanup. For example, with two
+substituents:
+
+.. code:: bash
+
+   --substituent-remove-branch-start 5 --substituent-remove-branch-start none \
+   --substituent-skip-cleanup false --substituent-skip-cleanup true
 
 .. list-table::
    :header-rows: 1

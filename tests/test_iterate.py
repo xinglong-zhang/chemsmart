@@ -593,6 +593,14 @@ def test_iterate_direct_default_labels_match_yaml_runner_behavior(
         pytest.param({"skeleton_files": ()}, id="missing-skeleton-file"),
         pytest.param({"skeleton_groups": ()}, id="missing-skeleton-group"),
         pytest.param({"substituent_files": ()}, id="missing-sub-file"),
+        pytest.param(
+            {"substituent_remove_branch_start": ("none", "2")},
+            id="sub-branch-count",
+        ),
+        pytest.param(
+            {"substituent_skip_cleanup": ("false", "true")},
+            id="sub-cleanup-count",
+        ),
         pytest.param({"substituent_indices": ()}, id="missing-sub-index"),
         pytest.param({"substituent_groups": ()}, id="missing-sub-group"),
         pytest.param(
@@ -705,6 +713,14 @@ def test_iterate_direct_multiple_options_preserve_order(monkeypatch):
         [
             "iterate",
             "direct",
+            "--substituent-remove-branch-start",
+            "2",
+            "--substituent-remove-branch-start",
+            "none",
+            "--substituent-skip-cleanup",
+            "false",
+            "--substituent-skip-cleanup",
+            "true",
             "-skf",
             "first.gjf",
             "-skg",
@@ -740,6 +756,15 @@ def test_iterate_direct_multiple_options_preserve_order(monkeypatch):
     assert [entry["file_path_raw"] for entry in settings.substituent_list] == [
         "Me.gjf",
         "OH.gjf",
+    ]
+
+    assert [e["remove_branch_start"] for e in settings.substituent_list] == [
+        2,
+        None,
+    ]
+    assert [e["skip_cleanup"] for e in settings.substituent_list] == [
+        False,
+        True,
     ]
 
 
@@ -905,8 +930,11 @@ def test_iterate_cdxml_command_is_not_registered():
     assert "not implemented" not in result.output
 
 
+@pytest.mark.parametrize("cleanup", [False, True])
 def test_iterate_direct_and_equivalent_yaml_generate_same_combinations(
     iterate_jobrunner,
+    monkeypatch,
+    cleanup,
     tmp_path: Path,
 ):
     """Equivalent direct and YAML configs produce identical combinations."""
@@ -923,6 +951,8 @@ def test_iterate_direct_and_equivalent_yaml_generate_same_combinations(
         substituent_indices=(1, 1),
         substituent_groups=("[1]", "[1]"),
         substituent_labels=("Me", "OH"),
+        substituent_remove_branch_start=("2", "none") if cleanup else (),
+        substituent_skip_cleanup=("false", "true") if cleanup else (),
     )
     yaml_path = _write_iterate_config(
         tmp_path,
@@ -935,10 +965,12 @@ skeletons:
 substituents:
   - file_path: "{methane}"
     label: Me
+    remove_branch_start: {2 if cleanup else "null"}
     link_index: 1
     groups: [1]
   - file_path: "{water}"
     label: OH
+    skip_cleanup: {str(cleanup).lower()}
     link_index: 1
     groups: [1]
 """,
@@ -951,10 +983,10 @@ substituents:
     yaml_job = _build_job_from_config_path(
         yaml_path, iterate_jobrunner, tmp_path, combination_mode="global"
     )
-    _, direct_combinations, direct_errors, _ = (
+    direct_pool, direct_combinations, direct_errors, _ = (
         iterate_jobrunner._generate_combinations(direct_job)
     )
-    _, yaml_combinations, yaml_errors, _ = (
+    yaml_pool, yaml_combinations, yaml_errors, _ = (
         iterate_jobrunner._generate_combinations(yaml_job)
     )
 
@@ -972,6 +1004,31 @@ substituents:
     assert {combo.label for combo in direct_combinations} == {
         combo.label for combo in yaml_combinations
     }
+
+    def check_analyzer(config, skeleton, substituents):
+        from types import SimpleNamespace
+
+        sub, _, sub_link = substituents[0]
+        assert sub_link == 1
+        expected = (
+            4 if sub.chemical_symbols[0] == "C" else (3 if cleanup else 2)
+        )
+        assert len(sub) == expected
+        assert len(skeleton) == 11
+        return SimpleNamespace(run=lambda: skeleton)
+
+    runner_module = importlib.import_module("chemsmart.jobs.iterate.runner")
+    monkeypatch.setattr(runner_module, "build_analyzer", check_analyzer)
+    for pool, combinations in [
+        (direct_pool, direct_combinations),
+        (yaml_pool, yaml_combinations),
+    ]:
+        for combo in combinations:
+            if len(combo.assignments) == 1:
+                result = runner_module._run_combination_task(combo, pool, 1)
+                assert (
+                    result.execution_status == "SUCCESS"
+                ), result.error_message
 
 
 @pytest.mark.parametrize(
@@ -2868,3 +2925,113 @@ def test_iterate_cli_separate_outputs(tmp_path: Path):
     expected = _read_xyz(EXPECTED_DIR / "etkdg_generation.xyz")
     _assert_structure_maps_equal(actual, expected)
     assert (output_directory / "etkdg_generation_iterate.out").exists()
+
+
+@pytest.mark.parametrize("hydrogen_index", [1, 4])
+def test_iterate_cleanup_prefers_hydrogen(monkeypatch, hydrogen_index):
+    """Equal-sized H/F branches are ordered chemically, not by atom index."""
+    import networkx as nx
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.iterate.iterate import SubstituentPreprocessor
+
+    symbols = ["C", "F", "F", "F", "F"]
+    symbols[hydrogen_index] = "H"
+    molecule = Molecule(symbols=symbols, positions=np.zeros((5, 3)))
+    monkeypatch.setattr(Molecule, "to_graph", lambda self: nx.star_graph(4))
+    processed, mapping = SubstituentPreprocessor(molecule, 1).run()
+    assert processed.chemical_symbols == ["C", "F", "F", "F"]
+    assert hydrogen_index + 1 not in mapping
+
+
+@pytest.mark.parametrize(
+    "start, skip, ring, removed, error",
+    [
+        (5, False, False, {5, 6}, None),
+        (
+            None,
+            False,
+            False,
+            set(),
+            None,
+        ),  # unsaturated chain: legacy behavior
+        (None, True, False, set(), None),
+        (2, False, False, set(), "not bonded"),
+        (5, False, True, set(), "cannot separate"),
+        (4, False, False, set(), "invalid remove_branch_start"),
+        (7, False, False, set(), "invalid remove_branch_start"),
+        (5, True, False, set(), "conflicts"),
+    ],
+)
+def test_iterate_explicit_cleanup(
+    monkeypatch, start, skip, ring, removed, error
+):
+    import networkx as nx
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.iterate.iterate import SubstituentPreprocessor
+
+    graph = nx.path_graph(6)
+    if ring:
+        graph.add_edge(5, 0)
+    molecule = Molecule(symbols=["C"] * 6, positions=np.zeros((6, 3)))
+    monkeypatch.setattr(Molecule, "to_graph", lambda self: graph)
+    if error:
+        with pytest.raises(ValueError, match=error) as exc:
+            SubstituentPreprocessor(
+                molecule, 4, start, skip, label="chain"
+            ).run()
+        assert "chain" in str(exc.value)
+        assert "4" in str(exc.value)
+        assert str(start) in str(exc.value)
+    else:
+        processed, mapping = SubstituentPreprocessor(
+            molecule, 4, start, skip
+        ).run()
+        kept = sorted(set(range(1, 7)) - removed)
+        assert len(processed) == len(kept)
+        assert mapping == {old: new for new, old in enumerate(kept, 1)}
+
+
+@pytest.mark.parametrize(
+    "options, message",
+    [
+        ({"remove_branch_start": True}, "positive integer"),
+        ({"skip_cleanup": "false"}, "boolean"),
+        ({"remove_branch_start": 2, "skip_cleanup": True}, "conflicts"),
+    ],
+)
+def test_iterate_cleanup_config_errors(tmp_path, options, message):
+    config = _build_direct_config(tmp_path)
+    config["substituents"][0].update(options)
+    # Normalized configs include path metadata, so validate the input fields only.
+    for entry in config["skeletons"] + config["substituents"]:
+        entry.pop("file_path_raw", None)
+    with pytest.raises(click.BadParameter, match=message):
+        validate_iterate_config(
+            config, param_hint="test", path_base_dir=str(tmp_path)
+        )
+
+
+@pytest.mark.parametrize("protect_core", [False, True])
+def test_iterate_cleanup_uses_bonded_start(monkeypatch, protect_core):
+    """Branch minima differ from starts; core and ring atoms stay protected."""
+    import networkx as nx
+
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.jobs.iterate.iterate import SkeletonPreprocessor
+
+    # Two size-two branches start at F (index 5) and O (index 6).
+    # Their lowest-index atoms are H and C, the reverse chemical ordering.
+    graph = nx.Graph([(3, 4), (4, 0), (3, 5), (5, 1), (3, 2), (2, 6), (6, 3)])
+    molecule = Molecule(
+        symbols=["H", "C", "C", "C", "F", "O", "C"],
+        positions=np.zeros((7, 3)),
+    )
+    monkeypatch.setattr(Molecule, "to_graph", lambda self: graph)
+    _, mapping = SkeletonPreprocessor(
+        molecule,
+        [4],
+        skeleton_indices=[3, 4, 7] if protect_core else None,
+    ).run()
+    assert mapping == {1: 1, 3: 2, 4: 3, 5: 4, 7: 5}

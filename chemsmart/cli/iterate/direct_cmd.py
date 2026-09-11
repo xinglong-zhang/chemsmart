@@ -130,6 +130,8 @@ def build_iterate_direct_config(
     substituent_groups: tuple[str, ...],
     substituent_labels: tuple[str, ...],
     path_base_dir: str,
+    substituent_remove_branch_start: tuple[str, ...] = (),
+    substituent_skip_cleanup: tuple[str, ...] = (),
 ) -> dict:
     """Convert ordered direct-input tuples into normalized standard config."""
     _require_count("skeleton file", skeleton_files)
@@ -150,6 +152,17 @@ def build_iterate_direct_config(
     )
     substituent_labels = _optional_tuple(
         substituent_labels, len(substituent_files), "substituent label"
+    )
+
+    substituent_remove_branch_start = _optional_tuple(
+        substituent_remove_branch_start,
+        len(substituent_files),
+        "substituent remove branch start",
+    )
+    substituent_skip_cleanup = _optional_tuple(
+        substituent_skip_cleanup,
+        len(substituent_files),
+        "substituent skip cleanup",
     )
 
     skeletons = []
@@ -184,21 +197,42 @@ def build_iterate_direct_config(
         skeletons.append(entry)
 
     substituents = []
-    for file_path, link_index, groups_text, label_text in zip(
+    for (
+        file_path,
+        link_index,
+        groups_text,
+        label_text,
+        start_text,
+        skip_text,
+    ) in zip(
         substituent_files,
         substituent_indices,
         substituent_groups,
         substituent_labels,
+        substituent_remove_branch_start,
+        substituent_skip_cleanup,
     ):
         sub_groups = _parse_flat_list(
             groups_text, "-subg / --substituent-groups"
         )
+        start = _none_to_default(start_text)
+        skip = _none_to_default(skip_text)
         substituents.append(
             {
                 "file_path": file_path,
                 "label": _none_to_default(label_text),
                 "link_index": [link_index],
                 "groups": sub_groups,
+                "remove_branch_start": (
+                    None
+                    if start is None
+                    else click.INT.convert(start, None, None)
+                ),
+                "skip_cleanup": (
+                    False
+                    if skip is None
+                    else {"true": True, "false": False}.get(skip.lower(), skip)
+                ),
             }
         )
 
@@ -223,6 +257,10 @@ def _build_iterate_direct_job(ctx, cli_algorithm_name=None, cli_options=None):
             substituent_groups=data["substituent_groups"],
             substituent_labels=data["substituent_labels"],
             path_base_dir=data["path_base_dir"],
+            substituent_remove_branch_start=data[
+                "substituent_remove_branch_start"
+            ],
+            substituent_skip_cleanup=data["substituent_skip_cleanup"],
         )
     return build_iterate_job(
         ctx,
@@ -296,6 +334,18 @@ def _build_iterate_direct_job(ctx, cli_algorithm_name=None, cli_options=None):
     type=str,
     help="Optional substituent label; use none for the default substituentN label.",
 )
+@click.option(
+    "--substituent-remove-branch-start",
+    multiple=True,
+    type=str,
+    help="Original 1-based branch start to remove. Repeat per substituent; none uses automatic cleanup.",
+)
+@click.option(
+    "--substituent-skip-cleanup",
+    multiple=True,
+    type=str,
+    help="Skip substituent cleanup: true/false. Repeat per substituent; none defaults to false.",
+)
 @click_iterate_execution_options
 @click_iterate_combination_options
 @click_job_options
@@ -310,6 +360,8 @@ def direct_cmd(
     substituent_index,
     substituent_groups,
     substituent_label,
+    substituent_remove_branch_start,
+    substituent_skip_cleanup,
     timeout,
     outputfile,
     directory,
@@ -343,6 +395,8 @@ def direct_cmd(
         "substituent_indices": substituent_index,
         "substituent_groups": substituent_groups,
         "substituent_labels": substituent_label,
+        "substituent_remove_branch_start": substituent_remove_branch_start,
+        "substituent_skip_cleanup": substituent_skip_cleanup,
         "path_base_dir": os.getcwd(),
         "timeout": timeout,
         "outputfile": outputfile,

@@ -156,10 +156,13 @@ class IterateMoleculePool:
         Pool of unique skeleton molecules.
     substituents : list[Molecule]
         Pool of unique substituent molecules.
+    substituent_cleanup : dict[int, dict]
+        Cleanup options keyed by substituent pool index, shared with workers.
     """
 
     skeletons: list[Molecule] = field(default_factory=list)
     substituents: list[Molecule] = field(default_factory=list)
+    substituent_cleanup: dict[int, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -338,6 +341,8 @@ def _run_combination_task(
             sub_prep = SubstituentPreprocessor(
                 molecule=substituent,
                 link_index=assignment.substituent_link_index,
+                label=assignment.substituent_label,
+                **pool.substituent_cleanup.get(assignment.substituent_idx, {}),
             )
             processed_sub, sub_index_map = sub_prep.run()
             substituents.append(
@@ -1103,6 +1108,10 @@ class IterateJobRunner(JobRunner):
 
             pool_idx = len(pool.substituents)
             pool.substituents.append(mol)
+            pool.substituent_cleanup[pool_idx] = {
+                "remove_branch_start": sub_config.get("remove_branch_start"),
+                "skip_cleanup": sub_config.get("skip_cleanup", False),
+            }
             valid_substituents.append((pool_idx, label, sub_config))
 
             sub_link_idx = sub_link_index[0]
