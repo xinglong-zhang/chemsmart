@@ -621,6 +621,17 @@ def _settle_from_delivery(
         settled = "returned_to_human"
         reasons = (f"the session ended {terminal!r}: {delivery.ending}",)
     ledger.settle(settled, reasons=reasons, evidence=evidence)
+    if workspace is not None and settled in {
+        "achieved",
+        "achieved_with_observations",
+    }:
+        _record_goal_qualification(
+            ledger,
+            workspace=workspace,
+            goal_id=goal_id,
+            current_run=f"goals/{goal_id}/runs/cycle-{cycles}",
+            current_outcome=None,
+        )
     return GoalLoopResultV1(
         goal_id=goal_id,
         settlement=settled,
@@ -4161,40 +4172,13 @@ class GoalDriver:
         self.phase = "settle"
 
     def _record_qualification(self) -> None:
-        """An achieved goal is live evidence: write it to the goal ledger
-        and the host's qualification store, so "qualified" is a fact the
-        capability registry can read rather than a claim."""
-
-        from chemsmart.agent.capability_registry import (
-            record_host_qualification,
-        )
-        from chemsmart.agent.terminal_states import (
-            derive_run_outcome,
-            read_run_events,
-        )
-
-        agent_root = self.workspace / ".chemsmart-agent"
-
-        def _read_outcome(run: str) -> Any:
-            return derive_run_outcome(
-                read_run_events(agent_root / run / "events.jsonl")
-            )
-
-        entries = _qualification_entries_for_goal(
-            ledger_entries=self.ledger.entries(),
+        _record_goal_qualification(
+            self.ledger,
+            workspace=self.workspace,
             goal_id=self.goal_id,
             current_run=f"goals/{self.goal_id}/runs/cycle-{self.cycles}",
             current_outcome=self.outcome,
-            read_outcome=_read_outcome,
         )
-        for entry in entries:
-            self.ledger.append("qualified", entry)
-        try:
-            record_host_qualification(entries)
-        except OSError:
-            # The host store is a convenience mirror; the ledger is the
-            # durable record.
-            pass
 
     def _settle(self) -> None:
         assert self.run_directory is not None and self.goal is not None
@@ -4545,6 +4529,59 @@ class GoalDriver:
 
 def _resolved_or_none(path: str | Path | None) -> str | None:
     return str(Path(path).resolve()) if path is not None else None
+
+
+def _record_goal_qualification(
+    ledger: GoalLedger,
+    *,
+    workspace: Path,
+    goal_id: str,
+    current_run: str,
+    current_outcome: Any,
+) -> tuple[dict[str, Any], ...]:
+    """An achieved goal is live evidence: write it to the goal ledger and
+    the host's qualification store, so "qualified" is a fact the
+    capability registry can read rather than a claim.
+
+    Called from every path that settles ``achieved``: the executed run's
+    and the analysis-only cycle's. The second had none -- g5 settled
+    ``achieved_with_observations`` from a cycle that launched nothing,
+    with two validated PySCF nodes in its cycle 1, and qualified nothing
+    while the repaired reader sat one call away (PySCF round,
+    2026-09-12): right where computed, unconnected where consumed.
+    """
+
+    from chemsmart.agent.capability_registry import (
+        record_host_qualification,
+    )
+    from chemsmart.agent.terminal_states import (
+        derive_run_outcome,
+        read_run_events,
+    )
+
+    agent_root = Path(workspace) / ".chemsmart-agent"
+
+    def _read_outcome(run: str) -> Any:
+        return derive_run_outcome(
+            read_run_events(agent_root / run / "events.jsonl")
+        )
+
+    entries = _qualification_entries_for_goal(
+        ledger_entries=ledger.entries(),
+        goal_id=goal_id,
+        current_run=current_run,
+        current_outcome=current_outcome,
+        read_outcome=_read_outcome,
+    )
+    for entry in entries:
+        ledger.append("qualified", entry)
+    try:
+        record_host_qualification(entries)
+    except OSError:
+        # The host store is a convenience mirror; the ledger is the
+        # durable record.
+        pass
+    return entries
 
 
 def _qualification_entries_for_goal(
