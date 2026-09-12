@@ -295,3 +295,76 @@ jobs:
         if: steps.changed-files.outputs.only_changed != 'true'
         shell: bash -l {0}
         run: make test
+
+  tests_soap:
+    needs: [pre-commit, build]
+    if: ${{ success() }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10"]
+        os: [ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check if only documentation changed
+        id: changed-files
+        uses: tj-actions/changed-files@v46
+        with:
+          files: |
+            docs/**
+            *.md
+
+      - name: Report documentation-only change
+        if: steps.changed-files.outputs.only_changed == 'true'
+        run: |
+          echo "Only documentation files changed; SOAP tests will be skipped."
+
+      - name: Set up Conda
+        if: steps.changed-files.outputs.only_changed != 'true'
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          miniforge-version: latest
+          python-version: ${{ matrix.python-version }}
+          environment-file: environment.yml
+          activate-environment: chemsmart
+          conda-solver: libmamba
+          channel-priority: strict
+
+      - name: Install project with test extra
+        if: steps.changed-files.outputs.only_changed != 'true'
+        shell: bash -l {0}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[test]
+
+      - name: Run SOAP tests with coverage
+        if: steps.changed-files.outputs.only_changed != 'true'
+        shell: bash -l {0}
+        run: make test-soap
+
+      - name: Upload SOAP coverage artifacts
+        if: always() && steps.changed-files.outputs.only_changed != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-soap-${{ runner.os }}
+          path: |
+            coverage-soap.xml
+          if-no-files-found: ignore
+
+      - name: Upload SOAP coverage to Codecov
+        if: >
+          steps.changed-files.outputs.only_changed != 'true' &&
+          hashFiles('coverage-soap.xml') != ''
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage-soap.xml
+          flags: soap
+          fail_ci_if_error: false
+
