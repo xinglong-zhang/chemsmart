@@ -1,0 +1,6 @@
+gas:
+  aux_basis: def2/j
+  basis: def2-tzvp
+  functional: wb97x-d3bj
+  ri_approximation: rijcosx
+  scf_convergence: tight

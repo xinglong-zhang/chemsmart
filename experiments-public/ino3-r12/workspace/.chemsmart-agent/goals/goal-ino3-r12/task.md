@@ -1,0 +1,8 @@
+I have a diamagnetic square-planar nickel(II) bis(arenethiolate) bis(phosphine) complex, clean by 1H and 31P NMR, and I want to take it to the one-electron oxidised form and put it in an EPR tube. I cannot get a voltammogram I would quote: the compound films onto the electrode within a single sweep, the return wave vanishes, and the anodic peak walks with scan rate, so I have no potential at all. My shelf holds ferrocenium hexafluorophosphate, acetylferrocenium tetrafluoroborate and tris(4-bromophenyl)aminium hexachloroantimonate, which in acetonitrile sit near 0.00, +0.27 and +0.70 V versus ferrocene. Where does the +/0 couple of the model complex fall on that scale in acetonitrile? And when the electron leaves, does the hole sit on nickel or on sulfur - am I making a nickel(III) species or a nickel(II) thiyl radical, and how is the spin split between the metal and the two sulfurs?
+
+What would satisfy me: a potential versus ferrocene in acetonitrile good to about plus or minus 0.2 V, which is enough to choose among those three oxidants, together with the spin population on nickel and on each sulfur in the cation.
+
+Structure in the workspace (idealised square-planar start, Ni-S 2.20, Ni-P 2.20 angstrom, thiolates trans; nothing optimised):
+  nickel-bis-thiolate-bis-phosphine.xyz   Ni(SMe)2(PH3)2, neutral, closed shell
+
+The oxidised form is the same composition at charge +1; I expect a doublet, but whether a quartet is competitive is part of the question. My real ligands are dmpe and 2,6-dimethylbenzenethiolate, so PH3 is a far weaker donor than anything I actually put on a metal; if a trimethylphosphine model is within reach I would rather have that.

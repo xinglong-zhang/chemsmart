@@ -1,0 +1,9 @@
+gas:
+  aux_basis: def2/j
+  basis: def2-svp
+  dispersion: d3bj
+  freq: true
+  functional: b3lyp
+ts:
+  geom_maxiter: 100
+  opt_convergence: normal

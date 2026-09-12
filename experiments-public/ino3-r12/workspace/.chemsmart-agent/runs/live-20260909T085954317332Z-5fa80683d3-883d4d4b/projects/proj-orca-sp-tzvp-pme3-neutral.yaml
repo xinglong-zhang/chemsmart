@@ -1,0 +1,18 @@
+gas:
+  aux_basis: def2/j
+  basis: def2-tzvp
+  charge: 0
+  dispersion: d3bj
+  functional: pbe0
+  multiplicity: 1
+  ri_approximation: rijcosx
+solv:
+  aux_basis: def2/j
+  basis: def2-tzvp
+  charge: 0
+  dispersion: d3bj
+  functional: pbe0
+  multiplicity: 1
+  ri_approximation: rijcosx
+  solvent_id: acetonitrile
+  solvent_model: cpcm

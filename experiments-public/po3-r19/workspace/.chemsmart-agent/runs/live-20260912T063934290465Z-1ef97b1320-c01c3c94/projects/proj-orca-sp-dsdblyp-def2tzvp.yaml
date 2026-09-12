@@ -1,0 +1,6 @@
+gas:
+  aux_basis: def2/jk
+  basis: def2-tzvp
+  dispersion: d3bj
+  functional: dsd-blyp
+  ri_approximation: rijk

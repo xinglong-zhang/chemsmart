@@ -1,0 +1,19 @@
+gas:
+  basis: def2-SVP
+  functional: B3LYP
+link:
+  basis: def2-SVP
+  freq: false
+  functional: B3LYP
+  guess: mix
+  jobtype: opt
+  stable: opt
+solv:
+  basis: def2-SVP
+  freq: false
+  functional: B3LYP
+td:
+  basis: def2-SVP
+  functional: B3LYP
+  nstates: 3
+  states: singlets

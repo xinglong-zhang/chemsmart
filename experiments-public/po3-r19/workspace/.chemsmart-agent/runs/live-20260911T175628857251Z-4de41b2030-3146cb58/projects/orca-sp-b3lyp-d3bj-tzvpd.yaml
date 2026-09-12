@@ -1,0 +1,7 @@
+gas:
+  aux_basis: def2/j
+  basis: def2-tzvpd
+  dispersion: d3bj
+  functional: b3lyp
+  ri_approximation: ri
+  scf_convergence: tight

@@ -1,0 +1,23 @@
+schema_version: chemsmart.bounded-execution-envelope.v1
+mode: bounded-local
+allowed_program_engines:
+  orca:
+  - cpu
+  xtb:
+  - cpu
+  pyscf:
+  - cpu
+resources:
+  execution_target: run
+  cores: 10
+  memory_gb: 40
+  gpu_count: 0
+  scratch_policy: server
+  # No per-node timer: a node may hold the whole executable window, so
+  # the goal's engine budget is the only bound on any one calculation.
+  node_timeout_seconds: 41400
+episode_wall_time_seconds: 43200
+postprocess_reserve_seconds: 1800
+max_engine_calls: 40
+max_excursion_calls: 2
+scratch_root: /home/chemsmart/agent-campaigns/ax41-refine-100/novel-round-7/workspaces/po3-r19/scratch

@@ -1,0 +1,89 @@
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+{
+  "cycles": 6,
+  "goal_id": "goal-po3-r19",
+  "reasons": [
+    "the recorded decision names these declared observables unreachable from the admissible evidence, and the host verified each: ddg-activation-regio-353k -- The VALUE of this observable is computed and delivered; what is unreachable from admissible evidence in this envelope is its declared precision of 0.5 kcal/mol (tolerance_origin task, frozen at declaration). Delivered under level-named claim ids: 0.6752 kcal/mol at DSD-BLYP-D3BJ/def2-TZVP with SVP RRHO 353 K thermal corrections, 0.4556 at the B3LYP-D3BJ/def2-SVP optimisation-and-frequency protocol, 0.2213 at B3LYP-D3BJ/def2-TZVP, with a measured total uncertainty of 1.2323 kcal/mol. The producers the tolerance would need: (i) a post-density-functional reference energy pair, DLPNO-CCSD(T) with a CBS extrapolation, on both converged saddles. ORCA's sp capability does declare ab_initio values dlpno-ccsd(t) and ccsd(t), so this is a wall-time gap and not a selector or keyword gap: 9388 s of episode engine wall remain against a DSD-BLYP/def2-TZVP single point that already cost 334-338 s on these 30-atom saddles, and a DLPNO-CCSD(T)/CBS pair is one to two orders of magnitude more per point with two points required for a difference. (ii) A Boltzmann-weighted conformer ensemble of each saddle carrying its own frequencies, plus a defensible treatment of the neat liquid medium: each opt+freq on these saddles cost 627-5471 s in cycles 1-3 and an ensemble needs several per channel, while ORCA's solvent_id domain holds no entry for a neat reactant medium, so custom_solvent parameters would be an unevidenced model choice. Decisive without either producer: setting the electronic-structure term to exactly zero, the measured RRHO-versus-Grimme-qRRHO entropy-model term (0.356444 kcal/mol) and the unsampled conformer-and-medium allowance (0.75 kcal/mol) still combine in quadrature to 0.845452 kcal/mol, exceeding the 0.5 kcal/mol tolerance by 0.345452 kcal/mol (receipt d3bca43a8e9f8a95b80f59a4e7d954722fa991e47d43850e7f1b02271e8bb4a1, quantities u-floor-without-method-kcal and u-floor-excess-over-tolerance-kcal). No admissible calculation can therefore reach the declared precision, and the blocked_unsupported stage ddg-at-task-tolerance in this session's analysis-only plan carries this observable's id as its output. [analysis node 'ddg-at-task-tolerance' is declared blocked_unsupported in this session's plan and names 'ddg-activation-regio-353k' as its output]"
+  ],
+  "revisions_admitted": 4,
+  "settlement": "unreachable_from_evidence"
+}

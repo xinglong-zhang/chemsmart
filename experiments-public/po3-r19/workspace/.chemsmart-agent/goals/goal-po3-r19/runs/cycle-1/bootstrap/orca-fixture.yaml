@@ -1,0 +1,19 @@
+gas:
+  basis: def2-SVP
+  functional: B3LYP
+neb:
+  basis: def2-SVP
+  functional: B3LYP
+  joboption: NEB-TS
+  nimages: 2
+  preopt_ends: false
+solv:
+  basis: def2-SVP
+  freq: false
+  functional: B3LYP
+td:
+  basis: def2-SVP
+  functional: B3LYP
+  nstates: 3
+  response_method: tda
+  state_manifold: singlet

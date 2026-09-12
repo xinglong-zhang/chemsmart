@@ -1,0 +1,40 @@
+{
+ "conditions": {
+  "solvents": [],
+  "thermochemistry": []
+ },
+ "created_at": "2026-09-11T19:02:26.492671+00:00",
+ "envelope": {
+  "allowed_program_engines": [
+   [
+    "orca",
+    [
+     "cpu"
+    ]
+   ],
+   [
+    "pyscf",
+    [
+     "cpu"
+    ]
+   ],
+   [
+    "xtb",
+    [
+     "cpu"
+    ]
+   ]
+  ],
+  "episode_wall_time_seconds": 43200.0,
+  "max_engine_calls": 40,
+  "max_excursion_calls": 2
+ },
+ "goal_id": "goal-po3-r19",
+ "goal_sha256": "8a25e7173677bd7249dbf570914d6eeb46503ce9b5a769842f1cdfc78d9153fb",
+ "granted_by": "claude-owner-delegated-reviewer",
+ "initial_review_sha256": "aeff31fe0a767749c7f247673ecd7b70d903193b4383606b4101e0cdaf37c40b",
+ "max_revisions": 12,
+ "schema_version": "chemsmart.goal.v1",
+ "scientific_identity_sha256": "",
+ "task_spec_sha256": "4de41b20307997ee16d6f088786ca2e9ed50346992cd0b6b2f48d477c244e4cf"
+}

@@ -1,0 +1,43 @@
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+Slurm accounting storage is disabled
+{
+  "cycles": 3,
+  "goal_id": "goal-ino3-r12",
+  "reasons": [
+    "the host completion gate certified the delivery; the host also recorded observations nobody asked for: falsified_expectation:basis-shift-pme3-v",
+    "delivered in an earlier cycle: spin-ni-pme3 (delivered in cycle 1), spin-s1-pme3 (delivered in cycle 1), spin-s2-pme3 (delivered in cycle 1)",
+    "the recorded decision states its uncertainties: The CPCM-specific systematic on the 0/+1 differential solvation of this pair is NOT in the 0.167348 V and cannot be measured in this workspace: every registered level uses CPCM, so there is no gas-phase or alternative-model counterpart to difference against. Two things bound its impact rather than excuse its absence: the same continuum model and solvent also enter the ferrocene reference couple, so the leading systematic is common-mode to the subtraction; and the whole delivered interval [-0.561497, -0.226801] V lies below the mildest oxidant on the shelf, so a solvation error of order 0.2 V would not change the oxidant choice, which is what the tolerance exists to support. A number for the real compound rather than the model would require buying that pair of calculations. | Transfer from the model to the real compound is unbounded here and is the dominant limitation on answering the experimental question. The workspace's own PH3-versus-PMe3 comparison moved the same couple by 0.196 V, so ligand substitution is a few-tenths-of-a-volt effect; an aryl thiolate is a weaker donor than SMe and should shift the couple positive, while dmpe chelation shifts it the other way. Nothing in this workspace separates those two for 2,6-dimethylbenzenethiolate/dmpe. | The delivered value sits at the edge of its own functional spread, and the spread is one-sided: PBE0 -0.394149, B3LYP -0.523195, TPSSh -0.541109 V. A symmetric error bar is what the budget can express, but the evidence says the couple is at least as negative as the delivered value and probably more negative. This is a finding about the delivery, not a defect in it. | RRHO is weakest exactly where the host flagged it: three sub-50 cm^-1 modes on the neutral (21.07 kJ/mol of T*S) and two on the cation (13.54 kJ/mol). The measured electronic/RRHO/qRRHO spread of 0.012906 V is small because both partners are equally floppy and the term largely cancels in the difference; that is a cancellation, not an absence, and a conformer change on one partner only would not cancel. | uncertainty-e-couple-pme3 is 0.167348 V against the previous cycle's inferred 0.165712 V, a 1.0% difference, because the decomposition changed (functional term put on a consistent RRHO footing, reference-scale term added). The two totals agreeing to 1% is itself evidence that the total is not sensitive to how it is decomposed. | couple-b3-corr-pme3 and couple-tp-corr-pme3 differ from the previous cycle's couple-b3lyp-basiscorr-pme3 (-0.5290) and couple-tpssh-basiscorr-pme3 (-0.5470) by exactly 0.004863 V, the PBE0 RRHO thermal term. New claim ids were used so the record does not carry two values under one name; both footings are defensible and the difference is smaller than any term in the budget."
+  ],
+  "revisions_admitted": 0,
+  "settlement": "achieved_with_observations"
+}

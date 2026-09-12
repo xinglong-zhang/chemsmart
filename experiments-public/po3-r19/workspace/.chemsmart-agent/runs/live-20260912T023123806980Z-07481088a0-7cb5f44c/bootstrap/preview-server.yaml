@@ -1,0 +1,28 @@
+SERVER:
+  SCHEDULER: PBS
+  QUEUE_NAME: preview
+  NUM_HOURS: 1
+  MEM_GB: 40
+  NUM_CORES: 10
+  NUM_GPUS: 0
+  NUM_THREADS: 10
+  SUBMIT_COMMAND: true
+  SCRATCH_DIR: null
+  PROJECT: preview
+  USE_HOSTS: false
+PYSCF:
+  EXEFOLDER: '/opt/miniforge3/envs/chemsmart-pyscf/bin'
+  LOCAL_RUN: true
+  SCRATCH: false
+GAUSSIAN:
+  EXEFOLDER: '/opt/chem/gaussian/g16'
+  LOCAL_RUN: true
+  SCRATCH: false
+ORCA:
+  EXEFOLDER: '/opt/chem/orca/6.1.1'
+  LOCAL_RUN: true
+  SCRATCH: false
+XTB:
+  EXEFOLDER: '/opt/miniforge3/envs/chemsmart-xtb/bin'
+  LOCAL_RUN: true
+  SCRATCH: false

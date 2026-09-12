@@ -1,0 +1,6 @@
+gas:
+  aux_basis: def2/j
+  basis: def2-tzvp
+  defgrid: defgrid3
+  functional: wb97x-v
+  ri_approximation: rijcosx

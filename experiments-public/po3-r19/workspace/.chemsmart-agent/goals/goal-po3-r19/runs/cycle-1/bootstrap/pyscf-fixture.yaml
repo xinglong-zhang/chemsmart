@@ -1,0 +1,41 @@
+hess:
+  basis: def2-svp
+  defgrid: defgrid2
+  density_fit: false
+  engine: cpu
+  freq: true
+  functional: b3lyp
+  scf_maxiter: 100
+  scf_tol: 1.0e-09
+opt:
+  basis: def2-svp
+  defgrid: defgrid2
+  density_fit: false
+  engine: cpu
+  freq: false
+  functional: b3lyp
+  opt_maxsteps: 100
+  opt_solver: geometric
+  scf_maxiter: 100
+  scf_tol: 1.0e-09
+sp:
+  basis: def2-svp
+  defgrid: defgrid2
+  density_fit: false
+  engine: cpu
+  freq: false
+  functional: b3lyp
+  scf_maxiter: 100
+  scf_tol: 1.0e-09
+td:
+  basis: def2-svp
+  defgrid: defgrid2
+  density_fit: false
+  engine: cpu
+  freq: false
+  functional: b3lyp
+  nstates: 5
+  response_method: tda
+  scf_maxiter: 100
+  scf_tol: 1.0e-09
+  state_manifold: singlet

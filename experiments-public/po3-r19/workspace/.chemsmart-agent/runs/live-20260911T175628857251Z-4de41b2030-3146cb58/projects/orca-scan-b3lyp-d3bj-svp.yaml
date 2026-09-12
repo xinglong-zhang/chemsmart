@@ -1,0 +1,10 @@
+gas:
+  aux_basis: def2/j
+  basis: def2-svp
+  dispersion: d3bj
+  functional: b3lyp
+  ri_approximation: ri
+  scf_convergence: tight
+scan:
+  geom_maxiter: 200
+  opt_convergence: normal

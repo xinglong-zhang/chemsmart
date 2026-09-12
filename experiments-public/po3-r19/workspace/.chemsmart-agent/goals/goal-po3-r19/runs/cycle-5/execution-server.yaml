@@ -1,0 +1,82 @@
+SERVER:
+  SCHEDULER: null
+  NUM_HOURS: 12
+  MEM_GB: 40
+  NUM_CORES: 10
+  NUM_GPUS: 0
+  NUM_THREADS: 10
+  SCRATCH_DIR: '/home/chemsmart/agent-campaigns/ax41-refine-100/novel-round-7/workspaces/po3-r19/scratch'
+GAUSSIAN:
+  CONDA_ENV: 'source /opt/miniforge3/etc/profile.d/conda.sh
+
+    conda activate /opt/miniforge3/envs/chemsmart-controller
+
+    '
+  ENVARS: 'export g16root=/opt/chem/gaussian
+
+    export PGI_FASTMATH_CPU=haswell
+
+    export GAUSS_EXEDIR=/opt/chem/gaussian/g16/bsd:/opt/chem/gaussian/g16
+
+    export LD_LIBRARY_PATH=/opt/chem/gaussian/g16/bsd:/opt/chem/gaussian/g16:/opt/chem/gaussian/gv/lib
+
+    export PATH=/opt/chem/gaussian/g16/bsd:/opt/chem/gaussian/g16:/opt/miniforge3/envs/chemsmart-controller/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    export GAUSS_SCRDIR=/home/chemsmart/agent-campaigns/ax41-refine-100/novel-round-7/workspaces/po3-r19/scratch
+
+    '
+  EXEFOLDER: /opt/chem/gaussian/g16
+  LOCAL_RUN: true
+  SCRATCH: true
+  SCRIPTS: 'export g16root=/opt/chem/gaussian
+
+    source /opt/chem/gaussian/g16/bsd/g16.profile
+
+    '
+ORCA:
+  CONDA_ENV: 'source /opt/miniforge3/etc/profile.d/conda.sh
+
+    conda activate /opt/miniforge3/envs/chemsmart-controller
+
+    '
+  ENVARS: 'export OMPI_MCA_plm=isolated
+
+    export OMPI_MCA_rmaps_base_oversubscribe=1
+
+    export PATH=/opt/chem/orca/6.1.1:/opt/openmpi/4.1.8/bin:/opt/miniforge3/envs/chemsmart-controller/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    export LD_LIBRARY_PATH=/opt/chem/orca/6.1.1:/opt/openmpi/4.1.8/lib
+
+    '
+  EXEFOLDER: /opt/chem/orca/6.1.1
+  LOCAL_RUN: false
+  MODULES: 'export PATH=/opt/chem/orca/6.1.1:/opt/openmpi/4.1.8/bin:$PATH
+
+    export LD_LIBRARY_PATH=/opt/chem/orca/6.1.1:/opt/openmpi/4.1.8/lib:${LD_LIBRARY_PATH:-}
+
+    '
+  SCRATCH: true
+PYSCF:
+  CONDA_ENV: 'source /opt/miniforge3/etc/profile.d/conda.sh
+
+    conda activate /opt/miniforge3/envs/chemsmart-controller
+
+    '
+  ENVARS: 'export PATH=/opt/miniforge3/envs/chemsmart-controller/bin:/opt/miniforge3/envs/chemsmart-pyscf/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    '
+  EXEFOLDER: /opt/miniforge3/envs/chemsmart-pyscf/bin
+  LOCAL_RUN: true
+  SCRATCH: false
+XTB:
+  CONDA_ENV: 'source /opt/miniforge3/etc/profile.d/conda.sh
+
+    conda activate /opt/miniforge3/envs/chemsmart-controller
+
+    '
+  ENVARS: 'export PATH=/opt/miniforge3/envs/chemsmart-controller/bin:/opt/miniforge3/envs/chemsmart-xtb/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+    '
+  EXEFOLDER: /opt/miniforge3/envs/chemsmart-xtb/bin
+  LOCAL_RUN: true
+  SCRATCH: true

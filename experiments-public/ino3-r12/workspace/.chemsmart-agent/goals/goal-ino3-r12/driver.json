@@ -1,0 +1,12 @@
+{
+  "analysis_completion_file": null,
+  "dispatch": "local",
+  "execution_envelope_file": "/home/chemsmart/agent-campaigns/ax41-refine-100/novel-round-7/workspaces/ino3-r12/execution-envelope.yaml",
+  "granted_by": "claude-owner-delegated-reviewer",
+  "max_revisions": 12,
+  "provider": "alibaba-token-plan-qwen",
+  "provider_config_file": null,
+  "schema_version": "chemsmart.goal-driver.v1",
+  "server": null,
+  "stop_file": "/home/chemsmart/agent-campaigns/ax41-refine-100/novel-round-7/workspaces/ino3-r12/STOP"
+}
