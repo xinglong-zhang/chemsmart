@@ -4136,10 +4136,24 @@ class GoalDriver:
             record_host_qualification,
         )
 
-        entries = _qualification_entries(
-            self.outcome,
+        from chemsmart.agent.terminal_states import (
+            derive_run_outcome,
+            read_run_events,
+        )
+
+        agent_root = self.workspace / ".chemsmart-agent"
+
+        def _read_outcome(run: str) -> Any:
+            return derive_run_outcome(
+                read_run_events(agent_root / run / "events.jsonl")
+            )
+
+        entries = _qualification_entries_for_goal(
+            ledger_entries=self.ledger.entries(),
             goal_id=self.goal_id,
-            run=f"goals/{self.goal_id}/runs/cycle-{self.cycles}",
+            current_run=f"goals/{self.goal_id}/runs/cycle-{self.cycles}",
+            current_outcome=self.outcome,
+            read_outcome=_read_outcome,
         )
         for entry in entries:
             self.ledger.append("qualified", entry)
@@ -4499,6 +4513,43 @@ class GoalDriver:
 
 def _resolved_or_none(path: str | Path | None) -> str | None:
     return str(Path(path).resolve()) if path is not None else None
+
+
+def _qualification_entries_for_goal(
+    *,
+    ledger_entries: Sequence[Mapping[str, Any]],
+    goal_id: str,
+    current_run: str,
+    current_outcome: Any,
+    read_outcome: Callable[[str], Any],
+) -> tuple[dict[str, Any], ...]:
+    """Every validated node of every run the goal recorded.
+
+    The rows were read from the settling cycle's outcome alone, so a goal
+    that executed in cycle one and settled ``achieved`` in an analysis-
+    only cycle two wrote none for the nodes it ran (PySCF round, g2,
+    2026-09-12). Each recorded run is read once; one it cannot read
+    contributes nothing.
+    """
+
+    outcomes: dict[str, Any] = {}
+    for entry in ledger_entries:
+        if str(entry.get("kind") or "") != "run_recorded":
+            continue
+        run = str((entry.get("payload") or {}).get("run") or "")
+        if not run or run in outcomes or run == current_run:
+            continue
+        try:
+            outcomes[run] = read_outcome(run)
+        except (KeyError, ValueError, OSError):
+            continue
+    outcomes[current_run] = current_outcome
+    entries: list[dict[str, Any]] = []
+    for run, outcome in outcomes.items():
+        entries.extend(
+            _qualification_entries(outcome, goal_id=goal_id, run=run)
+        )
+    return tuple(entries)
 
 
 def _qualification_entries(
