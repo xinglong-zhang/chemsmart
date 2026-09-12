@@ -1479,6 +1479,143 @@ def _observed_imaginary_mode_count(
 #: happens to fall past the 20 cm-1 noise convention.
 SOFT_IMAGINARY_MODE_BAND_CM1 = 50.0
 
+#: geomeTRIC's ``convergence_gmax`` (Eh/Bohr), the optimiser's own word for
+#: "the gradient is zero".  A Hessian computed at a geometry whose gradient
+#: exceeds it is an observation with standing: PySCF's harmonic analysis
+#: projects rotations out, so the projected spectrum at a non-stationary
+#: point can be entirely real (HF/STO-3G water at 1.10 A / 120 deg: 2015,
+#: 2868, 3225 cm-1; the archived stretched-water Hessian: three real modes
+#: at max|g| = 0.0185 Eh/Bohr), and zero imaginary modes then proves
+#: nothing about stationarity.  Never a refusal: a Hessian off a stationary
+#: point is a legitimate thing to ask for.  Owner ruling, 2026-09-12.
+HESS_STATIONARITY_GRADIENT_EH_PER_BOHR = 4.5e-4
+
+
+def _gradient_anomaly(gradient: float) -> dict[str, Any]:
+    """The projected spectrum can be all-real at a geometry that is not
+    stationary; the gradient the Hessian stage recorded says how far from
+    stationary it was, against the optimiser's own criterion.  An
+    observation with standing, never a verdict."""
+
+    return {
+        "signal_id": "stationary_point.gradient_above_optimizer_criterion",
+        "max_abs_gradient_eh_per_bohr": float(f"{gradient:.6g}"),
+        "optimizer_criterion_eh_per_bohr": (
+            HESS_STATIONARITY_GRADIENT_EH_PER_BOHR
+        ),
+        "policy_id": "hess_stationarity_gradient",
+    }
+
+
+def _neutral_sensor_facts(
+    *,
+    program: str,
+    jobtype: str,
+    multiplicity: Any,
+    output_artifacts: Sequence[TrustedArtifactRefV1],
+    expected_input_artifact: TrustedArtifactRefV1 | None,
+    expected_root_artifact: TrustedArtifactRefV1 | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The facts every host sensor consumes, read once through the reader.
+
+    The stationary-point rule, the spin observation, the basin walk and
+    the imaginary-mode inputs are program-neutral where they are computed
+    and were fed per program: the ORCA branch wrote all of them, xTB and
+    Gaussian wrote the count, PySCF wrote none, so the neutral word never
+    reached PySCF and the basin sensor never reached anyone but ORCA.
+    This reads the same facts from whatever the program's reader opened,
+    and a branch that already wrote a key keeps its own value.
+
+    Returns ``(block_facts, sensor_inputs)``; both empty when the primary
+    result cannot be opened, which is an absence the findings already
+    name.
+    """
+
+    from chemsmart.analysis.result_readers import reader_for
+
+    reader = reader_for(program)
+    if reader is None:
+        return {}, {}
+    primary = next(
+        (
+            artifact
+            for artifact in output_artifacts
+            if artifact.kind == reader.artifact_kind
+        ),
+        None,
+    )
+    if primary is None:
+        return {}, {}
+    try:
+        output = reader.open_output(
+            _current_artifact_path(primary, field_name="primary result")
+        )
+    except Exception:  # noqa: BLE001 - unreadable is an absence here
+        return {}, {}
+    block: dict[str, Any] = {}
+    inputs: dict[str, Any] = {}
+    raw_frequencies = getattr(output, "vibrational_frequencies", None)
+    frequencies: tuple[float, ...] = ()
+    if raw_frequencies is not None:
+        try:
+            frequencies = tuple(float(item) for item in raw_frequencies)
+        except (TypeError, ValueError):
+            frequencies = ()
+    count = consequential_imaginary_mode_count(frequencies)
+    if count is not None:
+        block["consequential_imaginary_mode_count"] = count
+        block["imaginary_frequencies_cm1"] = [
+            value for value in frequencies if value <= -20.0
+        ]
+    for name in ("charge", "multiplicity"):
+        value = getattr(output, name, None)
+        if isinstance(value, int) and not isinstance(value, bool):
+            block[name] = value
+    try:
+        observed = float(reader.read(output, "spin_square")[0])
+        target = float(reader.read(output, "spin_square_target")[0])
+        block["spin_square_observed"] = observed
+        block["spin_square_expected"] = target
+        block["spin_square_deviation"] = observed - target
+    except Exception:  # noqa: BLE001 - a closed shell or no diagnostic
+        pass
+    if frequencies:
+        inputs.update(_imaginary_mode_sensor_inputs(output, frequencies))
+    if jobtype in {"opt", "ts"}:
+        try:
+            inputs["basin"] = _basin_sensor_inputs(
+                expected_input_artifact, output, jobtype
+            )
+            if expected_root_artifact is not None and (
+                expected_input_artifact is None
+                or expected_root_artifact.sha256
+                != expected_input_artifact.sha256
+            ):
+                inputs["basin_root"] = {
+                    **_basin_sensor_inputs(
+                        expected_root_artifact, output, jobtype
+                    ),
+                    "reference": "goal_root",
+                    "reference_artifact_id": expected_root_artifact.artifact_id,
+                }
+        except Exception:  # noqa: BLE001 - no readable input geometry
+            pass
+    forces = getattr(output, "forces", None)
+    if (
+        jobtype in {"hess", "freq"}
+        and forces is not None
+        and getattr(output, "forces_unit", None) == "Eh/Bohr"
+    ):
+        try:
+            import numpy as np
+
+            gradient = float(np.max(np.abs(np.asarray(forces, dtype=float))))
+            block["max_abs_gradient_eh_per_bohr"] = gradient
+            inputs["stationarity_gradient"] = gradient
+        except (TypeError, ValueError):
+            pass
+    return block, inputs
+
 
 def _observed_soft_imaginary_mode(
     observation: Mapping[str, Any], program: str, *, jobtype: str
@@ -15319,6 +15456,25 @@ class CommandCompiledToolHostV1:
             observation["gaussian"] = gaussian_observation
         elif program not in {"pyscf", "xtb", "orca", "gaussian"}:
             findings.append("execution.program.validator_unavailable")
+        # The facts the sensors below consume, read once through the
+        # program's own reader; a branch above that already wrote a key
+        # keeps its value, and a program whose branch wrote nothing (PySCF,
+        # every one of them until 2026-09-12) is fed the same way.
+        neutral_block, neutral_inputs = _neutral_sensor_facts(
+            program=program,
+            jobtype=jobtype,
+            multiplicity=multiplicity,
+            output_artifacts=output_artifacts,
+            expected_input_artifact=expected_input_artifact,
+            expected_root_artifact=expected_root_artifact,
+        )
+        if neutral_block:
+            program_block = observation.setdefault(program, {})
+            if isinstance(program_block, dict):
+                for key, value in neutral_block.items():
+                    program_block.setdefault(key, value)
+        for key, value in neutral_inputs.items():
+            sensor_inputs.setdefault(key, value)
         # One program-neutral verdict on the order of the stationary point,
         # from the frequencies the program itself printed and the jobtype
         # the human approved. ORCA's transition-state check above stays;
@@ -15390,6 +15546,15 @@ class CommandCompiledToolHostV1:
                     **sensor_inputs,
                 }
             )
+        stationarity_gradient = sensor_inputs.pop(
+            "stationarity_gradient", None
+        )
+        if (
+            stationarity_gradient is not None
+            and float(stationarity_gradient)
+            > HESS_STATIONARITY_GRADIENT_EH_PER_BOHR
+        ):
+            anomalies.append(_gradient_anomaly(float(stationarity_gradient)))
         soft_mode = _observed_soft_imaginary_mode(
             observation, program, jobtype=jobtype
         )

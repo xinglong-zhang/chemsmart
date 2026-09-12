@@ -541,15 +541,17 @@ def coverage_for(
     if validated and jobtype in {"opt", "scan", "ts"}:
         rules.append("convergence")
     if (
-        program in {"gaussian", "orca", "xtb"}
-        and jobtype in {"hess", "opt", "ts"}
+        validated
+        and jobtype in {"freq", "hess", "opt", "ts"}
         and "vibrational_frequencies" in declared
     ):
-        # PySCF's frequencies are read through its structured result and
-        # its validation is delegated to the runner's policy, so the host
-        # rule does not reach it yet: that cell says so.
+        # Derived from the declaration, not from a hand list of programs:
+        # the host reads the count through the program's own reader for
+        # every validated program (PySCF was excluded here by name while
+        # its verification branch fed nothing, and the cell honestly said
+        # so for months while nothing read the cell).
         rules.append("stationary_point_order")
-    if program in {"gaussian", "orca"} and "spin_square" in declared:
+    if validated and "spin_square" in declared:
         rules.append("spin_square_observed")
     return tuple(sorted(axes.items())), tuple(sorted(rules))
 

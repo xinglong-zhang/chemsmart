@@ -346,10 +346,21 @@ def _artifact_scan_facts(
     reached: int | None = None
     planned: int | None = None
     digests: list[str] = []
+    from chemsmart.analysis.result_readers import reader_for
+
+    program = str(validation_record.get("program") or "").strip().lower()
+    reader = reader_for(program)
+    if reader is None:
+        return converged, reached, planned, ()
     for artifact in validation_record.get("output_artifacts") or ():
         if not isinstance(artifact, Mapping):
             continue
-        if artifact.get("kind") != "orca_output":
+        # Read through the program's own reader rather than ORCA's alone:
+        # ``converged`` was None on every non-ORCA node, so the flag the
+        # outcome record publishes was permanently absent for three of
+        # four programs and the nonconverged branch reached PySCF only
+        # through its native failure class.
+        if artifact.get("kind") != reader.artifact_kind:
             continue
         path = Path(str(artifact.get("path") or ""))
         sha256 = str(artifact.get("sha256") or "")
@@ -360,16 +371,15 @@ def _artifact_scan_facts(
 
             if sha256 and file_sha256(path) != sha256:
                 continue
-            from chemsmart.io.orca.output import ORCAOutput
-
-            output = ORCAOutput(filename=path)
-            converged = output.converged
-            reached = output.scan_step_count or None
-            coordinate = output.scan_coordinate
+            output = reader.open_output(path)
+            value = getattr(output, "converged", None)
+            converged = None if value is None else bool(value)
+            reached = getattr(output, "scan_step_count", None) or None
+            coordinate = getattr(output, "scan_coordinate", None)
             planned = int(coordinate["points"]) if coordinate else None
             digests.append(sha256)
             break
-        except (AttributeError, OSError, TypeError, ValueError):
+        except Exception:  # noqa: BLE001 - an unreadable file yields absence
             continue
     return converged, reached, planned, tuple(digests)
 

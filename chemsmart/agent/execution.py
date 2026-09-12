@@ -3895,6 +3895,7 @@ ANOMALY_SIGNALS = (
     "geometry.results_indistinguishable",
     "scan.extremum_at_grid_boundary",
     "spin.s2_deviation_ge_0.2",
+    "stationary_point.gradient_above_optimizer_criterion",
     "stationary_point.imaginary_mode_lt_50",
     "stationary_point.unexpected_order",
 )

@@ -185,6 +185,11 @@ class XTBOutput:
         return False
 
     @property
+    def converged(self):
+        """The name every reader answers for the host sensors."""
+        return self.geometry_optimization_converged
+
+    @property
     def charge(self):
         """Get molecular charge from main output or charges file."""
         if self.main_out:

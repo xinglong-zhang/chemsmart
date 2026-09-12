@@ -673,9 +673,18 @@ class PySCFOutput(FileMixin):
 
     @cached_property
     def forces(self):
-        """Return final-geometry forces in Hartree/Bohr, or None."""
+        """Return final-geometry forces in Hartree/Bohr, or None.
+
+        Written by the driver for the ``hess`` stage under contract v4
+        (the negative gradient at the Hessian geometry); absent on a
+        single point, which pays for no undeclared gradient.
+        """
         values = self.results.get("forces")
         return np.asarray(values, dtype=float) if values is not None else None
+
+    #: The unit ``forces`` is stored in, declared so a host sensor can read
+    #: a gradient magnitude against a criterion in the same unit.
+    forces_unit = "Eh/Bohr"
 
     @cached_property
     def chemical_symbols(self):

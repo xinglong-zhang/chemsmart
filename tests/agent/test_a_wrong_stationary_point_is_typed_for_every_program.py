@@ -112,8 +112,13 @@ def test_the_coverage_cell_says_what_the_host_can_judge():
     assert "stationary_point_order" in xtb_hess_rules
     assert xtb_hess_axes["spin"] == "unsupported"
 
+    # This asserted ``not in`` while PySCF's verification branch fed the
+    # rule nothing; the cell was honest and nothing read it. The rule is
+    # now fed through every program's reader, so the cell derives from
+    # the declaration alone and PySCF's Hessian is judged like xTB's.
     pyscf_hess_axes, pyscf_hess_rules = _cell("pyscf", "hess")
-    assert "stationary_point_order" not in pyscf_hess_rules
+    assert "stationary_point_order" in pyscf_hess_rules
+    assert "spin_square_observed" in pyscf_hess_rules
     assert pyscf_hess_axes["identity"] == "validated"
 
     _orca_sp_axes, orca_sp_rules = _cell("orca", "sp")

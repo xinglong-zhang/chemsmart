@@ -307,8 +307,11 @@ class _LoggedResultObservation:
     method: str
     basis: str | None
     engine: str
-    charge: int
-    multiplicity: int
+    #: The state the record holds for these bytes, or None when it holds
+    #: none.  A default of 0 and 1 registered every PySCF result as a
+    #: neutral singlet while its true state sat in the same record.
+    charge: int | None
+    multiplicity: int | None
     project_yaml_sha256: str
     input_artifact_sha256: str
     validation_receipt_sha256: str
@@ -2168,14 +2171,31 @@ def _recorded_result_artifacts(
             except OSError:
                 continue
             state = str(record.get("state") or "")
-            facts = (record.get("observations") or {}).get(program) or {}
+            observations_record = record.get("observations") or {}
+            facts = observations_record.get(program) or {}
             level = levels.get(digest, {})
             charge = facts.get("charge")
             multiplicity = facts.get("multiplicity")
+            if not isinstance(charge, int) or not isinstance(
+                multiplicity, int
+            ):
+                # The validator's own record of the bound state, where a
+                # program's observation block carries none.
+                validation = observations_record.get("result_validation")
+                if isinstance(validation, Mapping):
+                    charge = validation.get("charge", charge)
+                    multiplicity = validation.get("multiplicity", multiplicity)
             limitations = [
                 "registered from this workspace's run record; the bytes "
                 "were verified by digest and not parsed at registration"
             ]
+            if not isinstance(charge, int) or not isinstance(
+                multiplicity, int
+            ):
+                limitations.append(
+                    "the run record holds no charge or multiplicity for "
+                    "these bytes; bind the state explicitly before use"
+                )
             if state not in {"valid", "validated"}:
                 limitations.append(
                     f"inspectable only: the run recorded state {state!r} "
@@ -2204,9 +2224,11 @@ def _recorded_result_artifacts(
                 basis=str(level.get("basis") or "") or None,
                 dispersion=str(level.get("dispersion") or "") or None,
                 engine=str(record.get("engine") or "cpu"),
-                charge=int(charge) if isinstance(charge, int) else 0,
+                charge=int(charge) if isinstance(charge, int) else None,
                 multiplicity=(
-                    int(multiplicity) if isinstance(multiplicity, int) else 1
+                    int(multiplicity)
+                    if isinstance(multiplicity, int)
+                    else None
                 ),
                 project_yaml_sha256=str(
                     record.get("project_artifact_sha256") or ""
