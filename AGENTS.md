@@ -312,10 +312,52 @@ verdicts. Refusals are structural only — an axis that is not a
 perceived bond, a ring a rigid motion would tear (which differs per
 coordinate), collinear or out-of-range atoms; no energy exists at edit
 time and a requested value is never refused on scientific merit,
-because grading it is what the consuming optimisation is for. An
+because grading it is what the consuming optimisation is for. An axis
+the perception does not carry is refused with the numbers behind the
+refusal -- the distance, the cutoff, the signed margin, the policy id --
+and with the routes onward, because a perception convention blocking a
+geometric action is a host decision about chemistry and the session is
+entitled to see how narrowly it was made. An
 edited geometry is a starting structure; atom count, order, and
 formula are preserved, so parent atom i is edited atom i and a later
 analysis may re-measure the same coordinate on the relaxed result.
+Which atoms are adjacent is a host-owned convention, and it is declared
+rather than implied. One module decides it for every agent-reachable
+consumer, under one named policy: a pair is adjacent when its distance
+falls below ``min(1.30 x (r_A + r_B), (r_A + r_B) + 0.45 A)`` on covalent
+radii, the factor governing pairs whose radii sum is small -- every pair
+involving hydrogen -- and the cap governing the rest. A delivered
+adjacency carries, per pair, the distance, the cutoff applied, the policy
+id and the **signed margin** by which the pair cleared or missed it,
+because a boolean produced by a threshold cannot otherwise be told from a
+structural fact. Bond order, aromaticity and valence saturation are not
+derived from that cutoff and are not claimed: a distance cannot see where
+electrons are, and a number derived from the cutoff moves whenever the
+cutoff moves. The cases that have no distance answer -- [FHF]-, B-H-B
+bridges, agostic interactions, every proton-transfer saddle -- sit near
+the line by their nature, and for those the margin is what the host owes
+its reader: it reports what its convention said and how narrowly, and the
+scientist draws the chemical conclusion.
+
+The form is two-regime because a single one was measured against this
+repository's own structures and failed. An additive tolerance is
+scale-inconsistent -- 0.05 A is 8.1% of the H-H radius sum and 3.3% of
+C-C -- and hydrogen's covalent radius under-describes its bonds more than
+any other element's, so the tightest tolerance sat exactly where real
+bond-length variation is largest: H2 at its experimental 0.7414 A had no
+perceived bond, a hydrogen-bonded O-H at 1.030 A had none, SiH4 was five
+separated pieces, and one converged formaldehyde was delivered with no
+C-H bonds while the same molecule at a larger basis carried both. A pure
+multiplicative factor fails at the other end: the admissible single
+factor is only (1.1958, 1.2473), bounded below by H2 and above by a
+non-bonded C...Ti contact at 2.944 A in this repository's own conformer
+corpus. Two human-CLI conventions -- the conformer grouper's tolerance
+and the rdkit wrapper's -- remain deliberately separate and declared as
+legacy rather than presented as interchangeable, because a difference
+between two *named* conventions is a scientific observation while two
+unnamed answers to one question is the defect this declaration exists to
+prevent.
+
 ``append_molecular_atom`` is derivation's mirror: one atom, placed by
 the three internal coordinates that define its position against three
 anchor atoms; parent indices are unchanged and the appended atom is
