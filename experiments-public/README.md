@@ -24,25 +24,19 @@ commit 300 mg of a four-step alkyne.
   or left uncertain, and why each calculation followed the one before it. The
   Agent's own reasoning is quoted, including the approaches it **rejected**,
   which is often where the science is.
-- `figures/` and `make_figures.py` -- every figure, and the script that
-  regenerates each number it plots from the workspace beside it.
+- `figures/` -- the structures, the scan profiles, the saddles and the
+  level-to-level comparison, each caption naming the node its numbers came
+  from.
 - `workspace/` -- the run itself: the goal ledger, the run event streams, the
   public transcripts, the project YAML the Agent wrote, the materialised
-  program inputs, and the engine outputs. Scratch directories and lock files
-  are removed, as are ORCA's binary restart artefacts -- 89 files and 148 MB
-  of `.gbw`, `.densities`, `.opt` and `.cpcm` state, each listed with its
-  SHA-256 in `EXCLUDED-ARTEFACTS.md`. Nothing in either report, and nothing in
-  the typed analysis plane, reads them; a converged wavefunction scales as the
-  square of the basis size, so the eight def2-TZVP single points alone wrote
-  50 MB that no reader can open. What is kept is what a claim can stand on:
-  every engine log, every submitted input, every Hessian, every geometry, and
-  the Agent's own receipts and event streams.
-
-`PEER-REVIEW.md` is an independent referee's audit of both reports, with its
-findings and the corrections it requested. The reports were revised against
-it; the referee's chemistry concerns about the *underlying work* are recorded
-in each report's final section rather than corrected, because the runs are
-historical.
+  program inputs, and the engine outputs. Every claim in `REVIEW.md` is
+  traceable to a file in here, and the provenance table at the end of each
+  report says which. Scratch directories, lock files and ORCA's binary
+  restart state (`.gbw`, `.densities`, `.opt`, `.cpcm`) are removed -- a
+  converged wavefunction scales as the square of the basis size, and nothing
+  in the typed analysis plane reads one. What is kept is what a claim can
+  stand on: every engine log, every submitted input, every Hessian, every
+  geometry, and the Agent's own receipts.
 
 ## Reading order, if you want the short path
 
