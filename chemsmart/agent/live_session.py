@@ -762,9 +762,9 @@ def run_live_agent_session(
             run_directory=run_directory,
             # A database-only workspace has no user geometry yet; the
             # conformance probe needs any exact coordinate file (it runs
-            # fake previews at charge 0, multiplicity 1), so the host
-            # writes a private mechanical probe that never becomes a
-            # session artifact.
+            # fake previews, neutral, at the multiplicity the geometry's
+            # electron count permits), so the host writes a private
+            # mechanical probe that never becomes a session artifact.
             input_artifact=(
                 observations[0].artifact
                 if observations
@@ -2739,8 +2739,8 @@ def _conformance_probe_artifact(run_directory: Path) -> TrustedArtifactRefV1:
 
     A database-only workspace holds no user coordinate file yet, and
     bootstrap conformance only needs *a* readable geometry to exercise
-    each program's input-generation path (it already hardcodes charge 0
-    and multiplicity 1).  The probe lives in the private run directory
+    each program's input-generation path (neutral, at the multiplicity
+    its electron count permits).  The probe lives in the private run directory
     and is never registered as a session artifact, displayed as input,
     or entered into the task digest.
     """
@@ -2759,6 +2759,36 @@ def _conformance_probe_artifact(run_directory: Path) -> TrustedArtifactRefV1:
         path=str(target),
         cli_value=str(target),
     )
+
+
+def _conformance_state(
+    input_artifact: TrustedArtifactRefV1,
+) -> tuple[int, int]:
+    """A neutral state the probe molecule can have.
+
+    The probe fake-previews every program on the workspace's own first
+    geometry, and it bound charge 0, multiplicity 1 to whatever that
+    geometry was.  A neutral singlet is a state no odd-electron molecule
+    can have, and PySCF's preflight is the one that says so
+    (``pyscf.electrons.spin_parity``): a workspace whose supplied
+    structure was the allyl radical bootstrapped PySCF red, every PySCF
+    job type became reference-only, and a correctly planned single point
+    returned the goal to the human at zero engine calls (PySCF round,
+    g3, 2026-09-12).  The multiplicity is now the one the electron count
+    permits -- the same parity the identity binding refuses to violate --
+    read from the input's own atoms; a geometry the probe cannot read
+    keeps the closed-shell default and fails where it always did.
+    """
+
+    from chemsmart.agent.identity import _inspect_xyz_atom_order
+    from chemsmart.utils.periodictable import electron_count
+
+    try:
+        symbols = _inspect_xyz_atom_order(Path(input_artifact.path))
+        electrons = int(electron_count(symbols, 0))
+    except (ContractError, OSError, KeyError, TypeError, ValueError):
+        return 0, 1
+    return 0, (1 if electrons % 2 == 0 else 2)
 
 
 def _bootstrap_conformance(
@@ -2795,6 +2825,7 @@ def _bootstrap_conformance(
 
     receipts: list[ProgramComponentConformanceReceiptV1] = []
     records: list[dict[str, Any]] = []
+    charge, multiplicity = _conformance_state(input_artifact)
     for program in _conformance_programs():
         project_path: Path | None = None
         sections = _conformance_project_sections(program)
@@ -2819,8 +2850,8 @@ def _bootstrap_conformance(
                     input_path=input_artifact.path,
                     project_path=project_path,
                     server_path=server_path,
-                    charge=0,
-                    multiplicity=1,
+                    charge=charge,
+                    multiplicity=multiplicity,
                     registry_sha256=registry_sha256,
                     live_schema=live_schema,
                 )
