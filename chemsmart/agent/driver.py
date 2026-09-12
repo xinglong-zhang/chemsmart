@@ -54,6 +54,7 @@ from chemsmart.agent.terminal_states import (
     is_provider_transport_terminal,
 )
 from chemsmart.agent.workspace_record import (
+    printed_modes,
     read_workspace_record,
     record_run,
     render_workspace_record,
@@ -2232,6 +2233,11 @@ def _analysis_delivery(
     failed_artifacts: set[str] = set()
     uncharacterised_artifacts: set[str] = set(uncharacterised_artifact_sha256s)
     characterised: set[str] = set()
+    # The handoff edges and what each node left, so a validated Hessian
+    # characterises the optimisation whose reached geometry it consumed.
+    handoffs: dict[str, str] = {}
+    node_outputs: dict[str, tuple[str, ...]] = {}
+    characterising: set[str] = set()
     stopped_by: list[str] = []
     workflows_planned = 0
     nodes_previewed = 0
@@ -2378,6 +2384,19 @@ def _analysis_delivery(
             )[:240]
         elif kind == "program_result_verified":
             record = payload.get("record") or {}
+            node_name = str(
+                record.get("node_id") or payload.get("node_id") or ""
+            )
+            if node_name:
+                node_outputs[node_name] = tuple(
+                    str(item.get("sha256") or "")
+                    for item in record.get("output_artifacts") or ()
+                    if item.get("sha256")
+                )
+                if str(record.get("state") or "") == "valid" and (
+                    printed_modes(record)
+                ):
+                    characterising.add(node_name)
             if str(record.get("state") or "") != "valid":
                 failed_artifacts.update(
                     str(item.get("sha256") or "")
@@ -2402,6 +2421,11 @@ def _analysis_delivery(
             digest = str(record.get("result_artifact_sha256") or "")
             if digest:
                 characterised.add(digest)
+        elif kind == "optimized_geometry_handed_off":
+            if str(payload.get("status") or "") == "validated_handoff":
+                handoffs[str(payload.get("consumer_node_id") or "")] = str(
+                    payload.get("producer_node_id") or ""
+                )
         elif kind == "analysis_completion_evaluated":
             completion_status = str(payload.get("status") or "")
             prediction_rows = tuple(
@@ -2498,6 +2522,15 @@ def _analysis_delivery(
     # launched under, split by whether the session had the host check what
     # that structure is. Both are statements, never refusals: the number
     # may be exactly the finding worth reporting.
+    # A two-node minimum: the Hessian that consumed an optimisation's
+    # reached geometry through a validated handoff characterised that
+    # geometry, byte for byte, and the number read from the optimisation
+    # is not "uncharacterised (no frequencies printed)" -- it was worded
+    # so on two live PySCF goals while the Hessian beside it validated
+    # (PySCF round, 2026-09-12).
+    for consumer, producer in handoffs.items():
+        if consumer in characterising:
+            characterised.update(node_outputs.get(producer, ()))
     failed_seed = set(failed_artifacts) | set(failed_artifact_sha256s)
     failed_quantities, _failed_walk = _stale_quantity_ids(
         claim_pairs=claim_pairs,
@@ -4135,7 +4168,6 @@ class GoalDriver:
         from chemsmart.agent.capability_registry import (
             record_host_qualification,
         )
-
         from chemsmart.agent.terminal_states import (
             derive_run_outcome,
             read_run_events,

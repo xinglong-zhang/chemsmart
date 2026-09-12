@@ -1418,6 +1418,12 @@ def _neutral_sensor_facts(
             frequencies = tuple(float(item) for item in raw_frequencies)
         except (TypeError, ValueError):
             frequencies = ()
+    # How many modes the program printed, for every program: an
+    # optimisation that printed none made no claim about its
+    # stationary point, and the projections that word a delivered
+    # number read this count (the ORCA branch wrote its own; PySCF
+    # and xTB rows carried None and read as zero).
+    block["vibrational_mode_count"] = len(frequencies)
     count = consequential_imaginary_mode_count(frequencies)
     if count is not None:
         block["consequential_imaginary_mode_count"] = count

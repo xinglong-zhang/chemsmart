@@ -165,6 +165,21 @@ def record_run(
     stamp = recorded_at or _utc_now()
     entries: list[dict[str, Any]] = []
     levels_in_run: set[str] = set()
+    # Which node's reached geometry each consumer was handed, so a later
+    # reader can join a Hessian's characterisation onto the optimisation.
+    handoffs: dict[str, str] = {}
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("kind") != "optimized_geometry_handed_off":
+            continue
+        payload = event.get("payload") or {}
+        if str(payload.get("status") or "") == "validated_handoff":
+            handoffs[str(payload.get("consumer_node_id") or "")] = str(
+                payload.get("producer_node_id") or ""
+            )
     for line in lines:
         try:
             event = json.loads(line)
@@ -216,6 +231,8 @@ def record_run(
                     "vibrational_mode_count": block.get(
                         "vibrational_mode_count"
                     ),
+                    "printed_modes": printed_modes(record),
+                    "geometry_producer_node_id": handoffs.get(node_id, ""),
                     "state": str(record.get("state") or ""),
                     "result_receipt_sha256": str(
                         record.get("receipt_sha256") or ""
@@ -373,6 +390,41 @@ def record_run(
     return len(entries)
 
 
+def printed_modes(record: Mapping[str, Any]) -> bool:
+    """Whether a verified result carries a printed frequency block.
+
+    Read from the validator's own observations, program-neutrally: the
+    block that records ``vibrational_mode_count`` answers; a block the
+    neutral sensor step wrote carries ``consequential_imaginary_mode_count``
+    only when the reader served frequencies, so its presence answers for
+    a record written before the count travelled.
+    """
+
+    observations = record.get("observations") or {}
+    for value in observations.values():
+        if isinstance(value, Mapping) and "vibrational_mode_count" in value:
+            try:
+                return int(value.get("vibrational_mode_count") or 0) > 0
+            except (TypeError, ValueError):
+                return False
+    return any(
+        isinstance(value, Mapping)
+        and "consequential_imaginary_mode_count" in value
+        for value in observations.values()
+    )
+
+
+def _row_printed_modes(entry: Mapping[str, Any]) -> bool | None:
+    """A recorded row's word on its modes; None when the row cannot say."""
+
+    if isinstance(entry.get("printed_modes"), bool):
+        return bool(entry["printed_modes"])
+    try:
+        return int(entry.get("vibrational_mode_count") or 0) != 0
+    except (TypeError, ValueError):
+        return None
+
+
 def uncharacterised_artifacts(workspace: str | Path) -> tuple[str, ...]:
     """Output artifacts of recorded opt/ts results that printed no modes.
 
@@ -380,18 +432,44 @@ def uncharacterised_artifacts(workspace: str | Path) -> tuple[str, ...]:
     later, and that later stream carries no verified record for it; the
     workspace record does, so a number claimed on it still says its
     stationary point was never characterised.
+
+    An optimisation whose reached geometry a validated Hessian consumed
+    through the handoff edge, in the same run, is characterised by that
+    Hessian: ORCA's opt+freq is one node and PySCF's or xTB's are two,
+    and the same physics gets the same word (PySCF round, 2026-09-12).
     """
 
+    entries = read_workspace_record(workspace)
+    characterised: set[tuple[str, str, str]] = set()
+    for entry in entries:
+        if entry.get("kind") != "result":
+            continue
+        if str(entry.get("state") or "") != "valid":
+            continue
+        producer = str(entry.get("geometry_producer_node_id") or "")
+        if producer and _row_printed_modes(entry):
+            characterised.add(
+                (
+                    str(entry.get("goal_id") or ""),
+                    str(entry.get("run") or ""),
+                    producer,
+                )
+            )
     digests: set[str] = set()
-    for entry in read_workspace_record(workspace):
+    for entry in entries:
         if entry.get("kind") != "result":
             continue
         if str(entry.get("jobtype") or "") not in {"opt", "ts"}:
             continue
-        try:
-            if int(entry.get("vibrational_mode_count") or 0) != 0:
-                continue
-        except (TypeError, ValueError):
+        printed = _row_printed_modes(entry)
+        if printed is None or printed:
+            continue
+        key = (
+            str(entry.get("goal_id") or ""),
+            str(entry.get("run") or ""),
+            str(entry.get("node_id") or ""),
+        )
+        if key in characterised:
             continue
         digests.update(
             str(item) for item in entry.get("output_artifact_sha256s") or ()
