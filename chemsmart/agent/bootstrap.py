@@ -290,9 +290,15 @@ def bootstrap_program_conformance(
         "observations": tuple(observations),
     }
     fixture_sha = canonical_sha256(fixture)
-    passed = bool(covered) and len(covered) == len(
-        tuple(sorted(set(jobtypes)))
-    )
+    # Coverage is per stage. An engine passes for the stages that preview
+    # the probe molecule; a stage that cannot preview it is the gap the
+    # receipt reports -- absent from ``covered`` -- never a failure of the
+    # stages that did. The CPU PySCF surface declares ``td``, whose
+    # preview refuses any reference but a closed-shell singlet by design,
+    # so on a radical workspace one uncoverable stage had failed the whole
+    # engine and every PySCF job type stayed reference-only after the
+    # probe's own state was repaired (PySCF round g3b, 2026-09-12).
+    passed = bool(covered)
     status = "passed" if passed else "failed"
     compiler_sha = canonical_sha256(
         {"schema": live_schema.schema_sha256, "paths": tuple(observations)}

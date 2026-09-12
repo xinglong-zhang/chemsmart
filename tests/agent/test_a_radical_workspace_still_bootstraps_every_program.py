@@ -65,3 +65,9 @@ def test_every_program_bootstraps_over_the_supplied_molecule(
     assert pyscf.preview_status == "passed"
     assert pyscf.preflight_status == "passed"
     assert "sp" in pyscf.covered_jobtypes
+    # The CPU surface declares td, whose preview is singlet-only by design;
+    # coverage is per stage, so the stages that preview the doublet stay
+    # executable and td is the gap the receipt reports.
+    assert ("cpu", "sp") in pyscf.effective_engine_job_pairs
+    assert ("cpu", "opt") in pyscf.effective_engine_job_pairs
+    assert ("cpu", "hess") in pyscf.effective_engine_job_pairs
