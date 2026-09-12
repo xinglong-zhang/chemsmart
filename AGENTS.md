@@ -675,7 +675,21 @@ record, so PySCF's and xTB's two nodes get the word ORCA's one node
 gets. And the qualification rows the capability ladder reads were
 written from the settling cycle alone, so a goal that ran in cycle one
 and settled in an analysis-only cycle two qualified nothing; they now
-come from every cycle the goal recorded.
+come from every cycle the goal recorded, and from both settlements,
+because the first repair reached only the executed run's. Three more
+sentences from the re-issue. Conformance coverage is per stage: the CPU
+PySCF surface declares ``td``, whose preview refuses any reference but
+a closed-shell singlet by design, and one uncoverable stage had failed
+the whole engine, so a radical workspace stayed reference-only after
+the probe's own state was repaired; a stage that cannot preview this
+molecule is now the gap the receipt reports, never a failure of the
+stages that did. And a number claimed in a later cycle's session on a
+result an earlier run typed failed keeps its word at settlement -- that
+it stands on a node that did not meet its promise, or on one the
+session had the host characterise -- because the workspace record
+holds those results and both settle-time deliveries read them; the
+planar phosphine goal had claimed six characterised numbers on its
+inversion saddle and the settlement named only the anomalies.
 
 This surface is qualified through one completed multi-program execution:
 a single displayed approval covering seven nodes — one xTB optimisation
