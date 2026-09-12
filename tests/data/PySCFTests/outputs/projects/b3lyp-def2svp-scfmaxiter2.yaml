@@ -1,0 +1,8 @@
+# F7: an SCF that cannot converge in two cycles, so the driver records a
+# quiet unconverged stage and normal_termination false.
+sp:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  scf_maxiter: 2

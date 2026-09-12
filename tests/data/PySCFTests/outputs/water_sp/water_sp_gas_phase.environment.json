@@ -1,0 +1,130 @@
+{
+  "aux_basis_available": {},
+  "aux_basis_max_l": {},
+  "basis_available": {
+    "def2-svp": true
+  },
+  "basis_ecp_required_elements": [],
+  "basis_max_l": {
+    "def2-svp": 2
+  },
+  "cuda_available": 0,
+  "cuda_visible_devices": "",
+  "cupy_cutensor_pair": [
+    null,
+    null
+  ],
+  "cupy_distribution": null,
+  "cutensor_compatible": false,
+  "cutensor_distribution": null,
+  "dependencies": {
+    "cupy": {
+      "available": false,
+      "error_type": "ModuleNotFoundError"
+    },
+    "gpu4pyscf": {
+      "available": false,
+      "error_type": "ModuleNotFoundError"
+    },
+    "h5py": {
+      "available": true,
+      "version": "3.16.0"
+    },
+    "numpy": {
+      "available": true,
+      "version": "1.26.4"
+    },
+    "pyscf": {
+      "available": true,
+      "version": "2.14.0"
+    },
+    "pyscf_dispersion": {
+      "available": true
+    }
+  },
+  "device_count": 0,
+  "execution_ready": true,
+  "functional_available": {
+    "b3lypg": true
+  },
+  "functional_metadata": {
+    "b3lypg": {
+      "double_hybrid": false,
+      "laplacian_meta_gga": false,
+      "nlc": false
+    }
+  },
+  "gpu4pyscf_distribution": null,
+  "gpu_probe_error_type": "ModuleNotFoundError",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "interpreter_observed": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "interpreter_sha256": "8b52d5776cbe839d6a4cce3451fe9424eaf8a92389ad8597590263e2b15b44f4",
+  "libxc_version": "7.0.0",
+  "observed_at": "2026-09-12T15:42:47.035331+00:00",
+  "omp_num_threads": "4",
+  "packages": {
+    "geometric": "1.1.1",
+    "h5py": "3.16.0",
+    "numpy": "1.26.4",
+    "pyscf": "2.14.0",
+    "pyscf-dispersion": "1.5.0"
+  },
+  "preflight_findings": [],
+  "probe_returncode": 0,
+  "pyscf_version": "2.14.0",
+  "python_version": "3.10.20",
+  "receipt_sha256": "714d79b08bb502c8b01fa0c322d9be539f9c402c46529fc6301530d53b433c57",
+  "request": {
+    "aux_basis": null,
+    "basis": "def2-svp",
+    "dispersion": null,
+    "engine": "cpu",
+    "functional": "b3lypg",
+    "nstates": null,
+    "opt_solver": "geometric",
+    "response_method": null,
+    "solvent_id": null,
+    "stages": [
+      "scf"
+    ],
+    "state_manifold": null,
+    "symbols": [
+      "H",
+      "O"
+    ]
+  },
+  "request_sha256": "2b647ace65704f1ace5d049fc4b931b54b2a4ff2ba525d97acdb989694a1e841",
+  "required_stages": [
+    "scf"
+  ],
+  "run_id": "4d31f3a6-c688-43cc-acde-39fbe90a77fc",
+  "run_nonce": "4c740136174b45db240625331b2121184e823a99de4632ca0d78beaf3e8517fa",
+  "schema_version": "chemsmart.pyscf-environment.v1",
+  "solvent_ids": [
+    ""
+  ],
+  "solver_callables": {
+    "ase": {
+      "call_probe": "import_failed",
+      "callable": false,
+      "dependency_present": false,
+      "probe_exception_type": "ModuleNotFoundError"
+    },
+    "berny": {
+      "call_probe": "import_failed",
+      "callable": false,
+      "dependency_present": false,
+      "probe_exception_type": "ModuleNotFoundError"
+    },
+    "geometric": {
+      "call_probe": "entrypoint_reached",
+      "callable": true,
+      "dependency_present": true,
+      "probe_exception_type": "NotImplementedError"
+    }
+  },
+  "status": "available"
+}

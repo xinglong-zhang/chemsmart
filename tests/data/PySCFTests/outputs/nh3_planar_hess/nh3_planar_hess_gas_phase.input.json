@@ -1,0 +1,26 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "ae1252056ab35f741f7e1abefff6192528e19d098ddc3882d5cca52228d03192",
+  "engine": "cpu",
+  "environment_receipt_sha256": "ddabe1ace755e68bc1d8693b08681c71bba338a2d99148a2acc6b1651f75571a",
+  "input_artifact_kind": "pyscf_hdf5",
+  "input_artifact_path": "/home/chemsmart/agent-campaigns/ax41-refine-100/pyscf-round/workspaces/fixtures/runs/F2-opt/nh3_planar_opt_gas_phase.h5",
+  "input_artifact_sha256": "e4b86c93a170e228e4305afef6163c4034bf6a23f319151be49a35908aa27656",
+  "input_geometry_sha256": "48aacdd81aea791bb373bd572cc835f2d59b3312c49582a6eb82d59c4d58a118",
+  "label": "nh3_planar_hess_gas_phase",
+  "materializations": {},
+  "project_yaml_sha256": "cfe91c4e2dd24dca2747b3f890124aeb7a49e3a208b699c06ca7d670d80487e6",
+  "quarantined_targets": [],
+  "receipt_sha256": "a5ff1c7f71f95af0735b281507051aa176a1a8e9edc7bcf3a15d19e95cb042c5",
+  "requested_settings_sha256": "ced4338a325803259bb6b6fc840b8c57c261dd2142d63c09631fbc4cdffb5093",
+  "run_id": "ff4193de-ebfb-42fe-bcf4-0708f98d20a3",
+  "run_nonce": "63e9298fc82449140c6ae28a01461a08923a4dd9a83121c30398df5c4ab72cb4",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "nh3_planar_hess_gas_phase.py",
+  "script_sha256": "c9a9dd09b141b4b172cb9f1f37a7a55e5dbd8396dfb3d42a8047805ac683c78e",
+  "stages": [
+    "scf",
+    "hess"
+  ],
+  "state": "previewed"
+}

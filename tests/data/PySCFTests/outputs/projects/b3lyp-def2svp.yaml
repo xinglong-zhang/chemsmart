@@ -1,0 +1,18 @@
+# PySCF round fixtures: one hybrid level for every executable stage.
+sp:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: false
+opt:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  opt_solver: geometric
+  opt_maxsteps: 100
+hess:
+  functional: b3lyp
+  basis: def2-svp
+  freq: true
+  density_fit: false

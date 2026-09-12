@@ -1,0 +1,26 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "471e8c3445e93088a7f187b761722fadcc7c4c679d2c99d6654800158062553c",
+  "engine": "cpu",
+  "environment_receipt_sha256": "d192a0081fb72f8b3bebd036f9500b675ae17ec0c7b58752794b99f01a4e649f",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "625cbc464e1d6a9893f945ada6454eb5afd715e65a3b0bd2327cd81eb2390297",
+  "label": "water_opt_gas_phase",
+  "materializations": {},
+  "project_yaml_sha256": "cfe91c4e2dd24dca2747b3f890124aeb7a49e3a208b699c06ca7d670d80487e6",
+  "quarantined_targets": [],
+  "receipt_sha256": "687d679ec40de160359cedb8d453b3c541a1f0ce0231a26af865b33b6d33dce8",
+  "requested_settings_sha256": "b93829841f8554c4c3eaa819f57588a5a7253c41b0c6073eb97792f1b78ada23",
+  "run_id": "9c2e03f0-2031-4e96-a171-115e9fd97650",
+  "run_nonce": "2f54f2c8fd70dcd387a5a0425f0d613d2009a3f1b7c497cb3922473128c659bd",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "water_opt_gas_phase.py",
+  "script_sha256": "4e2dcd42753a8211f2d8d7e854109bbfd965a97a45a8741600aeb1c0cf0f1c3f",
+  "stages": [
+    "scf",
+    "opt"
+  ],
+  "state": "previewed"
+}

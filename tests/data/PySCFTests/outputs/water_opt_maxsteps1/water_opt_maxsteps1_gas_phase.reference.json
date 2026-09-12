@@ -1,0 +1,13 @@
+{
+ "artifact": "water_opt_maxsteps1_gas_phase.h5",
+ "command": "reference.py water_opt_maxsteps1_gas_phase.h5",
+ "jobtype": "opt",
+ "masses_isotope_averaged_amu": [
+  15.999,
+  1.008,
+  1.008
+ ],
+ "point_group_detect_symm": "C2v",
+ "pyscf_version": "2.14.0",
+ "symm_geom_tol_bohr": 1e-05
+}

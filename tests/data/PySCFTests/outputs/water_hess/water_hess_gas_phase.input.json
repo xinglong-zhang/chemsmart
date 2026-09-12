@@ -1,0 +1,26 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "ac816d77e16cdcedff66adc678c01b439eea17e0ea8383d05250d71f4c97dbc1",
+  "engine": "cpu",
+  "environment_receipt_sha256": "c4ab86c4d0fd4b2bc7edcddc7b4fec7703207045b6260f246336b86a9d6b5ff1",
+  "input_artifact_kind": "pyscf_hdf5",
+  "input_artifact_path": "/home/chemsmart/agent-campaigns/ax41-refine-100/pyscf-round/workspaces/fixtures/runs/F1-opt/water_opt_gas_phase.h5",
+  "input_artifact_sha256": "fd783764c8d56a32f7052bef849b419e57b7f33d3b2672e1c4ea2e4d20d5e209",
+  "input_geometry_sha256": "afecc4329c49535502654495750246a29a1fb4e04ec4c587b7e2af4203b60869",
+  "label": "water_hess_gas_phase",
+  "materializations": {},
+  "project_yaml_sha256": "cfe91c4e2dd24dca2747b3f890124aeb7a49e3a208b699c06ca7d670d80487e6",
+  "quarantined_targets": [],
+  "receipt_sha256": "5e7521d49207d49c6e8a8ae133799c477b3d4c48e0acf0ac931ad19191d9f0d9",
+  "requested_settings_sha256": "c31efa47671b3baa405b300125c7ae610be748e5397088a7a1e1374e2ac26772",
+  "run_id": "90079761-bdad-4062-81ca-6cd25f5f2af2",
+  "run_nonce": "b756a54be44f6b36e73bf6acf9c9d94799fbf855cf26ff7095325ed085638f89",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "water_hess_gas_phase.py",
+  "script_sha256": "a03ac3a1efb3021a1ac531c017f79829b4f99224892805133a8277a49c8989c0",
+  "stages": [
+    "scf",
+    "hess"
+  ],
+  "state": "previewed"
+}

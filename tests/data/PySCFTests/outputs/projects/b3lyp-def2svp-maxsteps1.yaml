@@ -1,0 +1,9 @@
+# F4: an optimisation that cannot converge in one step, so the artifact
+# records the last geometry the optimiser evaluated, never the input.
+opt:
+  functional: b3lyp
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  opt_solver: geometric
+  opt_maxsteps: 1

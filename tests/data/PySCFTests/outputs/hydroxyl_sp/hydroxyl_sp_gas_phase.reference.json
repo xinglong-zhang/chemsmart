@@ -1,0 +1,12 @@
+{
+ "artifact": "hydroxyl_sp_gas_phase.h5",
+ "command": "reference.py hydroxyl_sp_gas_phase.h5",
+ "jobtype": "sp",
+ "masses_isotope_averaged_amu": [
+  15.999,
+  1.008
+ ],
+ "point_group_detect_symm": "Coov",
+ "pyscf_version": "2.14.0",
+ "symm_geom_tol_bohr": 1e-05
+}

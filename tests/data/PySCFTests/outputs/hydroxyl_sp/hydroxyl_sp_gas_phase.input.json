@@ -1,0 +1,25 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "b633f2cfe52e65ad9b6cb02de0ddbe502249fb26aa04f08f7a1a4ed6142a2fc6",
+  "engine": "cpu",
+  "environment_receipt_sha256": "a36322611a331c03776762466f91f83903b06526277d3420034fdba0544f7058",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "03d1e11305522108e746fb97b60c978a807e08531cc0e02846416afe33545703",
+  "label": "hydroxyl_sp_gas_phase",
+  "materializations": {},
+  "project_yaml_sha256": "cfe91c4e2dd24dca2747b3f890124aeb7a49e3a208b699c06ca7d670d80487e6",
+  "quarantined_targets": [],
+  "receipt_sha256": "32c83c7d41251732ee99eaf4d4f07515d8212e353db930d14208ed71d9280495",
+  "requested_settings_sha256": "738da4ba8bab31e1f97e354068afe977d02bc25ba7433a81542038d25a5233ca",
+  "run_id": "cab8c55f-e228-4cb8-907f-8ff27197ff9e",
+  "run_nonce": "c2063726f882746487290e289761409298bfe9fc3fc9c04a3daa0c2c51b13689",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "hydroxyl_sp_gas_phase.py",
+  "script_sha256": "5b11479699bae4a2e83d2a82cb9e79dd00c5bb2e4d09c9836dddd47b34af30af",
+  "stages": [
+    "scf"
+  ],
+  "state": "previewed"
+}
