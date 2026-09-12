@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import platform
@@ -76,6 +77,11 @@ class Config:
     def chemsmart_orca(self):
         """Path to the ``orca`` sub-directory of the user config."""
         return self.chemsmart_dest / "orca"
+
+    @property
+    def chemsmart_pyscf(self):
+        """Path to the ``pyscf`` sub-directory of the user config."""
+        return self.chemsmart_dest / "pyscf"
 
     @property
     def chemsmart_package_path(self):
@@ -456,6 +462,67 @@ def add_lines_in_yaml_files(
             logger.error(f"Unexpected error while processing {yaml_file}: {e}")
 
 
+def set_program_exefolder(target_directory, program, folder):
+    """Set one program's ``EXEFOLDER`` without rewriting the YAML document.
+
+    Server templates intentionally keep PySCF's interpreter optional and
+    commented.  This line-oriented update activates or replaces only the
+    requested program field, preserving comments and block-scalar commands in
+    the rest of each server file.
+    """
+    if not target_directory.exists():
+        logger.info(f"Target directory not found: {target_directory}")
+        return
+
+    rendered_folder = json.dumps(str(folder))
+    program_header = f"{str(program).upper()}:"
+    for yaml_file in target_directory.glob("*.yaml"):
+        lines = yaml_file.read_text().splitlines(keepends=True)
+        updated = []
+        in_program = False
+        field_written = False
+
+        for line in lines:
+            stripped = line.strip()
+            is_top_level = bool(stripped) and not line[0].isspace()
+            if stripped == program_header and is_top_level:
+                in_program = True
+                updated.append(line)
+                continue
+
+            if in_program and is_top_level and not stripped.startswith("#"):
+                if not field_written:
+                    updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+                    field_written = True
+                in_program = False
+
+            if in_program and stripped in {
+                "EXEFOLDER:",
+                "# EXEFOLDER:",
+            }:
+                # A value-less field is unusual but still replaceable.
+                updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+                field_written = True
+                continue
+            if in_program and (
+                stripped.startswith("EXEFOLDER:")
+                or stripped.startswith("# EXEFOLDER:")
+            ):
+                updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+                field_written = True
+                continue
+            updated.append(line)
+
+        if in_program and not field_written:
+            updated.append(f"    EXEFOLDER: {rendered_folder}\n")
+            field_written = True
+        if field_written:
+            yaml_file.write_text("".join(updated))
+            logger.info(
+                f"Configured {program_header[:-1]} EXEFOLDER in {yaml_file}"
+            )
+
+
 @click.group(name="config", invoke_without_command=True)
 @click.pass_context
 def config(ctx):
@@ -566,6 +633,35 @@ def orca(ctx, folder):
 @click.option(
     "-f",
     "--folder",
+    type=click.Path(file_okay=False, path_type=Path),
+    required=True,
+    help="Path to the bin/ directory whose python owns PySCF.",
+)
+def pyscf(ctx, folder):
+    """Configure the Python interpreter used for PySCF jobs.
+
+    ``FOLDER`` names an environment's ``bin/`` directory, for example
+    ``~/miniconda3/envs/pyscf-gpu/bin``.  PySCF itself is never installed or
+    imported by this command.
+    """
+    cfg = ctx.obj["cfg"]
+    folder = Path(folder).expanduser()
+    if not folder.is_dir():
+        raise click.BadParameter(f"PySCF bin directory not found: {folder}")
+    if not (
+        folder / ("python.exe" if platform.system() == "Windows" else "python")
+    ).exists():
+        raise click.BadParameter(
+            f"No Python interpreter found in PySCF bin directory: {folder}"
+        )
+    set_program_exefolder(cfg.chemsmart_server, "PYSCF", folder)
+
+
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
     type=str,
     required=True,
     help="Path to the NCIPLOT folder.",
@@ -621,6 +717,7 @@ def scratch(ctx, folder):
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
+config.add_command(pyscf)
 config.add_command(nciplot)
 config.add_command(scratch)
 

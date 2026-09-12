@@ -1,0 +1,21 @@
+# Built-in PySCF test project.
+#
+# Deliberately small and fast: B3LYP/def2-SVP with density fitting converges
+# H2O in well under a second, which keeps CLI tests cheap.
+gas:
+  functional: b3lyp
+  basis: def2-svp
+  freq: True
+  density_fit: True
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  opt_solver: geometric
+solv:
+  functional: b3lyp
+  basis: def2-svp
+  freq: False
+  density_fit: True
+  defgrid: defgrid2
+  scf_tol: 1.0e-9
+  solvent_model: smd
+  solvent_id: water

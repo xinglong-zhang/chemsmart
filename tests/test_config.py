@@ -1,10 +1,13 @@
 """Tests for chemsmart.cli.config.Config class."""
 
+import platform
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from chemsmart.cli.config import Config
+from click.testing import CliRunner
+
+from chemsmart.cli.config import Config, config
 from chemsmart.utils.io import update_powershell_profiles, update_windows_env
 
 
@@ -781,3 +784,65 @@ class TestConfigurePathsInteractively:
             cfg.configure_paths_interactively()
 
         mock_update.assert_not_called()
+
+
+class TestConfigPySCF:
+    """Tests for the ``chemsmart config pyscf`` command."""
+
+    @staticmethod
+    def _interpreter_name():
+        return "python.exe" if platform.system() == "Windows" else "python"
+
+    @staticmethod
+    def _invoke(dest, args):
+        """Invoke ``chemsmart config pyscf`` against an isolated dest."""
+        with patch.object(
+            Config,
+            "chemsmart_dest",
+            new_callable=lambda: property(lambda self: dest),
+        ):
+            return CliRunner().invoke(config, ["pyscf"] + args)
+
+    def test_missing_folder_is_rejected(self, tmp_path):
+        """A path that is not a directory must not be recorded."""
+        dest = tmp_path / ".chemsmart"
+        missing = tmp_path / "no_such_bin"
+        result = self._invoke(dest, ["-f", str(missing)])
+        assert result.exit_code != 0
+        assert "PySCF bin directory not found" in result.output
+
+    def test_folder_without_interpreter_is_rejected(self, tmp_path):
+        """A bin directory with no python must not be recorded."""
+        dest = tmp_path / ".chemsmart"
+        empty_bin = tmp_path / "bin"
+        empty_bin.mkdir()
+        result = self._invoke(dest, ["-f", str(empty_bin)])
+        assert result.exit_code != 0
+        assert "No Python interpreter found" in result.output
+
+    def test_interpreter_folder_is_written_to_server_yaml(self, tmp_path):
+        """A valid bin directory is recorded as the PYSCF EXEFOLDER."""
+        dest = tmp_path / ".chemsmart"
+        server_dir = dest / "server"
+        server_dir.mkdir(parents=True)
+        server_yaml = server_dir / "local.yaml"
+        server_yaml.write_text(
+            "PYSCF:\n"
+            "    # EXEFOLDER: ~/miniconda3/envs/pyscf-gpu/bin\n"
+            "    LOCAL_RUN: True\n"
+            "    SCRATCH: False\n"
+        )
+
+        pyscf_bin = tmp_path / "bin"
+        pyscf_bin.mkdir()
+        (pyscf_bin / self._interpreter_name()).touch()
+
+        result = self._invoke(dest, ["-f", str(pyscf_bin)])
+        assert result.exit_code == 0, result.output
+
+        updated = server_yaml.read_text()
+        assert "EXEFOLDER" in updated
+        assert str(pyscf_bin) in updated
+        # The rest of the block must survive a targeted field update.
+        assert "LOCAL_RUN: True" in updated
+        assert "SCRATCH: False" in updated

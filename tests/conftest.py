@@ -33,6 +33,7 @@ from chemsmart.jobs.mol.runner import (
 )
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+from chemsmart.jobs.pyscf.runner import FakePySCFJobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
 
@@ -1864,6 +1865,55 @@ def xtb_he_outfolder(xtb_outputs_directory):
     return os.path.join(xtb_outputs_directory, "he_hess")
 
 
+# master PySCF test directory
+@pytest.fixture()
+def pyscf_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "PySCFTests")
+
+
+# pyscf yaml files
+@pytest.fixture()
+def pyscf_yaml_settings_directory(pyscf_test_directory):
+    return os.path.join(pyscf_test_directory, "project_yaml")
+
+
+@pytest.fixture()
+def pyscf_yaml_settings_test(pyscf_yaml_settings_directory):
+    return os.path.join(pyscf_yaml_settings_directory, "test.yaml")
+
+
+@pytest.fixture()
+def pyscf_inputs_directory(pyscf_test_directory):
+    pyscf_inputs_directory = os.path.join(pyscf_test_directory, "inputs")
+    return os.path.abspath(pyscf_inputs_directory)
+
+
+@pytest.fixture()
+def pyscf_outputs_directory(pyscf_test_directory):
+    pyscf_outputs_directory = os.path.join(pyscf_test_directory, "outputs")
+    return os.path.abspath(pyscf_outputs_directory)
+
+
+@pytest.fixture()
+def pyscf_water_sp_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "water_sp_cpcm_water")
+
+
+@pytest.fixture()
+def pyscf_water_opt_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "water_opt_gas_phase")
+
+
+@pytest.fixture()
+def pyscf_water_hess_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "water_hess_gas_phase")
+
+
+@pytest.fixture()
+def pyscf_he_sp_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "he_sp_gas_phase")
+
+
 # master CREST test directory
 @pytest.fixture()
 def crest_test_directory(test_data_directory):
@@ -2155,6 +2205,18 @@ def xtb_jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def xtb_jobrunner_scratch(tmpdir, pbs_server):
     return FakeXTBJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def pyscf_jobrunner_no_scratch(pbs_server):
+    return FakePySCFJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def pyscf_jobrunner_scratch(tmpdir, pbs_server):
+    return FakePySCFJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
 
