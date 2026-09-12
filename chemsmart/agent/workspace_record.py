@@ -425,6 +425,29 @@ def _row_printed_modes(entry: Mapping[str, Any]) -> bool | None:
         return None
 
 
+def failed_artifacts(workspace: str | Path) -> tuple[str, ...]:
+    """Output artifacts of recorded results the validator did not pass.
+
+    A claim recorded in a later cycle's session on a result an earlier
+    run typed failed carries no verified record in its own stream; the
+    workspace record does, so the settlement can still say the number
+    stands on a node that did not meet its promise, or on one the
+    session had the host characterise (PySCF round g5, 2026-09-12: six
+    claims on a characterised saddle, and the settlement said nothing).
+    """
+
+    digests: set[str] = set()
+    for entry in read_workspace_record(workspace):
+        if entry.get("kind") != "result":
+            continue
+        if str(entry.get("state") or "") == "valid":
+            continue
+        digests.update(
+            str(item) for item in entry.get("output_artifact_sha256s") or ()
+        )
+    return tuple(sorted(digests))
+
+
 def uncharacterised_artifacts(workspace: str | Path) -> tuple[str, ...]:
     """Output artifacts of recorded opt/ts results that printed no modes.
 

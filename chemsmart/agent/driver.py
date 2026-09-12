@@ -54,6 +54,7 @@ from chemsmart.agent.terminal_states import (
     is_provider_transport_terminal,
 )
 from chemsmart.agent.workspace_record import (
+    failed_artifacts,
     printed_modes,
     read_workspace_record,
     record_run,
@@ -426,6 +427,13 @@ def _settle_from_delivery(
         events_path,
         flagged_artifact_sha256s=_flagged_artifact_sha256s(
             _goal_anomalies(ledger)
+        ),
+        # The results an earlier run typed failed, so a number this
+        # cycle claimed on one of them is worded as standing on it --
+        # characterised or not -- exactly as it would be in that run's
+        # own stream.
+        failed_artifact_sha256s=(
+            failed_artifacts(workspace) if workspace else ()
         ),
         uncharacterised_artifact_sha256s=(
             uncharacterised_artifacts(workspace) if workspace else ()
@@ -4224,6 +4232,7 @@ class GoalDriver:
             inherited_rejected_artifacts=tuple(
                 sorted(self.rejected_artifacts)
             ),
+            failed_artifact_sha256s=failed_artifacts(self.workspace),
             uncharacterised_artifact_sha256s=uncharacterised_artifacts(
                 self.workspace
             ),
