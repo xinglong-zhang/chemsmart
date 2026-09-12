@@ -1026,6 +1026,7 @@ class TestGaussianCLIMecpCommand:
                 "-m",
                 "2",
                 "mecp",
+<<<<<<< Updated upstream
                 "-m1",
                 "2",
                 "-m2",
@@ -1033,6 +1034,15 @@ class TestGaussianCLIMecpCommand:
                 "-c1",
                 "1",
                 "-c2",
+=======
+                "--multiplicity1",
+                "2",
+                "--multiplicity2",
+                "4",
+                "--charge1",
+                "1",
+                "--charge2",
+>>>>>>> Stashed changes
                 "1",
                 "--max-steps",
                 "120",
@@ -1253,9 +1263,15 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
+<<<<<<< Updated upstream
                 "--multiplicity-1",
                 "1",
                 "--multiplicity-2",
+=======
+                "--multiplicity1",
+                "1",
+                "--multiplicity2",
+>>>>>>> Stashed changes
                 "3",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
@@ -1273,7 +1289,11 @@ class TestGaussianCLILinkMecpCommand:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
+<<<<<<< Updated upstream
         """Without ``--multiplicity-2``, state 2 defaults to state 1 + 2."""
+=======
+        """Without ``--multiplicity2``, state 2 defaults to state 1 + 2."""
+>>>>>>> Stashed changes
         result, settings = run_gaussian_and_capture_settings(
             "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
             [
@@ -1288,7 +1308,11 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
+<<<<<<< Updated upstream
                 "--multiplicity-1",
+=======
+                "--multiplicity1",
+>>>>>>> Stashed changes
                 "1",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
@@ -1320,7 +1344,11 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
+<<<<<<< Updated upstream
                 "-m1",
+=======
+                "--multiplicity1",
+>>>>>>> Stashed changes
                 "1",
                 "--stable",
                 "qrhf",
@@ -1356,7 +1384,11 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
+<<<<<<< Updated upstream
                 "-m1",
+=======
+                "--multiplicity1",
+>>>>>>> Stashed changes
                 "1",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),

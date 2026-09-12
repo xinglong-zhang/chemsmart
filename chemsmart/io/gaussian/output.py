@@ -20,6 +20,7 @@ from chemsmart.utils.repattern import (
     oniom_energy_pattern,
     oniom_gridpoint_pattern,
     scf_energy_pattern,
+    spin_squared_pattern,
 )
 from chemsmart.utils.utils import (
     get_range_from_list,
@@ -173,6 +174,7 @@ class Gaussian16Output(GaussianFileMixin):
                 return spin
         return None
 
+<<<<<<< Updated upstream
     @property
     def spin_squared(self):
         """Return the final post-annihilation ``<S^2>`` value, if printed."""
@@ -186,6 +188,29 @@ class Gaussian16Output(GaussianFileMixin):
             if match:
                 value = float(match.group(1).replace("D", "E").replace("d", "e"))
         return value
+=======
+    def _final_spin_squared_values(self):
+        """Return the final printed S**2 values before and after annihilation."""
+        values = None
+        pattern = re.compile(spin_squared_pattern)
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                values = tuple(float(value) for value in match.groups())
+        return values
+
+    @property
+    def spin_squared_before_annihilation(self):
+        """Return the final pre-annihilation S**2 value, if printed."""
+        values = self._final_spin_squared_values()
+        return None if values is None else values[0]
+
+    @property
+    def spin_squared_after_annihilation(self):
+        """Return the final post-annihilation S**2 value, if printed."""
+        values = self._final_spin_squared_values()
+        return None if values is None else values[1]
+>>>>>>> Stashed changes
 
     @cached_property
     def input_coordinates_block(self):

@@ -66,24 +66,43 @@ MECP Options
       -  Default
       -  Description
 
+<<<<<<< Updated upstream
    -  -  ``--multiplicity-1`` / ``-m1``
+=======
+   -  -  ``--multiplicity1``
+>>>>>>> Stashed changes
       -  int
       -  1 (singlet)
       -  Spin multiplicity of state A. Falls back to ``-m`` if not set.
 
+<<<<<<< Updated upstream
    -  -  ``--multiplicity-2`` / ``-m2``
       -  int
       -  multiplicity-1 + 2
       -  Spin multiplicity of state B.
 
    -  -  ``--charge-1`` / ``-c1``
+=======
+   -  -  ``--multiplicity2``
+      -  int
+      -  multiplicity1 + 2
+      -  Spin multiplicity of state B.
+
+   -  -  ``--charge1``
+>>>>>>> Stashed changes
       -  int
       -  0
       -  Charge of state A. Falls back to ``-c`` if not set.
 
+<<<<<<< Updated upstream
    -  -  ``--charge-2`` / ``-c2``
       -  int
       -  charge-1
+=======
+   -  -  ``--charge2``
+      -  int
+      -  charge1
+>>>>>>> Stashed changes
       -  Charge of state B.
 
    -  -  ``--title-a``
@@ -507,13 +526,21 @@ Set spin states explicitly (singlet ↔ triplet):
 
 .. code:: bash
 
+<<<<<<< Updated upstream
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity-1 1 --multiplicity-2 3
+=======
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity1 1 --multiplicity2 3
+>>>>>>> Stashed changes
 
 Doublet/quartet MECP for an open-shell cation:
 
 .. code:: bash
 
+<<<<<<< Updated upstream
    chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity-1 2 --multiplicity-2 4
+=======
+   chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity1 2 --multiplicity2 4
+>>>>>>> Stashed changes
 
 Use tight convergence (publication quality):
 

@@ -951,6 +951,8 @@ class TestGaussian16Output:
         )
         assert g16_link_sp.is_link
         assert g16_link_sp.jobtype == "sp"
+        assert g16_link_sp.spin_squared_before_annihilation == 1.005
+        assert g16_link_sp.spin_squared_after_annihilation == 0.0404
         assert len(g16_link_sp.vibrational_frequencies) == 0
         assert (
             g16_link_sp.num_vib_modes == g16_link_sp.num_vib_frequencies == 0

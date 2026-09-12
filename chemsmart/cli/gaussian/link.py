@@ -8,11 +8,15 @@ from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_solvent_options,
     gaussian,
 )
+<<<<<<< Updated upstream
 from chemsmart.cli.gaussian.mecp_options import (
     add_mecp_method_suffix,
     click_mecp_restart_option,
     click_mecp_step_size_method_option,
 )
+=======
+from chemsmart.cli.gaussian.mecp_options import click_gaussian_mecp_state_options
+>>>>>>> Stashed changes
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
@@ -49,6 +53,7 @@ logger = logging.getLogger(__name__)
     "--route", type=str, default=None, help="Route for the link section."
 )
 # MECP-specific options (used when --jobtype mecp)
+<<<<<<< Updated upstream
 @click.option(
     "--multiplicity-1",
     "-m1",
@@ -81,6 +86,9 @@ logger = logging.getLogger(__name__)
     default=None,
     help="[MECP] Charge for state 2. Defaults to charge-1.",
 )
+=======
+@click_gaussian_mecp_state_options
+>>>>>>> Stashed changes
 @click.option(
     "--max-steps",
     type=int,
@@ -400,7 +408,11 @@ def _link_mecp(
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
+<<<<<<< Updated upstream
             "Use gaussian -m/--multiplicity or link -j mecp --multiplicity-1/-m1."
+=======
+            "Use gaussian -m/--multiplicity or link -j mecp --multiplicity1."
+>>>>>>> Stashed changes
         )
 
     if multiplicity2 is None:
@@ -415,7 +427,11 @@ def _link_mecp(
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
+<<<<<<< Updated upstream
             "Use gaussian -c/--charge or link -j mecp --charge-1/-c1."
+=======
+            "Use gaussian -c/--charge or link -j mecp --charge1."
+>>>>>>> Stashed changes
         )
 
     if charge2 is None:

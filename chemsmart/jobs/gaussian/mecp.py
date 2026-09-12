@@ -18,6 +18,38 @@ from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 
 logger = logging.getLogger(__name__)
 
+MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
+
+# Settings consumed by the MECP driver rather than Gaussian link sub-jobs.
+MECP_ONLY_KEYS = frozenset(
+    {
+        "multiplicity_a",
+        "multiplicity_b",
+        "charge_a",
+        "charge_b",
+        "title_a",
+        "title_b",
+        "max_steps",
+        "step_size",
+        "trust_radius",
+        "energy_diff_tol",
+        "force_max_tol",
+        "force_rms_tol",
+        "disp_max_tol",
+        "disp_rms_tol",
+        "adaptive_step_size",
+        "step_size_method",
+        "step_size_grow",
+        "step_size_shrink",
+        "step_size_min",
+        "step_size_max",
+        "use_link",
+        "convergence_preset",
+        "verify_seam_minimum",
+        "hess_step_size",
+    }
+)
+
 
 class GaussianMECPJob(GaussianJob):
     """
@@ -42,6 +74,7 @@ class GaussianMECPJob(GaussianJob):
     """
 
     TYPE = "g16mecp"
+<<<<<<< Updated upstream
     MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
 
     @staticmethod
@@ -114,6 +147,8 @@ class GaussianMECPJob(GaussianJob):
             # params and will be overridden with state-specific values anyway.
         }
     )
+=======
+>>>>>>> Stashed changes
 
     def __init__(
         self,
@@ -271,7 +306,7 @@ class GaussianMECPJob(GaussianJob):
             link_kwargs = {
                 k: v
                 for k, v in self.settings.__dict__.items()
-                if not k.startswith("_") and k not in self._MECP_ONLY_KEYS
+                if not k.startswith("_") and k not in MECP_ONLY_KEYS
             }
             # Override with state-specific and link-specific values.
             link_kwargs.update(
@@ -406,7 +441,7 @@ class GaussianMECPJob(GaussianJob):
         diff_grad = grad_a - grad_b
         diff_norm_sq = float(np.sum(diff_grad * diff_grad))
 
-        if diff_norm_sq < self.MIN_DIFF_GRAD_NORM_SQ:
+        if diff_norm_sq < MIN_DIFF_GRAD_NORM_SQ:
             raise RuntimeError(
                 "Difference gradient is too small; cannot continue MECP step."
             )
@@ -723,7 +758,11 @@ class GaussianMECPJob(GaussianJob):
             and disp_rms <= self.settings.disp_rms_tol
         )
 
+<<<<<<< Updated upstream
     def _log_step(
+=======
+    def log_step(
+>>>>>>> Stashed changes
         self,
         f,
         step_idx,
@@ -863,7 +902,7 @@ class GaussianMECPJob(GaussianJob):
                 if self.settings.step_size_method != "harvey":
                     displacement = self._apply_trust_radius(displacement)
 
-                self._log_step(
+                self.log_step(
                     report,
                     step_idx,
                     ea,
