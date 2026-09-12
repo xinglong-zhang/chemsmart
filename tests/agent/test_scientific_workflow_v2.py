@@ -18,16 +18,12 @@ from chemsmart.agent.execution import (
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
 from chemsmart.agent.runtime.reducer import RuntimeState
-from chemsmart.agent.tool_runtime import (
-    _validate_stationary_point_policy_binding,
-)
 from chemsmart.agent.workflows import (
     ArtifactOutputIntentV1,
     CommandNodeIntentV1,
     MaterializedNodeV1,
     ScientificWorkflowEdgeV2,
     ScientificWorkflowNodeV2,
-    StationaryPointValidationPolicyV1,
     build_materialized_workflow,
     build_scientific_workflow_plan,
 )
@@ -283,77 +279,6 @@ def test_failed_branch_blocks_only_descendants_and_keeps_sibling_runnable():
     assert run.state == "failed"
     assert run.finished_at == "2026-08-13T00:00:04+00:00"
     assert derive_ready_node_ids(plan, run) == ()
-
-
-def test_stationary_point_policy_freezes_expected_mode_count():
-    body = {
-        "schema_version": "chemsmart.stationary-point-policy.v1",
-        "policy_id": "water-minimum",
-        "task_spec_sha256": "a" * 64,
-        "hessian_node_id": "hess-optimized",
-        "stationary_point_kind": "minimum",
-        "expected_imaginary_mode_count": 1,
-        "imaginary_mode_cutoff_cm1": 20.0,
-        "require_finite_modes": True,
-        "require_symmetric_hessian": True,
-    }
-    with pytest.raises(ContractError, match="point kind"):
-        StationaryPointValidationPolicyV1(
-            **body, policy_sha256=canonical_sha256(body)
-        )
-
-
-def test_stationary_point_policy_binds_exact_plan_task_and_hessian_node():
-    plan = _water_plan()
-    resources = build_execution_resource_spec(
-        execution_target="run",
-        cores=4,
-        memory_gb=4,
-        gpu_count=0,
-        scratch_policy="none",
-        node_timeout_seconds=600,
-    )
-    materialized = _materialized(
-        plan, resource_sha256=resources.resource_sha256
-    )
-    policy_body = {
-        "schema_version": "chemsmart.stationary-point-policy.v1",
-        "policy_id": "water-minimum",
-        "task_spec_sha256": plan.task_spec_sha256,
-        "hessian_node_id": "hess-optimized",
-        "stationary_point_kind": "minimum",
-        "expected_imaginary_mode_count": 0,
-        "imaginary_mode_cutoff_cm1": 20.0,
-        "require_finite_modes": True,
-        "require_symmetric_hessian": True,
-    }
-    policy = StationaryPointValidationPolicyV1(
-        **policy_body, policy_sha256=canonical_sha256(policy_body)
-    )
-    approval = build_frozen_workflow_approval(
-        approval_id="water-policy-approval",
-        plan=plan,
-        materialized_workflow=materialized,
-        resources=resources,
-        environment_identity_sha256s=("f" * 64,),
-        stationary_point_policy=policy,
-    )
-
-    _validate_stationary_point_policy_binding(
-        approval,
-        policy,
-        plan=plan,
-        hessian_node_id="hess-optimized",
-        require_for_hessian=True,
-    )
-    with pytest.raises(ContractError, match="another Hessian node"):
-        _validate_stationary_point_policy_binding(
-            approval,
-            policy,
-            plan=plan,
-            hessian_node_id="different-hess",
-            require_for_hessian=True,
-        )
 
 
 def test_event_store_consumes_approval_once_and_replays_node_frontier(

@@ -1196,49 +1196,6 @@ def build_materialized_workflow(
     )
 
 
-@dataclass(frozen=True)
-class StationaryPointValidationPolicyV1:
-    schema_version: str
-    policy_id: str
-    task_spec_sha256: str
-    hessian_node_id: str
-    stationary_point_kind: str
-    expected_imaginary_mode_count: int
-    imaginary_mode_cutoff_cm1: float
-    require_finite_modes: bool
-    require_symmetric_hessian: bool
-    policy_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.schema_version != "chemsmart.stationary-point-policy.v1":
-            raise ContractError("unsupported stationary point policy schema")
-        require_identifier(self.policy_id, "policy_id")
-        require_identifier(self.hessian_node_id, "hessian_node_id")
-        require_sha256(self.task_spec_sha256, "task_spec_sha256")
-        if self.stationary_point_kind not in {"minimum", "transition_state"}:
-            raise ContractError("unsupported stationary point kind")
-        expected = 0 if self.stationary_point_kind == "minimum" else 1
-        if self.expected_imaginary_mode_count != expected:
-            raise ContractError(
-                "imaginary-mode expectation differs from point kind"
-            )
-        if self.imaginary_mode_cutoff_cm1 <= 0:
-            raise ContractError("imaginary-mode cutoff must be positive")
-        body = {
-            "schema_version": self.schema_version,
-            "policy_id": self.policy_id,
-            "task_spec_sha256": self.task_spec_sha256,
-            "hessian_node_id": self.hessian_node_id,
-            "stationary_point_kind": self.stationary_point_kind,
-            "expected_imaginary_mode_count": self.expected_imaginary_mode_count,
-            "imaginary_mode_cutoff_cm1": self.imaginary_mode_cutoff_cm1,
-            "require_finite_modes": self.require_finite_modes,
-            "require_symmetric_hessian": self.require_symmetric_hessian,
-        }
-        if self.policy_sha256 != canonical_sha256(body):
-            raise ContractError("stationary point policy digest mismatch")
-
-
 __all__ = [
     "ArtifactInputIntentV1",
     "ArtifactOutputIntentV1",
@@ -1253,7 +1210,6 @@ __all__ = [
     "ScientificWorkflowEdgeV2",
     "ScientificWorkflowNodeV2",
     "ScientificWorkflowPlanV2",
-    "StationaryPointValidationPolicyV1",
     "build_command_workflow_draft",
     "build_command_workflow_spec",
     "build_materialized_workflow",

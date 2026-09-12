@@ -382,7 +382,6 @@ def test_deferred_admission_builds_existing_approval_contracts(tmp_path):
         materialized.materialized_sha256: materialized
     }
     host.approved_workspace = tmp_path.resolve()
-    host.stationary_point_policy = None
     host.workflow_drafts = {}
     host.workflow_execution_approval = None
     host.frozen_workflow_approval = None

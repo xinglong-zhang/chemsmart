@@ -127,13 +127,10 @@ def _run_receipt_state(
     if fake:
         return "previewed"
     if result_validation_state == "validated":
+        # A green Hessian is validated: the runner certifies the artifact's
+        # invariants, and which stationary point the geometry is remains
+        # the agent host's program-neutral verdict, never a runner word.
         return "validated"
-    if engine_complete and result_validation_state == "unclassified":
-        # A direct Hessian command can prove an intact, completed engine
-        # artifact without proving whether that geometry is a minimum or a
-        # transition state.  Preserve the useful execution outcome without
-        # fabricating an expected imaginary-mode count.
-        return "engine_complete"
     return "failed"
 
 

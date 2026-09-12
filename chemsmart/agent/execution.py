@@ -47,7 +47,6 @@ from chemsmart.agent.workflows import (
     MaterializedWorkflowV1,
     ScientificWorkflowEdgeV2,
     ScientificWorkflowPlanV2,
-    StationaryPointValidationPolicyV1,
 )
 
 
@@ -4605,15 +4604,12 @@ def _typed_result_validation_findings(
         return ()
 
     state = str(result_validation.get("state") or "").strip().lower()
-    downstream_hessian_classification = bool(
-        observations.get("runner_validation_delegation")
-        == "downstream_scientific_analysis"
-        and state == "unclassified"
-    )
     derived: list[str] = []
-    if state not in {"valid", "validated"} and not (
-        downstream_hessian_classification
-    ):
+    # ``unclassified`` is a word only historical PySCF Hessian receipts
+    # carry: the runner's per-plan classification policy was retired
+    # (2026-09-13) and the host judges the order itself; those records
+    # were green on every invariant and stay so on re-read.
+    if state not in {"valid", "validated", "unclassified"}:
         derived.append("result_validation.state_not_validated")
 
     embedded = result_validation.get("findings", ())
@@ -6901,7 +6897,6 @@ def build_frozen_workflow_approval(
     environment_identity_sha256s: Sequence[str],
     future_node_environment_identity_sha256s: Mapping[str, str] | None = None,
     environment_identity_by_receipt: Mapping[str, str] | None = None,
-    stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
     non_executable_node_ids: Sequence[str] = (),
     scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None,
 ) -> FrozenWorkflowApprovalV1:
@@ -7052,20 +7047,6 @@ def build_frozen_workflow_approval(
         raise ContractError(
             "frozen preview environment is absent from approval evidence"
         )
-    if stationary_point_policy is not None:
-        if stationary_point_policy.task_spec_sha256 != plan.task_spec_sha256:
-            raise ContractError(
-                "stationary point policy belongs to another task"
-            )
-        if stationary_point_policy.hessian_node_id not in planned_by_id:
-            raise ContractError(
-                "stationary point policy names an unknown node"
-            )
-        if stationary_point_policy.hessian_node_id not in executed:
-            raise ContractError(
-                "execution stationary point policy requires an executable "
-                "Hessian node"
-            )
     producer_digests = tuple(
         sorted(item.scientific_edge_sha256 for item in producer_rules)
     )
@@ -7099,11 +7080,9 @@ def build_frozen_workflow_approval(
             )
         ),
         "producer_edge_sha256s": producer_digests,
-        "stationary_point_policy_sha256": (
-            stationary_point_policy.policy_sha256
-            if stationary_point_policy is not None
-            else ""
-        ),
+        # Retired mechanism, retained digest field: every approval on disk
+        # hashes a body with this key, always empty, and stays valid.
+        "stationary_point_policy_sha256": "",
         "status": "approved",
         "materialized_preview_bindings": preview_bindings,
         "producer_edge_rules": producer_rules,
@@ -7550,7 +7529,11 @@ class WorkflowExecutionReviewV1:
     execution_envelope: dict[str, Any]
     environment_bindings: tuple[WorkflowEnvironmentBindingV1, ...]
     node_reviews: tuple[WorkflowExecutionNodeReviewV1, ...]
-    stationary_point_policy: StationaryPointValidationPolicyV1 | None
+    #: Retired (2026-09-13): the per-plan stationary-point policy was
+    #: constructed from no model input and consumed by no organ; the host
+    #: judges a Hessian's order itself. The field stays in the digest body
+    #: so every review on disk keeps its digest, and it is always None.
+    stationary_point_policy: Any
     status: str
     review_sha256: str
     #: Plan nodes this release cannot execute.  They stay in the scientific
@@ -7798,20 +7781,10 @@ class WorkflowExecutionReviewV1:
         ):
             raise ContractError("node review server profile differs")
         if self.stationary_point_policy is not None:
-            if self.stationary_point_policy.task_spec_sha256 != (
-                self.scientific_plan.task_spec_sha256
-            ):
-                raise ContractError(
-                    "stationary-point policy belongs to another task"
-                )
-            if (
-                self.stationary_point_policy.hessian_node_id
-                not in executed_ids
-            ):
-                raise ContractError(
-                    "execution stationary-point policy requires an executable "
-                    "Hessian node"
-                )
+            raise ContractError(
+                "the per-plan stationary-point policy was retired; a review "
+                "carrying one was not built by this host"
+            )
         if self.review_sha256 != canonical_sha256(self._body()):
             raise ContractError("workflow execution review digest mismatch")
 
@@ -7845,7 +7818,6 @@ def build_workflow_execution_review(
     execution_envelope: Mapping[str, Any],
     environment_bindings: Sequence[WorkflowEnvironmentBindingV1],
     node_reviews: Sequence[WorkflowExecutionNodeReviewV1],
-    stationary_point_policy: StationaryPointValidationPolicyV1 | None = None,
     non_executable_node_ids: Sequence[str] = (),
     scientific_toolchain_plan: ScientificToolchainPlanV1 | None = None,
     consulted_domain_knowledge: Sequence[Mapping[str, Any]] = (),
@@ -7871,7 +7843,7 @@ def build_workflow_execution_review(
         "execution_envelope": canonical_data(dict(execution_envelope)),
         "environment_bindings": tuple(environment_bindings),
         "node_reviews": tuple(node_reviews),
-        "stationary_point_policy": stationary_point_policy,
+        "stationary_point_policy": None,
         "status": "unapproved",
     }
     if non_executable:
@@ -7984,7 +7956,8 @@ class WorkflowExecutionApprovalBundleV1:
     execution_envelope: dict[str, Any]
     approved_environment_identities: tuple[str, ...]
     node_reviews: tuple[WorkflowExecutionNodeReviewV1, ...]
-    stationary_point_policy: StationaryPointValidationPolicyV1 | None
+    #: Retired; always None, kept in the digest body (see the review).
+    stationary_point_policy: Any
     one_shot: bool
     status: str
     bundle_sha256: str
@@ -8146,14 +8119,12 @@ class WorkflowExecutionApprovalBundleV1:
             raise ContractError(
                 "workflow and frozen approval producer edges differ"
             )
-        policy_sha256 = (
-            self.stationary_point_policy.policy_sha256
-            if self.stationary_point_policy is not None
-            else ""
-        )
-        if frozen.stationary_point_policy_sha256 != policy_sha256:
+        if self.stationary_point_policy is not None or (
+            frozen.stationary_point_policy_sha256
+        ):
             raise ContractError(
-                "execution bundle stationary-point policy differs from approval"
+                "the per-plan stationary-point policy was retired; a bundle "
+                "or approval carrying one was not built by this host"
             )
         toolchain_sha256 = (
             self.scientific_toolchain_plan.plan_sha256
@@ -8177,15 +8148,6 @@ class WorkflowExecutionApprovalBundleV1:
                 raise ContractError(
                     "bundle toolchain plan covers different calculation nodes"
                 )
-        if (
-            self.stationary_point_policy is not None
-            and self.stationary_point_policy.hessian_node_id
-            not in executed_ids
-        ):
-            raise ContractError(
-                "execution stationary-point policy requires an executable "
-                "Hessian node"
-            )
         node_ids = tuple(item.node_id for item in self.node_reviews)
         if node_ids != tuple(sorted(set(node_ids))):
             raise ContractError("execution bundle node reviews must be unique")
@@ -8369,7 +8331,6 @@ def approve_workflow_execution_review(
         environment_identity_sha256s=identities,
         future_node_environment_identity_sha256s=future_environments,
         environment_identity_by_receipt=identity_by_receipt,
-        stationary_point_policy=review.stationary_point_policy,
         non_executable_node_ids=review.non_executable_node_ids,
         scientific_toolchain_plan=review.scientific_toolchain_plan,
     )
@@ -8392,7 +8353,7 @@ def approve_workflow_execution_review(
         "execution_envelope": review.execution_envelope,
         "approved_environment_identities": identities,
         "node_reviews": review.node_reviews,
-        "stationary_point_policy": review.stationary_point_policy,
+        "stationary_point_policy": None,
         "one_shot": True,
         "status": "approved",
     }

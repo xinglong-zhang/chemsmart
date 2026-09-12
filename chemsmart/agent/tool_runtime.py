@@ -254,7 +254,6 @@ from chemsmart.agent.workflows import (
     ScientificWorkflowEdgeV2,
     ScientificWorkflowNodeV2,
     ScientificWorkflowPlanV2,
-    StationaryPointValidationPolicyV1,
     build_command_workflow_draft,
     build_materialized_workflow,
     build_scientific_workflow_plan,
@@ -947,148 +946,6 @@ def _pyscf_result_receipt_expectation(
         }
     )
     return expected
-
-
-def _validate_stationary_point_policy_binding(
-    frozen_approval: FrozenWorkflowApprovalV1 | None,
-    policy: StationaryPointValidationPolicyV1 | None,
-    *,
-    plan: ScientificWorkflowPlanV2 | None = None,
-    hessian_node_id: str = "",
-    require_for_hessian: bool = False,
-) -> None:
-    """Require a task-, plan-, and node-bound Hessian policy."""
-
-    if frozen_approval is not None and not isinstance(
-        frozen_approval, FrozenWorkflowApprovalV1
-    ):
-        raise ContractError(
-            "stationary-point binding requires a real approval"
-        )
-    if policy is not None and not isinstance(
-        policy, StationaryPointValidationPolicyV1
-    ):
-        raise ContractError("stationary-point binding requires a real policy")
-    if frozen_approval is None:
-        if policy is not None:
-            raise ContractError(
-                "stationary-point policy requires a frozen approval"
-            )
-        if require_for_hessian:
-            raise ContractError(
-                "Hessian execution requires a frozen workflow approval"
-            )
-        return
-    approved_sha256 = frozen_approval.stationary_point_policy_sha256
-    if not approved_sha256:
-        if policy is not None:
-            raise ContractError(
-                "unapproved stationary-point policy was supplied"
-            )
-        if require_for_hessian:
-            raise ContractError(
-                "Hessian execution requires an approved stationary-point policy"
-            )
-        return
-    if policy is None or policy.policy_sha256 != approved_sha256:
-        raise ContractError("frozen stationary-point policy is unavailable")
-    if plan is None or not isinstance(plan, ScientificWorkflowPlanV2):
-        raise ContractError(
-            "stationary-point policy requires its exact scientific plan"
-        )
-    if plan.plan_sha256 != frozen_approval.plan_sha256:
-        raise ContractError(
-            "stationary-point policy plan differs from approval"
-        )
-    if policy.task_spec_sha256 != frozen_approval.task_spec_sha256 or (
-        policy.task_spec_sha256 != plan.task_spec_sha256
-    ):
-        raise ContractError(
-            "stationary-point policy task differs from approval"
-        )
-    if policy.hessian_node_id not in frozen_approval.approved_node_ids:
-        raise ContractError("stationary-point Hessian node is not approved")
-    matching_nodes = tuple(
-        node for node in plan.nodes if node.node_id == policy.hessian_node_id
-    )
-    if len(matching_nodes) != 1 or matching_nodes[0].stage != "hess":
-        raise ContractError("stationary-point policy must bind a Hessian node")
-    if hessian_node_id and policy.hessian_node_id != hessian_node_id:
-        raise ContractError(
-            "stationary-point policy targets another Hessian node"
-        )
-    if policy.require_finite_modes is not True:
-        raise ContractError(
-            "stationary-point policy must require finite modes"
-        )
-    if policy.require_symmetric_hessian is not True:
-        raise ContractError(
-            "stationary-point policy must require a symmetric Hessian"
-        )
-
-
-def _runner_defers_hessian_classification(
-    *,
-    run_receipt: Mapping[str, Any],
-    jobtype: str,
-    hessian_node_id: str,
-    engine_complete: bool,
-    stationary_point_policy: StationaryPointValidationPolicyV1 | None,
-    approved_stationary_point_policy_sha256: str,
-) -> bool:
-    """Admit a complete HESS while leaving stationary-point meaning explicit.
-
-    The CLI runner owns engine/artifact invariants but does not own an
-    imaginary-mode expectation.  A Hessian is still a valid computed artifact
-    when its minimum/transition-state classification has not been prescribed
-    in advance.  In that case the scientific DAG must classify the modes
-    downstream.  If a policy *is* supplied, it must remain exactly bound.
-    """
-
-    if jobtype != "hess" or not hessian_node_id:
-        return False
-    if stationary_point_policy is None:
-        if approved_stationary_point_policy_sha256:
-            return False
-    else:
-        if not isinstance(
-            stationary_point_policy, StationaryPointValidationPolicyV1
-        ):
-            return False
-        if stationary_point_policy.hessian_node_id != hessian_node_id:
-            return False
-        if (
-            not approved_stationary_point_policy_sha256
-            or stationary_point_policy.policy_sha256
-            != approved_stationary_point_policy_sha256
-        ):
-            return False
-    result_validation = run_receipt.get("result_validation")
-    if not isinstance(result_validation, Mapping):
-        return False
-    frequency_validation = result_validation.get("frequency_validation")
-    if not isinstance(frequency_validation, Mapping):
-        return False
-    return bool(
-        engine_complete
-        and run_receipt.get("engine_complete") is True
-        and run_receipt.get("child_returncode") == 0
-        and run_receipt.get("state") == "engine_complete"
-        and run_receipt.get("scientifically_validated") is False
-        and run_receipt.get("scientific_validation_state") == "unclassified"
-        and not (run_receipt.get("findings") or ())
-        and result_validation.get("state") == "unclassified"
-        and not (result_validation.get("findings") or ())
-        and frequency_validation.get("stationary_point_classification")
-        == "unclassified"
-        and (
-            stationary_point_policy is None
-            or (
-                stationary_point_policy.require_finite_modes is True
-                and stationary_point_policy.require_symmetric_hessian is True
-            )
-        )
-    )
 
 
 def _spin_square_observation(output: Any, multiplicity: Any) -> dict[str, Any]:
@@ -1960,9 +1817,6 @@ class CommandCompiledToolHostV1:
         prior_anomaly_observations: Sequence[Mapping[str, Any]] = (),
         approved_environment_identities: tuple[str, ...] = (),
         materialized_workflow: MaterializedWorkflowV1 | None = None,
-        stationary_point_policy: (
-            StationaryPointValidationPolicyV1 | None
-        ) = None,
         approved_requested_observable_declarations: Sequence[
             Mapping[str, Any]
         ] = (),
@@ -2107,12 +1961,6 @@ class CommandCompiledToolHostV1:
             else int(engine_calls_remaining)
         )
         self._bounded_execution_started_at = time.monotonic()
-        self.stationary_point_policy = stationary_point_policy
-        _validate_stationary_point_policy_binding(
-            self.frozen_workflow_approval,
-            self.stationary_point_policy,
-            plan=scientific_workflow_plan,
-        )
         self.preview_server = str(preview_server)
         self.execution_server = str(execution_server)
         self.execution_server_file_sha256 = str(execution_server_file_sha256)
@@ -12094,21 +11942,6 @@ class CommandCompiledToolHostV1:
             ),
             capability_environment_receipt=capability_environment,
             pyscf_engine_observation=pyscf_engine,
-            stationary_point_policy=(
-                self.stationary_point_policy
-                if self.stationary_point_policy is not None
-                and self.stationary_point_policy.hessian_node_id == node_id
-                else None
-            ),
-            approved_stationary_point_policy_sha256=(
-                frozen_approval.stationary_point_policy_sha256
-                if self.stationary_point_policy is not None
-                and self.stationary_point_policy.hessian_node_id == node_id
-                else ""
-            ),
-            approved_hessian_node_id=(
-                node_id if approved_node.jobtype == "hess" else ""
-            ),
             process_observation=process_observation,
         )
         staged_auxiliary_findings = _staged_auxiliary_input_findings(
@@ -12146,12 +11979,8 @@ class CommandCompiledToolHostV1:
             environment_validation_sha256=(
                 evaluation.environment_validation_sha256
             ),
-            stationary_point_policy_sha256=(
-                self.stationary_point_policy.policy_sha256
-                if approved_node.jobtype == "hess"
-                and self.stationary_point_policy is not None
-                else ""
-            ),
+            # Retired mechanism, retained digest field (always empty).
+            stationary_point_policy_sha256="",
         )
         self.result_validation_receipts[
             result_validation_receipt.receipt_sha256
@@ -13678,7 +13507,6 @@ class CommandCompiledToolHostV1:
             node_reviews=tuple(
                 sorted(node_reviews, key=lambda item: item.node_id)
             ),
-            stationary_point_policy=self.stationary_point_policy,
             non_executable_node_ids=tuple(sorted(non_executable_ids)),
             scientific_toolchain_plan=self._toolchain_plan_for_review(plan),
             requested_observable_declarations=tuple(
@@ -14035,7 +13863,6 @@ class CommandCompiledToolHostV1:
             environment_identity_sha256s=tuple(sorted(environment_identities)),
             future_node_environment_identity_sha256s=future_environments,
             environment_identity_by_receipt=receipt_identity_map,
-            stationary_point_policy=self.stationary_point_policy,
         )
         self.workflow_execution_approval = approval
         self.frozen_workflow_approval = frozen
@@ -14635,11 +14462,6 @@ class CommandCompiledToolHostV1:
             EnvironmentCapabilityReceiptV1 | None
         ) = None,
         pyscf_engine_observation: _PySCFEngineObservation | None = None,
-        stationary_point_policy: (
-            StationaryPointValidationPolicyV1 | None
-        ) = None,
-        approved_stationary_point_policy_sha256: str = "",
-        approved_hessian_node_id: str = "",
         process_observation: ProcessObservationV1 | None = None,
     ) -> _ExecutionValidationEvaluation:
         findings: list[str] = []
@@ -14716,39 +14538,21 @@ class CommandCompiledToolHostV1:
                 )
                 observation["runner_findings"] = runner_findings
                 observation["runner_state"] = run_receipt.get("state")
-                deferred_hessian_classification = (
-                    _runner_defers_hessian_classification(
-                        run_receipt=run_receipt,
-                        jobtype=jobtype,
-                        hessian_node_id=approved_hessian_node_id,
-                        engine_complete=engine.engine_complete,
-                        stationary_point_policy=stationary_point_policy,
-                        approved_stationary_point_policy_sha256=(
-                            approved_stationary_point_policy_sha256
-                        ),
+                # The runner certifies the artifact's invariants and says
+                # validated; the order of a stationary point is the host's
+                # program-neutral verdict below, for every program alike.
+                # A deferral to a "downstream classification" that no organ
+                # performed used to admit an unclassified Hessian here.
+                if run_receipt.get("scientifically_validated") is not True:
+                    findings.append(
+                        "pyscf.run_receipt.scientific_validation_failed"
                     )
-                )
-                if deferred_hessian_classification:
-                    observation["runner_validation_delegation"] = (
-                        "approved_stationary_point_policy"
-                        if stationary_point_policy is not None
-                        else "downstream_scientific_analysis"
+                elif runner_findings:
+                    findings.append(
+                        "pyscf.run_receipt.validation_state_inconsistent"
                     )
-                else:
-                    observation["runner_validation_delegation"] = "none"
-                if not deferred_hessian_classification:
-                    if run_receipt.get("scientifically_validated") is not True:
-                        findings.append(
-                            "pyscf.run_receipt.scientific_validation_failed"
-                        )
-                    elif runner_findings:
-                        findings.append(
-                            "pyscf.run_receipt.validation_state_inconsistent"
-                        )
-                    if run_receipt.get("state") != "validated":
-                        findings.append(
-                            "pyscf.run_receipt.state_not_validated"
-                        )
+                if run_receipt.get("state") != "validated":
+                    findings.append("pyscf.run_receipt.state_not_validated")
                 if run_receipt.get("state") == "validated" and (
                     run_receipt.get("scientifically_validated") is not True
                     or runner_findings
@@ -14841,27 +14645,17 @@ class CommandCompiledToolHostV1:
                             else None
                         ),
                         expected_receipt=expected_receipt,
-                        stationary_point_policy=stationary_point_policy,
                     )
                     observation["result_validation"] = canonical_data(
                         result_validation
                     )
-                    if stationary_point_policy is not None:
-                        observation["stationary_point_policy_sha256"] = (
-                            stationary_point_policy.policy_sha256
-                        )
                     findings.extend(
                         str(item.rule_id)
                         for item in result_validation["findings"]
                     )
                     result_state = result_validation.get("state")
-                    unclassified_for_downstream = bool(
-                        deferred_hessian_classification
-                        and result_state == "unclassified"
-                    )
                     if (
                         result_state != "validated"
-                        and not unclassified_for_downstream
                         and not result_validation.get("findings")
                     ):
                         findings.append(
@@ -14883,12 +14677,6 @@ class CommandCompiledToolHostV1:
                 except Exception as exc:
                     observation["pyscf_result_error_type"] = type(exc).__name__
                     findings.append("pyscf.result.unreadable")
-            elif (
-                run_receipt is not None
-                and observation.get("runner_validation_delegation")
-                == "approved_stationary_point_policy"
-            ):
-                findings.append("pyscf.result.policy_validation_unavailable")
         elif exit_status != 0 and program not in {
             "orca",
             "gaussian",

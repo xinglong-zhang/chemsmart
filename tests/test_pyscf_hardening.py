@@ -276,16 +276,31 @@ def test_fake_result_is_explicitly_not_evaluated_and_has_no_fake_chemistry(
     assert tuple(results) == ("positions",)
 
 
-def test_unclassified_direct_hessian_preserves_engine_completion_only():
-    state = _run_receipt_state(
-        fake=False,
-        findings=[],
-        engine_complete=True,
-        result_validation_state="unclassified",
-    )
+def test_a_green_hessian_is_validated_and_a_stale_unclassified_word_is_not():
+    """The runner certifies invariants; the order of the stationary point
+    is the agent host's program-neutral verdict. ``unclassified`` was the
+    runner's word for "no per-plan policy told me what to expect", and
+    that policy was retired: no new receipt carries it, and a stale one
+    does not read as validated."""
 
-    assert state == "engine_complete"
-    assert state != "validated"
+    assert (
+        _run_receipt_state(
+            fake=False,
+            findings=[],
+            engine_complete=True,
+            result_validation_state="validated",
+        )
+        == "validated"
+    )
+    assert (
+        _run_receipt_state(
+            fake=False,
+            findings=[],
+            engine_complete=True,
+            result_validation_state="unclassified",
+        )
+        == "failed"
+    )
 
 
 def test_nonzero_pyscf_child_status_is_preserved():

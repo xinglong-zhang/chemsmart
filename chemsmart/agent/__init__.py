@@ -42,7 +42,6 @@ from chemsmart.agent.workflows import (
     CommandWorkflowSpecV1,
     MaterializedWorkflowV1,
     ScientificWorkflowPlanV2,
-    StationaryPointValidationPolicyV1,
 )
 
 __all__ = [
@@ -77,7 +76,6 @@ __all__ = [
     "ResolvedProgramBindingV1",
     "ScientificToolchainPlanV1",
     "ScientificWorkflowPlanV2",
-    "StationaryPointValidationPolicyV1",
     "WorkflowRunStateV1",
     "ValidatedDataEdgeBindingV1",
 ]

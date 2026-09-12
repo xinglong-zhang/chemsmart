@@ -129,7 +129,6 @@ RULE_RESULT_HESSIAN_CONSISTENCY_UNVERIFIED = (
     "pyscf.result.hessian_consistency_unverified"
 )
 RULE_RESULT_SETTINGS = "pyscf.result.settings_identity_invalid"
-RULE_RESULT_POLICY = "pyscf.result.stationary_point_policy_invalid"
 RULE_RESULT_DTYPE = "pyscf.result.nonnumeric_physical_array"
 RULE_RESULT_OCCUPATION = "pyscf.result.orbital_occupation_invalid"
 RULE_RESULT_SPIN_DIAGNOSTIC = "pyscf.result.spin_diagnostic_invalid"
@@ -1671,17 +1670,16 @@ def validate_pyscf_result(
     expected_symbols,
     expected_positions=None,
     expected_receipt=None,
-    stationary_point_policy=None,
 ):
     """Apply one scientific result contract to CLI and agent executions.
 
     The validator is intentionally pure: it reads the immutable HDF5 artifact
     and compares it with host-owned expectations, but launches no chemistry and
-    mutates no state. ``stationary_point_policy`` is duck-typed so the program
-    layer does not depend on agent contracts; when supplied, its approved
-    imaginary-mode count and cutoff are applied. Hessian symmetry, finite
-    physical arrays, and result identity are unconditional engine/artifact
-    invariants and cannot be weakened by policy.
+    mutates no state. Hessian symmetry, finite physical arrays, and result
+    identity are engine/artifact invariants; the order of the stationary
+    point a Hessian describes is not the runner's word -- the agent host
+    judges it on one program-neutral rule -- so a green Hessian is
+    ``validated`` here whatever its frequencies say.
     """
 
     jobtype = _normalize_result_jobtype(expected_jobtype)
@@ -2195,10 +2193,6 @@ def validate_pyscf_result(
     findings.extend(spin_findings)
     advisories.extend(spin_advisories)
 
-    policy, policy_findings = _result_stationary_point_policy(
-        stationary_point_policy, jobtype=jobtype
-    )
-    findings.extend(policy_findings)
     if jobtype == "hess":
         hessian = _result_array(results.get("hessian"))
         matrix = _hessian_matrix(hessian, len(expected_symbols))
@@ -2294,8 +2288,6 @@ def validate_pyscf_result(
             symbols=observed_symbols,
             positions=results.get("positions"),
             frequencies=results.get("vibrational_frequencies"),
-            expected_imaginary_modes=policy["expected_imaginary_mode_count"],
-            imaginary_mode_cutoff_cm1=policy["imaginary_mode_cutoff_cm1"],
         )
         findings.extend(frequency["findings"])
         expected_modes = frequency.get("expected_mode_count")
@@ -2363,16 +2355,7 @@ def validate_pyscf_result(
     validation_state = (
         "failed"
         if findings
-        else (
-            "qualified_legacy"
-            if legacy_evidence
-            else (
-                "unclassified"
-                if jobtype == "hess"
-                and policy["classification_state"] != "classified"
-                else "validated"
-            )
-        )
+        else ("qualified_legacy" if legacy_evidence else "validated")
     )
     return {
         "schema_version": RESULT_VALIDATION_SCHEMA_VERSION,
@@ -2385,7 +2368,6 @@ def validate_pyscf_result(
         "symbols": observed_symbols,
         "requested_settings_sha256": spec.get("requested_settings_sha256"),
         "applied_settings_sha256": spec.get("applied_settings_sha256"),
-        "stationary_point_policy": policy,
         "geometry_validation": geometry_observation,
         "electronic_state_validation": electronic_state_observation,
         "spin_diagnostic_validation": spin_diagnostic_observation,
@@ -2463,78 +2445,6 @@ def _verify_result_settings_identity(spec, provenance):
                 )
             )
     return findings
-
-
-def _result_stationary_point_policy(policy, *, jobtype):
-    resolved = {
-        "policy_sha256": "",
-        "classification_state": (
-            "unclassified" if jobtype == "hess" else "not_applicable"
-        ),
-        "expected_imaginary_mode_count": None,
-        "imaginary_mode_cutoff_cm1": None,
-        "require_finite_modes": True,
-        "require_symmetric_hessian": True,
-    }
-    if policy is None:
-        return resolved, []
-    findings = []
-    if jobtype != "hess":
-        findings.append(
-            _result_finding(
-                RULE_RESULT_POLICY,
-                "stationary_point_policy",
-                "policy used only for a Hessian node",
-                jobtype,
-                "approval:stationary_point_policy",
-            )
-        )
-        return resolved, findings
-    expected = _member(policy, "expected_imaginary_mode_count", _MISSING)
-    cutoff = _member(policy, "imaginary_mode_cutoff_cm1", _MISSING)
-    finite = _member(policy, "require_finite_modes", _MISSING)
-    symmetric = _member(policy, "require_symmetric_hessian", _MISSING)
-    valid = (
-        not isinstance(expected, bool)
-        and isinstance(expected, Integral)
-        and int(expected) >= 0
-        and not isinstance(cutoff, bool)
-        and isinstance(cutoff, Real)
-        and math.isfinite(float(cutoff))
-        and float(cutoff) >= 0
-        and finite is True
-        and symmetric is True
-    )
-    if not valid:
-        findings.append(
-            _result_finding(
-                RULE_RESULT_POLICY,
-                "stationary_point_policy",
-                (
-                    "typed mode count, finite cutoff, and invariant finite/"
-                    "symmetric requirements set to true"
-                ),
-                {
-                    "expected_imaginary_mode_count": expected,
-                    "imaginary_mode_cutoff_cm1": cutoff,
-                    "require_finite_modes": finite,
-                    "require_symmetric_hessian": symmetric,
-                },
-                "approval:stationary_point_policy",
-            )
-        )
-        return resolved, findings
-    resolved.update(
-        {
-            "policy_sha256": str(_member(policy, "policy_sha256", "")),
-            "classification_state": "classified",
-            "expected_imaginary_mode_count": int(expected),
-            "imaginary_mode_cutoff_cm1": float(cutoff),
-            "require_finite_modes": finite,
-            "require_symmetric_hessian": symmetric,
-        }
-    )
-    return resolved, findings
 
 
 def _hessian_matrix(values, atom_count):

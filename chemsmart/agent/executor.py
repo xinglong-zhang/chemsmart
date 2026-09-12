@@ -2095,7 +2095,6 @@ def _execution_inputs_from_bundle(
         "approved_environment_identities": (
             bundle.approved_environment_identities
         ),
-        "stationary_point_policy": bundle.stationary_point_policy,
         "approved_scientific_toolchain_plan": getattr(
             bundle, "scientific_toolchain_plan", None
         ),

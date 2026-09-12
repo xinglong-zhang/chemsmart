@@ -129,7 +129,6 @@ from chemsmart.agent.workflows import (
     ScientificWorkflowEdgeV2,
     ScientificWorkflowNodeV2,
     ScientificWorkflowPlanV2,
-    StationaryPointValidationPolicyV1,
 )
 from chemsmart.analysis.result_quantities import (
     QuantityExtractionError,
@@ -4146,21 +4145,21 @@ def _parse_scientific_toolchain_plan(
         ) from exc
 
 
-def _parse_stationary_point_policy(
-    value: Any,
-) -> StationaryPointValidationPolicyV1 | None:
-    if value is None:
-        return None
-    if not isinstance(value, Mapping):
+def _require_no_stationary_point_policy(value: Any) -> None:
+    """The per-plan stationary-point policy was retired (2026-09-13).
+
+    It was constructed from no model input and consumed by no organ; the
+    host judges a Hessian's order itself. The record field stays (always
+    null) so digests on disk hold; a record carrying a policy was not
+    written by this host.
+    """
+
+    if value is not None:
         raise ContractError(
-            "stationary-point policy must be an object or null"
+            "the stationary-point policy was retired; this record carries "
+            "one and was not written by this host"
         )
-    try:
-        return StationaryPointValidationPolicyV1(**dict(value))
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ContractError(
-            "stationary-point policy does not match the v1 schema"
-        ) from exc
+    return None
 
 
 def _parse_bounded_execution_envelope_record(
@@ -4275,7 +4274,7 @@ def load_workflow_execution_review(
             WorkflowExecutionNodeReviewV1(**dict(item))
             for item in raw.get("node_reviews", ())
         )
-        raw["stationary_point_policy"] = _parse_stationary_point_policy(
+        raw["stationary_point_policy"] = _require_no_stationary_point_policy(
             raw.get("stationary_point_policy")
         )
         if raw.get("scientific_toolchain_plan") is not None:
@@ -4377,7 +4376,7 @@ def load_workflow_execution_approval_bundle(
             WorkflowExecutionNodeReviewV1(**dict(item))
             for item in raw.get("node_reviews", ())
         )
-        raw["stationary_point_policy"] = _parse_stationary_point_policy(
+        raw["stationary_point_policy"] = _require_no_stationary_point_policy(
             raw.get("stationary_point_policy")
         )
         if raw.get("scientific_toolchain_plan") is not None:

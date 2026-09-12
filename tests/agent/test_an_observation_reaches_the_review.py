@@ -35,7 +35,6 @@ def _rebuilt(review, node_observations):
         execution_envelope=review.execution_envelope,
         environment_bindings=review.environment_bindings,
         node_reviews=review.node_reviews,
-        stationary_point_policy=review.stationary_point_policy,
         node_observations=node_observations,
     )
 
