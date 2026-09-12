@@ -781,11 +781,22 @@ if functional:
             laplacian = bool(checker(functional))
     except Exception:
         pass
+    nlc = None
+    try:
+        from pyscf.dft import libxc
+
+        nlc_checker = getattr(libxc, "is_nlc", None)
+        if callable(nlc_checker):
+            nlc = bool(nlc_checker(functional))
+    except Exception:
+        pass
     functional_evidence = {
         "double_hybrid": any(marker in normal for marker in markers),
     }
     if laplacian is not None:
         functional_evidence["laplacian_meta_gga"] = laplacian
+    if nlc is not None:
+        functional_evidence["nlc"] = nlc
     result["functional_metadata"] = {
         str(functional): functional_evidence
     }

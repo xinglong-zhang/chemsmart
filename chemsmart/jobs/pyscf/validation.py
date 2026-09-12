@@ -108,6 +108,8 @@ RULE_PROVENANCE_APPLIED_DIGEST = (
 )
 RULE_PROVENANCE_MATERIALIZATION = "pyscf.provenance.materialization_invalid"
 RULE_RESULT_UNIT = "pyscf.result.unit_missing_or_mismatched"
+RULE_HESSIAN_REFERENCE = "pyscf.hessian.reference_unsupported"
+RULE_HESSIAN_NLC_OPEN_SHELL = "pyscf.hessian.nlc_open_shell_unsupported"
 RULE_TD_PREVIEW_ONLY = "pyscf.td.preview_only_capability"
 RULE_TD_GPU_UNSUPPORTED = "pyscf.td.gpu_preview_unsupported"
 RULE_FREQUENCY_GEOMETRY = "pyscf.frequency.geometry_invalid"
@@ -271,6 +273,7 @@ def preflight(settings, molecule, environment) -> list[PySCFViolation]:
         _check_dispersion,
         _check_gpu,
         _check_electrons,
+        _check_hessian_support,
     )
     for check in checks:
         try:
@@ -1382,20 +1385,37 @@ def frequency_validation_receipt(
 def _result_contract_validation(spec, status):
     """Classify strict current records without upgrading historical HDF5."""
 
-    from chemsmart.jobs.pyscf.writer import RESULT_CONTRACT_VERSION
+    from chemsmart.jobs.pyscf.writer import (
+        RESULT_CONTRACT_VERSION,
+        SUPPORTED_RESULT_CONTRACT_VERSIONS,
+    )
 
     observed = spec.get("result_contract_version")
+    # A previous supported contract is a superset relation, never a
+    # downgrade: its artifacts stay executed evidence and legal geometry
+    # sources, and only the datasets the newer contract added are absent.
     observation = {
         "state": (
-            "current" if observed == RESULT_CONTRACT_VERSION else "legacy"
+            "current"
+            if observed == RESULT_CONTRACT_VERSION
+            else (
+                "supported"
+                if observed in SUPPORTED_RESULT_CONTRACT_VERSIONS
+                else "legacy"
+            )
         ),
         "observed_version": observed,
         "current_version": RESULT_CONTRACT_VERSION,
-        "new_execution_admissible": observed == RESULT_CONTRACT_VERSION,
+        "supported_versions": list(SUPPORTED_RESULT_CONTRACT_VERSIONS),
+        "new_execution_admissible": (
+            observed in SUPPORTED_RESULT_CONTRACT_VERSIONS
+        ),
     }
     findings = []
     advisories = []
-    if observed not in (None, RESULT_CONTRACT_VERSION):
+    if observed is not None and observed not in (
+        SUPPORTED_RESULT_CONTRACT_VERSIONS
+    ):
         observation["state"] = "unsupported"
         observation["new_execution_admissible"] = False
         findings.append(
@@ -3918,6 +3938,94 @@ def _check_gpu(settings, _molecule, environment):
             )
         )
 
+    return violations
+
+
+def _check_hessian_support(settings, molecule, environment):
+    """Refuse a Hessian PySCF 2.14 cannot compute, before the engine finds out.
+
+    Two refusals move to where the human decides: PySCF has no analytic
+    Hessian for any ROHF reference -- which ``scf.HF`` selects for every
+    one-electron system (``HF1e``) -- and none for an open-shell reference
+    under a non-local-correlation (VV10-type) functional
+    (``pyscf/hessian/uks.py``).  Both died live inside the driver at stage
+    ``hess`` after the engine call was spent.  The reference family is the
+    writer's own derivation, so this check and the script agree by
+    construction; the NLC flag is the target environment's word about the
+    functional, absent in a preview.
+    """
+
+    if "hess" not in _requested_stages(settings):
+        return []
+    from chemsmart.jobs.pyscf.writer import pyscf_reference_family
+
+    charge = _integral_value(_resolved_value(settings, molecule, "charge"))
+    multiplicity = _integral_value(
+        _resolved_value(settings, molecule, "multiplicity")
+    )
+    symbols = _first_member(molecule, "chemical_symbols", "symbols")
+    if (
+        charge is _MISSING
+        or multiplicity is _MISSING
+        or symbols is _MISSING
+        or not symbols
+    ):
+        # The electron checks name these gaps; nothing to add here.
+        return []
+    xc = _member(settings, "xc", None)
+    try:
+        family = pyscf_reference_family(
+            symbols=list(symbols),
+            charge=int(charge),
+            multiplicity=int(multiplicity),
+            xc=xc,
+        )
+    except (KeyError, TypeError, ValueError):
+        return []
+    violations = []
+    if family == "rohf":
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_HESSIAN_REFERENCE,
+                field="jobtype",
+                expected=(
+                    "a reference PySCF can differentiate twice: RHF, UHF, "
+                    "RKS or UKS"
+                ),
+                observed={
+                    "reference_family": family,
+                    "reason": (
+                        "PySCF 2.14 has no analytic Hessian for ROHF, which "
+                        "scf.HF selects for every one-electron system; "
+                        "a DFT functional runs UKS and can be differentiated"
+                    ),
+                },
+                evidence_ref="writer:reference_family",
+            )
+        )
+    if family == "uks" and xc:
+        nlc = _functional_evidence(environment, xc, "nlc")
+        if nlc is True:
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_HESSIAN_NLC_OPEN_SHELL,
+                    field="functional",
+                    expected=(
+                        "a functional without non-local correlation for an "
+                        "open-shell Hessian, or a closed-shell reference"
+                    ),
+                    observed={
+                        "reference_family": family,
+                        "functional": xc,
+                        "reason": (
+                            "PySCF 2.14 raises NotImplementedError for a UKS "
+                            "Hessian under an NLC functional "
+                            "(pyscf/hessian/uks.py)"
+                        ),
+                    },
+                    evidence_ref="environment:functional_metadata/nlc",
+                )
+            )
     return violations
 
 

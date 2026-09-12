@@ -26,6 +26,7 @@ import numpy as np
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.jobs.pyscf.environment import canonical_sha256
+from chemsmart.jobs.pyscf.writer import SUPPORTED_RESULT_CONTRACT_VERSIONS
 from chemsmart.utils.constants import energy_conversion
 
 # Historical quantities use six bases in the order energy, length,
@@ -318,7 +319,9 @@ def thermochemistry_route_hint(selectors) -> str:
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
-_CURRENT_PYSCF_RESULT_CONTRACT = "chemsmart.pyscf-result-contract.v3"
+#: Executed-evidence contracts the analysis plane admits, owned by the
+#: writer: a previous supported contract is a subset of the current one.
+_SUPPORTED_PYSCF_RESULT_CONTRACTS = SUPPORTED_RESULT_CONTRACT_VERSIONS
 _SELECTOR_RESULT_UNITS = {
     "energy": {"results/energies": "Eh"},
     "energies": {"results/energies": "Eh"},
@@ -1075,7 +1078,7 @@ def _require_analysis_ready_pyscf_result(
         or output.failure is not None
         or output.spec.get("preview_only") is not False
         or output.spec.get("result_contract_version")
-        != _CURRENT_PYSCF_RESULT_CONTRACT
+        not in _SUPPORTED_PYSCF_RESULT_CONTRACTS
     ):
         raise QuantityExtractionError(
             "scientific quantities require a current executed PySCF result"

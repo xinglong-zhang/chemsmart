@@ -566,11 +566,25 @@ def test_environment_probe_and_driver_sources_are_syntax_bounded():
 
 
 def test_force_free_sp_driver_does_not_launch_an_undeclared_gradient():
+    """The scf and opt stages launch no gradient of their own.
+
+    This pinned ``"nuc_grad_method" not in source`` over the whole driver
+    while the invariant it protects is about the single point; contract v4
+    computes the gradient at the Hessian geometry inside the ``hess``
+    branch, where it is a declared stage fact, so the assertion is scoped
+    to the stages that must stay force-free (see
+    tests/test_pyscf_contract_v4.py for the hess side).
+    """
+
     source = PySCFScriptWriter.render(
         {"schema_version": "2.0", "label": "force-free-sp"}
     )
-
-    assert "nuc_grad_method" not in source
+    scf_and_opt = source[
+        source.index('if stage == "scf":') : source.index(
+            'elif stage == "hess":'
+        )
+    ]
+    assert "nuc_grad_method" not in scf_and_opt
     assert 'status["properties"]["forces"]' not in source
 
 

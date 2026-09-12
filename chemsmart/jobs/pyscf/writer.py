@@ -43,7 +43,17 @@ LEGACY_RESULTS_SCHEMA_VERSION = "1.0"
 #: remains schema 2.0 so historical artifacts stay readable; this marker
 #: identifies records that satisfy the stricter state, status, and runtime
 #: reference checks required for new execution/data-edge admission.
-RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v3"
+RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v4"
+#: Contract versions this ChemSmart still reads as executed evidence.  v3 and
+#: v4 share the applied-spec vocabulary; v4 adds datasets (forces at the
+#: Hessian geometry, spin populations) and status facts (the mass convention
+#: behind the frequencies, the symmetry tolerance behind the point group, the
+#: optimiser's criteria, the continuation SCF) without touching any v3 field,
+#: so a v3 artifact stays analysis-ready and stays a legal geometry source.
+PREVIOUS_RESULT_CONTRACT_VERSIONS = ("chemsmart.pyscf-result-contract.v3",)
+SUPPORTED_RESULT_CONTRACT_VERSIONS = PREVIOUS_RESULT_CONTRACT_VERSIONS + (
+    RESULT_CONTRACT_VERSION,
+)
 TD_RESPONSE_MATERIALIZATION_SCHEMA_VERSION = (
     "chemsmart.pyscf-td-response-materialization.v1"
 )
@@ -123,6 +133,7 @@ RESULT_UNITS = {
     "mo_energy": "Eh",
     "mo_occ": "electron",
     "mulliken_charges": "elementary_charge",
+    "mulliken_spin_populations": "electron",
     "normal_modes": "atomic_mass_unit^-1/2",
     "oscillator_strengths": "dimensionless",
     "positions": "Angstrom",
@@ -141,7 +152,10 @@ def applied_pyscf_spec(config):
 def applied_pyscf_spec_fields(spec):
     """Return the digest vocabulary for a current or historical artifact."""
 
-    if spec.get("result_contract_version") == RESULT_CONTRACT_VERSION:
+    if (
+        spec.get("result_contract_version")
+        in SUPPORTED_RESULT_CONTRACT_VERSIONS
+    ):
         return APPLIED_SPEC_FIELDS
     return LEGACY_APPLIED_SPEC_FIELDS
 
@@ -240,12 +254,37 @@ def write_pyscf_h5(
 
     with h5py.File(filename, "w") as handle:
         handle.attrs["schema_version"] = schema_version
-        _write_mapping(handle.create_group("spec"), spec)
+        spec_group = handle.create_group("spec")
+        _write_mapping(spec_group, spec)
+        _attach_supplied_geometry_unit(spec_group, spec)
         _write_mapping(handle.create_group("provenance"), provenance)
         _write_mapping(handle.create_group("status"), status)
         results_group = handle.create_group("results")
         _write_mapping(results_group, results)
         _attach_result_units(results_group)
+
+
+def _attach_supplied_geometry_unit(spec_group, spec):
+    """State the unit of the supplied geometry on the dataset itself.
+
+    ``spec/positions`` is the structure the calculation was handed and
+    ``spec/unit`` its unit; a reader serving the supplied structure as a
+    typed quantity must find the unit where every other numeric dataset
+    carries it, not in a sibling field.
+    """
+
+    import h5py
+
+    node = spec_group.get("positions")
+    if not isinstance(node, h5py.Dataset):
+        return
+    if bool(node.attrs.get(H5_NULL_ATTRIBUTE, False)):
+        return
+    if node.dtype.kind not in {"f", "i", "u"}:
+        return
+    unit = spec.get("unit")
+    if isinstance(unit, str) and unit:
+        node.attrs["unit"] = unit
 
 
 def _attach_result_units(group):
@@ -1008,7 +1047,13 @@ def _write_h5(path, spec, provenance, status, results):
     """Write the versioned machine contract."""
     with h5py.File(path, "w") as handle:
         handle.attrs["schema_version"] = CONFIG["schema_version"]
-        _write_mapping(handle.create_group("spec"), spec)
+        spec_group = handle.create_group("spec")
+        _write_mapping(spec_group, spec)
+        positions_node = spec_group.get("positions")
+        if isinstance(positions_node, h5py.Dataset) and isinstance(
+            spec.get("unit"), str
+        ):
+            positions_node.attrs["unit"] = spec["unit"]
         _write_mapping(handle.create_group("provenance"), provenance)
         _write_mapping(handle.create_group("status"), status)
         results_group = handle.create_group("results")
@@ -1071,6 +1116,46 @@ def _symmetrize_cartesian_hessian(hessian):
     raise ValueError(
         "PySCF Cartesian Hessian must be square or atom-blocked"
     )
+
+
+def _optimizer_criteria(config):
+    """Record the convergence standard the selected optimiser applies.
+
+    ``optimizer_converged`` means a different physical test for each
+    ``opt_solver``; only the solver's name reached the artifact before.  The
+    values are read from the installed optimiser rather than typed here, so
+    the record follows the environment that ran.
+    """
+    solver = config.get("opt_solver")
+    record = {"solver": solver, "source": None}
+    try:
+        if solver == "geometric":
+            from geometric.params import OptParams
+
+            params = OptParams()
+            record["source"] = "geometric.params.OptParams (pyscf passes the same defaults)"
+            for key in ("energy", "grms", "gmax", "drms", "dmax"):
+                record["convergence_" + key] = float(
+                    getattr(params, "Convergence_" + key)
+                )
+        elif solver == "berny":
+            record["source"] = "pyberny defaults (not recorded)"
+        elif solver == "ase":
+            record["source"] = "ase BFGS fmax default 0.05 eV/Angstrom"
+    except Exception as exc:
+        record["error_type"] = type(exc).__name__
+    return record
+
+
+def _spin_populations(mf, config):
+    """Per-atom Mulliken spin populations, open-shell references only."""
+    if int(config.get("spin") or 0) == 0:
+        return None
+    evaluator = getattr(mf, "mulliken_spin_pop", None)
+    if not callable(evaluator):
+        raise AttributeError("mean-field object has no mulliken_spin_pop")
+    _per_ao, per_atom = evaluator(verbose=0)
+    return _to_host_array(per_atom).astype(float)
 
 
 def _spin_diagnostic(mf):
@@ -1167,6 +1252,13 @@ def main():
                 cycles = getattr(mf, "cycles", None)
                 if cycles is not None:
                     stage_status["final_scf_iterations"] = int(cycles)
+                # The final SCF starts from the optimiser's last density
+                # (mf.reset keeps the orbitals), so the electronic state is
+                # the one that path reached; say so on the record.
+                stage_status["final_scf_from_optimizer_density"] = True
+                stage_status["convergence_criteria"] = _optimizer_criteria(
+                    CONFIG
+                )
                 status["stages"]["opt"] = stage_status
             elif stage == "hess":
                 # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo
@@ -1196,13 +1288,43 @@ def main():
                 results["force_constants"] = np.asarray(
                     analysis["force_const_dyne"], dtype=float
                 )
-                status["stages"]["hess"] = {
+                hess_status = {
                     "converged": True,
                     "cartesian_symmetrization_applied": True,
                     "raw_max_abs_antisymmetry_eh_per_bohr2": (
                         raw_hessian_antisymmetry
                     ),
+                    # harmonic_analysis takes mol.atom_mass_list(
+                    # isotope_avg=True) when no mass is passed; the host's
+                    # thermochemistry applies its own table to rotation and
+                    # translation, so the table behind the frequencies is
+                    # stated where the frequencies are.
+                    "mass_convention": "isotope_averaged",
+                    "mass_source": (
+                        "pyscf.gto.Mole.atom_mass_list(isotope_avg=True)"
+                    ),
                 }
+                # The projected spectrum can be all-real at a geometry that
+                # is not stationary, so the gradient at the Hessian geometry
+                # is the only fact that says how stationary it was.  It is
+                # a stage fact, never a refusal: a Hessian off a stationary
+                # point is a legitimate request.
+                try:
+                    gradient = _to_host_array(
+                        mf.nuc_grad_method().kernel()
+                    ).astype(float)
+                    results["forces"] = -gradient
+                    hess_status["gradient_computed"] = True
+                    hess_status["max_abs_gradient_eh_per_bohr"] = float(
+                        np.max(np.abs(gradient))
+                    )
+                except Exception as exc:
+                    hess_status["gradient_computed"] = False
+                    hess_status["gradient_failure"] = {
+                        "type": type(exc).__name__,
+                        "message": str(exc),
+                    }
+                status["stages"]["hess"] = hess_status
             elif stage == "td":
                 raise RuntimeError(
                     "PySCF TD/TDA is a ChemSmart preview-only capability."
@@ -1241,6 +1363,26 @@ def main():
                 },
             }
         try:
+            spin_populations = _spin_populations(mf, CONFIG)
+            if spin_populations is None:
+                status["properties"]["mulliken_spin_populations"] = {
+                    "status": "not_applicable",
+                    "reason": "closed-shell reference carries no spin",
+                }
+            else:
+                results["mulliken_spin_populations"] = spin_populations
+                status["properties"]["mulliken_spin_populations"] = {
+                    "status": "ok"
+                }
+        except Exception as exc:
+            status["properties"]["mulliken_spin_populations"] = {
+                "status": "unavailable",
+                "failure": {
+                    "type": type(exc).__name__,
+                    "message": str(exc),
+                },
+            }
+        try:
             results["mulliken_charges"] = _to_host_array(
                 mf.mulliken_pop(verbose=0)[1]
             ).astype(float)
@@ -1268,9 +1410,19 @@ def main():
             }
         try:
             from pyscf import symm
+            from pyscf.symm import geom as symm_geom
 
             results["point_group"] = symm.detect_symm(mol._atom)[0]
-            status["properties"]["point_group"] = {"status": "ok"}
+            # The group is a threshold decision (symm_geom_tol, scaled by
+            # 1/sqrt(1+natm) inside detect_symm), far tighter than any
+            # optimiser's displacement criterion; the tolerance rides beside
+            # the label so a symmetry number derived from it is a stated
+            # convention and not a printed fact.
+            status["properties"]["point_group"] = {
+                "status": "ok",
+                "source": "pyscf.symm.detect_symm",
+                "tolerance_bohr": float(symm_geom.TOLERANCE),
+            }
         except Exception as exc:
             results["point_group"] = None
             status["properties"]["point_group"] = {

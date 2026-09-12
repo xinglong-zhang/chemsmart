@@ -1210,7 +1210,12 @@ class PySCFJobRunner(JobRunner):
         )
         for name in sorted(properties):
             detail = properties[name]
-            if not isinstance(detail, dict) or detail.get("status") == "ok":
+            if not isinstance(detail, dict) or detail.get("status") in {
+                "ok",
+                # A property the reference cannot carry (spin populations
+                # on a closed shell) was neither attempted nor omitted.
+                "not_applicable",
+            }:
                 continue
             findings.append(
                 {

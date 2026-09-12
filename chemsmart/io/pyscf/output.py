@@ -369,7 +369,8 @@ class PySCFOutput(FileMixin):
         return {
             name: detail.get("failure")
             for name, detail in self.property_status.items()
-            if isinstance(detail, dict) and detail.get("status") != "ok"
+            if isinstance(detail, dict)
+            and detail.get("status") not in {"ok", "not_applicable"}
         }
 
     @property
@@ -653,6 +654,18 @@ class PySCFOutput(FileMixin):
     @cached_property
     def mulliken_atomic_charges(self):
         values = self.results.get("mulliken_charges")
+        return [float(v) for v in values] if values is not None else None
+
+    @cached_property
+    def mulliken_atomic_spin_populations(self):
+        """Per-atom Mulliken spin populations (alpha minus beta), or None.
+
+        Written by the driver for open-shell references only (contract v4);
+        a closed-shell result carries the ``not_applicable`` property status
+        and answers None here, exactly as the log readers refuse the
+        selector on a restricted result rather than serving zeros.
+        """
+        values = self.results.get("mulliken_spin_populations")
         return [float(v) for v in values] if values is not None else None
 
     @cached_property
