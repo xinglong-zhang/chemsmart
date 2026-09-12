@@ -2655,13 +2655,23 @@ def displace_trusted_geometry_along_mode(
     grading it is what the consuming optimisation is for.
     """
 
+    from chemsmart.analysis.result_readers import reader_for
+
     source = _require_current_artifact(result_artifact, "result")
     program_name = str(program).strip().lower()
-    expected_kind = f"{program_name}_output"
-    if result_artifact.kind != expected_kind:
+    reader = reader_for(program_name)
+    if reader is None:
+        raise ContractError(
+            f"no result reader is registered for {program_name!r}"
+        )
+    # The kind is the reader's word, never derived from the program name:
+    # ``f"{program}_output"`` admitted every log program and refused the
+    # one whose artifact is structured HDF5, while the repair menu named
+    # this route as available for it.
+    if result_artifact.kind != reader.artifact_kind:
         raise ContractError(
             f"a mode displacement on {program_name} requires a "
-            f"{expected_kind} artifact"
+            f"{reader.artifact_kind} artifact, not {result_artifact.kind!r}"
         )
     index = int(mode_index)
     if index < 1:
@@ -2683,21 +2693,21 @@ def displace_trusted_geometry_along_mode(
 
     before = file_sha256(source)
     try:
-        if program_name == "orca":
-            from chemsmart.io.orca.output import ORCAOutput
-
-            output = ORCAOutput(str(source))
-        else:
-            raise ContractError(
-                "mode displacement is declared for orca results only"
-            )
+        # Whatever the program, its reader opens the result and its
+        # ``molecule`` carries the modes the program printed; the per-atom
+        # direction is the same Cartesian displacement everywhere (PySCF's
+        # array differs by a per-mode scalar that normalisation removes).
+        output = reader.open_output(source)
         normal_termination = bool(output.normal_termination)
         molecule = output.molecule
-        frequencies = list(output.vibrational_frequencies or ())
+        raw_frequencies = output.vibrational_frequencies
+        frequencies = [] if raw_frequencies is None else list(raw_frequencies)
     except ContractError:
         raise
-    except (AttributeError, IndexError, OSError, TypeError, ValueError) as exc:
-        raise ContractError("the result is not readable") from exc
+    except Exception as exc:  # noqa: BLE001 - the reader's own refusal
+        raise ContractError(
+            f"the result is not readable: {type(exc).__name__}: {exc}"
+        ) from exc
     after = file_sha256(source)
     if before != result_artifact.sha256 or after != before:
         raise ContractError("the result changed while it was being read")
@@ -2706,7 +2716,7 @@ def displace_trusted_geometry_along_mode(
             "a mode displacement requires a normally terminated result"
         )
     modes = getattr(molecule, "vibrational_modes", None)
-    if not modes or not frequencies:
+    if modes is None or len(modes) == 0 or not frequencies:
         raise ContractError(
             "this result prints no normal modes, so no displacement is "
             "available from it; a frequency-bearing job is what carries them"
@@ -4058,14 +4068,18 @@ def build_stationary_point_characterisation(
     from chemsmart.analysis.result_readers import reader_for
 
     normalized = require_identifier(str(program).strip().lower(), "program")
-    expected_kind = f"{normalized}_output"
-    if result_artifact.kind != expected_kind:
+    reader = reader_for(normalized)
+    if reader is None:
+        raise ContractError(
+            f"no result reader is registered for {normalized!r}"
+        )
+    if result_artifact.kind != reader.artifact_kind:
         raise ContractError(
             "a stationary point characterisation on "
-            f"{normalized} requires a {expected_kind} artifact, not "
+            f"{normalized} requires a {reader.artifact_kind} artifact, not "
             f"{result_artifact.kind!r}"
         )
-    output = reader_for(normalized).open_output(str(result_artifact.path))
+    output = reader.open_output(str(result_artifact.path))
     frequencies = tuple(
         float(value) for value in (output.vibrational_frequencies or ())
     )
