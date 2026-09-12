@@ -66,43 +66,24 @@ MECP Options
       -  Default
       -  Description
 
-<<<<<<< Updated upstream
-   -  -  ``--multiplicity-1`` / ``-m1``
-=======
    -  -  ``--multiplicity1``
->>>>>>> Stashed changes
       -  int
       -  1 (singlet)
       -  Spin multiplicity of state A. Falls back to ``-m`` if not set.
 
-<<<<<<< Updated upstream
-   -  -  ``--multiplicity-2`` / ``-m2``
-      -  int
-      -  multiplicity-1 + 2
-      -  Spin multiplicity of state B.
-
-   -  -  ``--charge-1`` / ``-c1``
-=======
    -  -  ``--multiplicity2``
       -  int
       -  multiplicity1 + 2
       -  Spin multiplicity of state B.
 
    -  -  ``--charge1``
->>>>>>> Stashed changes
       -  int
       -  0
       -  Charge of state A. Falls back to ``-c`` if not set.
 
-<<<<<<< Updated upstream
-   -  -  ``--charge-2`` / ``-c2``
-      -  int
-      -  charge-1
-=======
    -  -  ``--charge2``
       -  int
       -  charge1
->>>>>>> Stashed changes
       -  Charge of state B.
 
    -  -  ``--title-a``
@@ -312,13 +293,12 @@ Adaptive Step Size
 ==================
 
 When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated at the end of each
-iteration. The available algorithms are selected via ``--step-size-method``.
-For the default ``harvey`` optimizer, the inverse Hessian controls the step;
-``--adaptive-step-size`` and the scalar ``step-size-*`` controls apply only to
-``bb`` and ``grow_shrink``.
+iteration. The available algorithms are selected via ``--step-size-method``. For the default ``harvey`` optimizer, the
+inverse Hessian controls the step; ``--adaptive-step-size`` and the scalar ``step-size-*`` controls apply only to ``bb``
+and ``grow_shrink``.
 
 Barzilai-Borwein (``"bb"``)
------------------------------
+---------------------------
 
 The BB step size is derived from the secant condition and accelerates convergence near the MECP:
 
@@ -329,14 +309,11 @@ The BB step size is derived from the secant condition and accelerates convergenc
 where :math:`\Delta\mathbf{r} = \mathbf{r}_n - \mathbf{r}_{n-1}` and :math:`\Delta\mathbf{g}_\perp =
 \mathbf{g}_{\perp,n} - \mathbf{g}_{\perp,n-1}`.
 
-Before applying the secant formula, the position change is projected onto the
-current seam tangent so that it is paired consistently with the seam-tangent
-gradient change. Curvature is accepted only when its normalized magnitude is
-reliably positive. An unreliable pair damps the current step by
-``step_size_shrink`` instead of resetting it. Even a valid BB estimate is limited
-to between 0.5 and 2 times the current step before the configured
-``[step_size_min, step_size_max]`` bounds are applied. These safeguards prevent
-small secant denominators from causing abrupt jumps to ``step_size_max``.
+Before applying the secant formula, the position change is projected onto the current seam tangent so that it is paired
+consistently with the seam-tangent gradient change. Curvature is accepted only when its normalized magnitude is reliably
+positive. An unreliable pair damps the current step by ``step_size_shrink`` instead of resetting it. Even a valid BB
+estimate is limited to between 0.5 and 2 times the current step before the configured ``[step_size_min, step_size_max]``
+bounds are applied. These safeguards prevent small secant denominators from causing abrupt jumps to ``step_size_max``.
 
 Grow-Shrink (``"grow_shrink"``)
 -------------------------------
@@ -347,69 +324,56 @@ A dimensionless merit function tracks progress:
 
    M_n = \frac{|\Delta E_n|}{\epsilon_{\Delta E}} + \frac{\text{RMS}(\mathbf{g}_{\perp,n})}{\epsilon_{\text{rms}}}
 
-The update uses relative merit progress rather than reacting to every numerical
-change:
+The update uses relative merit progress rather than reacting to every numerical change:
 
 -  Improvement greater than 10%: grow by ``step_size_grow``.
 -  Change between a 2% regression and a 10% improvement: keep the step.
 -  Regression greater than 2%: shrink by ``step_size_shrink``.
 
-The dead band prevents small SCF and gradient fluctuations from making the step
-size oscillate.
+The dead band prevents small SCF and gradient fluctuations from making the step size oscillate.
 
 The current step size is recorded on every line of ``<label>_report.log``.
 
 Harvey inverse-BFGS (``"harvey"``, default)
---------------------------------------------
+-------------------------------------------
 
-This method follows the inverse-BFGS update used by easyMECP: it builds a full
-inverse Hessian from successive effective-gradient and Cartesian-displacement
-pairs, including negative-curvature updates, and limits the largest Cartesian
-component using Harvey's ``STPMX`` rule. Numerically singular updates are skipped.
-Ill-conditioned inverse Hessians and non-descent directions are reset to the
-configured diagonal initial inverse Hessian. The corresponding
+This method follows the inverse-BFGS update used by easyMECP: it builds a full inverse Hessian from successive
+effective-gradient and Cartesian-displacement pairs, including negative-curvature updates, and limits the largest
+Cartesian component using Harvey's ``STPMX`` rule. Numerically singular updates are skipped. Ill-conditioned inverse
+Hessians and non-descent directions are reset to the configured diagonal initial inverse Hessian. The corresponding
 ``bfgs_status=RESET_*`` reason is recorded in the report.
 
 Restarting interrupted calculations
-====================================
+===================================
 
-MECP optimization state is written atomically after every completed step to
-``<label>_state.npz``. It contains the next geometry, inverse Hessian, previous
-effective gradient, and adaptive-step history. Re-running the same job resumes
-from that state by default. The saved atom sequence and optimizer method must
-match the new invocation; otherwise CHEMSMART stops with an explicit error.
-Use ``--no-restart`` to deliberately start from the supplied input geometry.
-The state file is removed after successful convergence.
+MECP optimization state is written atomically after every completed step to ``<label>_state.npz``. It contains the next
+geometry, inverse Hessian, previous effective gradient, and adaptive-step history. Re-running the same job resumes from
+that state by default. The saved atom sequence and optimizer method must match the new invocation; otherwise CHEMSMART
+stops with an explicit error. Use ``--no-restart`` to deliberately start from the supplied input geometry. The state
+file is removed after successful convergence.
 
-MECP force calculations always include ``nosymm`` so that Gaussian Cartesian
-forces remain aligned with the optimizer coordinate frame. An explicit
-conflicting ``symmetry`` route option is rejected.
+MECP force calculations always include ``nosymm`` so that Gaussian Cartesian forces remain aligned with the optimizer
+coordinate frame. An explicit conflicting ``symmetry`` route option is rejected.
 
-Like easyMECP, CHEMSMART maintains one rolling checkpoint per state
-(``<label>_A.chk`` and ``<label>_B.chk``) instead of one checkpoint per
-iteration. It does not add ``guess=read`` automatically: checkpoint orbitals
-are read only when that option is explicitly present in the Gaussian route.
-If the first step requests ``guess=read`` but its checkpoint does not yet
-exist, ``read`` is removed for that first step and retained thereafter.
-Iteration ``.com`` and ``.log`` files and the two rolling checkpoints are kept
-in ``<label>_steps``; the report and trajectory remain in the main job
+Like easyMECP, CHEMSMART maintains one rolling checkpoint per state (``<label>_A.chk`` and ``<label>_B.chk``) instead of
+one checkpoint per iteration. It does not add ``guess=read`` automatically: checkpoint orbitals are read only when that
+option is explicitly present in the Gaussian route. If the first step requests ``guess=read`` but its checkpoint does
+not yet exist, ``read`` is removed for that first step and retained thereafter. Iteration ``.com`` and ``.log`` files
+and the two rolling checkpoints are kept in ``<label>_steps``; the report and trajectory remain in the main job
 directory.
 
-When Gaussian scratch storage is enabled, MECP scratch job directories are
-also grouped below ``<label>_steps`` instead of being created directly in the
-scratch root.
+When Gaussian scratch storage is enabled, MECP scratch job directories are also grouped below ``<label>_steps`` instead
+of being created directly in the scratch root.
 
-Seam-minimum verification uses a separate pair of temporary rolling
-checkpoints. They are deleted after a successful verification, so the final
-``<label>_A.chk`` and ``<label>_B.chk`` continue to represent the converged
-MECP geometry. Temporary checkpoints are retained if verification fails.
+Seam-minimum verification uses a separate pair of temporary rolling checkpoints. They are deleted after a successful
+verification, so the final ``<label>_A.chk`` and ``<label>_B.chk`` continue to represent the converged MECP geometry.
+Temporary checkpoints are retained if verification fails.
 
 Output Files
 ============
 
 Three output files are produced in the main job directory; Gaussian sub-job input/output files are stored in
-``<label>_steps``. The
-third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
+``<label>_steps``. The third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
 
 ``<label>_report.log``
    Step-by-step optimization log. The file header records the run settings; each subsequent line reports one step, using
@@ -433,8 +397,8 @@ third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`
    -  ``seam_max`` / ``seam_rms`` — max and RMS of the seam-correction component :math:`\mathbf{d}_\text{seam} =
       -(\Delta E / \|\mathbf{g}_\Delta\|^2)\,\mathbf{g}_\Delta` that moves the geometry toward the crossing surface.
 
-   The final line reads ``Converged at step N.`` on successful convergence. The presence of this ``Converged``
-   marker is used by ``skip_completed`` to avoid re-running a finished job.
+   The final line reads ``Converged at step N.`` on successful convergence. The presence of this ``Converged`` marker is
+   used by ``skip_completed`` to avoid re-running a finished job.
 
 ``<label>_traj.xyz``
    Multi-frame XYZ trajectory of the MECP geometry at every optimization step (coordinates in Ångström).
@@ -494,9 +458,9 @@ Add ``--verify-seam-minimum`` to the MECP command after the optimization converg
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
        --convergence tight --verify-seam-minimum
 
-The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states
-× 3N Cartesian coordinates), labelled ``<label>_check_step1_A``, ``<label>_check_step2_A``, etc. For a 10-atom molecule this is 120
-additional Gaussian calculations.  The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with
+The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states × 3N Cartesian
+coordinates), labelled ``<label>_check_step1_A``, ``<label>_check_step2_A``, etc. For a 10-atom molecule this is 120
+additional Gaussian calculations. The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with
 ``--hess-step-size``.
 
 Results are written to ``<label>_seam_check.log``:
@@ -526,21 +490,13 @@ Set spin states explicitly (singlet ↔ triplet):
 
 .. code:: bash
 
-<<<<<<< Updated upstream
-   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity-1 1 --multiplicity-2 3
-=======
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity1 1 --multiplicity2 3
->>>>>>> Stashed changes
 
 Doublet/quartet MECP for an open-shell cation:
 
 .. code:: bash
 
-<<<<<<< Updated upstream
-   chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity-1 2 --multiplicity-2 4
-=======
    chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity1 2 --multiplicity2 4
->>>>>>> Stashed changes
 
 Use tight convergence (publication quality):
 
@@ -578,11 +534,10 @@ Use the grow/shrink adaptive method instead of the default Barzilai-Borwein:
 
 .. note::
 
-   Each MECP step generates two Gaussian sub-jobs in ``<label>_steps``, named
-   ``<label>_step<N>_A`` and ``<label>_step<N>_B``
-   (single-point energy + forces), where ``<N>`` is the **1-indexed** step number (for example, ``step1`` and
-   ``step10``). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job itself honours
-   ``skip_completed`` via the ``Converged`` marker in the report file.
+   Each MECP step generates two Gaussian sub-jobs in ``<label>_steps``, named ``<label>_step<N>_A`` and
+   ``<label>_step<N>_B`` (single-point energy + forces), where ``<N>`` is the **1-indexed** step number (for example,
+   ``step1`` and ``step10``). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job
+   itself honours ``skip_completed`` via the ``Converged`` marker in the report file.
 
 ***********
  Link Jobs

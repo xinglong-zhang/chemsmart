@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 
 from chemsmart.cli.gaussian.mecp_options import add_mecp_method_suffix
-
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
@@ -16,7 +15,7 @@ from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 
 
 def test_first_mecp_step_removes_unavailable_guess_read():
-    remove_read = GaussianMECPJob._without_unavailable_guess_read
+    remove_read = GaussianMECPJob._route_without_guess_read
 
     assert remove_read("scf=xqc guess=read nosymm") == "scf=xqc nosymm"
     assert remove_read("guess=(mix,read) nosymm") == "guess=(mix) nosymm"
@@ -32,14 +31,15 @@ def test_mecp_requires_nosymm_for_force_alignment():
         ensure_nosymm("symmetry=loose")
 
 
-def test_gaussian_spin_squared_parser_returns_final_annihilated_value():
+def test_gaussian_spin_squared_parser_returns_final_values():
     output = object.__new__(Gaussian16Output)
     output.__dict__["contents"] = [
         "S**2 before annihilation     2.1040, after     2.0060",
         "S**2 before annihilation     2.0550, after     2.0015",
     ]
 
-    assert output.spin_squared == pytest.approx(2.0015)
+    assert output.spin_squared_before_annihilation == pytest.approx(2.0550)
+    assert output.spin_squared_after_annihilation == pytest.approx(2.0015)
 
 
 def test_gaussian_header_reuses_rolling_checkpoint():

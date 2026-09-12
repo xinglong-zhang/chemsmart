@@ -174,21 +174,6 @@ class Gaussian16Output(GaussianFileMixin):
                 return spin
         return None
 
-<<<<<<< Updated upstream
-    @property
-    def spin_squared(self):
-        """Return the final post-annihilation ``<S^2>`` value, if printed."""
-        pattern = re.compile(
-            r"S\*\*2 before annihilation\s+[-+0-9.DEde]+,\s+after\s+"
-            r"([-+0-9.DEde]+)"
-        )
-        value = None
-        for line in self.contents:
-            match = pattern.search(line)
-            if match:
-                value = float(match.group(1).replace("D", "E").replace("d", "e"))
-        return value
-=======
     def _final_spin_squared_values(self):
         """Return the final printed S**2 values before and after annihilation."""
         values = None
@@ -196,7 +181,10 @@ class Gaussian16Output(GaussianFileMixin):
         for line in self.contents:
             match = pattern.search(line)
             if match:
-                values = tuple(float(value) for value in match.groups())
+                values = tuple(
+                    float(value.replace("D", "E").replace("d", "e"))
+                    for value in match.groups()
+                )
         return values
 
     @property
@@ -210,7 +198,6 @@ class Gaussian16Output(GaussianFileMixin):
         """Return the final post-annihilation S**2 value, if printed."""
         values = self._final_spin_squared_values()
         return None if values is None else values[1]
->>>>>>> Stashed changes
 
     @cached_property
     def input_coordinates_block(self):

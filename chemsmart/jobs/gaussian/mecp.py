@@ -18,10 +18,21 @@ from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 
 logger = logging.getLogger(__name__)
 
-MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
+_MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
+
+_GROW_SHRINK_THRESHOLDS = {
+    "improvement": 0.10,
+    "regression": 0.02,
+}
+
+_BB_SAFEGUARDS = {
+    "curvature_cosine_min": 1.0e-4,
+    "relative_step_min": 0.5,
+    "relative_step_max": 2.0,
+}
 
 # Settings consumed by the MECP driver rather than Gaussian link sub-jobs.
-MECP_ONLY_KEYS = frozenset(
+_MECP_ONLY_KEYS = frozenset(
     {
         "multiplicity_a",
         "multiplicity_b",
@@ -43,10 +54,14 @@ MECP_ONLY_KEYS = frozenset(
         "step_size_shrink",
         "step_size_min",
         "step_size_max",
+        "harvey_initial_hessian",
+        "harvey_max_component_step",
+        "harvey_max_condition",
         "use_link",
         "convergence_preset",
         "verify_seam_minimum",
         "hess_step_size",
+        "restart",
     }
 )
 
@@ -74,11 +89,9 @@ class GaussianMECPJob(GaussianJob):
     """
 
     TYPE = "g16mecp"
-<<<<<<< Updated upstream
-    MIN_DIFF_GRAD_NORM_SQ = 1.0e-20
 
     @staticmethod
-    def _without_unavailable_guess_read(route):
+    def _route_without_guess_read(route):
         """Remove ``read`` from a Gaussian guess option for the first step."""
 
         def strip_parenthesized_read(match):
@@ -110,45 +123,6 @@ class GaussianMECPJob(GaussianJob):
                 "the optimization coordinates; remove the explicit symmetry option."
             )
         return f"{route} nosymm".strip()
-
-    # MECP-specific attribute names that must be stripped when building
-    # a GaussianLinkJobSettings for each sub-job (broken-symmetry mode).
-    _MECP_ONLY_KEYS = frozenset(
-        {
-            "multiplicity_a",
-            "multiplicity_b",
-            "charge_a",
-            "charge_b",
-            "title_a",
-            "title_b",
-            "max_steps",
-            "step_size",
-            "trust_radius",
-            "energy_diff_tol",
-            "force_max_tol",
-            "force_rms_tol",
-            "disp_max_tol",
-            "disp_rms_tol",
-            "adaptive_step_size",
-            "step_size_method",
-            "step_size_grow",
-            "step_size_shrink",
-            "step_size_min",
-            "step_size_max",
-            "harvey_initial_hessian",
-            "harvey_max_component_step",
-            "harvey_max_condition",
-            "use_link",
-            "convergence_preset",
-            "verify_seam_minimum",
-            "hess_step_size",
-            "restart",
-            # 'stable' and 'guess' are kept: they are valid GaussianLinkJobSettings
-            # params and will be overridden with state-specific values anyway.
-        }
-    )
-=======
->>>>>>> Stashed changes
 
     def __init__(
         self,
@@ -306,7 +280,7 @@ class GaussianMECPJob(GaussianJob):
             link_kwargs = {
                 k: v
                 for k, v in self.settings.__dict__.items()
-                if not k.startswith("_") and k not in MECP_ONLY_KEYS
+                if not k.startswith("_") and k not in _MECP_ONLY_KEYS
             }
             # Override with state-specific and link-specific values.
             link_kwargs.update(
@@ -371,31 +345,29 @@ class GaussianMECPJob(GaussianJob):
         if not oldchkfile and not self.settings.use_link:
             route = settings.additional_route_parameters or ""
             settings.additional_route_parameters = (
-                self._without_unavailable_guess_read(route)
+                self._route_without_guess_read(route)
             )
+
+        checkpoint_part = f"{checkpoint_tag}_" if checkpoint_tag else ""
+        job_kwargs = {
+            "molecule": mol,
+            "settings": settings,
+            "label": state_label,
+            "jobrunner": self.jobrunner,
+            "skip_completed": False,
+            "scratch_parent_folder": f"{self.label}_steps",
+            "checkpoint_filename": (
+                f"{self.label}_{checkpoint_part}{state}.chk"
+            ),
+        }
 
         if self.settings.use_link:
             from chemsmart.jobs.gaussian.link import GaussianLinkJob
 
-            job = GaussianLinkJob(
-                molecule=mol,
-                settings=settings,
-                label=state_label,
-                jobrunner=self.jobrunner,
-                skip_completed=False,
-            )
+            job = GaussianLinkJob(**job_kwargs)
         else:
-            job = GaussianGeneralJob(
-                molecule=mol,
-                settings=settings,
-                label=state_label,
-                jobrunner=self.jobrunner,
-                skip_completed=False,
-            )
+            job = GaussianGeneralJob(**job_kwargs)
         job.set_folder(self.steps_folder)
-        job.scratch_parent_folder = f"{self.label}_steps"
-        checkpoint_part = f"{checkpoint_tag}_" if checkpoint_tag else ""
-        job.checkpoint_filename = f"{self.label}_{checkpoint_part}{state}.chk"
         job.oldchkfile = oldchkfile
         job.run()
         output = job._output()
@@ -416,7 +388,7 @@ class GaussianMECPJob(GaussianJob):
         gradient = -forces
         if not hasattr(self, "_last_spin_squared"):
             self._last_spin_squared = {"A": None, "B": None}
-        self._last_spin_squared[state] = getattr(output, "spin_squared", None)
+        self._last_spin_squared[state] = output.spin_squared_after_annihilation
         if os.path.isfile(job.chkfile):
             self._state_checkpoint_files[checkpoint_key] = job.chkfile
         return energy, gradient
@@ -441,7 +413,7 @@ class GaussianMECPJob(GaussianJob):
         diff_grad = grad_a - grad_b
         diff_norm_sq = float(np.sum(diff_grad * diff_grad))
 
-        if diff_norm_sq < MIN_DIFF_GRAD_NORM_SQ:
+        if diff_norm_sq < _MIN_DIFF_GRAD_NORM_SQ:
             raise RuntimeError(
                 "Difference gradient is too small; cannot continue MECP step."
             )
@@ -550,7 +522,7 @@ class GaussianMECPJob(GaussianJob):
         # Effective_Gradient subroutine.
         diff_grad = grad_a - grad_b  # PerpG
         diff_norm_sq = float(np.sum(diff_grad * diff_grad))
-        if diff_norm_sq < self.MIN_DIFF_GRAD_NORM_SQ:
+        if diff_norm_sq < _MIN_DIFF_GRAD_NORM_SQ:
             raise RuntimeError(
                 "Difference gradient is too small; cannot continue MECP step."
             )
@@ -637,12 +609,6 @@ class GaussianMECPJob(GaussianJob):
             eff_grad,
         )
 
-    _GROW_SHRINK_IMPROVEMENT_THRESHOLD = 0.10
-    _GROW_SHRINK_REGRESSION_THRESHOLD = 0.02
-    _BB_CURVATURE_COSINE_MIN = 1.0e-4
-    _BB_RELATIVE_STEP_MIN = 0.5
-    _BB_RELATIVE_STEP_MAX = 2.0
-
     def _adapt_step_size(self, current_step_size, prev_merit, current_merit):
         """
         Return an updated step size based on the merit function progress.
@@ -654,9 +620,9 @@ class GaussianMECPJob(GaussianJob):
         """
         merit_scale = max(abs(prev_merit), np.finfo(float).tiny)
         relative_progress = (prev_merit - current_merit) / merit_scale
-        if relative_progress > self._GROW_SHRINK_IMPROVEMENT_THRESHOLD:
+        if relative_progress > _GROW_SHRINK_THRESHOLDS["improvement"]:
             new_step = current_step_size * self.settings.step_size_grow
-        elif relative_progress < -self._GROW_SHRINK_REGRESSION_THRESHOLD:
+        elif relative_progress < -_GROW_SHRINK_THRESHOLDS["regression"]:
             new_step = current_step_size * self.settings.step_size_shrink
         else:
             new_step = current_step_size
@@ -708,7 +674,8 @@ class GaussianMECPJob(GaussianJob):
         reliable_curvature = (
             r_dot_r >= 1.0e-30
             and g_dot_g >= 1.0e-30
-            and r_dot_g > self._BB_CURVATURE_COSINE_MIN * curvature_scale
+            and r_dot_g
+            > _BB_SAFEGUARDS["curvature_cosine_min"] * curvature_scale
         )
 
         if reliable_curvature:
@@ -716,8 +683,8 @@ class GaussianMECPJob(GaussianJob):
         else:
             candidate = current_step_size * self.settings.step_size_shrink
 
-        relative_min = current_step_size * self._BB_RELATIVE_STEP_MIN
-        relative_max = current_step_size * self._BB_RELATIVE_STEP_MAX
+        relative_min = current_step_size * _BB_SAFEGUARDS["relative_step_min"]
+        relative_max = current_step_size * _BB_SAFEGUARDS["relative_step_max"]
         safeguarded_step = np.clip(candidate, relative_min, relative_max)
         return float(
             np.clip(
@@ -758,11 +725,7 @@ class GaussianMECPJob(GaussianJob):
             and disp_rms <= self.settings.disp_rms_tol
         )
 
-<<<<<<< Updated upstream
-    def _log_step(
-=======
     def log_step(
->>>>>>> Stashed changes
         self,
         f,
         step_idx,
@@ -1081,7 +1044,7 @@ class GaussianMECPJob(GaussianJob):
         """Return the constrained MECP Lagrangian Hessian and multiplier."""
         diff_grad = np.asarray(grad_a).ravel() - np.asarray(grad_b).ravel()
         diff_norm_sq = float(np.dot(diff_grad, diff_grad))
-        if diff_norm_sq < cls.MIN_DIFF_GRAD_NORM_SQ:
+        if diff_norm_sq < _MIN_DIFF_GRAD_NORM_SQ:
             raise RuntimeError(
                 "Difference gradient is too small for seam verification."
             )

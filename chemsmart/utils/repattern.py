@@ -34,8 +34,8 @@ frozen_coordinates_pattern = (
 )
 scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
 spin_squared_pattern = (
-    r"S\*\*2 before annihilation\s+([+-]?\d+(?:\.\d+)?),"
-    r"\s+after\s+([+-]?\d+(?:\.\d+)?)"
+    r"S\*\*2 before annihilation\s+([-+0-9.DEde]+),"
+    r"\s+after\s+([-+0-9.DEde]+)"
 )
 mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
 oniom_gridpoint_pattern = r"ONIOM:\s+gridpoint\s+(\d+)\s+method:\s+(\w+)\s+system:\s+(\w+)\s+energy:\s+([+-]?\d*\.\d+|\d+)"

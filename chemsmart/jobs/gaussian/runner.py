@@ -100,7 +100,11 @@ class GaussianJobRunner(JobRunner):
 
     def _scratch_job_directory(self, job):
         """Return the scratch directory, optionally grouped by a job folder."""
-        scratch_parent = getattr(job, "scratch_parent_folder", None)
+        if self.scratch_dir is None:
+            raise ValueError(
+                "A scratch directory is required for scratch jobs."
+            )
+        scratch_parent = job.scratch_parent_folder
         if scratch_parent:
             return os.path.join(
                 self.scratch_dir,

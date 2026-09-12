@@ -3,6 +3,39 @@
 import click
 
 
+def click_mecp_state_options(function):
+    """Apply the common charge and multiplicity options for two MECP states."""
+    options = (
+        click.option(
+            "--multiplicity1",
+            type=int,
+            default=None,
+            help="Spin multiplicity for state 1.",
+        ),
+        click.option(
+            "--multiplicity2",
+            type=int,
+            default=None,
+            help="Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
+        ),
+        click.option(
+            "--charge1",
+            type=int,
+            default=None,
+            help="Charge for state 1.",
+        ),
+        click.option(
+            "--charge2",
+            type=int,
+            default=None,
+            help="Charge for state 2. Defaults to charge1.",
+        ),
+    )
+    for option in reversed(options):
+        function = option(function)
+    return function
+
+
 def add_mecp_method_suffix(label, method):
     """Return a MECP label ending in ``_<method>_mecp``."""
     suffix = f"_{method}_mecp"

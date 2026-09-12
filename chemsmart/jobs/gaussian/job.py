@@ -46,7 +46,14 @@ class GaussianJob(Job):
     PROGRAM = "Gaussian"
 
     def __init__(
-        self, molecule, settings=None, label=None, jobrunner=None, **kwargs
+        self,
+        molecule,
+        settings=None,
+        label=None,
+        jobrunner=None,
+        checkpoint_filename=None,
+        scratch_parent_folder=None,
+        **kwargs,
     ):
         """
         Initialize a Gaussian job with molecule and calculation settings.
@@ -60,6 +67,8 @@ class GaussianJob(Job):
             settings (GaussianJobSettings): Job configuration (required).
             label (str, optional): Job identifier for file naming.
             jobrunner (JobRunner, optional): Job execution handler.
+            checkpoint_filename (str, optional): Explicit checkpoint filename.
+            scratch_parent_folder (str, optional): Scratch grouping folder.
             **kwargs: Additional keyword arguments for parent class.
 
         Raises:
@@ -81,6 +90,8 @@ class GaussianJob(Job):
 
         self.molecule = molecule.copy() if molecule is not None else None
         self.settings = settings.copy()
+        self.checkpoint_filename = checkpoint_filename
+        self.scratch_parent_folder = scratch_parent_folder
 
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
@@ -138,7 +149,7 @@ class GaussianJob(Job):
         Returns:
             str: Full path to the Gaussian checkpoint file.
         """
-        chkfile = getattr(self, "checkpoint_filename", self.label + ".chk")
+        chkfile = self.checkpoint_filename or self.label + ".chk"
         return os.path.join(self.folder, chkfile)
 
     @property
