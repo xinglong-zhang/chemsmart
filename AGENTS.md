@@ -657,6 +657,26 @@ artifacts with PySCF's own reference numbers beside them, and the host
 RRHO engine agrees with PySCF's thermochemistry on the zero-point energy
 to 3e-11 Eh on the same Hessian.
 
+Three losses the first sealed PySCF goals paid for are repaired where
+they were made. The bootstrap conformance, which fake-previews every
+declared program on the workspace's own first geometry, bound charge 0
+and multiplicity 1 to whatever that geometry was, so a workspace whose
+supplied molecule was the allyl radical made every PySCF job type
+reference-only before any plan existed -- PySCF's preflight refuses the
+impossible singlet where ORCA's and Gaussian's previews do not -- and a
+correctly planned single point returned to the human at zero engine
+calls; the probe now binds, neutral, the multiplicity the input's own
+electron count permits. A number read from an optimisation whose
+reached geometry a validated Hessian consumed through the handoff edge
+was worded "uncharacterised (no frequencies printed)" in the settlement
+while that Hessian validated beside it -- true per result, false per
+goal -- and is now joined in the run stream and in the workspace
+record, so PySCF's and xTB's two nodes get the word ORCA's one node
+gets. And the qualification rows the capability ladder reads were
+written from the settling cycle alone, so a goal that ran in cycle one
+and settled in an analysis-only cycle two qualified nothing; they now
+come from every cycle the goal recorded.
+
 This surface is qualified through one completed multi-program execution:
 a single displayed approval covering seven nodes — one xTB optimisation
 feeding three ORCA and three PySCF single points on that geometry at
