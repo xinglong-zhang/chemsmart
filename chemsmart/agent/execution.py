@@ -4256,9 +4256,11 @@ def build_reached_geometry(
             f"{normalized} declares no geometry selector in the "
             f"'as_reached' structural state for jobtype {jobtype!r}, so "
             "this host cannot say which structure the run reached. A "
-            "jobtype whose log prints one structure has no reached "
-            "geometry to carry forward; where a trajectory artifact "
-            "exists, bind it as a geometry artifact instead. Selectors "
+            "fixed-geometry stage (a single point, a Hessian) reaches "
+            "nothing beyond what it was handed: bind the supplied "
+            "structure or the producing optimisation's geometry instead; "
+            "where a trajectory artifact exists, bind it as a geometry "
+            "artifact. Selectors "
             f"this jobtype declares in a structural state: "
             + (
                 ", ".join(
@@ -5235,6 +5237,30 @@ def _finalize_geometry_handoff(
     )
 
 
+def _supplied_symbols(
+    input_artifact: TrustedArtifactRefV1,
+) -> tuple[str, ...]:
+    """The atom symbols, in order, of the geometry a node was handed."""
+
+    if input_artifact.kind == "pyscf_hdf5":
+        source = _require_current_artifact(
+            input_artifact, "PySCF input artifact"
+        )
+        try:
+            from chemsmart.io.pyscf.output import read_pyscf_h5
+
+            spec, _provenance, _status, _results = read_pyscf_h5(source)
+        except (ImportError, KeyError, OSError, TypeError, ValueError) as exc:
+            raise ContractError(
+                "PySCF input artifact is not readable"
+            ) from exc
+        return tuple(str(item) for item in (spec.get("symbols") or ()))
+    symbols, _positions = _read_exact_xyz_geometry(
+        input_artifact, label="optimization input"
+    )
+    return symbols
+
+
 def handoff_optimized_pyscf_geometry(
     *,
     producer_receipt: ProgramExecutionReceiptV1,
@@ -5246,8 +5272,15 @@ def handoff_optimized_pyscf_geometry(
     expected_multiplicity: int,
     consumer_charge: int | None = None,
     consumer_multiplicity: int | None = None,
+    input_artifact: TrustedArtifactRefV1 | None = None,
 ) -> tuple[TrustedArtifactRefV1, OptimizedGeometryHandoffV1]:
-    """Extract the validated final OPT frame and materialize exact XYZ text."""
+    """Extract the validated final OPT frame and materialize exact XYZ text.
+
+    ``input_artifact`` is the geometry the approval bound to the producer;
+    the handoff refuses any change of atom identity or order against it,
+    the gate the xTB and native handoffs already carry and this one did
+    not (the charter names the invariant for every program).
+    """
 
     if not producer_receipt.validated:
         raise ContractError("optimized geometry requires a validated producer")
@@ -5285,6 +5318,12 @@ def handoff_optimized_pyscf_geometry(
         raise ContractError("PySCF optimization did not terminate normally")
 
     symbols = tuple(str(item) for item in (spec.get("symbols") or ()))
+    if input_artifact is not None and _supplied_symbols(input_artifact) != (
+        symbols
+    ):
+        raise ContractError(
+            "PySCF optimized geometry changed atom identity or atom order"
+        )
     positions_value = results.get("positions")
     if positions_value is None:
         raise ContractError("PySCF optimization has no final positions")

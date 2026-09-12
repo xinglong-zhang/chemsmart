@@ -89,6 +89,7 @@ SELECTOR_UNITS = {
     "vpt2_zero_point_rovibrational_energy": "cm^-1",
     "positions": "Angstrom",
     "reached_positions": "Angstrom",
+    "supplied_positions": "Angstrom",
     "connectivity": "",
     "symbols": "",
     "charge": "",
@@ -180,8 +181,14 @@ def _mode_displacement_matrices(output: Any) -> list[Any]:
 
     import numpy as np
 
-    modes = getattr(output, "vibrational_modes", None) or []
-    frequencies = getattr(output, "vibrational_frequencies", None) or []
+    # PySCF hands the modes back as one numpy array (nmode, natm, 3) and
+    # the log readers as a list of matrices; ``or []`` on an array is an
+    # ambiguous truth value, and that single expression hid the whole
+    # quantity on every real PySCF Hessian behind a swallowed ValueError.
+    modes = getattr(output, "vibrational_modes", None)
+    modes = [] if modes is None else list(modes)
+    frequencies = getattr(output, "vibrational_frequencies", None)
+    frequencies = [] if frequencies is None else list(frequencies)
     if not modes:
         raise MissingQuantityError(
             "result establishes no vibrational normal modes"
@@ -257,7 +264,8 @@ def _vibrational_mode_degeneracy_group(output: Any) -> list[int]:
     ordinary case; the grouping states a fact and judges nothing.
     """
 
-    frequencies = getattr(output, "vibrational_frequencies", None) or []
+    frequencies = getattr(output, "vibrational_frequencies", None)
+    frequencies = [] if frequencies is None else list(frequencies)
     if not frequencies:
         raise MissingQuantityError(
             "result establishes no vibrational frequencies"
@@ -625,6 +633,13 @@ class ResultReaderV1:
     #: geometry artifact is data rather than an engine run, so that format can
     #: opt out while retaining the same typed quantity path.
     requires_normal_termination: bool = True
+    #: A reader may hold a stricter admission for *quantities* than for
+    #: opening.  PySCF opens any receipt-bound artifact -- a failed run is
+    #: inspectable, its last geometry bindable -- while every extracted
+    #: number and every free energy also demands the green receipt.  Log
+    #: readers have no such split: their normal-termination gate is the
+    #: whole of it.
+    admit_for_analysis: Callable[[Path], Any] | None = None
 
     def __post_init__(self) -> None:
         jobtypes = tuple(item[0] for item in self.jobtype_selectors)
@@ -1839,27 +1854,43 @@ def _xyz_accessors() -> dict[str, Callable[[Any], Any]]:
 #: dedicated structured-HDF5 path in ``result_quantities``; the entries here are
 #: the log-parsing programs that had none.
 def _pyscf_output(path: Path) -> Any:
-    """Open a structured PySCF result after its full admission check.
+    """Open a receipt-bound structured PySCF result, green or failed.
 
     The HDF5 path carries an admission guard no log format has: the file
-    states its own contract version, a sibling run receipt binds these exact
-    bytes and the whole ancestry of digests behind them, and every numeric
-    dataset carries a declared unit.  Folding this program into the shared
-    reader plane must keep all of that, so the ancestry guard runs here at
-    open time and the per-dataset unit check runs inside each accessor --
-    verifying the union of every declared selector's datasets here would
-    refuse a valid result over a dataset nobody asked about.
+    states its own contract version and a sibling run receipt binds these
+    exact bytes and the whole ancestry of digests behind them.  That guard
+    runs here at open time.  What used to run here as well -- normal
+    termination, an empty findings list, a green receipt state -- made a
+    failed PySCF result unopenable by any consumer of the shared plane,
+    so the recovery route "restart from the geometry the run reached" was
+    unreachable for the one program whose artifact records that geometry
+    by construction.  Those requirements now live in
+    ``admit_for_analysis``, which extraction and thermochemistry call, and
+    the per-dataset unit check runs inside each accessor.
     """
+
+    from chemsmart.analysis.result_quantities import (
+        result_file_sha256,
+        validate_pyscf_result_binding,
+    )
+
+    output, _receipt = validate_pyscf_result_binding(
+        path, expected_sha256=result_file_sha256(path)
+    )
+    return output
+
+
+def _pyscf_admit_for_analysis(path: Path) -> Any:
+    """The green admission every PySCF quantity and free energy stands on."""
 
     from chemsmart.analysis.result_quantities import (
         result_file_sha256,
         validate_pyscf_analysis_artifact,
     )
 
-    output, _receipt = validate_pyscf_analysis_artifact(
+    return validate_pyscf_analysis_artifact(
         path, expected_sha256=result_file_sha256(path)
     )
-    return output
 
 
 def _pyscf_require_units(selector: str, output: Any) -> None:
@@ -1939,6 +1970,111 @@ def _first_scalar(value: Any) -> float:
     return float(value)
 
 
+def _pyscf_supplied_positions(output: Any) -> list[list[float]]:
+    """The geometry the driver was handed, from ``spec/positions``.
+
+    The unit is a spec field rather than a dataset attribute on older
+    contracts, so it is checked here by name instead of through the
+    dataset-unit guard: a supplied structure in any unit but Angstrom
+    would be a writer change, not an absence.
+    """
+
+    from chemsmart.analysis import result_quantities as rq
+
+    unit = getattr(output, "supplied_positions_unit", None)
+    if unit != "Angstrom":
+        raise rq.QuantityExtractionError(
+            "PySCF supplied geometry is not in Angstrom: "
+            f"spec/unit is {unit!r}"
+        )
+    values = output.supplied_positions
+    if values is None:
+        raise MissingQuantityError(
+            "pyscf result records no supplied geometry (spec/positions)"
+        )
+    return [[float(value) for value in row] for row in values]
+
+
+def _pyscf_optimization_converged(output: Any) -> int:
+    """1 when the optimiser converged, 0 when it stopped short.
+
+    None -- a fixed-geometry stage -- is refused rather than served as a
+    0 that would read as an observed failure.
+    """
+
+    value = output.converged
+    if value is None:
+        raise MissingQuantityError(
+            "this result ran no optimisation, so it has no convergence "
+            "to report; 'converged' is declared for opt"
+        )
+    return int(bool(value))
+
+
+def _pyscf_functional(output: Any) -> str:
+    """The functional the project asked for, as ``spec/method`` names it.
+
+    The literal libxc ran (``spec/xc``) is the same functional under a
+    different spelling wherever the alias table rewrote it -- ``b3lyp``
+    and ``b3lypg`` are one libxc code -- so the requested name is what a
+    program-neutral identity means, as for ORCA and Gaussian; the applied
+    materialisation rides the review as the functional-resolution receipt.
+    """
+
+    if not output.spec.get("xc"):
+        raise MissingQuantityError(
+            "this result ran a Hartree-Fock reference and names no "
+            "functional; the method identity is read by 'ab_initio'"
+        )
+    value = output.method
+    if not value:
+        raise MissingQuantityError("pyscf result records no method name")
+    return str(value)
+
+
+def _pyscf_ab_initio(output: Any) -> str:
+    value = output.spec.get("ab_initio")
+    if not value:
+        raise MissingQuantityError(
+            "this result ran a DFT functional and names no ab initio "
+            "method; the functional identity is read by 'functional'"
+        )
+    return str(value)
+
+
+def _pyscf_spin_populations(output: Any) -> list[float]:
+    """Per-atom Mulliken spin populations of an open-shell result, in order.
+
+    Written by the driver for open-shell references only; a closed shell
+    carries the ``not_applicable`` property and is refused rather than
+    served as zeros.  Checked against 2S = multiplicity - 1, the sum a
+    complete vector has by construction.
+    """
+
+    values = output.mulliken_atomic_spin_populations
+    if values is None:
+        raise MissingQuantityError(
+            "mulliken_atomic_spin_populations: this closed-shell result "
+            "carries no spin to partition (property not_applicable)"
+        )
+    values = [float(item) for item in values]
+    try:
+        multiplicity = int(output.multiplicity)
+    except (TypeError, ValueError):
+        multiplicity = None
+    if multiplicity is not None:
+        expected = float(multiplicity - 1)
+        total = sum(values)
+        if abs(total - expected) > 0.05:
+            raise MissingQuantityError(
+                f"mulliken_atomic_spin_populations sums to {total:.3f} "
+                f"where 2S for multiplicity {multiplicity} is "
+                f"{expected:.1f}; the vector is not the complete molecule "
+                "in order"
+            )
+    return values
+
+
 def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
     """Selector name to a callable reading it from a structured PySCF result.
 
@@ -1957,6 +2093,20 @@ def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
         "positions": lambda output: [
             [float(value) for value in row] for row in output.positions
         ],
+        # The structure the optimiser stopped on, converged or not: the
+        # same dataset as ``positions`` here, because every PySCF quantity
+        # belongs to the final structure; declared for ``opt`` only, since
+        # a fixed-geometry stage reaches nothing beyond what it was handed.
+        "reached_positions": lambda output: [
+            [float(value) for value in row] for row in output.positions
+        ],
+        "supplied_positions": _pyscf_supplied_positions,
+        "converged": _pyscf_optimization_converged,
+        "functional": _pyscf_functional,
+        "ab_initio": _pyscf_ab_initio,
+        "mulliken_atomic_spin_populations": lambda output: (
+            _pyscf_spin_populations(output)
+        ),
         "symbols": lambda output: [
             str(symbol) for symbol in output.chemical_symbols
         ],
@@ -2026,6 +2176,7 @@ def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
 #: and dipole properties, so a single point and an optimisation answer the
 #: same set; a Hessian stage adds the vibrational quantities on top.
 _PYSCF_SCF_SELECTORS = (
+    "ab_initio",
     "basis",
     "charge",
     "connectivity",
@@ -2034,17 +2185,61 @@ _PYSCF_SCF_SELECTORS = (
     "effective_multiplicity",
     "energies",
     "energy",
+    "functional",
     "gap",
     "homo",
     "lumo",
     "method",
     "mulliken_atomic_charges",
+    "mulliken_atomic_spin_populations",
     "multiplicity",
     "positions",
     "spin_square",
     "spin_square_deviation",
     "spin_square_target",
+    "supplied_positions",
     "symbols",
+)
+
+#: An optimisation additionally reports whether it converged and the
+#: structure it reached, which for this program is the one every other
+#: quantity belongs to.
+_PYSCF_OPT_SELECTORS = tuple(
+    sorted(_PYSCF_SCF_SELECTORS + ("converged", "reached_positions"))
+)
+
+#: What each PySCF selector's value belongs to.  One structure per
+#: result: the driver re-converges the SCF on the final geometry before
+#: any property is read, so everything but the supplied structure and
+#: the structure-free identities is ``as_reached`` -- and for ``sp`` and
+#: ``hess`` the reached structure is the supplied one by construction,
+#: which the validator enforces to 1e-8 A.  ``energies`` stays stateless
+#: on purpose: on an opt it is [E(supplied), E(reached)].
+_PYSCF_STRUCTURAL_STATES = tuple(
+    sorted(
+        [
+            ("connectivity", "as_reached"),
+            ("converged", "as_reached"),
+            ("dipole_moment", "as_reached"),
+            ("dipole_moment_magnitude", "as_reached"),
+            ("effective_multiplicity", "as_reached"),
+            ("energy", "as_reached"),
+            ("gap", "as_reached"),
+            ("homo", "as_reached"),
+            ("lumo", "as_reached"),
+            ("mulliken_atomic_charges", "as_reached"),
+            ("mulliken_atomic_spin_populations", "as_reached"),
+            ("positions", "as_reached"),
+            ("reached_positions", "as_reached"),
+            ("spin_square", "as_reached"),
+            ("spin_square_deviation", "as_reached"),
+            ("spin_square_target", "as_reached"),
+            ("supplied_positions", "as_supplied"),
+            ("vibrational_frequencies", "as_reached"),
+            ("vibrational_mode_atom_participation", "as_reached"),
+            ("vibrational_mode_degeneracy_group", "as_reached"),
+        ]
+    )
 )
 
 
@@ -2637,9 +2832,11 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     )
                 ),
             ),
-            ("opt", _PYSCF_SCF_SELECTORS),
+            ("opt", _PYSCF_OPT_SELECTORS),
             ("sp", _PYSCF_SCF_SELECTORS),
         ),
+        selector_structural_states=_PYSCF_STRUCTURAL_STATES,
+        admit_for_analysis=_pyscf_admit_for_analysis,
     ),
     "xyz": ResultReaderV1(
         program="xyz",
@@ -2691,6 +2888,7 @@ _SELECTOR_DIMENSIONS = {
     "vpt2_zero_point_rovibrational_energy": "FREQUENCY",
     "positions": "LENGTH",
     "reached_positions": "LENGTH",
+    "supplied_positions": "LENGTH",
     "connectivity": "DIMENSIONLESS",
     "symbols": "DIMENSIONLESS",
     "charge": "DIMENSIONLESS",
@@ -2868,6 +3066,10 @@ def extract_logged_quantities(
             f"{request.program} scientific quantities require a normally "
             "terminated program result"
         )
+    if reader.admit_for_analysis is not None:
+        # A reader that opens failed results for inspection keeps its
+        # green admission for quantities here.
+        reader.admit_for_analysis(artifact)
     evidence_ref = f"artifact:{request.artifact_id}#{request.artifact_sha256}"
     # The declaration gate.  A selector declared for a jobtype is a semantic
     # claim; until this check the registry was consulted only by the pre-plan

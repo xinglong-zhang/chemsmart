@@ -26,7 +26,10 @@ import numpy as np
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.jobs.pyscf.environment import canonical_sha256
-from chemsmart.jobs.pyscf.writer import SUPPORTED_RESULT_CONTRACT_VERSIONS
+from chemsmart.jobs.pyscf.writer import (
+    RESULT_UNITS,
+    SUPPORTED_RESULT_CONTRACT_VERSIONS,
+)
 from chemsmart.utils.constants import energy_conversion
 
 # Historical quantities use six bases in the order energy, length,
@@ -75,6 +78,15 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
         "energy",
         "energies",
         "positions",
+        # The artifact carries two structures -- what the driver was
+        # handed (spec/positions) and where it ended (results/positions)
+        # -- and a consumer asks for the role it needs.
+        "supplied_positions",
+        "reached_positions",
+        "converged",
+        "functional",
+        "ab_initio",
+        "mulliken_atomic_spin_populations",
         "connectivity",
         "symbols",
         "vibrational_frequencies",
@@ -322,37 +334,6 @@ _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
 #: Executed-evidence contracts the analysis plane admits, owned by the
 #: writer: a previous supported contract is a subset of the current one.
 _SUPPORTED_PYSCF_RESULT_CONTRACTS = SUPPORTED_RESULT_CONTRACT_VERSIONS
-_SELECTOR_RESULT_UNITS = {
-    "energy": {"results/energies": "Eh"},
-    "energies": {"results/energies": "Eh"},
-    "excitation_energies": {"results/excitation_energies": "Eh"},
-    "oscillator_strengths": {"results/oscillator_strengths": "dimensionless"},
-    "dipole_moment": {"results/dipole_moment": "Debye"},
-    "dipole_moment_magnitude": {"results/dipole_moment": "Debye"},
-    "mulliken_atomic_charges": {
-        "results/mulliken_charges": "elementary_charge"
-    },
-    "positions": {"results/positions": "Angstrom"},
-    "connectivity": {"results/positions": "Angstrom"},
-    "vibrational_frequencies": {"results/vibrational_frequencies": "cm^-1"},
-    "vibrational_mode_atom_participation": {
-        "results/normal_modes": "dimensionless"
-    },
-    "vibrational_mode_degeneracy_group": {
-        "results/vibrational_frequencies": "cm^-1"
-    },
-    "scan_energies": {"results/scan_energies": "Eh"},
-    "scan_coordinate_values": {"results/scan_coordinate_values": ""},
-    "scan_point_indices": {"results/scan_point_indices": ""},
-    "homo": {"results/mo_energy": "Eh"},
-    "lumo": {"results/mo_energy": "Eh"},
-    "gap": {"results/mo_energy": "Eh"},
-    "spin_square": {"results/spin_square": "dimensionless"},
-    "spin_square_deviation": {"results/spin_square": "dimensionless"},
-    "effective_multiplicity": {
-        "results/spin_square_effective_multiplicity": "dimensionless"
-    },
-}
 
 
 class QuantityContractError(ValueError):
@@ -361,6 +342,56 @@ class QuantityContractError(ValueError):
 
 class QuantityExtractionError(QuantityContractError):
     """Raised when trusted result evidence cannot be extracted safely."""
+
+
+#: Which HDF5 dataset(s) each selector reads.  The *unit* each dataset
+#: carries is the writer's declaration (``RESULT_UNITS``), never a second
+#: table here: two hand-written tables once disagreed on ``normal_modes``
+#: (writer amu^-1/2, reader "dimensionless") and the declared selector was
+#: refused on every real PySCF Hessian while every synthetic test passed.
+#: Deriving the expectation from the writer means a disagreement can only
+#: be an artifact written under another contract, which is a fact to state.
+_SELECTOR_RESULT_DATASETS: dict[str, tuple[str, ...]] = {
+    "energy": ("results/energies",),
+    "energies": ("results/energies",),
+    "excitation_energies": ("results/excitation_energies",),
+    "oscillator_strengths": ("results/oscillator_strengths",),
+    "dipole_moment": ("results/dipole_moment",),
+    "dipole_moment_magnitude": ("results/dipole_moment",),
+    "mulliken_atomic_charges": ("results/mulliken_charges",),
+    "mulliken_atomic_spin_populations": ("results/mulliken_spin_populations",),
+    "positions": ("results/positions",),
+    "reached_positions": ("results/positions",),
+    "connectivity": ("results/positions",),
+    "vibrational_frequencies": ("results/vibrational_frequencies",),
+    "vibrational_mode_atom_participation": ("results/normal_modes",),
+    "vibrational_mode_degeneracy_group": ("results/vibrational_frequencies",),
+    "homo": ("results/mo_energy",),
+    "lumo": ("results/mo_energy",),
+    "gap": ("results/mo_energy",),
+    "spin_square": ("results/spin_square",),
+    "spin_square_deviation": ("results/spin_square",),
+    "effective_multiplicity": ("results/spin_square_effective_multiplicity",),
+}
+
+
+def _dataset_unit(path: str) -> str:
+    leaf = path.rsplit("/", 1)[-1]
+    try:
+        return RESULT_UNITS[leaf]
+    except (
+        KeyError
+    ) as exc:  # a selector naming a dataset the writer never writes
+        raise QuantityContractError(
+            f"selector dataset {path!r} has no unit in the writer's table"
+        ) from exc
+
+
+#: Derived, never hand-written: selector -> {dataset path: expected unit}.
+_SELECTOR_RESULT_UNITS: dict[str, dict[str, str]] = {
+    selector: {path: _dataset_unit(path) for path in paths}
+    for selector, paths in _SELECTOR_RESULT_DATASETS.items()
+}
 
 
 def _freeze(value: Any) -> Any:
@@ -1055,28 +1086,26 @@ def _verify_artifact(
     return artifact
 
 
-def _require_analysis_ready_pyscf_result(
+def _require_receipt_bound_pyscf_result(
     *,
     artifact: Path,
     expected_sha256: str,
     output: PySCFOutput,
-    required_units: dict[str, str],
 ) -> dict[str, Any]:
-    """Require current, executed, receipt-bound result evidence.
+    """Require a real, receipt-bound PySCF artifact -- green or not.
 
-    Fake-preview HDF5 files intentionally resemble real results so downstream
-    readers can be exercised.  They are not numerical evidence.  Admission
-    therefore requires both the machine contract inside HDF5 and the sibling
-    ChemSmart run receipt that binds deterministic checks to these bytes.  A
-    Hessian may remain ``unclassified`` until a minimum/transition-state policy
-    is supplied; it is still analysis-ready when every invariant is green.
+    This is the admission to *open* a result: the file states a supported
+    contract, it is not a preview, and the sibling run receipt is
+    digest-valid, binds these exact bytes and carries the ancestry of
+    digests behind them.  It says nothing about whether the run succeeded.
+    A failed optimisation opened through it is inspectable -- its terminal
+    record, its last geometry, its printed numbers -- exactly as a failed
+    ORCA log is, while ``_require_analysis_ready_pyscf_result`` keeps the
+    green requirements every quantity extraction and free energy demands.
     """
 
     if (
-        not output.normal_termination
-        or not output.engine_complete
-        or output.failure is not None
-        or output.spec.get("preview_only") is not False
+        output.spec.get("preview_only") is not False
         or output.spec.get("result_contract_version")
         not in _SUPPORTED_PYSCF_RESULT_CONTRACTS
     ):
@@ -1103,19 +1132,12 @@ def _require_analysis_ready_pyscf_result(
         raise QuantityExtractionError(
             "PySCF run receipt digest is absent or invalid"
         )
-    receipt_state = receipt.get("state")
-    scientific_state = receipt.get("scientific_validation_state")
     if (
         receipt.get("fake") is not False
-        or receipt.get("engine_complete") is not True
-        or receipt.get("child_returncode") != 0
-        or receipt.get("findings") not in ([], ())
-        or receipt_state not in {"validated", "engine_complete"}
-        or scientific_state not in {"validated", "unclassified"}
         or receipt.get("result_sha256") != expected_sha256
     ):
         raise QuantityExtractionError(
-            "PySCF run receipt does not admit this exact result for analysis"
+            "PySCF run receipt does not bind this exact result"
         )
     spec = output.spec
     provenance = output.provenance
@@ -1169,8 +1191,12 @@ def _require_analysis_ready_pyscf_result(
         # carry a null ``input_artifact_sha256`` while the canonical
         # ``input_geometry_sha256`` above still binds atom order, coordinates,
         # units, charge and multiplicity.  Do not reject a matching absence as
-        # if it were a broken digest.
-        if field == "input_artifact_sha256" and expected in (None, ""):
+        # if it were a broken digest.  The applied-settings digest is written
+        # by the driver after the mean-field object exists, so a run that
+        # died earlier carries a matching absence there too.
+        if field in {"input_artifact_sha256", "applied_settings_sha256"} and (
+            expected in (None, "")
+        ):
             if observed in (None, ""):
                 continue
         try:
@@ -1218,6 +1244,51 @@ def _require_analysis_ready_pyscf_result(
         raise QuantityExtractionError(
             "PySCF applied settings digest differs across result provenance"
         )
+    return receipt
+
+
+def _require_analysis_ready_pyscf_result(
+    *,
+    artifact: Path,
+    expected_sha256: str,
+    output: PySCFOutput,
+    required_units: dict[str, str],
+) -> dict[str, Any]:
+    """Require current, executed, receipt-bound, *green* result evidence.
+
+    Fake-preview HDF5 files intentionally resemble real results so downstream
+    readers can be exercised.  They are not numerical evidence.  Admission
+    therefore requires both the machine contract inside HDF5 and the sibling
+    ChemSmart run receipt that binds deterministic checks to these bytes,
+    and every invariant green: this is what a quantity extraction and a free
+    energy stand on.  A historical receipt whose Hessian the runner left
+    ``unclassified`` stays admissible; the host applies the stationary-point
+    promise itself.
+    """
+
+    receipt = _require_receipt_bound_pyscf_result(
+        artifact=artifact, expected_sha256=expected_sha256, output=output
+    )
+    if (
+        not output.normal_termination
+        or not output.engine_complete
+        or output.failure is not None
+    ):
+        raise QuantityExtractionError(
+            "scientific quantities require a current executed PySCF result"
+        )
+    receipt_state = receipt.get("state")
+    scientific_state = receipt.get("scientific_validation_state")
+    if (
+        receipt.get("engine_complete") is not True
+        or receipt.get("child_returncode") != 0
+        or receipt.get("findings") not in ([], ())
+        or receipt_state not in {"validated", "engine_complete"}
+        or scientific_state not in {"validated", "unclassified"}
+    ):
+        raise QuantityExtractionError(
+            "PySCF run receipt does not admit this exact result for analysis"
+        )
     observed_units = output.result_units
     mismatches = {
         path: {"expected": unit, "observed": observed_units.get(path)}
@@ -1229,6 +1300,27 @@ def _require_analysis_ready_pyscf_result(
             f"PySCF result units are absent or incompatible: {mismatches}"
         )
     return receipt
+
+
+def validate_pyscf_result_binding(
+    artifact_path: str | os.PathLike[str],
+    *,
+    expected_sha256: str,
+) -> tuple[PySCFOutput, dict[str, Any]]:
+    """Open a receipt-bound structured result, green or failed.
+
+    The open-time admission every reader consumer shares: the bytes are the
+    receipt's bytes and the ancestry holds.  Whether the run succeeded is
+    the result's own word (``normal_termination``), which extraction and
+    thermochemistry check through ``validate_pyscf_analysis_artifact``.
+    """
+
+    artifact = _verify_artifact(artifact_path, expected_sha256)
+    output = PySCFOutput(artifact)
+    receipt = _require_receipt_bound_pyscf_result(
+        artifact=artifact, expected_sha256=expected_sha256, output=output
+    )
+    return output, receipt
 
 
 def validate_pyscf_analysis_artifact(
@@ -1310,33 +1402,13 @@ def _thermo_quantity(
     )
 
 
-def _uses_legacy_pyscf_thermochemistry_contract(
-    request: ThermochemistryRequestV1,
-) -> bool:
-    return (
-        request.program == "pyscf"
-        and request.concentration_mol_l is None
-        and request.entropy_method == "rrho"
-        and request.entropy_cutoff_cm1 is None
-        and request.enthalpy_cutoff_cm1 is None
-        and request.alpha == 4
-        and request.use_weighted_mass is False
-        and request.frequency_scale_factor == 1.0
-    )
-
-
 def _thermochemistry_assumptions(
     request: ThermochemistryRequestV1,
 ) -> tuple[str, ...]:
-    if _uses_legacy_pyscf_thermochemistry_contract(request):
-        return (
-            "ideal-gas translational partition function",
-            "rigid-rotor harmonic-oscillator thermochemistry",
-            "ground-state electronic degeneracy equals spin multiplicity",
-            "most-abundant isotopic masses",
-            "rotational symmetry derived by the shared ChemSmart engine",
-        )
-
+    # PySCF receipts used to keep a shorter "legacy" assumption list at
+    # default settings that never named the standard state; every program's
+    # receipt now says the same things, and a PySCF receipt additionally
+    # says which mass table produced its frequencies (below).
     assumptions = [
         "rigid-rotor harmonic-oscillator thermochemistry for harmonic quantities",
         "ground-state electronic degeneracy equals spin multiplicity",
@@ -1373,6 +1445,15 @@ def _thermochemistry_assumptions(
         assumptions.append(
             "Truhlar quasi-harmonic vibrational entropy with frequencies "
             f"below {request.entropy_cutoff_cm1:g} cm^-1 raised to the cutoff"
+        )
+    if request.program == "pyscf":
+        # The frequencies came from PySCF's harmonic analysis under its
+        # isotope-averaged masses while the rotational and translational
+        # terms above use the table this engine names; both conventions
+        # are on the receipt because the artifact records the first.
+        assumptions.append(
+            "vibrational frequencies from PySCF harmonic analysis under "
+            "isotope-averaged atomic masses (artifact mass_convention)"
         )
     mode = int(getattr(request, "reaction_coordinate_mode", 0) or 0)
     if mode:
@@ -1735,8 +1816,7 @@ def derive_result_thermochemistry(
         "assumptions": assumptions,
         "status": "derived",
     }
-    if not _uses_legacy_pyscf_thermochemistry_contract(request):
-        body = _extended_thermochemistry_body(body, request)
+    body = _extended_thermochemistry_body(body, request)
     return ThermochemistryReceiptV1(
         **body, receipt_sha256=canonical_quantity_sha256(body)
     )

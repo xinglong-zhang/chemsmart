@@ -669,8 +669,11 @@ def run_live_agent_session(
     result_observations = _scan_result_artifacts(
         workspace_path, scratch_exclusions
     )
-    failed_result_observations = _scan_failed_result_artifacts(
-        workspace_path, scratch_exclusions
+    failed_result_observations = (
+        *_scan_failed_result_artifacts(workspace_path, scratch_exclusions),
+        *_scan_failed_pyscf_result_artifacts(
+            workspace_path, scratch_exclusions
+        ),
     )
     database_observations = _scan_database_artifacts(
         workspace_path, scratch_exclusions
@@ -1536,6 +1539,90 @@ def _scan_database_artifacts(
         observations.setdefault(
             digest,
             _DatabaseObservation(artifact=artifact, record_count=record_count),
+        )
+    return tuple(
+        sorted(
+            observations.values(), key=lambda item: item.artifact.artifact_id
+        )
+    )
+
+
+def _scan_failed_pyscf_result_artifacts(
+    workspace: Path, excluded_roots: tuple[Path, ...] = ()
+) -> tuple[_FailedResultObservation, ...]:
+    """Name every PySCF result whose run did not terminate normally.
+
+    The log scanner sniffs three program banners and PySCF has none, so a
+    failed PySCF run -- an optimiser that stopped on its step limit, an SCF
+    that did not settle -- was invisible rather than inspectable.  The
+    driver's typed status is the sniffer here, and its own account of the
+    death (the stage that raised, or the quiet unconverged flag) travels in
+    the record.
+    """
+
+    from chemsmart.io.native_failure import summarize_pyscf_native_failure
+    from chemsmart.io.pyscf.output import read_pyscf_h5
+
+    observations: dict[str, _FailedResultObservation] = {}
+    private_root = workspace / _PRIVATE_ROOT_NAME
+    host_artifact_root = workspace / "artifacts"
+    barred = (private_root, host_artifact_root, *excluded_roots)
+    for candidate in sorted(workspace.rglob("*.h5")):
+        if any(root in candidate.parents for root in barred):
+            continue
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(workspace)
+            spec, _provenance, status, _results = read_pyscf_h5(resolved)
+        except (OSError, KeyError, TypeError, ValueError):
+            continue
+        if not isinstance(status, dict) or not isinstance(spec, dict):
+            continue
+        if status.get("normal_termination") is True:
+            continue
+        if spec.get("preview_only") is not False:
+            continue
+        summary = summarize_pyscf_native_failure(status)
+        stages = (
+            status.get("stages")
+            if isinstance(status.get("stages"), dict)
+            else {}
+        )
+        opt = stages.get("opt") if isinstance(stages.get("opt"), dict) else {}
+        converged = opt.get("converged")
+        digest = file_sha256(resolved)
+        artifact = TrustedArtifactRefV1(
+            artifact_id=f"failed-result-{digest[:16]}",
+            kind="failed_result",
+            sha256=digest,
+            size_bytes=resolved.stat().st_size,
+            path=str(resolved),
+            cli_value=str(resolved),
+        )
+        charge = spec.get("charge")
+        multiplicity = spec.get("multiplicity")
+        observations.setdefault(
+            digest,
+            _FailedResultObservation(
+                artifact=artifact,
+                program="pyscf",
+                jobtype=(str(spec.get("jobtype") or "").lower() or None),
+                converged=(None if converged is None else bool(converged)),
+                scan_steps_reached=None,
+                scan_steps_planned=None,
+                native_failure_class=(
+                    summary.error_class if summary is not None else ""
+                ),
+                engine_lines=(
+                    tuple(summary.engine_lines) if summary is not None else ()
+                ),
+                charge=charge if isinstance(charge, int) else None,
+                multiplicity=(
+                    multiplicity if isinstance(multiplicity, int) else None
+                ),
+            ),
         )
     return tuple(
         sorted(

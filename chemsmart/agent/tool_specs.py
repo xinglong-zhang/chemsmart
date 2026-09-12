@@ -65,10 +65,9 @@ def _legacy_tool_definitions(
             "Select the parser matching the registered artifact. Current "
             "program-wide reader selector union (not a promise for every job "
             "type): "
-            f"{reader_selector_inventory}. PySCF uses its structured HDF5 "
-            "result registry. Query inspect_program for job-scoped "
-            "parser support where declared; the selected method/settings must "
-            "still emit the quantity."
+            f"{reader_selector_inventory}. Query inspect_program for "
+            "job-scoped parser support where declared; the selected "
+            "method/settings must still emit the quantity."
         ),
     }
     structured_result_program_brief = {

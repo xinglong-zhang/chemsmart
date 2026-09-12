@@ -613,9 +613,63 @@ class PySCFOutput(FileMixin):
 
     @cached_property
     def positions(self):
-        """Return the final geometry in Angstrom."""
+        """Return the final geometry in Angstrom.
+
+        For an optimisation this is the last geometry the optimiser
+        evaluated, converged or not; for ``sp`` and ``hess`` it equals the
+        supplied geometry by construction and the validator enforces it.
+        Every other quantity in the artifact belongs to this structure: the
+        driver re-converges the SCF here before reading any property.
+        """
         values = self.results.get("positions")
         return np.asarray(values, dtype=float) if values is not None else None
+
+    @cached_property
+    def supplied_positions(self):
+        """Return the geometry the calculation was handed, in ``spec/unit``.
+
+        The artifact carries both structures: ``spec/positions`` is what
+        the driver received and ``results/positions`` what it ended on.
+        They differ for an optimisation that moved and coincide for a
+        fixed-geometry stage.
+        """
+        values = self.spec.get("positions")
+        return np.asarray(values, dtype=float) if values is not None else None
+
+    @property
+    def supplied_positions_unit(self):
+        return self.spec.get("unit")
+
+    @property
+    def final_energy(self):
+        """The last SCF energy in Hartree, the one the final structure has."""
+        return self.energies[-1] if self.energies else None
+
+    @property
+    def converged(self):
+        """Whether the optimisation converged; None for a fixed-geometry job.
+
+        Read from the driver's own stage status, so an optimiser that
+        stopped on its step limit answers False rather than an absence.
+        """
+        stages = self.status.get("stages")
+        if not isinstance(stages, dict) or "opt" not in self.spec.get(
+            "stages", []
+        ):
+            return None
+        opt = stages.get("opt")
+        if not isinstance(opt, dict) or "converged" not in opt:
+            return None
+        return bool(opt.get("converged"))
+
+    @property
+    def optimizer_converged(self):
+        stages = self.status.get("stages")
+        opt = stages.get("opt") if isinstance(stages, dict) else None
+        if not isinstance(opt, dict):
+            return None
+        value = opt.get("optimizer_converged")
+        return None if value is None else bool(value)
 
     @cached_property
     def forces(self):
@@ -688,12 +742,28 @@ class PySCFOutput(FileMixin):
             vibrational_modes=self.vibrational_modes,
             mulliken_atomic_charges=self.mulliken_atomic_charges,
             rotational_symmetry_number=self.rotational_symmetry_number,
-            is_optimized_structure=self.jobtype in ("opt",),
+            # An optimisation that stopped on its step limit reached a
+            # structure, but not an optimised one; the flag follows the
+            # driver's convergence record, never the jobtype alone.
+            is_optimized_structure=(
+                self.jobtype in ("opt",) and self.converged is True
+            ),
             info={PYSCF_SOURCE_ARTIFACT_INFO_KEY: self.source_artifact},
         )
         if return_list:
             return [molecule]
         return molecule
+
+    @cached_property
+    def molecule(self):
+        """The final structure with its properties, as the host sensors read it.
+
+        The log readers expose ``molecule`` and the basin, sibling and
+        spin sensors read it behind a bare ``except``; this reader had only
+        ``get_molecule()``, so every one of them returned an empty answer
+        for PySCF instead of a typed absence.
+        """
+        return self.get_molecule()
 
     # ------------------------------------------------------------------
     # thermochemistry -- delegated, never recomputed

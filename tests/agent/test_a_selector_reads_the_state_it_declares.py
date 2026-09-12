@@ -46,7 +46,16 @@ FIXTURE = (
     "/workspaces/po3-r18/nodes/ts-ester-c4"
 )
 
-GEOMETRY_SELECTORS = ("positions", "reached_positions")
+GEOMETRY_SELECTORS = ("positions", "reached_positions", "supplied_positions")
+
+#: Archived PySCF optimisations that moved (tests/data): one converged
+#: from a distorted water (0.083 A), one stopped after a single step
+#: (0.066 A). The artifact carries the supplied and the final structure.
+PYSCF_FIXTURES = (
+    "tests/data/PySCFTests/outputs/water_opt/water_opt_gas_phase.h5",
+    "tests/data/PySCFTests/outputs/water_opt_maxsteps1/"
+    "water_opt_maxsteps1_gas_phase.h5",
+)
 
 
 def _fixture_output():
@@ -54,6 +63,23 @@ def _fixture_output():
     if not hits or not pathlib.Path(hits[0]).is_file():
         pytest.skip("the archived multi-structure ORCA result is absent")
     return reader_for("orca"), hits[0]
+
+
+def _moved_outputs():
+    """Every archived result whose run moved, with its reader."""
+
+    found = []
+    hits = sorted(glob.glob(f"{FIXTURE}/*_optts_optts.out"))
+    if hits and pathlib.Path(hits[0]).is_file():
+        found.append(("orca", reader_for("orca"), hits[0]))
+    root = pathlib.Path(__file__).resolve().parents[2]
+    for relative in PYSCF_FIXTURES:
+        path = root / relative
+        if path.is_file():
+            found.append(("pyscf", reader_for("pyscf"), str(path)))
+    if not found:
+        pytest.skip("no archived multi-structure result is present")
+    return found
 
 
 def _coordinates(reader, handle, selector):
@@ -101,60 +127,92 @@ def test_declared_states_are_from_the_vocabulary():
 
 
 @pytest.mark.capability("selector:orca:ts:reached_positions")
+@pytest.mark.capability("selector:pyscf:opt:reached_positions")
 def test_a_reached_selector_returns_the_last_structure():
     """The relation that needs no oracle: reached means the last one."""
 
-    reader, path = _fixture_output()
-    handle = reader.open_output(path)
-    reached = _coordinates(reader, handle, "reached_positions")
+    for _program, reader, path in _moved_outputs():
+        handle = reader.open_output(path)
+        reached = _coordinates(reader, handle, "reached_positions")
 
-    molecule = handle.molecule
-    if isinstance(molecule, (list, tuple)):
-        molecule = molecule[-1]
-    last = np.asarray(molecule.positions, dtype=float)
-    assert reached.shape == last.shape
-    assert np.allclose(reached, last, atol=1e-8), (
-        "a selector declared 'as_reached' does not return the last "
-        "structure the result printed"
-    )
+        molecule = handle.molecule
+        if isinstance(molecule, (list, tuple)):
+            molecule = molecule[-1]
+        last = np.asarray(molecule.positions, dtype=float)
+        assert reached.shape == last.shape
+        assert np.allclose(reached, last, atol=1e-8), (
+            "a selector declared 'as_reached' does not return the last "
+            f"structure the result printed ({path})"
+        )
 
 
 @pytest.mark.capability("selector:orca:ts:positions")
+@pytest.mark.capability("selector:pyscf:opt:supplied_positions")
 def test_selectors_declaring_different_states_do_not_agree():
     """If two states return the same bytes, a declaration is false.
 
-    On this fixture the run moved 1.23 A, so ``positions``
+    On the ORCA fixture the run moved 1.23 A, so ``positions``
     (``thermochemistry_reference``) and ``reached_positions``
-    (``as_reached``) must differ. Before D2 both questions were answered
-    by one accessor and this relation could not be stated, let alone
-    checked.
+    (``as_reached``) must differ; on the PySCF fixtures the run moved
+    0.08 and 0.07 A, so ``supplied_positions`` (``as_supplied``) and
+    ``reached_positions`` must differ. Before D2 both questions were
+    answered by one accessor and this relation could not be stated, let
+    alone checked.
     """
 
-    reader, path = _fixture_output()
-    handle = reader.open_output(path)
-    seen: dict[str, np.ndarray] = {}
-    for selector in GEOMETRY_SELECTORS:
-        if selector not in reader.accessors:
-            continue
-        seen[reader.structural_state(selector)] = _coordinates(
-            reader, handle, selector
-        )
-    assert len(seen) >= 2, (
-        "the fixture exercises fewer than two structural states, so the "
-        f"relation is untested: {sorted(seen)}"
-    )
-    states = sorted(seen)
-    for index, first in enumerate(states):
-        for second in states[index + 1 :]:
-            left, right = seen[first], seen[second]
-            if left.shape != right.shape:
+    for _program, reader, path in _moved_outputs():
+        handle = reader.open_output(path)
+        seen: dict[str, np.ndarray] = {}
+        for selector in GEOMETRY_SELECTORS:
+            if selector not in reader.accessors:
                 continue
-            rmsd = float(np.sqrt(((left - right) ** 2).sum(axis=1).mean()))
-            assert rmsd > 1e-6, (
-                f"{first!r} and {second!r} are declared as different "
-                f"structural states and return identical coordinates "
-                f"(RMSD {rmsd:.3e} A), so one declaration is false"
+            if selector not in (
+                reader.selectors_for_jobtype(str(handle.jobtype)) or ()
+            ):
+                continue
+            seen[reader.structural_state(selector)] = _coordinates(
+                reader, handle, selector
             )
+        assert len(seen) >= 2, (
+            "the fixture exercises fewer than two structural states, so the "
+            f"relation is untested: {sorted(seen)} ({path})"
+        )
+        states = sorted(seen)
+        for index, first in enumerate(states):
+            for second in states[index + 1 :]:
+                left, right = seen[first], seen[second]
+                if left.shape != right.shape:
+                    continue
+                rmsd = float(np.sqrt(((left - right) ** 2).sum(axis=1).mean()))
+                assert rmsd > 1e-6, (
+                    f"{first!r} and {second!r} are declared as different "
+                    f"structural states and return identical coordinates "
+                    f"(RMSD {rmsd:.3e} A), so one declaration is false"
+                )
+
+
+@pytest.mark.capability("selector:pyscf:hess:supplied_positions")
+def test_a_fixed_geometry_result_reaches_what_it_was_handed():
+    """The fourth relation, which PySCF makes checkable: on a stage that
+    moves no atom the supplied and the final structure are one, and the
+    runner's own fixed-geometry invariant is read back through the
+    selector plane."""
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    reader = reader_for("pyscf")
+    for relative in (
+        "tests/data/PySCFTests/outputs/water_hess/water_hess_gas_phase.h5",
+        "tests/data/PySCFTests/outputs/water_sp/water_sp_gas_phase.h5",
+    ):
+        path = root / relative
+        if not path.is_file():
+            pytest.skip("archived PySCF fixed-geometry result is absent")
+        handle = reader.open_output(str(path))
+        supplied = _coordinates(reader, handle, "supplied_positions")
+        final = _coordinates(reader, handle, "positions")
+        assert np.allclose(supplied, final, atol=1e-8)
+        assert reader.structural_state("supplied_positions") == "as_supplied"
+        assert reader.structural_state("positions") == "as_reached"
 
 
 @pytest.mark.capability("tool:bind_reached_geometry")

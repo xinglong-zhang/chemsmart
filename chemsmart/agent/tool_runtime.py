@@ -12343,6 +12343,7 @@ class CommandCompiledToolHostV1:
                     artifact, observed = handoff_optimized_pyscf_geometry(
                         producer_receipt=receipt,
                         result_artifact=candidates[0],
+                        input_artifact=context.input_artifact,
                         producer_edge=edge,
                         approved_workspace=self.approved_workspace,
                         geometry_artifact_id=(
@@ -15719,6 +15720,11 @@ class CommandCompiledToolHostV1:
         available = reader.available_selectors(output)
         jobtype = str(getattr(output, "jobtype", "") or "").casefold()
         declared = reader.selectors_for_jobtype(jobtype)
+        requestable = tuple(
+            selector
+            for selector in available
+            if declared is None or selector in declared
+        )
         return {
             "artifact_id": artifact.artifact_id,
             "program": program,
@@ -15728,11 +15734,14 @@ class CommandCompiledToolHostV1:
             # A selector this artifact resolves is still refused unless the
             # job type declares it, because a declaration is a claim about
             # what the value means for that job type.
-            "requestable_selectors": tuple(
-                selector
-                for selector in available
-                if declared is None or selector in declared
-            ),
+            "requestable_selectors": requestable,
+            # Which molecular state each value belongs to -- supplied,
+            # reached, the thermochemistry reference -- so a session asks
+            # for the role it needs instead of learning it from a receipt.
+            "structural_states": {
+                selector: reader.structural_state(selector)
+                for selector in requestable
+            },
         }
 
     def _extract_result_quantities(self, turn_id: str, values: dict) -> Any:
