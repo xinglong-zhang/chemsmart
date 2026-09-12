@@ -63,7 +63,7 @@
   "interpreter_observed": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
   "interpreter_sha256": "8b52d5776cbe839d6a4cce3451fe9424eaf8a92389ad8597590263e2b15b44f4",
   "libxc_version": "7.0.0",
-  "observed_at": "2026-09-12T15:44:37.085684+00:00",
+  "observed_at": "2026-09-12T16:48:14.268627+00:00",
   "omp_num_threads": "4",
   "packages": {
     "geometric": "1.1.1",
@@ -76,7 +76,7 @@
   "probe_returncode": 0,
   "pyscf_version": "2.14.0",
   "python_version": "3.10.20",
-  "receipt_sha256": "0abbfbc8d4d8a98d5fe9466096107004b4e5eb92ed266f64ff47b6999723506d",
+  "receipt_sha256": "c88984b8da29dfa06ee16e78f75f344e661fca31c09ebc263849a29ead0f08b6",
   "request": {
     "aux_basis": null,
     "basis": "def2-svp",
@@ -102,8 +102,8 @@
     "scf",
     "hess"
   ],
-  "run_id": "e0ac1a75-b5c3-49c7-aeac-b586074cf745",
-  "run_nonce": "47b65774707f261e9b02746991495b9375baa0114d35db8f6727628ebd3b66e8",
+  "run_id": "915de985-4eeb-486e-8a1b-36e7066d7512",
+  "run_nonce": "cb47c10656dcaf2c1a07f1ce362ce01aba5c7251c11ad0af22a61b825faa6129",
   "schema_version": "chemsmart.pyscf-environment.v1",
   "solvent_ids": [
     ""

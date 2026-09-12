@@ -24,8 +24,8 @@ import numpy as np
 CONFIG = json.loads("""{
     "schema_version": "2.0",
     "result_contract_version": "chemsmart.pyscf-result-contract.v4",
-    "run_id": "e0ac1a75-b5c3-49c7-aeac-b586074cf745",
-    "run_nonce": "47b65774707f261e9b02746991495b9375baa0114d35db8f6727628ebd3b66e8",
+    "run_id": "915de985-4eeb-486e-8a1b-36e7066d7512",
+    "run_nonce": "cb47c10656dcaf2c1a07f1ce362ce01aba5c7251c11ad0af22a61b825faa6129",
     "chemsmart_version": "3.1.4",
     "label": "water_stretched_hess_gas_phase",
     "title": null,
@@ -943,13 +943,13 @@ if __name__ == "__main__":
 System: uname_result(system='Linux', node='chemsmart-hpc', release='5.15.0-187-generic', version='#197-Ubuntu SMP Fri Jul 17 19:17:01 UTC 2026', machine='x86_64')  Threads 4
 Python 3.10.20 | packaged by conda-forge | (main, Jun 11 2026, 03:31:56) [GCC 14.3.0]
 numpy 1.26.4  scipy 1.15.2  h5py 3.16.0
-Date: Sat Sep 12 23:44:37 2026
+Date: Sun Sep 13 00:48:14 2026
 PySCF version 2.14.0
 PySCF path  /opt/miniforge3/envs/chemsmart-pyscf/lib/python3.10/site-packages/pyscf
 
-[ENV] CHEMSMART_PYSCF_ENVIRONMENT_RECEIPT_SHA256 0abbfbc8d4d8a98d5fe9466096107004b4e5eb92ed266f64ff47b6999723506d
-[ENV] CHEMSMART_PYSCF_SCRIPT_SHA256 75a3f824d3208d977f1945a08728509f9ffc923edef9cc9da1469672fbaba55b
-[ENV] CHEMSMART_PYSCF_INPUT_RECEIPT_SHA256 33d5d6b715b400cbd3424dd18b43c33c20195f8abfcfddf25d19675e997f7c59
+[ENV] CHEMSMART_PYSCF_ENVIRONMENT_RECEIPT_SHA256 c88984b8da29dfa06ee16e78f75f344e661fca31c09ebc263849a29ead0f08b6
+[ENV] CHEMSMART_PYSCF_SCRIPT_SHA256 bfecb16846c83495df0e5fa2cd7f4a329c8126f50c61425d651d6055e9a84da5
+[ENV] CHEMSMART_PYSCF_INPUT_RECEIPT_SHA256 f3a4e14d7306778f857bb4a575b820512fe97e93609f59006d6a117e3e2eff75
 [CONFIG] conf_file None
 [INPUT] verbose = 4
 [INPUT] num. atoms = 3
@@ -986,7 +986,7 @@ SCF conv_tol_grad = None
 SCF max_cycles = 50
 direct_scf = True
 direct_scf_tol = 1e-13
-chkfile to save SCF result = /tmp/tmpa21nwdmk
+chkfile to save SCF result = /tmp/tmp32lt4uqw
 max_memory 8192 MB (current use 103 MB)
 XC library pyscf.dft.libxc version 7.0.0
     S. Lehtola, C. Steigemann, M. J.T. Oliveira, and M. A.L. Marques.,  SoftwareX 7, 1–5 (2018)
@@ -996,32 +996,32 @@ radial grids:
     Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
     
 becke partition: Becke, JCP 88, 2547 (1988); DOI:10.1063/1.454033
-pruning grids: <function nwchem_prune at 0x14e0bfc40550>
+pruning grids: <function nwchem_prune at 0x150524270550>
 grids dens level: 3
 symmetrized grids: False
-atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x14e0bfbf2dd0>
+atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x150524222dd0>
 small_rho_cutoff = 0
 Set gradient conv threshold to 3.16228e-05
 Initial guess from minao.
 tot grids = 33704
 init E= -76.2684326440855
-  HOMO = -0.42699611292513  LUMO = -0.000741454846898026  gap/eV = 11.59898
-cycle= 1 E= -76.266208311421  delta_E= 0.00222  |g|= 0.701  |ddm|= 1.38
-  HOMO = -0.121816087738143  LUMO = 0.0731604779891049  gap/eV = 5.30558
+  HOMO = -0.426996112925129  LUMO = -0.000741454846900691  gap/eV = 11.59898
+cycle= 1 E= -76.2662083114211  delta_E= 0.00222  |g|= 0.701  |ddm|= 1.38
+  HOMO = -0.121816087738139  LUMO = 0.073160477989112  gap/eV = 5.30558
 cycle= 2 E= -76.1713696446235  delta_E= 0.0948  |g|= 0.999  |ddm|= 1.11
-  HOMO = -0.29687050337587  LUMO = 0.0383943249959695  gap/eV = 9.12302
+  HOMO = -0.296870503375867  LUMO = 0.0383943249959731  gap/eV = 9.12302
 cycle= 3 E= -76.35783865537  delta_E= -0.186  |g|= 0.0249  |ddm|= 0.694
-  HOMO = -0.290434589012873  LUMO = 0.0428498517623361  gap/eV = 9.06913
+  HOMO = -0.290434589012877  LUMO = 0.0428498517623375  gap/eV = 9.06913
 cycle= 4 E= -76.3579523388469  delta_E= -0.000114  |g|= 0.00403  |ddm|= 0.0152
-  HOMO = -0.290794340607256  LUMO = 0.04251274910767  gap/eV = 9.06975
+  HOMO = -0.290794340607258  LUMO = 0.0425127491076736  gap/eV = 9.06975
 cycle= 5 E= -76.3579549713543  delta_E= -2.63e-06  |g|= 0.000474  |ddm|= 0.00227
-  HOMO = -0.290942500036313  LUMO = 0.0424878633980943  gap/eV = 9.07310
-cycle= 6 E= -76.3579550154201  delta_E= -4.41e-08  |g|= 9.67e-06  |ddm|= 0.000351
-  HOMO = -0.290942987051924  LUMO = 0.04248642105141  gap/eV = 9.07308
-cycle= 7 E= -76.3579550154644  delta_E= -4.44e-11  |g|= 1.49e-06  |ddm|= 1.79e-05
-  HOMO = -0.290942584316543  LUMO = 0.0424866588667694  gap/eV = 9.07307
-Extra cycle  E= -76.3579550154651  delta_E= -6.25e-13  |g|= 9.8e-07  |ddm|= 2.11e-06
-converged SCF energy = -76.3579550154651
+  HOMO = -0.290942500036313  LUMO = 0.0424878633980925  gap/eV = 9.07310
+cycle= 6 E= -76.35795501542  delta_E= -4.41e-08  |g|= 9.67e-06  |ddm|= 0.000351
+  HOMO = -0.290942987051926  LUMO = 0.0424864210514122  gap/eV = 9.07308
+cycle= 7 E= -76.3579550154643  delta_E= -4.43e-11  |g|= 1.49e-06  |ddm|= 1.79e-05
+  HOMO = -0.290942584316544  LUMO = 0.0424866588667694  gap/eV = 9.07307
+Extra cycle  E= -76.357955015465  delta_E= -7.25e-13  |g|= 9.8e-07  |ddm|= 2.11e-06
+converged SCF energy = -76.357955015465
 
 
 ******** <class 'pyscf.grad.rks.Gradients'> for <class 'pyscf.dft.rks.RKS'> ********
@@ -1030,7 +1030,7 @@ max_memory 8192 MB (current use 163 MB)
 grid_response = False
 --------------- RKS gradients ---------------
          x                y                z
-0 O    -0.0178646066     0.0030427258    -0.0000000000
-1 H     0.0184885646    -0.0027652963     0.0000000000
-2 H    -0.0006250929    -0.0002782835    -0.0000000000
+0 O    -0.0178646066     0.0030427258     0.0000000000
+1 H     0.0184885646    -0.0027652963    -0.0000000000
+2 H    -0.0006250929    -0.0002782835     0.0000000000
 ----------------------------------------------

@@ -659,6 +659,50 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "inside one sanctioned build",
     ),
     _r(
+        "leaf.pyscf.two_nodes_make_a_minimum",
+        "leaf:pyscf",
+        "T1",
+        "A PySCF opt carries no frequencies and a hess moves no atom: a "
+        "minimum is an opt node then a hess node bound to the validated "
+        "optimized geometry, and the hess is judged on its order like "
+        "every program's.",
+        "PySCF round 2026-09-12: the archived planar-ammonia optimisation "
+        "converged onto its D3h saddle and only the hess could say so",
+    ),
+    _r(
+        "leaf.pyscf.one_structure_per_result",
+        "leaf:pyscf",
+        "T1",
+        "Every PySCF quantity belongs to the final structure; "
+        "supplied_positions is what was handed in and reached_positions "
+        "what an optimisation stopped on, converged or not, so a failed "
+        "opt's last geometry is what bind_reached_geometry carries.",
+        "PySCF round 2026-09-12: the artifact held both structures and no "
+        "selector served either role",
+    ),
+    _r(
+        "leaf.pyscf.a_matching_name_is_not_a_matching_functional",
+        "leaf:pyscf",
+        "T1",
+        "functional is the name the project asked for; b3lyp and b3lypg "
+        "are one libxc functional here and b3lyp5 another, and ORCA's "
+        "b3lyp is the VWN5 form, so a string that matches across programs "
+        "is necessary and never sufficient.",
+        "PySCF round 2026-09-12: b3lyp == b3lypg == libxc 402 measured; "
+        "an owner ruling on the applied literal was reversed on it",
+    ),
+    _r(
+        "leaf.pyscf.no_imaginary_mode_is_not_a_stationary_point",
+        "leaf:pyscf",
+        "T1",
+        "A PySCF Hessian's frequencies are projected free of rotations, so "
+        "all-real modes prove only that no imaginary mode was found; the "
+        "gradient the run outcome reports beside them says whether the "
+        "geometry was stationary.",
+        "PySCF round 2026-09-12: the archived stretched water printed "
+        "three real modes at max|g| = 0.0185 Eh/Bohr",
+    ),
+    _r(
         "leaf.saddle.seed_a_bimolecular_saddle",
         "leaf:saddle",
         "T3",

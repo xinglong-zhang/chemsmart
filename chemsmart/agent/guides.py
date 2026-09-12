@@ -39,6 +39,11 @@ class GuideV1:
     analysis_kinds: tuple[str, ...] = ()
     terminal_states: tuple[str, ...] = ()
     workspace_kinds: tuple[str, ...] = ()
+    #: Programs whose presence in the planned DAG opens this guide. A
+    #: program leaf cannot key on a jobtype (``hess`` is xTB's too) and
+    #: the crossprogram guide keys on the *count* of programs, so the
+    #: fourth signal a program family needs is the program itself.
+    programs: tuple[str, ...] = ()
     rule_placement: str = field(default="")
 
     def __post_init__(self) -> None:
@@ -357,6 +362,61 @@ GUIDES: tuple[GuideV1, ...] = (
         ),
     ),
     GuideV1(
+        guide_id="pyscf",
+        title="PySCF: a library backend with one structure per result",
+        tier="T1",
+        activation_terms=("pyscf", "gpu4pyscf", "libxc"),
+        programs=("pyscf",),
+        workspace_kinds=("pyscf_hdf5",),
+        body=(
+            "PySCF is a library, not a binary: the host writes the driver "
+            "script, runs it in the registered PySCF interpreter, and the "
+            "structured HDF5 result (pyscf_hdf5) is the program's typed "
+            "account -- its log is never read. Three executable stages, one "
+            "node each: sp, opt, hess. An opt computes no frequencies and a "
+            "hess moves no atom, so a minimum is an opt node feeding a hess "
+            "node through the ordinary validated-optimized-geometry edge. "
+            "Every quantity a PySCF result carries belongs to one structure, "
+            "the final one: the SCF is re-converged there, from the "
+            "optimiser's own last density, before energies, orbitals, "
+            "dipole, populations, <S^2> and frequencies are read. "
+            "supplied_positions is the structure the calculation was "
+            "handed; reached_positions (opt only) is the last geometry the "
+            "optimiser evaluated, converged or not; energies on an opt is "
+            "[E(supplied), E(reached)]; for sp and hess supplied and final "
+            "coincide by construction and the host checks it. A hess is "
+            "judged by the same 20 cm-1 rule as every program: one "
+            "imaginary mode types the node failed_wrong_stationary_point "
+            "with the anomaly recorded, and characterise_stationary_point, "
+            "displace_along_vibrational_mode and bind_reached_geometry work "
+            "on a PySCF result as on any other. No imaginary mode means "
+            "none was found, not that the geometry is stationary: PySCF "
+            "projects rotations out, so a Hessian off a stationary point "
+            "can print all-real modes; the run outcome reports the gradient "
+            "at the Hessian geometry and raises an anomaly above the "
+            "optimiser's own criterion. functional is the name the project "
+            "asked for; in this build b3lyp and b3lypg are one libxc "
+            "functional (402, the VWN3 form) and b3lyp5 the VWN5 form, so a "
+            "matching string across programs is necessary and never "
+            "sufficient -- compare differences, never totals. Not available "
+            "here: transition-state searches, IRC, scans, excited-state "
+            "execution (td previews only), GPU execution, post-HF, double "
+            "hybrids, mixed basis/ECP, a Hessian for any ROHF reference "
+            "(every one-electron system) or for an open-shell NLC "
+            "functional; only the geometric optimiser is installed. A "
+            "Hessian with D3/D4 dispersion or an SMD cavity term is analytic "
+            "except those blocks, which are finite differences. A failure "
+            "arrives typed by the stage that raised or by a quiet "
+            "unconverged flag, and a non-converged optimisation still "
+            "writes its last structure. Free energies come from the host's "
+            "RRHO engine over the printed frequencies (derive_thermochemistry; "
+            "state T and p), never PySCF's thermo; the frequencies were "
+            "computed under isotope-averaged masses and the symmetry number "
+            "from PySCF's own detection at a tolerance far tighter than an "
+            "optimiser's, both stated on the receipt."
+        ),
+    ),
+    GuideV1(
         guide_id="recovery",
         title="answering a run that failed or landed on the wrong stationary point",
         tier="T4",
@@ -506,10 +566,13 @@ def guides_from_plan(
         found.add("crossprogram")
     jobs = {str(item).lower() for item in jobtypes}
     ops = {str(item) for item in operations}
+    named_programs = {str(item).lower() for item in programs if str(item)}
     for guide in GUIDES:
         if jobs.intersection(guide.jobtypes):
             found.add(guide.guide_id)
         if ops.intersection(guide.operations):
+            found.add(guide.guide_id)
+        if named_programs.intersection(guide.programs):
             found.add(guide.guide_id)
     if any(constants):
         found.add("constants")

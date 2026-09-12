@@ -177,8 +177,26 @@ not the authority for completion. The HDF5 record binds requested and applied se
 engine, environment, convergence, properties, and artifact hashes. A process exit code of zero is insufficient when
 preflight, provenance, convergence, or required-property validation is red.
 
+The artifact carries two structures and every quantity belongs to the second. ``spec/positions`` is the geometry the
+calculation was handed; ``results/positions`` is where it ended. For an optimisation the driver re-converges the SCF on
+the final geometry, from the optimiser's own last density, before any energy, orbital, dipole, population, spin
+expectation or frequency is read, so a PySCF result has one structure and it is the final one. For ``sp`` and ``hess``
+the two coincide by construction and the validator enforces it. An optimisation that stops on its step limit still
+writes the last geometry the optimiser evaluated, never the input; its receipt records the failure, and the structure
+stays readable. The typed analysis layer serves the supplied structure as ``supplied_positions`` and the final one as
+``positions`` (and, for ``opt``, ``reached_positions`` and ``converged``).
+
 The ``hess`` leaf uses the supplied geometry without optimizing it. In a multi-stage workflow, bind it to the exact
-optimized-geometry artifact from a validated ``opt`` node rather than reusing the initial geometry.
+optimized-geometry artifact from a validated ``opt`` node rather than reusing the initial geometry. A Hessian's
+frequencies are projected free of translations and rotations, so a spectrum with no imaginary mode does not by itself
+prove the geometry is a stationary point; the driver records the gradient at the Hessian geometry beside the frequencies
+(``results/forces``), the mass table behind the frequencies (isotope-averaged) and the tolerance behind the detected
+point group, so a free energy derived from the result states its conventions. A Hessian that includes a D3 or D4
+dispersion correction, or an SMD cavity term, is analytic except those blocks, which PySCF evaluates by finite
+differences.
+
+For an open-shell reference the driver also records per-atom Mulliken spin populations; a closed-shell result marks the
+property as not applicable rather than reporting zeros.
 
 **********************
  Unsupported Requests
@@ -186,4 +204,8 @@ optimized-geometry artifact from a validated ``opt`` node rather than reusing th
 
 The executable integration does not offer transition-state search, IRC, scan, QMMM/ONIOM, NEB, post-HF correlation,
 double hybrids, arbitrary mixed basis/ECP input, unsupported constraints, or real TD/TDA execution. These requests must
-block; they must not be rewritten as a superficially similar PySCF calculation.
+block; they must not be rewritten as a superficially similar PySCF calculation. PySCF 2.14 has no analytic Hessian for
+any ROHF reference, which its ``scf.HF`` selects for every one-electron system, nor for an open-shell reference under a
+non-local-correlation functional; both are refused at preflight rather than inside the engine. Only the ``geometric``
+optimiser is installed in this host's compute environment; ``berny`` and ``ase`` are refused by the environment probe
+when absent.

@@ -228,6 +228,63 @@ life and arm that as a falsifier. Editing the clone while a goal is parked
 made one window's later cycles a mixed-tree observation, because each
 per-node subprocess imports the clone fresh.
 
+## A writer and a reader are two tables
+
+**What bit us.** The PySCF driver's `RESULT_UNITS` said `normal_modes`
+are amu^-1/2 and the reader's per-selector unit table said
+`dimensionless`; `vibrational_mode_atom_participation`, declared for
+`pyscf:hess`, was refused on every real PySCF Hessian while every
+synthetic test passed, and the tool surface reported the selector as
+simply absent because `available_selectors` swallows the refusal.
+
+**What worked.** Deriving the reader's expectation from the writer's
+table by dataset name, so a disagreement can only be an artifact written
+under another contract; and a generated test that reads every declared
+selector on an archived real artifact of its jobtype, accepting only
+`MissingQuantityError` as an honest absence. With the units agreeing the
+same selector then died on `modes or []` over a numpy array -- the
+synthetic test had fed the helper lists -- which the archived-fixture
+test caught in the same run.
+
+**Condition worth stating.** The blocker recorded against archiving
+real PySCF results ("pyscf not in the controller env") was false:
+reading an `.h5` needs only h5py, which the controller env has. Verify
+a deferred note's reason before believing it.
+
+## Adding a PySCF quantity
+
+**What it takes, in order.** One line in the driver skeleton (the
+value PySCF computes, taken after the final SCF), one `RESULT_UNITS`
+entry (the writer refuses an unregistered numeric dataset), a property
+on `PySCFOutput`, an accessor and a jobtype declaration in the reader, a
+`_SELECTOR_RESULT_DATASETS` entry (the unit comes from the writer), a
+dimension and a display unit, a structural state, and an assertion on
+an archived fixture. A result contract bump when a dataset is added; v3
+artifacts stay executed evidence because the applied-spec vocabulary is
+shared. The fixture assertion is what makes a half-threaded quantity
+fail loudly.
+
+**What we would watch.** A quantity computed before the final SCF of an
+optimisation would belong to a structure the artifact does not carry;
+the driver's stage loop is where that order is fixed.
+
+## Retiring a mechanism whose field lives in a digest body
+
+**What we did.** Retired the per-plan stationary-point policy: the
+class, its parser, the deferral that admitted an unclassified Hessian,
+the delegation string that subtracted a finding, and the validator's
+policy argument. The `stationary_point_policy_sha256` (always `""`) and
+`stationary_point_policy` (always `None`) fields stayed in the digest
+bodies of the validation receipt, the frozen approval, the review and
+the bundle, because every record on disk hashes a body that carries
+them.
+
+**What worked.** A read-only sweep of every artifact the host holds,
+before the commit: 60 PySCF artifacts opened, the seven historical
+`unclassified` receipts still analysis-ready, the four failed runs
+refused as before. A record that carries a policy is refused as not
+this host's, so the retired mechanism cannot return through a record.
+
 ## Delegating a review
 
 **What worked.** Two reviewers, kept independent until both returned, each

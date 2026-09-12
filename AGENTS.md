@@ -370,8 +370,9 @@ transition-state search returns the wrong number of imaginary modes.
 The displacement vectors are the program's own and the host owns the
 arithmetic, recording the largest displacement it actually achieved
 beside the one requested; the model owns which mode and how far. It is
-declared for ORCA results and is a starting-structure operation like
-the other two: refusals are structural only — a result printing no
+declared for every reader that serves printed modes -- the artifact
+kind is the reader's word, never derived from a program's name -- and
+is a starting-structure operation like the other two: refusals are structural only — a result printing no
 modes, a mode the result does not carry, a zero amplitude — and an
 amplitude is never refused on scientific merit, because whether the
 step escaped the saddle is decided by the optimisation that consumes
@@ -535,9 +536,10 @@ no cavity-dispersion term, which is how it differs from an SMD run. The
 terms report what the program *applied*, which is not always what the
 route requested, so they are read beside the model rather than instead of
 it. Only ORCA declares them — no archived Gaussian log carries the
-printed terms, PySCF folds solvation into its total energy with no
-decomposition, and every archived xTB run has solvation switched off,
-so for those three there is nothing a declaration could have audited.
+printed terms, the PySCF driver does not yet write the decomposition
+PySCF 2.14 holds in its SCF summary (``e_solvent`` and, for SMD,
+``e_cds``), and every archived xTB run has solvation switched off, so
+for those three there is nothing a declaration could have audited.
 
 Per-atom populations are positional and named by the scheme that produced
 them. Atom-label schemes disagree between programs — ORCA numbers atoms
@@ -603,6 +605,57 @@ dataset is read only under the unit it declares; a stored unit that
 differs from the one a selector reads it as is a divergence to state,
 not an absence to report. PySCF ``td`` declares nothing, because it is a
 preview surface and no approved workflow can emit an excited state.
+
+A PySCF result is one structure, and the host says which. The driver
+re-converges the SCF on the final geometry, from the optimiser's own
+last density, before any energy, orbital, dipole, population, spin
+expectation or frequency is read, so every quantity belongs to
+``results/positions``; the geometry the run was handed sits beside it
+in ``spec/positions``. The reader declares the states accordingly --
+``supplied_positions`` as supplied, ``positions`` and every property as
+reached, ``reached_positions`` and ``converged`` for ``opt`` alone --
+and the structural-state oracle that holds for ORCA's OptTS holds for
+PySCF's archived optimisations, with a fourth relation a fixed-geometry
+stage makes checkable: supplied and final coincide, and the runner's
+own invariant is read back through the selector plane. A PySCF result
+opens whether or not its run succeeded, on the receipt binding alone;
+every quantity and every free energy still demands the green receipt.
+A failed optimisation's last evaluated geometry -- which PySCF returns
+whether or not it converged, 0.066 Å from the input on an archived
+one-step run -- is therefore what ``bind_reached_geometry`` carries.
+The host sensors are fed through each program's reader by one step,
+so the stationary-point rule, the spin observation and the basin walk
+reach PySCF as they reach ORCA (the basin sensor had been fed by the
+ORCA branch alone), and a PySCF Hessian on a saddle -- an exactly
+planar ammonia optimised onto its D3h saddle, one imaginary mode at
+−830 cm⁻¹ -- ends ``failed_wrong_stationary_point`` with the anomaly
+recorded. The per-plan stationary-point policy that once deferred a
+PySCF Hessian to a downstream classification no organ performed is
+retired; its digest fields stay, always empty, so every approval on
+disk keeps its digest. A Hessian's stationarity is an observation with
+standing: PySCF's harmonic analysis projects rotations out, and an
+archived water Hessian at a stretched geometry prints three real
+frequencies at a gradient forty times the optimiser's criterion, so the
+driver records the gradient at the Hessian geometry and the host raises
+``stationary_point.gradient_above_optimizer_criterion`` above
+geomeTRIC's own ``convergence_gmax`` (the registered policy
+``hess_stationarity_gradient``), never a refusal. The result contract
+(v4) also records per-atom Mulliken spin populations for open shells,
+the isotope-averaged mass table behind the frequencies, the symmetry
+tolerance behind the point group -- a hundred times tighter than an
+optimiser's displacement criteria, so a molecule relaxed onto a
+symmetric minimum can lose its symmetry number silently, which is why
+the number and its source ride the thermochemistry receipt -- and the
+optimiser's convergence criteria. ``functional`` on a PySCF result is
+the name the project asked for: ``b3lyp`` and ``b3lypg`` are one libxc
+functional in this build and ``b3lyp5`` the VWN5 form, so a matching
+string across programs is necessary and never sufficient. Two Hessians
+PySCF 2.14 cannot compute -- any ROHF reference, and an open-shell
+reference under a non-local-correlation functional -- are refused at
+preflight. Every PySCF declaration is exercised on archived real
+artifacts with PySCF's own reference numbers beside them, and the host
+RRHO engine agrees with PySCF's thermochemistry on the zero-point energy
+to 3e-11 Eh on the same Hessian.
 
 This surface is qualified through one completed multi-program execution:
 a single displayed approval covering seven nodes — one xTB optimisation

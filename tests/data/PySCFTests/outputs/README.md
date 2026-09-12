@@ -3,7 +3,7 @@
 Real PySCF 2.14.0 / libxc 7.0.0 runs produced on chemsmart-hpc on
 2026-09-12 through the human CLI (`chemsmart run --no-fake --no-scratch
 -n 4 -m 8 pyscf -p <project> -f <input> [-c C -m M] -l <label> <stage>`)
-at commit b4fce1c7 (result contract v4). Each directory holds the
+at commit b4fce1c7 (result contract v4); the three Hessians were re-run at cb99bbff after the runner stopped producing the `unclassified` word, so their receipts say `validated`. Each directory holds the
 artifact (`.h5`), its three receipts (`.receipt.json`, `.input.json`,
 `.environment.json`), PySCF's own log (`.out`, never parsed) and
 `.reference.json`, PySCF's independent account of the same bytes written
@@ -23,4 +23,5 @@ admission compares digests, never paths.
 | `hydroxyl_sp` | OH· UKS doublet single point | spin populations [1.026, −0.026]; ⟨S²⟩ 0.7518 |
 | `water_opt_maxsteps1` | the distorted water with `opt_maxsteps: 1` | an unconverged optimisation: `results/positions` is the last evaluated geometry (0.066 Å from the input); receipt state `failed` |
 | `water_stretched_hess` | Hessian at the converged water with O–H(1) +0.02 Å | three real frequencies at max\|g\| = 0.0185 Eh/Bohr: zero imaginary modes is not stationarity |
+| `water_hess_historical_unclassified` | the water Hessian as the pre-cb99bbff runner wrote it: receipt `engine_complete` / `unclassified` | historical receipts keep admitting after the per-plan policy was retired |
 | `water_sp_scfmaxiter2` | the distorted water with `scf_maxiter: 2` | a quiet SCF non-convergence: `normal_termination` false, `energies` present |

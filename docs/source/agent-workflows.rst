@@ -29,6 +29,13 @@ Release-qualified real Agent execution is narrower:
 -  ORCA CPU single-points, optimization/frequency, transition-state, excited-state, relaxed coordinate scans, and serial
    producer-to-consumer DAGs.
 
+A PySCF result is one structure: the driver re-converges the SCF on the final geometry before any property is read, so
+``positions`` and every property belong to where the run ended, ``supplied_positions`` to where it began, and an
+optimisation that stopped on its step limit still carries its last evaluated geometry forward through
+``bind_reached_geometry``. A PySCF Hessian is judged on the order of its stationary point by the same program-neutral
+rule as every other program's, and because its projected spectrum can be all-real at a non-stationary geometry the run
+outcome also reports the gradient at the Hessian geometry, raising an anomaly above the optimiser's own criterion.
+
 A relaxed scan states its driven coordinate on the workflow node rather than in project YAML: which atoms, which
 coordinate type, and the range and number of points. The same specification is rendered into each program's own idiom,
 so one physical description reaches ORCA's absolute endpoints and Gaussian's increment without the caller writing

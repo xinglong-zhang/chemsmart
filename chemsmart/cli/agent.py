@@ -574,6 +574,14 @@ def capabilities(kind, tests_root, as_json):
         render_capability_matrix,
     )
 
+    if tests_root is None:
+        # An instrument must be shown able to report red: without a tests
+        # root every capability reads "tested 0", which is a rendering
+        # default and not a measurement. Read the repository's own tests
+        # when this clone carries them; an installed package carries none
+        # and honestly reports what it can see.
+        candidate = Path(__file__).resolve().parents[2] / "tests"
+        tests_root = candidate if candidate.is_dir() else None
     records = build_capability_registry(tests_root=tests_root)
     if kind:
         records = tuple(item for item in records if item.kind == kind)

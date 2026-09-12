@@ -42,6 +42,7 @@ CASES = {
     "water_opt_maxsteps1": ("opt", "water_opt_maxsteps1_gas_phase.h5"),
     "water_stretched_hess": ("hess", "water_stretched_hess_gas_phase.h5"),
     "water_sp_scfmaxiter2": ("sp", "water_sp_scfmaxiter2_gas_phase.h5"),
+    "water_hess_historical_unclassified": ("hess", "water_hess_gas_phase.h5"),
 }
 GREEN = {
     "water_sp",
@@ -51,6 +52,7 @@ GREEN = {
     "nh3_planar_hess",
     "hydroxyl_sp",
     "water_stretched_hess",
+    "water_hess_historical_unclassified",
 }
 
 
@@ -358,3 +360,33 @@ def test_the_host_rrho_and_pyscf_thermo_agree_where_they_must():
         "isotope-averaged" in line for line in receipt.assumptions
     ), "a PySCF receipt names the mass table behind its frequencies"
     assert reference["sym_number"][0] == 2
+
+
+def test_a_historical_unclassified_receipt_still_admits_its_result():
+    """The runner used to leave a Hessian ``unclassified`` when no per-plan
+    policy told it what to expect; that policy was retired and the word is
+    no longer produced, but every receipt that carries it was green on
+    every invariant and stays analysis-ready."""
+
+    from chemsmart.analysis.result_quantities import (
+        result_file_sha256,
+        validate_pyscf_analysis_artifact,
+    )
+
+    path = _path("water_hess_historical_unclassified")
+    receipt = json.loads(path.with_suffix(".receipt.json").read_text())
+    assert (receipt["state"], receipt["scientific_validation_state"]) == (
+        "engine_complete",
+        "unclassified",
+    )
+    output, admitted = validate_pyscf_analysis_artifact(
+        path, expected_sha256=result_file_sha256(path)
+    )
+    assert admitted["result_sha256"] == result_file_sha256(path)
+    current = json.loads(
+        _path("water_hess").with_suffix(".receipt.json").read_text()
+    )
+    assert (current["state"], current["scientific_validation_state"]) == (
+        "validated",
+        "validated",
+    ), "the shipped runner validates a green Hessian outright"
