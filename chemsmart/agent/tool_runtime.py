@@ -1158,6 +1158,7 @@ def _same_structure_observations(
     output: Any,
     input_sha256: str = "",
     output_sha256s: Sequence[str] = (),
+    handoffs: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], ...]:
     """Whether this result is the same structure as one already validated.
 
@@ -1176,6 +1177,16 @@ def _same_structure_observations(
     two siblings launched from the same geometry, are one structure by
     construction; recording those would bury the real observation
     under the ordinary shape of a workflow.
+
+    That exclusion is read from the handoff records the host keeps
+    (``handoffs``, keyed by consumer node), never inferred from digests:
+    a handoff writes a fresh geometry file the producer's receipt does
+    not list, so the digest join missed every fixed-geometry consumer of
+    a validated handoff and the sensor's own three-heavy-atom floor hid
+    it until the first molecule large enough arrived -- acrolein's td on
+    its own optimisation and formic acid's three single points on their
+    CCSD geometry were each recorded as a surprise (PySCF round 2,
+    2026-09-13).
     """
 
     if output is None:
@@ -1195,10 +1206,27 @@ def _same_structure_observations(
     heavy = [index for index, symbol in enumerate(symbols) if symbol != "H"]
     if len(heavy) < 3:
         return ()
+    # The nodes this one is one structure with by construction: the
+    # producer whose geometry it consumed, every sibling that consumed
+    # the same producer's geometry, and every consumer of its own.
+    joined: set[str] = set()
+    for consumer, handoff in (handoffs or {}).items():
+        producer = str(getattr(handoff, "producer_node_id", "") or "")
+        if str(consumer) == node_id and producer:
+            joined.add(producer)
+        if producer == node_id:
+            joined.add(str(consumer))
+    own_producer = str(
+        getattr((handoffs or {}).get(node_id), "producer_node_id", "") or ""
+    )
+    if own_producer:
+        for consumer, handoff in (handoffs or {}).items():
+            if str(getattr(handoff, "producer_node_id", "")) == own_producer:
+                joined.add(str(consumer))
     found: list[dict[str, Any]] = []
     for receipt in receipts.values():
         other_id = str(getattr(receipt, "node_id", "") or "")
-        if not other_id or other_id == node_id:
+        if not other_id or other_id == node_id or other_id in joined:
             continue
         if str(getattr(receipt, "state", "")) != "valid":
             continue
@@ -12075,6 +12103,7 @@ class CommandCompiledToolHostV1:
                 self.result_validation_receipts,
                 node_id,
                 self._opened_result_output(result_validation_receipt),
+                handoffs=self.handoffs,
                 input_sha256=str(
                     getattr(
                         result_validation_receipt,

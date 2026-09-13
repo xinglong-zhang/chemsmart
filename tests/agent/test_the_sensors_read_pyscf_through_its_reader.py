@@ -330,3 +330,96 @@ def test_a_fixed_geometry_result_validates_against_the_geometry_it_was_handed():
     )
     assert wrong.validated is False
     assert "pyscf.result.geometry_invalid" in wrong.findings
+
+
+# ----------------------------------------------------------------------
+# a consumer at its producer's geometry is one structure by construction
+# ----------------------------------------------------------------------
+# a consumer at its producer's geometry is one structure by construction
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.capability("signal:geometry.results_indistinguishable")
+def test_a_consumer_at_its_producers_geometry_is_not_a_surprise():
+    """The same-structure sensor fires for independent starts that met on
+    one structure and must stay silent for a consumer sitting, by
+    construction, on the geometry a validated handoff carried. It joined
+    the two by digest, and a handoff writes a fresh geometry file the
+    producer's receipt does not list, so every fixed-geometry consumer of
+    a handoff with three or more heavy atoms was recorded as a surprise
+    (PySCF round 2, 2026-09-13: acrolein's td on its own optimisation,
+    formic acid's three single points on their CCSD geometry); the
+    sensor's own heavy-atom floor had hidden it on every smaller
+    molecule. The join is now the handoff record the host keeps."""
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.tool_runtime import _same_structure_observations
+    from chemsmart.analysis.result_readers import reader_for
+
+    orca = (
+        Path(__file__).resolve().parents[1] / "data" / "ORCATests" / "outputs"
+    )
+
+    def receipt(name, node_id, inp, out):
+        return SimpleNamespace(
+            node_id=node_id,
+            state="valid",
+            program="orca",
+            input_artifact_sha256=inp,
+            output_artifacts=(
+                SimpleNamespace(path=str(orca / name), sha256=out),
+            ),
+        )
+
+    consumer = reader_for("orca").open_output(
+        str(orca / "phenol_pka_B_sp.out")
+    )
+    producer = receipt("phenol_pka_B.out", "opt-a", "start.a", "result.a")
+    # The digest join: the consumer's input is a handoff file the
+    # producer's receipt does not list, so by digest alone this is two
+    # independent starts on one structure.
+    (found,) = _same_structure_observations(
+        {"a": producer},
+        "sp-b",
+        consumer,
+        input_sha256="carried.b",
+        output_sha256s=("sha.b",),
+        handoffs={},
+    )
+    assert found["other_node_id"] == "opt-a"
+    # The handoff join: the host recorded that sp-b consumed opt-a's
+    # geometry, and a consumer on its producer's geometry is no surprise.
+    handoffs = {
+        "sp-b": SimpleNamespace(
+            producer_node_id="opt-a", consumer_node_id="sp-b"
+        )
+    }
+    assert (
+        _same_structure_observations(
+            {"a": producer},
+            "sp-b",
+            consumer,
+            input_sha256="carried.b",
+            output_sha256s=("sha.b",),
+            handoffs=handoffs,
+        )
+        == ()
+    )
+    # Two siblings that consumed one producer's geometry through two
+    # handoff files are one structure by construction as well.
+    sibling = receipt("phenol_pka_B_sp.out", "sp-c", "carried.c", "result.c")
+    handoffs["sp-c"] = SimpleNamespace(
+        producer_node_id="opt-a", consumer_node_id="sp-c"
+    )
+    assert (
+        _same_structure_observations(
+            {"a": producer, "c": sibling},
+            "sp-b",
+            consumer,
+            input_sha256="carried.b",
+            output_sha256s=("sha.b",),
+            handoffs=handoffs,
+        )
+        == ()
+    )
