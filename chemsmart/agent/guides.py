@@ -295,7 +295,12 @@ GUIDES: tuple[GuideV1, ...] = (
             "excitation energy, never a hand conversion. PySCF stores "
             "excitation energies in hartree where the log-parsing programs "
             "print electronvolts; the reader states its unit and the "
-            "arithmetic is canonical."
+            "arithmetic is canonical. A root is an ordinal within its "
+            "manifold at the artifact's own geometry, never a state label: "
+            "fewer roots may come back than were requested and the "
+            "ordinals shift with them, an open-shell reference has one "
+            "unrestricted manifold with no per-root <S^2>, and TDA and full "
+            "response order roots differently."
         ),
     ),
     GuideV1(
@@ -358,7 +363,9 @@ GUIDES: tuple[GuideV1, ...] = (
             "b3lyp differ in their local correlation (VWN5 versus VWN3) and "
             "gave total energies 0.24 hartree apart under identical strings; "
             "compare differences across programs, never totals, and say "
-            "which variant each program means."
+            "which variant each program means. A correlated energy carries "
+            "a second convention, the frozen core, which the level line "
+            "shows and the placed rule below explains."
         ),
     ),
     GuideV1(

@@ -47,6 +47,13 @@ def test_the_leaf_opens_on_the_text_and_the_workspace():
 @pytest.mark.capability(
     "rule:leaf.pyscf.no_imaginary_mode_is_not_a_stationary_point"
 )
+@pytest.mark.capability("rule:leaf.pyscf.a_root_is_an_index_not_an_identity")
+@pytest.mark.capability(
+    "rule:leaf.pyscf.an_excited_minimum_has_no_hessian_here"
+)
+@pytest.mark.capability(
+    "rule:leaf.pyscf.correlated_methods_are_ab_initio_values"
+)
 def test_the_leaf_says_what_pyscf_can_do_and_what_it_cannot():
     guide = GUIDES_BY_ID["pyscf"]
     body = guide.body
@@ -72,4 +79,23 @@ def test_the_leaf_says_what_pyscf_can_do_and_what_it_cannot():
         "leaf.pyscf.one_structure_per_result",
         "leaf.pyscf.a_matching_name_is_not_a_matching_functional",
         "leaf.pyscf.no_imaginary_mode_is_not_a_stationary_point",
+        "leaf.pyscf.a_root_is_an_index_not_an_identity",
+        "leaf.pyscf.an_excited_minimum_has_no_hessian_here",
+        "leaf.pyscf.correlated_methods_are_ab_initio_values",
     }
+
+
+@pytest.mark.capability("rule:leaf.crossprogram.frozen_core_is_a_convention")
+def test_the_crossprogram_leaf_names_the_frozen_core_convention():
+    """A convention that makes two matching strings two calculations is
+    placed where a plan naming two programs reads it, never in the stem."""
+
+    placed = {rule.rule_id for rule in rules_for("leaf:crossprogram")}
+    assert "leaf.crossprogram.frozen_core_is_a_convention" in placed
+    (rule,) = [
+        rule
+        for rule in rules_for("leaf:crossprogram")
+        if rule.rule_id == "leaf.crossprogram.frozen_core_is_a_convention"
+    ]
+    assert "frozen_core" in rule.text and "auto" in rule.text
+    assert "5e-8 Eh" in rule.provenance

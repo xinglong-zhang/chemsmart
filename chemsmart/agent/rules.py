@@ -703,6 +703,68 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "three real modes at max|g| = 0.0185 Eh/Bohr",
     ),
     _r(
+        "leaf.pyscf.a_root_is_an_index_not_an_identity",
+        "leaf:pyscf",
+        "T1",
+        "An excited root is an ordinal within its manifold at the "
+        "artifact's own geometry, never a state identity: an excited-root "
+        "opt follows root k by index at every step, re-evaluates the "
+        "spectrum where it stopped, and the outcome reports that root's "
+        "gap to the ground state and to its neighbour as numbers with no "
+        "threshold behind them; read the gap before calling the delivered "
+        "geometry a state's minimum. A root PySCF's positive-eigenvalue "
+        "filter drops (below 1e-3 Eh) ends the node "
+        "failed_nonconverged_excited_state rather than switching roots.",
+        "PySCF round 2 2026-09-13: water root 1 ended degenerate with root "
+        "2 (3e-6 eV) after a 0.52 A move; PySCF 2.14 drops roots below "
+        "positive_eig_threshold and its scanner's converged property is "
+        "off by one",
+    ),
+    _r(
+        "leaf.pyscf.an_excited_minimum_has_no_hessian_here",
+        "leaf:pyscf",
+        "T1",
+        "No Hessian exists for an excited or a correlated surface in this "
+        "release, so a delivered excited-root, MP2 or CCSD minimum is "
+        "worded uncharacterised, displace_along_vibrational_mode cannot "
+        "read it, and a ground-state hess at that geometry answers a "
+        "different question: its gradient anomaly will say the ground "
+        "surface is not stationary there, which is correct.",
+        "measured 2026-09-13: td.Hessian is absent in PySCF 2.14; the "
+        "planar formaldehyde S1 stationary point is uncharacterisable here",
+    ),
+    _r(
+        "leaf.pyscf.correlated_methods_are_ab_initio_values",
+        "leaf:pyscf",
+        "T1",
+        "mp2, ccsd and ccsd(t) are ab_initio values on an HF reference: "
+        "energies for all three, gradients for MP2 and CCSD, no Hessian, "
+        "no density fitting or solvent with them this round. "
+        "reference_energy and correlation_energy are the program's own "
+        "components and correlation_energy is the final method's whole "
+        "correlation, triples included; the dipole, populations, orbital "
+        "energies and spin diagnostic on a correlated or excited result "
+        "belong to the reference, which inspect_run says beside each.",
+        "PySCF round 2 2026-09-13: archived water MP2/CCSD/CCSD(T) "
+        "fixtures with PySCF's own recomputation; the ORCA reader already "
+        "means the whole correlation by the same name",
+    ),
+    _r(
+        "leaf.crossprogram.frozen_core_is_a_convention",
+        "leaf:crossprogram",
+        "T3",
+        "PySCF correlates every electron unless frozen_core says otherwise, "
+        "while ORCA and Gaussian freeze the core by default, so two MP2 or "
+        "coupled-cluster energies with matching method and basis strings "
+        "differ by the core correlation until the convention is matched; "
+        "frozen_core: auto names PySCF's chemical-core rule, the level "
+        "line shows the count applied, and which convention is right is a "
+        "scientific choice, never the host's.",
+        "measured 2026-09-13: ORCA MP2/def2-SVP on water reproduces PySCF "
+        "frozen_core 1 to 5e-8 Eh and differs from the all-electron "
+        "default by 2.4e-3 Eh",
+    ),
+    _r(
         "leaf.saddle.seed_a_bimolecular_saddle",
         "leaf:saddle",
         "T3",
