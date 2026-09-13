@@ -127,13 +127,6 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
         ("freq", "hess", "opt", "opt_freq", "sp"),
     ): "derives in 0.1d from the executable PySCF cells",
     (
-        "chemsmart/agent/live_session.py",
-        "<module>",
-        "_CONFORMANCE_CORE_STAGES",
-        ("hess", "opt", "sp", "td"),
-    ): "deleted in 0.1c once every agent program declares its own "
-    "engine/job matrix",
-    (
         "chemsmart/agent/terminal_states.py",
         "expected_imaginary_mode_count",
         None,

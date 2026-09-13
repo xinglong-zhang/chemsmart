@@ -2640,12 +2640,6 @@ def _session_id(task_spec_sha256: str) -> str:
     return f"live-{timestamp}-{task_spec_sha256[:10]}-{uuid.uuid4().hex[:8]}"
 
 
-#: The core scientific stages a hierarchical workflow is built from.
-#: Conformance covers the intersection of this set with what each program
-#: declares, so bringing a new program to ``preview_only`` needs a ChemSmart
-#: declaration and a project fixture -- not a new branch in this function.
-_CONFORMANCE_CORE_STAGES = frozenset({"hess", "opt", "sp", "td"})
-
 #: Section shape of each program's project YAML.  ChemSmart does not declare
 #: this anywhere, because it is a property of each program's settings loader:
 #: PySCF keys sections by jobtype, while the route-building programs split
@@ -2661,10 +2655,14 @@ _CONFORMANCE_PROJECT_SHAPES = {
 def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
     """Return the declared stages ``program`` previews on ``engine``.
 
-    An explicit engine/job matrix is the program owner's bounded preview
-    surface.  The legacy core-stage intersection remains only for older
-    declarations whose independent engine and job lists would otherwise form
-    an unverified Cartesian product.
+    The program's own engine/job matrix is the whole answer: it is the
+    owner's bounded preview surface, and GPU PySCF, for example, previews
+    no excited-state stage.  A hand-written core-stage set used to stand
+    in for programs that declared no matrix, which meant a job type a
+    program declared was covered only if this module had heard of it --
+    the vocabulary-with-two-authors class, wearing a conformance hat.
+    Every agent program declares its matrix now, so the stand-in is gone
+    and a program that declares none covers nothing, visibly.
     """
 
     from chemsmart.settings.capabilities import ENGINE_CAPABILITIES
@@ -2672,18 +2670,12 @@ def _conformance_jobtypes(program: str, engine: str) -> tuple[str, ...]:
     capability = ENGINE_CAPABILITIES.get(program)
     if capability is None:
         return ()
-    pairs = capability.engine_job_capabilities
-    if pairs:
-        # A program that declares per-engine capability is authoritative about
-        # it; GPU PySCF, for example, previews no excited-state stage.
-        declared = {
-            item.jobtype
-            for item in pairs
-            if item.engine == engine and item.preview_supported
-        }
-        return tuple(sorted(declared))
-    declared = set(capability.jobtypes)
-    return tuple(sorted(declared & _CONFORMANCE_CORE_STAGES))
+    declared = {
+        item.jobtype
+        for item in capability.engine_job_capabilities
+        if item.engine == engine and item.preview_supported
+    }
+    return tuple(sorted(declared))
 
 
 #: Stages of a route-building program that read their own project section

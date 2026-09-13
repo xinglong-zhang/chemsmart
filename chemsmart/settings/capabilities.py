@@ -837,6 +837,15 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                     ("alpb", "cosmo", "cpcmx", "gbsa", "tmcosmo"),
                 ),
             ),
+            # xTB runs every declared job type on the one engine it has,
+            # so its matrix is the product -- but it is declared rather
+            # than left to the legacy Cartesian fallback, because the
+            # conformance probe reads the matrix and fell back to a
+            # hand-written core-stage set for any program that had none.
+            engine_job_capabilities=tuple(
+                EngineJobCapability(engine="cpu", jobtype=jobtype)
+                for jobtype in declared_jobtypes("xtb")
+            ),
         ),
     }
 )
