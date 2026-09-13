@@ -750,7 +750,59 @@ def _validate_pyscf_preview(expectation, paths):
                 path.name,
             )
         )
+    if result is not None:
+        findings.extend(_pyscf_settings_round_trip(expectation, result))
     return findings
+
+
+def _pyscf_settings_round_trip(expectation, result):
+    """Declared value -> driver CONFIG -> fake artifact spec -> no mismatch.
+
+    The verifier had checked only the run receipt's digest and state, so a
+    declared parameter the writer dropped or rewrote reached the artifact
+    unnoticed and the generated round-trip test could not admit PySCF at
+    all.  The comparison is the live one: ``verify_provenance`` is what the
+    real runner asks of a finished artifact, and the fake artifact carries
+    the applied spec the driver writes, so the oracle is the same and never
+    a second comparison written for the preview.  A fake artifact is
+    deliberately incomplete, which is the one finding set aside.
+    """
+
+    from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+    from chemsmart.jobs.pyscf.validation import (
+        RULE_PROVENANCE_INCOMPLETE,
+        verify_provenance,
+    )
+
+    expected = dict(expectation.settings)
+    expected.update(
+        {
+            "charge": expectation.charge,
+            "multiplicity": expectation.multiplicity,
+            "jobtype": expectation.jobtype,
+        }
+    )
+    try:
+        settings = PySCFJobSettings.from_dict(expected)
+    except (TypeError, ValueError) as exc:
+        return [
+            _mismatch(
+                "settings",
+                "a PySCF settings object built from the declared values",
+                f"{type(exc).__name__}: {exc}",
+                result.name,
+            )
+        ]
+    return [
+        _mismatch(
+            f"settings.{item.field}",
+            item.expected,
+            item.observed,
+            result.name,
+        )
+        for item in verify_provenance(settings, result)
+        if item.rule_id != RULE_PROVENANCE_INCOMPLETE
+    ]
 
 
 def _settings_class(program):
