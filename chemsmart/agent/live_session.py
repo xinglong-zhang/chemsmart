@@ -1676,8 +1676,21 @@ def _scan_pyscf_result_artifacts(
             input_artifact_sha256 = str(
                 output.spec.get("input_artifact_sha256") or ""
             ).strip()
+            # The job types a result may register under are the ones the
+            # reader declares selectors for: one authority, not a second
+            # hand-list. This set once read {"sp", "opt", "hess"}, so the
+            # first archived response results (contract v5) sat in a
+            # workspace and registered nothing -- the witness bank found
+            # it on the tree that had every other organ for them
+            # (2026-09-13, PySCF round 2).
+            from chemsmart.analysis.result_readers import reader_for
+
+            declared = {
+                name
+                for name, _selectors in reader_for("pyscf").jobtype_selectors
+            }
             if (
-                jobtype not in {"sp", "opt", "hess"}
+                jobtype not in declared
                 or not method
                 or not applied_method
                 or not basis
