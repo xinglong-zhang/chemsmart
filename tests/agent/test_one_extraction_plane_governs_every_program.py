@@ -81,14 +81,19 @@ def test_a_session_can_discover_what_pyscf_answers():
     """Coverage is what the capability query projects; it was empty before."""
 
     reader = reader_for("pyscf")
-    for jobtype in ("sp", "opt", "hess"):
+    for jobtype in ("sp", "opt", "hess", "td"):
         assert reader.selectors_for_jobtype(jobtype)
-    # ``td`` is a preview surface in this release.  No approved workflow can
-    # emit an excited state, so declaring one would advertise a quantity
-    # nothing reachable produces -- the same reason ORCA's VPT2 block stays
-    # undeclared while its parser reads it.
-    assert reader.selectors_for_jobtype("td") is None
-    assert "excitation_energies" in reader.accessors
+    # ``td`` is executable (contract v5): an approved workflow emits an
+    # excited state, so the response set is declared for it -- and for
+    # ``opt``, whose excited-root form re-evaluates the spectrum at the
+    # reached geometry -- while ``sp`` and ``hess`` still refuse it.
+    td = reader.selectors_for_jobtype("td")
+    assert "excitation_energies" in td and "oscillator_strengths" in td
+    assert "excitation_energies" in reader.selectors_for_jobtype("opt")
+    for jobtype in ("sp", "hess"):
+        assert "excitation_energies" not in reader.selectors_for_jobtype(
+            jobtype
+        )
 
 
 def test_an_unregistered_program_is_still_refused_by_name():

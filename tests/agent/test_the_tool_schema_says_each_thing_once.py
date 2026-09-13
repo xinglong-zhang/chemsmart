@@ -65,4 +65,14 @@ def test_nothing_was_lost_and_the_surface_fits_the_budget():
     # family whose operations the stem does not even expose. Moving it
     # to its guide recovered 834 bytes on both surfaces. A ceiling is
     # paid for, never banked.
-    assert len(text) < 118_000, len(text)
+    # Raised to 119,500 in the PySCF expansion round (2026-09-13) for
+    # affordances earned on seventeen real fixtures: an executable
+    # response stage, five selectors (transition_dipole_moments,
+    # excited_state_converged, excited_state_followed_root,
+    # ccsd_correlation_energy, triples_correction) that enter the two
+    # selector enums, and the pyscf leaf's account of manifolds, root
+    # indices, the frozen-core convention and electronic provenance. The
+    # stem ceiling (91,000) was not raised: every new sentence sits on a
+    # leaf, and the one sentence tried on a stem tool was moved to the
+    # leaf when the stem measured 53 bytes over.
+    assert len(text) < 119_500, len(text)

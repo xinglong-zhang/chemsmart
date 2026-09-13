@@ -70,6 +70,17 @@ SELECTOR_UNITS = {
     "oscillator_strengths": "",
     "singlet_oscillator_strengths": "",
     "triplet_oscillator_strengths": "",
+    # Per-root transition dipole vectors; PySCF returns atomic units and
+    # the driver converts with the CODATA factor it records.
+    "transition_dipole_moments": "Debye",
+    # 1 per converged root, 0 otherwise; the followed root of an
+    # excited-surface optimisation as a 1-based index.
+    "excited_state_converged": "",
+    "excited_state_followed_root": "",
+    # The coupled-cluster components beside the final method's whole
+    # correlation energy.
+    "ccsd_correlation_energy": "Eh",
+    "triples_correction": "Eh",
     "vibrational_frequencies": "cm^-1",
     "vibrational_mode_atom_participation": "",
     "vibrational_mode_degeneracy_group": "",
@@ -588,6 +599,74 @@ STRUCTURAL_STATES = (
     "stateless",
 )
 
+#: Which electronic state or method a selector's value belongs to.
+#:
+#: A structural state identifies a geometry, not a density.  One PySCF
+#: artifact of an excited-root optimisation carries the followed root's
+#: total energy beside the ground-state reference's dipole, populations and
+#: orbital energies, all at one geometry; a correlated result carries a
+#: CCSD total beside an HF dipole.  Every hash, unit and geometry check
+#: passes while a session reads "the S1 dipole" off a ground-state number,
+#: so the axis is declared like the structural one and rendered beside it.
+#:
+#: ``reference`` -- the SCF the job built on (mean-field properties);
+#: ``excited_root`` -- a root of the response manifold, an index at this
+#: geometry and never a state identity; ``correlated`` -- the correlated
+#: method's own component; ``computed_surface`` -- the surface the job
+#: computed on, resolved per artifact (the reference for HF/DFT and for a
+#: spectrum, the followed root for an excited-root optimisation, the
+#: correlated method otherwise); ``stateless`` -- a value no electronic
+#: state changes, and the honest answer for a selector nobody declared.
+ELECTRONIC_PROVENANCES = (
+    "reference",
+    "excited_root",
+    "correlated",
+    "computed_surface",
+    "stateless",
+)
+
+#: Method words that mark a post-SCF surface when a program's ``ab_initio``
+#: selector names one; the resolver reads the selector, never a route.
+_CORRELATED_METHOD_MARKERS = ("mp2", "ccsd", "cepa", "cisd", "nevpt", "caspt")
+
+
+def _resolve_computed_surface(reader, output, selector, word):
+    """Resolve ``computed_surface`` to the surface *this* artifact computed on.
+
+    Read from the result's own words: the followed root of an excited-root
+    optimisation, the correlated method a stage recorded, or the
+    ``ab_initio`` selector a log reader serves.  Any other declared word
+    passes through unchanged.
+    """
+
+    if word != "computed_surface":
+        return word
+    if getattr(output, "excited_state_followed_root", None):
+        return "excited_root"
+    if getattr(output, "correlated_method", None):
+        return "correlated"
+    accessor = reader.accessors.get("ab_initio")
+    if accessor is not None:
+        try:
+            value = str(accessor(output) or "").strip().lower()
+        except Exception:  # noqa: BLE001 - absence resolves to the reference
+            value = ""
+        if any(marker in value for marker in _CORRELATED_METHOD_MARKERS):
+            return "correlated"
+    return "reference"
+
+
+def _electronic_provenance_table(accessors, declared):
+    """Keep the declared provenance rows this reader actually implements."""
+
+    return tuple(
+        sorted(
+            (selector, word)
+            for selector, word in declared
+            if selector in accessors
+        )
+    )
+
 
 @dataclass(frozen=True)
 class ResultReaderV1:
@@ -640,6 +719,16 @@ class ResultReaderV1:
     #: readers have no such split: their normal-termination gate is the
     #: whole of it.
     admit_for_analysis: Callable[[Path], Any] | None = None
+    #: Which electronic state or method each selector's value belongs to,
+    #: as ``((selector, word), ...)`` over ``ELECTRONIC_PROVENANCES``; a
+    #: selector absent from the tuple is ``stateless``.  Declared beside
+    #: the structural state because the two answer different questions: a
+    #: geometry identity says nothing about whose density a dipole is.
+    selector_electronic_provenance: tuple[tuple[str, str], ...] = ()
+    #: Resolves a declared word against one opened result; the shared
+    #: resolver turns ``computed_surface`` into the concrete word this
+    #: artifact's own record supports.  None keeps every word as declared.
+    resolve_electronic_provenance: Callable[..., str] | None = None
 
     def __post_init__(self) -> None:
         jobtypes = tuple(item[0] for item in self.jobtype_selectors)
@@ -676,6 +765,24 @@ class ResultReaderV1:
                     f"{selector}: {state!r} is not one of "
                     f"{STRUCTURAL_STATES}"
                 )
+        provenance_names = tuple(
+            item[0] for item in self.selector_electronic_provenance
+        )
+        if provenance_names != tuple(sorted(set(provenance_names))):
+            raise ValueError(
+                "selector electronic provenance must be sorted and unique"
+            )
+        for selector, word in self.selector_electronic_provenance:
+            if selector not in self.selectors:
+                raise ValueError(
+                    f"electronic provenance declared for {selector!r}, "
+                    "which this reader does not implement"
+                )
+            if word not in ELECTRONIC_PROVENANCES:
+                raise ValueError(
+                    f"{selector}: {word!r} is not one of "
+                    f"{ELECTRONIC_PROVENANCES}"
+                )
 
     @property
     def selectors(self) -> frozenset[str]:
@@ -688,6 +795,27 @@ class ResultReaderV1:
             if name == selector:
                 return state
         return "stateless"
+
+    def electronic_provenance(self, selector: str) -> str:
+        """Which electronic state or method this selector's value belongs to,
+        as declared; ``computed_surface`` stays symbolic here."""
+
+        for name, word in self.selector_electronic_provenance:
+            if name == selector:
+                return word
+        return "stateless"
+
+    def electronic_provenance_for_output(
+        self, output: Any, selector: str
+    ) -> str:
+        """The declared provenance resolved against one opened result."""
+
+        word = self.electronic_provenance(selector)
+        if self.resolve_electronic_provenance is None:
+            return word
+        return str(
+            self.resolve_electronic_provenance(self, output, selector, word)
+        )
 
     def selectors_in_state(self, state: str) -> tuple[str, ...]:
         """Every selector this reader serves for one structural state."""
@@ -2075,6 +2203,100 @@ def _pyscf_spin_populations(output: Any) -> list[float]:
     return values
 
 
+def _pyscf_excited_records(output: Any) -> list[dict[str, Any]]:
+    records = list(getattr(output, "excited_state_records", None) or ())
+    if not records:
+        raise MissingQuantityError(
+            "this result ran no response stage; excited-state selectors "
+            "are declared for td and for an opt carrying excited_state_root"
+        )
+    return records
+
+
+def _pyscf_manifold_values(output: Any, multiplicity: int, key: str):
+    """Values of one restricted manifold, refused for any other manifold.
+
+    An artifact carries one manifold; the singlet selectors answer on a
+    singlet manifold and refuse a triplet one, and an unrestricted
+    reference has neither, which is an honest absence rather than a
+    silent relabelling.
+    """
+
+    records = _pyscf_excited_records(output)
+    values = [
+        record[key]
+        for record in records
+        if record.get("multiplicity") == multiplicity
+    ]
+    if not values:
+        manifold = getattr(output, "state_manifold", None)
+        raise MissingQuantityError(
+            f"this result carries the {manifold!r} manifold, not the "
+            f"multiplicity-{multiplicity} one"
+        )
+    return values
+
+
+def _pyscf_transition_dipoles(output: Any) -> list[list[float]]:
+    values = output.transition_dipole_moments
+    if values is None:
+        raise MissingQuantityError(
+            "this result records no transition dipole moments"
+        )
+    return [[float(item) for item in row] for row in values]
+
+
+def _pyscf_excited_converged(output: Any) -> list[int]:
+    values = output.excited_state_converged
+    if values is None:
+        raise MissingQuantityError(
+            "this result records no per-root convergence"
+        )
+    return [int(bool(item)) for item in values]
+
+
+def _pyscf_followed_root(output: Any) -> int:
+    value = output.excited_state_followed_root
+    if value is None:
+        raise MissingQuantityError(
+            "this result followed no excited root; the selector is declared "
+            "for an opt carrying excited_state_root"
+        )
+    return int(value)
+
+
+def _pyscf_correlated_scalar(name: str) -> Callable[[Any], float]:
+    def accessor(output: Any) -> float:
+        value = getattr(output, name)
+        if value is None:
+            method = getattr(output, "correlated_method", None)
+            detail = (
+                f"the {method} stage does not produce it"
+                if method
+                else "this result ran no correlated stage"
+            )
+            raise MissingQuantityError(f"{name}: {detail}")
+        return float(value)
+
+    return accessor
+
+
+def _pyscf_scf_energy(output: Any) -> float:
+    value = output.scf_energy
+    if value is None:
+        raise MissingQuantityError("this result records no SCF energy")
+    return float(value)
+
+
+def _pyscf_total_energy(output: Any) -> float:
+    """The energy of the surface the job computed on (see ``total_energy``)."""
+
+    value = output.total_energy
+    if value is None:
+        raise MissingQuantityError("this result records no total energy")
+    return float(value)
+
+
 def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
     """Selector name to a callable reading it from a structured PySCF result.
 
@@ -2088,7 +2310,14 @@ def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
     """
 
     raw: dict[str, Callable[[Any], Any]] = {
-        "energy": lambda output: float(output.energies[-1]),
+        # The energy of the surface the job computed on: the SCF for an HF
+        # or DFT job and for a spectrum, the followed root's total for an
+        # excited-root optimisation, the correlated total otherwise --
+        # ORCA's "FINAL SINGLE POINT ENERGY" semantics.  ``energies`` stays
+        # the SCF trace in stage order and ``scf_energy`` names the
+        # reference at the final geometry.
+        "energy": _pyscf_total_energy,
+        "scf_energy": _pyscf_scf_energy,
         "energies": lambda output: [float(item) for item in output.energies],
         "positions": lambda output: [
             [float(value) for value in row] for row in output.positions
@@ -2140,16 +2369,66 @@ def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
         "vibrational_mode_degeneracy_group": (
             _vibrational_mode_degeneracy_group
         ),
-        # Excited-state values stay implemented and undeclared: PySCF ``td``
-        # is a preview surface in this release, so no approved workflow can
-        # emit them and a job-type declaration would advertise a quantity
-        # nothing reachable produces.
+        # The response stage (contract v5): roots are ascending indices
+        # within one manifold at this artifact's own geometry.  The
+        # excitation energies are stored in hartree and read through the
+        # declared source unit; the record shape is the log readers' own,
+        # so a root is selected by index in an expression exactly as for
+        # ORCA, and the manifold-specific selectors refuse the other
+        # manifold and the unrestricted one rather than relabelling it.
         "excitation_energies": lambda output: [
             float(item) for item in output.excitation_energies
         ],
         "oscillator_strengths": lambda output: [
             float(item) for item in output.oscillator_strengths
         ],
+        "excited_state_indices": lambda output: [
+            int(item["state_index"]) for item in _pyscf_excited_records(output)
+        ],
+        "excited_state_manifold_roots": lambda output: [
+            int(item["manifold_root"])
+            for item in _pyscf_excited_records(output)
+        ],
+        "excited_state_multiplicities": lambda output: [
+            int(item)
+            for item in _required_record_values(
+                _pyscf_excited_records(output),
+                "multiplicity",
+                "a spin multiplicity (an unrestricted manifold has none)",
+            )
+        ],
+        "singlet_excitation_energies": lambda output: [
+            float(item)
+            for item in _pyscf_manifold_values(output, 1, "energy_eV")
+        ],
+        "triplet_excitation_energies": lambda output: [
+            float(item)
+            for item in _pyscf_manifold_values(output, 3, "energy_eV")
+        ],
+        "singlet_oscillator_strengths": lambda output: [
+            float(item)
+            for item in _pyscf_manifold_values(
+                output, 1, "oscillator_strength"
+            )
+        ],
+        "triplet_oscillator_strengths": lambda output: [
+            float(item)
+            for item in _pyscf_manifold_values(
+                output, 3, "oscillator_strength"
+            )
+        ],
+        "transition_dipole_moments": _pyscf_transition_dipoles,
+        "excited_state_converged": _pyscf_excited_converged,
+        "excited_state_followed_root": _pyscf_followed_root,
+        # The correlated stage: the program's own components at the final
+        # geometry.  ``correlation_energy`` is the final method's whole
+        # correlation, triples included, as the ORCA reader means it.
+        "reference_energy": _pyscf_correlated_scalar("reference_energy"),
+        "correlation_energy": _pyscf_correlated_scalar("correlation_energy"),
+        "ccsd_correlation_energy": _pyscf_correlated_scalar(
+            "ccsd_correlation_energy"
+        ),
+        "triples_correction": _pyscf_correlated_scalar("triples_correction"),
     }
     for name in (
         "spin_square",
@@ -2194,6 +2473,7 @@ _PYSCF_SCF_SELECTORS = (
     "mulliken_atomic_spin_populations",
     "multiplicity",
     "positions",
+    "scf_energy",
     "spin_square",
     "spin_square_deviation",
     "spin_square_target",
@@ -2201,11 +2481,52 @@ _PYSCF_SCF_SELECTORS = (
     "symbols",
 )
 
+#: The response stage: declared for ``td`` and, because an excited-root
+#: optimisation re-evaluates the spectrum at the reached geometry, for
+#: ``opt``, where a ground-state optimisation refuses them as absent.
+#: ``absorption_wavelengths`` is deliberately not here (``photon_wavelength``
+#: is the one conversion authority), nor ``excited_state_labels`` (PySCF
+#: prints none) nor ``excited_state_spin_square`` (PySCF prints no per-root
+#: <S^2>).
+_PYSCF_TD_SELECTORS = (
+    "excitation_energies",
+    "excited_state_converged",
+    "excited_state_indices",
+    "excited_state_manifold_roots",
+    "excited_state_multiplicities",
+    "oscillator_strengths",
+    "singlet_excitation_energies",
+    "singlet_oscillator_strengths",
+    "transition_dipole_moments",
+    "triplet_excitation_energies",
+    "triplet_oscillator_strengths",
+)
+
+#: The correlated stage: declared for ``sp`` and ``opt``, where an HF or
+#: DFT result refuses them as absent.
+_PYSCF_CORR_SELECTORS = (
+    "ccsd_correlation_energy",
+    "correlation_energy",
+    "reference_energy",
+    "triples_correction",
+)
+
 #: An optimisation additionally reports whether it converged and the
 #: structure it reached, which for this program is the one every other
-#: quantity belongs to.
+#: quantity belongs to; an excited-root optimisation also names its root.
 _PYSCF_OPT_SELECTORS = tuple(
-    sorted(_PYSCF_SCF_SELECTORS + ("converged", "reached_positions"))
+    sorted(
+        _PYSCF_SCF_SELECTORS
+        + _PYSCF_TD_SELECTORS
+        + _PYSCF_CORR_SELECTORS
+        + ("converged", "excited_state_followed_root", "reached_positions")
+    )
+)
+_PYSCF_SP_SELECTORS = tuple(
+    sorted(_PYSCF_SCF_SELECTORS + _PYSCF_CORR_SELECTORS)
+)
+_PYSCF_TD_JOBTYPE_SELECTORS = tuple(
+    sorted(_PYSCF_SCF_SELECTORS + _PYSCF_TD_SELECTORS)
 )
 
 #: What each PySCF selector's value belongs to.  One structure per
@@ -2218,28 +2539,137 @@ _PYSCF_OPT_SELECTORS = tuple(
 _PYSCF_STRUCTURAL_STATES = tuple(
     sorted(
         [
+            ("ccsd_correlation_energy", "as_reached"),
             ("connectivity", "as_reached"),
             ("converged", "as_reached"),
+            ("correlation_energy", "as_reached"),
             ("dipole_moment", "as_reached"),
             ("dipole_moment_magnitude", "as_reached"),
             ("effective_multiplicity", "as_reached"),
             ("energy", "as_reached"),
+            ("excitation_energies", "as_reached"),
+            ("excited_state_converged", "as_reached"),
+            ("excited_state_indices", "as_reached"),
+            ("excited_state_manifold_roots", "as_reached"),
+            ("excited_state_multiplicities", "as_reached"),
             ("gap", "as_reached"),
             ("homo", "as_reached"),
             ("lumo", "as_reached"),
             ("mulliken_atomic_charges", "as_reached"),
             ("mulliken_atomic_spin_populations", "as_reached"),
+            ("oscillator_strengths", "as_reached"),
             ("positions", "as_reached"),
             ("reached_positions", "as_reached"),
+            ("reference_energy", "as_reached"),
+            ("scf_energy", "as_reached"),
+            ("singlet_excitation_energies", "as_reached"),
+            ("singlet_oscillator_strengths", "as_reached"),
             ("spin_square", "as_reached"),
             ("spin_square_deviation", "as_reached"),
             ("spin_square_target", "as_reached"),
             ("supplied_positions", "as_supplied"),
+            ("transition_dipole_moments", "as_reached"),
+            ("triples_correction", "as_reached"),
+            ("triplet_excitation_energies", "as_reached"),
+            ("triplet_oscillator_strengths", "as_reached"),
             ("vibrational_frequencies", "as_reached"),
             ("vibrational_mode_atom_participation", "as_reached"),
             ("vibrational_mode_degeneracy_group", "as_reached"),
         ]
     )
+)
+
+#: Whose density or method each PySCF value belongs to.  The mean-field
+#: properties the driver reads off ``mf`` after the final SCF -- dipole,
+#: populations, orbital energies, the spin diagnostic -- are the
+#: reference's, on every configuration: an excited-root optimisation and
+#: a correlated result carry them beside a total that is not the
+#: reference's.  ``energy`` is the surface the job computed on and is
+#: resolved per artifact.
+_PYSCF_ELECTRONIC_PROVENANCE = tuple(
+    sorted(
+        [
+            ("ccsd_correlation_energy", "correlated"),
+            ("correlation_energy", "correlated"),
+            ("dipole_moment", "reference"),
+            ("dipole_moment_magnitude", "reference"),
+            ("effective_multiplicity", "reference"),
+            ("energies", "reference"),
+            ("energy", "computed_surface"),
+            ("excitation_energies", "excited_root"),
+            ("excited_state_converged", "excited_root"),
+            ("excited_state_followed_root", "excited_root"),
+            ("excited_state_indices", "excited_root"),
+            ("excited_state_manifold_roots", "excited_root"),
+            ("excited_state_multiplicities", "excited_root"),
+            ("gap", "reference"),
+            ("homo", "reference"),
+            ("lumo", "reference"),
+            ("mulliken_atomic_charges", "reference"),
+            ("mulliken_atomic_spin_populations", "reference"),
+            ("oscillator_strengths", "excited_root"),
+            ("reference_energy", "reference"),
+            ("scf_energy", "reference"),
+            ("singlet_excitation_energies", "excited_root"),
+            ("singlet_oscillator_strengths", "excited_root"),
+            ("spin_square", "reference"),
+            ("spin_square_deviation", "reference"),
+            ("spin_square_target", "reference"),
+            ("transition_dipole_moments", "excited_root"),
+            ("triples_correction", "correlated"),
+            ("triplet_excitation_energies", "excited_root"),
+            ("triplet_oscillator_strengths", "excited_root"),
+            ("vibrational_frequencies", "reference"),
+            ("vibrational_mode_atom_participation", "reference"),
+            ("vibrational_mode_degeneracy_group", "reference"),
+        ]
+    )
+)
+
+#: ORCA's word for the same axis, over the selectors its reader implements:
+#: the excitation set belongs to a root, the mean-field properties to the
+#: reference, and ``energy`` (``FINAL SINGLE POINT ENERGY``) to the surface
+#: the job computed on, resolved from the ``ab_initio`` selector.
+_ORCA_ELECTRONIC_PROVENANCE_DECLARED = (
+    ("absorption_wavelengths", "excited_root"),
+    ("alpha_homo", "reference"),
+    ("alpha_lumo", "reference"),
+    ("beta_homo", "reference"),
+    ("beta_lumo", "reference"),
+    ("correlation_energy", "correlated"),
+    ("dipole_moment", "reference"),
+    ("dipole_moment_magnitude", "reference"),
+    ("dispersion_energy", "reference"),
+    ("effective_multiplicity", "reference"),
+    ("energies", "computed_surface"),
+    ("energy", "computed_surface"),
+    ("entropy_times_temperature", "computed_surface"),
+    ("excitation_energies", "excited_root"),
+    ("excited_state_indices", "excited_root"),
+    ("excited_state_labels", "excited_root"),
+    ("excited_state_manifold_roots", "excited_root"),
+    ("excited_state_multiplicities", "excited_root"),
+    ("excited_state_spin_square", "excited_root"),
+    ("gap", "reference"),
+    ("gibbs_free_energy", "computed_surface"),
+    ("hirshfeld_atomic_charges", "reference"),
+    ("homo", "reference"),
+    ("loewdin_atomic_charges", "reference"),
+    ("loewdin_atomic_spin_populations", "reference"),
+    ("lumo", "reference"),
+    ("mulliken_atomic_charges", "reference"),
+    ("mulliken_atomic_spin_populations", "reference"),
+    ("oscillator_strengths", "excited_root"),
+    ("reference_energy", "reference"),
+    ("scf_energy", "reference"),
+    ("singlet_excitation_energies", "excited_root"),
+    ("singlet_oscillator_strengths", "excited_root"),
+    ("spin_square", "reference"),
+    ("spin_square_after_annihilation", "reference"),
+    ("spin_square_deviation", "reference"),
+    ("spin_square_target", "reference"),
+    ("triplet_excitation_energies", "excited_root"),
+    ("triplet_oscillator_strengths", "excited_root"),
 )
 
 
@@ -2308,6 +2738,10 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                 "thermochemistry_reference",
             ),
         ),
+        selector_electronic_provenance=_electronic_provenance_table(
+            _orca_accessors(), _ORCA_ELECTRONIC_PROVENANCE_DECLARED
+        ),
+        resolve_electronic_provenance=_resolve_computed_surface,
         jobtype_selectors=(
             (
                 "freq",
@@ -2833,9 +3267,17 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                 ),
             ),
             ("opt", _PYSCF_OPT_SELECTORS),
-            ("sp", _PYSCF_SCF_SELECTORS),
+            ("sp", _PYSCF_SP_SELECTORS),
+            # The response stage is executable (contract v5): a td result
+            # is one structure -- the supplied geometry, which the validator
+            # holds it to -- carrying the reference's mean-field properties
+            # beside its roots, so the SCF set is declared with the
+            # excitation set and the provenance axis says whose each is.
+            ("td", _PYSCF_TD_JOBTYPE_SELECTORS),
         ),
         selector_structural_states=_PYSCF_STRUCTURAL_STATES,
+        selector_electronic_provenance=_PYSCF_ELECTRONIC_PROVENANCE,
+        resolve_electronic_provenance=_resolve_computed_surface,
         admit_for_analysis=_pyscf_admit_for_analysis,
     ),
     "xyz": ResultReaderV1(
@@ -2880,6 +3322,11 @@ _SELECTOR_DIMENSIONS = {
     "oscillator_strengths": "DIMENSIONLESS",
     "singlet_oscillator_strengths": "DIMENSIONLESS",
     "triplet_oscillator_strengths": "DIMENSIONLESS",
+    "transition_dipole_moments": "DIPOLE_MOMENT",
+    "excited_state_converged": "DIMENSIONLESS",
+    "excited_state_followed_root": "DIMENSIONLESS",
+    "ccsd_correlation_energy": "ENERGY",
+    "triples_correction": "ENERGY",
     "vibrational_frequencies": "FREQUENCY",
     "vibrational_mode_atom_participation": "DIMENSIONLESS",
     "vibrational_mode_degeneracy_group": "DIMENSIONLESS",
@@ -2953,6 +3400,7 @@ _INTEGER_SELECTORS = frozenset(
     {
         "charge",
         "converged",
+        "excited_state_followed_root",
         "irc_converged",
         "multiplicity",
         "trajectory_frame_count",
@@ -3107,6 +3555,12 @@ def extract_logged_quantities(
             )
     quantities = []
     absent: list[tuple[str, str, str]] = []
+    # Whose density or method each delivered value belongs to, resolved
+    # against this artifact and carried on the receipt beside the value,
+    # so a ground-state dipole read off an excited-root result says so
+    # where the number is cited.  Present on the body only when a reader
+    # declares the axis, so every receipt minted before it verifies.
+    provenance: list[tuple[str, str]] = []
     positions_delivered = False
     for selector in request.selectors:
         try:
@@ -3175,6 +3629,11 @@ def extract_logged_quantities(
         )
         if selector.selector == "positions":
             positions_delivered = True
+        word = reader.electronic_provenance_for_output(
+            output, selector.selector
+        )
+        if word != "stateless":
+            provenance.append((selector.quantity_id, word))
     if rq.result_file_sha256(artifact) != request.artifact_sha256:
         raise rq.QuantityExtractionError(
             "result artifact changed during extraction"
@@ -3191,6 +3650,7 @@ def extract_logged_quantities(
         derived_adjacency=(
             _derived_adjacency(reader, output) if positions_delivered else ()
         ),
+        electronic_provenance=tuple(provenance),
     )
     return rq.QuantityExtractionReceiptV1(
         **body, receipt_sha256=rq.canonical_quantity_sha256(body)

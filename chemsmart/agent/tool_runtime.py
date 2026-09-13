@@ -15701,6 +15701,18 @@ class CommandCompiledToolHostV1:
                 selector: reader.structural_state(selector)
                 for selector in requestable
             },
+            # Whose density or method each value belongs to -- the
+            # reference, an excited root, the correlated method -- resolved
+            # against this artifact, because a geometry identity says
+            # nothing about whose density a dipole is: an excited-root
+            # optimisation carries the reference's dipole beside the root's
+            # energy at one structure.
+            "electronic_provenance": {
+                selector: reader.electronic_provenance_for_output(
+                    output, selector
+                )
+                for selector in requestable
+            },
         }
 
     def _extract_result_quantities(self, turn_id: str, values: dict) -> Any:
@@ -15735,6 +15747,7 @@ class CommandCompiledToolHostV1:
                 status=receipt.status,
                 absent=receipt.absent,
                 derived_adjacency=receipt.derived_adjacency,
+                electronic_provenance=receipt.electronic_provenance,
             )
         )
         self._emit(

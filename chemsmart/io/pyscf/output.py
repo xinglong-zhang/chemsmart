@@ -531,6 +531,38 @@ class PySCFOutput(FileMixin):
         return [float(v) for v in values] if values is not None else []
 
     @cached_property
+    def scf_energy(self):
+        """The SCF energy at the final geometry, in Hartree.
+
+        Contract v5 states it once as ``results/scf_energy``; on an older
+        artifact it is the last entry of the stage trace.
+        """
+        value = self.results.get("scf_energy")
+        if value is not None:
+            return float(np.asarray(value).reshape(-1)[0])
+        return self.energies[-1] if self.energies else None
+
+    @cached_property
+    def total_energy(self):
+        """The total energy of the surface the job computed on, in Hartree.
+
+        The SCF energy for an HF or DFT job and for a ``td`` spectrum (the
+        reference), the followed root's total for an excited-root
+        optimisation, the correlated total for ``mp2``/``ccsd``/``ccsd(t)``.
+        Older artifacts, which computed on the SCF surface alone, answer
+        with the last SCF energy.
+        """
+        value = self.results.get("total_energy")
+        if value is not None:
+            return float(np.asarray(value).reshape(-1)[0])
+        return self.energies[-1] if self.energies else None
+
+    # ------------------------------------------------------------------
+    # response stage: roots are ascending indices within one manifold at
+    # this artifact's own (final) geometry, never state identities
+    # ------------------------------------------------------------------
+
+    @cached_property
     def excitation_energies(self):
         """Return vertical excitation energies in Hartree, if present."""
         values = self.results.get("excitation_energies")
@@ -545,6 +577,160 @@ class PySCFOutput(FileMixin):
         return (
             [float(value) for value in values] if values is not None else None
         )
+
+    @cached_property
+    def transition_dipole_moments(self):
+        """Per-root transition dipole vectors in Debye, if present."""
+        values = self.results.get("transition_dipole_moments")
+        return np.asarray(values, dtype=float) if values is not None else None
+
+    @cached_property
+    def excited_state_converged(self):
+        """Per-root convergence of the response solver, as booleans."""
+        values = self.results.get("excited_state_converged")
+        if values is None:
+            return None
+        return [bool(int(value)) for value in np.asarray(values).reshape(-1)]
+
+    @cached_property
+    def excited_state_multiplicities(self):
+        """Per-root multiplicity of a restricted manifold; None otherwise.
+
+        A closed-shell reference asks for singlets or triplets and the
+        driver writes 1 or 3 per root.  An unrestricted reference has one
+        spin-conserving manifold PySCF labels neither, so no dataset is
+        written and the honest answer is None.
+        """
+        values = self.results.get("excited_state_multiplicities")
+        if values is None:
+            return None
+        return [int(value) for value in np.asarray(values).reshape(-1)]
+
+    @property
+    def response_method(self):
+        return self.spec.get("response_method")
+
+    @property
+    def state_manifold(self):
+        return self.spec.get("state_manifold")
+
+    @property
+    def td_stage(self):
+        """The driver's own record of the response stage, or None."""
+        stages = self.status.get("stages")
+        stage = stages.get("td") if isinstance(stages, dict) else None
+        return stage if isinstance(stage, dict) else None
+
+    @cached_property
+    def excited_state_records(self):
+        """One record per root, the shape the log readers produce.
+
+        ``state_index`` and ``manifold_root`` are the same 1-based ordinal
+        (an artifact carries one manifold), ``energy_eV`` is converted from
+        the stored hartree, ``multiplicity`` is the manifold's (None for
+        an unrestricted reference) and ``spin_square`` is None because
+        PySCF prints no per-root <S^2>.  ``converged`` is the driver's
+        per-root flag.
+        """
+        excitations = self.excitation_energies
+        if not excitations:
+            return []
+        strengths = self.oscillator_strengths or []
+        converged = self.excited_state_converged or []
+        multiplicities = self.excited_state_multiplicities
+        records = []
+        for index, energy in enumerate(excitations):
+            records.append(
+                {
+                    "state_index": index + 1,
+                    "manifold_root": index + 1,
+                    "multiplicity": (
+                        multiplicities[index]
+                        if multiplicities is not None
+                        and index < len(multiplicities)
+                        else None
+                    ),
+                    "energy_eV": float(energy) * units.Hartree,
+                    "oscillator_strength": (
+                        float(strengths[index])
+                        if index < len(strengths)
+                        else None
+                    ),
+                    "spin_square": None,
+                    "converged": (
+                        bool(converged[index])
+                        if index < len(converged)
+                        else None
+                    ),
+                }
+            )
+        return records
+
+    @property
+    def excited_state_followed_root(self):
+        """The root an excited-surface optimisation followed, or None."""
+        value = self.spec.get("excited_state_root")
+        return None if value is None else int(value)
+
+    @property
+    def excited_state_record(self):
+        """The optimiser's own record of the followed root, or None."""
+        stages = self.status.get("stages")
+        opt = stages.get("opt") if isinstance(stages, dict) else None
+        record = opt.get("excited_state") if isinstance(opt, dict) else None
+        return record if isinstance(record, dict) else None
+
+    # ------------------------------------------------------------------
+    # correlated stage: the program's own components at the final geometry
+    # ------------------------------------------------------------------
+
+    @property
+    def correlated_method(self):
+        """``mp2``/``ccsd``/``ccsd(t)`` when the job ran one, else None."""
+        stages = self.status.get("stages")
+        corr = stages.get("corr") if isinstance(stages, dict) else None
+        if isinstance(corr, dict) and corr.get("method"):
+            return str(corr["method"])
+        method = str(self.spec.get("ab_initio") or "").strip().lower()
+        return method if method in ("mp2", "ccsd", "ccsd(t)") else None
+
+    def _scalar_result(self, name):
+        value = self.results.get(name)
+        if value is None:
+            return None
+        return float(np.asarray(value).reshape(-1)[0])
+
+    @cached_property
+    def reference_energy(self):
+        """The HF energy a correlated method was computed on, in Hartree."""
+        return self._scalar_result("reference_energy")
+
+    @cached_property
+    def correlation_energy(self):
+        """The final method's whole correlation energy, in Hartree.
+
+        For CCSD(T) this is the CCSD correlation plus the triples
+        correction, which is what the ORCA reader means by the same name.
+        """
+        return self._scalar_result("correlation_energy")
+
+    @cached_property
+    def ccsd_correlation_energy(self):
+        return self._scalar_result("ccsd_correlation_energy")
+
+    @cached_property
+    def triples_correction(self):
+        return self._scalar_result("triples_correction")
+
+    @property
+    def frozen_core_applied(self):
+        """The number of orbitals the correlated stage left uncorrelated."""
+        stages = self.status.get("stages")
+        corr = stages.get("corr") if isinstance(stages, dict) else None
+        if not isinstance(corr, dict):
+            return None
+        value = corr.get("frozen_core_applied")
+        return None if value is None else int(value)
 
     @cached_property
     def _eigenvalues(self):

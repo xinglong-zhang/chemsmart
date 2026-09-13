@@ -126,6 +126,57 @@ def test_declared_states_are_from_the_vocabulary():
             )
 
 
+@pytest.mark.capability("selector:pyscf:td:excitation_energies")
+def test_electronic_provenance_is_declared_from_one_vocabulary_and_resolved():
+    """A structural state identifies a geometry, not a density.
+
+    The second axis says whose density or method a value belongs to, from
+    one vocabulary, declared per reader and resolved per artifact: the
+    symbolic ``computed_surface`` a reader declares for ``energy`` never
+    reaches a consumer, because the resolver turns it into the reference,
+    the followed root or the correlated method this result's own record
+    supports.  Every reader that declares the axis must declare it for the
+    excitation set and the mean-field set alike, or a session reads "the
+    S1 dipole" off a ground-state number under a true host word.
+    """
+
+    from chemsmart.analysis.result_readers import ELECTRONIC_PROVENANCES
+
+    declaring = {
+        program: reader
+        for program, reader in RESULT_READERS.items()
+        if reader.selector_electronic_provenance
+    }
+    assert {"orca", "pyscf"} <= set(declaring)
+    for program, reader in sorted(declaring.items()):
+        for selector, word in reader.selector_electronic_provenance:
+            assert word in ELECTRONIC_PROVENANCES, (program, selector, word)
+        for selector in ("excitation_energies", "oscillator_strengths"):
+            assert reader.electronic_provenance(selector) == "excited_root"
+        for selector in ("dipole_moment", "scf_energy"):
+            assert reader.electronic_provenance(selector) == "reference"
+        assert reader.electronic_provenance("energy") == "computed_surface"
+        assert reader.resolve_electronic_provenance is not None
+    root = pathlib.Path(__file__).resolve().parents[2]
+    reader = reader_for("pyscf")
+    for relative, expected in (
+        ("water_sp/water_sp_gas_phase.h5", "reference"),
+        ("water_mp2_sp/water_mp2_sp_gas_phase.h5", "correlated"),
+        (
+            "formaldehyde_s1_opt/formaldehyde_s1_opt_gas_phase.h5",
+            "excited_root",
+        ),
+        ("water_td_singlet/water_td_singlet_gas_phase.h5", "reference"),
+    ):
+        path = root / "tests" / "data" / "PySCFTests" / "outputs" / relative
+        if not path.is_file():
+            pytest.skip("an archived PySCF result is absent")
+        handle = reader.open_output(str(path))
+        resolved = reader.electronic_provenance_for_output(handle, "energy")
+        assert resolved == expected, (relative, resolved)
+        assert resolved != "computed_surface"
+
+
 @pytest.mark.capability("selector:orca:ts:reached_positions")
 @pytest.mark.capability("selector:pyscf:opt:reached_positions")
 def test_a_reached_selector_returns_the_last_structure():

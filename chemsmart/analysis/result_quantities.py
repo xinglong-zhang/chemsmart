@@ -107,6 +107,14 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
         "spin_square_target",
         "spin_square_deviation",
         "effective_multiplicity",
+        # The response stage (contract v5): per-root transition dipoles and
+        # convergence, the root an excited-surface optimisation followed.
+        "transition_dipole_moments",
+        "excited_state_converged",
+        "excited_state_followed_root",
+        # The coupled-cluster components beside ``correlation_energy``.
+        "ccsd_correlation_energy",
+        "triples_correction",
     }
 )
 
@@ -352,10 +360,27 @@ class QuantityExtractionError(QuantityContractError):
 #: Deriving the expectation from the writer means a disagreement can only
 #: be an artifact written under another contract, which is a fact to state.
 _SELECTOR_RESULT_DATASETS: dict[str, tuple[str, ...]] = {
+    # ``energy`` reads ``results/total_energy`` on a v5 artifact and the
+    # SCF trace before it, so the audited dataset is the one every
+    # contract writes; the v5 scalars audit their own datasets.
     "energy": ("results/energies",),
     "energies": ("results/energies",),
+    "scf_energy": ("results/scf_energy",),
     "excitation_energies": ("results/excitation_energies",),
     "oscillator_strengths": ("results/oscillator_strengths",),
+    "singlet_excitation_energies": ("results/excitation_energies",),
+    "triplet_excitation_energies": ("results/excitation_energies",),
+    "singlet_oscillator_strengths": ("results/oscillator_strengths",),
+    "triplet_oscillator_strengths": ("results/oscillator_strengths",),
+    "excited_state_indices": ("results/excitation_energies",),
+    "excited_state_manifold_roots": ("results/excitation_energies",),
+    "excited_state_multiplicities": ("results/excited_state_multiplicities",),
+    "excited_state_converged": ("results/excited_state_converged",),
+    "transition_dipole_moments": ("results/transition_dipole_moments",),
+    "reference_energy": ("results/reference_energy",),
+    "correlation_energy": ("results/correlation_energy",),
+    "ccsd_correlation_energy": ("results/ccsd_correlation_energy",),
+    "triples_correction": ("results/triples_correction",),
     "dipole_moment": ("results/dipole_moment",),
     "dipole_moment_magnitude": ("results/dipole_moment",),
     "mulliken_atomic_charges": ("results/mulliken_charges",),
@@ -598,6 +623,7 @@ def canonical_extraction_receipt_body(
     status: str,
     absent: Any = (),
     derived_adjacency: Any = (),
+    electronic_provenance: Any = (),
 ) -> dict[str, Any]:
     """Return the one body an extraction receipt is digested over.
 
@@ -633,6 +659,11 @@ def canonical_extraction_receipt_body(
         # every read that carries no adjacency -- verifies under one
         # arithmetic.
         body["derived_adjacency"] = derived_adjacency
+    if electronic_provenance:
+        # Whose density or method each delivered value belongs to, as
+        # ``((quantity_id, word), ...)``; present only when a reader
+        # declares the axis, under the same rule as the adjacency.
+        body["electronic_provenance"] = electronic_provenance
     return body
 
 
@@ -661,6 +692,14 @@ class QuantityExtractionReceiptV1:
     #: ring class, stereo descriptor -- is the scientist's judgement and
     #: must never be attached here.
     derived_adjacency: Any = ()
+    #: Whose density or method each delivered value belongs to, as
+    #: ``((quantity_id, word), ...)`` over the reader's declared
+    #: electronic-provenance axis: ``reference`` for a mean-field property,
+    #: ``excited_root`` for a root's quantity, ``correlated`` for a
+    #: correlated component, resolved per artifact.  A geometry identity
+    #: says nothing about whose density a dipole is, and this is where the
+    #: receipt says it.  Empty for a reader that declares no axis.
+    electronic_provenance: Any = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "quantities", tuple(self.quantities))
@@ -744,6 +783,17 @@ class QuantityExtractionReceiptV1:
                     "each absence records a quantity id, a selector and a "
                     "reason"
                 )
+        provenance = tuple(
+            (str(quantity_id), str(word))
+            for quantity_id, word in (self.electronic_provenance or ())
+        )
+        for _quantity_id, word in provenance:
+            if not word or word == "stateless":
+                raise QuantityContractError(
+                    "electronic provenance names a state or method per "
+                    "delivered quantity; a stateless value is not recorded"
+                )
+        object.__setattr__(self, "electronic_provenance", provenance)
         body = canonical_extraction_receipt_body(
             schema_version=self.schema_version,
             artifact_id=self.artifact_id,
@@ -754,6 +804,7 @@ class QuantityExtractionReceiptV1:
             status=self.status,
             absent=self.absent,
             derived_adjacency=self.derived_adjacency,
+            electronic_provenance=self.electronic_provenance,
         )
         if self.receipt_sha256 != canonical_quantity_sha256(body):
             raise QuantityContractError(
