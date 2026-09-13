@@ -176,30 +176,6 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
         ("opt", "ts"),
     ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
     (
-        "chemsmart/settings/capabilities.py",
-        "<module>",
-        None,
-        ("hess", "opt", "sp"),
-    ): "derives in 0.1b from XTBJobSettings.JOBTYPES",
-    (
-        "chemsmart/settings/xtb.py",
-        "XTBProjectSettings/explicit_fields",
-        None,
-        ("hess", "opt", "sp"),
-    ): "derives in 0.1b from XTBJobSettings.JOBTYPES",
-    (
-        "chemsmart/settings/xtb.py",
-        "YamlXTBProjectSettings/explicit_fields",
-        None,
-        ("hess", "opt", "sp"),
-    ): "derives in 0.1b from XTBJobSettings.JOBTYPES",
-    (
-        "chemsmart/settings/xtb.py",
-        "YamlXTBProjectSettingsBuilder",
-        "SECTIONS",
-        ("hess", "opt", "sp"),
-    ): "derives in 0.1b from XTBJobSettings.JOBTYPES",
-    (
         "chemsmart/agent/commands.py",
         "<module>",
         "_COORDINATE_DRIVEN_JOBTYPES",

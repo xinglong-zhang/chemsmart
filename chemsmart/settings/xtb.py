@@ -28,7 +28,7 @@ class XTBProjectSettings(RegistryMixin):
         multiplicity unless an approved project section declares both.
         """
 
-        if jobtype not in ("sp", "opt", "hess"):
+        if jobtype not in XTBJobSettings.JOBTYPES:
             raise ValueError(f"Unknown xTB jobtype: {jobtype!r}.")
         return frozenset()
 
@@ -173,7 +173,7 @@ class YamlXTBProjectSettings(XTBProjectSettings):
         }
 
     def explicit_fields(self, jobtype):
-        if jobtype not in ("sp", "opt", "hess"):
+        if jobtype not in XTBJobSettings.JOBTYPES:
             raise ValueError(f"Unknown xTB jobtype: {jobtype!r}.")
         return self._explicit_fields.get(jobtype, frozenset())
 
@@ -194,7 +194,10 @@ class YamlXTBProjectSettings(XTBProjectSettings):
 class YamlXTBProjectSettingsBuilder:
     """Fail-closed loader for the exact three-section xTB YAML dialect."""
 
-    SECTIONS = ("sp", "opt", "hess")
+    #: The section vocabulary is the settings class's job types, imported
+    #: rather than retyped: a vocabulary with two authors is how one job
+    #: type came to be declared in one place and refused in another.
+    SECTIONS = XTBJobSettings.JOBTYPES
 
     def __init__(self, filename):
         self.filename = os.path.abspath(filename)

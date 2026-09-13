@@ -510,6 +510,10 @@ def declared_jobtypes(program: str) -> tuple[str, ...]:
         from chemsmart.jobs.pyscf.settings import PYSCF_JOBTYPES
 
         return tuple(sorted(PYSCF_JOBTYPES))
+    if program == "xtb":
+        from chemsmart.jobs.xtb.settings import XTBJobSettings
+
+        return tuple(sorted(XTBJobSettings.JOBTYPES))
     return ()
 
 
@@ -808,7 +812,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             program="xtb",
             requires_project_configuration=False,
             supports_project_configuration=True,
-            jobtypes=("hess", "opt", "sp"),
+            jobtypes=declared_jobtypes("xtb"),
             project_owned_parameters=_XTB_PROJECT_PARAMETERS,
             engines=("cpu",),
             project_section_names=loader_project_section_names("xtb"),
