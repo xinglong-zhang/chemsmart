@@ -82,7 +82,6 @@ _PREVIEW_DEFERRED_RULES = frozenset(
         "pyscf.gpu.basis_angular_momentum",
         "pyscf.gpu.aux_basis_angular_momentum",
         "pyscf.gpu.functional_unverified",
-        "pyscf.td.preview_only_capability",
     }
 )
 

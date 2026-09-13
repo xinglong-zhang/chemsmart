@@ -251,7 +251,7 @@ def test_registry_internal_invariants(name, capability):
     )
 
 
-def test_pyscf_agent_matrix_is_cpu_only_and_keeps_td_preview_only():
+def test_pyscf_agent_matrix_is_cpu_only_and_td_is_executable_on_cpu():
     capability = PROGRAM_CAPABILITIES["pyscf"]
 
     preview_pairs = {
@@ -265,8 +265,11 @@ def test_pyscf_agent_matrix_is_cpu_only_and_keeps_td_preview_only():
         if item.execution_supported
     }
 
+    # The response stage is executable on the CPU engine (contract v5);
+    # GPU4PySCF declares no excited-state stage at all.
     assert ("cpu", "td") in preview_pairs
-    assert ("cpu", "td") not in execution_pairs
+    assert ("cpu", "td") in execution_pairs
+    assert ("gpu", "td") not in preview_pairs
     # GPU4PySCF is a declared preview surface (charter); execution is not.
     assert any(engine == "gpu" for engine, _jobtype in preview_pairs)
     assert not any(engine == "gpu" for engine, _jobtype in execution_pairs)
@@ -274,7 +277,8 @@ def test_pyscf_agent_matrix_is_cpu_only_and_keeps_td_preview_only():
         ("cpu", "sp"),
         ("cpu", "opt"),
         ("cpu", "hess"),
-    }.issubset(execution_pairs)
+        ("cpu", "td"),
+    } == execution_pairs
 
 
 def test_program_capability_rejects_incoherent_declarations():

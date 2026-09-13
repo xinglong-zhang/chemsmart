@@ -770,11 +770,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
                 EngineJobCapability(engine="cpu", jobtype="hess"),
                 EngineJobCapability(engine="cpu", jobtype="opt"),
                 EngineJobCapability(engine="cpu", jobtype="sp"),
-                EngineJobCapability(
-                    engine="cpu",
-                    jobtype="td",
-                    execution_supported=False,
-                ),
+                EngineJobCapability(engine="cpu", jobtype="td"),
                 EngineJobCapability(
                     engine="gpu",
                     jobtype="hess",

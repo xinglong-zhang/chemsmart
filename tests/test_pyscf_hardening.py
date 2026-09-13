@@ -31,7 +31,6 @@ from chemsmart.jobs.pyscf.runner import (
     _PREVIEW_DEFERRED_RULES,
     FakePySCFJobRunner,
     PySCFJobRunner,
-    PySCFPreflightError,
     PySCFResultValidationError,
     _receipt_file_sha256,
     _run_receipt_state,
@@ -114,7 +113,14 @@ def _prepare_preflight_runner(runner, tmp_path):
     return runner
 
 
-def test_fake_td_defers_only_preview_capability_rule(tmp_path):
+def test_fake_td_defers_no_capability_rule(tmp_path):
+    """A td preview reports no finding to defer: the stage is executable.
+
+    The preview-only gate that once travelled here as a deferred rule is
+    deleted, so a fake td prerun is exactly a fake sp prerun -- an
+    environment receipt with an empty finding list.
+    """
+
     runner = _prepare_preflight_runner(
         object.__new__(FakePySCFJobRunner), tmp_path
     )
@@ -133,14 +139,16 @@ def test_fake_td_defers_only_preview_capability_rule(tmp_path):
     receipt = json.loads(
         (tmp_path / "td.environment.json").read_text(encoding="utf-8")
     )
-    assert receipt["deferred_rule_ids"] == ["pyscf.td.preview_only_capability"]
-    assert [item["rule_id"] for item in receipt["preflight_findings"]] == [
-        "pyscf.td.preview_only_capability"
-    ]
-    assert "pyscf.td.preview_only_capability" in _PREVIEW_DEFERRED_RULES
+    assert receipt["deferred_rule_ids"] == []
+    assert receipt["preflight_findings"] == []
+    assert not any(
+        rule.startswith("pyscf.td.") for rule in _PREVIEW_DEFERRED_RULES
+    )
 
 
-def test_real_td_blocks_before_input_or_engine_launch(tmp_path):
+def test_real_td_passes_preflight_on_a_green_environment(tmp_path):
+    """The real runner reaches launch readiness for td like any stage."""
+
     runner = _prepare_preflight_runner(
         object.__new__(PySCFJobRunner), tmp_path
     )
@@ -171,12 +179,13 @@ def test_real_td_blocks_before_input_or_engine_launch(tmp_path):
             return_value=[],
         ),
     ):
-        with pytest.raises(PySCFPreflightError) as error:
-            runner._prerun(job)
+        runner._prerun(job)
 
-    assert [item["rule_id"] for item in error.value.findings] == [
-        "pyscf.td.preview_only_capability"
-    ]
+    receipt = json.loads(
+        (tmp_path / "td.environment.json").read_text(encoding="utf-8")
+    )
+    assert receipt["preflight_findings"] == []
+    assert receipt["execution_ready"] is True
 
 
 def test_the_driver_builds_the_response_it_was_asked_for():

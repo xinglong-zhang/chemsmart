@@ -49,10 +49,13 @@ def test_v1_agent_programs_exclude_human_only_programs_and_gpu_execution():
         for pair in records["orca"].preview_engine_job_pairs
         if pair not in records["orca"].execution_engine_job_pairs
     } == {"modred", "neb"}
+    # The response stage is executable on the CPU engine (contract v5);
+    # the GPU engine stays preview-only and declares no excited state.
     assert records["pyscf"].execution_engine_job_pairs == (
         ("cpu", "hess"),
         ("cpu", "opt"),
         ("cpu", "sp"),
+        ("cpu", "td"),
     )
     assert records["xtb"].execution_engine_job_pairs
 

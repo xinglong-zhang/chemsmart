@@ -13,6 +13,7 @@
     {"kind": "program_jobtype", "id": "orca:cpu:td", "status": "claimed", "run": "", "commit": "", "date": "", "source": "AGENTS.md product boundary"},
     {"kind": "program_jobtype", "id": "pyscf:cpu:sp", "status": "recorded", "run": "ax41-refine-100/pyscf-round/workspaces/g4-methanol goals/goal-g4-methanol/runs/cycle-1", "commit": "e8909401", "date": "2026-09-12"},
     {"kind": "program_jobtype", "id": "pyscf:cpu:opt", "status": "recorded", "run": "ax41-refine-100/pyscf-round/workspaces/g1-methylamine goals/goal-g1-methylamine/runs/cycle-1", "commit": "e8909401", "date": "2026-09-12"},
-    {"kind": "program_jobtype", "id": "pyscf:cpu:hess", "status": "recorded", "run": "ax41-refine-100/pyscf-round/workspaces/g1-methylamine goals/goal-g1-methylamine/runs/cycle-1", "commit": "e8909401", "date": "2026-09-12"}
+    {"kind": "program_jobtype", "id": "pyscf:cpu:hess", "status": "recorded", "run": "ax41-refine-100/pyscf-round/workspaces/g1-methylamine goals/goal-g1-methylamine/runs/cycle-1", "commit": "e8909401", "date": "2026-09-12"},
+    {"kind": "program_jobtype", "id": "pyscf:cpu:td", "status": "claimed", "run": "", "commit": "", "date": "", "source": "result contract v5 makes the response stage executable; the sealed live case of the expansion round (E1/E2) records it"}
   ]
 }

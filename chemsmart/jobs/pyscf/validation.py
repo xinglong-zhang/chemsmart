@@ -117,7 +117,6 @@ RULE_PROVENANCE_MATERIALIZATION = "pyscf.provenance.materialization_invalid"
 RULE_RESULT_UNIT = "pyscf.result.unit_missing_or_mismatched"
 RULE_HESSIAN_REFERENCE = "pyscf.hessian.reference_unsupported"
 RULE_HESSIAN_NLC_OPEN_SHELL = "pyscf.hessian.nlc_open_shell_unsupported"
-RULE_TD_PREVIEW_ONLY = "pyscf.td.preview_only_capability"
 RULE_TD_GPU_UNSUPPORTED = "pyscf.td.gpu_preview_unsupported"
 #: The response stage runs on a Kohn-Sham reference whose manifold matches
 #: its spin: singlet/triplet on a closed shell, ``unrestricted`` on an open
@@ -297,7 +296,6 @@ def preflight(settings, molecule, environment) -> list[PySCFViolation]:
     checks = (
         _check_unsupported_settings,
         _check_setting_values,
-        _check_preview_only_capability,
         _check_solvent,
         _check_solver,
         _check_dispersion,
@@ -4002,22 +4000,6 @@ def _check_correlated_settings(settings, *, jobtype, ab_initio):
             )
         )
     return violations
-
-
-def _check_preview_only_capability(settings, _molecule, _environment):
-    """Keep the experimental response stage non-executable by construction."""
-
-    if str(_member(settings, "jobtype", "")).strip().lower() != "td":
-        return []
-    return [
-        PySCFViolation(
-            rule_id=RULE_TD_PREVIEW_ONLY,
-            field="jobtype",
-            expected="fake/test preview only",
-            observed="td",
-            evidence_ref="capability:pyscf/td",
-        )
-    ]
 
 
 def _check_solvent(settings, _molecule, environment):

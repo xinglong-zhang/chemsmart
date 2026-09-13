@@ -130,11 +130,14 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
     assert gpu_td.status is CapabilityQueryStatus.UNSUPPORTED_ENGINE
     assert cpu_td.effective_engine_job_pairs == pairs
 
+    # The response stage is executable on the CPU engine (contract v5);
+    # the GPU engine remains the declared preview-only surface, so it is
+    # the pair an approval must still refuse.
     with pytest.raises(ContractError, match="preview-only engine-job pair"):
         build_approved_execution_overlay(
             registry=registry,
             preview_overlay=overlay,
-            approved_nodes=(("pyscf", "td", "cpu"),),
+            approved_nodes=(("pyscf", "sp", "gpu"),),
             execution_evidence_sha256="6" * 64,
         )
 
@@ -144,9 +147,17 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
         approved_nodes=(
             ("pyscf", "sp", "cpu"),
             ("pyscf", "opt", "cpu"),
+            ("pyscf", "td", "cpu"),
         ),
         execution_evidence_sha256="6" * 64,
     )
+    approved_td = query_capability(
+        ProgramCapabilityQueryV1("pyscf", "td", "cpu"),
+        registry=registry,
+        live_schema=live_schema,
+        overlay=execution_overlay,
+    )
+    assert approved_td.status is CapabilityQueryStatus.SUPPORTED
     approved = query_capability(
         ProgramCapabilityQueryV1("pyscf", "sp", "cpu"),
         registry=registry,
