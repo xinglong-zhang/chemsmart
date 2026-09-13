@@ -152,8 +152,8 @@ visible.
   target is qualified.
 - PySCF CPU ``sp/opt/hess`` and xTB CPU ``sp/opt/hess`` have approved real
   execution paths. PySCF CPU ``td``, excited-root ``opt``
-  and the ``mp2``, ``ccsd`` and ``ccsd(t)`` methods are executable and
-  fixture-qualified, claimed as completed execution only from sealed cases.
+  and the ``mp2``, ``ccsd`` and ``ccsd(t)`` methods are recorded from sealed
+  live goals on the configurations they ran.
 - GPU4PySCF ``sp/opt/hess`` is a PySCF-engine configuration and preview
   surface until a compatible GPU target is qualified. NCIPLOT and other human
   CLI families without an Agent declaration are not Agent execution paths.

@@ -71,7 +71,7 @@ chemsmart run PROGRAM --help
 
 | Program | Planning and safe preview | Release-qualified execution | Result analysis |
 | --- | --- | --- | --- |
-| PySCF CPU | `sp`, `opt`, `hess`, `td`; excited-root `opt`; `mp2`, `ccsd`, `ccsd(t)` as methods | `sp`, `opt`, `hess`; the response and correlated stages once their sealed cases have run | structured HDF5 quantities actually produced |
+| PySCF CPU | `sp`, `opt`, `hess`, `td`; excited-root `opt`; `mp2`, `ccsd`, `ccsd(t)` as methods | `sp`, `opt`, `hess`, `td`, excited-root `opt`, `mp2`/`ccsd`/`ccsd(t)` | structured HDF5 quantities actually produced |
 | GPU4PySCF | `sp`, `opt`, `hess` configuration and preview | not qualified in this release | the structured PySCF result path when a compatible result is supplied |
 | xTB CPU | `sp`, `opt`, `hess` | `sp`, `opt`, `hess` | validated native quantities, orbitals, dipoles, frequencies, geometry handoffs, and portable archive analysis |
 | ORCA CPU | `sp`, `opt`, `ts`, `irc`, `td`, `neb`, `scan`, `modred` | qualified for `sp`, optimization/frequency, `ts`, `td`, relaxed `scan`, and serial DAGs; `irc`, `neb`, and `modred` require target qualification | native energies, structures, frequencies, excited states, spin, solvent, auxiliary-basis, and trajectory evidence |

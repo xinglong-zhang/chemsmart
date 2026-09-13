@@ -940,6 +940,8 @@ def test_the_level_names_the_convention_and_the_root():
 # ----------------------------------------------------------------------
 
 
+@pytest.mark.capability("setting:pyscf:td_max_cycle")
+@pytest.mark.capability("setting:pyscf:cc_max_cycle")
 @pytest.mark.parametrize(
     ("case", "stage"),
     [("water_td_unconverged", "td"), ("water_ccsd_unconverged", "corr")],

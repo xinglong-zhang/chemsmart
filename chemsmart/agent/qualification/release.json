@@ -2,18 +2,185 @@
   "schema_version": "chemsmart.qualification-release.v1",
   "note": "Curated pointers to the live runs behind each release-qualified cell. Campaign evidence itself never enters Git; a record with status 'claimed' carries the charter's claim without a machine-recorded run and is displayed as such.",
   "records": [
-    {"kind": "program_jobtype", "id": "xtb:cpu:opt", "status": "recorded", "run": "ax41-refine-100/general-round/workspaces/w1b goals/goal-w1b/runs/cycle-1", "commit": "7fa80f17", "date": "2026-09-02"},
-    {"kind": "program_jobtype", "id": "xtb:cpu:hess", "status": "recorded", "run": "ax41-refine-100/general-round/workspaces/w1b goals/goal-w1b/runs/cycle-1", "commit": "7fa80f17", "date": "2026-09-02"},
-    {"kind": "program_jobtype", "id": "orca:cpu:opt", "status": "recorded", "run": "ax41-refine-100/general-round/workspaces/r2b goals/goal-r2b/runs/cycle-2", "commit": "7fa80f17", "date": "2026-09-02"},
-    {"kind": "program_jobtype", "id": "xtb:cpu:sp", "status": "claimed", "run": "", "commit": "", "date": "", "source": "AGENTS.md product boundary; multi-program qualification (xTB opt feeding ORCA/PySCF single points)"},
-    {"kind": "program_jobtype", "id": "orca:cpu:sp", "status": "claimed", "run": "", "commit": "", "date": "", "source": "AGENTS.md product boundary"},
-    {"kind": "program_jobtype", "id": "orca:cpu:ts", "status": "claimed", "run": "", "commit": "", "date": "", "source": "AGENTS.md product boundary; TS->IRC qualification target"},
-    {"kind": "program_jobtype", "id": "orca:cpu:irc", "status": "claimed", "run": "", "commit": "", "date": "", "source": "AGENTS.md product boundary; TS->IRC qualification target"},
-    {"kind": "program_jobtype", "id": "orca:cpu:scan", "status": "claimed", "run": "", "commit": "", "date": "", "source": "AGENTS.md product boundary; relaxed torsional profile"},
-    {"kind": "program_jobtype", "id": "orca:cpu:td", "status": "claimed", "run": "", "commit": "", "date": "", "source": "AGENTS.md product boundary"},
-    {"kind": "program_jobtype", "id": "pyscf:cpu:sp", "status": "recorded", "run": "ax41-refine-100/pyscf-round/workspaces/g4-methanol goals/goal-g4-methanol/runs/cycle-1", "commit": "e8909401", "date": "2026-09-12"},
-    {"kind": "program_jobtype", "id": "pyscf:cpu:opt", "status": "recorded", "run": "ax41-refine-100/pyscf-round/workspaces/g1-methylamine goals/goal-g1-methylamine/runs/cycle-1", "commit": "e8909401", "date": "2026-09-12"},
-    {"kind": "program_jobtype", "id": "pyscf:cpu:hess", "status": "recorded", "run": "ax41-refine-100/pyscf-round/workspaces/g1-methylamine goals/goal-g1-methylamine/runs/cycle-1", "commit": "e8909401", "date": "2026-09-12"},
-    {"kind": "program_jobtype", "id": "pyscf:cpu:td", "status": "claimed", "run": "", "commit": "", "date": "", "source": "result contract v5 makes the response stage executable; the sealed live case of the expansion round (E1/E2) records it"}
+    {
+      "kind": "program_jobtype",
+      "id": "xtb:cpu:opt",
+      "status": "recorded",
+      "run": "ax41-refine-100/general-round/workspaces/w1b goals/goal-w1b/runs/cycle-1",
+      "commit": "7fa80f17",
+      "date": "2026-09-02"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "xtb:cpu:hess",
+      "status": "recorded",
+      "run": "ax41-refine-100/general-round/workspaces/w1b goals/goal-w1b/runs/cycle-1",
+      "commit": "7fa80f17",
+      "date": "2026-09-02"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "orca:cpu:opt",
+      "status": "recorded",
+      "run": "ax41-refine-100/general-round/workspaces/r2b goals/goal-r2b/runs/cycle-2",
+      "commit": "7fa80f17",
+      "date": "2026-09-02"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "xtb:cpu:sp",
+      "status": "claimed",
+      "run": "",
+      "commit": "",
+      "date": "",
+      "source": "AGENTS.md product boundary; multi-program qualification (xTB opt feeding ORCA/PySCF single points)"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "orca:cpu:sp",
+      "status": "claimed",
+      "run": "",
+      "commit": "",
+      "date": "",
+      "source": "AGENTS.md product boundary"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "orca:cpu:ts",
+      "status": "claimed",
+      "run": "",
+      "commit": "",
+      "date": "",
+      "source": "AGENTS.md product boundary; TS->IRC qualification target"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "orca:cpu:irc",
+      "status": "claimed",
+      "run": "",
+      "commit": "",
+      "date": "",
+      "source": "AGENTS.md product boundary; TS->IRC qualification target"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "orca:cpu:scan",
+      "status": "claimed",
+      "run": "",
+      "commit": "",
+      "date": "",
+      "source": "AGENTS.md product boundary; relaxed torsional profile"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "orca:cpu:td",
+      "status": "claimed",
+      "run": "",
+      "commit": "",
+      "date": "",
+      "source": "AGENTS.md product boundary"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "pyscf:cpu:sp",
+      "status": "recorded",
+      "run": "ax41-refine-100/pyscf-round/workspaces/g4-methanol goals/goal-g4-methanol/runs/cycle-1",
+      "commit": "e8909401",
+      "date": "2026-09-12"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "pyscf:cpu:opt",
+      "status": "recorded",
+      "run": "ax41-refine-100/pyscf-round/workspaces/g1-methylamine goals/goal-g1-methylamine/runs/cycle-1",
+      "commit": "e8909401",
+      "date": "2026-09-12"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "pyscf:cpu:hess",
+      "status": "recorded",
+      "run": "ax41-refine-100/pyscf-round/workspaces/g1-methylamine goals/goal-g1-methylamine/runs/cycle-1",
+      "commit": "e8909401",
+      "date": "2026-09-12"
+    },
+    {
+      "kind": "program_jobtype",
+      "id": "pyscf:cpu:td",
+      "status": "recorded",
+      "run": "ax41-refine-100/pyscf-round-2/workspaces/E1-acrolein goals/goal-e1-acrolein/runs/cycle-1 + ax41-refine-100/pyscf-round-2/workspaces/E2-acetone goals/goal-e2-acetone/runs/cycle-1",
+      "commit": "a4f20506",
+      "date": "2026-09-13"
+    },
+    {
+      "kind": "setting",
+      "id": "pyscf:excited_state_root",
+      "status": "recorded",
+      "values": [
+        "1"
+      ],
+      "run": "ax41-refine-100/pyscf-round-2/workspaces/E2-acetone goals/goal-e2-acetone/runs/cycle-1 + cycle-2",
+      "commit": "a4f20506",
+      "date": "2026-09-13"
+    },
+    {
+      "kind": "setting",
+      "id": "pyscf:response_method",
+      "status": "recorded",
+      "values": [
+        "tda"
+      ],
+      "run": "ax41-refine-100/pyscf-round-2/workspaces/E1-acrolein goals/goal-e1-acrolein/runs/cycle-1 + ax41-refine-100/pyscf-round-2/workspaces/E2-acetone goals/goal-e2-acetone/runs/cycle-1",
+      "commit": "a4f20506",
+      "date": "2026-09-13"
+    },
+    {
+      "kind": "setting",
+      "id": "pyscf:state_manifold",
+      "status": "recorded",
+      "values": [
+        "singlet"
+      ],
+      "run": "ax41-refine-100/pyscf-round-2/workspaces/E1-acrolein goals/goal-e1-acrolein/runs/cycle-1 + ax41-refine-100/pyscf-round-2/workspaces/E2-acetone goals/goal-e2-acetone/runs/cycle-1",
+      "commit": "a4f20506",
+      "date": "2026-09-13"
+    },
+    {
+      "kind": "setting",
+      "id": "pyscf:nstates",
+      "status": "recorded",
+      "values": [
+        "3",
+        "2"
+      ],
+      "run": "ax41-refine-100/pyscf-round-2/workspaces/E1-acrolein goals/goal-e1-acrolein/runs/cycle-1 + ax41-refine-100/pyscf-round-2/workspaces/E2-acetone goals/goal-e2-acetone/runs/cycle-1",
+      "commit": "a4f20506",
+      "date": "2026-09-13"
+    },
+    {
+      "kind": "setting",
+      "id": "pyscf:ab_initio",
+      "status": "recorded",
+      "values": [
+        "mp2",
+        "ccsd(t)",
+        "ccsd"
+      ],
+      "run": "ax41-refine-100/pyscf-round-2/workspaces/E3-hcn-hnc goals/goal-e3-hcn-hnc/runs/cycle-1 + ax41-refine-100/pyscf-round-2/workspaces/E4-formic-acid goals/goal-e4-formic-acid/runs/cycle-1",
+      "commit": "006a65bf",
+      "date": "2026-09-13"
+    },
+    {
+      "kind": "setting",
+      "id": "pyscf:frozen_core",
+      "status": "recorded",
+      "values": [
+        "auto",
+        "all-electron default"
+      ],
+      "run": "ax41-refine-100/pyscf-round-2/workspaces/E3-hcn-hnc goals/goal-e3-hcn-hnc/runs/cycle-1 + ax41-refine-100/pyscf-round-2/workspaces/E4-formic-acid goals/goal-e4-formic-acid/runs/cycle-1",
+      "commit": "006a65bf",
+      "date": "2026-09-13"
+    }
   ]
 }

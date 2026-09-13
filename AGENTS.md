@@ -101,11 +101,10 @@ The production Agent supports:
 - explicitly approved execution on release-qualified CPU paths: ORCA
   single-points, optimization/frequency, transition-state, excited-state,
   relaxed coordinate scans, intrinsic reaction coordinates, and serial DAG
-  workflows; PySCF ``sp/opt/hess``; and xTB ``sp/opt/hess``. PySCF
-  ``td``, excited-root ``opt`` and the ``mp2``, ``ccsd`` and ``ccsd(t)``
-  methods are executable and fixture-qualified under result contract
-  v5, and are described as completed Agent execution only from the
-  sealed cases that ran them.
+  workflows; PySCF ``sp/opt/hess/td``, optimisation on an excited root,
+  and the ``mp2``, ``ccsd`` and ``ccsd(t)`` methods, each recorded from
+  a sealed live goal on the configuration it ran; and xTB
+  ``sp/opt/hess``.
 
 ORCA ``scan`` is qualified for approved execution: a relaxed torsional profile
 ran through the ordinary plan, preview, single human approval, and provider-free
@@ -755,8 +754,35 @@ every archived v4 artifact and turned nine real fixtures red. What is
 not claimed: CCSD(T) optimisation, EOM-CCSD, CASSCF, PySCF scans,
 transition states and IRC (the last raises inside PySCF's own geomeTRIC
 wrapper), DF-MP2 gradients, solvated correlated methods, excited-state
-Hessians, and any live qualification ahead of the sealed cases that
-record it.
+Hessians, and the triplet and unrestricted manifolds, solvated ``td``
+and the two iteration controls, which stay fixture-qualified until a
+sealed case exercises them.
+
+Four sealed goals ran this surface through the ordinary plan, preview,
+one displayed decision and provider-free execution. HCN/HNC: two MP2
+optimisations feeding four CCSD(T)/cc-pVTZ single points through
+validated handoffs, the isomerisation energy 14.95 kcal/mol
+core-correlated and 14.63 frozen, the core effect stated, frozen core
+in the level line and ``correlated`` on every extraction. Formic acid: a
+CCSD optimisation feeding ORCA and PySCF MP2 single points, the first
+PySCF-to-ORCA geometry handoff, the two programs 1.7e-6 Eh apart at
+matched frozen core and 7.6e-3 Eh apart between their defaults, the
+convention named by the session. Acrolein: a ``td`` validated on the
+geometry its optimisation reached, three roots with their strengths,
+the bright root's ordinal tied to the geometry it holds at. Acetone: the
+excited-root optimisation from an exactly symmetric start stopping on a
+planar stationary point whose gaps the outcome reported as facts, and
+the woken session breaking symmetry by its own declared rule to reach
+the pyramidal S1 minimum 3.5 kcal/mol lower -- and claiming the planar
+numbers it had already made, so the goal settled achieved with the
+better result computed and unclaimed. Three host defects were found by
+those goals and repaired where they were made: an approval id
+normalised by one organ and not another, which had also let a refusal
+end a goal unsettled; the expected input geometry handed to the
+validator for two of its three fixed-geometry job types; and a
+same-structure sensor that joined a consumer to its producer by digest,
+which a handoff file never matches, hidden until this round by its own
+three-heavy-atom floor.
 
 Three losses the first sealed PySCF goals paid for are repaired where
 they were made. The bootstrap conformance, which fake-previews every
@@ -850,10 +876,7 @@ Gaussian ``sp/opt/ts/irc/td/link/scan/modred`` is supported for project YAML,
 native-input generation, safe preview, and parsing of user-supplied completed
 results; this release does not claim Gaussian Agent execution. GPU4PySCF
 ``sp/opt/hess`` is a PySCF-engine configuration and preview surface, not a
-release-qualified Agent execution path; PySCF CPU ``td``, excited-root
-``opt`` and the correlated methods are executable and fixture-qualified,
-and are claimed as completed Agent execution only from the sealed cases
-that ran them. ORCA ``neb`` may be planned and previewed, but requires
+release-qualified Agent execution path. ORCA ``neb`` may be planned and previewed, but requires
 target-specific qualification before it is described as completed execution.
 NCIPLOT and additional human CLI families without an Agent declaration remain
 outside the version-3.1.4 Agent execution surface.
