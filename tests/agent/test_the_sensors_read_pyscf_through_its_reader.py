@@ -204,3 +204,57 @@ def test_convergence_facts_are_read_through_the_readers():
         record("water_sp", "water_sp_gas_phase.h5")
     )
     assert converged is None, "a single point has no optimisation to converge"
+
+
+# ----------------------------------------------------------------------
+# the response stage's numbers are sensor facts: no threshold, no signal
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.capability("selector:pyscf:opt:excited_state_followed_root")
+def test_an_excited_root_optimisation_reports_its_gaps_as_facts():
+    """Which root was followed, how far it ended from the ground state and
+    from its neighbour, and how many roots the filter dropped -- read
+    through the reader into the observation block, with no policy behind
+    them.  A root is an index, never a state identity; the session reads
+    the gap before it calls the delivered geometry a state's minimum."""
+
+    evaluation = _evaluate(
+        "formaldehyde_s1_opt_planar",
+        "formaldehyde_s1_opt_planar_gas_phase",
+        jobtype="opt",
+    )
+    block = evaluation.observations["pyscf"]
+    assert block["excited_state_followed_root"] == 1
+    assert abs(block["excited_state_root_gap_to_ground_ev"] - 3.406) < 5e-3
+    assert block["excited_state_root_gap_to_neighbour_ev"] > 4.0
+    assert block["excited_state_roots_filtered"] == 0
+    assert block["excited_state_followed_root_converged"] is True
+    assert block["excited_state_final_gradient_max"] < 4.5e-4
+    assert not [
+        item for item in evaluation.anomalies if "excited" in item["signal_id"]
+    ], "the gap is a fact, not a signal: no policy exists for it"
+
+    degenerate = _evaluate(
+        "water_s1_opt_degenerate",
+        "water_s1_opt_degenerate_gas_phase",
+        jobtype="opt",
+    ).observations["pyscf"]
+    assert degenerate["excited_state_root_gap_to_neighbour_ev"] < 1e-4
+
+
+@pytest.mark.capability("selector:pyscf:td:excitation_energies")
+def test_a_spectrum_reports_its_lowest_root_and_the_filter_count():
+    block = _evaluate(
+        "water_td_singlet", "water_td_singlet_gas_phase", jobtype="td"
+    ).observations["pyscf"]
+    assert abs(block["excited_state_lowest_root_ev"] - 7.552) < 5e-3
+    assert block["excited_state_roots_requested"] == 3
+    assert block["excited_state_roots_obtained"] == 3
+    assert block["excited_state_roots_filtered"] == 0
+    assert block["excited_state_unconverged_roots"] == []
+    assert "excited_state_followed_root" not in block
+    ground = _evaluate(
+        "water_opt", "water_opt_gas_phase", jobtype="opt"
+    ).observations["pyscf"]
+    assert not [key for key in ground if key.startswith("excited_state")]

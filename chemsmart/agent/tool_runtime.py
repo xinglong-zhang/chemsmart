@@ -1477,7 +1477,76 @@ def _neutral_sensor_facts(
             inputs["stationarity_gradient"] = gradient
         except (TypeError, ValueError):
             pass
+    # The response stage's own numbers, as facts with no threshold and no
+    # signal: which root an optimisation followed, how far it ended from
+    # the ground state and from its neighbour, and how many requested
+    # roots the program's positive-eigenvalue filter dropped. A root is
+    # an index, never a state identity; a small gap is what a single-
+    # reference response cannot describe, and the session reads it here
+    # before it calls the delivered geometry "the S1 minimum". A numeric
+    # policy is registered only after a sealed case shows one is needed.
+    block.update(_excited_state_sensor_facts(output))
     return block, inputs
+
+
+def _excited_state_sensor_facts(output: Any) -> dict[str, Any]:
+    """Gap and filter facts of a response stage, read through the reader."""
+
+    facts: dict[str, Any] = {}
+    td_stage = getattr(output, "td_stage", None)
+    if isinstance(td_stage, Mapping):
+        for key, name in (
+            ("nstates_requested", "excited_state_roots_requested"),
+            ("nstates_obtained", "excited_state_roots_obtained"),
+            ("roots_filtered", "excited_state_roots_filtered"),
+            ("unconverged_roots", "excited_state_unconverged_roots"),
+        ):
+            value = td_stage.get(key)
+            if value is not None:
+                facts[name] = (
+                    [int(item) for item in value]
+                    if isinstance(value, (list, tuple))
+                    else int(value)
+                )
+        excitations = getattr(output, "excitation_energies", None)
+        if excitations:
+            try:
+                facts["excited_state_lowest_root_ev"] = (
+                    float(excitations[0]) * 27.211386245988
+                )
+            except (TypeError, ValueError, IndexError):
+                pass
+    record = getattr(output, "excited_state_record", None)
+    if isinstance(record, Mapping):
+        for key, name in (
+            ("root", "excited_state_followed_root"),
+            (
+                "root_gap_to_ground_end_ev",
+                "excited_state_root_gap_to_ground_ev",
+            ),
+            (
+                "root_gap_to_neighbour_end_ev",
+                "excited_state_root_gap_to_neighbour_ev",
+            ),
+            (
+                "followed_root_converged_end",
+                "excited_state_followed_root_converged",
+            ),
+            (
+                "final_gradient_max_eh_per_bohr",
+                "excited_state_final_gradient_max",
+            ),
+        ):
+            value = record.get(key)
+            if value is None:
+                continue
+            if key == "root":
+                facts[name] = int(value)
+            elif isinstance(value, bool):
+                facts[name] = bool(value)
+            else:
+                facts[name] = float(value)
+    return facts
 
 
 def _observed_soft_imaginary_mode(
