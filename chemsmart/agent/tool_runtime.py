@@ -15782,6 +15782,11 @@ class CommandCompiledToolHostV1:
                 )
                 for selector in requestable
             },
+            # The level this artifact computed at, from its own record --
+            # method, basis, frozen core, the response and the followed
+            # root -- so a session names it beside the number it delivers
+            # instead of inferring it from a project it may not hold.
+            "level": reader.level_for_output(output),
         }
 
     def _extract_result_quantities(self, turn_id: str, values: dict) -> Any:

@@ -729,6 +729,13 @@ class ResultReaderV1:
     #: resolver turns ``computed_surface`` into the concrete word this
     #: artifact's own record supports.  None keeps every word as declared.
     resolve_electronic_provenance: Callable[..., str] | None = None
+    #: The level of theory one opened result computed at, as its own
+    #: record names it -- method, basis, solvent, the frozen-core count a
+    #: correlated stage applied, the response an excited stage ran on and
+    #: the root it followed -- for the inspection reply.  None renders no
+    #: level.  A level is shown and never compared: whether two programs
+    #: mean one thing by a keyword is a fact about the programs.
+    resolve_level: Callable[[Any], Mapping[str, Any]] | None = None
 
     def __post_init__(self) -> None:
         jobtypes = tuple(item[0] for item in self.jobtype_selectors)
@@ -816,6 +823,13 @@ class ResultReaderV1:
         return str(
             self.resolve_electronic_provenance(self, output, selector, word)
         )
+
+    def level_for_output(self, output: Any) -> dict[str, Any]:
+        """The level this result computed at, from its own record."""
+
+        if self.resolve_level is None:
+            return {}
+        return dict(self.resolve_level(output))
 
     def selectors_in_state(self, state: str) -> tuple[str, ...]:
         """Every selector this reader serves for one structural state."""
@@ -2297,6 +2311,58 @@ def _pyscf_total_energy(output: Any) -> float:
     return float(value)
 
 
+def _pyscf_level(output: Any) -> dict[str, Any]:
+    """The level this result computed at, from the artifact's own record.
+
+    The method and basis the spec names and the solvent the SCF was
+    attached to; the frozen-core count a correlated stage applied (PySCF
+    correlates every electron unless told otherwise, so 0 is a level and
+    never an absence); and the response an excited stage ran on -- its
+    method, its manifold, the roots requested -- with the root an
+    optimisation followed.  A matching functional string across programs
+    is necessary and never sufficient, which is why the level is shown
+    and never compared.
+    """
+
+    spec = output.spec if isinstance(output.spec, Mapping) else {}
+    level: dict[str, Any] = {}
+    ab_initio = spec.get("ab_initio")
+    method = spec.get("method")
+    if ab_initio not in (None, ""):
+        level["ab_initio"] = ab_initio
+    elif method not in (None, ""):
+        # ``method`` is the functional the project asked for when no ab
+        # initio method was named; the name is the project's, not libxc's.
+        level["functional"] = method
+    if spec.get("basis") not in (None, ""):
+        level["basis"] = spec["basis"]
+    if getattr(output, "solvent_on", False):
+        level["solvent_model"] = output.solvent_model
+        level["solvent"] = output.solvent_id
+    correlated = getattr(output, "correlated_method", None)
+    if correlated:
+        level["ab_initio"] = correlated
+        frozen = output.frozen_core_applied
+        if frozen is not None:
+            level["frozen_core"] = int(frozen)
+    stage = getattr(output, "td_stage", None)
+    if isinstance(stage, Mapping):
+        for key, name in (
+            ("response_method_applied", "response_method"),
+            ("state_manifold_applied", "state_manifold"),
+            ("nstates_requested", "nstates"),
+        ):
+            if stage.get(key) is not None:
+                level[name] = stage[key]
+    record = getattr(output, "excited_state_record", None)
+    if isinstance(record, Mapping) and record.get("root") is not None:
+        level["excited_state_root"] = int(record["root"])
+        for name in ("response_method", "state_manifold", "nstates"):
+            if record.get(name) is not None:
+                level.setdefault(name, record[name])
+    return level
+
+
 def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
     """Selector name to a callable reading it from a structured PySCF result.
 
@@ -3278,6 +3344,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         selector_structural_states=_PYSCF_STRUCTURAL_STATES,
         selector_electronic_provenance=_PYSCF_ELECTRONIC_PROVENANCE,
         resolve_electronic_provenance=_resolve_computed_surface,
+        resolve_level=_pyscf_level,
         admit_for_analysis=_pyscf_admit_for_analysis,
     ),
     "xyz": ResultReaderV1(

@@ -42,6 +42,17 @@ _LEVEL_KEYS = (
     "solvent_model",
     "solvent",
     "freq",
+    # A correlated method's level is not named without its frozen-core
+    # convention (PySCF correlates every electron unless told otherwise;
+    # ORCA and Gaussian freeze the core by default), and an excited-surface
+    # optimisation's level is the response it ran on and the root it
+    # followed: two results with one functional and one basis are at
+    # different levels when one of these differs.
+    "frozen_core",
+    "response_method",
+    "state_manifold",
+    "nstates",
+    "excited_state_root",
 )
 
 #: Two delivered values of one claim differ when they disagree by more

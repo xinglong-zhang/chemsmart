@@ -342,3 +342,79 @@ def test_a_jobtype_with_one_printed_structure_declares_no_state():
         "but its log prints only the structure the path started from: "
         f"{state_bearing}"
     )
+
+
+# ----------------------------------------------------------------------
+# the inspection reply carries every declared axis beside the level
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.capability("tool:inspect_run")
+def test_the_inspection_reply_names_the_level_beside_each_selectors_axes(
+    tmp_path,
+):
+    """``inspect_run`` on one artifact answers three declared questions per
+    selector -- whether the job type declares it, which structure it
+    belongs to, whose density it is -- and, from the artifact's own
+    record, the level the result computed at: the response and the root
+    for an excited-surface optimisation, the frozen-core count for a
+    correlated method.  A session names the level beside the number it
+    delivers instead of inferring it from a project it may not hold."""
+
+    from chemsmart.agent._contracts import TrustedArtifactRefV1, file_sha256
+    from chemsmart.agent.runtime.event_store import RuntimeEventStore
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    outputs = root / "tests" / "data" / "PySCFTests" / "outputs"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(
+            tmp_path / "events.jsonl", session_id="s1"
+        ),
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=workspace,
+    )
+    for artifact_id, relative in (
+        ("s1-opt", "formaldehyde_s1_opt/formaldehyde_s1_opt_gas_phase.h5"),
+        ("ccsdt-sp", "water_ccsdt_sp/water_ccsdt_sp_gas_phase.h5"),
+    ):
+        path = outputs / relative
+        host.artifacts[artifact_id] = TrustedArtifactRefV1(
+            artifact_id=artifact_id,
+            kind="pyscf_hdf5",
+            sha256=file_sha256(path),
+            size_bytes=path.stat().st_size,
+            path=str(path),
+            cli_value=str(path),
+        )
+
+    excited = host._inspect_run(
+        "t1", {"program": "pyscf", "artifact_id": "s1-opt"}
+    )
+    assert excited["jobtype"] == "opt"
+    assert excited["level"] == {
+        "functional": "b3lyp",
+        "basis": "def2-svp",
+        "response_method": "tda",
+        "state_manifold": "singlet",
+        "nstates": 1,
+        "excited_state_root": 1,
+    }
+    assert "excited_state_followed_root" in excited["requestable_selectors"]
+    assert excited["structural_states"]["reached_positions"] == "as_reached"
+    assert excited["electronic_provenance"]["energy"] == "excited_root"
+    assert excited["electronic_provenance"]["dipole_moment"] == "reference"
+
+    correlated = host._inspect_run(
+        "t2", {"program": "pyscf", "artifact_id": "ccsdt-sp"}
+    )
+    assert correlated["level"] == {
+        "ab_initio": "ccsd(t)",
+        "basis": "def2-svp",
+        "frozen_core": 1,
+    }
+    assert correlated["electronic_provenance"]["energy"] == "correlated"
+    assert correlated["electronic_provenance"]["scf_energy"] == "reference"
+    assert "triples_correction" in correlated["requestable_selectors"]

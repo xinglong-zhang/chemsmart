@@ -30,7 +30,7 @@ from .test_the_goal_loop_recovers_or_returns import (
 pytestmark = pytest.mark.capability("rule:wake.workspace_record")
 
 
-def _review(path, basis):
+def _review(path, basis, **level):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
@@ -45,6 +45,7 @@ def _review(path, basis):
                                     "basis": basis,
                                     "solvent_model": "cpcm",
                                     "solvent": "acetonitrile",
+                                    **level,
                                 }
                             ),
                             "project_settings_text_sha256": basis * 8,
@@ -112,6 +113,38 @@ def _stream(path, *, energy, dg):
         "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8"
     )
     return path
+
+
+def test_a_level_names_its_frozen_core_and_the_root_it_followed(tmp_path):
+    """Two results at one functional and basis are different calculations
+    when one froze its core or optimised on an excited root, so the level
+    line carries the convention and the response beside the method: a
+    divergence between them is then named beside its cause."""
+
+    workspace = tmp_path / "ws"
+    record_run(
+        workspace,
+        goal_id="goal-fc",
+        cycle=1,
+        run_events_path=_stream(tmp_path / "fc.jsonl", energy=-958.3, dg=-2.0),
+        run="goals/goal-fc/runs/cycle-1",
+        review_file=_review(
+            tmp_path / "rfc.json",
+            "def2svp0",
+            frozen_core=1,
+            response_method="tda",
+            state_manifold="singlet",
+            nstates=3,
+            excited_state_root=1,
+        ),
+    )
+    (level,) = render_workspace_record(workspace)["levels"].values()
+    assert level["basis"] == "def2svp0"
+    assert level["frozen_core"] == 1
+    assert level["response_method"] == "tda"
+    assert level["state_manifold"] == "singlet"
+    assert level["nstates"] == 3
+    assert level["excited_state_root"] == 1
 
 
 def test_two_goals_at_two_levels_leave_a_divergence(tmp_path):
