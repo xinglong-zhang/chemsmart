@@ -2682,12 +2682,20 @@ _ROUTE_PROGRAM_STAGE_SECTIONS = frozenset({"link", "neb", "td"})
 
 def _conformance_project_sections(
     program: str,
+    *,
+    multiplicity: int = 1,
 ) -> dict[str, dict[str, Any]] | None:
-    """Return deterministic conformance sections, or ``None`` when unneeded."""
+    """Return deterministic conformance sections, or ``None`` when unneeded.
+
+    ``multiplicity`` is the state the probe binds (``_conformance_state``):
+    a response stage names its manifold after the reference, so an
+    open-shell workspace previews ``td`` on the unrestricted manifold
+    rather than reporting a gap for a singlet it cannot have.
+    """
 
     shape = _CONFORMANCE_PROJECT_SHAPES.get(program)
     if shape == "pyscf_stage_keyed":
-        return _pyscf_conformance_sections()
+        return _pyscf_conformance_sections(multiplicity=multiplicity)
     if shape == "route_gas_solv":
         # A deliberately plain, cheap method: this fixture exists to exercise
         # the compile/preview path, and must never look like a scientific
@@ -2828,7 +2836,9 @@ def _bootstrap_conformance(
     charge, multiplicity = _conformance_state(input_artifact)
     for program in _conformance_programs():
         project_path: Path | None = None
-        sections = _conformance_project_sections(program)
+        sections = _conformance_project_sections(
+            program, multiplicity=multiplicity
+        )
         if sections is not None:
             project_path = bootstrap_directory / f"{program}-fixture.yaml"
             rendered = render_project_yaml(
@@ -3001,7 +3011,9 @@ def _combine_program_conformance(
     )
 
 
-def _pyscf_conformance_sections() -> dict[str, dict[str, Any]]:
+def _pyscf_conformance_sections(
+    multiplicity: int = 1,
+) -> dict[str, dict[str, Any]]:
     common = {
         "basis": "def2-svp",
         "defgrid": "defgrid2",
@@ -3018,7 +3030,12 @@ def _pyscf_conformance_sections() -> dict[str, dict[str, Any]]:
             **common,
             "nstates": 5,
             "response_method": "tda",
-            "state_manifold": "singlet",
+            # The manifold follows the reference the probe binds: a
+            # closed shell asks for singlets, an open shell has one
+            # unrestricted manifold.
+            "state_manifold": (
+                "singlet" if int(multiplicity) == 1 else "unrestricted"
+            ),
         },
     }
 

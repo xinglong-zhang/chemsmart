@@ -179,40 +179,82 @@ def test_real_td_blocks_before_input_or_engine_launch(tmp_path):
     ]
 
 
-def test_td_preview_driver_is_inert_even_when_run_directly():
+def test_the_driver_builds_the_response_it_was_asked_for():
+    """The td stage is executable and constructed from CONFIG alone.
+
+    The former test pinned a preview-only gate and the absence of any
+    response construction; contract v5 makes the response stage real, so
+    what is pinned now is that the driver dispatches TDA/TDDFT on the
+    converged mean field, applies the manifold and iteration controls the
+    spec names, reads the per-root convergence from the response object
+    (never from the scanner's off-by-one property), and never switches
+    roots when the followed one is filtered.
+    """
+
     source = PySCFScriptWriter.render(
-        {
-            "schema_version": "2.0",
-            "label": "td-preview-only",
-            "jobtype": "td",
-            "preview_only": True,
-        }
+        {"schema_version": "2.0", "label": "td-executable", "jobtype": "td"}
     )
 
-    compile(source, "<pyscf-td-preview-driver>", "exec")
-    assert 'if CONFIG.get("preview_only")' in source
-    assert ".TDA()" not in source
-    assert ".TDDFT()" not in source
-    assert "response.kernel()" not in source
+    compile(source, "<pyscf-td-driver>", "exec")
+    assert 'CONFIG.get("preview_only")' not in source
+    assert '{"tda": tdscf.TDA, "tddft": tdscf.TDDFT}' in source
+    assert 'td.singlet = manifold == "singlet"' in source
+    assert 'td.max_cycle = int(config["td_max_cycle"])' in source
+    assert "_root_convergence(td_start)[root - 1]" in source
+    assert "scanner.converged" not in source
+    assert "class FollowedRootFiltered" in source
+    assert '"response_eps_applied"' in source
 
 
 @pytest.mark.parametrize(
-    ("response_method", "factory_api"),
+    ("response_method", "reference_family", "factory_api"),
     (
-        ("tda", "pyscf.tdscf.rks.TDA"),
-        ("tddft", "pyscf.tdscf.rks.TDDFT"),
+        ("tda", "rks", "pyscf.tdscf.rks.TDA"),
+        ("tddft", "rks", "pyscf.tdscf.rks.TDDFT"),
+        ("tda", "uks", "pyscf.tdscf.uks.TDA"),
+        ("tddft", "uks", "pyscf.tdscf.uks.TDDFT"),
     ),
 )
-def test_td_preview_materializes_a_typed_non_executable_response_plan(
-    response_method, factory_api
+def test_td_materializes_the_executable_response_plan(
+    response_method, reference_family, factory_api
 ):
+    multiplicity = 1 if reference_family == "rks" else 2
     settings = PySCFJobSettings(
         jobtype="td",
         functional="b3lyp",
         basis="def2-svp",
         response_method=response_method,
-        state_manifold="singlet",
+        state_manifold="singlet" if multiplicity == 1 else "unrestricted",
         nstates=4,
+        charge=0,
+        multiplicity=multiplicity,
+        engine="cpu",
+    )
+
+    materialization = pyscf_td_response_materialization(
+        settings, reference_family=reference_family
+    )
+
+    assert materialization["response_factory_api"] == factory_api
+    assert materialization["nstates"] == 4
+    assert materialization["state_manifold"] == settings.state_manifold
+    assert materialization["execution_policy"] == "executable"
+    assert materialization["excited_state_root"] is None
+    body = dict(materialization)
+    observed = body.pop("receipt_sha256")
+    assert observed == canonical_sha256(body)
+
+
+def test_an_excited_root_optimisation_materializes_its_route():
+    settings = PySCFJobSettings(
+        jobtype="opt",
+        functional="b3lyp",
+        basis="def2-svp",
+        response_method="tda",
+        state_manifold="singlet",
+        nstates=3,
+        excited_state_root=2,
+        td_max_cycle=50,
         charge=0,
         multiplicity=1,
         engine="cpu",
@@ -220,13 +262,24 @@ def test_td_preview_materializes_a_typed_non_executable_response_plan(
 
     materialization = pyscf_td_response_materialization(settings)
 
-    assert materialization["response_factory_api"] == factory_api
-    assert materialization["nstates"] == 4
-    assert materialization["state_manifold"] == "singlet"
-    assert materialization["execution_policy"] == "preview_only"
-    body = dict(materialization)
-    observed = body.pop("receipt_sha256")
-    assert observed == canonical_sha256(body)
+    assert materialization["excited_state_root"] == 2
+    assert materialization["max_cycle"] == 50
+    assert "gradient_scanner_on_root" in materialization["operation_order"]
+    assert materialization["operation_order"][-1] == (
+        "vertical_excitation_kernel"
+    ), "the spectrum is re-evaluated at the reached geometry"
+    assert (
+        pyscf_td_response_materialization(
+            PySCFJobSettings(
+                jobtype="opt",
+                functional="b3lyp",
+                basis="def2-svp",
+                charge=0,
+                multiplicity=1,
+            )
+        )
+        is None
+    )
 
 
 def test_fake_result_is_explicitly_not_evaluated_and_has_no_fake_chemistry(
@@ -581,25 +634,27 @@ def test_environment_probe_and_driver_sources_are_syntax_bounded():
 
 
 def test_force_free_sp_driver_does_not_launch_an_undeclared_gradient():
-    """The scf and opt stages launch no gradient of their own.
+    """The scf stage launches no gradient of its own.
 
     This pinned ``"nuc_grad_method" not in source`` over the whole driver
     while the invariant it protects is about the single point; contract v4
     computes the gradient at the Hessian geometry inside the ``hess``
-    branch, where it is a declared stage fact, so the assertion is scoped
-    to the stages that must stay force-free (see
+    branch, where it is a declared stage fact, and v5 builds the gradient
+    scanner an excited-root or correlated optimisation walks on inside the
+    ``opt`` branch, which is that stage's declared work.  The assertion is
+    scoped to the one stage that must stay force-free (see
     tests/test_pyscf_contract_v4.py for the hess side).
     """
 
     source = PySCFScriptWriter.render(
         {"schema_version": "2.0", "label": "force-free-sp"}
     )
-    scf_and_opt = source[
+    scf_stage = source[
         source.index('if stage == "scf":') : source.index(
-            'elif stage == "hess":'
+            'elif stage == "opt":'
         )
     ]
-    assert "nuc_grad_method" not in scf_and_opt
+    assert "nuc_grad_method" not in scf_stage
     assert 'status["properties"]["forces"]' not in source
 
 

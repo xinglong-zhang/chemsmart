@@ -76,7 +76,64 @@ def click_pyscf_settings_options(f):
         "--ab-initio",
         type=str,
         default=None,
-        help="Ab initio method. Use 'hf' for a Hartree-Fock reference.",
+        help="Ab initio method: 'hf', or a correlated method on an HF "
+        "reference ('mp2', 'ccsd', 'ccsd(t)'). sp for all; opt for mp2 and "
+        "ccsd. Defaults to project YAML.",
+    )
+    @click.option(
+        "--frozen-core",
+        type=str,
+        default=None,
+        help="Orbitals excluded from correlation: an integer count, or "
+        "'auto' for PySCF's chemical-core rule. Omitted keeps PySCF's own "
+        "default, which correlates every electron (ORCA and Gaussian "
+        "freeze core by default). Applies to mp2/ccsd/ccsd(t) only.",
+    )
+    @click.option(
+        "--cc-max-cycle",
+        type=int,
+        default=None,
+        help="Coupled-cluster amplitude/lambda iteration cap (PySCF "
+        "default 50). ccsd/ccsd(t) only.",
+    )
+    @click.option(
+        "--nstates",
+        type=int,
+        default=None,
+        help="Number of excited roots per manifold (td, or opt with "
+        "--excited-root). Defaults to project YAML.",
+    )
+    @click.option(
+        "--response-method",
+        type=click.Choice(["tda", "tddft"], case_sensitive=False),
+        default=None,
+        help="TDA (Tamm-Dancoff) or full TDDFT response. Defaults to "
+        "project YAML.",
+    )
+    @click.option(
+        "--state-manifold",
+        type=click.Choice(
+            ["singlet", "triplet", "unrestricted"], case_sensitive=False
+        ),
+        default=None,
+        help="Excitation manifold: singlet or triplet on a closed-shell "
+        "reference; 'unrestricted' is the one spin-conserving manifold of "
+        "an open-shell (UKS) reference. Defaults to project YAML.",
+    )
+    @click.option(
+        "--excited-root",
+        type=int,
+        default=None,
+        help="opt only: optimise on root k of the manifold (1-based, at most "
+        "--nstates). A root is an index at each geometry, not a state "
+        "identity. Gas phase only; no Hessian exists for the result.",
+    )
+    @click.option(
+        "--td-max-cycle",
+        type=int,
+        default=None,
+        help="Davidson iteration cap for the response solver (PySCF default "
+        "100); the repair control behind an unconverged root.",
     )
     @click.option(
         "-b",
@@ -206,6 +263,13 @@ def pyscf(
     multiplicity,
     functional,
     ab_initio,
+    frozen_core,
+    cc_max_cycle,
+    nstates,
+    response_method,
+    state_manifold,
+    excited_root,
+    td_max_cycle,
     basis,
     aux_basis,
     dispersion,
@@ -279,12 +343,35 @@ def pyscf(
         keywords += ("functional", "ab_initio")
     if ab_initio is not None:
         job_settings.ab_initio = ab_initio
-        # An HF override must also replace a project-owned DFT functional.
+        # An ab initio override must also replace a project-owned DFT
+        # functional.
         job_settings.functional = None
         # A DFT grid inherited from that project would otherwise survive the
         # whitelist merge and then be recorded despite being inapplicable.
         job_settings.defgrid = None
         keywords += ("ab_initio", "functional", "defgrid")
+    if frozen_core is not None:
+        text = frozen_core.strip().lower()
+        job_settings.frozen_core = text if text == "auto" else int(text)
+        keywords += ("frozen_core",)
+    if cc_max_cycle is not None:
+        job_settings.cc_max_cycle = cc_max_cycle
+        keywords += ("cc_max_cycle",)
+    if nstates is not None:
+        job_settings.nstates = nstates
+        keywords += ("nstates",)
+    if response_method is not None:
+        job_settings.response_method = response_method.lower()
+        keywords += ("response_method",)
+    if state_manifold is not None:
+        job_settings.state_manifold = state_manifold.lower()
+        keywords += ("state_manifold",)
+    if excited_root is not None:
+        job_settings.excited_state_root = excited_root
+        keywords += ("excited_state_root",)
+    if td_max_cycle is not None:
+        job_settings.td_max_cycle = td_max_cycle
+        keywords += ("td_max_cycle",)
     if basis is not None:
         job_settings.basis = basis
         keywords += ("basis",)

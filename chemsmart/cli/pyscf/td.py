@@ -1,4 +1,4 @@
-"""Preview-only PySCF TDA/TDDFT CLI leaf."""
+"""PySCF TDA/TDDFT vertical-excitation CLI leaf."""
 
 import logging
 
@@ -16,10 +16,14 @@ logger = logging.getLogger(__name__)
 @click_job_options
 @click.pass_context
 def td(ctx, skip_completed, **kwargs):
-    """Preview a closed-shell gas-phase singlet TDA/TDDFT calculation.
+    """Run TDA/TDDFT vertical excitations of the supplied geometry.
 
-    This experimental leaf deliberately supports ChemSmart fake/test preview
-    only.  A non-fake runner rejects the node before launching PySCF.
+    Uses the ``td:`` section of the project YAML: a Kohn-Sham reference,
+    ``response_method`` (tda or tddft), ``state_manifold`` (singlet or
+    triplet on a closed shell; unrestricted on an open shell) and
+    ``nstates``. Roots are ascending indices within the manifold at this
+    geometry, never state identities. Implicit solvent gives energies
+    under PySCF's non-equilibrium response, which the artifact records.
     """
 
     from chemsmart.jobs.pyscf.td import PySCFTDJob

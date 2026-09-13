@@ -146,11 +146,20 @@ class TestPySCFJobSettings:
         with pytest.raises(ValueError, match="gen_genecp_file"):
             settings.validate()
 
-    def test_only_hf_is_supported_as_an_ab_initio_method(self):
-        settings = PySCFJobSettings(ab_initio="mp2", basis="def2-svp")
+    def test_the_ab_initio_vocabulary_is_hf_and_the_correlated_methods(self):
+        """``hf``, ``mp2``, ``ccsd`` and ``ccsd(t)`` validate; nothing else."""
 
-        with pytest.raises(ValueError, match="supports only 'hf'"):
-            settings.validate()
+        for method in ("hf", "mp2", "ccsd", "ccsd(t)"):
+            settings = PySCFJobSettings(
+                ab_initio=method, basis="def2-svp", jobtype="sp"
+            )
+            assert settings.validate().correlated_method == (
+                None if method == "hf" else method
+            )
+        with pytest.raises(ValueError, match="accepts one of"):
+            PySCFJobSettings(
+                ab_initio="casscf", basis="def2-svp", jobtype="sp"
+            ).validate()
 
     def test_ab_initio_and_dft_functional_are_mutually_exclusive(self):
         settings = PySCFJobSettings(

@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from chemsmart.jobs.pyscf.opt import PySCFOptJob
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.settings.pyscf import (
     PySCFProjectSettings,
@@ -36,7 +35,10 @@ def test_legacy_opt_freq_migrates_to_explicit_opt_and_hess_nodes(tmp_path):
 
     assert project.opt_settings().freq is False
     assert project.hess_settings().freq is True
-    assert PySCFOptJob.stages.fget(None) == ["scf", "opt"]
+    # The stages are the resolved settings' own derivation: a migrated
+    # ground-state opt runs scf and opt, never an in-process Hessian.
+    assert project.opt_settings().stages == ["scf", "opt"]
+    assert project.hess_settings().stages == ["scf", "hess"]
     canonical = project.render_canonical_yaml(jobtypes=("opt", "hess"))
     assert "gas:" not in canonical
     assert "opt:" in canonical
@@ -116,7 +118,7 @@ def test_td_project_materializes_explicit_bounded_response_fields(tmp_path):
     assert settings.freq is False
 
 
-def test_td_settings_reject_gpu_response_preview():
+def test_td_settings_reject_gpu_response():
     settings = PySCFJobSettings(
         jobtype="td",
         functional="b3lyp",
@@ -129,5 +131,5 @@ def test_td_settings_reject_gpu_response_preview():
         engine="gpu",
     )
 
-    with pytest.raises(ValueError, match="CPU-only preview"):
+    with pytest.raises(ValueError, match="CPU capability"):
         settings.validate()

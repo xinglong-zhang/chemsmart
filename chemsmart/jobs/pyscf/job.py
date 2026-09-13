@@ -93,6 +93,17 @@ class PySCFJob(Job):
         return PySCFJobSettings
 
     @property
+    def stages(self):
+        """Return the ordered stages the generated script executes.
+
+        Derived from the resolved settings by ``pyscf_stages`` -- the same
+        function preflight and the result validator call -- so an ``opt``
+        on an excited root (``scf, opt, td``) and a correlated single point
+        (``scf, corr``) never disagree with what the driver ran.
+        """
+        return list(self.settings.stages)
+
+    @property
     def inputfile(self):
         """Path to the generated driver script."""
         return os.path.join(self.folder, self.label + ".py")

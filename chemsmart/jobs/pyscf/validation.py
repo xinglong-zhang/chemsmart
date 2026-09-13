@@ -43,13 +43,20 @@ from ase.data import atomic_numbers as ASE_ATOMIC_NUMBERS
 
 from chemsmart.jobs.pyscf.settings import (
     FUNCTIONAL_DIVERGENCES,
+    PYSCF_AB_INITIO_METHODS,
+    PYSCF_COUPLED_CLUSTER_METHODS,
     PYSCF_DEFGRIDS,
     PYSCF_ENGINES,
+    PYSCF_FROZEN_CORE_AUTO,
     PYSCF_OPT_SOLVERS,
     PYSCF_RESPONSE_METHODS,
+    PYSCF_RESTRICTED_MANIFOLDS,
     PYSCF_SOLVENT_MODELS,
     PYSCF_STATE_MANIFOLDS,
+    PYSCF_UNRESTRICTED_MANIFOLD,
     is_double_hybrid_functional,
+    pyscf_correlated_method,
+    pyscf_stages,
 )
 
 
@@ -112,6 +119,26 @@ RULE_HESSIAN_REFERENCE = "pyscf.hessian.reference_unsupported"
 RULE_HESSIAN_NLC_OPEN_SHELL = "pyscf.hessian.nlc_open_shell_unsupported"
 RULE_TD_PREVIEW_ONLY = "pyscf.td.preview_only_capability"
 RULE_TD_GPU_UNSUPPORTED = "pyscf.td.gpu_preview_unsupported"
+#: The response stage runs on a Kohn-Sham reference whose manifold matches
+#: its spin: singlet/triplet on a closed shell, ``unrestricted`` on an open
+#: shell.  A mismatch is a contract about what PySCF computes, not a grade.
+RULE_TD_REFERENCE = "pyscf.td.reference_unsupported"
+#: PySCF 2.14 raises NotImplementedError for PCM/SMD excited-state
+#: gradients; an excited-root optimisation is gas phase only.
+RULE_TD_GRADIENT_SOLVENT = "pyscf.td.gradient_solvent_unsupported"
+#: Correlated methods: what this driver has audited, each with its route.
+RULE_CORRELATION_HESSIAN = "pyscf.correlation.hessian_unsupported"
+RULE_CORRELATION_CCSDT_GRADIENT = "pyscf.correlation.ccsd_t_gradient_unaudited"
+RULE_CORRELATION_DENSITY_FIT = "pyscf.correlation.density_fit_unsupported"
+RULE_CORRELATION_SOLVENT = "pyscf.correlation.solvent_unaudited"
+RULE_CORRELATION_DISPERSION = "pyscf.correlation.dispersion_unaudited"
+#: An excited or correlated surface is optimised with geomeTRIC only; the
+#: other backends are not installed here and were never exercised on a
+#: gradient scanner.
+RULE_SOLVER_UNAUDITED_SURFACE = "pyscf.solver.unaudited_surface"
+#: Excited-state and correlated result arrays: finite, aligned, ordered.
+RULE_RESULT_EXCITED = "pyscf.result.excited_state_invalid"
+RULE_RESULT_CORRELATION = "pyscf.result.correlation_invalid"
 RULE_FREQUENCY_GEOMETRY = "pyscf.frequency.geometry_invalid"
 RULE_FREQUENCY_MODE_COUNT = "pyscf.frequency.mode_count"
 RULE_FREQUENCY_NONFINITE = "pyscf.frequency.nonfinite"
@@ -211,6 +238,10 @@ _SUPPORTED_FIELDS = frozenset(
         "response_method",
         "state_manifold",
         "nstates",
+        "excited_state_root",
+        "td_max_cycle",
+        "frozen_core",
+        "cc_max_cycle",
     }
 )
 
@@ -573,7 +604,11 @@ def _verify_materializations(spec, provenance=None):
         ]
 
     violations = []
-    allowed = {"functional_definition", "solvent_dielectric"}
+    allowed = {
+        "functional_definition",
+        "solvent_dielectric",
+        "td_response_plan",
+    }
     unknown = tuple(sorted(set(materializations).difference(allowed)))
     if unknown:
         violations.append(
@@ -671,10 +706,14 @@ def _verify_materializations(spec, provenance=None):
             )
         )
 
+    violations.extend(
+        _verify_response_plan(spec, materializations.get("td_response_plan"))
+    )
+
     functional_record = materializations.get("functional_definition")
     xc = spec.get("xc")
     method = str(spec.get("method") or spec.get("ab_initio") or "").lower()
-    is_hf = xc is None and method == "hf"
+    is_hf = xc is None and method in PYSCF_AB_INITIO_METHODS
     is_dft = xc is not None
     if is_hf and functional_record is not None:
         violations.append(
@@ -834,6 +873,55 @@ def _verify_materializations(spec, provenance=None):
             )
         )
     return violations
+
+
+def _verify_response_plan(spec, record):
+    """The response manifest names exactly what the spec asked for."""
+
+    jobtype = str(spec.get("jobtype") or "").strip().lower()
+    excited_root = spec.get("excited_state_root")
+    requested = jobtype == "td" or (jobtype == "opt" and excited_root)
+    if not requested:
+        if record is None:
+            return []
+        return [
+            PySCFViolation(
+                rule_id=RULE_PROVENANCE_MATERIALIZATION,
+                field="spec.materializations.td_response_plan",
+                expected="absent without a response stage",
+                observed=record,
+                evidence_ref="h5:/spec/materializations/td_response_plan",
+            )
+        ]
+    family = str(spec.get("reference_family") or "").strip().lower()
+    module = "uks" if family == "uks" else "rks"
+    response_method = str(spec.get("response_method") or "").strip().lower()
+    expected = {
+        "response_method": response_method,
+        "state_manifold": str(spec.get("state_manifold") or "")
+        .strip()
+        .lower(),
+        "nstates": spec.get("nstates"),
+        "ground_state_reference_family": module,
+        "response_factory_api": (
+            f"pyscf.tdscf.{module}.{'TDA' if response_method == 'tda' else 'TDDFT'}"
+        ),
+        "execution_policy": "executable",
+    }
+    if not isinstance(record, Mapping) or any(
+        not _equivalent(field, value, record.get(field, _MISSING))
+        for field, value in expected.items()
+    ):
+        return [
+            PySCFViolation(
+                rule_id=RULE_PROVENANCE_MATERIALIZATION,
+                field="spec.materializations.td_response_plan",
+                expected=expected,
+                observed=record,
+                evidence_ref="h5:/spec/materializations/td_response_plan",
+            )
+        ]
+    return []
 
 
 def _result_advisory(rule_id, field, observed, evidence_ref, message):
@@ -1683,7 +1771,17 @@ def validate_pyscf_result(
     """
 
     jobtype = _normalize_result_jobtype(expected_jobtype)
-    required_stages = tuple(_requested_stages({"jobtype": jobtype}))
+    required_stages = tuple(
+        _requested_stages(
+            {
+                "jobtype": jobtype,
+                "ab_initio": _member(settings, "ab_initio", None),
+                "excited_state_root": _member(
+                    settings, "excited_state_root", None
+                ),
+            }
+        )
+    )
     expected_symbols = tuple(str(value) for value in expected_symbols or ())
     findings: list[PySCFViolation] = []
     # Convention rules contributed by domain-knowledge skills travel with the
@@ -1717,7 +1815,7 @@ def validate_pyscf_result(
         },
     }
     geometry_observation = {
-        "fixed_geometry_required": jobtype in {"sp", "hess"},
+        "fixed_geometry_required": jobtype in {"sp", "hess", "td"},
         "unit": "Angstrom",
         "absolute_tolerance_angstrom": _FIXED_GEOMETRY_ATOL_ANGSTROM,
         "matches_input": None,
@@ -1948,6 +2046,14 @@ def validate_pyscf_result(
                         "h5:/status/stages/opt",
                     )
                 )
+    if "td" in required_stages:
+        findings.extend(
+            _validate_excited_state_results(results, stage_statuses)
+        )
+    if "corr" in required_stages:
+        findings.extend(
+            _validate_correlated_results(results, stage_statuses, spec)
+        )
     if status.get("engine_complete") is not True:
         findings.append(
             _result_finding(
@@ -2049,7 +2155,7 @@ def validate_pyscf_result(
                 "h5:/results/positions",
             )
         )
-    elif jobtype in {"sp", "hess"}:
+    elif jobtype in {"sp", "hess", "td"}:
         input_valid = bool(
             input_positions is not None
             and input_positions.shape == (len(expected_symbols), 3)
@@ -2380,6 +2486,161 @@ def validate_pyscf_result(
         "advisories": advisories,
         "findings": findings,
     }
+
+
+def _validate_excited_state_results(results, stage_statuses):
+    """Roots are finite, ascending, and every per-root array is aligned."""
+
+    findings = []
+    excitations = _result_array(results.get("excitation_energies"))
+    if excitations is None or excitations.ndim != 1 or excitations.size == 0:
+        findings.append(
+            _result_finding(
+                RULE_RESULT_EXCITED,
+                "results.excitation_energies",
+                "non-empty 1-d array of excitation energies",
+                _array_observation(excitations),
+                "h5:/results/excitation_energies",
+            )
+        )
+        return findings
+    if not bool(np.isfinite(excitations).all()):
+        findings.append(
+            _result_finding(
+                RULE_RESULT_EXCITED,
+                "results.excitation_energies",
+                "finite excitation energies",
+                _array_observation(excitations),
+                "h5:/results/excitation_energies",
+            )
+        )
+    if excitations.size > 1 and bool((np.diff(excitations) < 0).any()):
+        findings.append(
+            _result_finding(
+                RULE_RESULT_EXCITED,
+                "results.excitation_energies",
+                "ascending roots within the manifold",
+                excitations.tolist(),
+                "h5:/results/excitation_energies",
+            )
+        )
+    count = int(excitations.size)
+    for name in (
+        "oscillator_strengths",
+        "excited_state_converged",
+        "excited_state_multiplicities",
+    ):
+        if name not in results:
+            continue
+        values = _result_array(results.get(name))
+        if values is None or values.shape[:1] != (count,):
+            findings.append(
+                _result_finding(
+                    RULE_RESULT_EXCITED,
+                    f"results.{name}",
+                    f"one entry per root ({count})",
+                    _array_observation(values),
+                    f"h5:/results/{name}",
+                )
+            )
+    dipoles = results.get("transition_dipole_moments")
+    if dipoles is not None:
+        values = _result_array(dipoles)
+        if values is None or values.shape != (count, 3):
+            findings.append(
+                _result_finding(
+                    RULE_RESULT_EXCITED,
+                    "results.transition_dipole_moments",
+                    (count, 3),
+                    _array_observation(values),
+                    "h5:/results/transition_dipole_moments",
+                )
+            )
+    td_status = stage_statuses.get("td")
+    obtained = (
+        td_status.get("nstates_obtained")
+        if isinstance(td_status, Mapping)
+        else None
+    )
+    if obtained != count:
+        findings.append(
+            _result_finding(
+                RULE_RESULT_EXCITED,
+                "status.stages.td.nstates_obtained",
+                count,
+                obtained,
+                "h5:/status/stages/td/nstates_obtained",
+            )
+        )
+    return findings
+
+
+def _validate_correlated_results(results, stage_statuses, spec):
+    """The components are finite and sum to the total the artifact states."""
+
+    findings = []
+    method = pyscf_correlated_method(spec.get("ab_initio"))
+    names = ["reference_energy", "correlation_energy", "total_energy"]
+    if method in PYSCF_COUPLED_CLUSTER_METHODS:
+        names.append("ccsd_correlation_energy")
+    if method == "ccsd(t)":
+        names.append("triples_correction")
+    values = {}
+    for name in names:
+        value = _finite_number(results.get(name))
+        if value is None:
+            findings.append(
+                _result_finding(
+                    RULE_RESULT_CORRELATION,
+                    f"results.{name}",
+                    "finite scalar in Eh",
+                    _array_observation(_result_array(results.get(name))),
+                    f"h5:/results/{name}",
+                )
+            )
+        values[name] = value
+    if all(values.get(name) is not None for name in names):
+        total = values["reference_energy"] + values["correlation_energy"]
+        if abs(total - values["total_energy"]) > 1.0e-8:
+            findings.append(
+                _result_finding(
+                    RULE_RESULT_CORRELATION,
+                    "results.total_energy",
+                    {"reference_plus_correlation": total},
+                    values["total_energy"],
+                    "h5:/results/total_energy",
+                )
+            )
+        if method == "ccsd(t)":
+            parts = (
+                values["ccsd_correlation_energy"]
+                + values["triples_correction"]
+            )
+            if abs(parts - values["correlation_energy"]) > 1.0e-8:
+                findings.append(
+                    _result_finding(
+                        RULE_RESULT_CORRELATION,
+                        "results.correlation_energy",
+                        {"ccsd_plus_triples": parts},
+                        values["correlation_energy"],
+                        "h5:/results/correlation_energy",
+                    )
+                )
+    corr_status = stage_statuses.get("corr")
+    applied = (
+        corr_status.get("method") if isinstance(corr_status, Mapping) else None
+    )
+    if applied != method:
+        findings.append(
+            _result_finding(
+                RULE_RESULT_CORRELATION,
+                "status.stages.corr.method",
+                method,
+                applied,
+                "h5:/status/stages/corr/method",
+            )
+        )
+    return findings
 
 
 def _normalize_result_jobtype(value):
@@ -3175,130 +3436,27 @@ def _check_setting_values(settings, _molecule, _environment):
     nstates = _member(settings, "nstates", None)
     ab_initio = _member(settings, "ab_initio", None)
     functional = _member(settings, "functional", None)
-    if jobtype == "td":
-        if str(response_method or "").strip().lower() not in (
-            PYSCF_RESPONSE_METHODS
-        ):
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_INVALID_SETTING,
-                    field="response_method",
-                    expected=PYSCF_RESPONSE_METHODS,
-                    observed=response_method,
-                    evidence_ref="settings:response_method",
-                )
-            )
-        if str(state_manifold or "").strip().lower() not in (
-            PYSCF_STATE_MANIFOLDS
-        ):
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_INVALID_SETTING,
-                    field="state_manifold",
-                    expected=PYSCF_STATE_MANIFOLDS,
-                    observed=state_manifold,
-                    evidence_ref="settings:state_manifold",
-                )
-            )
-        if (
-            isinstance(nstates, bool)
-            or not isinstance(nstates, Integral)
-            or int(nstates) <= 0
-        ):
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_INVALID_SETTING,
-                    field="nstates",
-                    expected="positive integer",
-                    observed=nstates,
-                    evidence_ref="settings:nstates",
-                )
-            )
-        if ab_initio is not None or not functional:
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_INVALID_SETTING,
-                    field="method",
-                    expected="closed-shell DFT functional",
-                    observed={
-                        "ab_initio": ab_initio,
-                        "functional": functional,
-                    },
-                    evidence_ref="settings:method",
-                )
-            )
-        resolved_multiplicity = _integral_value(
-            _resolved_value(settings, _molecule, "multiplicity")
+    excited_root = _member(settings, "excited_state_root", None)
+    td_max_cycle = _member(settings, "td_max_cycle", None)
+    violations.extend(
+        _check_response_settings(
+            settings,
+            _molecule,
+            jobtype=jobtype,
+            response_method=response_method,
+            state_manifold=state_manifold,
+            nstates=nstates,
+            ab_initio=ab_initio,
+            functional=functional,
+            excited_root=excited_root,
+            td_max_cycle=td_max_cycle,
         )
-        if resolved_multiplicity != 1:
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_INVALID_SETTING,
-                    field="multiplicity",
-                    expected=1,
-                    observed=(
-                        "<unresolved>"
-                        if resolved_multiplicity is _MISSING
-                        else resolved_multiplicity
-                    ),
-                    evidence_ref="resolved:multiplicity",
-                )
-            )
-        if _member(settings, "dispersion", None) is not None:
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_INVALID_SETTING,
-                    field="dispersion",
-                    expected="unset for preview-only TD response",
-                    observed=_member(settings, "dispersion", None),
-                    evidence_ref="settings:dispersion",
-                )
-            )
-        if (
-            _member(settings, "solvent_model", None) is not None
-            or _member(settings, "solvent_id", None) is not None
-        ):
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_INVALID_SETTING,
-                    field="solvent_model",
-                    expected="unset for preview-only gas-phase TD",
-                    observed={
-                        "solvent_model": _member(
-                            settings, "solvent_model", None
-                        ),
-                        "solvent_id": _member(settings, "solvent_id", None),
-                    },
-                    evidence_ref="settings:solvent_model",
-                )
-            )
-        if str(_member(settings, "engine", "cpu")).strip().lower() != "cpu":
-            violations.append(
-                PySCFViolation(
-                    rule_id=RULE_TD_GPU_UNSUPPORTED,
-                    field="engine",
-                    expected="cpu preview",
-                    observed=_member(settings, "engine", None),
-                    evidence_ref="settings:engine",
-                )
-            )
-    elif any(
-        value is not None
-        for value in (response_method, state_manifold, nstates)
-    ):
-        violations.append(
-            PySCFViolation(
-                rule_id=RULE_INVALID_SETTING,
-                field="td_settings",
-                expected="unset outside the td jobtype",
-                observed={
-                    "response_method": response_method,
-                    "state_manifold": state_manifold,
-                    "nstates": nstates,
-                },
-                evidence_ref="settings:jobtype",
-            )
+    )
+    violations.extend(
+        _check_correlated_settings(
+            settings, jobtype=jobtype, ab_initio=ab_initio
         )
+    )
     density_fit = _member(settings, "density_fit", False)
     if type(density_fit) is not bool:
         violations.append(
@@ -3326,7 +3484,12 @@ def _check_setting_values(settings, _molecule, _environment):
                 evidence_ref="settings:scf_tol",
             )
         )
-    for field in ("scf_maxiter", "opt_maxsteps"):
+    for field in (
+        "scf_maxiter",
+        "opt_maxsteps",
+        "td_max_cycle",
+        "cc_max_cycle",
+    ):
         value = _member(
             settings, field, 100 if field == "opt_maxsteps" else None
         )
@@ -3368,12 +3531,15 @@ def _check_setting_values(settings, _molecule, _environment):
             )
         )
 
-    if ab_initio is not None and str(ab_initio).lower() != "hf":
+    if (
+        ab_initio is not None
+        and str(ab_initio).strip().lower() not in PYSCF_AB_INITIO_METHODS
+    ):
         violations.append(
             PySCFViolation(
                 rule_id=RULE_INVALID_SETTING,
                 field="ab_initio",
-                expected="hf or a DFT functional",
+                expected=PYSCF_AB_INITIO_METHODS,
                 observed=ab_initio,
                 evidence_ref="settings:ab_initio",
             )
@@ -3458,6 +3624,381 @@ def _check_setting_values(settings, _molecule, _environment):
                 expected="unset when density_fit is disabled",
                 observed=aux_basis,
                 evidence_ref="settings:aux_basis",
+            )
+        )
+    return violations
+
+
+def _check_response_settings(
+    settings,
+    molecule,
+    *,
+    jobtype,
+    response_method,
+    state_manifold,
+    nstates,
+    ab_initio,
+    functional,
+    excited_root,
+    td_max_cycle,
+):
+    """The executable TDA/TDDFT contract for ``td`` and an excited opt.
+
+    Mirrors ``PySCFJobSettings._validate_response`` as typed violations,
+    so a preview reports every refusal by rule id before an engine is
+    spent.  The manifold is checked against the *resolved* multiplicity:
+    a closed-shell reference asks for singlet or triplet excitations and an
+    open-shell reference has exactly one spin-conserving manifold.
+    """
+
+    violations = []
+    populated = {
+        key: value
+        for key, value in (
+            ("response_method", response_method),
+            ("state_manifold", state_manifold),
+            ("nstates", nstates),
+            ("td_max_cycle", td_max_cycle),
+            ("excited_state_root", excited_root),
+        )
+        if value is not None
+    }
+    requested = jobtype == "td" or (
+        jobtype == "opt" and excited_root is not None
+    )
+    if excited_root is not None and jobtype != "opt":
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_INVALID_SETTING,
+                field="excited_state_root",
+                expected="unset outside the opt jobtype",
+                observed={
+                    "jobtype": jobtype,
+                    "excited_state_root": excited_root,
+                },
+                evidence_ref="settings:excited_state_root",
+            )
+        )
+        return violations
+    if not requested:
+        if populated:
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_INVALID_SETTING,
+                    field="td_settings",
+                    expected=(
+                        "unset outside the td jobtype or an opt carrying "
+                        "excited_state_root"
+                    ),
+                    observed=populated,
+                    evidence_ref="settings:jobtype",
+                )
+            )
+        return violations
+    if str(response_method or "").strip().lower() not in (
+        PYSCF_RESPONSE_METHODS
+    ):
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_INVALID_SETTING,
+                field="response_method",
+                expected=PYSCF_RESPONSE_METHODS,
+                observed=response_method,
+                evidence_ref="settings:response_method",
+            )
+        )
+    manifold = str(state_manifold or "").strip().lower()
+    if manifold not in PYSCF_STATE_MANIFOLDS:
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_INVALID_SETTING,
+                field="state_manifold",
+                expected=PYSCF_STATE_MANIFOLDS,
+                observed=state_manifold,
+                evidence_ref="settings:state_manifold",
+            )
+        )
+    if (
+        isinstance(nstates, bool)
+        or not isinstance(nstates, Integral)
+        or int(nstates) <= 0
+    ):
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_INVALID_SETTING,
+                field="nstates",
+                expected="positive integer",
+                observed=nstates,
+                evidence_ref="settings:nstates",
+            )
+        )
+    if ab_initio is not None or not functional:
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_TD_REFERENCE,
+                field="method",
+                expected="a Kohn-Sham reference (functional set, no ab_initio)",
+                observed={"ab_initio": ab_initio, "functional": functional},
+                evidence_ref="settings:method",
+            )
+        )
+    resolved_multiplicity = _integral_value(
+        _resolved_value(settings, molecule, "multiplicity")
+    )
+    if resolved_multiplicity is not _MISSING and manifold in (
+        PYSCF_STATE_MANIFOLDS
+    ):
+        restricted = int(resolved_multiplicity) == 1
+        if restricted and manifold not in PYSCF_RESTRICTED_MANIFOLDS:
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_TD_REFERENCE,
+                    field="state_manifold",
+                    expected=PYSCF_RESTRICTED_MANIFOLDS,
+                    observed={
+                        "state_manifold": manifold,
+                        "multiplicity": int(resolved_multiplicity),
+                        "reason": (
+                            "a closed-shell reference asks for singlet or "
+                            "triplet excitations"
+                        ),
+                    },
+                    evidence_ref="resolved:multiplicity",
+                )
+            )
+        elif not restricted and manifold != PYSCF_UNRESTRICTED_MANIFOLD:
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_TD_REFERENCE,
+                    field="state_manifold",
+                    expected=PYSCF_UNRESTRICTED_MANIFOLD,
+                    observed={
+                        "state_manifold": manifold,
+                        "multiplicity": int(resolved_multiplicity),
+                        "reason": (
+                            "an open-shell reference has one "
+                            "spin-conserving excitation manifold"
+                        ),
+                    },
+                    evidence_ref="resolved:multiplicity",
+                )
+            )
+    if excited_root is not None:
+        if (
+            isinstance(excited_root, bool)
+            or not isinstance(excited_root, Integral)
+            or int(excited_root) <= 0
+            or (
+                isinstance(nstates, Integral)
+                and not isinstance(nstates, bool)
+                and int(excited_root) > int(nstates)
+            )
+        ):
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_INVALID_SETTING,
+                    field="excited_state_root",
+                    expected="positive root index no larger than nstates",
+                    observed={
+                        "excited_state_root": excited_root,
+                        "nstates": nstates,
+                    },
+                    evidence_ref="settings:excited_state_root",
+                )
+            )
+        if (
+            _member(settings, "solvent_model", None) is not None
+            or _member(settings, "solvent_id", None) is not None
+        ):
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_TD_GRADIENT_SOLVENT,
+                    field="solvent_model",
+                    expected="gas phase for an excited-root optimisation",
+                    observed={
+                        "solvent_model": _member(
+                            settings, "solvent_model", None
+                        ),
+                        "solvent_id": _member(settings, "solvent_id", None),
+                        "reason": (
+                            "PySCF 2.14 raises NotImplementedError for "
+                            "PCM-TDDFT gradients; solvated td energies at a "
+                            "fixed geometry remain available"
+                        ),
+                    },
+                    evidence_ref="settings:solvent_model",
+                )
+            )
+        solver = _member(settings, "opt_solver", "geometric")
+        if str(solver).lower() != "geometric":
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_SOLVER_UNAUDITED_SURFACE,
+                    field="opt_solver",
+                    expected="geometric",
+                    observed=solver,
+                    evidence_ref="settings:opt_solver",
+                )
+            )
+    if _member(settings, "dispersion", None) is not None:
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_INVALID_SETTING,
+                field="dispersion",
+                expected="unset for a response calculation",
+                observed=_member(settings, "dispersion", None),
+                evidence_ref="settings:dispersion",
+            )
+        )
+    if str(_member(settings, "engine", "cpu")).strip().lower() != "cpu":
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_TD_GPU_UNSUPPORTED,
+                field="engine",
+                expected="cpu",
+                observed=_member(settings, "engine", None),
+                evidence_ref="settings:engine",
+            )
+        )
+    return violations
+
+
+def _check_correlated_settings(settings, *, jobtype, ab_initio):
+    """Cross-field rules for ``mp2``/``ccsd``/``ccsd(t)`` as typed violations.
+
+    Each names the route it leaves open; none grades the chemistry.  The
+    CCSD(T) gradient exists in PySCF 2.14 (``pyscf.grad.ccsd_t``) and is
+    refused here as *unaudited*, never as absent.
+    """
+
+    violations = []
+    method = pyscf_correlated_method(ab_initio)
+    frozen = _member(settings, "frozen_core", None)
+    cc_max_cycle = _member(settings, "cc_max_cycle", None)
+    if method is None:
+        for field, value in (
+            ("frozen_core", frozen),
+            ("cc_max_cycle", cc_max_cycle),
+        ):
+            if value is not None:
+                violations.append(
+                    PySCFViolation(
+                        rule_id=RULE_INVALID_SETTING,
+                        field=field,
+                        expected="unset without a correlated ab_initio method",
+                        observed=value,
+                        evidence_ref=f"settings:{field}",
+                    )
+                )
+        return violations
+    if jobtype == "hess":
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_CORRELATION_HESSIAN,
+                field="jobtype",
+                expected="an HF or DFT hess node",
+                observed={"jobtype": jobtype, "ab_initio": method},
+                evidence_ref="settings:jobtype",
+            )
+        )
+    if jobtype == "opt" and method == "ccsd(t)":
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_CORRELATION_CCSDT_GRADIENT,
+                field="jobtype",
+                expected=(
+                    "opt at mp2 or ccsd, then a ccsd(t) single point on the "
+                    "reached geometry"
+                ),
+                observed={
+                    "jobtype": jobtype,
+                    "ab_initio": method,
+                    "reason": (
+                        "PySCF 2.14 carries pyscf.grad.ccsd_t; this driver "
+                        "has not audited it"
+                    ),
+                },
+                evidence_ref="settings:jobtype",
+            )
+        )
+    if _member(settings, "density_fit", False) is True:
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_CORRELATION_DENSITY_FIT,
+                field="density_fit",
+                expected=False,
+                observed=True,
+                evidence_ref="settings:density_fit",
+            )
+        )
+    if (
+        _member(settings, "solvent_model", None) is not None
+        or _member(settings, "solvent_id", None) is not None
+    ):
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_CORRELATION_SOLVENT,
+                field="solvent_model",
+                expected="gas phase for a correlated method in this release",
+                observed={
+                    "solvent_model": _member(settings, "solvent_model", None),
+                    "solvent_id": _member(settings, "solvent_id", None),
+                },
+                evidence_ref="settings:solvent_model",
+            )
+        )
+    if _member(settings, "dispersion", None) is not None:
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_CORRELATION_DISPERSION,
+                field="dispersion",
+                expected="unset for a correlated method in this release",
+                observed=_member(settings, "dispersion", None),
+                evidence_ref="settings:dispersion",
+            )
+        )
+    if jobtype == "opt":
+        solver = _member(settings, "opt_solver", "geometric")
+        if str(solver).lower() != "geometric":
+            violations.append(
+                PySCFViolation(
+                    rule_id=RULE_SOLVER_UNAUDITED_SURFACE,
+                    field="opt_solver",
+                    expected="geometric",
+                    observed=solver,
+                    evidence_ref="settings:opt_solver",
+                )
+            )
+    if frozen is not None and not (
+        (
+            isinstance(frozen, str)
+            and frozen.strip().lower() == PYSCF_FROZEN_CORE_AUTO
+        )
+        or (
+            not isinstance(frozen, bool)
+            and isinstance(frozen, Integral)
+            and int(frozen) >= 0
+        )
+    ):
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_INVALID_SETTING,
+                field="frozen_core",
+                expected=f"non-negative orbital count or {PYSCF_FROZEN_CORE_AUTO!r}",
+                observed=frozen,
+                evidence_ref="settings:frozen_core",
+            )
+        )
+    if cc_max_cycle is not None and method not in (
+        PYSCF_COUPLED_CLUSTER_METHODS
+    ):
+        violations.append(
+            PySCFViolation(
+                rule_id=RULE_INVALID_SETTING,
+                field="cc_max_cycle",
+                expected="unset for mp2 (no amplitude iteration)",
+                observed=cc_max_cycle,
+                evidence_ref="settings:cc_max_cycle",
             )
         )
     return violations
@@ -4073,6 +4614,10 @@ def _requested_spec(settings):
         "response_method",
         "state_manifold",
         "nstates",
+        "excited_state_root",
+        "td_max_cycle",
+        "frozen_core",
+        "cc_max_cycle",
         "jobtype",
     )
     for field in direct_fields:
@@ -4122,19 +4667,20 @@ def _requested_spec(settings):
 
 
 def _requested_stages(settings):
+    """The stages a resolved configuration runs -- from the settings' own
+    derivation, never from the jobtype word alone."""
+
     jobtype = _member(settings, "jobtype", None)
     if not jobtype:
         return []
-    normal = str(jobtype).lower()
-    if normal.endswith("sp") or normal == "sp":
-        return ["scf"]
-    if "opt" in normal:
-        return ["scf", "opt"]
-    if "hess" in normal or "freq" in normal:
-        return ["scf", "hess"]
-    if normal.endswith("td") or normal == "td":
-        return ["scf", "td"]
-    return []
+    normal = str(jobtype).lower().replace("pyscf_", "")
+    if "freq" in normal:
+        normal = "hess"
+    return pyscf_stages(
+        normal,
+        ab_initio=_member(settings, "ab_initio", None),
+        excited_state_root=_member(settings, "excited_state_root", None),
+    )
 
 
 def _optimization_requested(settings, environment):

@@ -25,12 +25,7 @@ class PySCFSinglePointJob(PySCFJob):
             **kwargs,
         )
 
-    @property
-    def stages(self):
-        """Return the ordered stage list the generated script executes.
-
-        A single point converges the SCF and stops. ``freq=True`` is rejected
-        during settings validation rather than silently ignored; use an
-        explicit ``hess`` node when a fixed-geometry Hessian is intended.
-        """
-        return ["scf"]
+    # Stages come from the resolved settings (``PySCFJob.stages``): the SCF
+    # alone, or ``scf, corr`` for a correlated method.  ``freq=True`` is
+    # rejected during settings validation rather than silently ignored; use
+    # an explicit ``hess`` node when a fixed-geometry Hessian is intended.

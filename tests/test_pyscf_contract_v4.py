@@ -27,6 +27,7 @@ from chemsmart.jobs.pyscf.validation import (
 )
 from chemsmart.jobs.pyscf.writer import (
     APPLIED_SPEC_FIELDS,
+    APPLIED_SPEC_FIELDS_V4,
     LEGACY_APPLIED_SPEC_FIELDS,
     PREVIOUS_RESULT_CONTRACT_VERSIONS,
     RESULT_CONTRACT_VERSION,
@@ -77,11 +78,38 @@ def _hess_settings(**overrides):
 
 @pytest.mark.capability("program_jobtype:pyscf:cpu:hess")
 def test_a_previous_supported_contract_is_evidence_not_a_downgrade():
-    assert RESULT_CONTRACT_VERSION == "chemsmart.pyscf-result-contract.v4"
+    assert RESULT_CONTRACT_VERSION == "chemsmart.pyscf-result-contract.v5"
     assert PREVIOUS_RESULT_CONTRACT_VERSIONS == (
         "chemsmart.pyscf-result-contract.v3",
+        "chemsmart.pyscf-result-contract.v4",
     )
     assert SUPPORTED_RESULT_CONTRACT_VERSIONS[-1] == RESULT_CONTRACT_VERSION
+
+    # The applied-settings digest of an archived artifact is reconstructed
+    # from the vocabulary of *its* contract: v3 and v4 share one tuple,
+    # frozen, and v5 extends it by exactly the four controls it applies.
+    # Extending the current tuple in place would have marked every
+    # archived v4 fixture tampered.
+    for version in PREVIOUS_RESULT_CONTRACT_VERSIONS:
+        assert (
+            applied_pyscf_spec_fields({"result_contract_version": version})
+            == APPLIED_SPEC_FIELDS_V4
+        )
+    assert (
+        applied_pyscf_spec_fields(
+            {"result_contract_version": RESULT_CONTRACT_VERSION}
+        )
+        == APPLIED_SPEC_FIELDS
+    )
+    assert APPLIED_SPEC_FIELDS[: len(APPLIED_SPEC_FIELDS_V4)] == (
+        APPLIED_SPEC_FIELDS_V4
+    )
+    assert APPLIED_SPEC_FIELDS[len(APPLIED_SPEC_FIELDS_V4) :] == (
+        "excited_state_root",
+        "frozen_core",
+        "td_max_cycle",
+        "cc_max_cycle",
+    )
 
     complete_spec = {
         "reference_family": "rks",
@@ -99,10 +127,6 @@ def test_a_previous_supported_contract_is_evidence_not_a_downgrade():
         "properties": {},
     }
     for version in SUPPORTED_RESULT_CONTRACT_VERSIONS:
-        assert (
-            applied_pyscf_spec_fields({"result_contract_version": version})
-            == APPLIED_SPEC_FIELDS
-        )
         observation, current, findings, _advisories = (
             _result_contract_validation(
                 {"result_contract_version": version, **complete_spec},
@@ -114,7 +138,7 @@ def test_a_previous_supported_contract_is_evidence_not_a_downgrade():
         assert observation["state"] == (
             "current" if version == RESULT_CONTRACT_VERSION else "supported"
         )
-        assert current is True, "both supported contracts are strict records"
+        assert current is True, "every supported contract is a strict record"
 
     assert (
         applied_pyscf_spec_fields({}) == LEGACY_APPLIED_SPEC_FIELDS
@@ -144,16 +168,20 @@ def _driver_source():
 def _stage_branch(source, stage):
     """The text of one stage branch of the driver's stage loop."""
 
-    order = ("scf", "opt", "hess", "td")
+    order = ("scf", "opt", "td", "corr", "hess")
     start = source.index(
         ('if stage == "%s":' if stage == "scf" else 'elif stage == "%s":')
         % stage
     )
     following = order[order.index(stage) + 1 :]
+    # The last branch ends where the stage loop refuses an unknown stage.
     end = min(
-        source.index('elif stage == "%s":' % name)
-        for name in following
-        if ('elif stage == "%s":' % name) in source
+        [
+            source.index('elif stage == "%s":' % name)
+            for name in following
+            if ('elif stage == "%s":' % name) in source
+        ]
+        + [source.index('raise ValueError("Unknown stage')]
     )
     return source[start:end]
 
@@ -163,16 +191,23 @@ def test_the_gradient_is_computed_inside_the_hess_stage_only():
     """A single point still pays for no undeclared gradient.
 
     The former test pinned the text ``nuc_grad_method`` out of the whole
-    driver; the invariant it protected is that the ``scf`` and ``opt``
-    stages launch no gradient of their own, which is what is pinned now.
+    driver; the invariant it protected is that the ``scf`` stage launches
+    no gradient of its own, which is what is pinned now.  Contract v5's
+    ``opt`` branch builds the gradient *scanner* an excited-root or a
+    correlated optimisation walks on -- that is the stage's declared work,
+    and every such call is a scanner construction, never a free gradient
+    -- and the ``td`` and ``corr`` stages compute none.
     """
 
     source = _driver_source()
     compile(source, "<pyscf-driver>", "exec")
-    assert source.count("nuc_grad_method") == 1
     assert "nuc_grad_method" in _stage_branch(source, "hess")
-    for stage in ("scf", "opt"):
+    for stage in ("scf", "td", "corr"):
         assert "nuc_grad_method" not in _stage_branch(source, stage)
+    opt = _stage_branch(source, "opt")
+    assert opt.count("nuc_grad_method") == opt.count(
+        "nuc_grad_method().as_scanner("
+    )
     hess = _stage_branch(source, "hess")
     assert 'results["forces"] = -gradient' in hess
     assert '"max_abs_gradient_eh_per_bohr"' in hess

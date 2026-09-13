@@ -330,10 +330,13 @@ _PYSCF_PROJECT_PARAMETERS = (
     "ab_initio",
     "aux_basis",
     "basis",
+    "cc_max_cycle",
     "defgrid",
     "density_fit",
     "dispersion",
+    "excited_state_root",
     "freq",
+    "frozen_core",
     "functional",
     "nstates",
     "opt_maxsteps",
@@ -344,7 +347,43 @@ _PYSCF_PROJECT_PARAMETERS = (
     "solvent_id",
     "solvent_model",
     "state_manifold",
+    "td_max_cycle",
 )
+
+
+def _pyscf_parameter_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """PySCF's enumerable domains, imported from the settings vocabulary.
+
+    The method, manifold and frozen-core words are the settings module's
+    own tuples, so the declaration the model reads cannot drift from what
+    ``validate()`` admits; ``frozen_core`` also takes an orbital count,
+    which no enumeration can list.
+    """
+
+    from chemsmart.jobs.pyscf.settings import (
+        PYSCF_AB_INITIO_METHODS,
+        PYSCF_DEFGRIDS,
+        PYSCF_FROZEN_CORE_AUTO,
+        PYSCF_OPT_SOLVERS,
+        PYSCF_RESPONSE_METHODS,
+        PYSCF_SOLVENT_MODELS,
+        PYSCF_STATE_MANIFOLDS,
+    )
+
+    return tuple(
+        sorted(
+            (
+                ("ab_initio", tuple(sorted(PYSCF_AB_INITIO_METHODS))),
+                ("defgrid", tuple(sorted(PYSCF_DEFGRIDS))),
+                ("frozen_core", (PYSCF_FROZEN_CORE_AUTO,)),
+                ("opt_solver", tuple(sorted(PYSCF_OPT_SOLVERS))),
+                ("response_method", tuple(sorted(PYSCF_RESPONSE_METHODS))),
+                ("solvent_model", tuple(sorted(PYSCF_SOLVENT_MODELS))),
+                ("state_manifold", tuple(sorted(PYSCF_STATE_MANIFOLDS))),
+            )
+        )
+    )
+
 
 _XTB_PROJECT_PARAMETERS = (
     "charge",
@@ -726,17 +765,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             # PySCF keys sections by job type, and its loader also
             # accepts the legacy gas/solv pair and canonicalises it.
             project_section_names=loader_project_section_names("pyscf"),
-            project_parameter_domains=(
-                ("ab_initio", ("hf",)),
-                ("defgrid", ("defgrid1", "defgrid2", "defgrid3")),
-                ("opt_solver", ("ase", "berny", "geometric")),
-                ("response_method", ("tda", "tddft")),
-                (
-                    "solvent_model",
-                    ("cosmo", "cpcm", "iefpcm", "pcm", "smd", "ssvpe"),
-                ),
-                ("state_manifold", ("singlet",)),
-            ),
+            project_parameter_domains=_pyscf_parameter_domains(),
             engine_job_capabilities=(
                 EngineJobCapability(engine="cpu", jobtype="hess"),
                 EngineJobCapability(engine="cpu", jobtype="opt"),

@@ -25,13 +25,8 @@ class PySCFHessJob(PySCFJob):
             **kwargs,
         )
 
-    @property
-    def stages(self):
-        """Return the ordered stage list the generated script executes.
-
-        The geometry is taken as given and is *not* re-optimised. Frequencies
-        are only physically meaningful at a stationary point of the same
-        method and basis, so the caller is responsible for supplying an
-        optimised structure.
-        """
-        return ["scf", "hess"]
+    # Stages come from the resolved settings (``PySCFJob.stages``):
+    # ``scf, hess``.  The geometry is taken as given and is *not*
+    # re-optimised. Frequencies are only physically meaningful at a
+    # stationary point of the same method and basis, so the caller is
+    # responsible for supplying an optimised structure.

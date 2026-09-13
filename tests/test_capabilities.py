@@ -194,10 +194,13 @@ def test_declared_capabilities_preserve_project_ownership_contract():
         "ab_initio",
         "aux_basis",
         "basis",
+        "cc_max_cycle",
         "defgrid",
         "density_fit",
         "dispersion",
+        "excited_state_root",
         "freq",
+        "frozen_core",
         "functional",
         "nstates",
         "opt_maxsteps",
@@ -208,6 +211,7 @@ def test_declared_capabilities_preserve_project_ownership_contract():
         "solvent_id",
         "solvent_model",
         "state_manifold",
+        "td_max_cycle",
     )
     assert PROJECT_OWNED_PARAMETERS["xtb"] == (
         "charge",

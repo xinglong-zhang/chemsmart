@@ -50,7 +50,25 @@ PYSCF_OPT_SOLVERS = ("geometric", "berny", "ase")
 PYSCF_ENGINES = ("cpu", "gpu")
 PYSCF_JOBTYPES = ("hess", "opt", "sp", "td")
 PYSCF_RESPONSE_METHODS = ("tda", "tddft")
-PYSCF_STATE_MANIFOLDS = ("singlet",)
+#: Excitation manifolds.  A closed-shell reference asks for singlet or
+#: triplet excitations; an open-shell (UKS) reference has one
+#: spin-conserving manifold that PySCF labels neither, so it is named for
+#: what it is.  The reference decides which names are admissible.
+PYSCF_STATE_MANIFOLDS = ("singlet", "triplet", "unrestricted")
+PYSCF_RESTRICTED_MANIFOLDS = ("singlet", "triplet")
+PYSCF_UNRESTRICTED_MANIFOLD = "unrestricted"
+#: ``ab_initio`` values.  ``hf`` is the mean-field reference; the others
+#: are correlated single-reference methods computed on an HF reference
+#: (PySCF converts an ROHF reference to UHF for them).
+PYSCF_AB_INITIO_METHODS = ("hf", "mp2", "ccsd", "ccsd(t)")
+PYSCF_CORRELATED_METHODS = ("mp2", "ccsd", "ccsd(t)")
+PYSCF_COUPLED_CLUSTER_METHODS = ("ccsd", "ccsd(t)")
+#: ``frozen_core: auto`` asks PySCF's own chemical-core rule
+#: (``set_frozen(method="auto")``); an integer is an orbital count; unset
+#: keeps PySCF's default, which correlates every electron.  ORCA and
+#: Gaussian freeze core by default, and that divergence is declared on the
+#: cross-program guide rather than silently matched here.
+PYSCF_FROZEN_CORE_AUTO = "auto"
 
 #: Functionals for which the perturbative correlation term is not implemented
 #: by this v1 mean-field-only backend.  Passing one of these names to
@@ -105,6 +123,41 @@ _REGISTERED_FUNCTIONAL_VARIANTS = {
         "rule_id": "pyscf.functional.b3lyp5_vwn5",
     },
 }
+
+
+def pyscf_correlated_method(ab_initio):
+    """Return the lower-cased correlated method name, or None for HF/DFT."""
+    if ab_initio is None:
+        return None
+    normal = str(ab_initio).strip().lower()
+    return normal if normal in PYSCF_CORRELATED_METHODS else None
+
+
+def pyscf_stages(jobtype, *, ab_initio=None, excited_state_root=None):
+    """Return the ordered driver stages a resolved configuration runs.
+
+    Stages are derived from the resolved settings, never from the jobtype
+    word alone: an ``opt`` on an excited root runs ``scf, opt, td`` (the
+    spectrum is re-evaluated at the reached geometry, so every excited
+    quantity belongs to the one structure the artifact carries) and a
+    correlated ``sp``/``opt`` appends a ``corr`` stage that computes the
+    method's components at the final geometry.  The job classes, the
+    driver, preflight and the result validator all call this function.
+    """
+
+    normal = str(jobtype or "").strip().lower().replace("pyscf_", "")
+    if normal not in PYSCF_JOBTYPES:
+        return []
+    stages = ["scf"]
+    if normal == "opt":
+        stages.append("opt")
+    if normal == "td" or (normal == "opt" and excited_state_root is not None):
+        stages.append("td")
+    if normal == "hess":
+        stages.append("hess")
+    if pyscf_correlated_method(ab_initio) is not None:
+        stages.append("corr")
+    return stages
 
 
 def describe_functional_resolution(functional=None, *, ab_initio=None):
@@ -252,6 +305,10 @@ class PySCFJobSettings(MolecularJobSettings):
         response_method=None,
         state_manifold=None,
         nstates=None,
+        excited_state_root=None,
+        td_max_cycle=None,
+        frozen_core=None,
+        cc_max_cycle=None,
         charge=None,
         multiplicity=None,
         freq=False,
@@ -297,6 +354,10 @@ class PySCFJobSettings(MolecularJobSettings):
         self.response_method = response_method
         self.state_manifold = state_manifold
         self.nstates = nstates
+        self.excited_state_root = excited_state_root
+        self.td_max_cycle = td_max_cycle
+        self.frozen_core = frozen_core
+        self.cc_max_cycle = cc_max_cycle
         self.density_fit = density_fit
         self.opt_solver = opt_solver
         self.opt_maxsteps = opt_maxsteps
@@ -369,13 +430,39 @@ class PySCFJobSettings(MolecularJobSettings):
         return None
 
     @property
+    def correlated_method(self):
+        """Return ``mp2``/``ccsd``/``ccsd(t)`` or None for an HF/DFT job."""
+        return pyscf_correlated_method(self.ab_initio)
+
+    @property
+    def excited_surface(self):
+        """Whether the job follows an excited root (an ``opt`` on it)."""
+        return self.excited_state_root is not None
+
+    @property
+    def response_requested(self):
+        """Whether a TDA/TDDFT response stage runs (``td`` or excited opt)."""
+        return self.jobtype == "td" or self.excited_surface
+
+    @property
+    def stages(self):
+        """Return the driver stages these resolved settings run."""
+        return pyscf_stages(
+            self.jobtype,
+            ab_initio=self.ab_initio,
+            excited_state_root=self.excited_state_root,
+        )
+
+    @property
     def xc(self):
-        """Return the libxc functional string, or None for a HF reference.
+        """Return the libxc functional string, or None for an HF reference.
 
         Routed through :func:`resolve_functional`, which warns for names
-        that denote different functionals in different programs.
+        that denote different functionals in different programs.  Every
+        ``ab_initio`` method -- HF and the correlated methods computed on
+        an HF reference -- runs without a functional.
         """
-        if self.ab_initio and str(self.ab_initio).lower() == "hf":
+        if self.ab_initio:
             return None
         return resolve_functional(self.functional)
 
@@ -417,10 +504,15 @@ class PySCFJobSettings(MolecularJobSettings):
                 f"calculation than the one requested."
             )
 
-        if self.ab_initio is not None and str(self.ab_initio).lower() != "hf":
+        if (
+            self.ab_initio is not None
+            and str(self.ab_initio).strip().lower()
+            not in PYSCF_AB_INITIO_METHODS
+        ):
             raise ValueError(
                 f"Unknown ab_initio method {self.ab_initio!r}; the PySCF "
-                "v1 backend supports only 'hf' or a DFT functional."
+                f"backend accepts one of {PYSCF_AB_INITIO_METHODS} or a "
+                "DFT functional."
             )
 
         if self.ab_initio is not None and self.functional is not None:
@@ -491,65 +583,8 @@ class PySCFJobSettings(MolecularJobSettings):
                 "matches the executed Hessian stage."
             )
 
-        td_fields = {
-            "response_method": self.response_method,
-            "state_manifold": self.state_manifold,
-            "nstates": self.nstates,
-        }
-        if self.jobtype == "td":
-            response_method = str(self.response_method or "").strip().lower()
-            if response_method not in PYSCF_RESPONSE_METHODS:
-                raise ValueError(
-                    "PySCF td requires response_method to be one of "
-                    f"{PYSCF_RESPONSE_METHODS}, got {self.response_method!r}."
-                )
-            manifold = str(self.state_manifold or "").strip().lower()
-            if manifold not in PYSCF_STATE_MANIFOLDS:
-                raise ValueError(
-                    "PySCF td currently supports only an explicit singlet "
-                    f"state_manifold, got {self.state_manifold!r}."
-                )
-            if (
-                isinstance(self.nstates, bool)
-                or not isinstance(self.nstates, Integral)
-                or int(self.nstates) <= 0
-            ):
-                raise ValueError(
-                    "PySCF td requires nstates to be a positive integer, "
-                    f"got {self.nstates!r}."
-                )
-            if self.ab_initio is not None or not self.functional:
-                raise ValueError(
-                    "PySCF td preview supports closed-shell DFT only; set a "
-                    "functional and do not set ab_initio."
-                )
-            if self.multiplicity not in (None, 1):
-                raise ValueError(
-                    "PySCF td preview supports only a closed-shell singlet "
-                    f"reference, got multiplicity={self.multiplicity!r}."
-                )
-            if self.solvent_model is not None or self.solvent_id is not None:
-                raise ValueError(
-                    "PySCF td preview is gas-phase only; solvent response is "
-                    "not enabled."
-                )
-            if self.dispersion is not None:
-                raise ValueError(
-                    "PySCF td preview does not accept a ground-state "
-                    "dispersion correction as an excited-state setting."
-                )
-            if str(self.engine or "cpu").strip().lower() != "cpu":
-                raise ValueError(
-                    "PySCF td is a CPU-only preview capability; "
-                    "GPU4PySCF response calculations are not validated."
-                )
-        elif any(value is not None for value in td_fields.values()):
-            populated = ", ".join(
-                key for key, value in td_fields.items() if value is not None
-            )
-            raise ValueError(
-                f"PySCF {populated} are valid only for the td jobtype."
-            )
+        self._validate_correlated_method()
+        self._validate_response()
         if self.scf_tol is not None and (
             isinstance(self.scf_tol, bool)
             or not isinstance(self.scf_tol, Real)
@@ -559,7 +594,12 @@ class PySCFJobSettings(MolecularJobSettings):
             raise ValueError(
                 f"scf_tol must be finite and > 0, got {self.scf_tol!r}."
             )
-        for field in ("scf_maxiter", "opt_maxsteps"):
+        for field in (
+            "scf_maxiter",
+            "opt_maxsteps",
+            "td_max_cycle",
+            "cc_max_cycle",
+        ):
             value = getattr(self, field)
             if value is None:
                 continue
@@ -605,3 +645,195 @@ class PySCFJobSettings(MolecularJobSettings):
                 "No basis set specified; PySCF has no default basis."
             )
         return self
+
+    def _validate_correlated_method(self):
+        """Cross-field rules for ``mp2``/``ccsd``/``ccsd(t)``.
+
+        Each refusal names the route: these are contracts about what this
+        driver has audited, never grades of the chemistry asked for.
+        """
+        method = self.correlated_method
+        if method is None:
+            for field in ("frozen_core", "cc_max_cycle"):
+                if getattr(self, field) is not None:
+                    raise ValueError(
+                        f"{field} applies only to a correlated ab_initio "
+                        f"method ({PYSCF_CORRELATED_METHODS}); remove it or "
+                        "name the method."
+                    )
+            return
+        if self.jobtype == "hess":
+            raise ValueError(
+                f"PySCF {method} has no analytic Hessian in this release; "
+                "characterise the geometry with an HF or DFT hess node."
+            )
+        if self.jobtype == "td":
+            raise ValueError(
+                f"PySCF td runs on a Kohn-Sham reference; {method} has no "
+                "response surface here. Set a functional for td."
+            )
+        if self.jobtype == "opt" and method == "ccsd(t)":
+            raise ValueError(
+                "A CCSD(T) geometry optimisation is not audited through "
+                "this driver in this release (PySCF 2.14 carries "
+                "pyscf.grad.ccsd_t, unexercised here); optimise at mp2 or "
+                "ccsd and take a ccsd(t) single point on the reached "
+                "geometry."
+            )
+        if self.density_fit:
+            raise ValueError(
+                f"density_fit with {method} is refused: DF-MP2 has no "
+                "gradient in PySCF 2.14 and DF coupled cluster is not "
+                "audited here; set density_fit: false."
+            )
+        if self.solvent_model is not None or self.solvent_id is not None:
+            raise ValueError(
+                f"An implicit solvent with {method} is not audited in this "
+                "release; run the correlated single point in the gas "
+                "phase or use a DFT node for the solvated surface."
+            )
+        if self.dispersion is not None:
+            raise ValueError(
+                f"A dispersion correction with {method} is not audited in "
+                "this release; remove dispersion for the correlated node."
+            )
+        if self.jobtype == "opt" and str(self.opt_solver) != "geometric":
+            raise ValueError(
+                f"A {method} optimisation is audited with opt_solver "
+                f"geometric only; got {self.opt_solver!r}."
+            )
+        frozen = self.frozen_core
+        if frozen is not None and not (
+            (
+                isinstance(frozen, str)
+                and frozen.strip().lower() == PYSCF_FROZEN_CORE_AUTO
+            )
+            or (
+                not isinstance(frozen, bool)
+                and isinstance(frozen, Integral)
+                and int(frozen) >= 0
+            )
+        ):
+            raise ValueError(
+                "frozen_core must be a non-negative orbital count or "
+                f"{PYSCF_FROZEN_CORE_AUTO!r} (PySCF's chemical-core rule), "
+                f"got {frozen!r}."
+            )
+        if self.cc_max_cycle is not None and (
+            method not in PYSCF_COUPLED_CLUSTER_METHODS
+        ):
+            raise ValueError(
+                "cc_max_cycle applies only to ccsd or ccsd(t); MP2 has no "
+                "amplitude iteration."
+            )
+
+    def _validate_response(self):
+        """The executable TDA/TDDFT contract for ``td`` and an excited opt."""
+        td_fields = {
+            "response_method": self.response_method,
+            "state_manifold": self.state_manifold,
+            "nstates": self.nstates,
+            "td_max_cycle": self.td_max_cycle,
+            "excited_state_root": self.excited_state_root,
+        }
+        if self.excited_state_root is not None and self.jobtype != "opt":
+            raise ValueError(
+                "excited_state_root names the root an opt follows; it is "
+                f"valid only for the opt jobtype, not {self.jobtype!r}. "
+                "A td node computes the spectrum at a fixed geometry."
+            )
+        if not self.response_requested:
+            populated = ", ".join(
+                key for key, value in td_fields.items() if value is not None
+            )
+            if populated:
+                raise ValueError(
+                    f"PySCF {populated} are valid only for the td jobtype "
+                    "or an opt carrying excited_state_root."
+                )
+            return
+        what = "td" if self.jobtype == "td" else "opt on an excited root"
+        response_method = str(self.response_method or "").strip().lower()
+        if response_method not in PYSCF_RESPONSE_METHODS:
+            raise ValueError(
+                f"PySCF {what} requires response_method to be one of "
+                f"{PYSCF_RESPONSE_METHODS}, got {self.response_method!r}."
+            )
+        if (
+            isinstance(self.nstates, bool)
+            or not isinstance(self.nstates, Integral)
+            or int(self.nstates) <= 0
+        ):
+            raise ValueError(
+                f"PySCF {what} requires nstates to be a positive integer, "
+                f"got {self.nstates!r}."
+            )
+        if self.ab_initio is not None or not self.functional:
+            raise ValueError(
+                f"PySCF {what} runs on a Kohn-Sham reference: set a "
+                "functional and do not set ab_initio."
+            )
+        manifold = str(self.state_manifold or "").strip().lower()
+        if manifold not in PYSCF_STATE_MANIFOLDS:
+            raise ValueError(
+                f"PySCF {what} requires state_manifold to be one of "
+                f"{PYSCF_STATE_MANIFOLDS}, got {self.state_manifold!r}."
+            )
+        # Which manifolds the reference admits is a fact about the resolved
+        # electronic state.  A project section carries no multiplicity, so
+        # the check waits until the molecule's state is bound (the CLI
+        # re-validates per molecule and preflight resolves it); a settings
+        # object that already knows its multiplicity is held to it here.
+        if self.multiplicity is not None:
+            if int(self.multiplicity) == 1:
+                if manifold not in PYSCF_RESTRICTED_MANIFOLDS:
+                    raise ValueError(
+                        "A closed-shell reference asks for singlet or "
+                        "triplet excitations; got state_manifold="
+                        f"{self.state_manifold!r}. An open-shell reference "
+                        "(multiplicity > 1) names "
+                        f"{PYSCF_UNRESTRICTED_MANIFOLD!r}."
+                    )
+            elif manifold != PYSCF_UNRESTRICTED_MANIFOLD:
+                raise ValueError(
+                    "An open-shell (unrestricted) reference has one "
+                    "spin-conserving excitation manifold; set "
+                    f"state_manifold: {PYSCF_UNRESTRICTED_MANIFOLD!r} (got "
+                    f"{self.state_manifold!r} with multiplicity="
+                    f"{self.multiplicity!r})."
+                )
+        if self.excited_state_root is not None:
+            root = self.excited_state_root
+            if (
+                isinstance(root, bool)
+                or not isinstance(root, Integral)
+                or int(root) <= 0
+                or int(root) > int(self.nstates)
+            ):
+                raise ValueError(
+                    "excited_state_root must be a positive root index no "
+                    f"larger than nstates ({self.nstates!r}); got {root!r}."
+                )
+            if self.solvent_model is not None or self.solvent_id is not None:
+                raise ValueError(
+                    "PySCF 2.14 has no excited-state gradient under PCM/SMD "
+                    "(NotImplementedError: PCM-TDDFT Gradients); optimise "
+                    "the excited root in the gas phase, or take solvated "
+                    "td energies at a fixed geometry."
+                )
+            if str(self.opt_solver) != "geometric":
+                raise ValueError(
+                    "An excited-state optimisation is audited with "
+                    f"opt_solver geometric only; got {self.opt_solver!r}."
+                )
+        if self.dispersion is not None:
+            raise ValueError(
+                f"PySCF {what} does not accept a ground-state dispersion "
+                "correction as an excited-state setting; the host also has "
+                "no dispersion package installed."
+            )
+        if str(self.engine or "cpu").strip().lower() != "cpu":
+            raise ValueError(
+                f"PySCF {what} is a CPU capability; GPU4PySCF response "
+                "calculations are not validated here."
+            )

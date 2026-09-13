@@ -1,8 +1,10 @@
 """Generate the standalone PySCF driver script for a job.
 
 The emitted ``label.py`` is a **fixed skeleton plus one configuration dict**.
-Executable v1 workflows cover only sp/opt/hess; td is a declarative preview
-that the emitted driver refuses to run. The driver logic is invariant, so
+The skeleton runs the ground-state SCF, an optimisation (on the ground
+state, on an excited root, or on a correlated surface), a TDA/TDDFT
+response stage, a correlated-energy stage and an analytic Hessian, as the
+resolved stages ask. The driver logic is invariant, so
 nothing is gained by templating source text -- and free-form generation adds a
 quoting, escaping and injection surface for no benefit. Only ``CONFIG``
 varies, and it holds scalars, strings and a geometry array.
@@ -28,6 +30,7 @@ from chemsmart.io.pyscf.output import pyscf_source_artifact_binding
 from chemsmart.jobs.pyscf.settings import (
     PYSCF_DEFGRIDS,
     PYSCF_SOLVENT_MODELS,
+    PYSCF_UNRESTRICTED_MANIFOLD,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,14 +46,22 @@ LEGACY_RESULTS_SCHEMA_VERSION = "1.0"
 #: remains schema 2.0 so historical artifacts stay readable; this marker
 #: identifies records that satisfy the stricter state, status, and runtime
 #: reference checks required for new execution/data-edge admission.
-RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v4"
+RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v5"
 #: Contract versions this ChemSmart still reads as executed evidence.  v3 and
-#: v4 share the applied-spec vocabulary; v4 adds datasets (forces at the
+#: v4 share one applied-spec vocabulary; v4 adds datasets (forces at the
 #: Hessian geometry, spin populations) and status facts (the mass convention
 #: behind the frequencies, the symmetry tolerance behind the point group, the
 #: optimiser's criteria, the continuation SCF) without touching any v3 field,
 #: so a v3 artifact stays analysis-ready and stays a legal geometry source.
-PREVIOUS_RESULT_CONTRACT_VERSIONS = ("chemsmart.pyscf-result-contract.v3",)
+#: v5 makes the response stage executable, adds the excited-state and
+#: correlated-method datasets and status blocks, and widens the applied-spec
+#: vocabulary by four fields -- under its own version only, because the
+#: applied-settings digest of every archived artifact is reconstructed from
+#: the vocabulary of *that* artifact's contract.
+PREVIOUS_RESULT_CONTRACT_VERSIONS = (
+    "chemsmart.pyscf-result-contract.v3",
+    "chemsmart.pyscf-result-contract.v4",
+)
 SUPPORTED_RESULT_CONTRACT_VERSIONS = PREVIOUS_RESULT_CONTRACT_VERSIONS + (
     RESULT_CONTRACT_VERSION,
 )
@@ -114,19 +125,43 @@ LEGACY_APPLIED_SPEC_FIELDS = (
     "settings_digest",
 )
 
-APPLIED_SPEC_FIELDS = LEGACY_APPLIED_SPEC_FIELDS + (
+#: The v3/v4 vocabulary, frozen: the digest stored in every archived v3/v4
+#: artifact was computed over exactly these fields.
+APPLIED_SPEC_FIELDS_V4 = LEGACY_APPLIED_SPEC_FIELDS + (
     "result_contract_version",
     "reference_family",
 )
+
+#: The current (v5) vocabulary: the excited-root, frozen-core and iteration
+#: controls the driver now applies.
+APPLIED_SPEC_FIELDS = APPLIED_SPEC_FIELDS_V4 + (
+    "excited_state_root",
+    "frozen_core",
+    "td_max_cycle",
+    "cc_max_cycle",
+)
+
+#: Digest vocabulary per contract version.  Extending the current tuple in
+#: place would silently change the reconstruction for every archived
+#: artifact, so each version names its own.
+APPLIED_SPEC_FIELDS_BY_CONTRACT = {
+    "chemsmart.pyscf-result-contract.v3": APPLIED_SPEC_FIELDS_V4,
+    "chemsmart.pyscf-result-contract.v4": APPLIED_SPEC_FIELDS_V4,
+    RESULT_CONTRACT_VERSION: APPLIED_SPEC_FIELDS,
+}
 
 # Units are part of the machine contract rather than prose in a reader.  Every
 # numeric dataset the fixed driver can emit has one explicit unit, including
 # quantities that are dimensionless.
 RESULT_UNITS = {
     "atomic_numbers": "dimensionless",
+    "ccsd_correlation_energy": "Eh",
+    "correlation_energy": "Eh",
     "dipole_moment": "Debye",
     "energies": "Eh",
     "excitation_energies": "Eh",
+    "excited_state_converged": "dimensionless",
+    "excited_state_multiplicities": "dimensionless",
     "force_constants": "Dyne/Angstrom",
     "forces": "Eh/Bohr",
     "hessian": "Eh/Bohr^2",
@@ -138,8 +173,13 @@ RESULT_UNITS = {
     "oscillator_strengths": "dimensionless",
     "positions": "Angstrom",
     "reduced_masses": "atomic_mass_unit",
+    "reference_energy": "Eh",
+    "scf_energy": "Eh",
     "spin_square": "dimensionless",
     "spin_square_effective_multiplicity": "dimensionless",
+    "total_energy": "Eh",
+    "transition_dipole_moments": "Debye",
+    "triples_correction": "Eh",
     "vibrational_frequencies": "cm^-1",
 }
 
@@ -150,47 +190,75 @@ def applied_pyscf_spec(config):
 
 
 def applied_pyscf_spec_fields(spec):
-    """Return the digest vocabulary for a current or historical artifact."""
+    """Return the digest vocabulary of *this* artifact's contract version.
 
-    if (
-        spec.get("result_contract_version")
-        in SUPPORTED_RESULT_CONTRACT_VERSIONS
-    ):
-        return APPLIED_SPEC_FIELDS
+    A v4 artifact's ``applied_settings_sha256`` was computed over the v4
+    fields; reconstructing it from the v5 vocabulary would mark every
+    archived artifact tampered.  A contract-less artifact keeps the legacy
+    vocabulary.
+    """
+
+    version = spec.get("result_contract_version")
+    if version in APPLIED_SPEC_FIELDS_BY_CONTRACT:
+        return APPLIED_SPEC_FIELDS_BY_CONTRACT[version]
     return LEGACY_APPLIED_SPEC_FIELDS
 
 
-def pyscf_td_response_materialization(settings):
-    """Map typed TD/TDA intent to a non-executable PySCF response plan.
+def pyscf_td_response_materialization(settings, *, reference_family=None):
+    """Map typed TDA/TDDFT intent to the PySCF response construction.
 
-    The preview artifact remains inert. This manifest makes the intended
-    target-library construction explicit and testable without embedding a
-    dormant engine call that could later become an execution escape hatch.
+    The manifest names the exact classes the driver instantiates, so the
+    review packet, the artifact and the validator agree on the response
+    object by construction.  It covers the ``td`` jobtype and an ``opt``
+    on an excited root; ``reference_family`` (``rks``/``uks``) selects the
+    restricted or unrestricted factory.
     """
 
-    if str(getattr(settings, "jobtype", "")).strip().lower() != "td":
+    jobtype = str(getattr(settings, "jobtype", "")).strip().lower()
+    excited_root = getattr(settings, "excited_state_root", None)
+    if jobtype != "td" and not (jobtype == "opt" and excited_root):
         return None
     response_method = str(settings.response_method).strip().lower()
+    manifold = str(settings.state_manifold).strip().lower()
+    family = str(reference_family or "rks").strip().lower()
+    module = "uks" if family == "uks" else "rks"
     factory_api = {
-        "tda": "pyscf.tdscf.rks.TDA",
-        "tddft": "pyscf.tdscf.rks.TDDFT",
+        "tda": f"pyscf.tdscf.{module}.TDA",
+        "tddft": f"pyscf.tdscf.{module}.TDDFT",
     }[response_method]
+    operations = ["ground_state_scf", "response_construct"]
+    if manifold != PYSCF_UNRESTRICTED_MANIFOLD:
+        operations.append(f"set_{manifold}_channel")
+    operations.append("set_nstates")
+    if getattr(settings, "td_max_cycle", None) is not None:
+        operations.append("set_max_cycle")
+    if excited_root:
+        operations.extend(
+            (
+                "gradient_scanner_on_root",
+                "geometry_optimisation",
+                "final_scf",
+            )
+        )
+    operations.append("vertical_excitation_kernel")
     body = {
         "schema_version": TD_RESPONSE_MATERIALIZATION_SCHEMA_VERSION,
-        "ground_state_reference_family": "rks",
+        "ground_state_reference_family": module,
         "ground_state_stage": "scf",
         "response_method": response_method,
         "response_factory_api": factory_api,
-        "state_manifold": "singlet",
+        "state_manifold": manifold,
         "nstates": int(settings.nstates),
-        "operation_order": (
-            "ground_state_scf",
-            "response_construct",
-            "set_singlet_channel",
-            "set_nstates",
-            "vertical_excitation_kernel",
+        "excited_state_root": (
+            int(excited_root) if excited_root is not None else None
         ),
-        "execution_policy": "preview_only",
+        "max_cycle": (
+            int(settings.td_max_cycle)
+            if getattr(settings, "td_max_cycle", None) is not None
+            else None
+        ),
+        "operation_order": tuple(operations),
+        "execution_policy": "executable",
     }
     payload = json.dumps(body, sort_keys=True, separators=(",", ":"))
     return {
@@ -498,10 +566,33 @@ class PySCFScriptWriter:
                 if getattr(settings, "nstates", None) is not None
                 else None
             ),
-            # TD/TDA is deliberately a typed preview, not a latent engine
-            # escape hatch. The generated artifact carries the requested
-            # semantics but refuses direct execution even outside ChemSmart.
-            "preview_only": settings.jobtype == "td",
+            "excited_state_root": (
+                int(settings.excited_state_root)
+                if getattr(settings, "excited_state_root", None) is not None
+                else None
+            ),
+            "td_max_cycle": (
+                int(settings.td_max_cycle)
+                if getattr(settings, "td_max_cycle", None) is not None
+                else None
+            ),
+            "frozen_core": (
+                None
+                if getattr(settings, "frozen_core", None) is None
+                else (
+                    str(settings.frozen_core).strip().lower()
+                    if isinstance(settings.frozen_core, str)
+                    else int(settings.frozen_core)
+                )
+            ),
+            "cc_max_cycle": (
+                int(settings.cc_max_cycle)
+                if getattr(settings, "cc_max_cycle", None) is not None
+                else None
+            ),
+            # Kept in the vocabulary for every artifact on disk; no stage
+            # is a preview any more, so it is False for every new run.
+            "preview_only": False,
             "materializations": {},
             "engine": settings.engine,
             "num_threads": int(num_threads),
@@ -519,7 +610,9 @@ class PySCFScriptWriter:
                 input_artifact["sha256"] if input_artifact else None
             ),
         }
-        td_materialization = pyscf_td_response_materialization(settings)
+        td_materialization = pyscf_td_response_materialization(
+            settings, reference_family=config["reference_family"]
+        )
         if td_materialization is not None:
             config["materializations"]["td_response_plan"] = td_materialization
         geometry_payload = {
@@ -614,8 +707,7 @@ _SKELETON = '''#!/usr/bin/env python
 """PySCF driver generated by ChemSmart.
 
 DO NOT EDIT: this file is regenerated on every run, so edits are lost.
-Executable SP/OPT/HESS artifacts may be rerun with the bound environment.
-Preview-only artifacts refuse direct execution.
+Executable artifacts may be rerun with the bound environment.
 
 Imports pyscf, numpy, h5py and the standard library only -- never chemsmart.
 """
@@ -825,9 +917,11 @@ def _build_method(config, mol):
     return mf
 
 
-def _run_opt(config, mf):
+def _run_opt(config, method):
     """Optimise the geometry and return (converged, optimised Mole).
 
+    ``method`` is the mean-field object for a ground-state surface, or a
+    nuclear-gradient scanner for an excited root or a correlated method.
     assert_convergence is disabled so that a failed optimisation still
     produces a results file recording the failure, rather than raising with
     no artifact. Downstream, normal_termination stays False.
@@ -838,19 +932,227 @@ def _run_opt(config, mf):
         from pyscf.geomopt import geometric_solver
 
         return geometric_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
+            method, assert_convergence=False, maxsteps=maxsteps
         )
     if solver == "berny":
         from pyscf.geomopt import berny_solver
 
         return berny_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
+            method, assert_convergence=False, maxsteps=maxsteps
         )
     if solver == "ase":
         from pyscf.geomopt import ase_solver
 
-        return ase_solver.kernel(mf, target="atoms", max_steps=maxsteps)
+        return ase_solver.kernel(method, target="atoms", max_steps=maxsteps)
     raise ValueError("Unknown opt_solver: %s" % solver)
+
+
+class FollowedRootFiltered(RuntimeError):
+    """The followed excited root fell below PySCF's positive-eigenvalue
+    filter and vanished from the spectrum; the driver never switches roots.
+    """
+
+
+def _class_name(value):
+    return type(value).__module__ + "." + type(value).__qualname__
+
+
+def _build_response(config, mf):
+    """Construct the TDA/TDDFT response object on a converged mean field.
+
+    ``pyscf.tdscf.TDA/TDDFT`` dispatch on the mean-field class (RKS or
+    UKS; a PCM-wrapped reference attaches the non-equilibrium response).
+    The manifold flag is set for a restricted reference only: an
+    unrestricted reference has one spin-conserving manifold and PySCF
+    leaves ``singlet`` as None there.
+    """
+    from pyscf import tdscf
+
+    method = str(config["response_method"]).strip().lower()
+    manifold = str(config["state_manifold"]).strip().lower()
+    factory = {"tda": tdscf.TDA, "tddft": tdscf.TDDFT}[method]
+    td = factory(mf)
+    if manifold in ("singlet", "triplet"):
+        td.singlet = manifold == "singlet"
+    td.nstates = int(config["nstates"])
+    if config.get("td_max_cycle") is not None:
+        td.max_cycle = int(config["td_max_cycle"])
+    return td
+
+
+def _root_convergence(td):
+    """Per-root convergence flags as a 1-d boolean array."""
+    flags = np.asarray(td.converged, dtype=bool).reshape(-1)
+    obtained = int(np.asarray(td.e).reshape(-1).size)
+    if flags.size == 1 and obtained > 1:
+        flags = np.repeat(flags, obtained)
+    return flags[:obtained]
+
+
+def _response_solvent_record(mf, td):
+    """What the solvent model applied to the response, if any."""
+    ground = getattr(mf, "with_solvent", None)
+    response = getattr(td, "with_solvent", None)
+    if ground is None and response is None:
+        return None
+    return {
+        "equilibrium_solvation": (
+            None
+            if response is None
+            else bool(getattr(response, "equilibrium_solvation", False))
+        ),
+        "static_eps_applied": (
+            None if ground is None else float(getattr(ground, "eps", 0.0))
+        ),
+        # PySCF applies a fixed optical dielectric to the fast response
+        # for every solvent (solvent/_attach_solvent.py); the number it
+        # used is recorded here so a non-aqueous run shows the divergence.
+        "response_eps_applied": (
+            None if response is None else float(getattr(response, "eps", 0.0))
+        ),
+    }
+
+
+def _run_td(config, mf, results, status, runtime):
+    """Vertical excitations at the mean field's current geometry.
+
+    Roots are ascending within the requested manifold at this geometry.
+    PySCF drops eigenvalues below ``positive_eig_threshold`` before
+    reporting, so ``nstates_obtained`` may be smaller than the request;
+    the count of filtered roots is a stage fact, never a silent shift.
+    """
+    from pyscf.data import nist
+
+    td = _build_response(config, mf)
+    td.kernel()
+    runtime["response_class"] = _class_name(td)
+    excitations = np.asarray(td.e, dtype=float).reshape(-1)
+    obtained = int(excitations.size)
+    requested = int(config["nstates"])
+    converged = _root_convergence(td)
+    manifold = str(config["state_manifold"]).strip().lower()
+    results["excitation_energies"] = excitations
+    results["excited_state_converged"] = converged
+    if manifold in ("singlet", "triplet"):
+        results["excited_state_multiplicities"] = np.full(
+            obtained, 1 if manifold == "singlet" else 3, dtype=int
+        )
+    stage = {
+        "converged": bool(obtained > 0 and converged.all()),
+        "all_converged": bool(obtained > 0 and converged.all()),
+        "unconverged_roots": [
+            int(index + 1) for index, flag in enumerate(converged) if not flag
+        ],
+        "nstates_requested": requested,
+        "nstates_obtained": obtained,
+        "roots_filtered": int(max(requested - obtained, 0)),
+        "positive_eig_threshold_applied": float(
+            getattr(td, "positive_eig_threshold", float("nan"))
+        ),
+        "max_cycle_applied": int(td.max_cycle),
+        "response_method_applied": str(config["response_method"]),
+        "state_manifold_applied": manifold,
+        "singlet_flag_applied": (
+            None if td.singlet is None else bool(td.singlet)
+        ),
+        "transition_dipole_au_to_debye": float(nist.AU2DEBYE),
+        "solvent": _response_solvent_record(mf, td),
+    }
+    try:
+        results["oscillator_strengths"] = np.asarray(
+            td.oscillator_strength(), dtype=float
+        ).reshape(-1)[:obtained]
+        status["properties"]["oscillator_strengths"] = {"status": "ok"}
+    except Exception as exc:
+        status["properties"]["oscillator_strengths"] = {
+            "status": "unavailable",
+            "failure": {"type": type(exc).__name__, "message": str(exc)},
+        }
+    try:
+        dipoles = np.asarray(td.transition_dipole(), dtype=float)
+        results["transition_dipole_moments"] = (
+            dipoles.reshape(obtained, -1)[:, :3] * float(nist.AU2DEBYE)
+        )
+        status["properties"]["transition_dipole_moments"] = {"status": "ok"}
+    except Exception as exc:
+        status["properties"]["transition_dipole_moments"] = {
+            "status": "unavailable",
+            "failure": {"type": type(exc).__name__, "message": str(exc)},
+        }
+    status["stages"]["td"] = stage
+    return td, stage
+
+
+def _frozen_core_count(method):
+    frozen = getattr(method, "frozen", None)
+    if frozen is None:
+        return 0
+    if isinstance(frozen, (int, np.integer)):
+        return int(frozen)
+    return int(len(frozen))
+
+
+def _build_correlated(config, mf):
+    """Construct the MP2 or coupled-cluster object on the HF reference."""
+    from pyscf import cc, mp
+
+    method = str(config["ab_initio"]).strip().lower()
+    if method == "mp2":
+        obj = mp.MP2(mf)
+    elif method in ("ccsd", "ccsd(t)"):
+        obj = cc.CCSD(mf)
+        if config.get("cc_max_cycle") is not None:
+            obj.max_cycle = int(config["cc_max_cycle"])
+    else:
+        raise ValueError("Unknown correlated method: %s" % method)
+    frozen = config.get("frozen_core")
+    if frozen is None:
+        pass
+    elif isinstance(frozen, str) and frozen.strip().lower() == "auto":
+        setter = getattr(obj, "set_frozen", None)
+        if not callable(setter):
+            raise RuntimeError(
+                "this PySCF cannot resolve frozen_core 'auto' for %s"
+                % _class_name(obj)
+            )
+        setter(method="auto")
+    else:
+        obj.frozen = int(frozen)
+    return obj
+
+
+def _run_corr(config, mf, results, status, runtime):
+    """The correlated components at the mean field's current geometry."""
+    method = str(config["ab_initio"]).strip().lower()
+    obj = _build_correlated(config, mf)
+    runtime["correlated_class"] = _class_name(obj)
+    obj.kernel()
+    reference = float(mf.e_tot)
+    correlation = float(obj.e_corr)
+    stage = {
+        "converged": bool(getattr(obj, "converged", True)),
+        "method": method,
+        "frozen_core_requested": config.get("frozen_core"),
+        "frozen_core_applied": _frozen_core_count(obj),
+        "max_cycle_applied": (
+            int(obj.max_cycle) if method != "mp2" else None
+        ),
+        "amplitudes_converged": (
+            bool(getattr(obj, "converged", True)) if method != "mp2" else None
+        ),
+        "triples_computed": False,
+    }
+    results["reference_energy"] = reference
+    if method in ("ccsd", "ccsd(t)"):
+        results["ccsd_correlation_energy"] = correlation
+    if method == "ccsd(t)":
+        triples = float(obj.ccsd_t())
+        results["triples_correction"] = triples
+        correlation += triples
+        stage["triples_computed"] = True
+    results["correlation_energy"] = correlation
+    status["stages"]["corr"] = stage
+    return reference + correlation
 
 
 def _distribution_versions():
@@ -1180,12 +1482,6 @@ def main():
     log_path = label + ".out"
     results_path = label + ".h5"
 
-    if CONFIG.get("preview_only"):
-        raise RuntimeError(
-            "This ChemSmart PySCF artifact is preview-only and cannot launch "
-            "a chemistry engine."
-        )
-
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     t0 = time.time()
 
@@ -1221,6 +1517,9 @@ def main():
         ]
 
         energies = []
+        total_energy = None
+        excited_root = CONFIG.get("excited_state_root")
+        correlated = CONFIG.get("ab_initio") in ("mp2", "ccsd", "ccsd(t)")
         for stage in CONFIG["stages"]:
             current_stage = stage
             if stage == "scf":
@@ -1234,7 +1533,69 @@ def main():
                     stage_status["cycles"] = int(cycles)
                 status["stages"]["scf"] = stage_status
             elif stage == "opt":
-                optimizer_converged, mol_eq = _run_opt(CONFIG, mf)
+                surface = mf
+                surface_record = None
+                if excited_root is not None:
+                    # The surface is root k of the response at every step.
+                    # The scanner's own ``converged`` property indexes the
+                    # per-root flags with the 1-based root (PySCF 2.14,
+                    # grad/tdrhf.py) and raises for root == nstates, so
+                    # the driver reads the response object directly.
+                    td_start = _build_response(CONFIG, mf)
+                    td_start.kernel()
+                    runtime["response_class"] = _class_name(td_start)
+                    start_roots = int(np.asarray(td_start.e).reshape(-1).size)
+                    root = int(excited_root)
+                    if start_roots < root:
+                        raise FollowedRootFiltered(
+                            "excited_state_root %d is not in the %d roots "
+                            "PySCF kept at the supplied geometry (%d "
+                            "requested; roots below positive_eig_threshold "
+                            "%g Eh are dropped)"
+                            % (
+                                root,
+                                start_roots,
+                                int(CONFIG["nstates"]),
+                                float(td_start.positive_eig_threshold),
+                            )
+                        )
+                    surface = td_start.nuc_grad_method().as_scanner(state=root)
+                    surface_record = {
+                        "root": root,
+                        "response_method": str(CONFIG["response_method"]),
+                        "state_manifold": str(CONFIG["state_manifold"]),
+                        "nstates": int(CONFIG["nstates"]),
+                        "start_root_converged": bool(
+                            _root_convergence(td_start)[root - 1]
+                        ),
+                        "start_roots_obtained": start_roots,
+                        "followed_root_total_energy_start": float(
+                            td_start.e_tot[root - 1]
+                        ),
+                        "gradient_scanner_class": _class_name(surface),
+                    }
+                elif correlated:
+                    # The surface is the correlated method's energy; the
+                    # scanner rebuilds SCF, amplitudes and (for CC) the
+                    # lambda equations at every geometry.
+                    corr_start = _build_correlated(CONFIG, mf)
+                    runtime["correlated_class"] = _class_name(corr_start)
+                    surface = corr_start.nuc_grad_method().as_scanner()
+                    surface_record = {
+                        "method": str(CONFIG["ab_initio"]),
+                        "frozen_core_applied": _frozen_core_count(corr_start),
+                        "gradient_scanner_class": _class_name(surface),
+                    }
+                try:
+                    optimizer_converged, mol_eq = _run_opt(CONFIG, surface)
+                except IndexError as exc:
+                    if excited_root is None:
+                        raise
+                    raise FollowedRootFiltered(
+                        "excited_state_root %d vanished from the spectrum "
+                        "during the optimisation (PySCF drops roots below "
+                        "positive_eig_threshold): %s" % (int(excited_root), exc)
+                    ) from exc
                 # Re-converge on the optimised geometry so that every
                 # reported property belongs to the same structure.
                 mf.reset(mol_eq)
@@ -1259,7 +1620,77 @@ def main():
                 stage_status["convergence_criteria"] = _optimizer_criteria(
                     CONFIG
                 )
+                if surface_record is not None:
+                    # The last gradient the scanner evaluated is the
+                    # number behind ``optimizer_converged``.
+                    last_gradient = getattr(surface, "de", None)
+                    if last_gradient is not None:
+                        surface_record["final_gradient_max_eh_per_bohr"] = (
+                            float(np.max(np.abs(_to_host_array(last_gradient))))
+                        )
+                        surface_record["gradient_source"] = (
+                            "last scanner evaluation (scanner.de)"
+                        )
+                    base = getattr(surface, "base", None)
+                    if correlated and base is not None:
+                        surface_record["amplitudes_converged"] = (
+                            None
+                            if not hasattr(base, "converged")
+                            else bool(base.converged)
+                        )
+                        surface_record["lambda_converged"] = (
+                            None
+                            if not hasattr(base, "converged_lambda")
+                            else bool(base.converged_lambda)
+                        )
+                    stage_status[
+                        "excited_state" if excited_root is not None
+                        else "correlated"
+                    ] = surface_record
                 status["stages"]["opt"] = stage_status
+            elif stage == "td":
+                td, td_stage = _run_td(CONFIG, mf, results, status, runtime)
+                if excited_root is not None:
+                    root = int(excited_root)
+                    obtained = int(td_stage["nstates_obtained"])
+                    if obtained < root:
+                        raise FollowedRootFiltered(
+                            "excited_state_root %d is not in the %d roots "
+                            "PySCF kept at the reached geometry"
+                            % (root, obtained)
+                        )
+                    hartree_to_ev = 27.211386245988
+                    excitations = np.asarray(td.e, dtype=float).reshape(-1)
+                    total_energy = float(td.e_tot[root - 1])
+                    neighbours = []
+                    if root >= 2:
+                        neighbours.append(
+                            float(excitations[root - 1] - excitations[root - 2])
+                        )
+                    if root < obtained:
+                        neighbours.append(
+                            float(excitations[root] - excitations[root - 1])
+                        )
+                    record = status["stages"]["opt"].setdefault(
+                        "excited_state", {}
+                    )
+                    record["followed_root_total_energy_end"] = total_energy
+                    record["followed_root_converged_end"] = bool(
+                        _root_convergence(td)[root - 1]
+                    )
+                    record["root_gap_to_ground_end_ev"] = float(
+                        excitations[root - 1] * hartree_to_ev
+                    )
+                    record["root_gap_to_neighbour_end_ev"] = (
+                        float(min(neighbours) * hartree_to_ev)
+                        if neighbours
+                        else None
+                    )
+                    record["roots_filtered_end"] = int(
+                        td_stage["roots_filtered"]
+                    )
+            elif stage == "corr":
+                total_energy = _run_corr(CONFIG, mf, results, status, runtime)
             elif stage == "hess":
                 # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo
                 # helper and HDF5 writer must never receive that device array.
@@ -1325,14 +1756,18 @@ def main():
                         "message": str(exc),
                     }
                 status["stages"]["hess"] = hess_status
-            elif stage == "td":
-                raise RuntimeError(
-                    "PySCF TD/TDA is a ChemSmart preview-only capability."
-                )
             else:
                 raise ValueError("Unknown stage: %s" % stage)
 
         results["energies"] = np.asarray(energies, dtype=float)
+        # The SCF energy at the final geometry, stated once, and the
+        # total energy of the surface the job computed on: the SCF for
+        # HF/DFT, the correlated total, the followed root's total for an
+        # excited-state optimisation, the reference for a td spectrum.
+        results["scf_energy"] = float(energies[-1])
+        results["total_energy"] = float(
+            energies[-1] if total_energy is None else total_energy
+        )
         results["positions"] = np.asarray(
             mol.atom_coords(unit="Angstrom"), dtype=float
         )

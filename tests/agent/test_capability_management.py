@@ -164,11 +164,20 @@ def test_pyscf_capability_query_uses_exact_engine_job_matrix():
 
 
 def test_live_registry_projects_loader_bounded_parameter_domains():
+    """The domains the model reads are the settings module's own words."""
+
     from chemsmart.agent.capabilities import load_program_capabilities
+    from chemsmart.jobs.pyscf.settings import (
+        PYSCF_AB_INITIO_METHODS,
+        PYSCF_STATE_MANIFOLDS,
+    )
 
     pyscf = load_program_capabilities().get("pyscf")
+    domains = dict(pyscf.project_parameter_domains)
 
-    assert dict(pyscf.project_parameter_domains)["ab_initio"] == ("hf",)
+    assert domains["ab_initio"] == tuple(sorted(PYSCF_AB_INITIO_METHODS))
+    assert domains["state_manifold"] == tuple(sorted(PYSCF_STATE_MANIFOLDS))
+    assert domains["frozen_core"] == ("auto",)
 
 
 def test_support_overlay_can_narrow_but_not_broaden(

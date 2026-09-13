@@ -1,15 +1,15 @@
-"""Preview-only PySCF TDA/TDDFT job."""
+"""PySCF TDA/TDDFT vertical-excitation job."""
 
 from chemsmart.jobs.pyscf.job import PySCFJob
 
 
 class PySCFTDJob(PySCFJob):
-    """Closed-shell gas-phase singlet vertical-excitation preview."""
+    """Vertical excitations of the supplied geometry.
+
+    A Kohn-Sham reference (closed shell: singlet or triplet manifold; open
+    shell: the one unrestricted manifold) followed by a TDA or TDDFT
+    response stage.  The geometry is fixed; roots are ascending indices
+    within the manifold at this geometry.  Stages: ``scf, td``.
+    """
 
     TYPE = "pyscf_td"
-
-    @property
-    def stages(self):
-        """Return the intended ground-state and response stages."""
-
-        return ["scf", "td"]

@@ -20,7 +20,9 @@ def sp(ctx, skip_completed, **kwargs):
 
     Uses only the complete ``sp:`` section of the project YAML. Solvent and
     every other scientific setting must be declared for that stage; nothing
-    is inherited from ``opt`` or ``hess``.
+    is inherited from ``opt`` or ``hess``. ``ab_initio: mp2``, ``ccsd`` or
+    ``ccsd(t)`` computes the correlated energy on an HF reference, with
+    ``frozen_core`` naming the orbitals left uncorrelated.
     """
     from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
 

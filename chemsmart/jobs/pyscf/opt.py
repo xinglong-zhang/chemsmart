@@ -25,12 +25,11 @@ class PySCFOptJob(PySCFJob):
             **kwargs,
         )
 
-    @property
-    def stages(self):
-        """Return the ordered stage list the generated script executes.
-
-        A Hessian is deliberately not appended in-process.  The host binds the
-        validated optimized-geometry artifact to an explicit ``hess`` node,
-        keeping stage identity and evidence consistent across programs.
-        """
-        return ["scf", "opt"]
+    # Stages come from the resolved settings (``PySCFJob.stages``): a
+    # ground-state optimisation runs ``scf, opt``; an optimisation on an
+    # excited root re-evaluates the spectrum at the reached geometry
+    # (``scf, opt, td``); a correlated optimisation computes the method's
+    # components there (``scf, opt, corr``).  A Hessian is deliberately not
+    # appended in-process: the host binds the validated optimized-geometry
+    # artifact to an explicit ``hess`` node, keeping stage identity and
+    # evidence consistent across programs.
