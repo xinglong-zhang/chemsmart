@@ -9,6 +9,7 @@ supplied against reached, converged against stopped, open shell against
 closed -- are checked on fixtures built to differ.
 """
 
+import inspect
 import json
 from pathlib import Path
 
@@ -16,9 +17,14 @@ import numpy as np
 import pytest
 
 from chemsmart.agent._contracts import file_sha256
+from chemsmart.agent.driver import REPAIR_MENU
 from chemsmart.agent.execution import (
     TrustedArtifactRefV1,
     build_reached_geometry,
+)
+from chemsmart.agent.terminal_states import (
+    REPAIRABLE_NODE_STATES,
+    _classify_failure,
 )
 from chemsmart.analysis.result_quantities import (
     QuantityExtractionError,
@@ -29,6 +35,8 @@ from chemsmart.analysis.result_readers import (
     MissingQuantityError,
     reader_for,
 )
+from chemsmart.io.native_failure import summarize_pyscf_native_failure
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 
 FIXTURES = Path(__file__).resolve().parent / "data" / "PySCFTests" / "outputs"
 
@@ -766,8 +774,79 @@ def test_an_unconverged_stage_is_inspectable_and_not_evidence(case, stage):
         assert output.excited_state_converged == [False, False, False]
         assert output.td_stage["unconverged_roots"] == [1, 2, 3]
         assert output.td_stage["max_cycle_applied"] == 1
+        native_class, word, control = (
+            "excited_state_convergence",
+            "failed_nonconverged_excited_state",
+            "td_max_cycle",
+        )
     else:
         assert output.status["stages"]["corr"]["max_cycle_applied"] == 1
+        native_class, word, control = (
+            "correlation_convergence",
+            "failed_nonconverged_correlation",
+            "cc_max_cycle",
+        )
+    # The word is derived from the artifact's own typed status -- the
+    # summariser reads the stage flag, the classifier maps the class, and
+    # the menu names the public control that answers it, which is a
+    # control the settings object carries and the artifact recorded.
+    summary = summarize_pyscf_native_failure(output.status)
+    assert summary is not None and summary.error_class == native_class
+    assert "max_cycle 1" in " ".join(summary.diagnostic_lines)
+    assert (
+        _classify_failure(
+            jobtype=output.jobtype,
+            findings=(f"pyscf.native_failure.{native_class}",),
+            native_class=native_class,
+            converged=None,
+            reached=None,
+            planned=None,
+        )
+        == word
+    )
+    assert word in REPAIRABLE_NODE_STATES
+    assert control in REPAIR_MENU[word]
+    assert control in inspect.signature(PySCFJobSettings.__init__).parameters
+    assert output.spec[control] == 1
+
+
+@pytest.mark.capability("gate:terminal_state_vocabulary")
+def test_a_followed_root_that_vanishes_is_an_excited_state_convergence():
+    """The driver raises ``FollowedRootFiltered`` inside the ``opt`` stage
+    when the root it follows falls below PySCF's positive-eigenvalue
+    filter, rather than switching roots; the summariser maps the exception
+    by name, so the word is the response solver's and not the optimiser's.
+    Every exception the summariser maps by name is one the generated
+    driver defines."""
+
+    from chemsmart.io.native_failure import _PYSCF_EXCEPTION_CLASSES
+    from chemsmart.jobs.pyscf.writer import _SKELETON
+
+    for name in _PYSCF_EXCEPTION_CLASSES:
+        assert f"class {name}(" in _SKELETON, name
+    summary = summarize_pyscf_native_failure(
+        {
+            "normal_termination": False,
+            "failure": {
+                "stage": "opt",
+                "type": "FollowedRootFiltered",
+                "message": "followed root 1 fell below the filter",
+            },
+            "stages": {"scf": {"converged": True}},
+        }
+    )
+    assert summary.error_class == "excited_state_convergence"
+    assert (
+        _classify_failure(
+            jobtype="opt",
+            findings=("pyscf.native_failure.excited_state_convergence",),
+            native_class=summary.error_class,
+            converged=False,
+            reached=None,
+            planned=None,
+        )
+        == "failed_nonconverged_excited_state"
+    )
 
 
 # ----------------------------------------------------------------------

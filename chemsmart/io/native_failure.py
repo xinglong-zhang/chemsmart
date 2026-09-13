@@ -344,7 +344,20 @@ _PYSCF_STAGE_CLASSES = {
     "scf": "scf_convergence",
     "opt": "geometry_optimization",
     "hess": "hessian_evaluation",
-    "td": "excited_state",
+    # The response stage and the correlated stage (contract v5) are
+    # convergence statements in their own right: an unconverged Davidson
+    # root or amplitude set sits on an SCF that did converge.
+    "td": "excited_state_convergence",
+    "corr": "correlation_convergence",
+}
+
+#: A driver exception type that names its class regardless of the stage it
+#: was raised in: the followed root of an excited-surface optimisation
+#: vanished from the spectrum (PySCF drops roots below its
+#: positive-eigenvalue filter), which the driver raises inside the ``opt``
+#: stage rather than switching roots.
+_PYSCF_EXCEPTION_CLASSES = {
+    "FollowedRootFiltered": "excited_state_convergence",
 }
 
 
@@ -369,11 +382,13 @@ def summarize_pyscf_native_failure(
     stages = stages if isinstance(stages, dict) else {}
     if isinstance(failure, dict):
         stage = str(failure.get("stage") or "")
-        error_class = _PYSCF_STAGE_CLASSES.get(stage, "driver_exception")
+        kind = str(failure.get("type") or "").strip()
+        error_class = _PYSCF_EXCEPTION_CLASSES.get(
+            kind, _PYSCF_STAGE_CLASSES.get(stage, "driver_exception")
+        )
         message = " ".join(str(failure.get("message") or "").split())[
             :_MAX_DIAGNOSTIC_CHARS
         ]
-        kind = str(failure.get("type") or "").strip()
         line = _redact(f"{kind}: {message}" if kind else message).strip()
         return NativeFailureSummaryV1(
             schema_version=_SCHEMA_VERSION,
@@ -404,6 +419,26 @@ def summarize_pyscf_native_failure(
         quiet = (
             "geometry_optimization",
             "PySCF recorded the geometry optimizer unconverged",
+        )
+    elif _stage_flag("td", "converged") is False:
+        roots = _stage_flag("td", "unconverged_roots")
+        roots_text = (
+            ", ".join(str(item) for item in roots)
+            if isinstance(roots, (list, tuple)) and roots
+            else "unknown"
+        )
+        quiet = (
+            "excited_state_convergence",
+            "PySCF recorded the response solver unconverged "
+            f"(roots {roots_text} of "
+            f"{_stage_flag('td', 'nstates_obtained')} obtained; "
+            f"max_cycle {_stage_flag('td', 'max_cycle_applied')})",
+        )
+    elif _stage_flag("corr", "converged") is False:
+        quiet = (
+            "correlation_convergence",
+            f"PySCF recorded the {_stage_flag('corr', 'method')} amplitudes "
+            f"unconverged (max_cycle {_stage_flag('corr', 'max_cycle_applied')})",
         )
     if quiet is None:
         return None

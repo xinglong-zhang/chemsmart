@@ -48,17 +48,29 @@ REPAIRABLE_NODE_STATES = frozenset(
         "failed_nonconverged_scf",
         "failed_nonconverged_geometry",
         "failed_nonconverged_scan_step",
+        "failed_nonconverged_excited_state",
+        "failed_nonconverged_correlation",
         "timeout_terminated",
         "memory_limit_terminated",
         "failed_native",
     }
 )
 
-#: The only two native failure classes that are themselves statements
-#: about convergence. A class that names a cause outranks the
-#: convergence flag it leaves behind; these two keep their own meaning.
+#: The native failure classes that are themselves statements about
+#: convergence. A class that names a cause outranks the convergence flag
+#: it leaves behind; these keep their own meaning. The response solver
+#: and the coupled-cluster amplitudes joined the SCF and the optimiser
+#: when PySCF's td and correlated stages became executable (contract v5):
+#: an unconverged Davidson root or an unconverged amplitude set is a
+#: convergence statement about a stage whose SCF converged, and the word
+#: ``failed_nonconverged_scf`` would be false for such a run.
 _CONVERGENCE_FAILURE_CLASSES = frozenset(
-    {"scf_convergence", "geometry_optimization"}
+    {
+        "scf_convergence",
+        "geometry_optimization",
+        "excited_state_convergence",
+        "correlation_convergence",
+    }
 )
 
 #: What a program's output falls back to when no rule matched: "it ended
@@ -147,6 +159,8 @@ NODE_TERMINAL_STATES = (
     "failed_nonconverged_scf",
     "failed_nonconverged_geometry",
     "failed_nonconverged_scan_step",
+    "failed_nonconverged_excited_state",
+    "failed_nonconverged_correlation",
     "failed_wrong_stationary_point",
     "timeout_terminated",
     "timeout_ambiguous",
@@ -436,6 +450,13 @@ def _classify_failure(
     # second case was found by the general test rather than by a run.
     if native_class == "scf_convergence":
         return "failed_nonconverged_scf"
+    # A response solver or an amplitude set that did not converge is a
+    # convergence statement about a stage whose SCF did converge; each
+    # keeps its own word and its own public repair control.
+    if native_class == "excited_state_convergence":
+        return "failed_nonconverged_excited_state"
+    if native_class == "correlation_convergence":
+        return "failed_nonconverged_correlation"
     if (
         native_class
         and native_class not in _CONVERGENCE_FAILURE_CLASSES

@@ -919,6 +919,27 @@ REPAIR_MENU: Mapping[str, str] = {
         "structure the run reached. Or loosen the step's own "
         "optimisation controls."
     ),
+    "failed_nonconverged_excited_state": (
+        "The response solver left a root unconverged, or the followed root "
+        "fell below PySCF's positive-eigenvalue filter and vanished from "
+        "the spectrum; the run outcome names which roots and the per-root "
+        "flags stay inspectable on the result. Raise td_max_cycle in the "
+        "project section (PySCF's default is 100), request fewer or more "
+        "roots so the one you follow is well separated, or restart an "
+        "excited-root optimisation from the reached geometry with "
+        "bind_reached_geometry. Or the collapse is the finding: a root "
+        "that meets the ground state or its neighbour is what a "
+        "single-reference response cannot describe, and the recorded gap "
+        "says so."
+    ),
+    "failed_nonconverged_correlation": (
+        "The coupled-cluster amplitudes (or lambda equations) did not "
+        "converge within cc_max_cycle; the SCF beneath them did. Raise "
+        "cc_max_cycle in the project section (PySCF's default is 50), or "
+        "check the reference: an amplitude set that will not settle often "
+        "sits on a multireference case, where the spin diagnostic on the "
+        "result is the finding rather than the iteration cap."
+    ),
     "timeout_terminated": (
         "The engine ran out of the time the envelope granted. Restart "
         "from the geometry the run reached -- bind_reached_geometry "
