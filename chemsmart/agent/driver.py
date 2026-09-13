@@ -33,7 +33,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
 
-from chemsmart.agent._contracts import ContractError, canonical_data
+from chemsmart.agent._contracts import (
+    ContractError,
+    canonical_data,
+    require_identifier,
+)
 from chemsmart.agent.delivery import (
     current_assessments,
     unresolved_requirement_ids,
@@ -2806,7 +2810,11 @@ class GoalDriver:
             )
         self.task = task
         self.workspace = Path(workspace).resolve()
-        self.goal_id = goal_id
+        # A goal id is a public identifier like every id the host mints
+        # from it; normalising it here, through the one rule, is what keeps
+        # the approval the driver names and the approval the bundle checks
+        # one string (PySCF round 2 E1, 2026-09-13).
+        self.goal_id = require_identifier(goal_id, "goal_id")
         self.granted_by = granted_by
         self.max_revisions = max_revisions
         self.provider = provider
@@ -2829,7 +2837,9 @@ class GoalDriver:
         self.stop_file = stop_file
         self.session_kwargs = dict(session_kwargs or {})
 
-        self.goal_dir = self.workspace / ".chemsmart-agent" / "goals" / goal_id
+        self.goal_dir = (
+            self.workspace / ".chemsmart-agent" / "goals" / self.goal_id
+        )
         self.ledger = GoalLedger(self.goal_dir)
         self.ledger.directory.mkdir(parents=True, exist_ok=True)
         if not _resuming and self.ledger.goal_path.exists():
@@ -2950,6 +2960,7 @@ class GoalDriver:
         creates a second one.
         """
 
+        goal_id = require_identifier(goal_id, "goal_id")
         goal_dir = (
             Path(workspace).resolve() / ".chemsmart-agent" / "goals" / goal_id
         )
@@ -3114,7 +3125,28 @@ class GoalDriver:
             "outcome": self._outcome,
             "settle": self._settle,
         }[phase]
-        handler()
+        try:
+            handler()
+        except ContractError as exc:
+            # A typed refusal raised inside a phase but outside that
+            # handler's own net ended the goal unsettled: E1 (PySCF round
+            # 2, 2026-09-13) died in decide before the ledger existed --
+            # the bundle refused the driver's own approval id -- and the
+            # process exited with no goal_created and no settlement.
+            # Every ending is a settlement. A ContractError is an outcome
+            # the human reads; a non-contract exception stays a crash,
+            # because a genuine defect must not be laundered into one.
+            if self.phase in {"settled", "parked"}:
+                raise
+            if self.goal is None:
+                self.goal = self._goal_record(
+                    identity="",
+                    conditions={"solvents": (), "thermochemistry": ()},
+                    review_sha256="",
+                )
+                self.ledger.create(self.goal)
+                self._flush_declarations()
+            self._typed_error(f"{phase} phase", exc)
         return GoalStepV1(
             phase=phase,
             next_phase=self.phase,

@@ -106,7 +106,15 @@ def _engine_stream(
 
 
 def _loop(
-    tmp_path, *, sessions, executes, calls=6, max_revisions=5, excursions=0
+    tmp_path,
+    *,
+    sessions,
+    executes,
+    calls=6,
+    max_revisions=5,
+    excursions=0,
+    goal_id="goal-t1",
+    resolve=None,
 ):
     workspace = tmp_path / "ws"
     workspace.mkdir(parents=True, exist_ok=True)
@@ -118,6 +126,8 @@ def _loop(
         return step(workspace, kwargs)
 
     def resolve_review(**kwargs):
+        if resolve is not None:
+            return resolve(**kwargs)
         return ("d" * 64, tmp_path / "bundle.json")
 
     def execute_bundle(*, approval_file, workspace, run_directory):
@@ -130,7 +140,7 @@ def _loop(
         execution_envelope_file=_envelope_file(
             tmp_path, calls, excursions=excursions
         ),
-        goal_id="goal-t1",
+        goal_id=goal_id,
         granted_by="claude-owner-delegated-reviewer",
         max_revisions=max_revisions,
         plan_session=plan_session,
@@ -2129,3 +2139,41 @@ def test_a_transport_loss_does_not_block_the_requirement_wake(tmp_path):
     assert any(
         gate == "goal.requirement_is_resolved" for gate, _ in gates
     ), f"the requirement wake never fired: {gates}"
+
+
+def test_a_refusal_in_the_decide_phase_still_settles_the_goal(tmp_path):
+    """E1 of PySCF round 2 (2026-09-13): the session planned, the host
+    built the review, and the resolver refused the driver's own approval
+    id inside the decide phase before the ledger existed; the exception
+    escaped the loop and the process exited with no goal record and no
+    settlement. Every ending is a settlement: a ContractError in any phase
+    settles the goal returned_to_human, naming the phase and the refusal,
+    and the goal id the human typed is normalised through the one
+    identifier rule so the directory, the ledger and the approval carry
+    one spelling."""
+
+    def refuse(**kwargs):
+        raise ContractError("execution bundle approval IDs differ")
+
+    result = _loop(
+        tmp_path,
+        sessions=[_planning_session("live-1", review=_review_payload())],
+        executes=[],
+        goal_id="goal-T1-Upper",
+        resolve=refuse,
+    )
+    assert result.goal_id == "goal-t1-upper"
+    assert result.settlement == "returned_to_human"
+    assert any(
+        "decide phase" in reason and "approval IDs differ" in reason
+        for reason in result.reasons
+    ), result.reasons
+    goal_dir = tmp_path / "ws" / ".chemsmart-agent" / "goals" / "goal-t1-upper"
+    ledger = [
+        json.loads(line)
+        for line in (goal_dir / "ledger.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    kinds = [entry["kind"] for entry in ledger]
+    assert "goal_settled" in kinds, kinds
+    assert (goal_dir / "goal.json").exists()

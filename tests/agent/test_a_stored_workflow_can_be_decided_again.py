@@ -149,3 +149,29 @@ def test_a_review_for_another_workspace_is_refused(tmp_path):
         inspect_workflow_execution_replay(
             review_file=review_path, workspace=elsewhere
         )
+
+
+@pytest.mark.capability("gate:resolver.one_answer_per_question")
+def test_an_approval_id_with_capitals_names_one_bundle(tmp_path):
+    """The driver names the approval after the goal id. The approval the
+    resolver builds passes that id through the one identifier rule, which
+    normalises it, while the resolution kept the raw string, so the
+    bundle's own equality gate refused the driver's own id the first time
+    a goal id carried a capital letter (PySCF round 2 E1, 2026-09-13: the
+    session had planned, the review was built, no engine call was spent,
+    and the goal ended with no settlement). One identifier, one function."""
+
+    review, path = _stored_review(tmp_path)
+    resolution, bundle = _approve(
+        review,
+        path,
+        approval_id="goal-goal-E1-Acrolein-cycle-1",
+        scope=tmp_path / "scope",
+    )
+    assert bundle is not None
+    assert (
+        resolution.approval_id
+        == bundle.workflow_approval.approval_id
+        == bundle.frozen_workflow_approval.approval_id
+        == "goal-goal-e1-acrolein-cycle-1"
+    )

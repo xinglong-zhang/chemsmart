@@ -408,7 +408,13 @@ def review(
     help="The goal-level bounds the one human decision covers.",
 )
 @click.option(
-    "--goal-id", type=str, required=True, help="Identifier for this goal."
+    "--goal-id",
+    type=str,
+    required=True,
+    help=(
+        "Identifier for this goal: a public identifier (a letter, then "
+        "letters, digits, '_', '.' or '-'), normalised to lower case."
+    ),
 )
 @click.option(
     "--granted-by",

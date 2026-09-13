@@ -42,6 +42,7 @@ from chemsmart.agent._contracts import (
     canonical_json,
     canonical_sha256,
     file_sha256,
+    require_identifier,
     require_sha256,
 )
 from chemsmart.agent.analysis_completion import load_analysis_completion_policy
@@ -4533,8 +4534,15 @@ def resolve_workflow_execution_review(
         raise ContractError("approval requires an output file")
     if normalized != "approve" and output_file is not None:
         raise ContractError("a non-approval decision cannot create a bundle")
-    chosen_approval_id = (
-        str(approval_id).strip() or "approval-" + review.review_sha256[:16]
+    # The approval built from this id passes it through require_identifier,
+    # which normalises it; the resolution kept the raw string, and the
+    # bundle's own equality gate then refused the driver's own approval
+    # id the first time a goal id carried a capital letter (PySCF round 2
+    # E1, 2026-09-13: "goal-goal-E1-acrolein-cycle-1", no engine call, no
+    # settlement). One identifier, one function, at every organ.
+    chosen_approval_id = require_identifier(
+        str(approval_id).strip() or "approval-" + review.review_sha256[:16],
+        "approval_id",
     )
     resolution_id = (
         "resolution-" + review.review_sha256[:16] + "-" + normalized
