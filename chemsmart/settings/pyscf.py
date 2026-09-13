@@ -20,14 +20,18 @@ from collections.abc import Mapping
 
 import yaml
 
-from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.jobs.pyscf.settings import PYSCF_JOBTYPES, PySCFJobSettings
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
 
-PYSCF_JOBTYPES = ("sp", "opt", "hess", "td")
 PYSCF_MIGRATION_SECTIONS = ("gas", "solv")
+#: ``PYSCF_JOBTYPES`` is imported rather than retyped: this module once
+#: carried its own copy in a different order, and a vocabulary with two
+#: authors is how PySCF ``td`` came to be declared by the reader and refused
+#: by a hand-list beside it (PySCF round 2).  Every table below is keyed by
+#: it, and a test holds the keys to the declaration.
 PYSCF_ALLOWED_SECTIONS = PYSCF_JOBTYPES + PYSCF_MIGRATION_SECTIONS
 PYSCF_STAGE_SOURCES = {
     "sp": ("sp", "solv"),

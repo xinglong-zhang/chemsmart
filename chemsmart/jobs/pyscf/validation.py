@@ -48,6 +48,7 @@ from chemsmart.jobs.pyscf.settings import (
     PYSCF_DEFGRIDS,
     PYSCF_ENGINES,
     PYSCF_FROZEN_CORE_AUTO,
+    PYSCF_JOBTYPES,
     PYSCF_OPT_SOLVERS,
     PYSCF_RESPONSE_METHODS,
     PYSCF_RESTRICTED_MANIFOLDS,
@@ -2652,10 +2653,15 @@ def _validate_correlated_results(results, stage_statuses, spec):
 
 
 def _normalize_result_jobtype(value):
-    normal = str(value or "").strip().lower().replace("pyscf_", "")
-    if normal not in {"sp", "opt", "hess", "td"}:
-        return normal
-    return normal
+    """Return the bare job-type word a spec or a request spells.
+
+    Both branches of the membership test this replaced returned the same
+    value, so the vocabulary copy inside it decided nothing; the callers
+    compare the normalised words to each other and the vocabulary is
+    checked where a setting is validated.
+    """
+
+    return str(value or "").strip().lower().replace("pyscf_", "")
 
 
 def _result_verification_settings(*, settings, jobtype, charge, multiplicity):
@@ -3397,12 +3403,12 @@ def _check_setting_values(settings, _molecule, _environment):
             )
         )
     jobtype = _member(settings, "jobtype", None)
-    if jobtype not in {"sp", "opt", "hess", "td"}:
+    if jobtype not in PYSCF_JOBTYPES:
         violations.append(
             PySCFViolation(
                 rule_id=RULE_INVALID_SETTING,
                 field="jobtype",
-                expected=("sp", "opt", "hess", "td"),
+                expected=PYSCF_JOBTYPES,
                 observed=jobtype,
                 evidence_ref="settings:jobtype",
             )

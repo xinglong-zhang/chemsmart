@@ -497,6 +497,22 @@ def xtb_solvent_domains() -> tuple[tuple[str, tuple[str, ...]], ...]:
     return (("solvent_id", _normalized_domain(XTB_ALL_SOLVENT_IDS)),)
 
 
+def declared_jobtypes(program: str) -> tuple[str, ...]:
+    """Job-type vocabulary projected from each program's own settings.
+
+    The registry describes what a program can be asked for; the words
+    themselves belong to the settings module that validates them, so a
+    job type added there reaches the capability ladder, the conformance
+    probe and the agent surface without a second list to remember.
+    """
+
+    if program == "pyscf":
+        from chemsmart.jobs.pyscf.settings import PYSCF_JOBTYPES
+
+        return tuple(sorted(PYSCF_JOBTYPES))
+    return ()
+
+
 def loader_project_section_names(program: str) -> tuple[str, ...]:
     """Project-section vocabulary projected from each concrete loader."""
 
@@ -759,7 +775,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
             program="pyscf",
             requires_project_configuration=True,
             supports_project_configuration=True,
-            jobtypes=("hess", "opt", "sp", "td"),
+            jobtypes=declared_jobtypes("pyscf"),
             project_owned_parameters=_PYSCF_PROJECT_PARAMETERS,
             engines=("cpu", "gpu"),
             # PySCF keys sections by job type, and its loader also

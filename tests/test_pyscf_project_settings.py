@@ -89,7 +89,10 @@ def test_canonical_materialization_preserves_explicit_values_and_legacy_input():
         }
     )
 
-    assert tuple(sections) == ("sp", "opt", "hess")
+    # Which stages a legacy gas/solv document materialises, not the order
+    # they happen to be inserted in: the canonical render sorts its keys,
+    # so the mapping's order reaches no artifact and no reader.
+    assert set(sections) == {"sp", "opt", "hess"}
     assert sections["sp"]["density_fit"] is True
     assert sections["sp"]["scf_tol"] == 1.0e-10
     assert sections["sp"]["scf_maxiter"] == 75
