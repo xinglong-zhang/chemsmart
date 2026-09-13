@@ -101,7 +101,11 @@ The production Agent supports:
 - explicitly approved execution on release-qualified CPU paths: ORCA
   single-points, optimization/frequency, transition-state, excited-state,
   relaxed coordinate scans, intrinsic reaction coordinates, and serial DAG
-  workflows; PySCF ``sp/opt/hess``; and xTB ``sp/opt/hess``.
+  workflows; PySCF ``sp/opt/hess``; and xTB ``sp/opt/hess``. PySCF
+  ``td``, excited-root ``opt`` and the ``mp2``, ``ccsd`` and ``ccsd(t)``
+  methods are executable and fixture-qualified under result contract
+  v5, and are described as completed Agent execution only from the
+  sealed cases that ran them.
 
 ORCA ``scan`` is qualified for approved execution: a relaxed torsional profile
 ran through the ordinary plan, preview, single human approval, and provider-free
@@ -603,8 +607,9 @@ what no log format has, an admission guard binding the exact bytes to a
 sibling run receipt and its whole ancestry of digests, and each numeric
 dataset is read only under the unit it declares; a stored unit that
 differs from the one a selector reads it as is a divergence to state,
-not an absence to report. PySCF ``td`` declares nothing, because it is a
-preview surface and no approved workflow can emit an excited state.
+not an absence to report. PySCF ``td`` declares the SCF set beside the
+excitation set, because the response stage is executable under result
+contract v5 (below), and the provenance axis says whose each value is.
 
 A PySCF result is one structure, and the host says which. The driver
 re-converges the SCF on the final geometry, from the optimiser's own
@@ -657,6 +662,102 @@ artifacts with PySCF's own reference numbers beside them, and the host
 RRHO engine agrees with PySCF's thermochemistry on the zero-point energy
 to 3e-11 Eh on the same Hessian.
 
+The PySCF surface beyond the ground-state SCF is three capabilities
+under result contract v5, each with something that goes red. ``td``
+runs: TDA or full TDDFT on a closed-shell reference in the singlet or
+the triplet manifold, or on an open-shell reference in the one
+``unrestricted`` manifold, gas phase or under a PCM-family or SMD
+reference. Roots are ascending ordinals within the manifold at the
+artifact's own geometry -- an index, never a state identity -- and the
+artifact records per root its convergence, its oscillator strength and
+its transition dipole, and per stage how many roots were requested, how
+many PySCF's positive-eigenvalue filter (1e-3 Eh) kept, and the
+iteration cap applied; ``nstates`` may exceed what comes back and the
+ordinals shift with it, which is why the count is written. A solvated
+spectrum records the static dielectric it applied and the response
+dielectric PySCF actually used, which is 1.78 for every solvent in this
+build; a toluene fixture shows the divergence instead of hiding it
+behind water. The ``opt`` stage carrying ``excited_state_root``
+optimises on root *k* of that manifold with the analytic TDA/TDDFT
+gradient, gas phase only (the solvated gradient is not implemented
+upstream), reading the per-root flags directly because PySCF 2.14's
+scanner property is off by one and raises when the followed root is the
+last requested; it re-converges the SCF and re-evaluates the spectrum at
+the reached geometry so every quantity belongs to one structure, and
+records the followed root's gap to the ground state and to its neighbour
+there. A followed root that PySCF's filter drops ends the node typed
+rather than switching roots. Those gaps and counts are neutral sensor
+facts in the run outcome with no threshold behind them: a 0.1 eV
+degeneracy policy was in the plan and withdrawn under independent
+review, because nobody here derived the number; a water root that ended
+degenerate with its neighbour to 3e-6 eV is the case the number exists
+for, and the session, not the host, says what it means. No Hessian
+exists for that minimum here, so the delivered geometry is worded
+uncharacterised. ``mp2``, ``ccsd`` and ``ccsd(t)`` are ``ab_initio``
+values on an HF reference, as ORCA's settings already spell them:
+energies for all three, analytic gradients for MP2 and CCSD (the CCSD(T)
+gradient exists upstream and is refused as unaudited, never called
+absent), no Hessian, and no density fitting or solvent this round.
+``reference_energy`` and ``correlation_energy`` are the program's own
+components, ``correlation_energy`` meaning the final method's whole
+correlation with the triples included, as the ORCA reader already means
+it, with ``ccsd_correlation_energy`` and ``triples_correction`` beside.
+PySCF correlates every electron unless ``frozen_core`` says otherwise,
+where ORCA and Gaussian freeze the core by default; the choice is the
+scientist's, ``auto`` names PySCF's own chemical-core rule, the artifact
+records the count applied, the level line displays it, and the
+crossprogram guide's first placed rule says so: on water, ORCA's default
+MP2 correlation reproduces PySCF's ``frozen_core: 1`` to 5e-8 Eh and
+differs from the all-electron default by 2.4e-3 Eh.
+
+Two words join the terminal vocabulary,
+``failed_nonconverged_excited_state`` and
+``failed_nonconverged_correlation``, derived from the artifact's own
+stage flags, because an unconverged Davidson root or amplitude set sits
+on an SCF that did converge and ``failed_nonconverged_scf`` would be
+false for a real run; each is repairable and its menu names the public
+control that answers it, ``td_max_cycle`` and ``cc_max_cycle``, project
+keys the artifact records. The unconverged fixtures were generated
+through the CLI with those controls, so the route the menu names is a
+route that exists.
+
+A structural state identifies a geometry, not a density. An excited-root
+or correlated artifact carries the reference's dipole, populations,
+orbital energies and spin expectation beside a total energy that is not
+the reference's, and every hash, unit and geometry check passes while a
+session reads "the S1 dipole" off a ground-state number. So a second
+declaration axis stands beside the structural state: each reader
+declares, per selector, whether a value belongs to the ``reference``, an
+``excited_root``, the ``correlated`` method, or the surface the job
+computed on, resolved per artifact; PySCF and ORCA's ``td`` both declare
+it, ``inspect_run`` lists the resolved word beside the structural state
+and the level the artifact's own record names (method, basis, the
+frozen-core count applied, the response and the followed root), and the
+extraction receipt carries it inside its digest -- present only where a
+reader declares the axis, so every receipt minted before it verifies
+unchanged. ``energy`` is the surface the job computed on, ORCA's "FINAL
+SINGLE POINT ENERGY" semantics: the reference for a spectrum, the
+followed root's total for an excited-root optimisation, the correlated
+total otherwise; ``scf_energy`` names the reference.
+
+An excited minimum is a structure producer through the same handoff
+every optimisation uses, and the archived chain shows it over real
+bytes: the reached geometry of the formaldehyde S1 optimisation, written
+by the host's own reached-geometry route, was the input of a response
+run whose first root equals the gap the producer recorded at its end,
+3.052 eV -- the emission energy read where the excited surface reached,
+on a reference energy the two runs agree on to 3e-12 Eh. Every
+declaration is exercised on eighteen new real fixtures with PySCF's own
+recomputation beside them and on two ORCA differentials at matched
+conventions, and the applied-spec vocabulary is versioned per contract,
+because extending one tuple would have changed the provenance digest of
+every archived v4 artifact and turned nine real fixtures red. What is
+not claimed: CCSD(T) optimisation, EOM-CCSD, CASSCF, PySCF scans,
+transition states and IRC (the last raises inside PySCF's own geomeTRIC
+wrapper), DF-MP2 gradients, solvated correlated methods, excited-state
+Hessians, and any live qualification ahead of the sealed cases that
+record it.
+
 Three losses the first sealed PySCF goals paid for are repaired where
 they were made. The bootstrap conformance, which fake-previews every
 declared program on the workspace's own first geometry, bound charge 0
@@ -678,8 +779,9 @@ and settled in an analysis-only cycle two qualified nothing; they now
 come from every cycle the goal recorded, and from both settlements,
 because the first repair reached only the executed run's. Three more
 sentences from the re-issue. Conformance coverage is per stage: the CPU
-PySCF surface declares ``td``, whose preview refuses any reference but
-a closed-shell singlet by design, and one uncoverable stage had failed
+PySCF surface declares ``td``, whose preview then refused any reference
+but a closed-shell singlet (it now previews an open-shell reference in
+the unrestricted manifold), and one uncoverable stage had failed
 the whole engine, so a radical workspace stayed reference-only after
 the probe's own state was repaired; a stage that cannot preview this
 molecule is now the gap the receipt reports, never a failure of the
@@ -700,9 +802,10 @@ answered through the merged plane on those live results, serving method,
 basis, energies, orbital energies, the spin diagnostic and per-atom
 Mulliken charges that close on each record's own formal charge; a
 frequency selector is served for ``hess`` and refused for ``sp`` by the
-job type detected from the stored spec. What the merge does not claim is
-any new execution surface: PySCF ``sp/opt/hess`` was already
-release-qualified and remains exactly that.
+job type detected from the stored spec. What the merge itself claimed
+was no new execution surface: PySCF ``sp/opt/hess`` was already
+release-qualified, and the response and correlated stages described
+above came in a later round on top of it.
 
 The first charged, open-shell xTB runs under the Agent found a defect
 the merge had carried: the xTB result audit merged the project's
@@ -747,8 +850,10 @@ Gaussian ``sp/opt/ts/irc/td/link/scan/modred`` is supported for project YAML,
 native-input generation, safe preview, and parsing of user-supplied completed
 results; this release does not claim Gaussian Agent execution. GPU4PySCF
 ``sp/opt/hess`` is a PySCF-engine configuration and preview surface, not a
-release-qualified Agent execution path. PySCF CPU ``td`` is likewise
-preview-only. ORCA ``neb`` may be planned and previewed, but requires
+release-qualified Agent execution path; PySCF CPU ``td``, excited-root
+``opt`` and the correlated methods are executable and fixture-qualified,
+and are claimed as completed Agent execution only from the sealed cases
+that ran them. ORCA ``neb`` may be planned and previewed, but requires
 target-specific qualification before it is described as completed execution.
 NCIPLOT and additional human CLI families without an Agent declaration remain
 outside the version-3.1.4 Agent execution surface.

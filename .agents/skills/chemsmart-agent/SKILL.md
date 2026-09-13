@@ -96,7 +96,8 @@ refuses a selector whose meaning was never audited for that job type.
 Excitation energies come back in hartree there and in electronvolts from
 the log-parsing programs; the reader states its own native unit and the
 arithmetic is canonical either way, so never convert one yourself.
-PySCF ``td`` is a preview surface and declares nothing.
+PySCF ``td`` is executable and declares the SCF set beside the excitation
+set; a second declaration axis says whose density each value is.
 
 A geometry may cross programs -- an xTB optimisation feeding an ORCA or
 PySCF single point is the ordinary multi-program protocol, and the
@@ -150,7 +151,9 @@ visible.
   constrained optimisation (``modred``) as preview paths until the selected
   target is qualified.
 - PySCF CPU ``sp/opt/hess`` and xTB CPU ``sp/opt/hess`` have approved real
-  execution paths. PySCF CPU ``td`` is preview-only.
+  execution paths. PySCF CPU ``td``, excited-root ``opt``
+  and the ``mp2``, ``ccsd`` and ``ccsd(t)`` methods are executable and
+  fixture-qualified, claimed as completed execution only from sealed cases.
 - GPU4PySCF ``sp/opt/hess`` is a PySCF-engine configuration and preview
   surface until a compatible GPU target is qualified. NCIPLOT and other human
   CLI families without an Agent declaration are not Agent execution paths.

@@ -20,6 +20,13 @@ opt:
   opt_solver: geometric
   opt_maxsteps: 100
 td:
+  # td runs on the CPU engine: response_method tda|tddft; state_manifold
+  # singlet|triplet on a closed shell, unrestricted on an open shell;
+  # td_max_cycle caps the Davidson solver (PySCF default 100). An opt section
+  # may add excited_state_root (<= nstates) with the same three response
+  # fields to optimise on that root; an sp/opt section may name
+  # ab_initio: mp2|ccsd|ccsd(t) with frozen_core (count or auto; omitted
+  # correlates every electron) and cc_max_cycle (PySCF default 50).
   functional: b3lyp
   basis: def2-svp
   freq: false
