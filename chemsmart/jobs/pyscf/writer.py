@@ -1032,7 +1032,9 @@ def _run_td(config, mf, results, status, runtime):
     converged = _root_convergence(td)
     manifold = str(config["state_manifold"]).strip().lower()
     results["excitation_energies"] = excitations
-    results["excited_state_converged"] = converged
+    # Physical arrays are integer or floating in this contract; the
+    # per-root flags travel as 0/1 and the reader restores the booleans.
+    results["excited_state_converged"] = converged.astype(int)
     if manifold in ("singlet", "triplet"):
         results["excited_state_multiplicities"] = np.full(
             obtained, 1 if manifold == "singlet" else 3, dtype=int

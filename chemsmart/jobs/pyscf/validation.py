@@ -1616,7 +1616,10 @@ def _expected_reference_family(spec, *, symbols, charge, multiplicity):
     if xc is not None:
         return ("rks" if spin == 0 else "uks"), electron_count == 1
     method = str(spec.get("method") or spec.get("ab_initio") or "").lower()
-    if method != "hf":
+    # Every ab initio method -- HF and the correlated methods computed on
+    # an HF reference -- runs the same mean field; only the family of that
+    # reference is a runtime fact to check.
+    if method not in PYSCF_AB_INITIO_METHODS:
         return None, electron_count == 1
     if spin == 0:
         return "rhf", electron_count == 1
