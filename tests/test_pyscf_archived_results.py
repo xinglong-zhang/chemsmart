@@ -68,6 +68,7 @@ CASES = {
         "formaldehyde_s1_opt_planar_gas_phase.h5",
     ),
     "water_s1_opt_degenerate": ("opt", "water_s1_opt_degenerate_gas_phase.h5"),
+    "formaldehyde_s1_td": ("td", "formaldehyde_s1_td_gas_phase.h5"),
     "water_mp2_sp": ("sp", "water_mp2_sp_gas_phase.h5"),
     "water_mp2_sp_fc1": ("sp", "water_mp2_sp_fc1_gas_phase.h5"),
     "water_ccsd_sp": ("sp", "water_ccsd_sp_gas_phase.h5"),
@@ -94,6 +95,7 @@ GREEN = {
     "formaldehyde_s1_opt",
     "formaldehyde_s1_opt_planar",
     "water_s1_opt_degenerate",
+    "formaldehyde_s1_td",
     "water_mp2_sp",
     "water_mp2_sp_fc1",
     "water_ccsd_sp",
@@ -108,6 +110,7 @@ TD_CASES = (
     "water_td_rpa",
     "hydroxyl_td_unrestricted",
     "water_td_cpcm_toluene",
+    "formaldehyde_s1_td",
 )
 EXCITED_OPT_CASES = (
     "formaldehyde_s1_opt",
@@ -744,6 +747,192 @@ def test_the_orca_tda_differential_agrees_within_the_measured_band():
     for (orca_ev, orca_f), ev, f in zip(orca, pyscf_ev, pyscf_f):
         assert abs(orca_ev - ev) < 2e-3, (orca_ev, ev)
         assert abs(orca_f - f) < 1e-3, (orca_f, f)
+
+
+# ----------------------------------------------------------------------
+# an excited minimum is a structure producer: its reached geometry feeds
+# a response consumer through the handoff every optimisation uses
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.capability("selector:pyscf:opt:reached_positions")
+@pytest.mark.capability("selector:pyscf:td:excitation_energies")
+def test_an_excited_minimum_hands_its_geometry_to_a_response_consumer(
+    tmp_path,
+):
+    """``formaldehyde_s1_td`` is a real run on the XYZ the host's own
+    reached-geometry route wrote from ``formaldehyde_s1_opt``.  The
+    validated handoff materialises that geometry from the producer's
+    bytes under the identity gate; the consumer computed at it and holds
+    to it; and its first root is the gap the producer recorded at its
+    end -- the emission energy, read where the excited surface reached,
+    on a reference energy the two runs agree on to the last digit."""
+
+    from chemsmart.agent.execution import (
+        build_program_execution_invocation,
+        build_program_execution_receipt,
+        handoff_optimized_pyscf_geometry,
+    )
+    from tests.agent.test_program_execution import _artifact as _bound_artifact
+    from tests.agent.test_program_execution import (
+        _test_approval,
+        _test_resources,
+    )
+
+    approval = _test_approval(tmp_path)
+    opt_node = approval.node("opt-initial")
+    invocation = build_program_execution_invocation(
+        node_id=opt_node.node_id,
+        approval=approval,
+        project_artifact=_bound_artifact(
+            tmp_path / "water-pyscf.yaml",
+            artifact_id="project.water.pyscf",
+            kind="project_yaml",
+        ),
+        input_artifact=_bound_artifact(
+            tmp_path / "water.xyz",
+            artifact_id="geometry.water.initial",
+            kind="geometry_xyz",
+        ),
+        scientific_identity_sha256=opt_node.scientific_identity_sha256,
+        environment_receipt_sha256="b" * 64,
+        resources=_test_resources(),
+        argv=("chemsmart", "run", "pyscf", "opt"),
+    )
+    producer = _artifact("formaldehyde_s1_opt", artifact_id="result.s1.hdf5")
+    receipt = build_program_execution_receipt(
+        invocation,
+        execution_state="validated",
+        exit_status=0,
+        engine_complete=True,
+        validated=True,
+        output_artifacts=(producer,),
+        validator_receipt_sha256s=("e" * 64,),
+        result_validation_receipt_sha256="e" * 64,
+        started_at="2026-09-13T00:00:00+00:00",
+        finished_at="2026-09-13T00:00:01+00:00",
+    )
+    start = FIXTURES / "inputs" / "formaldehyde_bent_start.xyz"
+    supplied = TrustedArtifactRefV1(
+        artifact_id="geometry.h2co.start",
+        kind="geometry_xyz",
+        sha256=file_sha256(start),
+        size_bytes=start.stat().st_size,
+        path=str(start),
+        cli_value=str(start),
+    )
+    geometry, handoff = handoff_optimized_pyscf_geometry(
+        producer_receipt=receipt,
+        result_artifact=producer,
+        producer_edge=approval.producer_edges[0],
+        approved_workspace=tmp_path,
+        geometry_artifact_id="geometry.h2co.s1",
+        expected_charge=0,
+        expected_multiplicity=1,
+        input_artifact=supplied,
+    )
+    assert handoff.status == "validated_handoff"
+    assert handoff.symbols == ("C", "O", "H", "H")
+    text = Path(geometry.path).read_text(encoding="utf-8")
+    assert "source_sha256=" + producer.sha256 in text
+    carried = np.asarray(
+        [
+            [float(v) for v in line.split()[1:4]]
+            for line in text.splitlines()[2:6]
+        ]
+    )
+
+    reader = reader_for("pyscf")
+    opt = _open("formaldehyde_s1_opt")
+    td = _open("formaldehyde_s1_td")
+    assert np.allclose(carried, np.asarray(opt.positions), atol=1e-9)
+    assert np.allclose(np.asarray(td.supplied_positions), carried, atol=1e-9)
+    assert np.allclose(
+        np.asarray(td.positions), np.asarray(td.supplied_positions), atol=1e-12
+    ), "a response stage holds to the geometry it was handed"
+    emission_ev = td.excitation_energies[0] * HARTREE_TO_EV
+    end_gap_ev = opt.excited_state_record["root_gap_to_ground_end_ev"]
+    # Two independent response solves at one geometry -- the producer's
+    # from the optimiser's own density, the consumer's from scratch --
+    # agree to 7e-6 eV (2.5e-7 Eh), measured; the band is ten times that.
+    assert abs(emission_ev - end_gap_ev) < 1e-4, (emission_ev, end_gap_ev)
+    assert abs(td.scf_energy - opt.scf_energy) < 1e-9
+    root_total = td.scf_energy + td.excitation_energies[0]
+    assert abs(root_total - opt.total_energy) < 1e-4 / HARTREE_TO_EV, (
+        "the producer's total is the root's total; the consumer's is the "
+        "reference's, and the root's total is rebuilt from it"
+    )
+    assert reader.electronic_provenance_for_output(opt, "energy") == (
+        "excited_root"
+    )
+    assert reader.electronic_provenance_for_output(td, "energy") == "reference"
+
+
+@pytest.mark.capability("tool:bind_reached_geometry")
+def test_the_reached_geometry_of_an_excited_minimum_is_what_its_consumer_ran_on(
+    tmp_path,
+):
+    artifact = _artifact("formaldehyde_s1_opt")
+    geometry, receipt = build_reached_geometry(
+        approved_workspace=tmp_path,
+        reached_artifact_id="reached-s1",
+        result_artifact=artifact,
+        program="pyscf",
+    )
+    assert receipt.normal_termination is True
+    archived = FIXTURES / "inputs" / "formaldehyde_s1_reached.xyz"
+    assert (
+        Path(geometry.path).read_text().splitlines()[2:]
+        == archived.read_text().splitlines()[2:]
+    ), "the archived consumer input is this route's own output"
+
+
+# ----------------------------------------------------------------------
+# the level a result computed at is read from its own record
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.capability("tool:inspect_run")
+def test_the_level_names_the_convention_and_the_root():
+    """Method and basis alone do not name a level: a correlated result's
+    frozen-core count and an excited-surface result's response, manifold
+    and followed root are what make two results at one functional and one
+    basis different calculations, and the inspection reply says so from
+    the artifact rather than from a project the session may not hold."""
+
+    reader = reader_for("pyscf")
+    assert reader.level_for_output(_open("water_sp")) == {
+        "functional": "b3lyp",
+        "basis": "def2-svp",
+    }
+    assert reader.level_for_output(_open("water_mp2_sp")) == {
+        "ab_initio": "mp2",
+        "basis": "def2-svp",
+        "frozen_core": 0,
+    }, "PySCF's all-electron default is a level, never an absence"
+    assert reader.level_for_output(_open("water_ccsdt_sp")) == {
+        "ab_initio": "ccsd(t)",
+        "basis": "def2-svp",
+        "frozen_core": 1,
+    }, "'auto' is displayed as the count it applied"
+    assert reader.level_for_output(_open("water_td_cpcm_toluene")) == {
+        "functional": "b3lyp",
+        "basis": "def2-svp",
+        "solvent_model": "cpcm",
+        "solvent": "toluene",
+        "response_method": "tda",
+        "state_manifold": "singlet",
+        "nstates": 3,
+    }
+    assert reader.level_for_output(_open("formaldehyde_s1_opt")) == {
+        "functional": "b3lyp",
+        "basis": "def2-svp",
+        "response_method": "tda",
+        "state_manifold": "singlet",
+        "nstates": 1,
+        "excited_state_root": 1,
+    }
+    assert reader_for("orca").level_for_output(object()) == {}
 
 
 # ----------------------------------------------------------------------
