@@ -59,15 +59,36 @@ def _artifacts(case: str, label: str) -> tuple[TrustedArtifactRefV1, ...]:
 
 
 def _evaluate(
-    case: str, label: str, *, jobtype: str, charge=0, multiplicity=1
+    case: str,
+    label: str,
+    *,
+    jobtype: str,
+    charge=0,
+    multiplicity=1,
+    expected_input=None,
 ):
     return CommandCompiledToolHostV1._evaluate_execution_outputs(
         program="pyscf",
         jobtype=jobtype,
         charge=charge,
         multiplicity=multiplicity,
+        expected_input_artifact=expected_input,
         output_artifacts=_artifacts(case, label),
         exit_status=0,
+    )
+
+
+def _input(name: str) -> TrustedArtifactRefV1:
+    """The geometry an archived run was handed, typed as the executor types it."""
+
+    path = FIXTURES / "inputs" / name
+    return TrustedArtifactRefV1(
+        artifact_id=f"geometry.{name}",
+        kind="geometry_xyz",
+        sha256=file_sha256(path),
+        size_bytes=path.stat().st_size,
+        path=str(path),
+        cli_value=str(path),
     )
 
 
@@ -258,3 +279,54 @@ def test_a_spectrum_reports_its_lowest_root_and_the_filter_count():
         "water_opt", "water_opt_gas_phase", jobtype="opt"
     ).observations["pyscf"]
     assert not [key for key in ground if key.startswith("excited_state")]
+
+
+# ----------------------------------------------------------------------
+# a fixed-geometry result is held to the geometry it was handed, and the
+# host hands it over for every job type the validator holds
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.capability("program_jobtype:pyscf:cpu:td")
+def test_a_fixed_geometry_result_validates_against_the_geometry_it_was_handed():
+    """The validator holds sp, hess and td to the geometry they were handed,
+    and the host evaluation must hand it over for every one of them. It
+    handed it over for sp and hess alone while the validator's set had
+    grown to td, so E1 of PySCF round 2 (2026-09-13) ran its response
+    stage on the carried geometry -- roots right to the digit -- and was
+    typed failed under pyscf.result.geometry_invalid with an expected
+    geometry of shape None. One set, the validator's, for both organs."""
+
+    from chemsmart.jobs.pyscf.validation import FIXED_GEOMETRY_JOBTYPES
+
+    assert FIXED_GEOMETRY_JOBTYPES == {"sp", "hess", "td"}
+    for case, label, jobtype, name in (
+        (
+            "water_td_singlet",
+            "water_td_singlet_gas_phase",
+            "td",
+            "water_relaxed.xyz",
+        ),
+        (
+            "formaldehyde_s1_td",
+            "formaldehyde_s1_td_gas_phase",
+            "td",
+            "formaldehyde_s1_reached.xyz",
+        ),
+        ("water_sp", "water_sp_gas_phase", "sp", "water_distorted.xyz"),
+    ):
+        evaluation = _evaluate(
+            case, label, jobtype=jobtype, expected_input=_input(name)
+        )
+        assert evaluation.validated is True, (case, evaluation.findings)
+        assert "pyscf.result.geometry_invalid" not in evaluation.findings
+    # And the rule still bites when the geometry handed over is not the
+    # one the result ran on.
+    wrong = _evaluate(
+        "water_td_singlet",
+        "water_td_singlet_gas_phase",
+        jobtype="td",
+        expected_input=_input("water_distorted.xyz"),
+    )
+    assert wrong.validated is False
+    assert "pyscf.result.geometry_invalid" in wrong.findings

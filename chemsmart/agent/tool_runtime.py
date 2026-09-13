@@ -14677,6 +14677,7 @@ class CommandCompiledToolHostV1:
                     )
                     from chemsmart.io.pyscf.output import read_pyscf_h5
                     from chemsmart.jobs.pyscf.validation import (
+                        FIXED_GEOMETRY_JOBTYPES,
                         validate_pyscf_result,
                     )
 
@@ -14714,9 +14715,16 @@ class CommandCompiledToolHostV1:
                         expected_charge=charge,
                         expected_multiplicity=multiplicity,
                         expected_symbols=expected_symbols,
+                        # The validator holds a fixed-geometry job type
+                        # to the geometry it was handed; which job types
+                        # those are is the validator's own set, never a
+                        # second list here: this list read {"sp", "hess"}
+                        # while the validator's had grown to td, and E1 of
+                        # PySCF round 2 was typed failed on roots that were
+                        # right to the digit (2026-09-13).
                         expected_positions=(
                             expected_positions
-                            if jobtype in {"sp", "hess"}
+                            if jobtype in FIXED_GEOMETRY_JOBTYPES
                             else None
                         ),
                         expected_receipt=expected_receipt,

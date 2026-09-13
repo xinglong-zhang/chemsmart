@@ -174,6 +174,13 @@ _LINEARITY_RELATIVE_TOLERANCE = 1.0e-4
 _HESSIAN_SYMMETRY_RTOL = 2.0e-5
 _HESSIAN_SYMMETRY_ATOL = 1.0e-7
 _FIXED_GEOMETRY_ATOL_ANGSTROM = 1.0e-8
+#: The job types held to the geometry they were handed: supplied and final
+#: coincide by construction and the validator checks it. One authority for
+#: every organ that must supply the expected geometry -- the host evaluation
+#: once passed it for sp and hess alone while this set had grown to td, so
+#: every td under the goal driver failed geometry_invalid with an expected
+#: geometry of shape None (PySCF round 2 E1, 2026-09-13).
+FIXED_GEOMETRY_JOBTYPES = frozenset({"sp", "hess", "td"})
 _OCCUPATION_ATOL = 1.0e-7
 _SPIN_DIAGNOSTIC_NUMERICAL_ATOL = 1.0e-7
 # Independent CODATA-2018 SI constants.  The child uses PySCF's constants;
@@ -1816,7 +1823,7 @@ def validate_pyscf_result(
         },
     }
     geometry_observation = {
-        "fixed_geometry_required": jobtype in {"sp", "hess", "td"},
+        "fixed_geometry_required": jobtype in FIXED_GEOMETRY_JOBTYPES,
         "unit": "Angstrom",
         "absolute_tolerance_angstrom": _FIXED_GEOMETRY_ATOL_ANGSTROM,
         "matches_input": None,
@@ -2156,7 +2163,7 @@ def validate_pyscf_result(
                 "h5:/results/positions",
             )
         )
-    elif jobtype in {"sp", "hess", "td"}:
+    elif jobtype in FIXED_GEOMETRY_JOBTYPES:
         input_valid = bool(
             input_positions is not None
             and input_positions.shape == (len(expected_symbols), 3)
