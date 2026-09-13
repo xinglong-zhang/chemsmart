@@ -1,0 +1,10 @@
+# Differential oracle for water_mp2_sp: ORCA 6.1.1 MP2 on the same relaxed
+# water geometry with every electron correlated (NoFrozenCore), no RI --
+# PySCF's own default when frozen_core is unset.
+! RHF MP2 def2-SVP NoRI TightSCF NoFrozenCore
+%maxcore 1000
+* xyz 0 1
+O   0.083323   0.083323  -0.000000
+H   1.043716  -0.026894  -0.000000
+H  -0.026894   1.043716   0.000000
+*

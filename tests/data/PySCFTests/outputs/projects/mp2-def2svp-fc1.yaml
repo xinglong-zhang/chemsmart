@@ -1,0 +1,8 @@
+# Expansion-round fixtures: MP2 with one frozen core orbital, which on water
+# reproduces ORCA's default frozen-core MP2 correlation energy to 1e-6 Eh.
+sp:
+  ab_initio: mp2
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  frozen_core: 1

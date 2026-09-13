@@ -1,0 +1,51 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "79f98de8d971d0fd5ed44a74b516b77bc72773b1440a2e254a3fc8fc620b5c05",
+  "engine": "cpu",
+  "environment_receipt_sha256": "165080882d76b3d44271121f7eacf99c2598650b4c1b7f6e5562705d5f4577c8",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "0ac6e04abde3a7b5af056d67489c22907da68871bff2572d5c4ae0365a1918af",
+  "label": "formaldehyde_s1_opt_gas_phase",
+  "materializations": {
+    "td_response_plan": {
+      "excited_state_root": 1,
+      "execution_policy": "executable",
+      "ground_state_reference_family": "rks",
+      "ground_state_stage": "scf",
+      "max_cycle": null,
+      "nstates": 1,
+      "operation_order": [
+        "ground_state_scf",
+        "response_construct",
+        "set_singlet_channel",
+        "set_nstates",
+        "gradient_scanner_on_root",
+        "geometry_optimisation",
+        "final_scf",
+        "vertical_excitation_kernel"
+      ],
+      "receipt_sha256": "11f791a6a5dc3b7544b5cca4197648f938d86ddbcc0592bb99491283c0275fc0",
+      "response_factory_api": "pyscf.tdscf.rks.TDA",
+      "response_method": "tda",
+      "schema_version": "chemsmart.pyscf-td-response-materialization.v1",
+      "state_manifold": "singlet"
+    }
+  },
+  "project_yaml_sha256": "7ca63b645c1c8e535105b16cc8c094c9b834c8a2463b923d18694e482e127458",
+  "quarantined_targets": [],
+  "receipt_sha256": "1194075c7c37988dfedef801b9f2cbafe981d2fd6cf4398ea270034fff6c952e",
+  "requested_settings_sha256": "d09736335db9d4505d01417816d4a50eca25f8b1967024a828c67f55d3f14d99",
+  "run_id": "c57e9549-af7d-4cf8-8705-2001b86a41ac",
+  "run_nonce": "685b2539636f8fad52e647257a4b46b0355aa46bd8389eaeadb7340fe61c1085",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "formaldehyde_s1_opt_gas_phase.py",
+  "script_sha256": "f7bd05f1bc7767c6952d4cc12f70776f889f751b13c2391a53d7493f1f81d88f",
+  "stages": [
+    "scf",
+    "opt",
+    "td"
+  ],
+  "state": "previewed"
+}

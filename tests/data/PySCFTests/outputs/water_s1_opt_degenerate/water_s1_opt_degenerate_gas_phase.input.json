@@ -1,0 +1,51 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "498bc88181709aa39b2b6093a63d634601e83fd06e7c47b52fa809410353180f",
+  "engine": "cpu",
+  "environment_receipt_sha256": "8c06e3dd28ba5336e0129f2e87081212fe3b3f10b39e8388432c62d69b789095",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "930f396017160bae064cc9b44dfee018e1c1f2f81abb0f5668af272959e58483",
+  "label": "water_s1_opt_degenerate_gas_phase",
+  "materializations": {
+    "td_response_plan": {
+      "excited_state_root": 1,
+      "execution_policy": "executable",
+      "ground_state_reference_family": "rks",
+      "ground_state_stage": "scf",
+      "max_cycle": null,
+      "nstates": 3,
+      "operation_order": [
+        "ground_state_scf",
+        "response_construct",
+        "set_singlet_channel",
+        "set_nstates",
+        "gradient_scanner_on_root",
+        "geometry_optimisation",
+        "final_scf",
+        "vertical_excitation_kernel"
+      ],
+      "receipt_sha256": "a88b92778d9888d716e86c79bd95f4e07833fa99f9ef94bae961613c61e7410b",
+      "response_factory_api": "pyscf.tdscf.rks.TDA",
+      "response_method": "tda",
+      "schema_version": "chemsmart.pyscf-td-response-materialization.v1",
+      "state_manifold": "singlet"
+    }
+  },
+  "project_yaml_sha256": "fc8eb6c00f7156cde1f1c4ca99952199ef45288f212e0e267699ded18cbda246",
+  "quarantined_targets": [],
+  "receipt_sha256": "3347e70faea682e634e3d57bb6f0c549b5a4ea4286d052c25f9dccb5fa8d3169",
+  "requested_settings_sha256": "a67ecc4778a0dbaa670b23cd58005881b1adae01b429360dd23f1683fdb12017",
+  "run_id": "ab7862e6-7411-4df9-9615-6cab66b80373",
+  "run_nonce": "142bd10f092399b09513bf61bef02d556d9980a08e2601da8edfbe3479c73f9c",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "water_s1_opt_degenerate_gas_phase.py",
+  "script_sha256": "f0214472faeab6bb93ec3ca7c757c6f52bf2d1e899c4c27f2f34f77741be2496",
+  "stages": [
+    "scf",
+    "opt",
+    "td"
+  ],
+  "state": "previewed"
+}

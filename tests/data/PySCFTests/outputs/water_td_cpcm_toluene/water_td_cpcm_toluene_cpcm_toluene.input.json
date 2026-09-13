@@ -1,0 +1,47 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "310cc0e8082de35e370888d6aeb3527c6715d206a6653d8fa5fbc53c97d4a37f",
+  "engine": "cpu",
+  "environment_receipt_sha256": "34b956afb194490de9c7053c319136879f3464af2a0e74e0419076215be4235f",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "930f396017160bae064cc9b44dfee018e1c1f2f81abb0f5668af272959e58483",
+  "label": "water_td_cpcm_toluene_cpcm_toluene",
+  "materializations": {
+    "td_response_plan": {
+      "excited_state_root": null,
+      "execution_policy": "executable",
+      "ground_state_reference_family": "rks",
+      "ground_state_stage": "scf",
+      "max_cycle": null,
+      "nstates": 3,
+      "operation_order": [
+        "ground_state_scf",
+        "response_construct",
+        "set_singlet_channel",
+        "set_nstates",
+        "vertical_excitation_kernel"
+      ],
+      "receipt_sha256": "371ce6adc6738af7623ffdac8e5e0e340b709e2920b47707a39ccdb70c7d2eb8",
+      "response_factory_api": "pyscf.tdscf.rks.TDA",
+      "response_method": "tda",
+      "schema_version": "chemsmart.pyscf-td-response-materialization.v1",
+      "state_manifold": "singlet"
+    }
+  },
+  "project_yaml_sha256": "f1388afac7f18dcaa68550e0e794f8d507da5cc8c920ce28db21f8ccee6e70e7",
+  "quarantined_targets": [],
+  "receipt_sha256": "63a4e8719be0401fb350e8ed6dfbdf8a5cb3b0b2e73c4acadacee31994e2b34f",
+  "requested_settings_sha256": "c078e2df472727a1ade1459ced07ce6d04772f96f298b23fcba87e47957b0c74",
+  "run_id": "b816416a-4eb3-45cd-9474-62817c53c3df",
+  "run_nonce": "a0cb5a318c78fe8d2cd5b84b888c395ccf89b23010b526a8930bf8f6c05b4ca5",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "water_td_cpcm_toluene_cpcm_toluene.py",
+  "script_sha256": "7f5b90e04f8bb09fa0668fd927203e6044d0cd9bfe973b746e12aa35b780073d",
+  "stages": [
+    "scf",
+    "td"
+  ],
+  "state": "previewed"
+}

@@ -1,0 +1,12 @@
+# Expansion-round fixtures: optimise on root 1 of the TDA singlet manifold
+# (three roots requested, so the neighbour gap exists at the reached geometry).
+opt:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  response_method: tda
+  state_manifold: singlet
+  nstates: 3
+  excited_state_root: 1
+  opt_solver: geometric
+  opt_maxsteps: 100

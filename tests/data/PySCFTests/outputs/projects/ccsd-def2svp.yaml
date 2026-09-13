@@ -1,0 +1,6 @@
+# Expansion-round fixtures: CCSD on an HF reference, every electron correlated.
+sp:
+  ab_initio: ccsd
+  basis: def2-svp
+  freq: false
+  density_fit: false

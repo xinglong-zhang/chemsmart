@@ -1,0 +1,53 @@
+{
+ "artifact": "water_td_cpcm_toluene_cpcm_toluene.h5",
+ "command": "reference.py water_td_cpcm_toluene_cpcm_toluene.h5",
+ "jobtype": "td",
+ "masses_isotope_averaged_amu": [
+  15.999,
+  1.008,
+  1.008
+ ],
+ "point_group_detect_symm": "C2v",
+ "pyscf_version": "2.14.0",
+ "scf_converged": true,
+ "scf_energy_eh": -76.36354411569702,
+ "stored_excitations_match_recomputed_max_abs_eh": 8.659739592076221e-15,
+ "symm_geom_tol_bohr": 1e-05,
+ "td_converged_per_root": [
+  true,
+  true,
+  true
+ ],
+ "td_equilibrium_solvation": false,
+ "td_excitation_energies_eh": [
+  0.28799396284115897,
+  0.3589929051516548,
+  0.37310040867723987
+ ],
+ "td_nstates_requested": 3,
+ "td_oscillator_strengths": [
+  0.01882956711285896,
+  1.5190901719665048e-28,
+  0.09194987462747968
+ ],
+ "td_positive_eig_threshold_eh": 0.001,
+ "td_response_eps": 1.78,
+ "td_singlet_flag": true,
+ "td_transition_dipole_moments_debye": [
+  [
+   -4.492811788293174e-15,
+   1.9880889275045396e-15,
+   -0.7959876422125657
+  ],
+  [
+   4.5759016555417506e-14,
+   4.316891815674386e-14,
+   -1.196717884858314e-14
+  ],
+  [
+   -1.0927619383842302,
+   -1.0927619383842266,
+   1.479228954987815e-15
+  ]
+ ]
+}

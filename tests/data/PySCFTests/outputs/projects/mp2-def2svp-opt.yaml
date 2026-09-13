@@ -1,0 +1,9 @@
+# Expansion-round fixtures: a geometry optimisation on the MP2 surface
+# (geomeTRIC on the MP2 gradient scanner), components at the reached geometry.
+opt:
+  ab_initio: mp2
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  opt_solver: geometric
+  opt_maxsteps: 100

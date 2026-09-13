@@ -1,0 +1,15 @@
+# Differential oracle for water_td_singlet: ORCA 6.1.1 TDA on the same
+# relaxed water geometry with B3LYP/G, the VWN3 functional PySCF's b3lypg
+# names, no RI, three singlet roots. A band between the two programs is
+# measured and recorded, never scored.
+! RHF B3LYP/G def2-SVP NoRI TightSCF DefGrid3
+%maxcore 1000
+%tddft
+  nroots 3
+  tda true
+end
+* xyz 0 1
+O   0.083323   0.083323  -0.000000
+H   1.043716  -0.026894  -0.000000
+H  -0.026894   1.043716   0.000000
+*

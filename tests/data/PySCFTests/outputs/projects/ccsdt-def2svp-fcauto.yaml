@@ -1,0 +1,8 @@
+# Expansion-round fixtures: CCSD(T) with PySCF's chemical-core rule
+# (frozen_core: auto), so the artifact records the count it applied.
+sp:
+  ab_initio: ccsd(t)
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  frozen_core: auto

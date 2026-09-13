@@ -1,0 +1,9 @@
+# Expansion-round fixtures: full TDDFT (RPA) singlet excitations; the roots
+# differ from the TDA fixture on the same reference, and both are ascending.
+td:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  response_method: tddft
+  state_manifold: singlet
+  nstates: 3

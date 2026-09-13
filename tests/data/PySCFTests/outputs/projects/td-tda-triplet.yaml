@@ -1,0 +1,8 @@
+# Expansion-round fixtures: TDA triplet excitations on a closed-shell KS reference.
+td:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  response_method: tda
+  state_manifold: triplet
+  nstates: 3

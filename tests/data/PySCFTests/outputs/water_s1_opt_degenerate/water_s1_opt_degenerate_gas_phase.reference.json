@@ -1,0 +1,52 @@
+{
+ "artifact": "water_s1_opt_degenerate_gas_phase.h5",
+ "command": "reference.py water_s1_opt_degenerate_gas_phase.h5",
+ "followed_root_total_energy_eh": -76.10456466966399,
+ "jobtype": "opt",
+ "masses_isotope_averaged_amu": [
+  15.999,
+  1.008,
+  1.008
+ ],
+ "point_group_detect_symm": "Coov",
+ "pyscf_version": "2.14.0",
+ "scf_converged": true,
+ "scf_energy_eh": -76.20221921191937,
+ "stored_excitations_match_recomputed_max_abs_eh": 2.9109347063349666e-07,
+ "symm_geom_tol_bohr": 1e-05,
+ "td_converged_per_root": [
+  true,
+  true,
+  true
+ ],
+ "td_excitation_energies_eh": [
+  0.09765454225538711,
+  0.09765464937482357,
+  0.23213276407702607
+ ],
+ "td_nstates_requested": 3,
+ "td_oscillator_strengths": [
+  0.0001544990872258413,
+  0.0001544987505877228,
+  1.923418080936464e-09
+ ],
+ "td_positive_eig_threshold_eh": 0.001,
+ "td_singlet_flag": true,
+ "td_transition_dipole_moments_debye": [
+  [
+   0.08755472446414876,
+   0.08755472467619438,
+   2.639147024111424e-12
+  ],
+  [
+   1.8658475703256217e-12,
+   1.865434256687535e-12,
+   -0.12382087612909055
+  ],
+  [
+   -0.00020035889953582027,
+   0.00020037997334313576,
+   -1.3423249860884352e-15
+  ]
+ ]
+}

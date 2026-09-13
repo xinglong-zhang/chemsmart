@@ -1,0 +1,47 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "eae1ae41feacacceafa753eb5b1c1c91817f3877954ecda05952f1b5ccf644f8",
+  "engine": "cpu",
+  "environment_receipt_sha256": "f775e1ddf757e44bf11835c8f5399192bee386bfb539cbf8fef14cd77aa32ae6",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "930f396017160bae064cc9b44dfee018e1c1f2f81abb0f5668af272959e58483",
+  "label": "water_td_triplet_gas_phase",
+  "materializations": {
+    "td_response_plan": {
+      "excited_state_root": null,
+      "execution_policy": "executable",
+      "ground_state_reference_family": "rks",
+      "ground_state_stage": "scf",
+      "max_cycle": null,
+      "nstates": 3,
+      "operation_order": [
+        "ground_state_scf",
+        "response_construct",
+        "set_triplet_channel",
+        "set_nstates",
+        "vertical_excitation_kernel"
+      ],
+      "receipt_sha256": "47706753af9f2eaae81f33d6875d2c40a639b51033530c6d2d1ccda6e68667ec",
+      "response_factory_api": "pyscf.tdscf.rks.TDA",
+      "response_method": "tda",
+      "schema_version": "chemsmart.pyscf-td-response-materialization.v1",
+      "state_manifold": "triplet"
+    }
+  },
+  "project_yaml_sha256": "24afd84b901ab84d8f44b1bee169b50185d7de72b3d0678aa3a843ad75170d84",
+  "quarantined_targets": [],
+  "receipt_sha256": "7f46cd5baf2320ca8a1fb8f4eb04a735ffc662e8e800ad94e975a17bc89caac2",
+  "requested_settings_sha256": "97e9d796b87bf761a20aaea3ad5fee1ad7a829912f10978cc4304be3af12b187",
+  "run_id": "df50d759-f0fd-4bad-addf-0cddafcf7a49",
+  "run_nonce": "c23cfac15f1cd329ecf354055f640bd886ae437e4de204264517ade4c7728270",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "water_td_triplet_gas_phase.py",
+  "script_sha256": "f9408046b95ccb2956e515e5a1294491bf72c3751f53e6127382d184f6eba641",
+  "stages": [
+    "scf",
+    "td"
+  ],
+  "state": "previewed"
+}

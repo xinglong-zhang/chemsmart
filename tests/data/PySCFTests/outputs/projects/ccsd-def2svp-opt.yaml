@@ -1,0 +1,10 @@
+# Expansion-round fixtures: a geometry optimisation on the CCSD surface
+# (geomeTRIC on the CCSD gradient scanner, amplitudes and lambda equations
+# solved at every geometry), components at the reached geometry.
+opt:
+  ab_initio: ccsd
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  opt_solver: geometric
+  opt_maxsteps: 100

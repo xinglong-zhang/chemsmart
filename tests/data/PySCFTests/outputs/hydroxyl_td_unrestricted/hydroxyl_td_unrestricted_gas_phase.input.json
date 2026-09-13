@@ -1,0 +1,46 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "5e3f72fbd19d27279cbb71cd3405935652605bd31f7a5f2c4bc86df3617635e7",
+  "engine": "cpu",
+  "environment_receipt_sha256": "5006fab23c07507c542bdb96665aad39c472b296bdf199453fbba8801ac4d219",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "03d1e11305522108e746fb97b60c978a807e08531cc0e02846416afe33545703",
+  "label": "hydroxyl_td_unrestricted_gas_phase",
+  "materializations": {
+    "td_response_plan": {
+      "excited_state_root": null,
+      "execution_policy": "executable",
+      "ground_state_reference_family": "uks",
+      "ground_state_stage": "scf",
+      "max_cycle": null,
+      "nstates": 3,
+      "operation_order": [
+        "ground_state_scf",
+        "response_construct",
+        "set_nstates",
+        "vertical_excitation_kernel"
+      ],
+      "receipt_sha256": "8604a6bca599789771c5fc028bf196b554940deb2925d9e9ebf096236994ae3c",
+      "response_factory_api": "pyscf.tdscf.uks.TDA",
+      "response_method": "tda",
+      "schema_version": "chemsmart.pyscf-td-response-materialization.v1",
+      "state_manifold": "unrestricted"
+    }
+  },
+  "project_yaml_sha256": "ebb530f4728be857320665978635095afe98279ac9c22ee458e8f87dab6330bf",
+  "quarantined_targets": [],
+  "receipt_sha256": "bd486f30ce34bf082c5fee5cab6c4af1398b2e2696aef9bfa7070fd3c2c0e488",
+  "requested_settings_sha256": "a84bcc6b5e28dd6cb6309dbd5e6552ed307f956c02ef0fb27a430b736362cee9",
+  "run_id": "fa61876e-419f-43d3-b934-e9d334108fc9",
+  "run_nonce": "2d3a4074040efecee5479fc28a610ca2e495ae8e7889dc20c45874e878186eb9",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "hydroxyl_td_unrestricted_gas_phase.py",
+  "script_sha256": "8b755eaaa95b7a0647b28012f76780ed57c87beb85d0249afa91f590bde441a7",
+  "stages": [
+    "scf",
+    "td"
+  ],
+  "state": "previewed"
+}

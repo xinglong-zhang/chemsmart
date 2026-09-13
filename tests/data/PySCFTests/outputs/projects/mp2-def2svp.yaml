@@ -1,0 +1,7 @@
+# Expansion-round fixtures: MP2 on an HF reference, PySCF's own default
+# (every electron correlated; frozen_core unset).
+sp:
+  ab_initio: mp2
+  basis: def2-svp
+  freq: false
+  density_fit: false

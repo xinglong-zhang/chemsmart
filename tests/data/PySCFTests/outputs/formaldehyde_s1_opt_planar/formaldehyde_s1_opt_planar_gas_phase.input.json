@@ -1,0 +1,51 @@
+{
+  "compute_interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
+  "config_sha256": "451215afb66b20bbb283acd0ee6eecb48b771f27d78c7ea7f30554b9cd24acd1",
+  "engine": "cpu",
+  "environment_receipt_sha256": "bbd3adf9df2a8d086fa5290bb6bb49987888cfe97a191cb511b89c039283a61d",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
+  "input_geometry_sha256": "05a77aaddee4f0c5c174c23361342974eefbae7753e2cab7a00de4548ce95344",
+  "label": "formaldehyde_s1_opt_planar_gas_phase",
+  "materializations": {
+    "td_response_plan": {
+      "excited_state_root": 1,
+      "execution_policy": "executable",
+      "ground_state_reference_family": "rks",
+      "ground_state_stage": "scf",
+      "max_cycle": null,
+      "nstates": 3,
+      "operation_order": [
+        "ground_state_scf",
+        "response_construct",
+        "set_singlet_channel",
+        "set_nstates",
+        "gradient_scanner_on_root",
+        "geometry_optimisation",
+        "final_scf",
+        "vertical_excitation_kernel"
+      ],
+      "receipt_sha256": "a88b92778d9888d716e86c79bd95f4e07833fa99f9ef94bae961613c61e7410b",
+      "response_factory_api": "pyscf.tdscf.rks.TDA",
+      "response_method": "tda",
+      "schema_version": "chemsmart.pyscf-td-response-materialization.v1",
+      "state_manifold": "singlet"
+    }
+  },
+  "project_yaml_sha256": "fc8eb6c00f7156cde1f1c4ca99952199ef45288f212e0e267699ded18cbda246",
+  "quarantined_targets": [],
+  "receipt_sha256": "6c0e7b6996792726d50565d13e8705a2a257a339728515b6d2420535d30c88d4",
+  "requested_settings_sha256": "8a26b56bdd15e7a09eaf24d0a801ca6b5f87ba34998ebefa00561a24af8a36ab",
+  "run_id": "bf37d694-c1e2-4ef9-9e33-c9de5fbec016",
+  "run_nonce": "fd8a39564f0166c089d5994b8289d6190d2088ca371d7d9b8e57bc898a5d916c",
+  "schema_version": "chemsmart.pyscf-input.v1",
+  "script_path": "formaldehyde_s1_opt_planar_gas_phase.py",
+  "script_sha256": "0a2c53e104764e6b609062bfe4afc7473e4585a452d5fae5201fb986565a83e1",
+  "stages": [
+    "scf",
+    "opt",
+    "td"
+  ],
+  "state": "previewed"
+}

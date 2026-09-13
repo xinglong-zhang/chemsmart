@@ -1,0 +1,51 @@
+{
+ "artifact": "water_td_triplet_gas_phase.h5",
+ "command": "reference.py water_td_triplet_gas_phase.h5",
+ "jobtype": "td",
+ "masses_isotope_averaged_amu": [
+  15.999,
+  1.008,
+  1.008
+ ],
+ "point_group_detect_symm": "C2v",
+ "pyscf_version": "2.14.0",
+ "scf_converged": true,
+ "scf_energy_eh": -76.35831622283689,
+ "stored_excitations_match_recomputed_max_abs_eh": 8.43769498715119e-15,
+ "symm_geom_tol_bohr": 1e-05,
+ "td_converged_per_root": [
+  true,
+  true,
+  true
+ ],
+ "td_excitation_energies_eh": [
+  0.25256479779595103,
+  0.3288178639404793,
+  0.3297464540849975
+ ],
+ "td_nstates_requested": 3,
+ "td_oscillator_strengths": [
+  0.0,
+  0.0,
+  0.0
+ ],
+ "td_positive_eig_threshold_eh": 0.001,
+ "td_singlet_flag": false,
+ "td_transition_dipole_moments_debye": [
+  [
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.0,
+   0.0,
+   0.0
+  ],
+  [
+   0.0,
+   0.0,
+   0.0
+  ]
+ ]
+}

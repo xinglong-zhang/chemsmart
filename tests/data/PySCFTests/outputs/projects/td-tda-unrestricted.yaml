@@ -1,0 +1,9 @@
+# Expansion-round fixtures: TDA on an open-shell (UKS) reference has one
+# spin-conserving manifold; PySCF prints no per-root <S^2> for it.
+td:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  response_method: tda
+  state_manifold: unrestricted
+  nstates: 3

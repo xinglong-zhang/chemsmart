@@ -1,0 +1,11 @@
+# Differential oracle for water_mp2_sp_fc1: ORCA 6.1.1 MP2 on the same
+# relaxed water geometry with ORCA's default frozen core, no RI. Its MP2
+# correlation energy is PySCF's frozen_core: 1 value, not the all-electron
+# default; the divergence is a convention the cross-program guide declares.
+! RHF MP2 def2-SVP NoRI TightSCF
+%maxcore 1000
+* xyz 0 1
+O   0.083323   0.083323  -0.000000
+H   1.043716  -0.026894  -0.000000
+H  -0.026894   1.043716   0.000000
+*

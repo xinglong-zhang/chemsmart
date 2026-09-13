@@ -1,0 +1,11 @@
+# Expansion-round fixtures: the response solver capped at one Davidson
+# iteration through the public td_max_cycle control, so at least one root
+# is unconverged and the node ends typed rather than validated.
+td:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  response_method: tda
+  state_manifold: singlet
+  nstates: 3
+  td_max_cycle: 1

@@ -1,0 +1,9 @@
+# Expansion-round fixtures: the coupled-cluster solver capped at one
+# amplitude iteration through the public cc_max_cycle control, so the
+# amplitudes do not converge and the node ends typed rather than validated.
+sp:
+  ab_initio: ccsd
+  basis: def2-svp
+  freq: false
+  density_fit: false
+  cc_max_cycle: 1

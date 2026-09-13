@@ -1,0 +1,14 @@
+# Expansion-round fixtures: optimise on root 1 with exactly one root
+# requested -- the case where PySCF 2.14's gradient-scanner `converged`
+# property raises IndexError (it indexes the per-root flags with the 1-based
+# root); the driver reads the response object directly.
+opt:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  response_method: tda
+  state_manifold: singlet
+  nstates: 1
+  excited_state_root: 1
+  opt_solver: geometric
+  opt_maxsteps: 100

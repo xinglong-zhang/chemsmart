@@ -1,0 +1,24 @@
+{
+ "artifact": "water_ccsdt_sp_gas_phase.h5",
+ "command": "reference.py water_ccsdt_sp_gas_phase.h5",
+ "corr_ccsd_correlation_energy_eh": -0.21149585096565054,
+ "corr_converged": true,
+ "corr_correlation_energy_eh": -0.21453214084930866,
+ "corr_frozen_orbitals": 1,
+ "corr_method": "ccsd(t)",
+ "corr_reference_energy_eh": -75.96029740415281,
+ "corr_total_energy_eh": -76.17482954500213,
+ "corr_triples_correction_eh": -0.003036289883658119,
+ "jobtype": "sp",
+ "masses_isotope_averaged_amu": [
+  15.999,
+  1.008,
+  1.008
+ ],
+ "point_group_detect_symm": "C2v",
+ "pyscf_version": "2.14.0",
+ "scf_converged": true,
+ "scf_energy_eh": -75.96029740415281,
+ "stored_total_energy_match_recomputed_abs_eh": 2.842170943040401e-14,
+ "symm_geom_tol_bohr": 1e-05
+}

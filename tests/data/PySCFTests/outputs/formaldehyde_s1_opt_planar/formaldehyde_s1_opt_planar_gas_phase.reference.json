@@ -1,0 +1,53 @@
+{
+ "artifact": "formaldehyde_s1_opt_planar_gas_phase.h5",
+ "command": "reference.py formaldehyde_s1_opt_planar_gas_phase.h5",
+ "followed_root_total_energy_eh": -114.27702346609962,
+ "jobtype": "opt",
+ "masses_isotope_averaged_amu": [
+  12.011,
+  15.999,
+  1.008,
+  1.008
+ ],
+ "point_group_detect_symm": "Cs",
+ "pyscf_version": "2.14.0",
+ "scf_converged": true,
+ "scf_energy_eh": -114.40220201383389,
+ "stored_excitations_match_recomputed_max_abs_eh": 2.5113055133196838e-06,
+ "symm_geom_tol_bohr": 1e-05,
+ "td_converged_per_root": [
+  true,
+  true,
+  true
+ ],
+ "td_excitation_energies_eh": [
+  0.12517854773425932,
+  0.29384029035966064,
+  0.29882602017647275
+ ],
+ "td_nstates_requested": 3,
+ "td_oscillator_strengths": [
+  7.203447813329612e-13,
+  0.0020395716864422884,
+  0.09523925687199528
+ ],
+ "td_positive_eig_threshold_eh": 0.001,
+ "td_singlet_flag": true,
+ "td_transition_dipole_moments_debye": [
+  [
+   -7.467635335759714e-06,
+   2.4262341954608155e-14,
+   9.048134967488277e-16
+  ],
+  [
+   0.2593532319148219,
+   6.604290627719407e-13,
+   5.2588356450559464e-14
+  ],
+  [
+   -9.09006520269852e-14,
+   1.7574243515751082,
+   -0.0002092612150447716
+  ]
+ ]
+}

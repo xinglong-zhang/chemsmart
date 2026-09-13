@@ -1,0 +1,13 @@
+# Expansion-round fixtures: TDA singlets under C-PCM toluene (eps 2.38,
+# optical eps ~2.24). PySCF's non-equilibrium response applies eps 1.78 for
+# every solvent; the artifact records the number it used, and a solvent
+# whose optical dielectric is not 1.78 shows the divergence.
+td:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  response_method: tda
+  state_manifold: singlet
+  nstates: 3
+  solvent_model: cpcm
+  solvent_id: toluene
