@@ -165,8 +165,33 @@ def _driver_source():
     )
 
 
+def _stage_function(source, stage):
+    """The text of ``_run_<stage>`` when the branch delegates to one."""
+
+    marker = "def _run_%s(" % stage
+    if marker not in source:
+        return ""
+    start = source.index(marker)
+    remainder = source[start + len(marker) :]
+    offsets = [
+        remainder.index(nxt)
+        for nxt in ("\ndef ", "\nclass ")
+        if nxt in remainder
+    ]
+    end = start + len(marker) + (min(offsets) if offsets else len(remainder))
+    return source[start:end]
+
+
 def _stage_branch(source, stage):
-    """The text of one stage branch of the driver's stage loop."""
+    """The text of one stage's work, wherever the driver keeps it.
+
+    A stage that grew a second way of doing its job is extracted into
+    ``_run_<stage>`` beside the others, so the branch is one call and the
+    work is in the function. What these tests pin is the work -- which
+    stage launches a gradient, which one states its mass convention --
+    and following the delegation keeps them pinning that rather than the
+    layout it happened to have.
+    """
 
     order = ("scf", "opt", "td", "corr", "hess")
     start = source.index(
@@ -183,7 +208,7 @@ def _stage_branch(source, stage):
         ]
         + [source.index('raise ValueError("Unknown stage')]
     )
-    return source[start:end]
+    return source[start:end] + _stage_function(source, stage)
 
 
 @pytest.mark.capability("program_jobtype:pyscf:cpu:hess")

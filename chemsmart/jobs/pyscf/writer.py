@@ -1479,6 +1479,70 @@ def _spin_diagnostic(mf):
     return tuple(values)
 
 
+def _run_hess(config, mf, mol, results, status):
+    """The Hessian of the surface the mean field is on, and its spectrum.
+
+    One stage with one exit, so the derivative behind the numbers is
+    recorded in one place: a Hessian PySCF differentiates analytically
+    and one it cannot are the same scientific object with different
+    provenance, and a reader must be able to tell them apart.
+    """
+
+    # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo helper
+    # and HDF5 writer must never receive that device array.
+    raw_hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
+    hessian, raw_hessian_antisymmetry = _symmetrize_cartesian_hessian(
+        raw_hessian
+    )
+    from pyscf.hessian import thermo
+
+    # Preserve imaginary modes as negative real wavenumbers. PySCF's
+    # default returns complex values, which a float HDF5 dataset would
+    # otherwise truncate to zero imaginary parts.
+    analysis = thermo.harmonic_analysis(mol, hessian, imaginary_freq=False)
+    results["hessian"] = hessian
+    results["vibrational_frequencies"] = np.asarray(
+        analysis["freq_wavenumber"], dtype=float
+    )
+    results["normal_modes"] = np.asarray(analysis["norm_mode"], dtype=float)
+    results["reduced_masses"] = np.asarray(
+        analysis["reduced_mass"], dtype=float
+    )
+    results["force_constants"] = np.asarray(
+        analysis["force_const_dyne"], dtype=float
+    )
+    hess_status = {
+        "converged": True,
+        "cartesian_symmetrization_applied": True,
+        "raw_max_abs_antisymmetry_eh_per_bohr2": raw_hessian_antisymmetry,
+        # harmonic_analysis takes mol.atom_mass_list(isotope_avg=True)
+        # when no mass is passed; the host's thermochemistry applies its
+        # own table to rotation and translation, so the table behind the
+        # frequencies is stated where the frequencies are.
+        "mass_convention": "isotope_averaged",
+        "mass_source": "pyscf.gto.Mole.atom_mass_list(isotope_avg=True)",
+    }
+    # The projected spectrum can be all-real at a geometry that is not
+    # stationary, so the gradient at the Hessian geometry is the only
+    # fact that says how stationary it was. It is a stage fact, never a
+    # refusal: a Hessian off a stationary point is a legitimate request.
+    try:
+        gradient = _to_host_array(mf.nuc_grad_method().kernel()).astype(float)
+        results["forces"] = -gradient
+        hess_status["gradient_computed"] = True
+        hess_status["max_abs_gradient_eh_per_bohr"] = float(
+            np.max(np.abs(gradient))
+        )
+    except Exception as exc:
+        hess_status["gradient_computed"] = False
+        hess_status["gradient_failure"] = {
+            "type": type(exc).__name__,
+            "message": str(exc),
+        }
+    status["stages"]["hess"] = hess_status
+    return hess_status
+
+
 def main():
     label = CONFIG["label"]
     log_path = label + ".out"
@@ -1694,70 +1758,7 @@ def main():
             elif stage == "corr":
                 total_energy = _run_corr(CONFIG, mf, results, status, runtime)
             elif stage == "hess":
-                # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo
-                # helper and HDF5 writer must never receive that device array.
-                raw_hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
-                hessian, raw_hessian_antisymmetry = (
-                    _symmetrize_cartesian_hessian(raw_hessian)
-                )
-                from pyscf.hessian import thermo
-
-                # Preserve imaginary modes as negative real wavenumbers.
-                # PySCF's default returns complex values, which a float HDF5
-                # dataset would otherwise truncate to zero imaginary parts.
-                analysis = thermo.harmonic_analysis(
-                    mol, hessian, imaginary_freq=False
-                )
-                results["hessian"] = hessian
-                results["vibrational_frequencies"] = np.asarray(
-                    analysis["freq_wavenumber"], dtype=float
-                )
-                results["normal_modes"] = np.asarray(
-                    analysis["norm_mode"], dtype=float
-                )
-                results["reduced_masses"] = np.asarray(
-                    analysis["reduced_mass"], dtype=float
-                )
-                results["force_constants"] = np.asarray(
-                    analysis["force_const_dyne"], dtype=float
-                )
-                hess_status = {
-                    "converged": True,
-                    "cartesian_symmetrization_applied": True,
-                    "raw_max_abs_antisymmetry_eh_per_bohr2": (
-                        raw_hessian_antisymmetry
-                    ),
-                    # harmonic_analysis takes mol.atom_mass_list(
-                    # isotope_avg=True) when no mass is passed; the host's
-                    # thermochemistry applies its own table to rotation and
-                    # translation, so the table behind the frequencies is
-                    # stated where the frequencies are.
-                    "mass_convention": "isotope_averaged",
-                    "mass_source": (
-                        "pyscf.gto.Mole.atom_mass_list(isotope_avg=True)"
-                    ),
-                }
-                # The projected spectrum can be all-real at a geometry that
-                # is not stationary, so the gradient at the Hessian geometry
-                # is the only fact that says how stationary it was.  It is
-                # a stage fact, never a refusal: a Hessian off a stationary
-                # point is a legitimate request.
-                try:
-                    gradient = _to_host_array(
-                        mf.nuc_grad_method().kernel()
-                    ).astype(float)
-                    results["forces"] = -gradient
-                    hess_status["gradient_computed"] = True
-                    hess_status["max_abs_gradient_eh_per_bohr"] = float(
-                        np.max(np.abs(gradient))
-                    )
-                except Exception as exc:
-                    hess_status["gradient_computed"] = False
-                    hess_status["gradient_failure"] = {
-                        "type": type(exc).__name__,
-                        "message": str(exc),
-                    }
-                status["stages"]["hess"] = hess_status
+                _run_hess(CONFIG, mf, mol, results, status)
             else:
                 raise ValueError("Unknown stage: %s" % stage)
 
