@@ -63,3 +63,29 @@ a convention, and both programs agree once it is named.
 | `hydroxyl_ump2_sp` | OH· UMP2 on a UHF reference | an open-shell correlated result |
 | `water_mp2_opt`, `water_ccsd_opt` | the distorted water optimised on the MP2 and on the CCSD surface | correlated structure producers: amplitude and Λ convergence, final gradient 6e-6 Eh/Bohr, components at the reached geometry |
 | `water_ccsd_unconverged` | `cc_max_cycle: 1` through the CLI | amplitudes unconverged; `stages/corr/converged` false; receipt `failed` |
+
+## Surface round (2026-09-14, result contract v6)
+
+Produced the same way in the compute env, on the distorted water of
+`inputs/water_distorted.xyz`, with `reference.py` beside each. These
+four are the first artifacts to record a `surface`: the electronic
+surface a result's geometry and total energy belong to. They exist as a
+matched and a mismatched pair, because the question a Hessian answers is
+about one surface and the host had no way to ask which.
+
+| directory | what it is | why it is here |
+|---|---|---|
+| `water_mp2_opt_v6` | MP2/def2-SVP optimisation | surface `mp2:rhf:-:def2-svp:0:1:-:-:-:-:0:-:-:-`; all-electron, so the frozen-core count is 0 rather than absent |
+| `water_dft_hess_on_mp2_geometry` | B3LYP Hessian on that MP2 minimum (`-f water_mp2_opt.h5`) | the mismatch: a validated Hessian that characterises a *different* surface from the geometry it consumed |
+| `water_dft_opt_v6` | B3LYP/def2-SVP optimisation of the same start | surface `dft:rks:b3lypg:def2-svp:0:1:-:-:-:-:-:-:-:-` |
+| `water_dft_hess_on_dft_geometry` | B3LYP Hessian on that B3LYP minimum | the control: same surface, so the Hessian characterises the structure |
+
+One measurement worth keeping beside them. A B3LYP Hessian at the
+geometry the S1 (TDA root 1) optimisation of formaldehyde reached is
+refused by the validator as `pyscf.result.hessian_invalid`: PySCF's
+analytic Hessian there carries a raw antisymmetry of 5.0e-05 Eh/Bohr^2
+against a limit calibrated near stationarity, because the ground state
+at that geometry is not stationary at all -- its gradient is 0.0998
+Eh/Bohr. A cross-surface Hessian is not merely uninformative; at a
+geometry far from its own stationary point it is numerically worse too.
+

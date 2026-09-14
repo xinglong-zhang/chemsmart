@@ -66,6 +66,7 @@ from chemsmart.agent.workspace_record import (
     render_workspace_record,
     uncharacterised_artifacts,
 )
+from chemsmart.analysis.result_readers import surfaces_agree
 
 
 def _utc_now() -> str:
@@ -241,6 +242,17 @@ def _achieved_word(
             "delivered from a result whose stationary point is "
             "uncharacterised (no frequencies printed): "
             + ", ".join(delivery.uncharacterised_source_quantity_ids),
+        )
+    if delivery.surface_mismatched_characterisations:
+        provenance = provenance + (
+            "characterised on another surface, so the geometry's own "
+            "stationary point is still unchecked: "
+            + ", ".join(
+                f"{producer} by {consumer}"
+                for producer, consumer in (
+                    delivery.surface_mismatched_characterisations
+                )
+            ),
         )
     if delivery.delivered_in_earlier_cycles:
         provenance = provenance + (
@@ -1800,6 +1812,13 @@ class _AnalysisDelivery:
     #: whose result printed no frequencies: its stationary point is
     #: uncharacterised, and the number says so.
     uncharacterised_source_quantity_ids: tuple[str, ...] = ()
+    #: Producer/consumer node pairs whose Hessian was computed on a
+    #: different electronic surface from the geometry it consumed. The
+    #: Hessian is a real number about a real structure; it just does not
+    #: characterise the surface the producer walked on, and a reader who
+    #: is not told that reads a ground-state spectrum as an excited
+    #: minimum's (PySCF round 2 E2, 2026-09-13).
+    surface_mismatched_characterisations: tuple[tuple[str, str], ...] = ()
     #: The recorded decision's own stated uncertainties, verbatim.
     decision_uncertainties: tuple[str, ...] = ()
     #: Result artifacts a session characterised, with the host checking
@@ -2180,6 +2199,22 @@ def _stale_quantity_ids(
     return stale, tuple(sorted(rejected_artifacts))
 
 
+def _recorded_surface(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """The electronic surface a verified result recorded, if it did.
+
+    Read from the validator's own observations, where the neutral sensor
+    step wrote it through the program's reader, so the driver asks no
+    program-specific question of its own.
+    """
+
+    observations = record.get("observations") or {}
+    for value in observations.values():
+        if isinstance(value, Mapping) and value.get("surface"):
+            surface = value["surface"]
+            return surface if isinstance(surface, Mapping) else None
+    return None
+
+
 def _printed_no_modes(record: Mapping[str, Any]) -> bool:
     """Whether a verified opt/ts result carries no frequency block.
 
@@ -2278,6 +2313,7 @@ def _analysis_delivery(
     handoffs: dict[str, str] = {}
     node_outputs: dict[str, tuple[str, ...]] = {}
     characterising: set[str] = set()
+    node_surfaces: dict[str, Mapping[str, Any]] = {}
     stopped_by: list[str] = []
     workflows_planned = 0
     nodes_previewed = 0
@@ -2433,6 +2469,9 @@ def _analysis_delivery(
                     for item in record.get("output_artifacts") or ()
                     if item.get("sha256")
                 )
+                surface = _recorded_surface(record)
+                if surface:
+                    node_surfaces[node_name] = surface
                 if str(record.get("state") or "") == "valid" and (
                     printed_modes(record)
                 ):
@@ -2568,9 +2607,26 @@ def _analysis_delivery(
     # is not "uncharacterised (no frequencies printed)" -- it was worded
     # so on two live PySCF goals while the Hessian beside it validated
     # (PySCF round, 2026-09-12).
+    # ...and only when the Hessian was computed on the producer's own
+    # surface. A ground-state Hessian on the geometry an excited-root
+    # optimisation reached describes a different potential energy
+    # surface: it is a real number about a real structure and it says
+    # nothing about whether that structure is a minimum of the surface
+    # the optimisation walked on. Where the two cannot be compared --
+    # a program that records no surface, a field its reader cannot
+    # determine -- the Hessian still characterises, as it did before,
+    # and the run story says the comparison was not available.
+    surface_mismatches: list[tuple[str, str]] = []
     for consumer, producer in handoffs.items():
-        if consumer in characterising:
-            characterised.update(node_outputs.get(producer, ()))
+        if consumer not in characterising:
+            continue
+        verdict = surfaces_agree(
+            node_surfaces.get(producer), node_surfaces.get(consumer)
+        )
+        if verdict is False:
+            surface_mismatches.append((producer, consumer))
+            continue
+        characterised.update(node_outputs.get(producer, ()))
     failed_seed = set(failed_artifacts) | set(failed_artifact_sha256s)
     failed_quantities, _failed_walk = _stale_quantity_ids(
         claim_pairs=claim_pairs,
@@ -2690,6 +2746,7 @@ def _analysis_delivery(
         characterised_source_quantity_ids=characterised_quantities,
         characterised_artifact_sha256s=tuple(sorted(characterised)),
         uncharacterised_source_quantity_ids=uncharacterised_quantities,
+        surface_mismatched_characterisations=tuple(surface_mismatches),
         decision_uncertainties=tuple(decision_uncertainties),
         declared_observable_misses=declared_misses,
         goal_delivered=dict(goal_delivered_ids or {}),

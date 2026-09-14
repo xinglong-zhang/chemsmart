@@ -905,6 +905,20 @@ class ResultReaderV1:
     #: level.  A level is shown and never compared: whether two programs
     #: mean one thing by a keyword is a fact about the programs.
     resolve_level: Callable[[Any], Mapping[str, Any]] | None = None
+    #: The electronic surface one opened result is on, as a mapping over
+    #: ``SURFACE_IDENTITY_FIELDS``.  Unlike the level, a surface is *for*
+    #: comparing: two results are one surface when every field agrees and
+    #: neither reader wrote ``unknown``.  None means this reader cannot
+    #: say, and the organs that ask treat that as "not comparable" rather
+    #: than as agreement.
+    resolve_surface: Callable[[Any], Mapping[str, Any] | None] | None = None
+
+    def surface_for_output(self, output: Any) -> Mapping[str, Any] | None:
+        """The surface this result is on, or None when unknowable."""
+
+        if self.resolve_surface is None:
+            return None
+        return self.resolve_surface(output)
 
     def __post_init__(self) -> None:
         jobtypes = tuple(item[0] for item in self.jobtype_selectors)
@@ -2995,6 +3009,9 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
             _orca_accessors(), _ORCA_ELECTRONIC_PROVENANCE_DECLARED
         ),
         resolve_electronic_provenance=_resolve_computed_surface,
+        resolve_surface=lambda output: surface_from_accessors(
+            RESULT_READERS["orca"], output
+        ),
         jobtype_selectors=(
             (
                 "freq",
@@ -3532,6 +3549,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         selector_electronic_provenance=_PYSCF_ELECTRONIC_PROVENANCE,
         resolve_electronic_provenance=_resolve_computed_surface,
         resolve_level=_pyscf_level,
+        resolve_surface=lambda output: getattr(output, "surface", None),
         admit_for_analysis=_pyscf_admit_for_analysis,
     ),
     "xyz": ResultReaderV1(

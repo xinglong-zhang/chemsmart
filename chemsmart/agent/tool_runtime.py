@@ -1467,6 +1467,20 @@ def _neutral_sensor_facts(
         return {}, {}
     block: dict[str, Any] = {}
     inputs: dict[str, Any] = {}
+    # The electronic surface this result is on, where its reader can say
+    # it. Every organ that asks whether two results describe the same
+    # thing -- the characterisation join, the same-structure sensor --
+    # reads this one fact rather than each deciding for itself, and a
+    # reader that cannot say leaves it absent rather than guessing.
+    try:
+        surface = reader.surface_for_output(output)
+    except Exception:  # noqa: BLE001 - a reader without an identity
+        surface = None
+    if surface:
+        from chemsmart.analysis.result_readers import surface_token
+
+        block["surface"] = canonical_data(surface)
+        block["surface_id"] = surface_token(surface)
     raw_frequencies = getattr(output, "vibrational_frequencies", None)
     frequencies: tuple[float, ...] = ()
     if raw_frequencies is not None:
