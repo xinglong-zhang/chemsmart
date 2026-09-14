@@ -72,12 +72,6 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
         ("gaussian", "orca", "pyscf", "xtb"),
     ): _READER_PROGRAMS,
     (
-        "chemsmart/agent/bootstrap.py",
-        "bootstrap_program_conformance",
-        None,
-        ("modred", "scan"),
-    ): "derives in 0.4 from commands._COORDINATE_DRIVEN_JOBTYPES",
-    (
         "chemsmart/agent/knowledge.py",
         "<module>",
         "_PYSCF_SUBSTITUTION_JOB_TYPES",
@@ -362,8 +356,8 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
         "<module>",
         "_CONFORMANCE_COORDINATES",
         ("modred", "scan"),
-    ): "table keyed by the coordinate-driven jobtypes; 0.4 keys it off "
-    "commands._COORDINATE_DRIVEN_JOBTYPES",
+    ): "table keyed by the coordinate-driven job types, whose keys the "
+    "conformance probe reads from that declaration",
     (
         "chemsmart/agent/live_session.py",
         "<module>",

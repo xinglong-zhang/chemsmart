@@ -29,6 +29,7 @@ from chemsmart.agent.cli_schema import (
     build_live_click_schema,
 )
 from chemsmart.agent.projects import ProjectValidationReceiptV1
+from chemsmart.settings.capabilities import program_capability
 
 
 @dataclass(frozen=True)
@@ -341,13 +342,20 @@ def native_coordinate_options(
             raise ContractError(
                 "a scan needs a range; start and stop are the same value"
             )
-        if program == "orca":
+        # The idiom is the program's own declaration, not this module's
+        # opinion about which programs can scan: a program that grows a
+        # scan leaf declares how it spells one, and the renderer needs
+        # no new branch.
+        capability = program_capability(program)
+        idiom = capability.coordinate_idiom if capability else ""
+        if idiom == "absolute_range":
             values["dist_start"] = f"{start}"
             values["dist_end"] = f"{stop}"
             values["num_steps"] = f"{points}"
-        elif program == "gaussian":
-            # Gaussian walks outward from the starting geometry, so the
-            # increment carries the direction and the endpoint is implied.
+        elif idiom == "increment_steps":
+            # A program with this idiom walks outward from the starting
+            # geometry, so the increment carries the direction and the
+            # endpoint is implied.
             intervals = points - 1
             values["step_size"] = f"{(stop - start) / intervals}"
             values["num_steps"] = f"{intervals}"

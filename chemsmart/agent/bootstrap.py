@@ -28,7 +28,10 @@ from chemsmart.agent.capabilities import (
     build_trusted_compute_environment_receipt,
 )
 from chemsmart.agent.cli_schema import LiveClickSchemaV1
-from chemsmart.agent.commands import native_coordinate_options
+from chemsmart.agent.commands import (
+    _COORDINATE_DRIVEN_JOBTYPES,
+    native_coordinate_options,
+)
 
 _PYTHON_PROBE = r"""
 import importlib
@@ -219,7 +222,7 @@ def bootstrap_program_conformance(
                 # coordinate through the same translation the production path
                 # uses, so conformance exercises that translation rather than
                 # a hand-written argv that could drift from it.
-                if jobtype in {"modred", "scan"}:
+                if jobtype in _COORDINATE_DRIVEN_JOBTYPES:
                     job_command = live_schema.command(
                         (target, program, jobtype)
                     )

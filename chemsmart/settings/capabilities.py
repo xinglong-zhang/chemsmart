@@ -70,6 +70,14 @@ class ProgramCapability:
     engines: tuple[str, ...]
     project_parameter_domains: tuple[tuple[str, tuple[str, ...]], ...] = ()
     engine_job_capabilities: tuple[EngineJobCapability, ...] = ()
+    #: How this program spells a driven coordinate on its own CLI.
+    #: ``absolute_range`` takes the two endpoints and a point count;
+    #: ``increment_steps`` takes a step size and an interval count and
+    #: walks outward from the supplied geometry, so the increment
+    #: carries the direction. A program that declares neither cannot be
+    #: asked for a scan, and the refusal says so by name rather than by
+    #: a branch on the program's name in the renderer.
+    coordinate_idiom: str = ""
     agent_enabled: bool = True
     #: Top-level section names this program's project YAML accepts. The
     #: route-building programs group settings by phase (``gas`` for most job
@@ -539,6 +547,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
     {
         "gaussian": ProgramCapability(
             program="gaussian",
+            coordinate_idiom="increment_steps",
             requires_project_configuration=True,
             supports_project_configuration=True,
             jobtypes=(
@@ -626,6 +635,7 @@ PROGRAM_CAPABILITIES: Mapping[str, ProgramCapability] = MappingProxyType(
         ),
         "orca": ProgramCapability(
             program="orca",
+            coordinate_idiom="absolute_range",
             requires_project_configuration=True,
             supports_project_configuration=True,
             jobtypes=(
