@@ -230,6 +230,8 @@ from chemsmart.agent.scientific_validation import (
 )
 from chemsmart.agent.skills import resolve_skill
 from chemsmart.agent.terminal_states import (
+    GEOMETRY_SEARCH_JOBTYPES,
+    STATIONARY_POINT_PROMISES,
     consequential_imaginary_mode_count,
     expected_imaginary_mode_count,
     stationary_point_order_finding,
@@ -1105,7 +1107,7 @@ def _basin_sensor_inputs(
     means is the scientist's.
     """
 
-    if jobtype not in {"opt", "ts"}:
+    if jobtype not in GEOMETRY_SEARCH_JOBTYPES:
         return {}
     symbols, positions = _pyscf_input_geometry(input_artifact)
     if not symbols:
@@ -1472,7 +1474,7 @@ def _neutral_sensor_facts(
         pass
     if frequencies:
         inputs.update(_imaginary_mode_sensor_inputs(output, frequencies))
-    if jobtype in {"opt", "ts"}:
+    if jobtype in GEOMETRY_SEARCH_JOBTYPES:
         try:
             inputs["basin"] = _basin_sensor_inputs(
                 expected_input_artifact, output, jobtype
@@ -1621,7 +1623,7 @@ def _observed_soft_imaginary_mode(
 #: was visible and nothing said this system needed it (NOVEL-1/2 ino1,
 #: 2026-09-04). The host knows the program, the job type, the settings
 #: and the atom count at compile time, so it says so there.
-_ORCA_GEOMETRY_CAP_JOBTYPES = frozenset({"opt", "ts"})
+_ORCA_GEOMETRY_CAP_JOBTYPES = GEOMETRY_SEARCH_JOBTYPES
 
 
 def _artifact_id_taken(
@@ -1752,12 +1754,11 @@ def compile_time_observations(
         dict(settings) if not isinstance(settings, Mapping) else settings
     )
     observations: list[str] = []
-    if geometry is not None and jobtype in _ORCA_GEOMETRY_CAP_JOBTYPES | {
-        "opt",
-        "ts",
-        "hess",
-        "freq",
-    }:
+    # Every job type that promises a stationary point: the two that
+    # search for one and the two that evaluate a Hessian on one. The
+    # union this replaced added the geometry-cap set to a hand-written
+    # copy of itself plus hess and freq, and named the same four.
+    if geometry is not None and jobtype in STATIONARY_POINT_PROMISES:
         try:
             from chemsmart.agent.symmetry import symmetry_observation
 
@@ -14975,7 +14976,7 @@ class CommandCompiledToolHostV1:
                     if output.multiplicity != multiplicity:
                         findings.append("orca.result.multiplicity_mismatch")
                     if (
-                        jobtype in {"opt", "ts"}
+                        jobtype in GEOMETRY_SEARCH_JOBTYPES
                         and output.converged is not True
                     ):
                         findings.append(
@@ -15297,7 +15298,7 @@ class CommandCompiledToolHostV1:
                         if energy is None or not math.isfinite(energy):
                             findings.append("gaussian.result.energy_missing")
                         if (
-                            expected_result_jobtype in {"opt", "ts"}
+                            expected_result_jobtype in GEOMETRY_SEARCH_JOBTYPES
                             and not optimization_converged
                         ):
                             findings.append(

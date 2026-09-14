@@ -22,6 +22,11 @@ from chemsmart.agent._contracts import (
     require_identifier,
     require_sha256,
 )
+from chemsmart.agent.terminal_states import (
+    GEOMETRY_SEARCH_JOBTYPES,
+    STATIONARY_POINT_PROMISES,
+    SURFACE_SAMPLING_JOBTYPES,
+)
 
 
 class SupportLevel(str, Enum):
@@ -538,11 +543,13 @@ def coverage_for(
     rules: list[str] = []
     if validated:
         rules.append("state_match")
-    if validated and jobtype in {"opt", "scan", "ts"}:
+    if validated and jobtype in (
+        GEOMETRY_SEARCH_JOBTYPES | SURFACE_SAMPLING_JOBTYPES
+    ):
         rules.append("convergence")
     if (
         validated
-        and jobtype in {"freq", "hess", "opt", "ts"}
+        and jobtype in STATIONARY_POINT_PROMISES
         and "vibrational_frequencies" in declared
     ):
         # Derived from the declaration, not from a hand list of programs:

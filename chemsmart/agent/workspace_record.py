@@ -29,6 +29,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from chemsmart.agent.terminal_states import GEOMETRY_SEARCH_JOBTYPES
+
 WORKSPACE_RECORD_FILE = "workspace-record.jsonl"
 WORKSPACE_RECORD_SCHEMA = "chemsmart.workspace-record.v1"
 
@@ -493,7 +495,7 @@ def uncharacterised_artifacts(workspace: str | Path) -> tuple[str, ...]:
     for entry in entries:
         if entry.get("kind") != "result":
             continue
-        if str(entry.get("jobtype") or "") not in {"opt", "ts"}:
+        if str(entry.get("jobtype") or "") not in GEOMETRY_SEARCH_JOBTYPES:
             continue
         printed = _row_printed_modes(entry)
         if printed is None or printed:

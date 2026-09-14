@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping
 
 #: The one program-neutral validity finding: a converged search landed on
@@ -100,16 +101,35 @@ _UNDIAGNOSED_FAILURE_CLASSES = frozenset(
 CONSEQUENTIAL_IMAGINARY_MODE_CM1 = -20.0
 
 
-def expected_imaginary_mode_count(jobtype: str) -> int | None:
-    """How many imaginary modes the declared jobtype promises: one for a
-    transition-state search, none for a minimum, and no promise at all
-    for a jobtype that computes no Hessian or makes no claim."""
+#: How many imaginary modes each job type promises: one for a
+#: transition-state search, none for a minimum or a Hessian, and no
+#: promise at all for a job type that is absent here -- a scan samples a
+#: surface whose points are not stationary, an IRC walks a path, and
+#: neither makes the claim. This mapping is the promise itself, and
+#: eleven copies of its two halves used to be spread over the driver,
+#: the workspace record, the sensors, the capability cells and the
+#: geometry handoff.
+STATIONARY_POINT_PROMISES: Mapping[str, int] = MappingProxyType(
+    {"freq": 0, "hess": 0, "opt": 0, "ts": 1}
+)
 
-    if jobtype == "ts":
-        return 1
-    if jobtype in {"opt", "hess", "freq"}:
-        return 0
-    return None
+#: Of those, the job types that search for the structure rather than
+#: being handed it. A run of one that printed no vibrational modes never
+#: checked its own promise; its geometry is a producer for a downstream
+#: stage; and the walk from the input geometry to the one it reached is
+#: what the basin sensor measures. A Hessian is not here because it
+#: moves nothing.
+GEOMETRY_SEARCH_JOBTYPES = frozenset({"opt", "ts"})
+
+#: Job types that sample a surface: they converge per point and produce
+#: a geometry, but no point they return is claimed to be stationary.
+SURFACE_SAMPLING_JOBTYPES = frozenset({"scan"})
+
+
+def expected_imaginary_mode_count(jobtype: str) -> int | None:
+    """How many imaginary modes the declared jobtype promises, or None."""
+
+    return STATIONARY_POINT_PROMISES.get(jobtype)
 
 
 def consequential_imaginary_mode_count(

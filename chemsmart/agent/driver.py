@@ -53,6 +53,7 @@ from chemsmart.agent.goal import (
 )
 from chemsmart.agent.rules import rules_by_id
 from chemsmart.agent.terminal_states import (
+    GEOMETRY_SEARCH_JOBTYPES,
     PRIOR_ANOMALIES_FILE,
     REPAIRABLE_NODE_STATES,
     is_provider_transport_terminal,
@@ -2179,11 +2180,6 @@ def _stale_quantity_ids(
     return stale, tuple(sorted(rejected_artifacts))
 
 
-#: Job types whose result promises a stationary point; a run of one that
-#: printed no vibrational modes never checked that promise.
-_STATIONARY_POINT_JOBTYPES = frozenset({"opt", "ts"})
-
-
 def _printed_no_modes(record: Mapping[str, Any]) -> bool:
     """Whether a verified opt/ts result carries no frequency block.
 
@@ -2195,7 +2191,7 @@ def _printed_no_modes(record: Mapping[str, Any]) -> bool:
 
     observations = record.get("observations") or {}
     jobtype = str(observations.get("jobtype") or record.get("jobtype") or "")
-    if jobtype not in _STATIONARY_POINT_JOBTYPES:
+    if jobtype not in GEOMETRY_SEARCH_JOBTYPES:
         return False
     for key, value in observations.items():
         if isinstance(value, Mapping) and "vibrational_mode_count" in value:

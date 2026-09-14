@@ -42,6 +42,10 @@ from chemsmart.agent.projects import (
     ProjectValidationReceiptV1,
 )
 from chemsmart.agent.scientific_toolchain import ScientificToolchainPlanV1
+from chemsmart.agent.terminal_states import (
+    GEOMETRY_SEARCH_JOBTYPES,
+    SURFACE_SAMPLING_JOBTYPES,
+)
 from chemsmart.agent.workflows import (
     PREVIEW_RESOURCE_SHA256,
     MaterializedWorkflowV1,
@@ -5590,7 +5594,11 @@ def handoff_optimized_native_geometry(
         raise ContractError(
             f"{normalized_program} result changed while extracting geometry"
         )
-    if not normal_termination or not converged or jobtype not in {"opt", "ts"}:
+    if (
+        not normal_termination
+        or not converged
+        or jobtype not in GEOMETRY_SEARCH_JOBTYPES
+    ):
         raise ContractError(
             f"{normalized_program} result is not a converged OPT or TS"
         )
@@ -6558,12 +6566,14 @@ def _frozen_producer_edge_rule(
 #: displayed review states, so the scientist approves that settlement
 #: explicitly. Any other point on the surface remains the explicit
 #: bind-a-scan-point route with its own new workflow and review.
-DEFERRABLE_GEOMETRY_PRODUCER_STAGES = frozenset({"opt", "ts", "scan"})
+DEFERRABLE_GEOMETRY_PRODUCER_STAGES = (
+    GEOMETRY_SEARCH_JOBTYPES | SURFACE_SAMPLING_JOBTYPES
+)
 
 #: Stages the optimized-geometry rule itself covers. A scan is deferrable
 #: (set above) but is never an "optimized geometry": its edge carries the
 #: scan-minimum rule instead.
-OPTIMIZED_GEOMETRY_PRODUCER_STAGES = frozenset({"opt", "ts"})
+OPTIMIZED_GEOMETRY_PRODUCER_STAGES = GEOMETRY_SEARCH_JOBTYPES
 
 
 def is_validated_optimized_geometry_edge(

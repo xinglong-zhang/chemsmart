@@ -78,42 +78,6 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
         ("modred", "scan"),
     ): "derives in 0.4 from commands._COORDINATE_DRIVEN_JOBTYPES",
     (
-        "chemsmart/agent/capabilities.py",
-        "coverage_for",
-        None,
-        ("freq", "hess", "opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/capabilities.py",
-        "coverage_for",
-        None,
-        ("opt", "scan", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/driver.py",
-        "<module>",
-        "_STATIONARY_POINT_JOBTYPES",
-        ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/execution.py",
-        "<module>",
-        "DEFERRABLE_GEOMETRY_PRODUCER_STAGES",
-        ("opt", "scan", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/execution.py",
-        "<module>",
-        "OPTIMIZED_GEOMETRY_PRODUCER_STAGES",
-        ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/execution.py",
-        "handoff_optimized_native_geometry",
-        None,
-        ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
         "chemsmart/agent/knowledge.py",
         "<module>",
         "_PYSCF_SUBSTITUTION_JOB_TYPES",
@@ -138,46 +102,28 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
     "from the capability registry",
     (
         "chemsmart/agent/terminal_states.py",
-        "expected_imaginary_mode_count",
-        None,
-        ("freq", "hess", "opt"),
-    ): "becomes the stationary-point declaration itself in 0.2",
-    (
-        "chemsmart/agent/tool_runtime.py",
         "<module>",
-        "_ORCA_GEOMETRY_CAP_JOBTYPES",
+        "GEOMETRY_SEARCH_JOBTYPES",
         ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
+    ): _DECLARATION
+    + ": the job types that search for the structure",
     (
-        "chemsmart/agent/tool_runtime.py",
-        "CommandCompiledToolHostV1/_evaluate_execution_outputs",
-        None,
-        ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/tool_runtime.py",
-        "_basin_sensor_inputs",
-        None,
-        ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/tool_runtime.py",
-        "_neutral_sensor_facts",
-        None,
-        ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
-    (
-        "chemsmart/agent/tool_runtime.py",
-        "compile_time_observations",
-        None,
+        "chemsmart/agent/terminal_states.py",
+        "<module>",
+        "STATIONARY_POINT_PROMISES",
         ("freq", "hess", "opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
+    ): _DECLARATION
+    + ": what each job type promises about imaginary "
+    "modes; the coverage test below holds the searching job types "
+    "inside it",
     (
-        "chemsmart/agent/workspace_record.py",
-        "uncharacterised_artifacts",
-        None,
-        ("opt", "ts"),
-    ): "derives in 0.2 from terminal_states.STATIONARY_POINT_PROMISES",
+        "chemsmart/agent/terminal_states.py",
+        "<module>",
+        "SURFACE_SAMPLING_JOBTYPES",
+        ("scan",),
+    ): _DECLARATION
+    + ": job types that sample a surface, whose points "
+    "are not claimed stationary",
     (
         "chemsmart/agent/commands.py",
         "<module>",
@@ -621,3 +567,20 @@ def test_a_table_keyed_by_the_pyscf_vocabulary_covers_all_of_it():
     assert set(_pyscf_conformance_sections(multiplicity=2)) == set(
         PYSCF_JOBTYPES
     )
+
+
+def test_the_stationary_point_declarations_agree_with_each_other():
+    """A job type that searches for a structure promises something about
+    it, and a job type that samples a surface promises nothing."""
+
+    from chemsmart.agent.terminal_states import (
+        GEOMETRY_SEARCH_JOBTYPES,
+        STATIONARY_POINT_PROMISES,
+        SURFACE_SAMPLING_JOBTYPES,
+        expected_imaginary_mode_count,
+    )
+
+    assert GEOMETRY_SEARCH_JOBTYPES <= set(STATIONARY_POINT_PROMISES)
+    assert not SURFACE_SAMPLING_JOBTYPES & set(STATIONARY_POINT_PROMISES)
+    for jobtype in SURFACE_SAMPLING_JOBTYPES:
+        assert expected_imaginary_mode_count(jobtype) is None
