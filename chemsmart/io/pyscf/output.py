@@ -685,6 +685,31 @@ class PySCFOutput(FileMixin):
     # ------------------------------------------------------------------
 
     @property
+    def surface(self):
+        """The electronic surface this result's geometry and energy are on.
+
+        The spec's recorded identity, joined with the one field only the
+        run can know: how many core orbitals the correlated stage
+        actually froze. A result written before this contract carries no
+        surface, and the reader says absent rather than reconstructing
+        one from the settings it happens to recognise -- a rebuilt
+        identity would be this host's opinion wearing the artifact's
+        authority.
+        """
+
+        recorded = self.spec.get("surface")
+        if not isinstance(recorded, dict):
+            return None
+        surface = dict(recorded)
+        stages = self.status.get("stages")
+        corr = stages.get("corr") if isinstance(stages, dict) else None
+        if isinstance(corr, dict) and corr.get("frozen_core_applied") is not (
+            None
+        ):
+            surface["frozen_core"] = corr["frozen_core_applied"]
+        return surface
+
+    @property
     def correlated_method(self):
         """``mp2``/``ccsd``/``ccsd(t)`` when the job ran one, else None."""
         stages = self.status.get("stages")

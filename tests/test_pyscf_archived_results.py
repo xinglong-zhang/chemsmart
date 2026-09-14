@@ -1073,6 +1073,9 @@ def test_every_declared_pyscf_selector_is_requestable_and_provenanced():
         "positions",
         "reached_positions",
         "supplied_positions",
+        # The surface identity names the density every other value
+        # belongs to; it is not itself a value on one.
+        "surface_id",
         "symbols",
     }
     for jobtype, _selectors in reader.jobtype_selectors:

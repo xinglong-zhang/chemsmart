@@ -88,6 +88,7 @@ SUPPORTED_PYSCF_SELECTORS = frozenset(
         "ab_initio",
         "mulliken_atomic_spin_populations",
         "connectivity",
+        "surface_id",
         "symbols",
         "vibrational_frequencies",
         "vibrational_mode_atom_participation",

@@ -28,6 +28,7 @@ from chemsmart.jobs.pyscf.validation import (
 from chemsmart.jobs.pyscf.writer import (
     APPLIED_SPEC_FIELDS,
     APPLIED_SPEC_FIELDS_V4,
+    APPLIED_SPEC_FIELDS_V5,
     LEGACY_APPLIED_SPEC_FIELDS,
     PREVIOUS_RESULT_CONTRACT_VERSIONS,
     RESULT_CONTRACT_VERSION,
@@ -78,38 +79,41 @@ def _hess_settings(**overrides):
 
 @pytest.mark.capability("program_jobtype:pyscf:cpu:hess")
 def test_a_previous_supported_contract_is_evidence_not_a_downgrade():
-    assert RESULT_CONTRACT_VERSION == "chemsmart.pyscf-result-contract.v5"
-    assert PREVIOUS_RESULT_CONTRACT_VERSIONS == (
-        "chemsmart.pyscf-result-contract.v3",
-        "chemsmart.pyscf-result-contract.v4",
+    # Every version this ChemSmart reads, with the current one last and
+    # named nowhere but the module that declares it: what is pinned is
+    # the relation between the versions, not which round we are in.
+    assert SUPPORTED_RESULT_CONTRACT_VERSIONS == (
+        PREVIOUS_RESULT_CONTRACT_VERSIONS + (RESULT_CONTRACT_VERSION,)
     )
-    assert SUPPORTED_RESULT_CONTRACT_VERSIONS[-1] == RESULT_CONTRACT_VERSION
+    assert RESULT_CONTRACT_VERSION not in PREVIOUS_RESULT_CONTRACT_VERSIONS
 
-    # The applied-settings digest of an archived artifact is reconstructed
-    # from the vocabulary of *its* contract: v3 and v4 share one tuple,
-    # frozen, and v5 extends it by exactly the four controls it applies.
-    # Extending the current tuple in place would have marked every
-    # archived v4 fixture tampered.
+    # The applied-settings digest of an archived artifact is
+    # reconstructed from the vocabulary of *its* contract, so each
+    # version's tuple is frozen once it has artifacts on disk and the
+    # current one only ever extends. Extending a tuple in place would
+    # mark every archived artifact of that version tampered.
+    frozen = {
+        "chemsmart.pyscf-result-contract.v3": APPLIED_SPEC_FIELDS_V4,
+        "chemsmart.pyscf-result-contract.v4": APPLIED_SPEC_FIELDS_V4,
+        "chemsmart.pyscf-result-contract.v5": APPLIED_SPEC_FIELDS_V5,
+    }
     for version in PREVIOUS_RESULT_CONTRACT_VERSIONS:
-        assert (
-            applied_pyscf_spec_fields({"result_contract_version": version})
-            == APPLIED_SPEC_FIELDS_V4
+        vocabulary = applied_pyscf_spec_fields(
+            {"result_contract_version": version}
         )
+        assert vocabulary == frozen[version], version
+        # A previous vocabulary is a prefix of the current one: the
+        # current contract adds fields and moves none.
+        assert APPLIED_SPEC_FIELDS[: len(vocabulary)] == vocabulary, version
     assert (
         applied_pyscf_spec_fields(
             {"result_contract_version": RESULT_CONTRACT_VERSION}
         )
         == APPLIED_SPEC_FIELDS
     )
-    assert APPLIED_SPEC_FIELDS[: len(APPLIED_SPEC_FIELDS_V4)] == (
-        APPLIED_SPEC_FIELDS_V4
-    )
-    assert APPLIED_SPEC_FIELDS[len(APPLIED_SPEC_FIELDS_V4) :] == (
-        "excited_state_root",
-        "frozen_core",
-        "td_max_cycle",
-        "cc_max_cycle",
-    )
+    # What v6 adds: the electronic surface a result's geometry and total
+    # energy belong to.
+    assert APPLIED_SPEC_FIELDS[len(APPLIED_SPEC_FIELDS_V5) :] == ("surface",)
 
     complete_spec = {
         "reference_family": "rks",

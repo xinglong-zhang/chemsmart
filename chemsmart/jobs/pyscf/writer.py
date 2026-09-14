@@ -28,6 +28,7 @@ from ase.data import atomic_numbers as ASE_ATOMIC_NUMBERS
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.io.pyscf.output import pyscf_source_artifact_binding
 from chemsmart.jobs.pyscf.settings import (
+    PYSCF_CORRELATED_METHODS,
     PYSCF_DEFGRIDS,
     PYSCF_SOLVENT_MODELS,
     PYSCF_UNRESTRICTED_MANIFOLD,
@@ -46,7 +47,7 @@ LEGACY_RESULTS_SCHEMA_VERSION = "1.0"
 #: remains schema 2.0 so historical artifacts stay readable; this marker
 #: identifies records that satisfy the stricter state, status, and runtime
 #: reference checks required for new execution/data-edge admission.
-RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v5"
+RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v6"
 #: Contract versions this ChemSmart still reads as executed evidence.  v3 and
 #: v4 share one applied-spec vocabulary; v4 adds datasets (forces at the
 #: Hessian geometry, spin populations) and status facts (the mass convention
@@ -58,9 +59,14 @@ RESULT_CONTRACT_VERSION = "chemsmart.pyscf-result-contract.v5"
 #: vocabulary by four fields -- under its own version only, because the
 #: applied-settings digest of every archived artifact is reconstructed from
 #: the vocabulary of *that* artifact's contract.
+#: v6 adds one field to the applied-spec vocabulary, ``surface``: the
+#: electronic surface a result's geometry and total energy belong to,
+#: recorded so two results can be compared as surfaces rather than as
+#: strings. Under its own version only, for the same reason v5 was.
 PREVIOUS_RESULT_CONTRACT_VERSIONS = (
     "chemsmart.pyscf-result-contract.v3",
     "chemsmart.pyscf-result-contract.v4",
+    "chemsmart.pyscf-result-contract.v5",
 )
 SUPPORTED_RESULT_CONTRACT_VERSIONS = PREVIOUS_RESULT_CONTRACT_VERSIONS + (
     RESULT_CONTRACT_VERSION,
@@ -132,14 +138,17 @@ APPLIED_SPEC_FIELDS_V4 = LEGACY_APPLIED_SPEC_FIELDS + (
     "reference_family",
 )
 
-#: The current (v5) vocabulary: the excited-root, frozen-core and iteration
-#: controls the driver now applies.
-APPLIED_SPEC_FIELDS = APPLIED_SPEC_FIELDS_V4 + (
+#: The v5 vocabulary, frozen: the excited-root, frozen-core and iteration
+#: controls, over which every archived v5 digest was computed.
+APPLIED_SPEC_FIELDS_V5 = APPLIED_SPEC_FIELDS_V4 + (
     "excited_state_root",
     "frozen_core",
     "td_max_cycle",
     "cc_max_cycle",
 )
+
+#: The current (v6) vocabulary: the surface identity.
+APPLIED_SPEC_FIELDS = APPLIED_SPEC_FIELDS_V5 + ("surface",)
 
 #: Digest vocabulary per contract version.  Extending the current tuple in
 #: place would silently change the reconstruction for every archived
@@ -147,6 +156,7 @@ APPLIED_SPEC_FIELDS = APPLIED_SPEC_FIELDS_V4 + (
 APPLIED_SPEC_FIELDS_BY_CONTRACT = {
     "chemsmart.pyscf-result-contract.v3": APPLIED_SPEC_FIELDS_V4,
     "chemsmart.pyscf-result-contract.v4": APPLIED_SPEC_FIELDS_V4,
+    "chemsmart.pyscf-result-contract.v5": APPLIED_SPEC_FIELDS_V5,
     RESULT_CONTRACT_VERSION: APPLIED_SPEC_FIELDS,
 }
 
@@ -264,6 +274,92 @@ def pyscf_td_response_materialization(settings, *, reference_family=None):
     return {
         **body,
         "receipt_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    }
+
+
+#: What makes two results the same electronic surface. Every entry is a
+#: value the host applied, never a value a project asked for: ``b3lyp``
+#: and ``b3lypg`` are one functional in this build and must not hash
+#: apart, and a frozen-core count of one is only equal to another when
+#: both are recorded -- two absent values establish nothing.
+#:
+#: What equality here does *not* establish is stated where the join
+#: reads it: an ordinal root is an index into an ascending list at one
+#: geometry and not a continuous electronic character, and a constrained
+#: optimum's character needs a curvature analysis this release does not
+#: compute. Constraint entries carry the requested target and never the
+#: achieved residual, so two runs of one constraint are one surface.
+SURFACE_IDENTITY_FIELDS = (
+    "basis",
+    "charge",
+    "constraints",
+    "density_fitting",
+    "dispersion",
+    "excited_root",
+    "frozen_core",
+    "functional_applied",
+    "method_family",
+    "multiplicity",
+    "reference",
+    "solvent",
+    "solvent_model",
+    "state_manifold",
+)
+
+
+def pyscf_surface_identity(config):
+    """The electronic surface a result's geometry and energy belong to.
+
+    A ``td`` spectrum is computed *on* its reference surface and its
+    total energy is the reference's, so it carries no followed root; an
+    optimisation that follows root k walks on the response surface and
+    does. A correlated single point is on the correlated surface.
+    """
+
+    response = str(config.get("response_method") or "").strip().lower()
+    ab_initio = str(config.get("ab_initio") or "").strip().lower()
+    root = config.get("excited_state_root")
+    functional = config.get("xc")
+    if root is not None and response:
+        method_family = response
+    elif ab_initio in PYSCF_CORRELATED_METHODS:
+        method_family = ab_initio
+    elif ab_initio == "hf":
+        method_family = "hf"
+    elif functional:
+        method_family = "dft"
+    else:
+        method_family = "unknown"
+    return {
+        "basis": config.get("basis"),
+        "charge": (
+            None if config.get("charge") is None else int(config["charge"])
+        ),
+        # No constrained surface is expressible in this release; the key
+        # exists so a constrained optimum is a different surface the day
+        # one is, rather than silently the same one.
+        "constraints": [],
+        "density_fitting": (
+            config.get("aux_basis") or "default"
+            if config.get("density_fit")
+            else None
+        ),
+        "dispersion": config.get("dispersion"),
+        "excited_root": None if root is None else int(root),
+        "frozen_core": config.get("frozen_core"),
+        "functional_applied": functional,
+        "method_family": method_family,
+        "multiplicity": (
+            None
+            if config.get("multiplicity") is None
+            else int(config["multiplicity"])
+        ),
+        "reference": config.get("reference_family"),
+        "solvent": config.get("solvent_id"),
+        "solvent_model": config.get("solvent_model"),
+        "state_manifold": (
+            config.get("state_manifold") if root is not None else None
+        ),
     }
 
 
@@ -615,6 +711,10 @@ class PySCFScriptWriter:
         )
         if td_materialization is not None:
             config["materializations"]["td_response_plan"] = td_materialization
+        # Derived from the resolved configuration rather than supplied
+        # beside it, so the surface a result records is the surface the
+        # driver was configured to compute on and not a second opinion.
+        config["surface"] = pyscf_surface_identity(config)
         geometry_payload = {
             "symbols": config["symbols"],
             "positions": config["positions"],

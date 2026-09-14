@@ -153,6 +153,7 @@ SELECTOR_UNITS = {
     "converged": "1",
     "irc_converged": "1",
     "solvent": "",
+    "surface_id": "",
 }
 
 
@@ -623,11 +624,156 @@ ELECTRONIC_PROVENANCES = (
     "correlated",
     "computed_surface",
     "stateless",
+    # A result whose recorded surface names a method family this release
+    # has never audited. It is not "reference": that word would be a true
+    # sentence about the wrong density, which is exactly how an excited
+    # or correlated number came to be read as a ground-state one.
+    "unknown",
 )
 
 #: Method words that mark a post-SCF surface when a program's ``ab_initio``
 #: selector names one; the resolver reads the selector, never a route.
 _CORRELATED_METHOD_MARKERS = ("mp2", "ccsd", "cepa", "cisd", "nevpt", "caspt")
+
+#: The fields of a surface identity, in the order the token spells them.
+#: A reader that cannot say what a field was leaves it absent, and an
+#: absent field is never equal to another absent field: two results
+#: agree about a frozen core when both recorded one, and about nothing
+#: when neither did.
+SURFACE_IDENTITY_FIELDS = (
+    "method_family",
+    "reference",
+    "functional_applied",
+    "basis",
+    "charge",
+    "multiplicity",
+    "solvent_model",
+    "solvent",
+    "dispersion",
+    "density_fitting",
+    "frozen_core",
+    "excited_root",
+    "state_manifold",
+    "constraints",
+)
+#: What an absent field spells in the token. ``-`` is a field the reader
+#: knows does not apply -- no solvent, no followed root -- and ``?`` is a
+#: field it cannot determine. Two ``?`` are never agreement: a frozen
+#: core nobody recorded on either side is two unknowns, not a match.
+_SURFACE_FIELD_ABSENT = "-"
+_SURFACE_FIELD_UNKNOWN = "?"
+#: The word a reader writes into a surface field it cannot determine.
+SURFACE_UNKNOWN = "unknown"
+
+
+def surface_token(surface: Mapping[str, Any] | None) -> str:
+    """Render a surface identity as one comparable, readable token.
+
+    Two results are on one surface when their tokens are equal *and*
+    neither carries an unknown field: the token is what a human reads on
+    the level line and what a receipt carries, and the join that decides
+    whether a Hessian characterises a geometry asks the reader rather
+    than the string.
+    """
+
+    if not surface:
+        return ""
+    parts = []
+    for name in SURFACE_IDENTITY_FIELDS:
+        value = surface.get(name)
+        if value == SURFACE_UNKNOWN:
+            parts.append(_SURFACE_FIELD_UNKNOWN)
+        elif value is None or value == [] or value == ():
+            parts.append(_SURFACE_FIELD_ABSENT)
+        elif isinstance(value, bool):
+            parts.append("yes" if value else "no")
+        elif isinstance(value, (list, tuple)):
+            parts.append("+".join(str(item) for item in value))
+        else:
+            parts.append(str(value).strip().lower())
+    return ":".join(parts)
+
+
+def surfaces_agree(first, second):
+    """Whether two results are on one electronic surface.
+
+    ``True`` when every field agrees, ``False`` when one differs, and
+    ``None`` when the question cannot be answered -- a result that
+    recorded no surface, or a field either reader could not determine.
+    A caller must not read ``None`` as agreement: that is precisely the
+    reading under which a ground-state Hessian characterised an excited
+    minimum, and the caller says "on another surface" or "not
+    comparable" rather than staying silent.
+    """
+
+    if not first or not second:
+        return None
+    for name in SURFACE_IDENTITY_FIELDS:
+        left = first.get(name)
+        right = second.get(name)
+        if SURFACE_UNKNOWN in (left, right):
+            return None
+        if left != right:
+            return False
+    return True
+
+
+def surface_from_accessors(reader, output):
+    """A surface identity assembled from what one reader can answer.
+
+    For a program whose result records no identity of its own, this is
+    what the host can honestly say: the level fields its reader already
+    parses, and the word ``unknown`` for every field it cannot -- never
+    a default, because a default would make two different surfaces
+    compare equal.
+    """
+
+    def _read(selector):
+        accessor = reader.accessors.get(selector)
+        if accessor is None:
+            return SURFACE_UNKNOWN
+        try:
+            value = accessor(output)
+        except MissingQuantityError:
+            return None
+        except Exception:  # noqa: BLE001 - an unreadable field is unknown
+            return SURFACE_UNKNOWN
+        if isinstance(value, str):
+            value = value.strip().lower() or None
+        return value
+
+    ab_initio = _read("ab_initio")
+    functional = _read("functional")
+    if isinstance(ab_initio, str) and any(
+        marker in ab_initio for marker in _CORRELATED_METHOD_MARKERS
+    ):
+        method_family = ab_initio
+    elif ab_initio == "hf":
+        method_family = "hf"
+    elif isinstance(functional, str) and functional:
+        method_family = "dft"
+    else:
+        method_family = SURFACE_UNKNOWN
+    charge = _read("charge")
+    multiplicity = _read("multiplicity")
+    return {
+        "basis": _read("basis"),
+        "charge": None if charge is None else charge,
+        "constraints": [],
+        # Not parsed from a log by this release; an unknown field makes
+        # the surface incomparable rather than falsely equal.
+        "density_fitting": SURFACE_UNKNOWN,
+        "dispersion": SURFACE_UNKNOWN,
+        "excited_root": None,
+        "frozen_core": SURFACE_UNKNOWN,
+        "functional_applied": functional,
+        "method_family": method_family,
+        "multiplicity": None if multiplicity is None else multiplicity,
+        "reference": SURFACE_UNKNOWN,
+        "solvent": _read("solvent"),
+        "solvent_model": _read("solvation_model"),
+        "state_manifold": None,
+    }
 
 
 def _resolve_computed_surface(reader, output, selector, word):
@@ -641,6 +787,29 @@ def _resolve_computed_surface(reader, output, selector, word):
 
     if word != "computed_surface":
         return word
+    # The surface the result recorded, where it recorded one: a method
+    # family this resolver has never heard of used to fall through every
+    # branch below and answer "reference", which is a true word about the
+    # wrong density.
+    family = (
+        str(
+            (getattr(output, "surface", None) or {}).get("method_family") or ""
+        )
+        .strip()
+        .lower()
+    )
+    if family:
+        if getattr(output, "excited_state_followed_root", None) or family in {
+            "tda",
+            "tddft",
+            "eom_ccsd",
+        }:
+            return "excited_root"
+        if any(marker in family for marker in _CORRELATED_METHOD_MARKERS):
+            return "correlated"
+        if family in {"hf", "dft"}:
+            return "reference"
+        return "unknown"
     if getattr(output, "excited_state_followed_root", None):
         return "excited_root"
     if getattr(output, "correlated_method", None):
@@ -2174,6 +2343,20 @@ def _pyscf_functional(output: Any) -> str:
     return str(value)
 
 
+def _pyscf_surface_id(output: Any) -> str:
+    """The electronic surface this result recorded, as one token."""
+
+    surface = getattr(output, "surface", None)
+    if not surface:
+        raise MissingQuantityError(
+            "this result records no surface identity; it was written "
+            "under a contract older than v6, and the host states the "
+            "surface as absent rather than rebuilding one from the "
+            "settings it happens to recognise"
+        )
+    return surface_token(surface)
+
+
 def _pyscf_ab_initio(output: Any) -> str:
     value = output.spec.get("ab_initio")
     if not value:
@@ -2399,6 +2582,7 @@ def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
         "converged": _pyscf_optimization_converged,
         "functional": _pyscf_functional,
         "ab_initio": _pyscf_ab_initio,
+        "surface_id": _pyscf_surface_id,
         "mulliken_atomic_spin_populations": lambda output: (
             _pyscf_spin_populations(output)
         ),
@@ -2522,6 +2706,7 @@ def _pyscf_accessors() -> dict[str, Callable[[Any], Any]]:
 #: same set; a Hessian stage adds the vibrational quantities on top.
 _PYSCF_SCF_SELECTORS = (
     "ab_initio",
+    "surface_id",
     "basis",
     "charge",
     "connectivity",
@@ -2634,6 +2819,7 @@ _PYSCF_STRUCTURAL_STATES = tuple(
             ("spin_square_deviation", "as_reached"),
             ("spin_square_target", "as_reached"),
             ("supplied_positions", "as_supplied"),
+            ("surface_id", "stateless"),
             ("transition_dipole_moments", "as_reached"),
             ("triples_correction", "as_reached"),
             ("triplet_excitation_energies", "as_reached"),
@@ -2676,6 +2862,7 @@ _PYSCF_ELECTRONIC_PROVENANCE = tuple(
             ("oscillator_strengths", "excited_root"),
             ("reference_energy", "reference"),
             ("scf_energy", "reference"),
+            ("surface_id", "stateless"),
             ("singlet_excitation_energies", "excited_root"),
             ("singlet_oscillator_strengths", "excited_root"),
             ("spin_square", "reference"),
@@ -3360,6 +3547,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
 
 #: Physical dimension of each selector, in the shared quantity vocabulary.
 _SELECTOR_DIMENSIONS = {
+    "surface_id": "DIMENSIONLESS",
     "mulliken_atomic_spin_populations": "DIMENSIONLESS",
     "loewdin_atomic_spin_populations": "DIMENSIONLESS",
     "functional": "DIMENSIONLESS",
@@ -3458,6 +3646,7 @@ _TEXT_SELECTORS = frozenset(
         "solvation_model",
         "solvent",
         "wavefunction_stability_verdict",
+        "surface_id",
     }
 )
 _TEXT_VECTOR_SELECTORS = frozenset(
