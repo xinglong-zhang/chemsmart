@@ -79,6 +79,7 @@ from chemsmart.agent.delivery import (
 )
 from chemsmart.agent.execution import (
     DEFERRABLE_GEOMETRY_PRODUCER_STAGES,
+    HESSIAN_CONSUMER_ROLES,
     AnomalyObservationV1,
     ApprovedNodeBindingV1,
     AtomAppendReceiptV1,
@@ -136,6 +137,7 @@ from chemsmart.agent.execution import (
     handoff_optimized_xtb_geometry,
     handoff_scan_minimum_geometry,
     handoff_validated_orca_producer_hessian,
+    hessian_role_for_rule,
     invocation_identity_sha256,
     is_validated_optimized_geometry_edge,
     is_validated_orca_ts_hessian_edge,
@@ -12264,10 +12266,13 @@ class CommandCompiledToolHostV1:
                 if edge.producer_node_id != node_id:
                     continue
                 consumer_binding = approval.node(edge.consumer_node_id)
+                hessian_role = hessian_role_for_rule(edge.selection_rule)
                 if edge.selection_rule == "validated_final_orca_ts_hessian":
                     if (
-                        context.proposal.program != "orca"
-                        or context.proposal.jobtype != "ts"
+                        context.proposal.program
+                        != hessian_role.producer_program
+                        or context.proposal.jobtype
+                        not in hessian_role.producer_stages
                     ):
                         raise ContractError(
                             "final ORCA Hessian handoff requires an ORCA TS"
@@ -12327,10 +12332,15 @@ class CommandCompiledToolHostV1:
                     self.artifacts[artifact.artifact_id] = artifact
                     self.hessian_handoffs[edge.consumer_node_id] = observed
                 elif edge.selection_rule == "validated_producer_orca_hessian":
-                    if context.proposal.program != "orca":
+                    if (
+                        context.proposal.program
+                        != hessian_role.producer_program
+                        or context.proposal.jobtype
+                        not in hessian_role.producer_stages
+                    ):
                         raise ContractError(
-                            "a producer ORCA Hessian handoff requires an "
-                            "ORCA producer"
+                            "a producer ORCA Hessian handoff requires a "
+                            "frequency-bearing ORCA producer"
                         )
                     result_candidates = tuple(
                         item for item in outputs if item.kind == "orca_output"
@@ -14066,31 +14076,24 @@ class CommandCompiledToolHostV1:
         auxiliary_inputs = tuple(
             item for item in producer_inputs if item not in geometry_inputs
         )
-        valid_orca_irc_auxiliary = bool(
-            planned_node.program == "orca"
-            and planned_node.stage == "irc"
-            and len(auxiliary_inputs) == 1
+        # One declared Hessian role per auxiliary input, read from the
+        # role table rather than spelled out per program and stage.
+        valid_hessian_auxiliary = bool(
+            len(auxiliary_inputs) == 1
             and len(geometry_inputs) == 1
             and geometry_inputs[0].binding_id == "filename"
-            and auxiliary_inputs[0].binding_id == "hess_filename"
-            and auxiliary_inputs[0].artifact_class == "orca_hessian"
-        )
-        valid_orca_ts_auxiliary = bool(
-            planned_node.program == "orca"
-            and planned_node.stage == "ts"
-            and len(auxiliary_inputs) == 1
-            and len(geometry_inputs) == 1
-            and geometry_inputs[0].binding_id == "filename"
-            and auxiliary_inputs[0].binding_id == "inhess_filename"
-            and auxiliary_inputs[0].artifact_class == "orca_hessian"
+            and any(
+                planned_node.program == role.consumer_program
+                and planned_node.stage in role.consumer_stages
+                and auxiliary_inputs[0].binding_id == role.consumer_input_id
+                and auxiliary_inputs[0].artifact_class == role.artifact_class
+                for role in HESSIAN_CONSUMER_ROLES.values()
+            )
         )
         if (
             node is None
             or len(geometry_inputs) != 1
-            or (
-                auxiliary_inputs
-                and not (valid_orca_irc_auxiliary or valid_orca_ts_auxiliary)
-            )
+            or (auxiliary_inputs and not valid_hessian_auxiliary)
         ):
             raise ContractError(
                 "future bounded node requires one filename/geometry_xyz input; "

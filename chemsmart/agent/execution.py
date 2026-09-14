@@ -20,6 +20,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
+from types import MappingProxyType
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -44,6 +45,7 @@ from chemsmart.agent.projects import (
 from chemsmart.agent.scientific_toolchain import ScientificToolchainPlanV1
 from chemsmart.agent.terminal_states import (
     GEOMETRY_SEARCH_JOBTYPES,
+    STATIONARY_POINT_PROMISES,
     SURFACE_SAMPLING_JOBTYPES,
 )
 from chemsmart.agent.workflows import (
@@ -3744,15 +3746,11 @@ def build_program_execution_invocation(
         # A future ORCA Hessian has no bytes at review time.  It is authorized
         # by the typed producer edge, then checked here against the semantic
         # handoff selected from the validated TS receipt.
-        hessian_roles = {
-            "hess_filename": "validated_final_orca_ts_hessian",
-            "inhess_filename": "validated_producer_orca_hessian",
-        }
         aux_keys = tuple(auxiliary_input_artifacts)
         future_auxiliary_ok = bool(
             node.input_mode == "producer"
             and len(aux_keys) == 1
-            and aux_keys[0] in hessian_roles
+            and aux_keys[0] in HESSIAN_CONSUMER_ROLES
             and tuple(auxiliary_handoffs) == aux_keys
         )
         if future_auxiliary_ok:
@@ -3763,8 +3761,10 @@ def build_program_execution_invocation(
                 edge
                 for edge in approval.producer_edges
                 if edge.consumer_node_id == node.node_id
-                and edge.artifact_kind == "orca_hessian"
-                and edge.selection_rule == hessian_roles[role]
+                and edge.artifact_kind
+                == HESSIAN_CONSUMER_ROLES[role].artifact_class
+                and edge.selection_rule
+                == HESSIAN_CONSUMER_ROLES[role].selection_rule
             )
             future_auxiliary_ok = bool(
                 len(matching_edges) == 1
@@ -6575,6 +6575,118 @@ DEFERRABLE_GEOMETRY_PRODUCER_STAGES = (
 #: scan-minimum rule instead.
 OPTIMIZED_GEOMETRY_PRODUCER_STAGES = GEOMETRY_SEARCH_JOBTYPES
 
+#: The stages whose results print a Hessian to hand on. It is the
+#: promise table's keys: a job type promises something about imaginary
+#: modes exactly when it computed the curvature to say it with.
+FREQUENCY_BEARING_STAGES = frozenset(STATIONARY_POINT_PROMISES)
+
+
+@dataclass(frozen=True)
+class HessianConsumerRoleV1:
+    """One way a completed Hessian may be handed to a later calculation.
+
+    A starting Hessian for a transition-state search and the final
+    Hessian of a converged transition state are different scientific
+    facts with different rules, and each was written out seven times --
+    in the auxiliary-binding check, in two edge predicates, in two
+    handoff guards, in the review's admission of auxiliary inputs and in
+    the sentence the model reads. They are one table now, so a role
+    added for another program is one entry rather than seven edits, and
+    a role's producer stages cannot say one thing in the predicate and
+    another in the prose.
+
+    ``artifact_class`` carries the program: an ``orca_hessian`` is
+    ORCA's file. The programs are named anyway, because
+    ``consumer_input_id`` is a live CLI option of one program and a
+    second program's Hessian consumer would spell its own.
+    """
+
+    consumer_input_id: str
+    selection_rule: str
+    artifact_class: str
+    result_artifact_kind: str
+    producer_program: str
+    producer_stages: frozenset[str]
+    consumer_program: str
+    consumer_stages: frozenset[str]
+    meaning: str
+
+
+HESSIAN_CONSUMER_ROLES: Mapping[str, HessianConsumerRoleV1] = MappingProxyType(
+    {
+        "hess_filename": HessianConsumerRoleV1(
+            consumer_input_id="hess_filename",
+            selection_rule="validated_final_orca_ts_hessian",
+            artifact_class="orca_hessian",
+            result_artifact_kind="orca_output",
+            producer_program="orca",
+            producer_stages=frozenset({"ts"}),
+            consumer_program="orca",
+            consumer_stages=frozenset({"irc"}),
+            meaning=(
+                "the final Hessian of a converged transition state, "
+                "read by the intrinsic reaction coordinate that "
+                "walks away from it"
+            ),
+        ),
+        "inhess_filename": HessianConsumerRoleV1(
+            consumer_input_id="inhess_filename",
+            selection_rule="validated_producer_orca_hessian",
+            artifact_class="orca_hessian",
+            result_artifact_kind="orca_output",
+            producer_program="orca",
+            producer_stages=FREQUENCY_BEARING_STAGES,
+            consumer_program="orca",
+            consumer_stages=frozenset({"ts"}),
+            meaning=(
+                "curvature to start a transition-state search from, "
+                "which may carry any imaginary-mode count because it "
+                "is information and not a classification"
+            ),
+        ),
+    }
+)
+
+
+def hessian_role_for_rule(selection_rule: str) -> HessianConsumerRoleV1 | None:
+    """Return the Hessian role a producer-edge selection rule names."""
+
+    for role in HESSIAN_CONSUMER_ROLES.values():
+        if role.selection_rule == selection_rule:
+            return role
+    return None
+
+
+def _is_hessian_role_edge(
+    plan: ScientificWorkflowPlanV2,
+    edge: ScientificWorkflowEdgeV2,
+    role: HessianConsumerRoleV1,
+) -> bool:
+    """Whether one edge is exactly this Hessian role."""
+
+    if (
+        edge.edge_kind != "data"
+        or edge.artifact_class != role.artifact_class
+        or edge.consumer_input_id != role.consumer_input_id
+    ):
+        return False
+    source = next(
+        (node for node in plan.nodes if node.node_id == edge.source_node_id),
+        None,
+    )
+    target = next(
+        (node for node in plan.nodes if node.node_id == edge.target_node_id),
+        None,
+    )
+    return bool(
+        source is not None
+        and target is not None
+        and source.program == role.producer_program
+        and source.stage in role.producer_stages
+        and target.program == role.consumer_program
+        and target.stage in role.consumer_stages
+    )
+
 
 def is_validated_optimized_geometry_edge(
     plan: ScientificWorkflowPlanV2,
@@ -6645,27 +6757,8 @@ def is_validated_orca_ts_hessian_edge(
 ) -> bool:
     """Whether an edge requests the native Hessian of a final ORCA TS."""
 
-    if (
-        edge.edge_kind != "data"
-        or edge.artifact_class != "orca_hessian"
-        or edge.consumer_input_id != "hess_filename"
-    ):
-        return False
-    source = next(
-        (node for node in plan.nodes if node.node_id == edge.source_node_id),
-        None,
-    )
-    target = next(
-        (node for node in plan.nodes if node.node_id == edge.target_node_id),
-        None,
-    )
-    return bool(
-        source is not None
-        and target is not None
-        and source.program == "orca"
-        and source.stage == "ts"
-        and target.program == "orca"
-        and target.stage == "irc"
+    return _is_hessian_role_edge(
+        plan, edge, HESSIAN_CONSUMER_ROLES["hess_filename"]
     )
 
 
@@ -6684,26 +6777,8 @@ def is_validated_producer_orca_hessian_edge(
     and lives in the project YAML ts section.
     """
 
-    if (
-        edge.edge_kind != "data"
-        or edge.artifact_class != "orca_hessian"
-        or edge.consumer_input_id != "inhess_filename"
-    ):
-        return False
-    source = next(
-        (node for node in plan.nodes if node.node_id == edge.source_node_id),
-        None,
-    )
-    target = next(
-        (node for node in plan.nodes if node.node_id == edge.target_node_id),
-        None,
-    )
-    return bool(
-        source is not None
-        and target is not None
-        and source.program == "orca"
-        and target.program == "orca"
-        and target.stage == "ts"
+    return _is_hessian_role_edge(
+        plan, edge, HESSIAN_CONSUMER_ROLES["inhess_filename"]
     )
 
 

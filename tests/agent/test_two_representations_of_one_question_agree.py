@@ -37,6 +37,7 @@ is a scientific observation, not a defect. Only silence is the defect.
 """
 
 import itertools
+import json
 
 import numpy as np
 import pytest
@@ -303,3 +304,29 @@ def test_every_host_policy_is_declared_and_owned():
     # disagreement is an observation rather than a silent contradiction.
     families = {row.family for row in policies.values()}
     assert families == {"shared", "legacy"}
+
+
+@pytest.mark.capability("tool:plan_scientific_workflow")
+def test_every_declared_hessian_role_reaches_the_sentence_the_model_reads():
+    """A role the host admits is a role the model can be told about.
+
+    The two Hessian roles were written out seven times, and one of the
+    seven is the tool description the planning session actually reads.
+    A role added to the table and not to that sentence is admitted by
+    the host and unknown to the only party that can ask for it, which is
+    the affordance-that-never-joins class in its quietest form.
+    """
+
+    from chemsmart.agent.execution import HESSIAN_CONSUMER_ROLES
+    from chemsmart.agent.tool_specs import (
+        build_command_compiled_tool_surface,
+    )
+
+    rendered = json.dumps(
+        build_command_compiled_tool_surface().tool_definitions
+    )
+    for role in HESSIAN_CONSUMER_ROLES.values():
+        assert role.consumer_input_id in rendered, role.consumer_input_id
+        assert role.artifact_class in rendered, role.artifact_class
+        for stage in role.consumer_stages:
+            assert stage in rendered, stage

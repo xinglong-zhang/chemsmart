@@ -139,6 +139,22 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
     ): "the log-parsing programs; "
     + _READER_PROGRAMS,
     (
+        "chemsmart/agent/execution.py",
+        "<module>",
+        "HESSIAN_CONSUMER_ROLES",
+        ("irc",),
+    ): _DECLARATION
+    + ": which stage consumes the final Hessian of a "
+    "converged transition state",
+    (
+        "chemsmart/agent/execution.py",
+        "<module>",
+        "HESSIAN_CONSUMER_ROLES",
+        ("ts",),
+    ): _DECLARATION
+    + ": which stage produces that Hessian, and which "
+    "stage a starting Hessian is fed to",
+    (
         "chemsmart/agent/guides.py",
         "<module>",
         "GUIDES",
