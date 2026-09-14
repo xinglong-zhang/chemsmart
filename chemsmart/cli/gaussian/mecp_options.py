@@ -8,24 +8,28 @@ def click_mecp_state_options(function):
     options = (
         click.option(
             "--multiplicity1",
+            "-m1",
             type=int,
             default=None,
             help="Spin multiplicity for state 1.",
         ),
         click.option(
             "--multiplicity2",
+            "-m2",
             type=int,
             default=None,
             help="Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
         ),
         click.option(
             "--charge1",
+            "-c1",
             type=int,
             default=None,
             help="Charge for state 1.",
         ),
         click.option(
             "--charge2",
+            "-c2",
             type=int,
             default=None,
             help="Charge for state 2. Defaults to charge1.",
