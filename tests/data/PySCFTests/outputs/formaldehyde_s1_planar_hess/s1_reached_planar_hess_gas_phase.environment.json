@@ -56,14 +56,14 @@
   },
   "gpu4pyscf_distribution": null,
   "gpu_probe_error_type": "ModuleNotFoundError",
-  "input_artifact_kind": "pyscf_hdf5",
-  "input_artifact_path": "/home/chemsmart/.claude/jobs/d2dda3a3/tmp/joinprobe/mp2_opt_gas_phase.h5",
-  "input_artifact_sha256": "26296784f1db5e2b251a2647f92707f75476a82cc261a0b7debe322942b0edba",
+  "input_artifact_kind": null,
+  "input_artifact_path": null,
+  "input_artifact_sha256": null,
   "interpreter": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
   "interpreter_observed": "/opt/miniforge3/envs/chemsmart-pyscf/bin/python3.10",
   "interpreter_sha256": "8b52d5776cbe839d6a4cce3451fe9424eaf8a92389ad8597590263e2b15b44f4",
   "libxc_version": "7.0.0",
-  "observed_at": "2026-09-14T01:44:20.544494+00:00",
+  "observed_at": "2026-09-14T01:41:42.886315+00:00",
   "omp_num_threads": "4",
   "packages": {
     "geometric": "1.1.1",
@@ -76,34 +76,37 @@
   "probe_returncode": 0,
   "pyscf_version": "2.14.0",
   "python_version": "3.10.20",
-  "receipt_sha256": "2befbadd4b431a49c219ef1e6456a95a1c93a572bfefbcbaf5a245532b7403eb",
+  "receipt_sha256": "3dcb718c8c63472e0a3cd975722e0db8e475cc8994a3fa4d720f4eb7fbd06bef",
   "request": {
     "aux_basis": null,
     "basis": "def2-svp",
     "dispersion": null,
     "engine": "cpu",
     "functional": "b3lypg",
-    "nstates": null,
+    "nstates": 3,
     "opt_solver": "geometric",
-    "response_method": null,
+    "response_method": "tda",
     "solvent_id": null,
     "stages": [
       "scf",
+      "td",
       "hess"
     ],
-    "state_manifold": null,
+    "state_manifold": "singlet",
     "symbols": [
+      "C",
       "H",
       "O"
     ]
   },
-  "request_sha256": "5dba5358d52e523a15113716a5dedd6dff16181fff71a0144d4508c5171719dc",
+  "request_sha256": "60844cb3faf5e3b9913348bc3430928509fd65faed55c0be4dfce81c3b19bc19",
   "required_stages": [
     "scf",
+    "td",
     "hess"
   ],
-  "run_id": "e2372388-13e2-4886-a550-18dc90ebffc8",
-  "run_nonce": "f954b8735525982716bdc97b9a23f8f943ea7a27dddb0c73406bcba26786ef12",
+  "run_id": "e90c3747-bb21-424f-aea2-b59beb953db4",
+  "run_nonce": "812f4d9ae2b641d0fa11c1f046556ed5ca66cc6706ea669620210465a80c435d",
   "schema_version": "chemsmart.pyscf-environment.v1",
   "solvent_ids": [
     ""

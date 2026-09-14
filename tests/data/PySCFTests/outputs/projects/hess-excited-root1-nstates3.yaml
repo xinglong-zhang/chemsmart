@@ -1,0 +1,14 @@
+# A Hessian on root 1 of the TDA singlet manifold: the curvature of the
+# surface an excited-root optimisation walks on, which PySCF cannot
+# differentiate twice analytically, so the driver differences its own
+# analytic gradient.
+hess:
+  functional: b3lyp
+  basis: def2-svp
+  density_fit: false
+  freq: true
+  response_method: tda
+  state_manifold: singlet
+  nstates: 3
+  excited_state_root: 1
+  hessian_derivative: finite_difference

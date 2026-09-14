@@ -23,8 +23,8 @@ import numpy as np
 CONFIG = json.loads("""{
     "schema_version": "2.0",
     "result_contract_version": "chemsmart.pyscf-result-contract.v6",
-    "run_id": "05872b70-b14f-41ba-a1cb-ad3019c1ab4f",
-    "run_nonce": "56523b1265ffd4d656bfa76dcffee3e320fbc9655a6a00994d2b25b8abf0f3d4",
+    "run_id": "e2372388-13e2-4886-a550-18dc90ebffc8",
+    "run_nonce": "f954b8735525982716bdc97b9a23f8f943ea7a27dddb0c73406bcba26786ef12",
     "chemsmart_version": "3.1.4",
     "label": "dft_hess_on_mp2_gas_phase",
     "title": null,
@@ -41,19 +41,19 @@ CONFIG = json.loads("""{
     ],
     "positions": [
         [
-            0.08281509188649679,
-            0.08281509188638128,
-            2.143367011514131e-15
+            0.0828150918863348,
+            0.08281509188649763,
+            -4.38260971546391e-17
         ],
         [
-            1.0389559261040289,
-            -0.021771017990323084,
-            -1.3846086690717865e-14
+            1.0389559261038512,
+            -0.02177101799035996,
+            -9.339955573608477e-15
         ],
         [
-            -0.0217710179903133,
-            1.0389559261039034,
-            9.666862743373265e-15
+            -0.02177101799033776,
+            1.0389559261040349,
+            7.366703233401636e-15
         ]
     ],
     "unit": "Angstrom",
@@ -87,6 +87,8 @@ CONFIG = json.loads("""{
     "td_max_cycle": null,
     "frozen_core": null,
     "cc_max_cycle": null,
+    "hessian_derivative": null,
+    "fd_step_angstrom": 0.005,
     "preview_only": false,
     "materializations": {},
     "engine": "cpu",
@@ -94,7 +96,7 @@ CONFIG = json.loads("""{
     "max_memory_mb": 8192.0,
     "project_yaml_digest": "cfe91c4e2dd24dca2747b3f890124aeb7a49e3a208b699c06ca7d670d80487e6",
     "input_artifact_kind": "pyscf_hdf5",
-    "input_artifact_sha256": "b752c8ae6cceb866263b096652365ced38225c21383a05f3d7e4f30144c29d51",
+    "input_artifact_sha256": "26296784f1db5e2b251a2647f92707f75476a82cc261a0b7debe322942b0edba",
     "surface": {
         "basis": "def2-svp",
         "charge": 0,
@@ -111,10 +113,10 @@ CONFIG = json.loads("""{
         "solvent_model": null,
         "state_manifold": null
     },
-    "input_geometry_sha256": "0cc613c4faa7f0d3a9b06351642b834b2696b78e88a422dc420e7c077f2cb499",
-    "requested_settings_sha256": "ac3c804e7e786e72b5817e4b15ab77a9fee443853994c72397107f555d5dc768",
+    "input_geometry_sha256": "00434aa7daf140466570788865920df40efc6f3cad39c822a143044bc6a1142e",
+    "requested_settings_sha256": "23561ec0f52964df6955dcec9bf2c91f7db2293de318c5829ddb7c3cde053319",
     "applied_settings_sha256": null,
-    "settings_digest": "ac3c804e7e786e72b5817e4b15ab77a9fee443853994c72397107f555d5dc768"
+    "settings_digest": "23561ec0f52964df6955dcec9bf2c91f7db2293de318c5829ddb7c3cde053319"
 }""")
 
 
@@ -871,18 +873,145 @@ def _spin_diagnostic(mf):
     return tuple(values)
 
 
+def _hessian_correlated_method(config):
+    """The correlated method a Hessian would differentiate, or None."""
+
+    method = str(config.get("ab_initio") or "").strip().lower()
+    return method if method in ("mp2", "ccsd", "ccsd(t)") else None
+
+
+def _hessian_surface_scanner(config, mf):
+    """A gradient scanner for the surface a Hessian is wanted on.
+
+    The same objects the optimiser walks on: root k of the response for
+    an excited surface, the correlated method's own gradient otherwise.
+    Returned with the facts that say which surface it is.
+    """
+
+    root = config.get("excited_state_root")
+    correlated = _hessian_correlated_method(config)
+    if root is not None:
+        td = _build_response(config, mf)
+        td.kernel()
+        roots = int(np.asarray(td.e).reshape(-1).size)
+        root = int(root)
+        if roots < root:
+            raise FollowedRootFiltered(
+                "excited_state_root %d is not in the %d roots PySCF kept "
+                "at this geometry" % (root, roots)
+            )
+        scanner = td.nuc_grad_method().as_scanner(state=root)
+        return scanner, {
+            "gradient_source_class": _class_name(scanner),
+            "root": root,
+            "response_class": _class_name(td),
+            "roots_obtained": roots,
+        }
+    if correlated is not None:
+        obj = _build_correlated(config, mf)
+        scanner = obj.nuc_grad_method().as_scanner()
+        return scanner, {
+            "gradient_source_class": _class_name(scanner),
+            "correlated_method": correlated,
+        }
+    scanner = mf.nuc_grad_method().as_scanner()
+    return scanner, {"gradient_source_class": _class_name(scanner)}
+
+
+def _finite_difference_hessian(scanner, mol, step_angstrom):
+    """Central differences of the analytic gradient, 6N evaluations.
+
+    The step is in Angstrom because that is the unit the geometry is
+    carried in here and the unit a scientist reads; the division is by
+    the step in Bohr because the gradient is in Eh/Bohr, and both
+    numbers are recorded so neither has to be reconstructed.
+    """
+
+    from pyscf.data import nist
+
+    base = mol.atom_coords(unit="Angstrom").copy()
+    natm = int(mol.natm)
+    step = float(step_angstrom)
+    rows = []
+    converged = []
+    for index in range(3 * natm):
+        atom, axis = divmod(index, 3)
+        row = None
+        for sign in (1.0, -1.0):
+            coords = base.copy()
+            coords[atom, axis] += sign * step
+            displaced = mol.set_geom_(coords, unit="Angstrom", inplace=False)
+            _energy, gradient = scanner(displaced)
+            converged.append(bool(getattr(scanner, "converged", False)))
+            gradient = _to_host_array(gradient).astype(float).ravel()
+            row = gradient if row is None else row - gradient
+        rows.append(row / (2.0 * step / nist.BOHR))
+    # PySCF's analytic Hessian, the symmetriser and the harmonic
+    # analysis all speak (atom, atom, xyz, xyz); differences are built
+    # row by row in (3N, 3N). One shape leaves this function, so every
+    # consumer downstream sees one kind of Hessian whatever produced it.
+    raw = (
+        np.asarray(rows, dtype=float)
+        .reshape(natm, 3, natm, 3)
+        .transpose(0, 2, 1, 3)
+    )
+    return raw, {
+        "step_angstrom": step,
+        "step_bohr": step / float(nist.BOHR),
+        "gradient_evaluations": 6 * natm,
+        "per_displacement_converged": [bool(item) for item in converged],
+        "all_displacements_converged": bool(all(converged)),
+        "scheme": "central",
+    }
+
+
+def _hessian_surface_gradient(config, mf):
+    """The gradient of the surface a Hessian was taken on."""
+
+    if (
+        config.get("excited_state_root") is None
+        and _hessian_correlated_method(config) is None
+    ):
+        return mf.nuc_grad_method().kernel()
+    scanner, _facts = _hessian_surface_scanner(config, mf)
+    _energy, gradient = scanner(mf.mol)
+    return gradient
+
+
 def _run_hess(config, mf, mol, results, status):
     """The Hessian of the surface the mean field is on, and its spectrum.
 
     One stage with one exit, so the derivative behind the numbers is
     recorded in one place: a Hessian PySCF differentiates analytically
-    and one it cannot are the same scientific object with different
-    provenance, and a reader must be able to tell them apart.
+    and one it differentiates twice by hand are the same scientific
+    object with different provenance, and a reader must be able to tell
+    them apart. Every fact the difference costs -- the step in both
+    units, how many gradients were spent, whether each displaced point
+    converged -- is written beside the frequencies, because a number
+    read near a crossing or on a soft mode is only as good as the
+    points it was built from.
     """
 
-    # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo helper
-    # and HDF5 writer must never receive that device array.
-    raw_hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
+    derivative = str(config.get("hessian_derivative") or "").strip().lower()
+    if not derivative:
+        derivative = (
+            "analytic"
+            if config.get("excited_state_root") is None
+            and _hessian_correlated_method(config) is None
+            else "central_finite_difference"
+        )
+    fd_facts = {}
+    if derivative == "analytic":
+        # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo
+        # helper and HDF5 writer must never receive that device array.
+        raw_hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
+        fd_facts = {"gradient_evaluations": 1}
+    else:
+        scanner, surface_facts = _hessian_surface_scanner(config, mf)
+        raw_hessian, fd_facts = _finite_difference_hessian(
+            scanner, mol, config.get("fd_step_angstrom") or 0.005
+        )
+        fd_facts.update(surface_facts)
     hessian, raw_hessian_antisymmetry = _symmetrize_cartesian_hessian(
         raw_hessian
     )
@@ -906,6 +1035,7 @@ def _run_hess(config, mf, mol, results, status):
     hess_status = {
         "converged": True,
         "cartesian_symmetrization_applied": True,
+        "derivative": derivative,
         "raw_max_abs_antisymmetry_eh_per_bohr2": raw_hessian_antisymmetry,
         # harmonic_analysis takes mol.atom_mass_list(isotope_avg=True)
         # when no mass is passed; the host's thermochemistry applies its
@@ -914,12 +1044,22 @@ def _run_hess(config, mf, mol, results, status):
         "mass_convention": "isotope_averaged",
         "mass_source": "pyscf.gto.Mole.atom_mass_list(isotope_avg=True)",
     }
+    hess_status.update(fd_facts)
     # The projected spectrum can be all-real at a geometry that is not
     # stationary, so the gradient at the Hessian geometry is the only
     # fact that says how stationary it was. It is a stage fact, never a
     # refusal: a Hessian off a stationary point is a legitimate request.
+    #
+    # It must be the gradient of the surface that was differentiated.
+    # The mean field's own gradient at the relaxed planar S1 point of
+    # formaldehyde is 0.133 Eh/Bohr while the S1 gradient there is
+    # 2e-5: reporting the first would say a stationary point of one
+    # surface is far from stationary, using a number belonging to
+    # another.
     try:
-        gradient = _to_host_array(mf.nuc_grad_method().kernel()).astype(float)
+        gradient = _to_host_array(
+            _hessian_surface_gradient(config, mf)
+        ).astype(float)
         results["forces"] = -gradient
         hess_status["gradient_computed"] = True
         hess_status["max_abs_gradient_eh_per_bohr"] = float(
@@ -943,7 +1083,7 @@ def main():
     started_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     t0 = time.time()
 
-    spec_fields = ('run_id', 'run_nonce', 'label', 'title', 'program', 'jobtype', 'engine', 'stages', 'symbols', 'positions', 'unit', 'xc', 'ab_initio', 'method', 'basis', 'charge', 'spin', 'multiplicity', 'dispersion', 'density_fit', 'aux_basis', 'defgrid', 'atom_grid', 'scf_tol', 'scf_maxiter', 'solvent_model', 'solvent_call', 'solvent_method', 'solvent_id', 'solvent_eps', 'solvent_lebedev_order', 'opt_solver', 'opt_maxsteps', 'response_method', 'state_manifold', 'nstates', 'preview_only', 'materializations', 'num_threads', 'max_memory_mb', 'input_geometry_sha256', 'input_artifact_kind', 'input_artifact_sha256', 'requested_settings_sha256', 'applied_settings_sha256', 'settings_digest', 'result_contract_version', 'reference_family', 'excited_state_root', 'frozen_core', 'td_max_cycle', 'cc_max_cycle', 'surface')
+    spec_fields = ('run_id', 'run_nonce', 'label', 'title', 'program', 'jobtype', 'engine', 'stages', 'symbols', 'positions', 'unit', 'xc', 'ab_initio', 'method', 'basis', 'charge', 'spin', 'multiplicity', 'dispersion', 'density_fit', 'aux_basis', 'defgrid', 'atom_grid', 'scf_tol', 'scf_maxiter', 'solvent_model', 'solvent_call', 'solvent_method', 'solvent_id', 'solvent_eps', 'solvent_lebedev_order', 'opt_solver', 'opt_maxsteps', 'response_method', 'state_manifold', 'nstates', 'preview_only', 'materializations', 'num_threads', 'max_memory_mb', 'input_geometry_sha256', 'input_artifact_kind', 'input_artifact_sha256', 'requested_settings_sha256', 'applied_settings_sha256', 'settings_digest', 'result_contract_version', 'reference_family', 'excited_state_root', 'frozen_core', 'td_max_cycle', 'cc_max_cycle', 'surface', 'hessian_derivative', 'fd_step_angstrom')
     spec = {key: CONFIG.get(key) for key in spec_fields}
     status = {
         "stages": {},
@@ -1129,9 +1269,15 @@ def main():
                         neighbours.append(
                             float(excitations[root] - excitations[root - 1])
                         )
-                    record = status["stages"]["opt"].setdefault(
-                        "excited_state", {}
+                    # The stage that owns the followed surface: an
+                    # optimisation walks it, and a Hessian on a root has
+                    # no optimisation to write into.
+                    owner = (
+                        status["stages"]["opt"]
+                        if "opt" in status["stages"]
+                        else td_stage
                     )
+                    record = owner.setdefault("excited_state", {})
                     record["followed_root_total_energy_end"] = total_energy
                     record["followed_root_converged_end"] = bool(
                         _root_convergence(td)[root - 1]
@@ -1308,13 +1454,13 @@ if __name__ == "__main__":
 System: uname_result(system='Linux', node='chemsmart-hpc', release='5.15.0-187-generic', version='#197-Ubuntu SMP Fri Jul 17 19:17:01 UTC 2026', machine='x86_64')  Threads 4
 Python 3.10.20 | packaged by conda-forge | (main, Jun 11 2026, 03:31:56) [GCC 14.3.0]
 numpy 1.26.4  scipy 1.15.2  h5py 3.16.0
-Date: Mon Sep 14 09:25:22 2026
+Date: Mon Sep 14 09:44:21 2026
 PySCF version 2.14.0
 PySCF path  /opt/miniforge3/envs/chemsmart-pyscf/lib/python3.10/site-packages/pyscf
 
-[ENV] CHEMSMART_PYSCF_ENVIRONMENT_RECEIPT_SHA256 d654e891dfcca64bfc81301b7a5f6013459dfa5f83462bb817d87cbce58f94b2
-[ENV] CHEMSMART_PYSCF_SCRIPT_SHA256 d8d0bc99a90ec023a38ba00b3710a625c32ba78e9a0fe3e44dfec8b9a702be7f
-[ENV] CHEMSMART_PYSCF_INPUT_RECEIPT_SHA256 20b889f8068d1bf7a901cebb69ce0edbc10018a04a2c1cfdaac4f67334202e18
+[ENV] CHEMSMART_PYSCF_ENVIRONMENT_RECEIPT_SHA256 2befbadd4b431a49c219ef1e6456a95a1c93a572bfefbcbaf5a245532b7403eb
+[ENV] CHEMSMART_PYSCF_SCRIPT_SHA256 36a0828432b887699bb3fc7b6a5a1d2815ab89bbd29d9465d3a1eb2d57a91fad
+[ENV] CHEMSMART_PYSCF_INPUT_RECEIPT_SHA256 3a1800a52731b74aa90103e879eea3dd40152923d5984c7da6b04d0318368059
 [CONFIG] conf_file None
 [INPUT] verbose = 4
 [INPUT] num. atoms = 3
@@ -1324,17 +1470,17 @@ PySCF path  /opt/miniforge3/envs/chemsmart-pyscf/lib/python3.10/site-packages/py
 [INPUT] symmetry False subgroup None
 [INPUT] Mole.unit = Angstrom
 [INPUT] Symbol           X                Y                Z      unit          X                Y                Z       unit  Magmom
-[INPUT]  1 O      0.082815091886   0.082815091886   0.000000000000 AA    0.156497842646   0.156497842646   0.000000000000 Bohr   0.0
+[INPUT]  1 O      0.082815091886   0.082815091886  -0.000000000000 AA    0.156497842646   0.156497842646  -0.000000000000 Bohr   0.0
 [INPUT]  2 H      1.038955926104  -0.021771017990  -0.000000000000 AA    1.963342155830  -0.041141261455  -0.000000000000 Bohr   0.0
 [INPUT]  3 H     -0.021771017990   1.038955926104   0.000000000000 AA   -0.041141261455   1.963342155830   0.000000000000 Bohr   0.0
 
-nuclear repulsion = 9.15547581487949
+nuclear repulsion = 9.15547581487948
 number of shells = 12
 number of NR pGTOs = 38
 number of NR cGTOs = 24
 basis = def2-svp
 ecp = {}
-CPU time:         0.48
+CPU time:         0.49
 
 
 ******** <class 'pyscf.dft.rks.RKS'> ********
@@ -1351,7 +1497,7 @@ SCF conv_tol_grad = None
 SCF max_cycles = 50
 direct_scf = True
 direct_scf_tol = 1e-13
-chkfile to save SCF result = /tmp/tmpvyqrw7kr
+chkfile to save SCF result = /tmp/tmp1wj69b03
 max_memory 8192 MB (current use 103 MB)
 XC library pyscf.dft.libxc version 7.0.0
     S. Lehtola, C. Steigemann, M. J.T. Oliveira, and M. A.L. Marques.,  SoftwareX 7, 1–5 (2018)
@@ -1361,32 +1507,32 @@ radial grids:
     Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
     
 becke partition: Becke, JCP 88, 2547 (1988); DOI:10.1063/1.454033
-pruning grids: <function nwchem_prune at 0x14c960284ca0>
+pruning grids: <function nwchem_prune at 0x150e4d748e50>
 grids dens level: 3
 symmetrized grids: False
-atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x14c96023b520>
+atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x150e4d6fb6d0>
 small_rho_cutoff = 0
 Set gradient conv threshold to 3.16228e-05
 Initial guess from minao.
 tot grids = 33704
 init E= -76.2864983483052
-  HOMO = -0.430585643678911  LUMO = 0.00270003664590845  gap/eV = 11.79030
+  HOMO = -0.430585643678906  LUMO = 0.00270003664590668  gap/eV = 11.79030
 cycle= 1 E= -76.2671778979605  delta_E= 0.0193  |g|= 0.702  |ddm|=  1.4
-  HOMO = -0.124661144077795  LUMO = 0.0748738105543261  gap/eV = 5.42962
-cycle= 2 E= -76.1793082744614  delta_E= 0.0879  |g|= 0.983  |ddm|= 1.09
-  HOMO = -0.297932852772996  LUMO = 0.0418473189438755  gap/eV = 9.24589
-cycle= 3 E= -76.3581486320475  delta_E= -0.179  |g|= 0.0241  |ddm|= 0.675
-  HOMO = -0.291747093636788  LUMO = 0.0460585014617485  gap/eV = 9.19216
+  HOMO = -0.124661144077795  LUMO = 0.074873810554331  gap/eV = 5.42962
+cycle= 2 E= -76.1793082744615  delta_E= 0.0879  |g|= 0.983  |ddm|= 1.09
+  HOMO = -0.297932852772991  LUMO = 0.0418473189438804  gap/eV = 9.24589
+cycle= 3 E= -76.3581486320477  delta_E= -0.179  |g|= 0.0241  |ddm|= 0.675
+  HOMO = -0.291747093636782  LUMO = 0.0460585014617512  gap/eV = 9.19216
 cycle= 4 E= -76.3582537338576  delta_E= -0.000105  |g|= 0.00383  |ddm|= 0.0147
-  HOMO = -0.292085763469658  LUMO = 0.045736426263947  gap/eV = 9.19261
+  HOMO = -0.292085763469656  LUMO = 0.0457364262639439  gap/eV = 9.19261
 cycle= 5 E= -76.3582561115748  delta_E= -2.38e-06  |g|= 0.000446  |ddm|= 0.00217
-  HOMO = -0.292225169350884  LUMO = 0.0457139284514532  gap/eV = 9.19579
-cycle= 6 E= -76.3582561499579  delta_E= -3.84e-08  |g|= 8.49e-06  |ddm|= 0.000323
-  HOMO = -0.292225775601346  LUMO = 0.0457126162478185  gap/eV = 9.19577
-cycle= 7 E= -76.3582561499932  delta_E= -3.53e-11  |g|= 1.19e-06  |ddm|= 1.61e-05
-  HOMO = -0.292225432759152  LUMO = 0.0457128271064069  gap/eV = 9.19577
-Extra cycle  E= -76.3582561499933  delta_E= -1.42e-13  |g|= 8.04e-07  |ddm|= 1.78e-06
-converged SCF energy = -76.3582561499933
+  HOMO = -0.292225169350879  LUMO = 0.0457139284514607  gap/eV = 9.19579
+cycle= 6 E= -76.3582561499578  delta_E= -3.84e-08  |g|= 8.49e-06  |ddm|= 0.000323
+  HOMO = -0.292225775601337  LUMO = 0.0457126162478194  gap/eV = 9.19577
+cycle= 7 E= -76.3582561499932  delta_E= -3.54e-11  |g|= 1.19e-06  |ddm|= 1.61e-05
+  HOMO = -0.292225432759142  LUMO = 0.0457128271064069  gap/eV = 9.19577
+Extra cycle  E= -76.3582561499935  delta_E= -2.84e-13  |g|= 8.04e-07  |ddm|= 1.78e-06
+converged SCF energy = -76.3582561499935
 
 
 ******** <class 'pyscf.grad.rks.Gradients'> for <class 'pyscf.dft.rks.RKS'> ********
@@ -1395,7 +1541,7 @@ max_memory 8192 MB (current use 163 MB)
 grid_response = False
 --------------- RKS gradients ---------------
          x                y                z
-0 O     0.0032320560     0.0032320560     0.0000000000
-1 H    -0.0050723504     0.0018390990    -0.0000000000
-2 H     0.0018390990    -0.0050723504     0.0000000000
+0 O     0.0032320560     0.0032320560    -0.0000000000
+1 H    -0.0050723504     0.0018390990     0.0000000000
+2 H     0.0018390990    -0.0050723504    -0.0000000000
 ----------------------------------------------

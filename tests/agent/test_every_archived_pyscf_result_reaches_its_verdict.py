@@ -59,6 +59,14 @@ _HOST_RULE_ABOVE_THE_RECEIPT = {
     # Hessian describes; the host's order rule does, and it types the
     # result failed_wrong_stationary_point with the anomaly recorded.
     "nh3_planar_hess": {"result.stationary_point_order"},
+    # The relaxed planar stationary point of formaldehyde's S1 (TDA root
+    # 1) surface: a true stationary point of that surface, maximum
+    # gradient 9.1e-06 Eh/Bohr on it, carrying one imaginary mode at
+    # -503.9 cm-1. The runner validates the artifact; the host's order
+    # rule reads a hess that promised no imaginary mode and types it.
+    # This is the class round 2 could not see at all, because no Hessian
+    # of an excited surface existed here.
+    "formaldehyde_s1_planar_hess": {"result.stationary_point_order"},
 }
 
 pytestmark = pytest.mark.capability("program_jobtype:pyscf:cpu:*")

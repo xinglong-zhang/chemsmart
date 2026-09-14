@@ -23,6 +23,10 @@ from chemsmart.cli.job import (
     click_pubchem_options,
 )
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.pyscf.settings import (
+    PYSCF_FD_STEP_ANGSTROM,
+    PYSCF_HESSIAN_DERIVATIVES,
+)
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import clean_label
 from chemsmart.utils.utils import return_objects_and_indices_from_string_index
@@ -95,6 +99,25 @@ def click_pyscf_settings_options(f):
         default=None,
         help="Coupled-cluster amplitude/lambda iteration cap (PySCF "
         "default 50). ccsd/ccsd(t) only.",
+    )
+    @click.option(
+        "--hessian-derivative",
+        type=click.Choice(PYSCF_HESSIAN_DERIVATIVES),
+        default=None,
+        help="How the second derivative is obtained: 'analytic' is "
+        "PySCF's own and exists for HF and DFT references only; "
+        "'finite_difference' differences the analytic gradient of the "
+        "surface the job is on, which is the only route to the curvature "
+        "of an excited root or a correlated method. Omitted uses the "
+        "analytic derivative where PySCF has one. hess only.",
+    )
+    @click.option(
+        "--fd-step-angstrom",
+        type=float,
+        default=None,
+        help="Displacement of a finite-difference Hessian, in Angstrom "
+        f"(default {PYSCF_FD_STEP_ANGSTROM}). ORCA's NumFreq default is "
+        "0.005 Bohr, a different convention.",
     )
     @click.option(
         "--nstates",
@@ -265,6 +288,8 @@ def pyscf(
     ab_initio,
     frozen_core,
     cc_max_cycle,
+    hessian_derivative,
+    fd_step_angstrom,
     nstates,
     response_method,
     state_manifold,
@@ -357,6 +382,12 @@ def pyscf(
     if cc_max_cycle is not None:
         job_settings.cc_max_cycle = cc_max_cycle
         keywords += ("cc_max_cycle",)
+    if hessian_derivative is not None:
+        job_settings.hessian_derivative = hessian_derivative
+        keywords += ("hessian_derivative",)
+    if fd_step_angstrom is not None:
+        job_settings.fd_step_angstrom = fd_step_angstrom
+        keywords += ("fd_step_angstrom",)
     if nstates is not None:
         job_settings.nstates = nstates
         keywords += ("nstates",)

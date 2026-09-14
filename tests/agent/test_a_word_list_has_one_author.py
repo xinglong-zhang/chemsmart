@@ -434,6 +434,21 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
         "molecule",
         ("opt",),
     ): "derives in C.1 from the stationary-point stage set",
+    (
+        "chemsmart/io/pyscf/output.py",
+        "PySCFOutput/excited_state_record",
+        None,
+        ("opt", "td"),
+    ): "the two stages that can own a followed root: the optimisation "
+    "that walks it and the response stage a Hessian differentiates",
+    (
+        "chemsmart/jobs/pyscf/settings.py",
+        "<module>",
+        "PYSCF_EXCITED_SURFACE_JOBTYPES",
+        ("hess", "opt"),
+    ): _DECLARATION
+    + ": the job types whose own surface can be an "
+    "excited root",
 }
 
 

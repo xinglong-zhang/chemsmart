@@ -30,6 +30,7 @@ from chemsmart.io.pyscf.output import pyscf_source_artifact_binding
 from chemsmart.jobs.pyscf.settings import (
     PYSCF_CORRELATED_METHODS,
     PYSCF_DEFGRIDS,
+    PYSCF_FD_STEP_ANGSTROM,
     PYSCF_SOLVENT_MODELS,
     PYSCF_UNRESTRICTED_MANIFOLD,
 )
@@ -148,7 +149,11 @@ APPLIED_SPEC_FIELDS_V5 = APPLIED_SPEC_FIELDS_V4 + (
 )
 
 #: The current (v6) vocabulary: the surface identity.
-APPLIED_SPEC_FIELDS = APPLIED_SPEC_FIELDS_V5 + ("surface",)
+APPLIED_SPEC_FIELDS = APPLIED_SPEC_FIELDS_V5 + (
+    "surface",
+    "hessian_derivative",
+    "fd_step_angstrom",
+)
 
 #: Digest vocabulary per contract version.  Extending the current tuple in
 #: place would silently change the reconstruction for every archived
@@ -685,6 +690,16 @@ class PySCFScriptWriter:
                 int(settings.cc_max_cycle)
                 if getattr(settings, "cc_max_cycle", None) is not None
                 else None
+            ),
+            "hessian_derivative": (
+                str(settings.hessian_derivative).strip().lower()
+                if getattr(settings, "hessian_derivative", None) is not None
+                else None
+            ),
+            "fd_step_angstrom": (
+                float(settings.fd_step_angstrom)
+                if getattr(settings, "fd_step_angstrom", None) is not None
+                else PYSCF_FD_STEP_ANGSTROM
             ),
             # Kept in the vocabulary for every artifact on disk; no stage
             # is a preview any more, so it is False for every new run.
@@ -1579,18 +1594,145 @@ def _spin_diagnostic(mf):
     return tuple(values)
 
 
+def _hessian_correlated_method(config):
+    """The correlated method a Hessian would differentiate, or None."""
+
+    method = str(config.get("ab_initio") or "").strip().lower()
+    return method if method in ("mp2", "ccsd", "ccsd(t)") else None
+
+
+def _hessian_surface_scanner(config, mf):
+    """A gradient scanner for the surface a Hessian is wanted on.
+
+    The same objects the optimiser walks on: root k of the response for
+    an excited surface, the correlated method's own gradient otherwise.
+    Returned with the facts that say which surface it is.
+    """
+
+    root = config.get("excited_state_root")
+    correlated = _hessian_correlated_method(config)
+    if root is not None:
+        td = _build_response(config, mf)
+        td.kernel()
+        roots = int(np.asarray(td.e).reshape(-1).size)
+        root = int(root)
+        if roots < root:
+            raise FollowedRootFiltered(
+                "excited_state_root %d is not in the %d roots PySCF kept "
+                "at this geometry" % (root, roots)
+            )
+        scanner = td.nuc_grad_method().as_scanner(state=root)
+        return scanner, {
+            "gradient_source_class": _class_name(scanner),
+            "root": root,
+            "response_class": _class_name(td),
+            "roots_obtained": roots,
+        }
+    if correlated is not None:
+        obj = _build_correlated(config, mf)
+        scanner = obj.nuc_grad_method().as_scanner()
+        return scanner, {
+            "gradient_source_class": _class_name(scanner),
+            "correlated_method": correlated,
+        }
+    scanner = mf.nuc_grad_method().as_scanner()
+    return scanner, {"gradient_source_class": _class_name(scanner)}
+
+
+def _finite_difference_hessian(scanner, mol, step_angstrom):
+    """Central differences of the analytic gradient, 6N evaluations.
+
+    The step is in Angstrom because that is the unit the geometry is
+    carried in here and the unit a scientist reads; the division is by
+    the step in Bohr because the gradient is in Eh/Bohr, and both
+    numbers are recorded so neither has to be reconstructed.
+    """
+
+    from pyscf.data import nist
+
+    base = mol.atom_coords(unit="Angstrom").copy()
+    natm = int(mol.natm)
+    step = float(step_angstrom)
+    rows = []
+    converged = []
+    for index in range(3 * natm):
+        atom, axis = divmod(index, 3)
+        row = None
+        for sign in (1.0, -1.0):
+            coords = base.copy()
+            coords[atom, axis] += sign * step
+            displaced = mol.set_geom_(coords, unit="Angstrom", inplace=False)
+            _energy, gradient = scanner(displaced)
+            converged.append(bool(getattr(scanner, "converged", False)))
+            gradient = _to_host_array(gradient).astype(float).ravel()
+            row = gradient if row is None else row - gradient
+        rows.append(row / (2.0 * step / nist.BOHR))
+    # PySCF's analytic Hessian, the symmetriser and the harmonic
+    # analysis all speak (atom, atom, xyz, xyz); differences are built
+    # row by row in (3N, 3N). One shape leaves this function, so every
+    # consumer downstream sees one kind of Hessian whatever produced it.
+    raw = (
+        np.asarray(rows, dtype=float)
+        .reshape(natm, 3, natm, 3)
+        .transpose(0, 2, 1, 3)
+    )
+    return raw, {
+        "step_angstrom": step,
+        "step_bohr": step / float(nist.BOHR),
+        "gradient_evaluations": 6 * natm,
+        "per_displacement_converged": [bool(item) for item in converged],
+        "all_displacements_converged": bool(all(converged)),
+        "scheme": "central",
+    }
+
+
+def _hessian_surface_gradient(config, mf):
+    """The gradient of the surface a Hessian was taken on."""
+
+    if (
+        config.get("excited_state_root") is None
+        and _hessian_correlated_method(config) is None
+    ):
+        return mf.nuc_grad_method().kernel()
+    scanner, _facts = _hessian_surface_scanner(config, mf)
+    _energy, gradient = scanner(mf.mol)
+    return gradient
+
+
 def _run_hess(config, mf, mol, results, status):
     """The Hessian of the surface the mean field is on, and its spectrum.
 
     One stage with one exit, so the derivative behind the numbers is
     recorded in one place: a Hessian PySCF differentiates analytically
-    and one it cannot are the same scientific object with different
-    provenance, and a reader must be able to tell them apart.
+    and one it differentiates twice by hand are the same scientific
+    object with different provenance, and a reader must be able to tell
+    them apart. Every fact the difference costs -- the step in both
+    units, how many gradients were spent, whether each displaced point
+    converged -- is written beside the frequencies, because a number
+    read near a crossing or on a soft mode is only as good as the
+    points it was built from.
     """
 
-    # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo helper
-    # and HDF5 writer must never receive that device array.
-    raw_hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
+    derivative = str(config.get("hessian_derivative") or "").strip().lower()
+    if not derivative:
+        derivative = (
+            "analytic"
+            if config.get("excited_state_root") is None
+            and _hessian_correlated_method(config) is None
+            else "central_finite_difference"
+        )
+    fd_facts = {}
+    if derivative == "analytic":
+        # GPU4PySCF returns a CuPy-like Hessian. PySCF's CPU thermo
+        # helper and HDF5 writer must never receive that device array.
+        raw_hessian = _to_host_array(mf.Hessian().kernel()).astype(float)
+        fd_facts = {"gradient_evaluations": 1}
+    else:
+        scanner, surface_facts = _hessian_surface_scanner(config, mf)
+        raw_hessian, fd_facts = _finite_difference_hessian(
+            scanner, mol, config.get("fd_step_angstrom") or 0.005
+        )
+        fd_facts.update(surface_facts)
     hessian, raw_hessian_antisymmetry = _symmetrize_cartesian_hessian(
         raw_hessian
     )
@@ -1614,6 +1756,7 @@ def _run_hess(config, mf, mol, results, status):
     hess_status = {
         "converged": True,
         "cartesian_symmetrization_applied": True,
+        "derivative": derivative,
         "raw_max_abs_antisymmetry_eh_per_bohr2": raw_hessian_antisymmetry,
         # harmonic_analysis takes mol.atom_mass_list(isotope_avg=True)
         # when no mass is passed; the host's thermochemistry applies its
@@ -1622,12 +1765,22 @@ def _run_hess(config, mf, mol, results, status):
         "mass_convention": "isotope_averaged",
         "mass_source": "pyscf.gto.Mole.atom_mass_list(isotope_avg=True)",
     }
+    hess_status.update(fd_facts)
     # The projected spectrum can be all-real at a geometry that is not
     # stationary, so the gradient at the Hessian geometry is the only
     # fact that says how stationary it was. It is a stage fact, never a
     # refusal: a Hessian off a stationary point is a legitimate request.
+    #
+    # It must be the gradient of the surface that was differentiated.
+    # The mean field's own gradient at the relaxed planar S1 point of
+    # formaldehyde is 0.133 Eh/Bohr while the S1 gradient there is
+    # 2e-5: reporting the first would say a stationary point of one
+    # surface is far from stationary, using a number belonging to
+    # another.
     try:
-        gradient = _to_host_array(mf.nuc_grad_method().kernel()).astype(float)
+        gradient = _to_host_array(
+            _hessian_surface_gradient(config, mf)
+        ).astype(float)
         results["forces"] = -gradient
         hess_status["gradient_computed"] = True
         hess_status["max_abs_gradient_eh_per_bohr"] = float(
@@ -1837,9 +1990,15 @@ def main():
                         neighbours.append(
                             float(excitations[root] - excitations[root - 1])
                         )
-                    record = status["stages"]["opt"].setdefault(
-                        "excited_state", {}
+                    # The stage that owns the followed surface: an
+                    # optimisation walks it, and a Hessian on a root has
+                    # no optimisation to write into.
+                    owner = (
+                        status["stages"]["opt"]
+                        if "opt" in status["stages"]
+                        else td_stage
                     )
+                    record = owner.setdefault("excited_state", {})
                     record["followed_root_total_energy_end"] = total_energy
                     record["followed_root_converged_end"] = bool(
                         _root_convergence(td)[root - 1]

@@ -674,11 +674,24 @@ class PySCFOutput(FileMixin):
 
     @property
     def excited_state_record(self):
-        """The optimiser's own record of the followed root, or None."""
+        """The run's own record of the followed root, or None.
+
+        Written by the stage that owns the followed surface: the
+        optimisation that walked it, or the response stage itself when a
+        Hessian differentiates a root at a fixed geometry and there is
+        no optimisation to write into.
+        """
         stages = self.status.get("stages")
-        opt = stages.get("opt") if isinstance(stages, dict) else None
-        record = opt.get("excited_state") if isinstance(opt, dict) else None
-        return record if isinstance(record, dict) else None
+        if not isinstance(stages, dict):
+            return None
+        for name in ("opt", "td"):
+            stage = stages.get(name)
+            record = (
+                stage.get("excited_state") if isinstance(stage, dict) else None
+            )
+            if isinstance(record, dict):
+                return record
+        return None
 
     # ------------------------------------------------------------------
     # correlated stage: the program's own components at the final geometry

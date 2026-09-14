@@ -11,6 +11,7 @@ PySCF 2.14 cannot compute are refused at preflight instead of dying in
 the engine after the call was spent.
 """
 
+import re
 from types import SimpleNamespace
 
 import h5py
@@ -112,8 +113,12 @@ def test_a_previous_supported_contract_is_evidence_not_a_downgrade():
         == APPLIED_SPEC_FIELDS
     )
     # What v6 adds: the electronic surface a result's geometry and total
-    # energy belong to.
-    assert APPLIED_SPEC_FIELDS[len(APPLIED_SPEC_FIELDS_V5) :] == ("surface",)
+    # energy belong to, and how a Hessian's second derivative was taken.
+    assert APPLIED_SPEC_FIELDS[len(APPLIED_SPEC_FIELDS_V5) :] == (
+        "surface",
+        "hessian_derivative",
+        "fd_step_angstrom",
+    )
 
     complete_spec = {
         "reference_family": "rks",
@@ -169,10 +174,10 @@ def _driver_source():
     )
 
 
-def _stage_function(source, stage):
-    """The text of ``_run_<stage>`` when the branch delegates to one."""
+def _function_text(source, name):
+    """The text of one driver function, or '' when it has none."""
 
-    marker = "def _run_%s(" % stage
+    marker = "def %s(" % name
     if marker not in source:
         return ""
     start = source.index(marker)
@@ -184,6 +189,29 @@ def _stage_function(source, stage):
     ]
     end = start + len(marker) + (min(offsets) if offsets else len(remainder))
     return source[start:end]
+
+
+def _stage_function(source, stage):
+    """``_run_<stage>`` and the driver helpers it calls.
+
+    A stage's work is where the stage put it, and a stage with two ways
+    of doing its job puts some of it in a helper: the Hessian stage
+    takes the gradient of whichever surface it differentiated. What
+    these tests pin is the work, so the reader follows the calls rather
+    than the layout.
+    """
+
+    text = _function_text(source, "_run_%s" % stage)
+    if not text:
+        return ""
+    called = {
+        name
+        for name in re.findall(r"\b(_[A-Za-z0-9_]+)\s*\(", text)
+        if name != "_run_%s" % stage
+    }
+    for name in sorted(called):
+        text += _function_text(source, name)
+    return text
 
 
 def _stage_branch(source, stage):

@@ -50,6 +50,29 @@ PYSCF_OPT_SOLVERS = ("geometric", "berny", "ase")
 PYSCF_ENGINES = ("cpu", "gpu")
 PYSCF_JOBTYPES = ("hess", "opt", "sp", "td")
 PYSCF_RESPONSE_METHODS = ("tda", "tddft")
+#: How a Hessian's second derivative is obtained. ``analytic`` is
+#: PySCF's own second derivative and exists for HF and DFT references
+#: only; ``finite_difference`` differences the analytic gradient of
+#: whatever surface the job is on, which is the only route to the
+#: curvature of an excited root or a correlated method here. Unset
+#: resolves to the analytic derivative where PySCF has one.
+PYSCF_HESSIAN_DERIVATIVES = ("analytic", "finite_difference")
+#: Job types whose own surface can be an excited root: the optimisation
+#: that walks it and the Hessian that differentiates it twice. A ``td``
+#: is not one of them -- its geometry and total energy are the
+#: reference's, and its roots are values computed on that surface.
+PYSCF_EXCITED_SURFACE_JOBTYPES = frozenset({"hess", "opt"})
+#: The order driver stages run in, declared once. A surface is built
+#: before anything differentiates it: the correlated method and the
+#: response both come before the Hessian that measures their curvature.
+#: Every tuple archived under contract v5 -- scf,opt,td; scf,opt,corr;
+#: scf,corr; scf,td; scf,hess -- is unchanged by this ordering.
+PYSCF_STAGE_ORDER = ("scf", "opt", "corr", "td", "hess")
+#: The displacement a finite-difference Hessian steps by, in Angstrom:
+#: the unit the geometry is carried in and the one a scientist reads.
+#: ORCA's NumFreq default is 0.005 Bohr, a different convention, and the
+#: two are compared on the record rather than conflated in a name.
+PYSCF_FD_STEP_ANGSTROM = 0.005
 #: Excitation manifolds.  A closed-shell reference asks for singlet or
 #: triplet excitations; an open-shell (UKS) reference has one
 #: spin-conserving manifold that PySCF labels neither, so it is named for
@@ -148,16 +171,16 @@ def pyscf_stages(jobtype, *, ab_initio=None, excited_state_root=None):
     normal = str(jobtype or "").strip().lower().replace("pyscf_", "")
     if normal not in PYSCF_JOBTYPES:
         return []
-    stages = ["scf"]
+    running = {"scf"}
     if normal == "opt":
-        stages.append("opt")
-    if normal == "td" or (normal == "opt" and excited_state_root is not None):
-        stages.append("td")
+        running.add("opt")
     if normal == "hess":
-        stages.append("hess")
+        running.add("hess")
+    if normal == "td" or excited_state_root is not None:
+        running.add("td")
     if pyscf_correlated_method(ab_initio) is not None:
-        stages.append("corr")
-    return stages
+        running.add("corr")
+    return [stage for stage in PYSCF_STAGE_ORDER if stage in running]
 
 
 def describe_functional_resolution(functional=None, *, ab_initio=None):
@@ -309,6 +332,8 @@ class PySCFJobSettings(MolecularJobSettings):
         td_max_cycle=None,
         frozen_core=None,
         cc_max_cycle=None,
+        hessian_derivative=None,
+        fd_step_angstrom=None,
         charge=None,
         multiplicity=None,
         freq=False,
@@ -358,6 +383,8 @@ class PySCFJobSettings(MolecularJobSettings):
         self.td_max_cycle = td_max_cycle
         self.frozen_core = frozen_core
         self.cc_max_cycle = cc_max_cycle
+        self.hessian_derivative = hessian_derivative
+        self.fd_step_angstrom = fd_step_angstrom
         self.density_fit = density_fit
         self.opt_solver = opt_solver
         self.opt_maxsteps = opt_maxsteps
@@ -736,11 +763,19 @@ class PySCFJobSettings(MolecularJobSettings):
             "td_max_cycle": self.td_max_cycle,
             "excited_state_root": self.excited_state_root,
         }
-        if self.excited_state_root is not None and self.jobtype != "opt":
+        # A root names the surface a job walks on or differentiates: an
+        # optimisation follows it downhill and a Hessian measures its
+        # curvature. A td node computes the spectrum at a fixed geometry
+        # and names no root, because its own surface is the reference's.
+        if self.excited_state_root is not None and self.jobtype not in (
+            PYSCF_EXCITED_SURFACE_JOBTYPES
+        ):
             raise ValueError(
-                "excited_state_root names the root an opt follows; it is "
-                f"valid only for the opt jobtype, not {self.jobtype!r}. "
-                "A td node computes the spectrum at a fixed geometry."
+                "excited_state_root names the root a job walks on or "
+                "differentiates; it is valid for "
+                f"{sorted(PYSCF_EXCITED_SURFACE_JOBTYPES)}, not "
+                f"{self.jobtype!r}. A td node computes the spectrum at a "
+                "fixed geometry."
             )
         if not self.response_requested:
             populated = ", ".join(
@@ -752,7 +787,11 @@ class PySCFJobSettings(MolecularJobSettings):
                     "or an opt carrying excited_state_root."
                 )
             return
-        what = "td" if self.jobtype == "td" else "opt on an excited root"
+        what = (
+            "td"
+            if self.jobtype == "td"
+            else f"{self.jobtype} on an excited root"
+        )
         response_method = str(self.response_method or "").strip().lower()
         if response_method not in PYSCF_RESPONSE_METHODS:
             raise ValueError(

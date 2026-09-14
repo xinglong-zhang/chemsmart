@@ -2,11 +2,11 @@
  "artifact": "mp2_opt_gas_phase.h5",
  "command": "reference.py mp2_opt_gas_phase.h5",
  "corr_converged": true,
- "corr_correlation_energy_eh": -0.2040815982464505,
+ "corr_correlation_energy_eh": -0.204081598246449,
  "corr_frozen_orbitals": 0,
  "corr_method": "mp2",
- "corr_reference_energy_eh": -75.96061581036669,
- "corr_total_energy_eh": -76.16469740861314,
+ "corr_reference_energy_eh": -75.96061581036665,
+ "corr_total_energy_eh": -76.1646974086131,
  "jobtype": "opt",
  "masses_isotope_averaged_amu": [
   15.999,
@@ -16,7 +16,7 @@
  "point_group_detect_symm": "C2v",
  "pyscf_version": "2.14.0",
  "scf_converged": true,
- "scf_energy_eh": -75.96061581036669,
- "stored_total_energy_match_recomputed_abs_eh": 7.541231639152102e-09,
+ "scf_energy_eh": -75.96061581036665,
+ "stored_total_energy_match_recomputed_abs_eh": 7.541189006587956e-09,
  "symm_geom_tol_bohr": 1e-05
 }

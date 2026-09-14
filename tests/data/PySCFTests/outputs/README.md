@@ -89,3 +89,28 @@ at that geometry is not stationary at all -- its gradient is 0.0998
 Eh/Bohr. A cross-surface Hessian is not merely uninformative; at a
 geometry far from its own stationary point it is numerically worse too.
 
+### Numerical Hessians (same round)
+
+PySCF differentiates an HF or DFT energy twice analytically and does not
+differentiate a TDA root, an MP2 or a CCSD energy twice at all, so the
+curvature of those surfaces is reached by differencing the analytic
+gradient the driver already has: 6N evaluations, central, step 0.005 A.
+The step, in both units, how many gradients it cost, and whether every
+displaced point converged are recorded on the `hess` stage beside the
+frequencies.
+
+| directory | what it is | why it is here |
+|---|---|---|
+| `water_hess_fd` | the water Hessian again, `--hessian-derivative finite_difference` | the differential oracle: 1638.741 / 3791.985 / 3886.980 cm-1 against the analytic 1638.699 / 3791.587 / 3886.729, max delta 0.40 cm-1 in 18 gradients |
+| `formaldehyde_s1_planar_hess` | the curvature of the S1 (TDA root 1) surface at the relaxed planar stationary point of `formaldehyde_s1_opt_planar` | one imaginary mode at -503.9 cm-1, at a maximum S1 gradient of 9.1e-06 Eh/Bohr: a true stationary point of that surface and not its minimum. Round 2 delivered this shape of structure as "the S1 geometry" because no Hessian of an excited surface existed |
+
+Two facts these runs settled. A numerical Hessian's raw asymmetry is
+truncation error, not quadrature noise: 4.4e-05 Eh/Bohr^2 on water at
+0.005 A against an analytic-Hessian limit of 1.1e-05, with frequencies
+agreeing to 0.40 cm-1. Nobody here derived a limit for it, so it is
+recorded and never graded. And the gradient a Hessian stage records is
+the gradient of the surface it differentiated: at the planar S1 point
+the mean field's own gradient is 0.133 Eh/Bohr while S1's is 9.1e-06,
+and reporting the first would call a stationary point of one surface far
+from stationary using a number belonging to another.
+
