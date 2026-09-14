@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 @click_orca_solvent_options
 @click.option(
     "--multiplicity1",
+    "-m1",
     type=click.IntRange(min=1),
     default=None,
     required=True,
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--multiplicity2",
+    "-m2",
     type=click.IntRange(min=1),
     default=None,
     required=True,
