@@ -92,6 +92,15 @@ def _r(
 #: to refuse.
 HOST_POLICIES: tuple[tuple[str, str, str, bool], ...] = (
     (
+        "sensor_heavy_atom_floor",
+        "chemsmart.agent.tool_runtime.SENSOR_HEAVY_ATOM_FLOOR",
+        "three heavy atoms: the Kabsch heavy-atom RMSD behind the basin "
+        "and same-structure sensors is computed from three or more heavy "
+        "atoms, and below the floor each block records that it stopped "
+        "rather than saying nothing",
+        False,
+    ),
+    (
         "bond_perception",
         "chemsmart.io.molecules.perception.BOND_PERCEPTION_POLICY_ID",
         "which atoms are adjacent: min(1.3 x sum of covalent radii, "

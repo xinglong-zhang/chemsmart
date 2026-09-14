@@ -1130,7 +1130,10 @@ def _basin_sensor_inputs(
         return {}
     heavy = [index for index, symbol in enumerate(symbols) if symbol != "H"]
     inputs: dict[str, Any] = {}
-    if len(heavy) >= 3:
+    if len(heavy) < SENSOR_HEAVY_ATOM_FLOOR:
+        inputs["heavy_atom_rmsd_floor_applied"] = True
+        inputs["heavy_atom_count"] = len(heavy)
+    if len(heavy) >= SENSOR_HEAVY_ATOM_FLOOR:
         before = np.asarray(positions, dtype=float)[heavy]
         after = out_positions[heavy]
         *_rest, rmsd = kabsch_align(before, after)
@@ -1154,6 +1157,17 @@ def _basin_sensor_inputs(
     except Exception:
         return inputs
     return inputs
+
+
+#: A Kabsch heavy-atom RMSD needs three heavy atoms to mean anything:
+#: below that, two structures align exactly by construction and the
+#: number is zero whatever the molecule did. The basin sensor and the
+#: same-structure sensor both stop there, and both used to stop in
+#: silence -- which is how a digest join that missed every handoff
+#: consumer stayed hidden until the first molecule with three heavy
+#: atoms arrived (PySCF round 2, 2026-09-13). The floor is declared, and
+#: reaching it is a recorded fact rather than an absence.
+SENSOR_HEAVY_ATOM_FLOOR = 3
 
 
 def _same_structure_observations(
@@ -1208,8 +1222,18 @@ def _same_structure_observations(
     except Exception:  # noqa: BLE001 - a reader without a geometry
         return ()
     heavy = [index for index, symbol in enumerate(symbols) if symbol != "H"]
-    if len(heavy) < 3:
-        return ()
+    if len(heavy) < SENSOR_HEAVY_ATOM_FLOOR:
+        # Not silence: the block says the comparison was not made and
+        # why, so a reader can tell "no sibling matched" from "no
+        # comparison was possible".
+        return (
+            {
+                "observation": "same_structure_comparison_not_made",
+                "heavy_atom_rmsd_floor_applied": True,
+                "heavy_atom_count": len(heavy),
+                "node_id": str(node_id),
+            },
+        )
     # The nodes this one is one structure with by construction: the
     # producer whose geometry it consumed, every sibling that consumed
     # the same producer's geometry, and every consumer of its own.
@@ -1521,6 +1545,23 @@ def _neutral_sensor_facts(
     return block, inputs
 
 
+def _plain_reader_value(value: Any) -> Any:
+    """Return a reader's value in a plain Python container.
+
+    Nothing makes two readers agree on the container: the HDF5 path
+    serves numpy arrays and numpy scalars where a log parser serves
+    lists and floats for the same selector. Both idioms a sensor
+    naturally reaches for are shape-sensitive -- ``if values:`` raises
+    on an array of more than one element, and an array is not a list or
+    a tuple, so a membership branch silently takes the scalar path -- so
+    the container is removed once, here, and every fact below is written
+    against plain Python.
+    """
+
+    tolist = getattr(value, "tolist", None)
+    return tolist() if callable(tolist) else value
+
+
 def _excited_state_sensor_facts(output: Any) -> dict[str, Any]:
     """Gap and filter facts of a response stage, read through the reader."""
 
@@ -1533,15 +1574,17 @@ def _excited_state_sensor_facts(output: Any) -> dict[str, Any]:
             ("roots_filtered", "excited_state_roots_filtered"),
             ("unconverged_roots", "excited_state_unconverged_roots"),
         ):
-            value = td_stage.get(key)
+            value = _plain_reader_value(td_stage.get(key))
             if value is not None:
                 facts[name] = (
                     [int(item) for item in value]
                     if isinstance(value, (list, tuple))
                     else int(value)
                 )
-        excitations = getattr(output, "excitation_energies", None)
-        if excitations:
+        excitations = _plain_reader_value(
+            getattr(output, "excitation_energies", None)
+        )
+        if excitations is not None and len(excitations):
             try:
                 facts["excited_state_lowest_root_ev"] = (
                     float(excitations[0]) * 27.211386245988
@@ -1579,6 +1622,25 @@ def _excited_state_sensor_facts(output: Any) -> dict[str, Any]:
             else:
                 facts[name] = float(value)
     return facts
+
+
+#: Every function that turns a reader's numbers into sensor facts,
+#: enumerated by the host rather than by whichever ones a test author
+#: remembered. A reader may serve a Python list where another serves a
+#: numpy array for the same quantity, and the two must produce the same
+#: facts: ``if values:`` raises on an array of more than one element and
+#: ``isinstance(value, (list, tuple))`` is false for one, so a sensor
+#: that reads a list correctly can be silently wrong or fatal on the
+#: same numbers from another program. The shape-invariance test drives
+#: this tuple and fails when an entry has no driver.
+SENSOR_FACT_FUNCTIONS = (
+    _scan_boundary_sensor,
+    _basin_sensor_inputs,
+    _same_structure_observations,
+    _imaginary_mode_sensor_inputs,
+    _gradient_anomaly,
+    _excited_state_sensor_facts,
+)
 
 
 def _observed_soft_imaginary_mode(
