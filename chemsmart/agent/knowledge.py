@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Iterable
 
 from chemsmart.agent._contracts import (
@@ -73,12 +75,56 @@ class ProgramSubstitutionReceiptV1:
             raise ContractError("program substitution receipt digest mismatch")
 
 
-_PYSCF_TRANSFER_JOB_FAMILIES = frozenset(
-    {"sp", "opt", "hess", "freq", "opt_freq"}
+#: Each Gaussian job family and the PySCF job types that would carry it.
+#: This mapping is the only thing here that is a judgement about
+#: chemistry -- that a Gaussian ``freq`` is a PySCF ``hess``, that an
+#: ``opt_freq`` is two stages, that a QM/MM or NEB job has no PySCF job
+#: type behind it at all.  Whether those job types can actually run is
+#: not a judgement and is not written here: it is read from the
+#: capability registry for the engine the request selected, so a job
+#: type that becomes executable through a sealed live run reaches this
+#: gate without a second list to remember.  It had one, and the list
+#: forbade ``td`` for a release in which PySCF ``td`` executes.
+_PYSCF_SUBSTITUTION_JOB_TYPES: Mapping[str, tuple[str, ...]] = (
+    MappingProxyType(
+        {
+            "freq": ("hess",),
+            "hess": ("hess",),
+            "irc": ("irc",),
+            "link": (),
+            "modred": ("modred",),
+            "neb": (),
+            "opt": ("opt",),
+            "opt_freq": ("opt", "hess"),
+            "qmmm": (),
+            "scan": ("scan",),
+            "sp": ("sp",),
+            "td": ("td",),
+            "ts": ("ts",),
+        }
+    )
 )
-_PYSCF_FORBIDDEN_JOB_FAMILIES = frozenset(
-    {"ts", "irc", "td", "scan", "qmmm", "neb"}
-)
+
+
+def pyscf_executable_jobtypes(engine: str) -> frozenset[str]:
+    """Return the PySCF job types the registry may execute on *engine*.
+
+    ``execution_supported`` is the registry's word that an implementation
+    is allowed to become executable once environment, approval and
+    validation gates pass; it is narrower than preview and it is where a
+    capability earned by a sealed run is recorded.
+    """
+
+    from chemsmart.settings.capabilities import program_capability
+
+    capability = program_capability("pyscf")
+    if capability is None:
+        return frozenset()
+    return frozenset(
+        item.jobtype
+        for item in capability.resolved_engine_job_capabilities
+        if item.engine == engine and item.execution_supported
+    )
 
 
 @dataclass(frozen=True)
@@ -332,11 +378,19 @@ def assess_typed_program_substitution(
             "pyscf",
         ):
             failures.append("program.substitution.matrix_pair_unsupported")
-        if not set(request.job_families).issubset(
-            _PYSCF_TRANSFER_JOB_FAMILIES
-        ):
+        unsupported = tuple(
+            family
+            for family in request.job_families
+            if not _PYSCF_SUBSTITUTION_JOB_TYPES.get(family)
+        )
+        if unsupported:
             failures.append("program.substitution.job_family_unsupported")
-        if set(request.job_families) & _PYSCF_FORBIDDEN_JOB_FAMILIES:
+        executable = pyscf_executable_jobtypes(request.selected_engine)
+        if any(
+            not set(_PYSCF_SUBSTITUTION_JOB_TYPES[family]).issubset(executable)
+            for family in request.job_families
+            if family not in unsupported
+        ):
             failures.append("program.substitution.job_family_forbidden")
         if request.method_family not in {"hf", "dft"}:
             failures.append("program.substitution.method_family_unsupported")

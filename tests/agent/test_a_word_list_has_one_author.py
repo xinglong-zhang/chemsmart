@@ -116,16 +116,26 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
     (
         "chemsmart/agent/knowledge.py",
         "<module>",
-        "_PYSCF_FORBIDDEN_JOB_FAMILIES",
-        ("irc", "neb", "qmmm", "scan", "td", "ts"),
-    ): "derives in 0.1d from the executable PySCF cells; today it "
-    "forbids substituting td, which PySCF runs",
-    (
-        "chemsmart/agent/knowledge.py",
-        "<module>",
-        "_PYSCF_TRANSFER_JOB_FAMILIES",
-        ("freq", "hess", "opt", "opt_freq", "sp"),
-    ): "derives in 0.1d from the executable PySCF cells",
+        "_PYSCF_SUBSTITUTION_JOB_TYPES",
+        (
+            "freq",
+            "hess",
+            "irc",
+            "link",
+            "modred",
+            "neb",
+            "opt",
+            "opt_freq",
+            "qmmm",
+            "scan",
+            "sp",
+            "td",
+            "ts",
+        ),
+    ): _DECLARATION
+    + ": which PySCF job types carry which Gaussian job "
+    "family, a judgement about chemistry; whether they execute is read "
+    "from the capability registry",
     (
         "chemsmart/agent/terminal_states.py",
         "expected_imaginary_mode_count",
@@ -185,31 +195,31 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
     (
         "chemsmart/agent/guides.py",
         "<module>",
-        None,
+        "GUIDES",
         ("ts",),
     ): _GUIDE_SIGNAL,
     (
         "chemsmart/agent/guides.py",
         "<module>",
-        None,
+        "GUIDES",
         ("scan",),
     ): _GUIDE_SIGNAL,
     (
         "chemsmart/agent/guides.py",
         "<module>",
-        None,
+        "GUIDES",
         ("td",),
     ): _GUIDE_SIGNAL,
     (
         "chemsmart/agent/guides.py",
         "<module>",
-        None,
+        "GUIDES",
         ("pyscf",),
     ): _GUIDE_SIGNAL,
     (
         "chemsmart/agent/guides.py",
         "<module>",
-        None,
+        "GUIDES",
         ("irc", "ts"),
     ): _GUIDE_SIGNAL,
     (
@@ -320,19 +330,25 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
     (
         "chemsmart/agent/tool_runtime.py",
         "CommandCompiledToolHostV1/_evaluate_execution_outputs",
-        None,
+        "expected_directions",
         ("ircf",),
     ): _GAUSSIAN_NATIVE,
     (
         "chemsmart/agent/tool_runtime.py",
         "CommandCompiledToolHostV1/_evaluate_execution_outputs",
-        None,
+        "expected_directions",
         ("ircr",),
     ): _GAUSSIAN_NATIVE,
     (
         "chemsmart/agent/tool_runtime.py",
         "CommandCompiledToolHostV1/_evaluate_execution_outputs",
         None,
+        ("ircf", "ircr"),
+    ): _GAUSSIAN_NATIVE,
+    (
+        "chemsmart/agent/tool_runtime.py",
+        "CommandCompiledToolHostV1/_evaluate_execution_outputs",
+        "expected_directions",
         ("ircf", "ircr"),
     ): _GAUSSIAN_NATIVE,
     (
@@ -459,7 +475,7 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
     (
         "chemsmart/io/pyscf/output.py",
         "PySCFOutput/get_molecule",
-        None,
+        "molecule",
         ("opt",),
     ): "derives in C.1 from the stationary-point stage set",
 }
@@ -531,7 +547,12 @@ def _word_lists(path: pathlib.Path) -> list[tuple[str, str | None, tuple]]:
             found.append(("/".join(enclosing) or "<module>", target, words))
             return
         for child in ast.iter_child_nodes(node):
-            visit(child, enclosing, target if binds else None)
+            # A name reaches the literal it binds even through a wrapper
+            # call such as ``MappingProxyType({...})``, so the record can
+            # say which table it means; a later statement that binds
+            # nothing starts again with no name.
+            inherits = binds or not isinstance(node, ast.stmt)
+            visit(child, enclosing, target if inherits else None)
 
     visit(ast.parse(path.read_text()), [], None)
     return found
