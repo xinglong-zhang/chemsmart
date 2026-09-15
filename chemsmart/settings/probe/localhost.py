@@ -26,7 +26,17 @@ def _mem_total_kb(meminfo_path: str = "/proc/meminfo") -> int | None:
 def scratch_candidates(
     env: Mapping[str, str], *, user: str
 ) -> tuple[str, ...]:
-    """Existing directories a scratch could live in, best first."""
+    """Writable directories a scratch could live in, best first.
+
+    Existence is not enough. A shared cluster normally owns ``/scratch``
+    as a root that only the administrator may write to, handing each user
+    a subdirectory underneath it, so a candidate that merely ``is_dir()``
+    can still refuse every write. Offering one is worse than offering
+    nothing: the wizard writes it into ``SCRATCH_DIR``, its own scratch
+    round trip then fails, and the message blames the environment for a
+    directory the probe itself chose while a writable candidate sat lower
+    in this very list.
+    """
 
     ordered = []
     for candidate in (
@@ -40,7 +50,9 @@ def scratch_candidates(
         if candidate and candidate not in ordered:
             ordered.append(candidate)
     return tuple(
-        candidate for candidate in ordered if Path(candidate).is_dir()
+        candidate
+        for candidate in ordered
+        if Path(candidate).is_dir() and os.access(candidate, os.W_OK)
     )
 
 

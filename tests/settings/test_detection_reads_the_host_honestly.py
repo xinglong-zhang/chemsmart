@@ -8,7 +8,10 @@ apart before naming either.
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
+
+import pytest
 
 from chemsmart.settings.probe import detect_scheduler
 from chemsmart.settings.probe.localhost import scratch_candidates
@@ -86,3 +89,35 @@ def test_scratch_candidates_prefer_the_user_scratch(tmp_path):
     found = scratch_candidates(env, user="alice")
     assert found[0] == str(tmp_path / "scratch" / "alice")
     assert localhost is not None
+
+
+def test_a_scratch_directory_nobody_can_write_is_not_offered(tmp_path):
+    """A shared cluster owns /scratch and hands out subdirectories.
+
+    Observed on a real centre: ``/scratch`` exists, ``/scratch/$USER`` was
+    never created, and the root refuses every write. Offering it is worse
+    than offering nothing, because the wizard records it as SCRATCH_DIR
+    and its own scratch round trip then fails on a directory the probe
+    chose while a writable candidate sat lower in the same list.
+    """
+
+    unwritable = tmp_path / "scratch"
+    unwritable.mkdir()
+    fallback = tmp_path / "tmp"
+    fallback.mkdir()
+    unwritable.chmod(0o555)
+    if os.access(unwritable, os.W_OK):  # pragma: no cover - root ignores mode
+        pytest.skip("running as root: directory modes do not restrict writes")
+
+    try:
+        # The unwritable one is offered first (SCRATCH) and the writable one
+        # last (TMPDIR); only membership is asserted, because the real
+        # /scratch and /tmp of the host running this test are also consulted.
+        found = scratch_candidates(
+            {"SCRATCH": str(unwritable), "TMPDIR": str(fallback)},
+            user="nobody-here",
+        )
+        assert str(unwritable) not in found
+        assert str(fallback) in found
+    finally:
+        unwritable.chmod(0o755)
