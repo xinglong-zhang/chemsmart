@@ -117,6 +117,54 @@ def test_prompts_show_the_queue_ceiling_and_accept_edits(
     assert payload["SERVER"]["SCRATCH_DIR"] is None
 
 
+def test_a_pyscf_folder_without_an_interpreter_is_refused_at_the_prompt(
+    tmp_path, monkeypatch
+):
+    """The prompt holds a typed folder to the config command's standard.
+
+    PySCF is a library, so this folder is the ``bin/`` whose ``python``
+    runs the calculation. Accepting any string recorded a path nothing had
+    examined, and the mistake surfaced much later inside a job rather than
+    where it was typed. A refusal re-asks, so the run is not abandoned.
+    """
+
+    _wire(
+        monkeypatch,
+        tmp_path,
+        detection=DetectionV1("SLURM", ("sinfo responds",)),
+        scheduler=_SLURM,
+    )
+    CliRunner().invoke(wizard, ["--server", "--yes"])  # the file must exist
+
+    good = tmp_path / "envs" / "chemsmart-pyscf" / "bin"
+    good.mkdir(parents=True)
+    (good / "python").touch()
+    missing = tmp_path / "no-such-environment" / "bin"
+
+    result = CliRunner().invoke(
+        wizard,
+        ["--server"],
+        input=(
+            "\n\n\n\n"  # cores, memory, hours, scratch: keep the defaults
+            "y\n"  # reconfigure program blocks
+            "n\nn\ny\n"  # GAUSSIAN no, ORCA no, PYSCF yes
+            f"{missing}\n"  # refused: the directory does not exist
+            f"{tmp_path}\n"  # refused: a directory holding no python
+            f"{good}\n"  # accepted
+            "n\nn\n"  # XTB, NCIPLOT
+            "\n\n"  # project, email
+        ),
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "executable folder not found" in result.output
+    assert "No Python interpreter found" in result.output
+    payload = yaml.safe_load(
+        (tmp_path / "server" / "SLURM.yaml").read_text(encoding="utf-8")
+    )
+    assert payload["PYSCF"]["EXEFOLDER"] == str(good)
+
+
 def test_an_unqualified_scheduler_downgrades_honestly(tmp_path, monkeypatch):
     _wire(
         monkeypatch,

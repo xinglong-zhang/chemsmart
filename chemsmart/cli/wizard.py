@@ -146,6 +146,29 @@ def _confirm_choices(
     )
 
 
+def _checked_exefolder(program: str):
+    """Hold a typed folder to the same standard the config command uses.
+
+    This prompt used to accept any string, so a mistyped path reached the
+    YAML unexamined and surfaced much later inside a job, far from the
+    typo that caused it -- and for PySCF a folder with no ``python`` in it
+    is not an installation at all. ``click.prompt`` re-prompts when its
+    ``value_proc`` raises a ``UsageError``, so the answer is corrected
+    where it is given rather than abandoning a half-written setup.
+    """
+
+    def _check(raw: str) -> str:
+        folder = (raw or "").strip()
+        if not folder:
+            return ""
+        from chemsmart.cli.config import validated_program_exefolder
+
+        validated_program_exefolder(program, folder)
+        return folder
+
+    return _check
+
+
 def _offer_program_overwrites(
     target: Path, template_text: str, *, assume_yes: bool
 ) -> None:
@@ -174,7 +197,8 @@ def _offer_program_overwrites(
             f"  {name} executable folder (Enter to skip)",
             default="",
             show_default=False,
-        ).strip()
+            value_proc=_checked_exefolder(name),
+        )
         target.write_text(existing, encoding="utf-8")
         if folder:
             from chemsmart.cli.config import set_program_exefolder

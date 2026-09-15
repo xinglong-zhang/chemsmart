@@ -730,6 +730,36 @@ def orca(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/bin/orca_6_0_0", folder)
 
 
+def validated_program_exefolder(program, folder):
+    """A program's executable folder, or a refusal that names what is wrong.
+
+    One authority so every route that records an ``EXEFOLDER`` holds it to
+    the same standard. PySCF is a Python library rather than a binary, so
+    its folder is the ``bin/`` whose ``python`` runs the calculation and a
+    folder without that interpreter is not a PySCF installation; every
+    other program only needs the directory to exist. Raising
+    ``BadParameter`` lets an option refuse outright and lets an
+    interactive prompt re-ask, because ``click.prompt`` re-prompts on a
+    ``UsageError`` raised from its ``value_proc``.
+    """
+
+    resolved = Path(folder).expanduser()
+    if not resolved.is_dir():
+        raise click.BadParameter(
+            f"{program} executable folder not found: {resolved}"
+        )
+    if str(program).upper() == "PYSCF":
+        interpreter = (
+            "python.exe" if platform.system() == "Windows" else "python"
+        )
+        if not (resolved / interpreter).exists():
+            raise click.BadParameter(
+                f"No Python interpreter found in PySCF bin directory: "
+                f"{resolved}"
+            )
+    return resolved
+
+
 @config.command()
 @click.pass_context
 @click.option(
@@ -747,15 +777,7 @@ def pyscf(ctx, folder):
     imported by this command.
     """
     cfg = ctx.obj["cfg"]
-    folder = Path(folder).expanduser()
-    if not folder.is_dir():
-        raise click.BadParameter(f"PySCF bin directory not found: {folder}")
-    if not (
-        folder / ("python.exe" if platform.system() == "Windows" else "python")
-    ).exists():
-        raise click.BadParameter(
-            f"No Python interpreter found in PySCF bin directory: {folder}"
-        )
+    folder = validated_program_exefolder("PYSCF", folder)
     set_program_exefolder(cfg.chemsmart_server, "PYSCF", folder)
 
 
