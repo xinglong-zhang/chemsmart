@@ -1286,7 +1286,9 @@ class GaussianMECPJobSettings(GaussianJobSettings):
             "harvey_max_condition": harvey_max_condition,
             "hess_step_size": hess_step_size,
         }
-        invalid = [name for name, value in positive_values.items() if value <= 0]
+        invalid = [
+            name for name, value in positive_values.items() if value <= 0
+        ]
         if invalid:
             raise ValueError(
                 "MECP settings must be positive: " + ", ".join(invalid)

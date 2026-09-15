@@ -90,6 +90,24 @@ class GaussianMECPJob(GaussianJob):
 
     TYPE = "g16mecp"
 
+    def __init__(
+        self,
+        molecule,
+        settings,
+        label,
+        jobrunner=None,
+        **kwargs,
+    ):
+        settings = GaussianMECPJobSettings.from_settings(settings)
+        super().__init__(
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )
+        self._last_spin_squared = {"A": None, "B": None}
+
     @staticmethod
     def _route_without_guess_read(route):
         """Remove ``read`` from a Gaussian guess option for the first step."""
@@ -123,23 +141,6 @@ class GaussianMECPJob(GaussianJob):
                 "the optimization coordinates; remove the explicit symmetry option."
             )
         return f"{route} nosymm".strip()
-
-    def __init__(
-        self,
-        molecule,
-        settings,
-        label,
-        jobrunner=None,
-        **kwargs,
-    ):
-        settings = GaussianMECPJobSettings.from_settings(settings)
-        super().__init__(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
-            **kwargs,
-        )
 
     @classmethod
     def settings_class(cls) -> Type[GaussianMECPJobSettings]:
@@ -386,8 +387,6 @@ class GaussianMECPJob(GaussianJob):
                 f"coordinate shape {np.array(mol.positions).shape}."
             )
         gradient = -forces
-        if not hasattr(self, "_last_spin_squared"):
-            self._last_spin_squared = {"A": None, "B": None}
         self._last_spin_squared[state] = output.spin_squared_after_annihilation
         if os.path.isfile(job.chkfile):
             self._state_checkpoint_files[checkpoint_key] = job.chkfile
