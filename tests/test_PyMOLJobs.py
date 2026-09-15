@@ -19,6 +19,8 @@ from chemsmart.jobs.mol.runner import (
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
     PyMOLSpinJobRunner,
+    _format_mo_surface_color_commands,
+    _resolve_mo_phase_colors,
     normalize_pymol_style,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
@@ -618,6 +620,87 @@ class TestPyMOLJobs:
         assert job_mo5.number == 5
         assert job_mo5.label == "benzene"
         assert job_mo5.mo_basename == "benzene_MO5"
+
+    def test_pymol_mo_job_phase_color_parameters(
+        self,
+        gaussian_benzene_opt_outfile,
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+
+        job = PyMOLMOJob(
+            molecules,
+            label="benzene",
+            homo=True,
+            swap=True,
+            color_positive="[0,1,0]",
+            color_negative="[1,0,0]",
+        )
+
+        assert job.swap is True
+        assert job.color_positive == "[0,1,0]"
+        assert job.color_negative == "[1,0,0]"
+
+    def test_resolve_mo_phase_colors_defaults_and_invert(self):
+        job = SimpleNamespace(
+            color_positive=None,
+            color_negative=None,
+            swap=False,
+        )
+        assert _resolve_mo_phase_colors(job) == ("blue", "red")
+
+        job.swap = True
+        assert _resolve_mo_phase_colors(job) == ("red", "blue")
+
+        job.color_positive = "green"
+        job.color_negative = "yellow"
+        job.swap = False
+        assert _resolve_mo_phase_colors(job) == ("green", "yellow")
+
+        job.swap = True
+        assert _resolve_mo_phase_colors(job) == ("yellow", "green")
+
+    def test_format_mo_surface_color_commands(self):
+        named = _format_mo_surface_color_commands("blue", "red")
+        assert "set surface_color, blue, pos_iso" in named
+        assert "set surface_color, red, neg_iso" in named
+
+        rgb = _format_mo_surface_color_commands("[0,1,0]", "[1,0,0]")
+        assert "set_color mo_pos_phase, [0,1,0]" in rgb
+        assert "set surface_color, mo_pos_phase, pos_iso" in rgb
+        assert "set_color mo_neg_phase, [1,0,0]" in rgb
+        assert "set surface_color, mo_neg_phase, neg_iso" in rgb
+
+    def test_write_molecular_orbital_pml_phase_colors(
+        self,
+        tmpdir,
+        gaussian_benzene_opt_outfile,
+        pymol_mo_jobrunner,
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+        job = PyMOLMOJob(
+            molecules,
+            label="benzene",
+            homo=True,
+            swap=True,
+            color_positive="[0,1,0]",
+            color_negative="[1,0,0]",
+        )
+        job.set_folder(tmpdir)
+
+        pymol_mo_jobrunner._write_molecular_orbital_pml(job)
+
+        pml_path = os.path.join(tmpdir, "benzene_HOMO.pml")
+        with open(pml_path) as f:
+            pml = f.read()
+
+        assert "set_color mo_pos_phase, [1,0,0]" in pml
+        assert "set surface_color, mo_pos_phase, pos_iso" in pml
+        assert "set_color mo_neg_phase, [0,1,0]" in pml
+        assert "set surface_color, mo_neg_phase, neg_iso" in pml
 
     def test_pymol_spin_job_parameters(
         self,
