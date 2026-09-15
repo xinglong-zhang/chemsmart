@@ -752,11 +752,65 @@ conventions, and the applied-spec vocabulary is versioned per contract,
 because extending one tuple would have changed the provenance digest of
 every archived v4 artifact and turned nine real fixtures red. What is
 not claimed: CCSD(T) optimisation, EOM-CCSD, CASSCF, PySCF scans,
-transition states and IRC (the last raises inside PySCF's own geomeTRIC
-wrapper), DF-MP2 gradients, solvated correlated methods, excited-state
-Hessians, and the triplet and unrestricted manifolds, solvated ``td``
+transition states and IRC, DF-MP2 gradients, solvated correlated
+methods, and the triplet and unrestricted manifolds, solvated ``td``
 and the two iteration controls, which stay fixture-qualified until a
 sealed case exercises them.
+
+Result contract v6 adds what none of those artifacts carried: the
+electronic **surface** a result's geometry and total energy belong to.
+Every field in it is a value the host applied rather than one a project
+asked for, so ``b3lyp`` and ``b3lypg`` -- one functional in this build --
+record the same surface, and a frozen-core count is the count the
+correlated stage actually froze. Where a reader cannot determine a field
+it writes ``unknown``, and two surfaces agree only when every field
+agrees and neither reader wrote it: a frozen core nobody recorded on
+either side is two unknowns, not a match. The comparison therefore has
+three answers rather than two, and the third is never read as the first.
+Two organs ask it. A method family this release has never audited
+resolves to the provenance word ``unknown`` instead of falling through to
+``reference``, which was a true sentence about the wrong density. And a
+validated Hessian characterises the stationary point of the geometry it
+consumed only when the two share a surface: a ground-state Hessian at an
+excited minimum, or a cheap one at a correlated minimum, is a real number
+about a real structure that says nothing about the surface the
+optimisation walked on, and the delivery now names that pair instead of
+crediting it. Where the two cannot be compared the Hessian still
+characterises, as before, and the reader is told the comparison was not
+available.
+
+PySCF differentiates an HF or DFT energy twice analytically and does not
+differentiate a TDA root, an MP2 or a CCSD energy twice at all, so a
+``hess`` on one of those surfaces differences the analytic gradient the
+driver already has: 6N central displacements at 0.005 Angstrom, with the
+step in both units, the gradient count, the per-displacement convergence
+and the class of the object that produced the gradients recorded beside
+the frequencies. ``hessian_derivative`` and ``fd_step_angstrom`` are
+project keys and CLI options, and an unset derivative resolves to the
+analytic one where PySCF has it. Stages run in a declared order so a
+surface is built before anything differentiates it, and the gradient a
+Hessian stage records is the gradient of the surface it differentiated --
+at the relaxed planar S1 point of formaldehyde the mean field's own
+gradient is 0.133 Eh/Bohr where S1's is 9.1e-06, and the first would call
+a stationary point of one surface far from stationary using a number
+belonging to another. A differenced Hessian's raw asymmetry is the
+truncation error of the step rather than the quadrature noise the
+analytic limit was calibrated on -- 4.4e-05 Eh/Bohr^2 on water against a
+limit of 1.1e-05, with frequencies agreeing to 0.40 cm-1 -- so for a
+numerical Hessian it is recorded and never graded, because nobody here
+derived a limit for it.
+
+None of this is described as completed Agent execution. It is exercised
+on six new real fixtures with PySCF's own recomputation beside them and
+through direct runs of the human CLI, and no sealed goal has run any of
+it. What those runs establish is that the host can now ask a question it
+could not ask before: the relaxed planar stationary point of
+formaldehyde's S1 surface carries one imaginary mode at -503.9 cm-1 at a
+maximum S1 gradient of 9.1e-06 Eh/Bohr, so it is a genuine stationary
+point of that surface and not its minimum, and the program-neutral order
+rule types it. An excited-state stationary point delivered as "the
+geometry" with no way to say which kind of stationary point it is was
+exactly what the previous round's acetone goal delivered.
 
 Four sealed goals ran this surface through the ordinary plan, preview,
 one displayed decision and provider-free execution. HCN/HNC: two MP2

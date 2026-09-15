@@ -167,6 +167,20 @@ Program-Level Options
       -  Davidson iteration cap for the response solver (PySCF default 100); the repair control behind an unconverged
          root.
 
+   -  -  ``--hessian-derivative``
+
+      -  analytic/finite_difference
+
+      -  ``hess`` only: how the second derivative is obtained. ``analytic`` is PySCF's own and exists for HF and DFT
+         references; ``finite_difference`` differences the analytic gradient of the surface the job is on, which is the
+         only route to the curvature of an excited root or a correlated method. Omitted resolves to the analytic
+         derivative where PySCF has one.
+
+   -  -  ``--fd-step-angstrom``
+      -  positive float
+      -  Displacement of a finite-difference Hessian, in Angstrom (default 0.005). ORCA's NumFreq default is 0.005 Bohr,
+         a different convention; the applied step is recorded in both units on the result.
+
    -  -  ``-x, --functional``
       -  libxc functional
       -  DFT functional. Program-specific definitions remain scientifically distinct.
