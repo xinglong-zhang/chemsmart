@@ -543,7 +543,8 @@ Use the grow/shrink adaptive method instead of the default Barzilai-Borwein:
  Link Jobs
 ***********
 
-Run multi-step Gaussian calculations with linked job steps.
+Run multi-step Gaussian calculations with linked job steps. Current Link job only supports openshell singlet broken
+symmetry guess as first job, followed by link job to run different job types (opt, modred, ts, scan, sp, etc).
 
 .. code:: bash
 
@@ -608,7 +609,6 @@ This creates a multi-step workflow:
    ...
    # opt freq um062x def2svp geom=check guess=read
    ...
-   #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
 
 To use multiple guess options, separate them with a comma:
 
@@ -624,7 +624,6 @@ This sets ``guess=(mix,always)`` in the route string:
    ...
    # opt freq um062x def2svp geom=check guess=read
    ...
-   #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
 
 ******************
  Custom User Jobs

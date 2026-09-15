@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
     "--use-weights/--no-use-weights",
     type=bool,
     default=True,
-    help="Whether to use torsion weights in TFD calculation. Default=True.",
+    help="Whether to use torsion weights in TFD (Torsion Fingerprint Deviation) calculation. Default=True.",
 )
 @click.option(
     "--max-dev",
     type=click.Choice(["equal", "spec"], case_sensitive=False),
     default="equal",
-    help="Normalization method for torsion deviations. "
+    help="Normalization method for torsion deviations in TFD (Torsion Fingerprint Deviation) calculation. "
     "'equal': all torsions normalized using 180.0 degrees (default). "
     "'spec': each torsion normalized using its specific maximal deviation.",
 )
@@ -50,5 +50,5 @@ def tfd(ctx, use_weights, max_dev):
         f"Running TFD grouping with use_weights={use_weights}, max_dev={max_dev}"
     )
     return create_grouper_job_from_context(
-        ctx, strategy="torsion", use_weights=use_weights, max_dev=max_dev
+        ctx, strategy="tfd", use_weights=use_weights, max_dev=max_dev
     )

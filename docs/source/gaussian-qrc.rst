@@ -18,7 +18,7 @@ The core idea:
 #. Optimize each displaced geometry to find the adjacent minima.
 #. Plot energy vs. displacement for a quick reaction profile.
 
-Chemsmart automates this process, taking a TS frequency calculation output and directly submitting QRC jobs.
+CHEMSMART automates this process, taking a TS frequency calculation output and directly submitting QRC jobs.
 
 .. code:: bash
 
@@ -160,7 +160,7 @@ If a TS has two imaginary frequencies, displace along the second mode:
  Summary
 *********
 
-Chemsmart QRC automates the workflow of:
+CHEMSMART QRC automates the workflow of:
 
 -  Extracting vibrational modes from TS calculations
 -  Displacing the TS geometry by ± amplitude along a mode

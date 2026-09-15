@@ -1,0 +1,11 @@
+ERROR STOP 
+
+Error termination. Backtrace:
+#0  0x103b44983
+#1  0x103b45557
+#2  0x103b46793
+#3  0x102c4abeb
+#4  0x102c6c70b
+#5  0x102f4511b
+#6  0x102aa90a7
+#7  0x10317e47f

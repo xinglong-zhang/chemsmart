@@ -3,7 +3,7 @@
 #################
 
 Configure server-specific settings for your HPC cluster or local machine. Server configuration files are YAML files
-stored in the ``~/.chemsmart/server/`` directory that define how Chemsmart submits and executes computational chemistry
+stored in the ``~/.chemsmart/server/`` directory that define how CHEMSMART submits and executes computational chemistry
 jobs. This folder is created automatically when configuring CHEMSMART. Users can access and freely modify the contents
 in this folder without affecting the CHEMSMART codes.
 
@@ -37,7 +37,7 @@ Configuration Structure
 Each server configuration file contains:
 
 #. **SERVER** section - Defines scheduler and resource allocation settings
-#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, NCIPLOT, etc.)
+#. **Program-specific sections** - Configure individual programs (GAUSSIAN, ORCA, XTB, CREST, NCIPLOT, etc.)
 
 SERVER Section
 ==============
@@ -105,12 +105,19 @@ MEM_GB
 
 **Type:** Integer
 
-**Description:** Amount of memory to request in gigabytes (GB).
+**Description:** Amount of memory to request in gigabytes (GB). To set this correctly, users should first find out their
+cluster specifications — in particular, the amount of memory available per CPU core on the target partition. The value
+of ``MEM_GB`` should be set to slightly less than ``NUM_CORES * memory_per_core`` to stay within the node's memory
+limit. For example, if a node provides approximately 6 GB per core and you are requesting ``NUM_CORES: 64``, then
+``MEM_GB`` should be set to approximately ``375`` (i.e., slightly less than ``64 × 6 = 384``). Contact your system
+administrator or consult your cluster's documentation to determine the memory-per-core ratio for the partition you are
+using.
 
 **Examples:**
 
 .. code:: yaml
 
+   MEM_GB: 375   # Request 375 GB memory for a 64-core job (~6 GB/core node)
    MEM_GB: 400   # Request 400 GB memory
    MEM_GB: 100   # Request 100 GB memory
    MEM_GB: 48    # Request 48 GB memory for smaller jobs
@@ -197,8 +204,9 @@ SCRATCH_DIR
 **Type:** String or Null
 
 **Description:** Path to the scratch directory for temporary files. Set to ``null`` if not using a specific scratch
-location. Note that both Gaussian and ORCA calculations are by default run in scratch directory, thus, it is recommended
-to set up the path to scratch directory. See the section on setting up scratch directory.
+location. This is one source for the scratch **path** when scratch mode is enabled (see :ref:`scratch-behavior`).
+Gaussian, ORCA, and NCIPLOT runners default to scratch mode when the program ``SCRATCH`` key is absent, so it is
+recommended to configure a valid scratch path.
 
 **Examples:**
 
@@ -222,6 +230,30 @@ to disable.
    USE_HOSTS: true
    USE_HOSTS: false
 
+EXTRA_SCHEDULER_DIRECTIVES
+--------------------------
+
+**Type:** Multiline string
+
+**Description:** Additional scheduler directives to inject into the submission script header. Use this for scheduler
+options that are not covered by built-in settings.
+
+**Examples:**
+
+.. code:: yaml
+
+   # For SLURM
+   EXTRA_SCHEDULER_DIRECTIVES: |
+       #SBATCH --reservation=xlzhang_1
+
+or
+
+.. code:: yaml
+
+   # For PBS/Torque
+   EXTRA_SCHEDULER_DIRECTIVES: |
+       #PBS -m abe
+
 EXTRA_COMMANDS
 --------------
 
@@ -243,8 +275,8 @@ set environment variables, or activate conda environments. Use the pipe (``|``) 
 Program-Specific Sections
 =========================
 
-Each computational chemistry program (GAUSSIAN, ORCA, NCIPLOT) has its own configuration section. These sections define
-program-specific paths, execution settings, and environment variables.
+Each computational chemistry program (GAUSSIAN, ORCA, XTB, CREST, NCIPLOT) has its own configuration section. These
+sections define program-specific paths, execution settings, and environment variables.
 
 GAUSSIAN Section
 ----------------
@@ -285,8 +317,11 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether to use a scratch directory for temporary Gaussian files. When ``True``, Gaussian will write
-temporary files to the scratch directory specified in ENVARS.
+**Description:** Default scratch mode for Gaussian when the user omits both ``--scratch`` and ``--no-scratch`` on the
+CLI (see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
+When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
+absent or ``null``, CHEMSMART uses the Gaussian job-runner class default (``True``)—that is **not** the same as omitting
+the CLI flags; CLI omission triggers the lookup of this key in the first place.
 
 **Example:**
 
@@ -294,6 +329,7 @@ temporary files to the scratch directory specified in ENVARS.
 
    SCRATCH: True   # Use scratch directory
    SCRATCH: False  # Run in job directory
+   SCRATCH: null   # Same as omitting the key (use class default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -396,7 +432,10 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether to use a scratch directory for temporary ORCA files.
+**Description:** Default scratch mode for ORCA when the user omits both ``--scratch`` and ``--no-scratch`` on the CLI
+(see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
+When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
+absent or ``null``, CHEMSMART uses the ORCA job-runner class default (``True``).
 
 **Example:**
 
@@ -404,6 +443,7 @@ SCRATCH
 
    SCRATCH: True   # Use scratch directory
    SCRATCH: False  # Run in job directory
+   SCRATCH: null   # Same as omitting the key (use class default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -452,6 +492,191 @@ ENVARS
        export PATH=$HOME/bin/openmpi-4.1.6/build/bin:$PATH
        export LD_LIBRARY_PATH=$HOME/bin/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
 
+XTB Section
+-----------
+
+Configuration for the standalone xTB executable used by CHEMSMART xTB jobs.
+
+EXEFOLDER
+^^^^^^^^^
+
+**Type:** String or ``null``
+
+**Description:** Path to an xTB installation directory, or ``null`` to use the ``xtb`` executable from the activated
+conda environment / ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null  # use xtb from conda env / PATH
+
+LOCAL_RUN
+^^^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to treat xTB as a local/serial executable. Packaged templates typically use ``True``.
+
+**Example:**
+
+.. code:: yaml
+
+   LOCAL_RUN: True
+
+SCRATCH
+^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to run xTB in a scratch directory. Packaged templates default to ``False`` (job folder).
+
+**Example:**
+
+.. code:: yaml
+
+   SCRATCH: False  # run in job folder
+   SCRATCH: True   # run in scratch, then copy results back
+
+CONDA_ENV
+^^^^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Commands to activate the conda environment that provides ``xtb`` (and CHEMSMART).
+
+**Example:**
+
+.. code:: yaml
+
+   CONDA_ENV: |
+       source ~/miniconda3/etc/profile.d/conda.sh
+       conda activate ~/miniconda3/envs/chemsmart
+
+ENVARS
+^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Environment variables for xTB runs. Set ``SCRATCH`` if scratch mode is enabled.
+
+**Example:**
+
+.. code:: yaml
+
+   ENVARS: |
+       export SCRATCH=~/scratch
+
+Full example:
+
+.. code:: yaml
+
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+
+CREST Section
+-------------
+
+Configuration for the standalone CREST executable used by CHEMSMART CREST conformational search jobs.
+
+EXEFOLDER
+^^^^^^^^^
+
+**Type:** String or ``null``
+
+**Description:** Path to a CREST installation directory, or ``null`` to use the ``crest`` executable from the activated
+conda environment / ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   CREST:
+       EXEFOLDER: null  # use crest from conda env / PATH
+
+LOCAL_RUN
+^^^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to treat CREST as a local/serial executable. Packaged templates typically use ``True``.
+
+**Example:**
+
+.. code:: yaml
+
+   LOCAL_RUN: True
+
+SCRATCH
+^^^^^^^
+
+**Type:** Boolean
+
+**Description:** Whether to run CREST in a scratch directory. Packaged templates default to ``False`` (job folder).
+
+**Example:**
+
+.. code:: yaml
+
+   SCRATCH: False  # run in job folder
+   SCRATCH: True   # run in scratch, then copy results back
+
+CONDA_ENV
+^^^^^^^^^
+
+**Type:** Multiline string
+
+**Description:** Commands to activate the conda environment that provides ``crest`` (and CHEMSMART). Most CREST
+workflows also requires ``xtb`` to be available on ``PATH``.
+
+**Example:**
+
+.. code:: yaml
+
+   CONDA_ENV: |
+       source ~/miniconda3/etc/profile.d/conda.sh
+       conda activate ~/miniconda3/envs/chemsmart
+
+ENVARS
+^^^^^^
+
+**Type:** Multiline string or ``null``
+
+**Description:** Environment variables for CREST runs. Set ``SCRATCH`` if scratch mode is enabled. Packaged templates
+typically use ``null``.
+
+**Example:**
+
+.. code:: yaml
+
+   ENVARS: null
+   ENVARS: |
+       export SCRATCH=~/scratch
+
+Full example:
+
+.. code:: yaml
+
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+
 NCIPLOT Section
 ---------------
 
@@ -489,13 +714,18 @@ SCRATCH
 
 **Type:** Boolean
 
-**Description:** Whether to use a scratch directory for temporary NCIPLOT files.
+**Description:** Default scratch mode for NCIPLOT when the user omits both ``--scratch`` and ``--no-scratch`` on the CLI
+(see :ref:`scratch-behavior`). This YAML key is **not** read when the user passes ``--scratch`` or ``--no-scratch``.
+When ``True``, jobs run under the resolved scratch path. When ``False``, jobs run in the job folder. If this YAML key is
+absent or ``null``, CHEMSMART uses the NCIPLOT job-runner class default (``True``).
 
 **Example:**
 
 .. code:: yaml
 
    SCRATCH: True
+   SCRATCH: False
+   SCRATCH: null   # Same as omitting the key (use class default)
 
 CONDA_ENV
 ^^^^^^^^^
@@ -594,6 +824,26 @@ Complete example for a SLURM-based HPC cluster:
            module load openmpi
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -658,6 +908,26 @@ Complete example for a PBS/Torque-based HPC cluster:
            module load openmpi
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -718,6 +988,26 @@ Complete example for a local workstation without a job scheduler:
            module purge
        ENVARS: |
            export SCRATCH=~/scratch
+   XTB:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
+   CREST:
+       EXEFOLDER: null
+       LOCAL_RUN: True
+       SCRATCH: False
+       CONDA_ENV: |
+           source ~/miniconda3/etc/profile.d/conda.sh
+           conda activate ~/miniconda3/envs/chemsmart
+       MODULES: null
+       SCRIPTS: null
+       ENVARS: null
    NCIPLOT:
        EXEFOLDER: ~/bin/nciplot
        LOCAL_RUN: False
@@ -731,6 +1021,106 @@ Complete example for a local workstation without a job scheduler:
            export SCRATCH=~/scratch
            export NCIPLOT_HOME=~/bin/nciplot
 
+.. _scratch-behavior:
+
+Scratch Behavior
+================
+
+CHEMSMART resolves whether to run in scratch from the CLI, the program ``SCRATCH`` key in server YAML, and the
+job-runner class default. When scratch mode is enabled, the scratch **directory path** is resolved separately.
+
+Scratch mode (on/off)
+---------------------
+
+CLI (``chemsmart run`` / ``chemsmart sub``)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When both ``--scratch`` and ``--no-scratch`` are omitted, ``JobRunner.from_job`` resolves scratch **before** the typed
+runner is constructed:
+
+#. Explicit ``--scratch`` or ``--no-scratch`` wins.
+#. Else program ``SCRATCH`` in server YAML for executable-backed runners.
+#. Else the job-runner class default.
+
+Programmatic API (direct constructor)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you call a typed runner constructor with ``scratch=None``, server YAML is **not** read—you get the class ``SCRATCH``
+default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI flag yields scratch off, but
+``NCIPLOTJobRunner(..., scratch=None)`` still uses the class default (on).
+
+.. note::
+
+   Server YAML ``SCRATCH`` is read only for executable-backed programs such as ``GAUSSIAN``, ``ORCA``, ``XTB``,
+   ``CREST``, and ``NCIPLOT``. A ``PYMOL:`` block (or other non-executable program) does not affect scratch when the CLI
+   flag is omitted.
+
+Resolution table (CLI path)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+   :header-rows:
+      1
+
+   :widths:
+      20 25 20 35
+
+   -  -  CLI
+      -  YAML ``SCRATCH``
+      -  Final ``scratch``
+      -  Runs in
+
+   -  -  ``--no-scratch``
+      -  any
+      -  ``False``
+      -  job folder
+
+   -  -  ``--scratch``
+      -  any
+      -  ``True``
+      -  scratch directory if path exists; else job folder (warning)
+
+   -  -  omit
+      -  ``False``
+      -  ``False``
+      -  job folder
+
+   -  -  omit
+      -  ``True``
+      -  ``True``
+      -  scratch directory if path exists; else job folder (warning)
+
+   -  -  omit
+      -  absent *(class ``False``, e.g. xTB, PyMOL, thermochemistry)*
+      -  ``False``
+      -  job folder
+
+   -  -  omit
+      -  absent *(class ``True``, e.g. Gaussian, ORCA, NCIPLOT)*
+      -  ``True``
+      -  scratch directory if path exists; else job folder (warning)
+
+When scratch mode resolves to ``True`` but no scratch path can be found, CHEMSMART logs a warning, sets
+``scratch=False``, and runs in the job folder. When a path is found but the directory does not exist, job setup raises
+``FileNotFoundError``.
+
+Scratch directory path
+----------------------
+
+When scratch mode is ``True``, the scratch directory path is resolved in this order:
+
+#. Program ``ENVARS`` (for example ``export SCRATCH=~/scratch`` under ``GAUSSIAN`` / ``ORCA`` / ``XTB`` / ``CREST`` /
+   ``NCIPLOT``)
+#. ``SERVER.SCRATCH_DIR``
+#. User settings ``SCRATCH`` (from CHEMSMART user configuration)
+
+If scratch mode is enabled but no scratch path can be resolved, CHEMSMART disables scratch with a warning and runs in
+the job folder. If a path is resolved but that directory does not exist, job setup raises ``FileNotFoundError``.
+Configure a real scratch path (or pass ``--no-scratch``) before relying on scratch execution.
+
+``chemsmart sub`` reconstructs CLI arguments for the worker ``chemsmart run`` script. When ``--scratch`` /
+``--no-scratch`` are omitted at submit time, those flags are also omitted in the reconstructed command so the worker
+applies the same YAML / class-default resolution.
+
 Customization Tips
 ==================
 
@@ -738,16 +1128,27 @@ When customizing server configuration files:
 
 #. **Scheduler-specific settings**: Adjust SCHEDULER, QUEUE_NAME, and SUBMIT_COMMAND based on your cluster's job
    scheduler.
+
 #. **Resource limits**: Set NUM_HOURS, MEM_GB, NUM_CORES to match your cluster's queue limits and job requirements.
+   Determine the memory-per-core ratio for your partition and set ``MEM_GB`` to slightly less than ``NUM_CORES ×
+   memory_per_core``. For example, ``NUM_CORES: 64`` with ~6 GB/core → ``MEM_GB: 375``.
+
 #. **Module system**: Update MODULES sections to load the correct versions of libraries and tools available on your
    system.
-#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. This
-   will be automatically updated when configuring CHEMSMART during the configuration phase.
-#. **Scratch directories**: Set SCRATCH environment variables to valid paths on your system. Some HPC systems provide
-   node-local scratch (e.g., ``/tmp``) while others use network-attached scratch directories.
+
+#. **Software paths**: Update EXEFOLDER paths to point to your actual installations of Gaussian, ORCA, and NCIPLOT. For
+   xTB and CREST, ``EXEFOLDER`` may be ``null`` to use ``xtb`` / ``crest`` from the activated conda environment /
+   ``PATH``. Paths for Gaussian, ORCA, and NCIPLOT are updated interactively when configuring CHEMSMART.
+
+#. **Scratch directories**: Configure program ``SCRATCH`` (mode) and a valid scratch path (``ENVARS`` / ``SCRATCH_DIR``
+   / user settings). Some HPC systems provide node-local scratch (e.g., ``/tmp``) while others use network-attached
+   scratch directories. See :ref:`scratch-behavior`.
+
 #. **Conda environments**: Adjust conda activation commands to match your conda installation path and environment names.
+
 #. **Project accounting**: Add or remove PROJECT field based on whether your cluster requires project/account numbers
    for job submission.
+
 #. **MPI configuration**: For ORCA, ensure the MPI library paths are correctly set in ENVARS to match your system's MPI
    installation.
 
@@ -758,7 +1159,7 @@ After creating a custom server configuration file:
 
 #. Save it in ``~/.chemsmart/server/`` with a descriptive name (e.g., ``myserver.yaml``)
 
-#. Use it with Chemsmart commands via the ``-s`` flag:
+#. Use it with chemsmart commands via the ``-s`` flag:
 
    .. code:: bash
 
@@ -767,3 +1168,36 @@ After creating a custom server configuration file:
 #. Verify the generated submission script to ensure all paths and settings are correct
 
 #. Test with a small job first to validate the configuration works correctly on your system
+
+Updating Existing Server YAML Files
+===================================
+
+When CHEMSMART adds support for a new program section in its bundled server template, existing user YAML files can be
+updated with either of the following:
+
+.. code:: bash
+
+   chemsmart update configs
+   chemsmart update configs -s SLURM
+   chemsmart update configs -s SLURM -s PBS
+
+`chemsmart update configs` updates the server configuration files interactively; `chemsmart update configs -s SLURM`
+updates the server configuration file located at `~/.chemsmart/server/SLURM.yaml`; whereas `chemsmart update configs -s
+SLURM -s PBS` updates multiple server configuration files located at `~/.chemsmart/server/SLURM.yaml` and
+`~/.chemsmart/server/PBS.yaml`.
+
+The command compares each selected YAML file with the bundled ``server.yaml`` template and only adds missing top-level
+program configuration sections. It does not update fields under``SERVER``, does not recursively fill missing fields
+inside an existing program section, and does not overwrite existing program sections or existing ``EXEFOLDER`` values.
+Custom top-level fields are preserved.
+
+Use ``-s`` / ``--server`` to select an existing YAML file from ``~/.chemsmart/server/``; the value may be given with or
+without ``.yaml``. Repeat the option to select multiple files. Without ``-s``, all existing ``*.yaml`` files in the
+server directory are checked. The command does not create missing server YAML files.
+
+In an interactive terminal, the command prompts at most once for the ``EXEFOLDER`` of each missing program discovered
+across the selected files. Press Enter to keep the value from the bundled template. A supplied path is applied only to
+newly copied program sections in files that were missing that program; existing program sections and paths are never
+changed. Program names are discovered from the template rather than maintained in a fixed list.
+
+When standard input is not an interactive terminal, the command does not prompt and uses the bundled template values.

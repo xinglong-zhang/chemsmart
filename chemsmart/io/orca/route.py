@@ -83,6 +83,11 @@ class ORCARoute:
         return None
 
     @property
+    def method(self):
+        """Extract the computational method (functional or ab initio)."""
+        return self.functional or self.ab_initio
+
+    @property
     def dispersion(self):
         """
         Extract dispersion correction from route keywords.

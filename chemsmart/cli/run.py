@@ -9,7 +9,6 @@ from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
-from chemsmart.settings.server import Server
 from chemsmart.utils.logger import create_logger
 
 logger = logging.getLogger(__name__)
@@ -58,8 +57,6 @@ def run(
     logger.info("Entering main program")
 
     # Instantiate the jobrunner with CLI options
-    if server is not None:
-        server = Server.from_servername(server)
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
@@ -78,6 +75,22 @@ def run(
     ctx.obj["jobrunner"] = jobrunner
 
 
+def _run_single_job(job, jobrunner):
+    """Attach a typed jobrunner and execute one job locally."""
+    typed_runner = jobrunner.from_job(
+        job=job,
+        server=jobrunner.server,
+        scratch=jobrunner.scratch,
+        fake=jobrunner.fake,
+        delete_scratch=jobrunner.delete_scratch,
+        num_cores=jobrunner.num_cores,
+        num_gpus=jobrunner.num_gpus,
+        mem_gb=jobrunner.mem_gb,
+    )
+    job.jobrunner = typed_runner
+    job.run()
+
+
 @run.result_callback()
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):
@@ -93,7 +106,10 @@ def process_pipeline(ctx, *args, **kwargs):
     # jobrunner at this stage is an instance of JobRunner class
     jobrunner = ctx.obj["jobrunner"]
 
-    # Get the job
+    # Get the job (some command paths intentionally return no job object)
+    if not args:
+        logger.debug("No pipeline output returned. Skipping job execution.")
+        return None
     job = args[0]
     logger.debug(f"Job to be run: {job}")
 
@@ -105,45 +121,21 @@ def process_pipeline(ctx, *args, **kwargs):
         )
         return None
 
-    # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
-        logger.info(f"Running {len(job)} jobs")
-        for single_job in job:
-            logger.info(f"Running job: {single_job.label}")
-            # Instantiate a specific jobrunner based on job type
-            job_specific_runner = jobrunner.from_job(
-                job=single_job,
-                server=jobrunner.server,
-                scratch=jobrunner.scratch,
-                fake=jobrunner.fake,
-                delete_scratch=jobrunner.delete_scratch,
-                num_cores=jobrunner.num_cores,
-                num_gpus=jobrunner.num_gpus,
-                mem_gb=jobrunner.mem_gb,
+        if not job:
+            logger.debug("Empty job list. Skipping job execution.")
+            return None
+        if not all(isinstance(single_job, Job) for single_job in job):
+            raise ValueError(
+                "Batch job submission is not supported in this branch."
             )
-            # Attach jobrunner to job and run the job with the jobrunner
-            single_job.jobrunner = job_specific_runner
-            single_job.run()
+        logger.info(f"Running {len(job)} jobs locally")
+        for single_job in job:
+            _run_single_job(single_job, jobrunner)
         return None
 
-    # Instantiate a specific jobrunner based on job type
-    # jobrunner at this stage is an instance of specific JobRunner subclass
-    # to run the job
     if isinstance(job, Job):
-        jobrunner = jobrunner.from_job(
-            job=job,
-            server=jobrunner.server,
-            scratch=jobrunner.scratch,
-            fake=jobrunner.fake,
-            delete_scratch=jobrunner.delete_scratch,
-            num_cores=jobrunner.num_cores,
-            num_gpus=jobrunner.num_gpus,
-            mem_gb=jobrunner.mem_gb,
-        )
-
-        # Attach jobrunner to job and run the job with the jobrunner
-        job.jobrunner = jobrunner
-        job.run()
+        _run_single_job(job, jobrunner)
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 

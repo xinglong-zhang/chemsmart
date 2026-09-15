@@ -20,7 +20,7 @@ qmmm:
   mult_intermediate: 1
 
   # Low-level (MM) region
-  low_level_force_field: "ff13SB"
+  low_level_force_field: "system.ORCAFF.prms"
 
   # Total system
   charge_total: 0
