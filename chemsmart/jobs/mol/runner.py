@@ -20,6 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from chemsmart.io.gaussian.output import Gaussian16WBIOutput
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol.templates.zhang_group_scientific_styles import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
@@ -1455,6 +1456,70 @@ class PyMOLNCIJobRunner(PyMOLVisualizationJobRunner):
             command += f"; nci_intermediate {job.source_basename}"
         else:
             command += f"; nci {job.source_basename}"
+        return command
+
+
+class PyMOLNBOJobRunner(PyMOLVisualizationJobRunner):
+    """
+    Specialized PyMOL job runner for NBO perturbation visualization.
+    """
+
+    JOBTYPES = ["pymol_nbo"]
+
+    def _prerun(self, job):
+        self._assign_variables(job)
+        self._write_nbo_perturbation_pml(job)
+
+    def _write_nbo_perturbation_pml(self, job):
+        nbo_output = Gaussian16WBIOutput(filename=job.analysis_filename)
+        perturbations = nbo_output.get_second_order_perturbations(
+            min_e2=job.threshold,
+            max_entries=job.max_interactions,
+        )
+        perturbations = [
+            entry
+            for entry in perturbations
+            if entry["donor_atom_numbers"]
+            and entry["acceptor_atom_numbers"]
+            and entry["donor_atom_numbers"][0]
+            != entry["acceptor_atom_numbers"][0]
+        ]
+
+        if len(perturbations) == 0:
+            raise ValueError(
+                "No NBO second-order perturbation entries found for visualization."
+            )
+
+        pml_file = os.path.join(job.folder, f"{job.nbo_basename}.pml")
+        if os.path.exists(pml_file):
+            logger.warning(f"PML file {pml_file} already exists. Overwriting.")
+
+        with open(pml_file, "w") as f:
+            f.write("set dash_gap, 0.2\n")
+            f.write("set dash_radius, 0.08\n")
+            f.write("set label_size, -0.4\n")
+            for i, entry in enumerate(perturbations):
+                interaction_name = f"nbo_{i+1}"
+                donor_atom = entry["donor_atom_numbers"][0]
+                acceptor_atom = entry["acceptor_atom_numbers"][0]
+                e2_value = entry["stabilization_energy_kcal_per_mol"]
+
+                f.write(
+                    f"distance {interaction_name}, id {donor_atom}, id {acceptor_atom}\n"
+                )
+                f.write(f"set dash_color, yellow, {interaction_name}\n")
+                f.write(f'label {interaction_name}, "E2={e2_value:.2f}"\n')
+            logger.info(f"Wrote NBO perturbation PML file: {pml_file}")
+
+    def _job_specific_commands(self, job, command):
+        command = self._call_pml(job, command)
+        command = self._add_refresh_command(job, command)
+        command = self._add_ray_command(job, command)
+        return command
+
+    def _call_pml(self, job, command):
+        pml_file = os.path.join(job.folder, f"{job.nbo_basename}.pml")
+        command += f"; load {quote_path(pml_file)}"
         return command
 
 

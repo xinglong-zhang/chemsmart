@@ -10,12 +10,14 @@ from chemsmart.jobs.mol.align import PyMOLAlignJob
 from chemsmart.jobs.mol.irc import PyMOLIRCMovieJob
 from chemsmart.jobs.mol.mo import PyMOLMOJob
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
+from chemsmart.jobs.mol.nbo import PyMOLNBOJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
 from chemsmart.jobs.mol.runner import (
     PYMOL_SCIENTIFIC_STYLE_COMMANDS,
     PYMOL_VISUALIZE_STYLE_CLI_CHOICES,
     PyMOLAlignJobRunner,
     PyMOLJobRunner,
+    PyMOLNBOJobRunner,
     PyMOLNCIJobRunner,
     PyMOLScientificStyleVisualizationJobRunner,
     PyMOLSpinJobRunner,
@@ -960,6 +962,63 @@ class TestPyMOLFileProcessingUsesSourceFilename:
         assert f"load {quote_path(dens_file)}" in command
         assert f"load {quote_path(grad_file)}" in command
         assert "; nci benzene_opt" in command
+
+    def test_nbo_cli_passes_analysis_parameters(
+        self, gaussian_benzene_opt_outfile, invoke_mol_cli
+    ):
+        from unittest.mock import patch
+
+        with patch("chemsmart.jobs.mol.nbo.PyMOLNBOJob") as mock_nbo_job:
+            result = invoke_mol_cli(
+                [
+                    "-f",
+                    gaussian_benzene_opt_outfile,
+                    "nbo",
+                    "--threshold",
+                    "12.5",
+                    "-N",
+                    "3",
+                ]
+            )
+
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_nbo_job.call_args
+        assert kwargs["analysis_filename"] == gaussian_benzene_opt_outfile
+        assert kwargs["threshold"] == 12.5
+        assert kwargs["max_interactions"] == 3
+        assert kwargs["source_basename"] == "benzene"
+
+    def test_nbo_writes_pml_from_perturbation_analysis(
+        self,
+        tmpdir,
+        gaussian_benzene_opt_outfile,
+        wbi_outputfile,
+        pbs_server,
+    ):
+        molecules = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile, index="-1", return_list=True
+        )
+        job = PyMOLNBOJob(
+            molecules,
+            label="nbo_label",
+            source_basename="benzene_opt",
+            analysis_filename=wbi_outputfile,
+            threshold=100.0,
+            max_interactions=2,
+        )
+        job.set_folder(tmpdir)
+        runner = PyMOLNBOJobRunner(server=pbs_server, scratch=False)
+
+        runner._write_nbo_perturbation_pml(job)
+
+        pml_file = os.path.join(tmpdir, "nbo_label_nbo.pml")
+        assert os.path.exists(pml_file)
+        with open(pml_file) as f:
+            pml_contents = f.read()
+
+        assert "distance nbo_1" in pml_contents
+        assert "distance nbo_2" in pml_contents
+        assert "set dash_color, yellow, nbo_1" in pml_contents
 
 
 class TestPyMOLStyleCommands:

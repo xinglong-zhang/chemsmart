@@ -2813,6 +2813,99 @@ class Gaussian16WBIOutput(Gaussian16Output):
                 return line.split()[-1].split("*")[0]
 
     @cached_property
+    def second_order_perturbation_analysis(self):
+        """
+        Parse second-order NBO perturbation analysis entries.
+
+        Returns:
+            list[dict]: Parsed entries with donor/acceptor labels, atom
+                indices, and E(2)/energy terms.
+        """
+        section_header = "Second Order Perturbation Theory Analysis of Fock Matrix in NBO Basis"
+        section_start = None
+        for i, line in enumerate(self.contents):
+            if section_header in line:
+                section_start = i
+                break
+
+        if section_start is None:
+            return []
+
+        entry_pattern = re.compile(
+            r"^\s*(?P<donor_idx>\*\*\*|\d+)\.\s+"
+            r"(?P<donor>.+?)\s+/\s*"
+            r"(?P<acceptor_idx>\*\*\*|\d+)\.\s+"
+            r"(?P<acceptor>.+?)\s+"
+            r"(?P<e2>-?\d+\.\d+)\s+"
+            r"(?P<delta_e>-?\d+\.\d+)\s+"
+            r"(?P<fij>-?\d+\.\d+)\s*$"
+        )
+
+        perturbations = []
+        for line in self.contents[section_start + 1 :]:
+            if "Natural Bond Orbitals (Summary):" in line:
+                break
+
+            match = entry_pattern.match(line)
+            if match is None:
+                continue
+
+            donor_idx = match.group("donor_idx")
+            acceptor_idx = match.group("acceptor_idx")
+            donor_label = match.group("donor").strip()
+            acceptor_label = match.group("acceptor").strip()
+
+            perturbations.append(
+                {
+                    "donor_nbo_index": (
+                        int(donor_idx) if donor_idx != "***" else None
+                    ),
+                    "donor_nbo": donor_label,
+                    "donor_atom_numbers": self._extract_atom_numbers_from_nbo_label(
+                        donor_label
+                    ),
+                    "acceptor_nbo_index": (
+                        int(acceptor_idx) if acceptor_idx != "***" else None
+                    ),
+                    "acceptor_nbo": acceptor_label,
+                    "acceptor_atom_numbers": self._extract_atom_numbers_from_nbo_label(
+                        acceptor_label
+                    ),
+                    "stabilization_energy_kcal_per_mol": float(
+                        match.group("e2")
+                    ),
+                    "energy_difference_au": float(match.group("delta_e")),
+                    "fock_matrix_element_au": float(match.group("fij")),
+                }
+            )
+
+        return perturbations
+
+    @staticmethod
+    def _extract_atom_numbers_from_nbo_label(nbo_label):
+        """
+        Extract atom numbers from an NBO label.
+        """
+        return [int(i) for i in re.findall(r"[A-Z][a-z]?\s+(\d+)", nbo_label)]
+
+    def get_second_order_perturbations(self, min_e2=0.5, max_entries=None):
+        """
+        Get filtered second-order perturbation entries sorted by E(2).
+        """
+        perturbations = [
+            entry
+            for entry in self.second_order_perturbation_analysis
+            if entry["stabilization_energy_kcal_per_mol"] >= min_e2
+        ]
+        perturbations.sort(
+            key=lambda entry: entry["stabilization_energy_kcal_per_mol"],
+            reverse=True,
+        )
+        if max_entries is not None:
+            perturbations = perturbations[:max_entries]
+        return perturbations
+
+    @cached_property
     def natural_atomic_orbitals(self):
         """
         Parse the NBO natural atomic orbitals.
