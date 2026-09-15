@@ -1493,8 +1493,8 @@ class TestGaussianCLILinkMecpCommand:
 
         assert result.exit_code == 0, result.output
         assert settings.functional.lower().startswith("u")
-        
-        
+
+
 class TestGaussianQMMMCLI:
     """CLI tests for the nested ``opt qmmm`` (and related) subcommands."""
 
