@@ -114,13 +114,51 @@ def test_the_same_structure_sensor_reports_a_comparison_it_could_not_make(
         assert len(observations) == 1, name
         (observation,) = observations
         assert (
-            observation["observation"] == "same_structure_comparison_not_made"
+            observation["signal_id"]
+            == "geometry.same_structure_comparison_not_made"
         )
         assert observation["heavy_atom_count"] == _heavy(symbols)
     else:
         # Above the floor with no receipts to compare against, the
         # sensor is silent because it looked and found no sibling.
         assert observations == (), name
+
+
+@pytest.mark.parametrize("name,symbols,positions", _MOLECULES)
+def test_every_observation_the_sensor_returns_reaches_its_consumer(
+    name, symbols, positions
+):
+    """Drive the consumer, because asserting the producer proved nothing.
+
+    This sensor's output is an anomaly observation's input: the executor
+    reads ``signal_id`` from every block it returns. Checking only the
+    producer's own spelling is what let the floor block drift to a
+    different word from its sibling while the suite stayed green, and the
+    first goal to validate a node below the floor -- water, one heavy
+    atom -- died of a KeyError *after* its engine had run, so a finished
+    calculation was typed interrupted_mid_engine and the next node never
+    launched. Building the observation the executor would build is the
+    assertion that actually holds the two halves together.
+    """
+
+    from chemsmart.agent.execution import build_anomaly_observation
+
+    for observation in _same_structure_observations(
+        {}, "node-a", _output(symbols, positions)
+    ):
+        receipt = build_anomaly_observation(
+            node_id="node-a",
+            program="pyscf",
+            jobtype="opt",
+            signal_id=str(observation["signal_id"]),
+            values={
+                key: value
+                for key, value in dict(observation).items()
+                if key != "signal_id"
+            },
+            source_receipt_sha256="0" * 64,
+        )
+        assert receipt.signal_id, name
 
 
 def test_the_floor_is_the_declared_policy_and_not_a_second_number():

@@ -1227,8 +1227,20 @@ def _same_structure_observations(
         # why, so a reader can tell "no sibling matched" from "no
         # comparison was possible".
         return (
+            # ``signal_id`` and not some other word for the same thing:
+            # every observation this function returns is read by one
+            # consumer, which builds an anomaly observation from it and
+            # asks for that key by name. Naming the floor block
+            # differently from its own sibling below left the two halves
+            # disagreeing while the suite stayed green, because the test
+            # asserted the producer's spelling instead of driving the
+            # consumer -- and the first goal to validate a node with
+            # fewer than three heavy atoms died of a KeyError after its
+            # engine had already run, so a finished calculation was
+            # typed interrupted_mid_engine and the next node never
+            # launched. Water has one heavy atom.
             {
-                "observation": "same_structure_comparison_not_made",
+                "signal_id": "geometry.same_structure_comparison_not_made",
                 "heavy_atom_rmsd_floor_applied": True,
                 "heavy_atom_count": len(heavy),
                 "node_id": str(node_id),
