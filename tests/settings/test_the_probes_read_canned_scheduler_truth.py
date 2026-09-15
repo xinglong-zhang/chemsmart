@@ -57,6 +57,43 @@ def test_sinfo_partitions_parse_to_typed_queue_facts():
     assert by_name["debug"].max_time_seconds == 30 * 60  # bare minutes
 
 
+# Recorded on a real centre whose default partition spans 2017-era GPU
+# nodes, H200 nodes and 91 plain compute nodes. sinfo prints one row per
+# node configuration, so one partition arrives here fifteen times over.
+_SINFO_HETEROGENEOUS = """\
+chpc*|up|7-00:00:00|28|128284|1|gpu:GTX1080Ti:8(S:0-1)
+chpc*|up|7-00:00:00|256|2321767|1|gpu:H200:8
+chpc*|up|7-00:00:00|32+|95777+|91|(null)
+public|up|7-00:00:00|32|95781+|5|(null)
+"""
+
+
+def test_a_heterogeneous_partition_is_one_queue_a_user_can_pick():
+    """One entry per partition, described by its typical node.
+
+    Left unmerged, a choice list offers the same name repeatedly and binds
+    whichever row came first -- here a single GTX1080Ti node, which would
+    advertise 28 cores for a partition reaching 256.
+    """
+
+    queues = parse_sinfo(0, _SINFO_HETEROGENEOUS, "")
+
+    assert [queue.name for queue in queues] == ["chpc", "public"]
+
+    chpc = queues[0]
+    assert chpc.cores_per_node == 32  # the 91-node class, not the first row
+    assert chpc.mem_kb_per_node == 95777 * 1024
+    assert chpc.node_count == 93  # 1 + 1 + 91: the partition total
+    assert chpc.is_default is True
+    assert chpc.max_time_seconds == 7 * 24 * 3600
+    # The rows disagree about gres, so the partition claims no accelerator.
+    assert chpc.gres == ""
+
+    # A partition named once is carried through untouched.
+    assert queues[1].cores_per_node == 32
+    assert queues[1].node_count == 5
+
+
 def test_a_failing_sinfo_refuses_instead_of_inventing_queues():
     with pytest.raises(ProbeUnitError, match="sinfo exited 1"):
         parse_sinfo(1, "", "slurm_load_partitions: unable to contact")

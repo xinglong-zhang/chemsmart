@@ -34,6 +34,50 @@ def _int_or_none(text: str) -> int | None:
         return None
 
 
+def _merge_partition_rows(
+    rows: list[QueueFactsV1],
+) -> QueueFactsV1:
+    """One partition's rows folded into the partition a user can pick.
+
+    ``sinfo`` prints one row per distinct node configuration, not one per
+    partition, so a heterogeneous partition arrives here many times over.
+    Treating each row as its own queue offers the same name repeatedly in
+    one choice list and then binds whichever row happened to come first,
+    which is an arbitrary node rather than a described one.
+
+    The facts kept are those of the node configuration **most of the
+    partition's nodes have**, because the wizard is choosing a default job
+    shape and the shape that fits the most nodes is the one most likely to
+    be scheduled; the largest node would default every job to a size only
+    a handful of nodes can satisfy. ``node_count`` is the partition total,
+    and a ``gres`` is kept only when every row agrees, so a partition that
+    mixes accelerated and plain nodes never claims a GPU nobody asked for.
+    """
+
+    if len(rows) == 1:
+        return rows[0]
+    typical = max(
+        rows, key=lambda row: (row.node_count or 0, row.cores_per_node or 0)
+    )
+    gres = {row.gres for row in rows}
+    limits = [row.max_time_seconds for row in rows]
+    return QueueFactsV1(
+        name=typical.name,
+        is_default=any(row.is_default for row in rows),
+        available=any(row.available for row in rows),
+        # A row with no limit makes the partition's ceiling unlimited.
+        max_time_seconds=(
+            None
+            if any(limit is None for limit in limits)
+            else max(limit for limit in limits)
+        ),
+        cores_per_node=typical.cores_per_node,
+        mem_kb_per_node=typical.mem_kb_per_node,
+        node_count=sum(row.node_count or 0 for row in rows) or None,
+        gres=gres.pop() if len(gres) == 1 else "",
+    )
+
+
 def parse_sinfo(
     returncode: int, stdout: str, stderr: str
 ) -> tuple[QueueFactsV1, ...]:
@@ -73,7 +117,11 @@ def parse_sinfo(
                 gres="" if gres in {"(null)", ""} else gres,
             )
         )
-    return tuple(queues)
+    # One entry per partition, in the order the controller first named it.
+    by_name: dict[str, list[QueueFactsV1]] = {}
+    for queue in queues:
+        by_name.setdefault(queue.name, []).append(queue)
+    return tuple(_merge_partition_rows(rows) for rows in by_name.values())
 
 
 def parse_sinfo_version(returncode: int, stdout: str, stderr: str) -> str:
