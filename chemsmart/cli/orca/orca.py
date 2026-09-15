@@ -96,11 +96,13 @@ def click_orca_settings_options(f):
         "-b", "--basis", type=str, default=None, help="New basis set to run."
     )
     @click.option(
-        "-a",
         "--aux-basis",
         type=str,
         default=None,
-        help="Auxiliary basis set.",
+        help=(
+            "Auxiliary basis set. The -a short option is reserved for "
+            "--append-label."
+        ),
     )
     @click.option(
         "-e",

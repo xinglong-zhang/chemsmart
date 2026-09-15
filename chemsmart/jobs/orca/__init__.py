@@ -7,6 +7,7 @@ settings, and runners for ORCA quantum chemistry calculations.
 
 from .irc import ORCAIRCJob
 from .job import ORCAGeneralJob, ORCAInpJob, ORCAJob
+from .mecp import ORCAMECPJob
 from .modred import ORCAModredJob
 from .opt import ORCAOptJob
 from .qmmm import ORCAQMMMJob
@@ -26,6 +27,7 @@ __all__ = [
     "ORCAJob",
     "ORCAInpJob",
     "ORCAGeneralJob",
+    "ORCAMECPJob",
     "ORCAModredJob",
     "ORCAJobRunner",
     "ORCAQRCJob",

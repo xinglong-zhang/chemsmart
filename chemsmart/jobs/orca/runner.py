@@ -67,6 +67,7 @@ class ORCAJobRunner(JobRunner):
         "orcairc",
         "orcaqmmm",
         "orcaneb",
+        "orcamecp",
     ]
 
     PROGRAM = "orca"
@@ -342,6 +343,26 @@ class ORCAJobRunner(JobRunner):
                     )
                     copy(cosmorsxyz_path, dest)
                     logger.info(f"Copied {cosmorsxyz_path} to {dest}.")
+                    continue
+
+                moinp_match = re.search(
+                    r'^\s*moinp\s+["\']([^"\']+)["\']', line, re.IGNORECASE
+                )
+                if moinp_match:
+                    source = getattr(job.settings, "moinp", None)
+                    if source is None:
+                        source = moinp_match.group(1)
+                    if not os.path.isabs(source):
+                        source = os.path.join(job.folder, source)
+                    if not os.path.isfile(source):
+                        raise FileNotFoundError(
+                            f"MECP PES2 orbital file does not exist: {source}"
+                        )
+                    destination = os.path.join(
+                        self.running_directory, os.path.basename(source)
+                    )
+                    if os.path.abspath(source) != os.path.abspath(destination):
+                        copy(source, destination)
 
     def _write_input(self, job):
         """
@@ -453,6 +474,15 @@ class ORCAJobRunner(JobRunner):
                         logger.error(
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
+
+        # Native ORCA MECP calculations produce many auxiliary files.  Write
+        # one concise report after the output has been copied back from
+        # scratch, matching the report-file convention used by Gaussian MECP.
+        if job.TYPE == "orcamecp":
+            try:
+                job.log_result()
+            except (OSError, ValueError) as e:
+                logger.error(f"Failed to write ORCA MECP quality report: {e}")
 
 
 class FakeORCAJobRunner(ORCAJobRunner):

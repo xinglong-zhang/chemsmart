@@ -2,6 +2,7 @@ import logging
 import math
 import os
 import re
+from dataclasses import dataclass
 from functools import cached_property
 
 import numpy as np
@@ -32,6 +33,26 @@ from chemsmart.utils.utils import (
 p = PeriodicTable()
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ORCAMECPResult:
+    """Summary of a native ORCA SurfCrossOpt calculation."""
+
+    converged: bool
+    normal_termination: bool
+    state_1_energy: float | None
+    state_2_energy: float | None
+    energy_gap: float | None
+    final_structure: Molecule | None
+    numfreq_requested: bool
+    numfreq_completed: bool
+    state_1_frequencies: tuple[float, ...]
+    state_2_frequencies: tuple[float, ...]
+    state_1_imaginary_frequencies: tuple[float, ...]
+    state_2_imaginary_frequencies: tuple[float, ...]
+    is_minimum: bool | None
+    energy_gap_history: tuple[float, ...]
 
 
 class ORCAOutput(ORCAFileMixin):
@@ -149,6 +170,211 @@ class ORCAOutput(ORCAFileMixin):
                 energy = float(line.split()[-1])
                 energies.append(energy)
         return energies
+
+    @cached_property
+    def is_mecp(self):
+        """Whether this output contains a native ORCA MECP calculation."""
+        return any(
+            "SURFCROSSOPT" in line.upper() or "%MECP" in line.upper()
+            for line in self.contents
+        )
+
+    @cached_property
+    def mecp_energy_gap_history(self):
+        """Energy differences between the two surfaces, in Hartree."""
+        pattern = re.compile(
+            r"Energy difference between (?:both|the two) states\s*"
+            r"(?::|=)?\s*([-+]?\d*\.?\d+(?:[EeDd][-+]?\d+)?)",
+            re.IGNORECASE,
+        )
+        gaps = []
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                gaps.append(float(match.group(1).replace("D", "E")))
+        return gaps
+
+    @cached_property
+    def mecp_state_energies(self):
+        """Final PES1/PES2 energies adjacent to the last reported MECP gap."""
+        explicit = re.compile(
+            r"(?:PES|STATE)\s*([12])\s*(?:ENERGY)?\s*[:=]\s*"
+            r"([-+]?\d*\.?\d+(?:[EeDd][-+]?\d+)?)",
+            re.IGNORECASE,
+        )
+        found = {}
+        for line in self.contents:
+            match = explicit.search(line)
+            if match:
+                found[int(match.group(1))] = float(
+                    match.group(2).replace("D", "E")
+                )
+        if 1 in found and 2 in found:
+            return found[1], found[2]
+
+        # ORCA versions that do not label PES energies print the two SCF
+        # results immediately before the corresponding energy-difference line.
+        gap_index = None
+        for index, line in enumerate(self.contents):
+            if "ENERGY DIFFERENCE BETWEEN" in line.upper():
+                gap_index = index
+        if gap_index is None:
+            return None, None
+        energies = []
+        for line in self.contents[:gap_index]:
+            if "FINAL SINGLE POINT ENERGY" in line:
+                energies.append(float(line.split()[-1].replace("D", "E")))
+        if len(energies) >= 2:
+            return energies[-2], energies[-1]
+        return None, None
+
+    @cached_property
+    def mecp_result(self):
+        """Return a structured summary for a native SurfCrossOpt output."""
+        if not self.is_mecp:
+            return None
+        state_1, state_2 = self.mecp_state_energies
+        gaps = tuple(self.mecp_energy_gap_history)
+        gap = gaps[-1] if gaps else None
+        if gap is None and state_1 is not None and state_2 is not None:
+            gap = state_1 - state_2
+        try:
+            structure = self._get_mecp_stationary_point_structure()
+        except (IndexError, ValueError):
+            structure = None
+        state_1_freqs, state_2_freqs = self.mecp_numfreq_frequencies
+        numfreq_requested = any(
+            "SURFCROSSNUMFREQ" in line.upper() for line in self.contents
+        )
+        numfreq_completed = bool(
+            numfreq_requested
+            and structure is not None
+            and len(structure) > 0
+            and all(
+                tuple(mode for mode, _ in rows)
+                == tuple(range(3 * len(structure)))
+                for rows in self._mecp_numfreq_rows
+            )
+            and self.normal_termination
+        )
+        imaginary_cutoff = -1.0
+        state_1_imaginary = tuple(
+            freq for freq in state_1_freqs if freq < imaginary_cutoff
+        )
+        state_2_imaginary = tuple(
+            freq for freq in state_2_freqs if freq < imaginary_cutoff
+        )
+        is_minimum = None
+        if numfreq_completed:
+            is_minimum = not state_1_imaginary and not state_2_imaginary
+        return ORCAMECPResult(
+            converged=bool(self.converged),
+            normal_termination=self.normal_termination,
+            state_1_energy=state_1,
+            state_2_energy=state_2,
+            energy_gap=gap,
+            final_structure=structure,
+            numfreq_requested=numfreq_requested,
+            numfreq_completed=numfreq_completed,
+            state_1_frequencies=state_1_freqs,
+            state_2_frequencies=state_2_freqs,
+            state_1_imaginary_frequencies=state_1_imaginary,
+            state_2_imaginary_frequencies=state_2_imaginary,
+            is_minimum=is_minimum,
+            energy_gap_history=gaps,
+        )
+
+    @cached_property
+    def mecp_numfreq_frequencies(self):
+        """Return effective-Hessian frequencies for PES1 and PES2.
+
+        ORCA labels the second surface as ``VIBRATIONAL FREQUENCIES PES2``
+        and prints the first surface under the ordinary
+        ``VIBRATIONAL FREQUENCIES`` heading.  Frequencies include the seven
+        projected zero modes of a non-linear MECP calculation.
+        """
+        return tuple(
+            tuple(frequency for _, frequency in rows)
+            for rows in self._mecp_numfreq_rows
+        )
+
+    @cached_property
+    def _mecp_numfreq_rows(self):
+        """Keep mode indices to validate all 3N rows, including zero modes.
+
+        Use the last occurrence of each table even if it is empty. Never
+        borrow rows from a following table or an earlier completed table.
+        """
+        frequency_pattern = re.compile(
+            r"^\s*(\d+):\s*([-+]?\d+(?:\.\d+)?)\s+cm\*\*-1"
+        )
+
+        def _section(header):
+            values = []
+            for index, line in enumerate(self.contents):
+                if line.strip() != header:
+                    continue
+                current = []
+                for candidate in self.contents[index + 1 :]:
+                    if candidate.strip().startswith("VIBRATIONAL FREQUENCIES"):
+                        break
+                    match = frequency_pattern.match(candidate)
+                    if match:
+                        current.append(
+                            (int(match.group(1)), float(match.group(2)))
+                        )
+                    elif current:
+                        break
+                    elif candidate.strip() and not (
+                        set(candidate.strip()) == {"-"}
+                        or candidate.strip().startswith("Scaling factor")
+                    ):
+                        break
+                values = current
+            return tuple(values)
+
+        return (
+            _section("VIBRATIONAL FREQUENCIES"),
+            _section("VIBRATIONAL FREQUENCIES PES2"),
+        )
+
+    def _get_mecp_stationary_point_structure(self):
+        """Return the geometry at ORCA's converged MECP stationary point.
+
+        A converged ``SurfCrossOpt`` output prints the stationary-point
+        geometry and then performs one final energy evaluation on each PES.
+        Consequently, the last Cartesian block in the file belongs to PES2
+        and must not be used as the optimized MECP geometry.
+        """
+        marker = "FINAL ENERGY EVALUATION AT THE STATIONARY POINT"
+        header = "CARTESIAN COORDINATES (ANGSTROEM)"
+        pattern = re.compile(standard_coord_pattern)
+
+        marker_indices = [
+            i for i, line in enumerate(self.contents) if marker in line
+        ]
+        if not marker_indices:
+            raise ValueError("No MECP stationary-point geometry was found.")
+
+        for line_index in range(marker_indices[-1] + 1, len(self.contents)):
+            if header not in self.contents[line_index]:
+                continue
+            coordinate_lines = []
+            for line in self.contents[line_index + 1 :]:
+                if pattern.match(line):
+                    coordinate_lines.append(line)
+                elif coordinate_lines:
+                    break
+            if coordinate_lines:
+                structure = CoordinateBlock(
+                    coordinate_block=coordinate_lines
+                ).molecule
+                # A crossing point has two electronic energies.  Attaching
+                # either PES value to the geometry would be ambiguous.
+                structure.energy = None
+                return structure
+
+        raise ValueError("No MECP stationary-point geometry was found.")
 
     @cached_property
     def input_coordinates_block(self):

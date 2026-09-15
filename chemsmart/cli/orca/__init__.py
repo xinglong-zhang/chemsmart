@@ -9,6 +9,7 @@ single point calculations, and constrained optimizations.
 
 from .inp import inp
 from .irc import irc
+from .mecp import mecp
 from .modred import modred
 from .neb import neb
 from .opt import opt
@@ -23,6 +24,7 @@ from .ts import ts
 __all__ = [
     "inp",
     "irc",
+    "mecp",
     "modred",
     "opt",
     "orca",
