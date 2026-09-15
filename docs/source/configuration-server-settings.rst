@@ -1058,11 +1058,9 @@ default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI f
 Resolution table (CLI path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   :header-rows:
-      1
-
-   :widths:
-      20 25 20 35
+.. list-table::
+   :header-rows: 1
+   :widths: 20 25 20 35
 
    -  -  CLI
       -  YAML ``SCRATCH``
