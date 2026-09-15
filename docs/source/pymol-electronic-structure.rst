@@ -48,6 +48,18 @@ MO Options
       -  bool
       -  Plot LUMO (default: disabled)
 
+   -  -  ``-sw, --swap``
+      -  bool
+      -  Swap positive and negative orbital phase colors (default: disabled)
+
+   -  -  ``-cp, --color-positive``
+      -  str
+      -  Color for the positive orbital phase isosurface, e.g. ``-cp '[0,1,0]'`` or ``-cp blue`` (default: blue)
+
+   -  -  ``-cn, --color-negative``
+      -  str
+      -  Color for the negative orbital phase isosurface, e.g. ``-cn '[1,0,0]'`` or ``-cn red`` (default: red)
+
    -  -  ``-i, --isosurface-value``
       -  float
       -  Set isosurface value to be used in PyMOL .pml file (default: 0.05).
@@ -81,6 +93,10 @@ MO Options
    modify the *.pml file* after the *.pse file* and *.pml file* have been generated and then reapply the updated
    settings to the PyMOL session.
 
+   Orbital phase colors are for visualization only. Because an orbital's overall sign is arbitrary, swapping both phase
+   colors with ``-sw/--swap`` is scientifically valid. When comparing separate orbitals with swapped colors, describe
+   them as phase-aligned for visualization rather than implying that a specific color has an absolute physical phase.
+
 Basic Usage
 ===========
 
@@ -101,6 +117,18 @@ Specific orbital:
 .. code:: bash
 
    chemsmart run mol -f molecule.log mo -n 5 -m 2
+
+Invert phase colors:
+
+.. code:: bash
+
+   chemsmart run mol -f molecule.log mo -h -sw
+
+Custom phase colors:
+
+.. code:: bash
+
+   chemsmart run mol -f molecule.log mo -h -cp '[0,1,0]' -cn '[1,0,0]'
 
 *******************
  Spin Density Jobs

@@ -25,6 +25,9 @@ class PyMOLMOJob(PyMOLJob):
         number (int | None): Specific MO number to visualize.
         homo (bool | None): Whether to visualize the HOMO.
         lumo (bool | None): Whether to visualize the LUMO.
+        swap (bool): Swap positive and negative phase colors.
+        color_positive (str | None): PyMOL color for the positive phase.
+        color_negative (str | None): PyMOL color for the negative phase.
         mo_basename (str): Basename for MO-related artifacts (cube, pml, pse).
         jobrunner (JobRunner): Execution backend for running the job.
         skip_completed (bool): If True, completed jobs are not rerun.
@@ -39,6 +42,9 @@ class PyMOLMOJob(PyMOLJob):
         number=None,
         homo=None,
         lumo=None,
+        swap=False,
+        color_positive=None,
+        color_negative=None,
         mo_basename=None,
         **kwargs,
     ):
@@ -56,6 +62,12 @@ class PyMOLMOJob(PyMOLJob):
             number (int, optional): Specific molecular orbital number.
             homo (bool, optional): Visualize HOMO if True.
             lumo (bool, optional): Visualize LUMO if True.
+            swap (bool, optional): Swap positive and negative phase
+                colors if True.
+            color_positive (str, optional): PyMOL color for the positive
+                phase isosurface.
+            color_negative (str, optional): PyMOL color for the negative
+                phase isosurface.
             mo_basename (str, optional): Base name for output files
                 (auto-generated if not provided).
             **kwargs: Additional arguments passed to parent PyMOLJob.
@@ -71,6 +83,9 @@ class PyMOLMOJob(PyMOLJob):
         self.number = number
         self.homo = homo
         self.lumo = lumo
+        self.swap = swap
+        self.color_positive = color_positive
+        self.color_negative = color_negative
 
         if self.number:
             mo_basename = f"{self.label}_MO{self.number}"
