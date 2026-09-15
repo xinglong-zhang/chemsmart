@@ -97,7 +97,7 @@ class PyMOLMOJob(PyMOLJob):
         )
 
         self.mo_basename = mo_basename
-        
+
         self.swap = swap
         self.color_positive = color_positive
         self.color_negative = color_negative
