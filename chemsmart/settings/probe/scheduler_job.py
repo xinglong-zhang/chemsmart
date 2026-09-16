@@ -246,9 +246,19 @@ class SchedulerArrayStateV1:
 
 
 def squeue_array_command(array_job_id: str) -> tuple[str, ...]:
+    """One row per element, expanded.
+
+    By default squeue *compresses* an array's pending elements into a
+    single range row -- `%i` reads `4242_[1-6%4]` -- so a barrier asking
+    "is every member terminal" would count one row for six calculations
+    and could report a range string as an unfinished task id. `-r`
+    (`--array`) expands them.
+    """
+
     return (
         "squeue",
         "-h",
+        "-r",
         "-t",
         "all",
         "-j",
@@ -281,6 +291,14 @@ def parse_squeue_array(
         parts = [part.strip() for part in line.split("|")]
         if len(parts) != 8 or parts[1] != str(array_job_id):
             continue
+        # A compressed range row would make one line stand for several
+        # calculations, so it is not read as an element. Asking with -r
+        # should prevent it; a site that returns one anyway makes the
+        # cohort unknown rather than silently undercounted.
+        if not parts[2].isdigit():
+            return SchedulerArrayStateV1(
+                array_job_id=str(array_job_id), known=False
+            )
         elements.append(
             SchedulerArrayElementV1(
                 element_id=parts[0],

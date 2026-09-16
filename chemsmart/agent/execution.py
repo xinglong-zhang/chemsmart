@@ -9098,6 +9098,36 @@ def derive_ready_node_ids(
     return tuple(ready)
 
 
+#: How a workflow node may move. A state with no successors has ended,
+#: which is what "terminal" means here, so the terminal set is derived
+#: from this table rather than written down a second time -- a hand-list
+#: beside a declaration is how a cancelled node came to hold a wave open
+#: forever while the machine already knew it had ended.
+WORKFLOW_NODE_TRANSITIONS: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        # A human may withdraw the grant at a node boundary; only a
+        # node that never launched can be cancelled, so the word is
+        # unreachable from any running or terminal state.
+        "pending": frozenset({"running", "blocked", "cancelled"}),
+        "deferred": frozenset(),
+        "running": frozenset({"engine_complete", "failed", "ambiguous"}),
+        "engine_complete": frozenset({"validated", "failed"}),
+        "validated": frozenset(),
+        "failed": frozenset(),
+        "blocked": frozenset(),
+        "ambiguous": frozenset(),
+        "cancelled": frozenset(),
+    }
+)
+
+#: Node run states that have ended, however they ended.
+TERMINAL_NODE_RUN_STATES: frozenset[str] = frozenset(
+    state
+    for state, successors in WORKFLOW_NODE_TRANSITIONS.items()
+    if not successors
+)
+
+
 def transition_workflow_node(
     run_state: WorkflowRunStateV1,
     *,
@@ -9119,20 +9149,7 @@ def transition_workflow_node(
     current = by_id.get(normalized_id)
     if current is None:
         raise ContractError("workflow run state has no such node")
-    allowed = {
-        # A human may withdraw the grant at a node boundary; only a
-        # node that never launched can be cancelled, so the word is
-        # unreachable from any running or terminal state.
-        "pending": {"running", "blocked", "cancelled"},
-        "deferred": set(),
-        "running": {"engine_complete", "failed", "ambiguous"},
-        "engine_complete": {"validated", "failed"},
-        "validated": set(),
-        "failed": set(),
-        "blocked": set(),
-        "ambiguous": set(),
-        "cancelled": set(),
-    }
+    allowed = WORKFLOW_NODE_TRANSITIONS
     if new_state not in allowed[current.state]:
         raise ContractError("invalid workflow node state transition")
     if plan is not None:

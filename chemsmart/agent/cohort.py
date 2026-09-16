@@ -124,7 +124,23 @@ class CohortManifestV1:
         return {**self._body(), "cohort_sha256": self.cohort_sha256}
 
     def write(self, run_directory: str | Path) -> Path:
+        """Write this cohort once.
+
+        Membership is fixed at dispatch. An unconditional overwrite let a
+        second correctly-digested manifest replace the first through the
+        public writer -- a different experiment than the one the barrier
+        is waiting for, with the digest check none the wiser.
+        """
+
         path = Path(run_directory) / COHORT_MANIFEST_FILE
+        if path.exists():
+            existing = read_cohort_manifest(run_directory)
+            if existing is not None and existing.cohort_id == self.cohort_id:
+                return path
+            raise ContractError(
+                f"a cohort is already dispatched in {run_directory}: "
+                "membership is fixed when the wave is submitted"
+            )
         path.write_text(
             json.dumps(self.public_record(), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -386,17 +402,28 @@ def cohort_completion(
             )
         )
 
+    # Terminality, not an execution receipt. A member cancelled before
+    # launch, or refused admission, reaches a terminal state without ever
+    # running an engine; asking for a receipt made the wave wait on it
+    # forever, so one cancelled calculation could never wake the Agent.
+    from chemsmart.agent.execution import TERMINAL_NODE_RUN_STATES
+
     finished: set[str] = set()
     for event in events:
-        if getattr(event, "kind", "") != "program_execution_observed":
-            continue
+        kind = getattr(event, "kind", "")
         payload = getattr(event, "payload", None) or {}
         record = payload.get("record") or {}
         node_id = str(
             payload.get("node_id") or (record or {}).get("node_id") or ""
         )
-        if node_id:
+        if not node_id:
+            continue
+        if kind == "program_execution_observed":
             finished.add(node_id)
+        elif kind == "workflow_node_state_changed":
+            state = str((record or {}).get("state") or "")
+            if state in TERMINAL_NODE_RUN_STATES:
+                finished.add(node_id)
     live = set(run_live_leases(events))
     pending = tuple(
         node_id
@@ -478,11 +505,27 @@ def read_cohort_manifest(
 
     path = Path(run_directory) / COHORT_MANIFEST_FILE
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        # No file at all: a single-job dispatch, which is absence.
         return None
+    # A file that exists and cannot be read is **not** absence. `None`
+    # means "no cohort", and `cohort_frontier(ready, None)` admits every
+    # ready node -- so a truncated manifest would silently turn a bounded
+    # wave back into the flowing walk it exists to prevent, executing
+    # work the Agent did not ask for in this wave.
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ContractError(
+            f"the cohort manifest at {path} is unreadable, and a wave "
+            "whose membership cannot be read is not a wave without one"
+        ) from exc
     if not isinstance(raw, dict):
-        return None
+        raise ContractError(
+            f"the cohort manifest at {path} is damaged: a manifest is an "
+            "object naming this wave's members"
+        )
     return CohortManifestV1(
         schema_version=str(raw.get("schema_version") or ""),
         goal_id=str(raw.get("goal_id") or ""),

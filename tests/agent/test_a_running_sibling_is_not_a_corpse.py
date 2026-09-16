@@ -74,13 +74,25 @@ def test_the_lease_is_read_by_every_site_that_calls_running_dead():
     import chemsmart.agent.executor as executor
     import chemsmart.agent.terminal_states as terminal_states
 
-    for module in (terminal_states, executor):
-        source = Path(module.__file__).read_text(encoding="utf-8")
-        ast.parse(source)
-        assert "reservation_lease_is_live" in source, (
-            f"{module.__name__} still concludes a running node is dead "
-            "without asking whether its lease is live"
-        )
+    terminal_source = Path(terminal_states.__file__).read_text(
+        encoding="utf-8"
+    )
+    ast.parse(terminal_source)
+    assert "reservation_lease_is_live" in terminal_source
+
+    executor_source = Path(executor.__file__).read_text(encoding="utf-8")
+    ast.parse(executor_source)
+    assert "run_live_leases" in executor_source, (
+        "the executor still concludes a running node is dead without "
+        "asking whether its lease is live"
+    )
+    # The first wiring read `reserved_at`/`lease_seconds` off
+    # WorkflowNodeRunStateV1, which has neither, so the branch could
+    # never be taken and a live sibling was still written down as
+    # interrupted. A getattr against a missing attribute is how a
+    # contract looks wired while being unreachable.
+    assert 'getattr(node_state, "lease_seconds"' not in executor_source
+    assert 'getattr(node_state, "reserved_at"' not in executor_source
 
 
 def _reserved(node_id, reserved_at, lease_seconds):
@@ -136,3 +148,61 @@ def test_a_live_lease_never_invents_a_terminal_word():
     assert "running" not in NODE_TERMINAL_STATES
     source = Path(terminal_states.__file__).read_text(encoding="utf-8")
     assert 'terminal = "running"' not in source
+
+
+def test_the_lease_survives_the_builder_that_mints_the_reservation():
+    """Drive the producer, not its spelling.
+
+    The first version of this module asserted only that
+    `reservation_lease_is_live` appeared in two files. It did -- and the
+    builder that mints reservations accepted `lease_seconds` and
+    `reserver` and then never put them in the record body, so every
+    reservation carried the defaults and the helper always answered
+    False. The whole lease was dead behind a green test. A witness that
+    does not drive the producer proves the name exists, not the contract.
+    """
+
+    import inspect
+
+    from chemsmart.agent.runtime import records
+
+    source = inspect.getsource(records.build_workflow_node_launch_reservation)
+    assert "lease_seconds" in source.split("body = {")[1], (
+        "the builder takes a lease and drops it before the record is "
+        "constructed, so reservation_lease_is_live can never say yes"
+    )
+
+
+def test_a_reservation_record_round_trips_its_lease():
+    from chemsmart.agent.runtime.records import (
+        workflow_node_launch_reservation_from_record,
+    )
+
+    record = {
+        "schema_version": "chemsmart.workflow-node-launch-reservation.v1",
+        "reservation_id": "r1",
+        "run_id": "run1",
+        "workflow_id": "w1",
+        "node_id": "n1",
+        "plan_sha256": "a" * 64,
+        "materialized_workflow_sha256": "b" * 64,
+        "approval_id": "ap1",
+        "approval_sha256": "c" * 64,
+        "invocation_sha256": "d" * 64,
+        "consumes_approval": True,
+        "state": "running",
+        "reserved_at": _stamp(5),
+        "admission_sha256": "e" * 64,
+        "data_edge_binding_sha256s": (),
+        "lease_seconds": 900,
+        "reserver": "host 1 SLURM_ARRAY_TASK_ID=2",
+    }
+    from chemsmart.agent._contracts import canonical_sha256
+
+    record["reservation_sha256"] = canonical_sha256(record)
+    reservation = workflow_node_launch_reservation_from_record(record)
+    assert reservation.lease_seconds == 900
+    assert reservation_lease_is_live(
+        reserved_at=reservation.reserved_at,
+        lease_seconds=reservation.lease_seconds,
+    )

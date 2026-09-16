@@ -40,6 +40,7 @@ from chemsmart.agent.execution import (
     transition_workflow_node,
 )
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
+from chemsmart.agent.terminal_states import run_live_leases
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
 from chemsmart.agent.tool_specs import build_approved_execution_tool_surface
 
@@ -374,6 +375,40 @@ def _execution_failure_summary(receipt: Any, host: Any = None) -> str:
         # host claim about readiness, validity, or what to do next.
         parts.append("engine reported (verbatim): " + " | ".join(engine_lines))
     return "; ".join(parts)
+
+
+def _run_events_for_leases(run_directory: Path) -> tuple[Any, ...]:
+    """This run's events as kind/payload pairs, for the lease question.
+
+    Read as lines rather than as reconstructed events: the question needs
+    only the kind and the payload, and a stream a concurrent element is
+    still appending to must not fail the reader that asks whether that
+    element is alive.
+    """
+
+    from types import SimpleNamespace
+
+    try:
+        lines = (
+            (Path(run_directory) / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+    except OSError:
+        return ()
+    events = []
+    for line in lines:
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        events.append(
+            SimpleNamespace(
+                kind=str(raw.get("kind") or ""),
+                payload=raw.get("payload") or {},
+            )
+        )
+    return tuple(events)
 
 
 class ApprovedWorkflowExecutor:
@@ -1808,6 +1843,9 @@ class ApprovedWorkflowExecutor:
             workflow_id=self.plan.workflow_id,
             run_id=run_id,
         )
+        live_leases = frozenset(
+            run_live_leases(_run_events_for_leases(self.run_directory))
+        )
         if durable.run_state is not None:
             # A continuation: the durable stream is the starting truth.
             # Admission happens here, at entry, not lazily at the first
@@ -1874,17 +1912,13 @@ class ApprovedWorkflowExecutor:
                     # say so rather than vanish from the delivery table
                     # as never-attempted.  Observed live on the first
                     # mid-engine SIGTERM.
-                    from chemsmart.agent.runtime.records import (
-                        reservation_lease_is_live,
-                    )
-
-                    if reservation_lease_is_live(
-                        reserved_at=getattr(node_state, "reserved_at", "")
-                        or "",
-                        lease_seconds=getattr(
-                            node_state, "lease_seconds", None
-                        ),
-                    ):
+                    # Read from the reservations the stream holds, not
+                    # from the run-state row: WorkflowNodeRunStateV1 has
+                    # neither `reserved_at` nor `lease_seconds`, so the
+                    # getattr answered None for every node and this
+                    # branch was unreachable -- a live sibling was still
+                    # written down as interrupted.
+                    if node_state.node_id in live_leases:
                         seen.add(node_state.node_id)
                         continue
                     binding = self._binding(node_state.node_id)

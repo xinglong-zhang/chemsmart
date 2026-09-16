@@ -76,19 +76,35 @@ def test_no_tool_lets_the_model_write_a_hardware_setting():
     )
 
     specs = build_command_compiled_tool_surface().tool_definitions
-    names = {str(spec.get("function", {}).get("name") or "") for spec in specs}
-    for writer in (
-        "set_execution_resources",
-        "configure_server",
-        "set_num_cores",
-        "set_max_concurrent_tasks",
-    ):
-        assert (
-            writer not in names
-        ), f"{writer} lets the model rewrite host hardware policy"
-    blob = repr(specs).lower()
-    for key in ("num_cores", "num_threads", "mem_gb", "max_concurrent_tasks"):
-        assert f'"{key}"' not in blob or "inspect" in blob, (
-            f"{key} appears in the tool surface as something the model "
-            "supplies rather than reads"
-        )
+
+    # Walk the declared input properties of every tool rather than
+    # matching quoted substrings in a repr. The first version searched
+    # `repr(specs)` for double-quoted keys while a repr generally yields
+    # single quotes, and it passed whenever the word "inspect" appeared
+    # anywhere on the surface -- so a writable hardware parameter under
+    # any new name would have kept it green.
+    hardware = {
+        "num_cores",
+        "num_threads",
+        "mem_gb",
+        "memory_gb",
+        "cores",
+        "max_concurrent_tasks",
+        "queue_name",
+        "qos",
+        "account",
+        "ntasks_per_node",
+        "cpus_per_task",
+    }
+    offenders = []
+    for spec in specs:
+        function = spec.get("function") or {}
+        name = str(function.get("name") or "")
+        parameters = function.get("parameters") or {}
+        for key in parameters.get("properties") or {}:
+            if str(key) in hardware:
+                offenders.append(f"{name}.{key}")
+    assert not offenders, (
+        "these tool inputs let the model supply host hardware policy "
+        f"rather than read it: {offenders}"
+    )

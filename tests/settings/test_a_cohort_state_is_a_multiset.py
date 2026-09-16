@@ -102,3 +102,25 @@ def test_a_failed_query_is_not_terminal_either():
     )
     assert not cohort.known
     assert not cohort.terminal
+
+
+def test_the_query_expands_compressed_array_rows():
+    """squeue compresses pending elements by default.
+
+    `squeue -j 4242` reads `4242_[1-6%4]` for six pending calculations,
+    so a barrier asking "is every member terminal" would count one row
+    for six and could report a range string as an unfinished task id.
+    """
+
+    assert "-r" in squeue_array_command("4242")
+
+
+def test_a_compressed_row_makes_the_cohort_unknown_not_undercounted():
+    """A site that returns a range anyway must not be read as one
+    element: unknown is honest, six-counted-as-one is not."""
+
+    compressed = "4242_[1-6%4]|4242|1-6%4|PENDING|0:00|x|N/A|N/A\n"
+    cohort = parse_squeue_array(0, compressed, "", array_job_id="4242")
+    assert not cohort.known
+    assert not cohort.terminal
+    assert cohort.unfinished == ()

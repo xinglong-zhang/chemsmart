@@ -641,6 +641,13 @@ def build_workflow_node_launch_reservation(
             sorted(item.receipt_sha256 for item in matched_data_bindings)
         ),
     }
+    # The lease is part of the record or it is nothing: taken and then
+    # dropped here, every reservation carried the default 0 and
+    # `reservation_lease_is_live` could never say yes, so a healthy
+    # sibling stayed indistinguishable from a corpse behind a green test.
+    if int(lease_seconds or 0) > 0:
+        body["lease_seconds"] = int(lease_seconds)
+        body["reserver"] = str(reserver or "")
     return WorkflowNodeLaunchReservationV1(
         **body, reservation_sha256=canonical_sha256(body)
     )

@@ -138,3 +138,90 @@ def test_without_a_cohort_the_question_is_not_asked(tmp_path):
     complete, pending = cohort_completion(tmp_path)
     assert complete is None
     assert pending == ()
+
+
+def _state_changed(node_id, state):
+    return {
+        "kind": "workflow_node_state_changed",
+        "payload": {
+            "node_id": node_id,
+            "record": {"node_id": node_id, "state": state},
+        },
+    }
+
+
+def test_a_cancelled_member_ends_the_wave_rather_than_holding_it(tmp_path):
+    """The barrier is terminality, not an execution receipt.
+
+    The first predicate asked "does every member have a
+    program_execution_observed event". A member cancelled before launch,
+    or refused admission, reaches a terminal state without ever running
+    an engine -- so the wave waited on it forever, and a cohort
+    containing one cancelled calculation could never wake the Agent.
+    """
+
+    _manifest(tmp_path)
+    _events(
+        tmp_path,
+        [
+            _observed("a1"),
+            _observed("a2"),
+            _state_changed("a3", "cancelled"),
+        ],
+    )
+    complete, pending = cohort_completion(tmp_path)
+    assert complete, f"a cancelled member held the wave open: {pending}"
+
+
+def test_a_member_still_pending_is_not_mistaken_for_terminal(tmp_path):
+    _manifest(tmp_path)
+    _events(tmp_path, [_observed("a1"), _state_changed("a2", "running")])
+    complete, pending = cohort_completion(tmp_path)
+    assert not complete
+    assert set(pending) == {"a2", "a3"}
+
+
+def test_a_damaged_manifest_does_not_silently_remove_the_wave(tmp_path):
+    """`None` means "no cohort", and a truncated file must not say that.
+
+    `cohort_frontier(ready, None)` admits every ready node, so a manifest
+    that failed to parse would silently turn a bounded wave back into the
+    flowing walk it exists to prevent -- executing work the Agent did not
+    ask for in this wave, with nothing on disk saying why.
+    """
+
+    import pytest
+
+    from chemsmart.agent._contracts import ContractError
+    from chemsmart.agent.cohort import (
+        COHORT_MANIFEST_FILE,
+        read_cohort_manifest,
+    )
+
+    _manifest(tmp_path)
+    (tmp_path / COHORT_MANIFEST_FILE).write_text(
+        '{"schema_version": "chemsmart.coho', encoding="utf-8"
+    )
+    with pytest.raises(ContractError, match="unreadable|damaged"):
+        read_cohort_manifest(tmp_path)
+
+    (tmp_path / COHORT_MANIFEST_FILE).write_text("[]", encoding="utf-8")
+    with pytest.raises(ContractError, match="unreadable|damaged"):
+        read_cohort_manifest(tmp_path)
+
+
+def test_a_cohort_is_written_once_and_not_replaced(tmp_path):
+    """Membership is fixed at dispatch.
+
+    `write()` overwrote unconditionally, so a second correctly-digested
+    manifest replaced the first through the public writer -- a different
+    experiment than the one the barrier is waiting for.
+    """
+
+    import pytest
+
+    from chemsmart.agent._contracts import ContractError
+
+    _manifest(tmp_path, nodes=("a1", "a2", "a3"))
+    with pytest.raises(ContractError, match="already"):
+        _manifest(tmp_path, nodes=("b1", "b2"))
