@@ -1400,9 +1400,16 @@ def test_a_run_no_revision_can_answer_returns_to_the_human(tmp_path):
     assert sessions == 1, "no second planning session was started"
 
 
-def _driver_after_run(tmp_path, *, calls, rows, failed):
+def _driver_after_run(tmp_path, *, calls, rows, failed, settle=True):
     """A driver standing at its settle step after one recorded run whose
-    stream carries the delivery rows, with the engine line spent."""
+    stream carries the delivery rows, with the engine line spent.
+
+    ``settle=False`` leaves the goal unsettled, for a caller that must
+    put something on the ledger first. A goal settles once --
+    `GoalLedger.settle` is keyed and `resume` refuses a settled goal --
+    so a caller that needs a different word builds the ledger it wants
+    and settles once, rather than settling twice and reading the
+    second."""
 
     workspace = tmp_path / "ws"
     driver = GoalDriver(
@@ -1440,7 +1447,8 @@ def _driver_after_run(tmp_path, *, calls, rows, failed):
         status="failed" if failed else "completed",
         analysis_status="partial" if failed else "completed",
     )
-    driver._settle()
+    if settle:
+        driver._settle()
     return driver
 
 
@@ -1602,7 +1610,9 @@ def test_the_word_names_the_delivered_number_that_came_from_a_flagged_node(
             },
         },
     ]
-    driver = _driver_after_run(tmp_path, calls=1, failed=False, rows=rows)
+    driver = _driver_after_run(
+        tmp_path, calls=1, failed=False, rows=rows, settle=False
+    )
     driver.ledger.append(
         "anomalies_observed",
         {
@@ -1618,6 +1628,9 @@ def test_the_word_names_the_delivered_number_that_came_from_a_flagged_node(
             ],
         },
     )
+    # The anomalies are on the ledger before the single settlement, so
+    # the word is produced once rather than by re-settling a goal that
+    # has already ended.
     driver.phase = "settle"
     driver._settle()
 

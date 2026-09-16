@@ -275,6 +275,15 @@ def wait_for_dispatched_run(
             return f"scheduler no longer knows job {receipt.job_id}"
         if state.terminal:
             return f"job {receipt.job_id} {state.state}"
+        if state.dependency_unsatisfiable:
+            # PENDING is correctly not terminal, so without this the loop
+            # waits on a job the scheduler has already decided can never
+            # run -- every thirty seconds, forever, with no mail and
+            # nothing on disk to read.
+            return (
+                f"job {receipt.job_id} can never run: "
+                f"{state.reason or 'dependency never satisfied'}"
+            )
         polls += 1
         if max_polls is not None and polls >= max_polls:
             return f"job {receipt.job_id} still {state.state}"

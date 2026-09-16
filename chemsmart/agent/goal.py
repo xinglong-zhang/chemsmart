@@ -403,6 +403,11 @@ class GoalLedger:
             raise ContractError(
                 f"{state} settles on receipts, never prose alone"
             )
+        # The one row that ends a goal was the only charging row with no
+        # key. Its sole protection was `resume`'s unlocked read-then-act,
+        # which is the pattern the keyed append exists to replace. Two
+        # wakes racing could append *different words* and a later reader
+        # takes whichever it scans first.
         self.append(
             "goal_settled",
             {
@@ -410,6 +415,10 @@ class GoalLedger:
                 "reasons": tuple(reasons),
                 "evidence": canonical_data(evidence or {}),
             },
+            # The directory *is* the goal id. Reading goal.json here
+            # would fail exactly where settlement matters most: a
+            # ContractError before the record exists still settles.
+            idempotency_key=f"goal-settled:{self.directory.name}",
         )
 
 

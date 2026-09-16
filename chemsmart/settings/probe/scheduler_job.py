@@ -62,6 +62,21 @@ class SchedulerJobStateV1:
     start_time: str = ""
     end_time: str = ""
     run_seconds: int | None = None
+    #: Slurm's own word for *why* a job is where it is. A dependency that
+    #: can never be satisfied is a `Reason`, never a `JobState`, so a
+    #: reader that looks only at the state waits on it forever.
+    reason: str = ""
+
+    @property
+    def dependency_unsatisfiable(self) -> bool:
+        """Whether this job is waiting on something that cannot happen.
+
+        `PENDING` is correctly not terminal, so nothing else in the tree
+        would ever stop waiting. Slurm says `DependencyNeverSatisfied`
+        once it knows, and that is the whole signal.
+        """
+
+        return self.reason.strip().lower() == "dependencyneversatisfied"
 
     @property
     def terminal(self) -> bool:
@@ -167,6 +182,9 @@ def parse_scontrol_job(
         start_time=fields.get("StartTime", ""),
         end_time=fields.get("EndTime", ""),
         run_seconds=parse_elapsed_seconds(fields.get("RunTime", "")),
+        # Harvested all along and then discarded. A dependency that can
+        # never be satisfied says so here and nowhere else.
+        reason=fields.get("Reason", ""),
     )
 
 
