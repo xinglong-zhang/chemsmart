@@ -25,10 +25,10 @@ class PyMOLMOJob(PyMOLJob):
         number (int | None): Specific MO number to visualize.
         homo (bool | None): Whether to visualize the HOMO.
         lumo (bool | None): Whether to visualize the LUMO.
+        mo_basename (str): Basename for MO-related artifacts (cube, pml, pse).
         swap (bool): Swap positive and negative phase colors.
         color_positive (str | None): PyMOL color for the positive phase.
         color_negative (str | None): PyMOL color for the negative phase.
-        mo_basename (str): Basename for MO-related artifacts (cube, pml, pse).
         jobrunner (JobRunner): Execution backend for running the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
@@ -42,10 +42,10 @@ class PyMOLMOJob(PyMOLJob):
         number=None,
         homo=None,
         lumo=None,
+        mo_basename=None,
         swap=False,
         color_positive=None,
         color_negative=None,
-        mo_basename=None,
         **kwargs,
     ):
         """
