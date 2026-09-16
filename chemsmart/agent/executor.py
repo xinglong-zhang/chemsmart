@@ -2080,6 +2080,15 @@ def _execution_inputs_from_bundle(
     return {
         "approved_workspace": workspace,
         "run_evidence_root": workspace,
+        # The cycle folder a branch lives under, read from the run
+        # directory the driver already named. A run directory that is not
+        # a cycle keeps the legacy flat layout rather than inventing one.
+        "cycle_label": (
+            run_directory.name
+            if run_directory is not None
+            and str(run_directory.name).startswith("cycle-")
+            else None
+        ),
         "execution_resources": resources,
         "workflow_execution_approval": approval,
         "frozen_workflow_approval": bundle.frozen_workflow_approval,

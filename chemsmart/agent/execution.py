@@ -233,6 +233,83 @@ def build_scientific_decision_record(
     )
 
 
+#: The legacy branch root, kept so every recorded run keeps the path it
+#: was written at.
+NODE_BRANCH_LEGACY_ROOT = "nodes"
+
+
+def node_branch_directory(
+    workspace: Any, node_id: str, *, cycle_label: str | None = None
+) -> Path:
+    """Where one calculation's whole record lives.
+
+    A *branch* is one approved calculation's folder: the project YAML it
+    ran from, the exact CHEMSMART command, the engine's own input and
+    output, its artifacts and its evidence. The cycle above it is the
+    reasoning unit -- what the Agent saw before it thought again -- and
+    the branch is the scientific unit, so a human opening one folder can
+    say what was requested, what ran, what configuration was used, what
+    the engine consumed and produced, and what evidence it contributed.
+
+    Four call sites used to answer this separately: the launch site, the
+    plan-time occupied-id guard, and two workspace scans that must not
+    mistake an engine's output for a geometry a human supplied.
+
+    Args:
+        workspace: The approved workspace.
+        node_id: The node's stable scientific identity.
+        cycle_label: The cycle folder, e.g. ``cycle-0003``. ``None``
+            keeps the legacy flat layout.
+
+    Returns:
+        Path: The branch directory.
+    """
+
+    base = Path(workspace)
+    if cycle_label:
+        return base / str(cycle_label) / node_id
+    return base / NODE_BRANCH_LEGACY_ROOT / node_id
+
+
+def node_branch_roots(workspace: Any) -> tuple[Path, ...]:
+    """Every directory in a workspace that holds branches.
+
+    A workspace scan bars these: what an engine wrote is evidence the
+    host owns, never a geometry a human put there for the model to find.
+    """
+
+    base = Path(workspace)
+    roots = [base / NODE_BRANCH_LEGACY_ROOT]
+    try:
+        roots.extend(
+            sorted(path for path in base.glob("cycle-*") if path.is_dir())
+        )
+    except OSError:
+        pass
+    return tuple(roots)
+
+
+def existing_node_branches(workspace: Any, node_id: str) -> tuple[Path, ...]:
+    """Branches this node id already holds evidence in, in any cycle.
+
+    "A re-run takes a fresh id; the earlier directory is evidence" was
+    enforced by looking in one place. Per-cycle folders would make the
+    same id in a later cycle look unused, quietly weakening a recorded
+    refusal, so every cycle is searched. An empty directory is not
+    evidence and does not occupy an id.
+    """
+
+    found = []
+    for root in node_branch_roots(workspace):
+        branch = root / node_id
+        try:
+            if branch.is_dir() and any(branch.iterdir()):
+                found.append(branch)
+        except OSError:
+            continue
+    return tuple(found)
+
+
 @dataclass(frozen=True)
 class ExecutionResourceSpecV1:
     """Host-owned compute allocation for every node in one workflow."""

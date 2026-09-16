@@ -8,6 +8,7 @@ import logging
 import math
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -129,6 +130,7 @@ from chemsmart.agent.execution import (
     environment_review_summary,
     execution_path_placeholder,
     execution_server_profile_sha256,
+    existing_node_branches,
     extract_trusted_database_record_geometry,
     fetch_trusted_pubchem_geometry,
     handoff_final_orca_ts_hessian,
@@ -143,6 +145,7 @@ from chemsmart.agent.execution import (
     is_validated_orca_ts_hessian_edge,
     is_validated_producer_orca_hessian_edge,
     is_validated_scan_minimum_geometry_edge,
+    node_branch_directory,
     project_real_execution_argv,
     promote_project_candidate,
     transform_trusted_molecular_geometry,
@@ -1994,6 +1997,7 @@ class CommandCompiledToolHostV1:
         task_spec_sha256s: tuple[str, ...] = (),
         approved_workspace: str | Path | None = None,
         run_evidence_root: str | Path | None = None,
+        cycle_label: str | None = None,
         execution_resources: ExecutionResourceSpecV1 | None = None,
         workflow_execution_approval: WorkflowExecutionApprovalV1 | None = None,
         frozen_workflow_approval: FrozenWorkflowApprovalV1 | None = None,
@@ -2101,6 +2105,11 @@ class CommandCompiledToolHostV1:
             if run_evidence_root is not None
             else None
         )
+        #: The cycle this host is executing, as a folder name. A branch
+        #: lives under it, so one calculation's whole record sits in one
+        #: place a chemist can open. ``None`` keeps the legacy layout, so
+        #: every recorded run keeps the path it was written at.
+        self.cycle_label = str(cycle_label) if cycle_label else None
         self.execution_resources = execution_resources
         self.workflow_execution_approval = workflow_execution_approval
         self.frozen_workflow_approval = frozen_workflow_approval
@@ -6610,8 +6619,7 @@ class CommandCompiledToolHostV1:
         occupied = tuple(
             node_id
             for node_id in node_ids
-            if (root / "nodes" / node_id).is_dir()
-            and any((root / "nodes" / node_id).iterdir())
+            if existing_node_branches(root, node_id)
         )
         if occupied:
             raise ContractError(
@@ -11968,7 +11976,9 @@ class CommandCompiledToolHostV1:
                     "execution environment differs from the exact frozen "
                     "node approval"
                 )
-        node_workspace = self.approved_workspace / "nodes" / node_id
+        node_workspace = node_branch_directory(
+            self.approved_workspace, node_id, cycle_label=self.cycle_label
+        )
         _prepare_execution_node_workspace(node_workspace)
         started = datetime.now(timezone.utc).isoformat()
         if frozen_approval.plan_sha256 != scientific_plan.plan_sha256:
@@ -12024,6 +12034,11 @@ class CommandCompiledToolHostV1:
                 "handoff": self.handoffs.get(node_id),
             }
         command = list(real_argv)
+        # The branch is written before the engine starts, so a node that
+        # dies still says what was asked of it. A chemist opening this
+        # folder sees the exact CHEMSMART command and the exact project
+        # configuration it ran from, beside the engine's own files.
+        _write_branch_request(node_workspace, command)
         environment = _program_process_environment(
             overrides=self.execution_environment,
             remove=self.execution_environment_remove,
@@ -18056,6 +18071,51 @@ def _public_process_stream(value: str | bytes | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return str(value)
+
+
+def _write_branch_request(node_workspace: Path, command: list[str]) -> None:
+    """Record what was asked of this calculation, before it is asked.
+
+    Two files, both host-owned and both written before launch so a node
+    killed mid-engine still carries them:
+
+    ``command.txt`` -- the exact CHEMSMART command, shell-quoted, as it
+    was handed to the operating system. Not a reconstruction: the same
+    list the process was started with.
+
+    ``project.yaml`` -- a copy of the project configuration that command
+    names, so the branch does not depend on a file elsewhere in the
+    workspace still existing, or still saying what it said.
+
+    A missing or unreadable project file is recorded as such rather than
+    raising: the engine's own run is the evidence, and the host does not
+    fail a calculation over its own bookkeeping.
+    """
+
+    _write_host_execution_artifact(
+        node_workspace / "command.txt",
+        shlex.join(str(item) for item in command) + "\n",
+    )
+    project = ""
+    for flag, value in zip(command, command[1:]):
+        if str(flag) in {"-p", "--project"}:
+            project = str(value)
+            break
+    if not project:
+        return
+    source = Path(project)
+    try:
+        payload = source.read_text(encoding="utf-8")
+    except OSError as exc:
+        _write_host_execution_artifact(
+            node_workspace / "project.yaml.missing",
+            f"{source}: {exc}\n",
+        )
+        return
+    _write_host_execution_artifact(
+        node_workspace / "project.yaml",
+        f"# copied from {source}\n{payload}",
+    )
 
 
 def _write_host_execution_artifact(path: Path, payload: str) -> None:

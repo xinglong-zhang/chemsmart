@@ -80,6 +80,7 @@ from chemsmart.agent.execution import (
     WorkflowExecutionNodeReviewV1,
     WorkflowExecutionReviewV1,
     WorkflowReviewResolutionV1,
+    node_branch_roots,
     workflow_execution_approval_bundle_json,
     workflow_execution_review_json,
 )
@@ -1447,11 +1448,13 @@ def _scan_xyz_artifacts(
     observations: dict[str, _XyzObservation] = {}
     private_root = workspace / _PRIVATE_ROOT_NAME
     host_artifact_root = workspace / "artifacts"
-    host_node_root = workspace / "nodes"
     barred = (
         private_root,
         host_artifact_root,
-        host_node_root,
+        # Every cycle's branches, not just the legacy root: what an
+        # engine wrote is evidence the host owns, never a geometry a
+        # human put here for the model to find.
+        *node_branch_roots(workspace),
         *excluded_roots,
     )
     for candidate in sorted(workspace.rglob("*.xyz")):
@@ -1507,11 +1510,13 @@ def _scan_database_artifacts(
     observations: dict[str, _DatabaseObservation] = {}
     private_root = workspace / _PRIVATE_ROOT_NAME
     host_artifact_root = workspace / "artifacts"
-    host_node_root = workspace / "nodes"
     barred = (
         private_root,
         host_artifact_root,
-        host_node_root,
+        # Every cycle's branches, not just the legacy root: what an
+        # engine wrote is evidence the host owns, never a geometry a
+        # human put here for the model to find.
+        *node_branch_roots(workspace),
         *excluded_roots,
     )
     for candidate in sorted(workspace.rglob("*.db")):
