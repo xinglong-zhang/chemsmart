@@ -64,6 +64,7 @@ class ORCAJobRunner(JobRunner):
         "orcascan",
         "orcats",
         "orcasp",
+        "orcatd",
         "orcairc",
         "orcaqmmm",
         "orcaneb",
@@ -456,6 +457,7 @@ class ORCAJobRunner(JobRunner):
                         logger.error(
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
+                        raise
 
 
 class FakeORCAJobRunner(ORCAJobRunner):

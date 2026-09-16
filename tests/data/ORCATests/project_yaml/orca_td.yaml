@@ -1,0 +1,16 @@
+# ORCA project settings with a td: section for CLI tests.
+gas:
+  functional: m062x
+  basis: def2-svp
+solv:
+  functional: m062x
+  basis: def2-tzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: cyclohexane
+td:
+  functional: cam-b3lyp
+  basis: def2-svp
+  freq: False
+  solvent_model: smd
+  solvent_id: water

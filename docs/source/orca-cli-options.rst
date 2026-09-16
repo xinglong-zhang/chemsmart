@@ -527,6 +527,179 @@ Direct Input
    -  -  ``inp``
       -  Run ORCA input file as-is
 
+Excited States
+==============
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   -  -  Subcommand
+      -  Description
+
+   -  -  ``td``
+      -  TDDFT / TDA excited states. Vertical by default; supports optional excited-state ``Opt``/``Freq`` via ``-r``,
+         plus SOC coupling and NTO analysis.
+
+TD-specific options (``chemsmart sub orca ... td ...``):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-n, --nroots``
+      -  int
+      -  Number of excited states to solve for (``NRoots``, default 3).
+
+   -  -  ``--tda/--no-tda``
+      -  bool
+      -  Enable/disable the Tamm–Dancoff approximation. Default ``--no-tda`` writes ``TDA false`` so a bare ``td``
+         request runs full TDDFT.
+
+   -  -  ``--triplets/--no-triplets``
+      -  bool
+      -  Solve for triplet excitations. Implicitly enabled by ``--dosoc`` when not set.
+
+   -  -  ``--dosoc/--no-dosoc``
+      -  bool
+      -  Write ``DoSOC true`` inside ``%tddft``. Does **not** by itself emit a ``%rel`` block.
+
+   -  -  ``--soc-type``
+      -  int
+      -  Emit a minimal ``%rel`` block with ``SOCType <value>``. If omitted, no ``%rel`` is written even when
+         ``--dosoc`` is enabled.
+
+   -  -  ``--printlevel``
+      -  int
+      -  ``PrintLevel`` inside ``%tddft``.
+
+   -  -  ``--cpcmeq/--no-cpcmeq``
+      -  bool
+      -  ``CPCMEQ`` inside ``%tddft``. Explicit ``false`` is preserved.
+
+   -  -  ``--nto/--no-nto``
+      -  bool
+      -  ``DoNTO`` inside ``%tddft``. Passing ``--nto-states`` or ``--nto-thresh`` implicitly enables it.
+
+   -  -  ``--nto-states``
+      -  string
+      -  Comma / range list of positive 1-based state indices, e.g. ``"1,2,3"`` or ``"1-3"``.
+
+   -  -  ``--nto-thresh``
+      -  float
+      -  ``NTOThresh``.
+
+   -  -  ``--td-maxiter``
+      -  int
+      -  ``MaxIter`` inside ``%tddft``. Independent of the SCF ``MaxIter``.
+
+   -  -  ``--td-maxdim``
+      -  int
+      -  ``MaxDim`` (Davidson subspace).
+
+   -  -  ``--td-etol``
+      -  float
+      -  ``ETol`` (energy convergence).
+
+   -  -  ``--td-rtol``
+      -  float
+      -  ``RTol`` (residual convergence).
+
+   -  -  ``--tprint``
+      -  float
+      -  ``TPrint`` transition print threshold.
+
+   -  -  ``--root``
+      -  int
+      -  Target excited-state index (``IRoot``). Defaults to ``1`` when an excited-state task is requested (via YAML or
+         ``-r``); must satisfy ``1 <= root <= nroots``.
+
+   -  -  ``--root-mult``
+      -  singlet | triplet
+      -  Target-state multiplicity (``IRootMult``). Defaults to ``singlet`` for excited-state tasks. ``triplet`` implies
+         ``--triplets`` and is distinct from ``--triplets`` alone (which only enables solving for triplet excitations).
+
+   -  -  ``--follow-root/--no-follow-root``
+      -  bool
+      -  ``FollowIRoot`` inside ``%tddft``. Only meaningful when an excited-state ``Opt`` / ``Freq`` / ``NumFreq`` task
+         is requested via ``additional_route_parameters`` (YAML or ``-r``).
+
+Unset options are omitted from the input file; ORCA falls back to its own defaults. Only ``NRoots`` and ``TDA`` are
+written by default. When neither the project YAML nor the CLI requests ``Opt`` / ``Freq`` / ``NumFreq`` through
+``additional_route_parameters``, ``orca td`` runs a vertical calculation: the CLI clears Opt/Freq/NumFreq that would
+otherwise be inherited from ``ORCAJobSettings`` defaults or from parsing a ``.log`` / ``.inp`` file, so the route line
+carries no task keyword.
+
+Excited-state optimization and frequencies are opt-in via ``additional_route_parameters``, set either on the project
+YAML (``td:`` section) or on the ``orca`` group via ``-r`` / ``--additional-route-parameters``. Any ``Opt`` / ``Freq`` /
+``NumFreq`` token found there is consumed as a task request; remaining tokens (e.g. ``TightSCF``) are appended to the
+``!`` route line with duplicates deduplicated. ``-r`` **replaces** the YAML value in full — there is no per-token merge,
+and only that field is replaced (other structured settings such as functional or solvent are unaffected). Use ``-r ''``
+to force a vertical TD when the YAML would otherwise request a task; use ``-r TightSCF`` to keep the extras while
+dropping any YAML-provided Opt/Freq. ``Opt`` / ``Freq`` / ``NumFreq`` act on the target excited state selected by
+``--root`` / ``--root-mult`` (not on the ground state). ORCA's ``DoSOC`` computes singlet–triplet couplings and is not
+equivalent to a SOC-based gradient method; ``Opt`` combined with ``--dosoc`` is refused because CHEMSMART does not drive
+``SOCGrad`` — use ``chemsmart run orca inp`` for that workflow. SF-TDA, ESD, XAS, TD-specific restarts and spectrum
+post-processing are also intentionally out of scope for this subcommand; use ``orca inp``.
+
+Minimal vertical TDDFT (``td --nroots 10``):
+
+.. code::
+
+   %tddft
+     NRoots 10
+     TDA false
+   end
+
+TD + SOC (``td --nroots 10 --dosoc --printlevel 3``):
+
+.. code::
+
+   %tddft
+     NRoots 10
+     TDA false
+     Triplets true
+     DoSOC true
+     PrintLevel 3
+   end
+
+Adding ``--soc-type 3`` additionally writes:
+
+.. code::
+
+   %rel
+     SOCType 3
+   end
+
+Excited-state optimization on the first singlet root (``-r Opt td --nroots 5 --root 1``) produces a route line ending in
+``Opt`` and adds ``IRoot 1`` / ``IRootMult singlet`` inside ``%tddft``:
+
+.. code::
+
+   ! CAM-B3LYP def2-SVP defgrid3 SMD(water) Opt
+   %tddft
+     NRoots 5
+     TDA false
+     IRoot 1
+     IRootMult singlet
+   end
+
+Combining ``-r 'Opt Freq'`` / ``-r 'Opt NumFreq'`` writes both keywords onto the route line, and any user-supplied
+extras such as ``-r 'TightSCF'`` are preserved (with duplicate task keywords deduplicated).
+
+NTO (``td --nto-states 1,2,3 --nto-thresh 1e-4``) writes ``DoNTO true``, ``NTOStates 1,2,3`` and ``NTOThresh 0.0001``
+inside the same single ``%tddft`` block.
+
+.. note::
+
+   SOC support here covers closed-shell (S=0) reference states with singlet–triplet couplings. Combinations with
+   UHF/UKS, double-hybrids, or ECPs may need a manual ORCA input via ``orca inp``; CHEMSMART does not auto-inject
+   ``ForceECP`` or reshape the reference multiplicity.
+
 QM/MM
 =====
 
