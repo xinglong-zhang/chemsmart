@@ -173,8 +173,15 @@ def build_cohort_dispatch_script(
     # naming is applied to a placeholder and then substituted: two
     # authors for one path is how a writer and a reader stop agreeing.
     element = "${SLURM_ARRAY_TASK_ID}"
-    result = str(execution_result_file(run_directory, element=0)).replace(
-        "execution-result.0.json", f"execution-result.{element}.json"
+    # The directory is quoted and the element index expands inside the
+    # quotes. Every other path in this script is quoted and this one was
+    # not: with a workspace under "My Drive", bash redirects to `/My` and
+    # hands the rest to `chemsmart agent run` as stray arguments, so
+    # every element dies before doing anything. Double quotes, because
+    # single quotes would redirect to a literal `${SLURM_ARRAY_TASK_ID}`.
+    directory = str(execution_result_file(run_directory, element=0).parent)
+    result = '"{}/execution-result.{}.json"'.format(
+        directory.replace("\\", "\\\\").replace('"', '\\"'), element
     )
     buffer.write(
         "# One approved calculation of this wave, executed provider-free.\n"

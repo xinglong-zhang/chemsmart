@@ -4233,10 +4233,7 @@ class GoalDriver:
                     # selected it. Empty is the single-job path, and
                     # nothing here invents a cohort: a wave the Agent
                     # did not ask for is not a wave.
-                    cohort_node_ids=tuple(
-                        getattr(self.session, "selected_execution_wave", ())
-                        or ()
-                    ),
+                    cohort_node_ids=self._dispatchable_wave(),
                 )
             except ContractError as exc:
                 self._typed_error("scheduler dispatch", exc)
@@ -4461,6 +4458,103 @@ class GoalDriver:
             ),
         )
         self.phase = "parked"
+
+    def _dispatchable_wave(self) -> tuple[str, ...]:
+        """The selected wave, less anything this approval cannot launch.
+
+        The model selects against the *planned* draft's ready frontier,
+        which is what exists at selection time -- before any review is
+        resolved. A stage the review then retained as non-executable was
+        displayed as intent and never approved, so it can appear in a
+        wave and can never run.
+
+        The failure was silent and total: every element's cohort scope
+        would be a node nothing can launch, so each runs nothing, the run
+        outcome derivation finds no run, and the analysis-only branch
+        settles a partition that never ran as a complete delivery.
+
+        This is the host checking two things it owns against each other,
+        not a refusal shown to the Agent; what it drops it records, and
+        an empty result is the single-job path rather than an array of
+        nothing.
+        """
+
+        selected = tuple(
+            str(item)
+            for item in getattr(self.session, "selected_execution_wave", ())
+            or ()
+        )
+        if not selected:
+            return ()
+        retained = set(self._declared_non_executable_ids())
+        wave = tuple(item for item in selected if item not in retained)
+        dropped = tuple(item for item in selected if item in retained)
+        if dropped:
+            self.ledger.append(
+                "wave_members_dropped",
+                {
+                    "cycle": self.cycles,
+                    "selected": list(selected),
+                    "dropped": list(dropped),
+                    "reason": (
+                        "the displayed review retained these as "
+                        "non-executable intent, so this approval cannot "
+                        "launch them"
+                    ),
+                },
+            )
+        return wave
+
+    def _unanswerable_terminal_states(self) -> dict[str, str]:
+        """How each node ended, for the endings a human has to read.
+
+        Two exclusions, and they are the same exclusion twice. A stage
+        the plan declared non-executable was displayed with the review,
+        never approved and never launched, so it has no ending to answer
+        -- counting its `not_launched` returned a goal whose every
+        executable node had validated (live, 2026-09-03).
+
+        A calculation outside *this wave* is the same: the Agent chose to
+        see this wave's evidence before deciding the next, which is what
+        the barrier is for, so every approved node outside the cohort is
+        `not_launched` by construction and by design. Without this the
+        first barrier of every multi-wave goal settled
+        `returned_to_human` -- and the only cohort that escaped was one
+        holding the whole approved partition, where the barrier does
+        nothing. A member of *this* wave that never launched is still
+        read: that is a launch that should have happened.
+
+        The cohort manifest is the authority, because it is digest-bound
+        to this approval and was written before any element started. No
+        manifest means no cohort, and then every unlaunched node counts
+        exactly as it always did.
+        """
+
+        from chemsmart.agent.cohort import read_cohort_manifest
+
+        retained = set(self._declared_non_executable_ids())
+        deferred: set[str] = set()
+        if self.run_directory is not None:
+            manifest = read_cohort_manifest(self.run_directory)
+            if manifest is not None:
+                members = set(manifest.node_ids)
+                deferred = {
+                    str(node.node_id)
+                    for node in (self.outcome.nodes if self.outcome else ())
+                    if str(node.node_id) not in members
+                }
+        return {
+            str(node.node_id): str(node.state)
+            for node in (self.outcome.nodes if self.outcome else ())
+            if str(node.state) != "validated"
+            and not (
+                str(node.state) == "not_launched"
+                and (
+                    str(node.node_id) in retained
+                    or str(node.node_id) in deferred
+                )
+            )
+        }
 
     def _record_qualification(self) -> None:
         _record_goal_qualification(
@@ -4770,16 +4864,7 @@ class GoalDriver:
         # review, never approved and never launched: it has no ending to
         # answer. Counting its not_launched as one returned a goal whose
         # every executable node had validated (live, 2026-09-03).
-        retained = set(self._declared_non_executable_ids())
-        terminal_states = {
-            str(node.node_id): str(node.state)
-            for node in (self.outcome.nodes if self.outcome else ())
-            if str(node.state) != "validated"
-            and not (
-                str(node.state) == "not_launched"
-                and str(node.node_id) in retained
-            )
-        }
+        terminal_states = self._unanswerable_terminal_states()
         repairable = {
             node_id: state
             for node_id, state in terminal_states.items()

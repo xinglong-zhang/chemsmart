@@ -7886,10 +7886,14 @@ class CommandCompiledToolHostV1:
         dispatchable = bool(verdict.rows) and all(
             row.status == "ready" for row in verdict.rows
         )
-        if dispatchable:
-            # Where the dispatcher reads it. A wave that lives only in a
-            # tool reply is a wave the array never hears about.
-            self.selected_execution_wave = tuple(verdict.members)
+        # Where the dispatcher reads it. A wave that lives only in a
+        # tool reply is a wave the array never hears about -- and a wave
+        # left standing after the Agent has moved on is worse, because
+        # the driver would submit calculations it has already seen. The
+        # last word is the selection, whether or not it is dispatchable.
+        self.selected_execution_wave = (
+            tuple(verdict.members) if dispatchable else ()
+        )
         record = verdict.public_record()
         return {
             "status": "ready" if dispatchable else "not_dispatchable",

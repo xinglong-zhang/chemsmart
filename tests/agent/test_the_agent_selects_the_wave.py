@@ -243,3 +243,66 @@ def test_an_invalid_wave_is_not_recorded_as_the_selection():
     )
     assert reply["status"] == "not_dispatchable"
     assert getattr(host, "selected_execution_wave", ()) == ()
+
+
+def test_an_invalid_selection_clears_the_previous_one():
+    """A stale wave is worse than none: it dispatches the wrong science.
+
+    The attribute was set on success and never cleared, so a session that
+    selected (a1, a2), read the evidence, and then proposed an
+    undispatchable (b1) still had (a1, a2) on the host -- and the driver
+    would have submitted that wave again, re-running calculations the
+    Agent had already seen instead of the ones it asked for.
+
+    The earlier witness for this used a `__new__` host and asserted
+    `getattr(host, ..., ()) == ()` on an attribute that had never been
+    set, so it could not fail for the reason it named.
+    """
+
+    import tempfile
+    from pathlib import Path
+
+    from chemsmart.agent.runtime.event_store import RuntimeEventStore
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    root = Path(tempfile.mkdtemp())
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(root / "events.jsonl", session_id="s"),
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=root / "workspace",
+    )
+    host._resolve_program_workflow = lambda workflow_id: SimpleNamespace(
+        draft=SimpleNamespace(
+            workflow_id="w1",
+            nodes=(
+                SimpleNamespace(node_id="a1", inputs=()),
+                SimpleNamespace(node_id="a2", inputs=()),
+                SimpleNamespace(
+                    node_id="b1",
+                    inputs=(
+                        SimpleNamespace(
+                            binding_id="filename",
+                            producer_node_id="a1",
+                            producer_output_id="geometry",
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        scientific_plan=SimpleNamespace(plan_sha256="d" * 64),
+    )
+    host._workflow_context = lambda draft, **_kw: _context(("a1", "a2"))
+
+    host._select_execution_wave(
+        "t1", {"workflow_id": "w1", "node_ids": ["a1", "a2"]}
+    )
+    assert host.selected_execution_wave == ("a1", "a2")
+
+    reply = host._select_execution_wave(
+        "t2", {"workflow_id": "w1", "node_ids": ["b1"]}
+    )
+    assert reply["status"] == "not_dispatchable"
+    assert host.selected_execution_wave == (), (
+        "an undispatchable selection left the previous wave standing, so "
+        "the driver would submit calculations the Agent has already seen"
+    )

@@ -210,3 +210,41 @@ def test_the_receipt_on_disk_names_both_jobs(tmp_path, submitted):
     assert record["job_id"] == "412"
     assert record["wake_job_id"] == "422"
     assert record["cohort_node_ids"] == list(_NODES)
+
+
+def test_the_element_redirect_survives_a_path_with_a_space(tmp_path):
+    """Every other path in the script is quoted; this one was not.
+
+    `bash` redirects to the first word: with a workspace under "My
+    Drive", `> /My Drive/ws/run/execution-result.${i}.json` redirects to
+    `/My` and hands the rest to `chemsmart agent run` as stray
+    positional arguments. Every element fails before doing anything, and
+    the wave then cannot satisfy its own barrier.
+    """
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.dispatch import build_cohort_dispatch_script
+
+    spaced = tmp_path / "My Drive" / "run dir"
+    spaced.mkdir(parents=True)
+    submitter = _server().get_submitter(
+        SimpleNamespace(label="goal-g1-cycle-1", PROGRAM=None, folder=".")
+    )
+    script = build_cohort_dispatch_script(
+        submitter=submitter,
+        python="/env/bin/python",
+        approval_file=tmp_path / "bundle.json",
+        workspace=tmp_path / "ws",
+        run_directory=spaced,
+        cohort_size=2,
+    )
+    line = next(item for item in script.splitlines() if "agent run" in item)
+    redirect = line.split(">", 1)[1].strip()
+    assert redirect.startswith("'") or redirect.startswith(
+        '"'
+    ), f"the redirect target is unquoted: {redirect}"
+    # And the variable must still expand: quoting the whole thing with
+    # single quotes would redirect to a literal '${SLURM_ARRAY_TASK_ID}'.
+    assert "${SLURM_ARRAY_TASK_ID}" in redirect
+    assert "My Drive" in redirect
