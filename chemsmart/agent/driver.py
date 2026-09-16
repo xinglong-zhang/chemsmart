@@ -3394,6 +3394,30 @@ class GoalDriver:
         for kind, payload in deferred:
             self.ledger.append(kind, payload)
 
+    def _review_file_for_cycle(self) -> Path | None:
+        """This cycle's displayed review, wherever the driver came from.
+
+        `_plan` sets `self.review_file`, and a parked cycle's workspace
+        record is written by the *wake* -- which `resume` rebuilds at the
+        outcome phase without planning. So every scheduler-dispatched
+        cycle recorded its results with `review_file=None`, and
+        `record_run` reads the level of every result from exactly that
+        file: seven live result rows went to disk with an empty
+        `level_sha256` while the review beside them carried the settings
+        text and its digest for every node. The per-claim level
+        attribution this round built had nothing to attribute, and
+        nothing failed.
+
+        The path is deterministic; `_plan` computes the same one.
+        """
+
+        if self.review_file is not None and Path(self.review_file).is_file():
+            return Path(self.review_file)
+        candidate = (
+            self.goal_dir / "reviews" / f"cycle-{self.cycles}.json"
+        )
+        return candidate if candidate.is_file() else None
+
     def _declared_non_executable_ids(self) -> tuple[str, ...]:
         """Node ids the cycle's displayed review retained as intent only."""
 
@@ -3449,7 +3473,7 @@ class GoalDriver:
                 cycle=self.cycles,
                 run_events_path=events_path,
                 run=run_reference,
-                review_file=self.review_file,
+                review_file=self._review_file_for_cycle(),
             )
         except (
             Exception
