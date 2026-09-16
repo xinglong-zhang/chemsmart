@@ -153,13 +153,17 @@ class GaussianInputWriter(InputWriter):
             f.write(f"%chk={self.job.label}.chk\n")
 
         # Set default values if jobrunner resources are not specified
-        num_cores = self.jobrunner.num_cores if not None else 12
-        mem_gb = self.jobrunner.mem_gb if not None else 16
+        # Gaussian is shared-memory: %nprocshared is threads inside one
+        # process, so it reads the threads-per-process number rather than
+        # the scheduler allocation. (``x if not None else y`` is always
+        # ``x``; the fallbacks it looked like it had never applied.)
+        num_threads = self.jobrunner.num_threads
+        mem_gb = self.jobrunner.mem_gb
         logger.debug(
-            f"Writing resource specifications - cores: {num_cores}, "
+            f"Writing resource specifications - threads: {num_threads}, "
             f"memory: {mem_gb}GB"
         )
-        f.write(f"%nprocshared={num_cores}\n")
+        f.write(f"%nprocshared={num_threads}\n")
         f.write(f"%mem={mem_gb}GB\n")
 
     def _write_route_section(self, f):

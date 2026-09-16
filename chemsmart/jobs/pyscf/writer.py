@@ -577,14 +577,21 @@ class PySCFScriptWriter:
         call, method, solvent_id, eps = self._solvent_config(settings)
 
         jobrunner = job.jobrunner
-        num_threads = getattr(jobrunner, "num_cores", None)
+        # OpenMP threads inside one PySCF process, not the allocation.
+        # A runner that names no threads falls back to its cores, which
+        # is the same rule the server profile applies: threads default to
+        # the allocation, so nothing that never set them changes.
+        num_threads = getattr(jobrunner, "num_threads", None)
+        if num_threads is None:
+            num_threads = getattr(jobrunner, "num_cores", None)
         if (
             isinstance(num_threads, bool)
             or not isinstance(num_threads, Integral)
             or int(num_threads) <= 0
         ):
             raise ValueError(
-                f"num_cores must be a positive integer, got {num_threads!r}"
+                "num_threads must be a positive integer, got "
+                f"{num_threads!r}"
             )
         mem_gb = getattr(jobrunner, "mem_gb", None)
         # PySCF's max_memory is per-process in MB and bounds integral

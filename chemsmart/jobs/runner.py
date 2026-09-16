@@ -344,7 +344,21 @@ class JobRunner(RegistryMixin):
 
     @property
     def num_threads(self):
-        return self.server.num_threads
+        """Threads one process runs, inside this runner's own allocation.
+
+        An operator who declares ``NUM_THREADS`` in the server profile
+        means it. Otherwise threads follow *this runner's* core count,
+        not the profile's: ``chemsmart run -n 4`` narrows the allocation
+        and must narrow the threads with it, or a four-core run would
+        bind sixty-four OpenMP threads from a profile it overrode.
+        """
+
+        server = getattr(self, "server", None)
+        kwargs = getattr(server, "kwargs", None) or {}
+        declared = kwargs.get("NUM_THREADS")
+        if declared is None:
+            return self.num_cores
+        return declared
 
     @property
     @abstractmethod

@@ -666,7 +666,7 @@ class PySCFJobRunner(JobRunner):
         no effect. This is the substantive reason PySCF runs out-of-process.
         """
         env = super()._update_os_environ(job)
-        threads = str(self.num_cores)
+        threads = str(self.num_threads)
         for var in (
             "OMP_NUM_THREADS",
             "MKL_NUM_THREADS",

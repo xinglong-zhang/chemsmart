@@ -203,12 +203,27 @@ class Server(RegistryMixin):
     @cached_property
     def num_threads(self):
         """
-        Get number of threads for parallel execution.
+        Threads one process runs, inside the cores the scheduler allocated.
+
+        ``NUM_CORES`` is the allocation and ``NUM_THREADS`` is what a
+        single process does with it. They are different questions: ORCA
+        spends the allocation on MPI *ranks* (``%pal nprocs``, with
+        ``%maxcore`` dividing the total memory by that rank count), while
+        Gaussian, PySCF and xTB spend it on *threads* inside one process.
+
+        Unset, this is the allocation, so a profile that names only
+        NUM_CORES behaves exactly as it always has. The previous default
+        was a bare 16 with no relation to the machine, and nothing read
+        it -- a 64-core profile would have dropped to 16 threads the
+        moment anything did.
 
         Returns:
-            int: Number of threads (default: 16).
+            int: Threads per process.
         """
-        return self.kwargs.get("NUM_THREADS", 16)
+        declared = self.kwargs.get("NUM_THREADS")
+        if declared is None:
+            return self.num_cores
+        return declared
 
     @cached_property
     def submit_command(self):

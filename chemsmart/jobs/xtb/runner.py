@@ -255,7 +255,7 @@ class XTBJobRunner(JobRunner):
             "MKL_NUM_THREADS",
             "OPENBLAS_NUM_THREADS",
         ):
-            env[variable] = str(self.num_cores)
+            env[variable] = str(self.num_threads)
         return env
 
     @staticmethod
