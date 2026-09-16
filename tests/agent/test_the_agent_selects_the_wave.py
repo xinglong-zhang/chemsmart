@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from chemsmart.agent.cohort import validate_wave
 
 
@@ -110,6 +112,7 @@ def test_the_host_reports_an_undispatchable_wave_rather_than_refusing():
     assert "conf-a-opt" in detail
 
 
+@pytest.mark.capability("tool:select_execution_wave")
 def test_the_handler_asks_the_one_readiness_authority(monkeypatch, tmp_path):
     """No second frontier: the host's own projection is what is judged."""
 
@@ -179,6 +182,7 @@ def test_the_handler_asks_the_one_readiness_authority(monkeypatch, tmp_path):
     }
 
 
+@pytest.mark.capability("tool:select_execution_wave")
 def test_a_selected_wave_is_recorded_where_the_dispatcher_reads_it(
     monkeypatch, tmp_path
 ):
@@ -245,6 +249,7 @@ def test_an_invalid_wave_is_not_recorded_as_the_selection():
     assert getattr(host, "selected_execution_wave", ()) == ()
 
 
+@pytest.mark.capability("tool:select_execution_wave")
 def test_an_invalid_selection_clears_the_previous_one():
     """A stale wave is worse than none: it dispatches the wrong science.
 
@@ -353,3 +358,36 @@ def test_a_node_the_plan_does_not_contain_says_so():
     )
     assert waiting.rows[0].status == "not_ready"
     assert "a1" in waiting.rows[0].detail
+
+
+@pytest.mark.capability("rule:tool.select_execution_wave")
+def test_the_tool_tells_the_model_an_invalid_wave_is_not_an_error():
+    """The rule has to reach the description the model actually reads.
+
+    A registered rule renders into its tool's description, and a rule
+    that renders nowhere is a paragraph. What it must carry is the one
+    thing the model cannot infer from the schema: that naming an
+    undispatchable wave returns a verdict rather than failing the call,
+    so there is nothing here to route around.
+    """
+
+    from chemsmart.agent.rules import rules_for
+    from chemsmart.agent.tool_specs import (
+        build_command_compiled_tool_surface,
+    )
+
+    placed = rules_for("tool:select_execution_wave")
+    assert placed, "no rule is placed on the wave tool"
+
+    description = next(
+        item["function"]["description"]
+        for item in build_command_compiled_tool_surface().tool_definitions
+        if item["function"]["name"] == "select_execution_wave"
+    )
+    for rule in placed:
+        assert rule.text in description, (
+            f"{rule.rule_id} is registered and does not reach the "
+            "description the model reads"
+        )
+    assert "refused" in description
+    assert "waits on" in description
