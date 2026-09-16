@@ -630,16 +630,40 @@ class Server(RegistryMixin):
             ValueError: If no submission command is defined for this server.
             ProbeUnitError: If the submission failed or named no job.
         """
+        submitter = self.get_submitter(job)
+        return self._run_submission(job, submitter.submit_script)
+
+    def _run_submission(self, job, script_name):
+        """Run the submit command on one script and name what it created.
+
+        One authority for "submit this script and read the scheduler's
+        answer", shared by the single-job and array paths. The array path
+        used to call ``Popen`` and discard the job id entirely, so an array
+        produced no receipt and nothing could wait on it, ask after it, or
+        park a goal on it -- the one handle the scheduler gives you was
+        thrown away at the moment it was printed.
+
+        Args:
+            job: Job instance whose folder the command runs in.
+            script_name (str): Submit script to hand the scheduler.
+
+        Returns:
+            SubmissionReceiptV1: The scheduler, the job id it assigned, and
+            the exact command and script that produced it.
+
+        Raises:
+            ValueError: If no submission command is defined for this server.
+            ProbeUnitError: If the submission failed or named no job.
+        """
         from chemsmart.settings.probe.scheduler_job import parse_submission
 
-        submitter = self.get_submitter(job)
         command = self.submit_command
         if command is None:
             raise ValueError(
                 f"Cannot submit job on {self} "
                 f"since no submit command is defined."
             )
-        command += f" {submitter.submit_script}"
+        command += f" {script_name}"
         logger.info(f"Submitting job with command: {command}")
         if "<" in command or ">" in command or "|" in command:
             # Use shell=True if the command has shell operators
@@ -670,7 +694,7 @@ class Server(RegistryMixin):
             scheduler=str(self.scheduler),
             job_id=job_id,
             submit_command=command,
-            submit_script=os.path.join(job.folder, submitter.submit_script),
+            submit_script=os.path.join(job.folder, script_name),
             submitted_at=datetime.now(timezone.utc).isoformat(),
             stdout=completed.stdout,
         )
@@ -709,35 +733,29 @@ class Server(RegistryMixin):
             jobs=jobs, num_nodes=num_nodes, cli_args=cli_args
         )
 
-        # Submit the array job
-        if not test:
-            self._submit_array_job(first_job, submitter)
+        # Submit the array job, returning the receipt naming what the
+        # scheduler created so a caller can wait on it or park on it.
+        if test:
+            return None
+        return self._submit_array_job(first_job, submitter)
 
     def _submit_array_job(self, job, submitter):
         """
-        Submit an array job to the scheduler.
+        Submit an array job to the scheduler and return what it was named.
 
         Args:
-            job: Template job instance.
-            submitter: Submitter instance with array job script.
+            job: Template job instance (the array's first job).
+            submitter: Submitter instance holding the array submit script.
 
         Returns:
-            int: Exit code from the submission command.
+            SubmissionReceiptV1: The scheduler, the array job id it assigned,
+            and the exact command and script that produced it.
+
+        Raises:
+            ValueError: If no submission command is defined for this server.
+            ProbeUnitError: If the submission failed or named no job.
         """
-        command = self.submit_command
-        if command is None:
-            raise ValueError(
-                f"Cannot submit job on {self} "
-                f"since no submit command is defined."
-            )
-        command += f" {submitter.array_submit_script}"
-        logger.info(f"Submitting array job with command: {command}")
-        if "<" in command or ">" in command or "|" in command:
-            # Use shell=True if the command has shell operators
-            p = subprocess.Popen(command, shell=True)
-        else:
-            p = subprocess.Popen(shlex.split(command), cwd=job.folder)
-        return p.wait()
+        return self._run_submission(job, submitter.array_submit_script)
 
 
 class YamlServerSettings(Server):

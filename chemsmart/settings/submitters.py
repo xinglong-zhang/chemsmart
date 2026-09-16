@@ -143,6 +143,19 @@ class Submitter(RegistryMixin):
 
     NAME: Optional[str] = None
 
+    #: The environment variable this scheduler sets to the running array
+    #: task's index, and the index the scheduler's own ``--array``/``-J``
+    #: range starts from. They are one declaration because they are one
+    #: question -- "which task am I?" -- and answering it twice is what
+    #: broke here: runscripts were named ``0..N-1`` by ``enumerate``, the
+    #: SLURM directive declared ``1-N``, and the dispatch shell added one
+    #: again, so every task ran another task's job and two tasks ran a
+    #: file that did not exist. A scheduler that declares no variable
+    #: declares no array support and is refused by name rather than
+    #: silently writing a submit script with no array directive.
+    ARRAY_TASK_ID_VARIABLE: Optional[str] = None
+    ARRAY_INDEX_BASE: int = 0
+
     def __init__(self, name, job, server, **kwargs):
         """
         Initialize the job submitter.
@@ -267,6 +280,49 @@ class Submitter(RegistryMixin):
             return f"chemsmart_sub_array_{self.job.label}.sh"
         return "chemsmart_sub_array.sh"
 
+    def array_run_script(self, task_id):
+        """The runscript one array task runs, named by that task's own id.
+
+        The filename *is* the task id, so the dispatch shell needs no
+        arithmetic and there is no second place for the convention to be
+        restated. ``task_id`` is the scheduler's index, not a list
+        position.
+
+        Args:
+            task_id (int): Scheduler array task index.
+
+        Returns:
+            str: Filename of the runscript for that task.
+        """
+        return f"chemsmart_run_array_{task_id}.py"
+
+    def array_task_ids(self, count):
+        """The scheduler task ids for an array of ``count`` jobs.
+
+        Args:
+            count (int): Number of jobs in the array.
+
+        Returns:
+            list[int]: Task ids, from this scheduler's own index base.
+        """
+        base = int(self.ARRAY_INDEX_BASE)
+        return list(range(base, base + int(count)))
+
+    def _require_array_support(self):
+        """Refuse an array on a scheduler that declares none.
+
+        A scheduler failure must not wear a job's failure word: writing a
+        submit script with no array directive would run one job N times
+        under one id rather than say that this scheduler is unsupported.
+        """
+        if not self.ARRAY_TASK_ID_VARIABLE:
+            raise ValueError(
+                f"{type(self).__name__} declares no array task-id variable, "
+                "so CHEMSMART cannot express an array job on this scheduler. "
+                "Submit the jobs individually, or declare "
+                "ARRAY_TASK_ID_VARIABLE and ARRAY_INDEX_BASE for it."
+            )
+
     @property
     def run_script(self):
         """
@@ -340,6 +396,8 @@ class Submitter(RegistryMixin):
             logger.warning("No jobs provided for array job")
             return
 
+        self._require_array_support()
+
         # Store job list for array processing
         self.jobs = jobs
         self.num_nodes = num_nodes
@@ -361,6 +419,7 @@ class Submitter(RegistryMixin):
                 - a sequence (e.g., list or tuple) of per-job argument lists,
                   where ``cli_args[i]`` contains the args for ``jobs[i]``.
         """
+        task_ids = self.array_task_ids(len(jobs))
         for i, job in enumerate(jobs):
             # Determine CLI args for this specific job/index.
             # If cli_args looks like a per-job sequence (same length as jobs and
@@ -373,12 +432,19 @@ class Submitter(RegistryMixin):
                 ):
                     job_cli_args = cli_args[i]
 
-            # Create a run script for each job using a 0-based index so the
-            # filenames align with scheduler array task IDs and task-based
-            # execution of chemsmart_run_array_${TASK_ID}.py.
-            runscript_name = f"chemsmart_run_array_{i}.py"
-            runscript = RunScript(runscript_name, job_cli_args)
-            logger.debug(f"Writing array run script {i}: {runscript_name}")
+            # The filename is the scheduler's own task id, from this
+            # submitter's declared index base, so the dispatch shell runs
+            # ``chemsmart_run_array_${TASK_ID}.py`` with no arithmetic.
+            task_id = task_ids[i]
+            runscript_name = self.array_run_script(task_id)
+            runscript = RunScript(
+                os.path.join(self.submit_folder, runscript_name),
+                job_cli_args,
+            )
+            logger.debug(
+                f"Writing array run script for task {task_id}: "
+                f"{runscript_name}"
+            )
             runscript.write()
 
     def _write_array_submitscript(self, num_nodes):
@@ -391,9 +457,12 @@ class Submitter(RegistryMixin):
         Args:
             num_nodes (int): Number of nodes to request.
         """
-        with open(self.array_submit_script, "w") as f:
+        submit_script_path = os.path.join(
+            self.submit_folder, self.array_submit_script
+        )
+        with open(submit_script_path, "w") as f:
             logger.debug(
-                f"Writing array submission script: {self.array_submit_script}"
+                f"Writing array submission script: {submit_script_path}"
             )
             self._write_bash_header(f)
             self._write_array_scheduler_options(f, num_nodes)
@@ -422,22 +491,21 @@ class Submitter(RegistryMixin):
         Args:
             f: File handle.
         """
-        # Default implementation - map scheduler task ids to the
-        # 1-based array runscript filenames.
+        self._require_array_support()
+        variable = self.ARRAY_TASK_ID_VARIABLE
+        # The runscript's name is the task id, so this is an identity and
+        # not a mapping. The arithmetic that used to live here is what
+        # made every task run another task's job.
         f.write("# Array job execution\n")
-        f.write('if [ -n "$SLURM_ARRAY_TASK_ID" ]; then\n')
-        f.write("  TASK_ID=$((SLURM_ARRAY_TASK_ID + 1))\n")
-        f.write('elif [ -n "$PBS_ARRAYID" ]; then\n')
-        f.write("  TASK_ID=$PBS_ARRAYID\n")
-        f.write('elif [ -n "$LSB_JOBINDEX" ]; then\n')
-        f.write("  TASK_ID=$LSB_JOBINDEX\n")
-        f.write("else\n")
+        f.write(f'if [ -z "${variable}" ]; then\n')
         f.write(
-            '  echo "Error: no supported array task environment variable found." >&2\n'
+            f'  echo "Error: {variable} is not set; this script runs as a '
+            'scheduler array task." >&2\n'
         )
         f.write("  exit 1\n")
-        f.write("fi\n\n")
-        f.write("python chemsmart_run_array_${TASK_ID}.py\n")
+        f.write("fi\n")
+        f.write(f"TASK_ID=${variable}\n\n")
+        f.write(f"python {self.array_run_script('${TASK_ID}')}\n")
 
     def _write_runscript(self, cli_args):
         """
@@ -708,6 +776,12 @@ class PBSSubmitter(Submitter):
         parameters passed to the base class.
     """
 
+    #: No array directive is written for PBS (no _write_array_scheduler_options
+    #: override), so no array task-id variable is declared: an array on this
+    #: scheduler is refused by name rather than submitted as one job run N
+    #: times under one id. PBS_ARRAYID and a -J range are what wiring it
+    #: would need.
+
     NAME = "PBS"
 
     def __init__(self, name="PBS", job=None, server=None, **kwargs):
@@ -785,6 +859,12 @@ class SLURMSubmitter(Submitter):
         parameters passed to the base class.
     """
 
+    #: SLURM numbers array tasks from whatever the --array range says; the
+    #: range is written from this base, so zero keeps task ids and list
+    #: positions identical.
+    ARRAY_TASK_ID_VARIABLE = "SLURM_ARRAY_TASK_ID"
+    ARRAY_INDEX_BASE = 0
+
     NAME = "SLURM"
 
     def __init__(self, name="SLURM", job=None, server=None, **kwargs):
@@ -857,14 +937,15 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --output={self.job.label}_array_%a.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}_array_%a.slurmerr\n")
 
-        # Array directive: 1 to num_jobs, optionally throttled so that at
-        # most num_nodes tasks run concurrently (useful for resource limits).
-        # This matches the 1-based array runscript filenames
-        # (for example, chemsmart_run_array_1.py ... chemsmart_run_array_N.py).
+        # Array directive over this submitter's own declared task ids, so
+        # the range and the runscript filenames cannot disagree. Optionally
+        # throttled with %N so that at most num_nodes tasks run at once.
+        task_ids = self.array_task_ids(num_jobs)
+        span = f"{task_ids[0]}-{task_ids[-1]}"
         if num_nodes is not None:
-            f.write(f"#SBATCH --array=1-{num_jobs}%{num_nodes}\n")
+            f.write(f"#SBATCH --array={span}%{num_nodes}\n")
         else:
-            f.write(f"#SBATCH --array=1-{num_jobs}\n")
+            f.write(f"#SBATCH --array={span}\n")
 
         if self.server.num_gpus:
             f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
@@ -918,6 +999,11 @@ class SLFSubmitter(Submitter):
         kwargs (dict): Additional submission
         parameters passed to the base class.
     """
+
+    #: No array directive is written for LSF, so none is declared; see the
+    #: note on PBSSubmitter. LSB_JOBINDEX starts at one, so wiring it would
+    #: set ARRAY_INDEX_BASE = 1 -- which is why the base is a per-scheduler
+    #: declaration and not a constant.
 
     NAME = "SLF"
 
