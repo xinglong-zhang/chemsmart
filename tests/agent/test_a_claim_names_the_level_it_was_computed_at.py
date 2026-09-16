@@ -457,3 +457,149 @@ def _single_level_review(tmp_path):
         encoding="utf-8",
     )
     return path
+
+
+def _expression_per_output(receipt, outputs):
+    """An expression receipt with several outputs, each on its own pair.
+
+    The shape the host actually emits, measured live on CUHK
+    (`water-levels-1`, one water geometry at three basis sets):
+
+        out d-svp-321g   sources [18cb2025, 6ae3f89c]
+        out d-tzvp-svp   sources [18cb2025, 3bec2300]
+        out d-tzvp-321g  sources [3bec2300, 6ae3f89c]
+
+    Three outputs, two sources each, and the pairs differ.
+    """
+
+    from chemsmart.agent._contracts import canonical_data
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionOutputDependencyV1,
+    )
+
+    return {
+        "kind": "quantity_expression_evaluated",
+        "payload": {
+            "receipt_sha256": receipt,
+            "record": {
+                "output_dependencies": [
+                    canonical_data(
+                        QuantityExpressionOutputDependencyV1(
+                            output_id=output_id,
+                            source_receipt_sha256s=tuple(sorted(sources)),
+                            model_authored_constants=(),
+                            convention_operations=(),
+                            arithmetic_node_count=1,
+                        )
+                    )
+                    for output_id, sources in outputs
+                ]
+            },
+        },
+    }
+
+
+def _claim_of(claim_id, quantity_id, receipt):
+    return {
+        "kind": "analysis_claims_recorded",
+        "payload": {
+            "receipt_sha256": "9" * 64,
+            "record": {
+                "claims": [
+                    {
+                        "claim_id": claim_id,
+                        "quantity_id": quantity_id,
+                        "source_receipt_sha256": receipt,
+                        "display_value": 1.0,
+                        "display_unit": "kcal/mol",
+                        "dimension": [0, 0, 0, 0, 0, 0, 0],
+                    }
+                ]
+            },
+        },
+    }
+
+
+def _three_level_review(tmp_path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / "review.json"
+    path.write_text(
+        json.dumps(
+            {
+                "workflow_execution_review": {
+                    "node_reviews": [
+                        {
+                            "node_id": f"calc-{n}",
+                            "project_settings_text": f"B3LYP/{n}",
+                            "project_settings_text_sha256": sha,
+                        }
+                        for n, sha in (
+                            ("a", "a" * 64),
+                            ("b", "b" * 64),
+                            ("c", "c" * 64),
+                        )
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_a_composed_claim_names_its_own_terms_not_the_expressions(tmp_path):
+    """One expression, three outputs, three different pairs of ancestors.
+
+    The wrong-key repair read `output_dependencies` and then **flattened
+    every row into one list keyed by the expression receipt**, so every
+    claim standing on that receipt inherited the union of all its
+    outputs' sources. Measured live: three basis-set differences, each
+    genuinely standing on two of three calculations, every one of them
+    recorded with all three levels.
+
+    That is A1's own defect one layer up -- a claim naming levels it does
+    not stand on -- and it is worse than the run-level version it
+    replaced, because three claims carrying an identical 3-tuple compare
+    as `same_level` in `divergences()` and the pair is skipped. The
+    suppression the per-node level exists to prevent, reintroduced by
+    its own repair.
+    """
+
+    claims = _record(
+        tmp_path,
+        [
+            _node("calc-a", "1" * 64, "sp"),
+            _node("calc-b", "2" * 64, "sp"),
+            _node("calc-c", "3" * 64, "sp"),
+            _extraction("a1" + "0" * 62, "1" * 64),
+            _extraction("b1" + "0" * 62, "2" * 64),
+            _extraction("c1" + "0" * 62, "3" * 64),
+            _expression_per_output(
+                "e1" + "0" * 62,
+                (
+                    ("d-ab", ("a1" + "0" * 62, "b1" + "0" * 62)),
+                    ("d-bc", ("b1" + "0" * 62, "c1" + "0" * 62)),
+                    ("d-ac", ("a1" + "0" * 62, "c1" + "0" * 62)),
+                ),
+            ),
+            _claim_of("delta-ab", "d-ab", "e1" + "0" * 62),
+            _claim_of("delta-bc", "d-bc", "e1" + "0" * 62),
+        ],
+        review=_three_level_review(tmp_path / "review"),
+    )
+
+    assert tuple(claims["delta-ab"]["level_sha256s"]) == (
+        "a" * 64,
+        "b" * 64,
+    ), claims["delta-ab"]["level_sha256s"]
+    assert tuple(claims["delta-bc"]["level_sha256s"]) == (
+        "b" * 64,
+        "c" * 64,
+    ), claims["delta-bc"]["level_sha256s"]
+    assert claims["delta-ab"]["level_sha256s"] != (
+        claims["delta-bc"]["level_sha256s"]
+    ), (
+        "two differences over different pairs of levels compare as the "
+        "same level, so divergences() skips them -- which is the "
+        "suppression the per-node level exists to prevent"
+    )

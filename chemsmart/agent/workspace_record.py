@@ -242,15 +242,27 @@ def record_run(
             # code, and the test that should have caught it invented the
             # key it wanted. The dependency rows already resolve each
             # output to the receipts underneath it.
-            sources = tuple(
-                str(digest)
-                for item in record.get("output_dependencies") or ()
-                if isinstance(item, Mapping)
-                for digest in item.get("source_receipt_sha256s") or ()
-                if digest
-            )
-            if receipt and sources:
-                receipts_by_expression[receipt] = sources
+            # Per output, never flattened. One expression node set can
+            # carry several outputs on different pairs of ancestors --
+            # measured live, three basis-set differences each standing on
+            # two of three calculations -- and collecting them into one
+            # list keyed by the receipt gave every claim the union. That
+            # is this file's own defect one layer up, and worse than the
+            # run-level version it replaced: three claims carrying an
+            # identical set compare as `same_level` in `divergences` and
+            # the pair is skipped, which is the suppression the per-node
+            # level exists to prevent.
+            for item in record.get("output_dependencies") or ():
+                if not isinstance(item, Mapping):
+                    continue
+                output_id = str(item.get("output_id") or "")
+                sources = tuple(
+                    str(digest)
+                    for digest in item.get("source_receipt_sha256s") or ()
+                    if digest
+                )
+                if receipt and output_id and sources:
+                    receipts_by_expression[(receipt, output_id)] = sources
         if event.get("kind") != "optimized_geometry_handed_off":
             continue
         payload = event.get("payload") or {}
@@ -446,7 +458,7 @@ def record_run(
     )
 
     def _levels_under(
-        receipt: str, seen: frozenset[str]
+        receipt: str, output_id: str, seen: frozenset[str]
     ) -> tuple[bool, set, bool]:
         """(reached a result, its levels, any level this run cannot say).
 
@@ -458,19 +470,32 @@ def record_run(
         suppression the per-node attribution exists to prevent.
         """
 
-        if not receipt or receipt in seen:
+        key = (receipt, output_id)
+        if not receipt or key in seen:
             return False, set(), False
-        seen = seen | {receipt}
+        seen = seen | {key}
         artifact = artifact_by_receipt.get(receipt)
         if artifact:
             level = level_by_artifact.get(artifact)
             return True, ({level} if level else set()), not level
+        # This output's own ancestors. A source names a receipt and not
+        # which of its outputs, so a nested expression falls back to
+        # everything that receipt carries -- the honest answer when the
+        # link itself does not say which one.
+        sources = receipts_by_expression.get(key)
+        if sources is None:
+            sources = tuple(
+                digest
+                for (other, _), digests in receipts_by_expression.items()
+                if other == receipt
+                for digest in digests
+            )
         reached = False
         levels: set = set()
         unknown = False
-        for source in receipts_by_expression.get(receipt, ()):
+        for source in sources:
             source_reached, source_levels, source_unknown = _levels_under(
-                source, seen
+                source, "", seen
             )
             reached = reached or source_reached
             levels |= source_levels
@@ -481,7 +506,12 @@ def record_run(
         if entry["kind"] != "claim":
             continue
         reached, levels, unknown = _levels_under(
-            str(entry.get("source_receipt_sha256") or ""), frozenset()
+            str(entry.get("source_receipt_sha256") or ""),
+            # The claim's own output. An expression names its outputs by
+            # the quantity id the claim carries, so a claim resolves the
+            # terms it stands on rather than its whole expression's.
+            str(entry.get("quantity_id") or entry.get("claim_id") or ""),
+            frozenset(),
         )
         if reached:
             # An incomplete set is worse than an empty one: absent reads
