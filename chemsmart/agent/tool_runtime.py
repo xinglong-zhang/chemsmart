@@ -2111,6 +2111,13 @@ class CommandCompiledToolHostV1:
         #: place a chemist can open. ``None`` keeps the legacy layout, so
         #: every recorded run keeps the path it was written at.
         self.cycle_label = str(cycle_label) if cycle_label else None
+        #: The wave this session selected, in the order it selected it.
+        #: Declared here rather than created on first use, so the session
+        #: that carries it to the dispatcher reads an attribute that
+        #: always exists: a `getattr` default would turn a renamed
+        #: attribute into an empty wave, which dispatches as a single job
+        #: and looks exactly like a session that chose not to select one.
+        self.selected_execution_wave: tuple[str, ...] = ()
         self.execution_resources = execution_resources
         self.workflow_execution_approval = workflow_execution_approval
         self.frozen_workflow_approval = frozen_workflow_approval

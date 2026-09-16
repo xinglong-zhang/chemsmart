@@ -1277,9 +1277,7 @@ def run_live_agent_session(
         **body,
         result_sha256=canonical_sha256(body),
         prepared_execution=prepared_execution,
-        selected_execution_wave=tuple(
-            getattr(host, "selected_execution_wave", ()) or ()
-        ),
+        selected_execution_wave=tuple(host.selected_execution_wave or ()),
     )
 
 

@@ -188,3 +188,51 @@ def test_the_ledger_records_which_wave_was_dispatched(tmp_path):
     record = json.loads(json.dumps(receipt.public_record()))
     assert record["cohort_node_ids"] == ["a1", "a2"]
     assert record["wake_job_id"] == "422"
+
+
+def test_the_attribute_the_tool_sets_is_the_attribute_the_session_reads(
+    tmp_path,
+):
+    """The hop a `getattr` default would have hidden.
+
+    A renamed attribute read with a default returns an empty wave, which
+    dispatches as a single job and is indistinguishable from a session
+    that chose not to select one -- the declared-but-no-reader defect
+    this round exists to remove. Both ends are driven here: a real host
+    runs the real tool, and the expression the session builder uses reads
+    it back.
+    """
+
+    from chemsmart.agent.runtime.event_store import RuntimeEventStore
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(
+            tmp_path / "events.jsonl", session_id="s"
+        ),
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=tmp_path / "workspace",
+    )
+    # A real host declares it before any tool runs, so the session's read
+    # cannot be an AttributeError on a session that selected nothing.
+    assert host.selected_execution_wave == ()
+
+    host._resolve_program_workflow = lambda workflow_id: SimpleNamespace(
+        draft=SimpleNamespace(
+            workflow_id="w1",
+            nodes=(
+                SimpleNamespace(node_id="a1", inputs=()),
+                SimpleNamespace(node_id="a2", inputs=()),
+            ),
+        ),
+        scientific_plan=SimpleNamespace(plan_sha256="d" * 64),
+    )
+    host._workflow_context = lambda draft, **_kw: SimpleNamespace(
+        ready_node_ids=("a1", "a2"), waiting_node_ids=()
+    )
+    host._select_execution_wave(
+        "t1", {"workflow_id": "w1", "node_ids": ["a1", "a2"]}
+    )
+
+    # Exactly what `run_live_agent_session` writes onto the result.
+    assert tuple(host.selected_execution_wave or ()) == ("a1", "a2")
