@@ -132,6 +132,142 @@ class CohortManifestV1:
         return path
 
 
+#: What the host can say about one proposed member of a wave.
+COHORT_MEMBER_STATUSES = ("ready", "not_ready", "depends_on")
+
+
+@dataclass(frozen=True)
+class CohortMemberVerdictV1:
+    """One proposed calculation, and what the host sees about it."""
+
+    node_id: str
+    status: str
+    detail: str = ""
+
+    def public_record(self) -> dict[str, Any]:
+        return {
+            "node_id": self.node_id,
+            "status": self.status,
+            "detail": self.detail,
+        }
+
+
+@dataclass(frozen=True)
+class CohortValidityV1:
+    """Whether a proposed wave can be dispatched, member by member.
+
+    Typed evidence, never an exception. A wave the host cannot dispatch
+    is something the Agent reads and selects again from; raising would
+    teach a session to carry workarounds for a question the host owns.
+    """
+
+    members: tuple[str, ...]
+    rows: tuple[CohortMemberVerdictV1, ...]
+    summary: str
+
+    @property
+    def dispatchable(self) -> bool:
+        return bool(self.members) and all(
+            row.status == "ready" for row in self.rows
+        )
+
+    def public_record(self) -> dict[str, Any]:
+        return {
+            "dispatchable": self.dispatchable,
+            "members": list(self.members),
+            "rows": [row.public_record() for row in self.rows],
+            "summary": self.summary,
+        }
+
+
+def validate_wave(
+    *,
+    proposed: tuple[str, ...],
+    ready: tuple[str, ...],
+    edges: tuple[tuple[str, str], ...],
+) -> CohortValidityV1:
+    """Judge a proposed wave against the host's own ready frontier.
+
+    Readiness is a host/DAG fact with a single authority, and this does
+    not compute it -- it is handed the frontier that authority produced.
+    Which ready calculations to run together is the Agent's scientific
+    strategy, so the host says only what it sees: ready, not yet ready
+    and what it waits on, or ordered against a sibling in the same wave.
+
+    Two members joined by an edge are one experiment rather than two,
+    however ready they both are: running them together would mean the
+    consumer starting before the Agent had seen the producer's evidence,
+    which is the barrier this exists to keep.
+
+    Nothing raises. Every shape the model could get wrong -- an empty
+    wave, a repeated member, a node outside the plan -- comes back as a
+    verdict.
+    """
+
+    members: list[str] = []
+    for node_id in proposed:
+        name = str(node_id).strip()
+        if name and name not in members:
+            members.append(name)
+    member_set = set(members)
+    ready_set = {str(item) for item in ready}
+    producers: dict[str, list[str]] = {}
+    for source, target in edges:
+        producers.setdefault(str(target), []).append(str(source))
+
+    rows = []
+    for node_id in members:
+        blocking = sorted(
+            producer
+            for producer in producers.get(node_id, ())
+            if producer in member_set
+        )
+        if blocking:
+            rows.append(
+                CohortMemberVerdictV1(
+                    node_id=node_id,
+                    status="depends_on",
+                    detail=(
+                        "consumes "
+                        + ", ".join(blocking)
+                        + " in this same wave, so the two are one "
+                        "experiment: run the producer first and choose "
+                        "the consumer after reading its evidence"
+                    ),
+                )
+            )
+            continue
+        if node_id in ready_set:
+            rows.append(CohortMemberVerdictV1(node_id=node_id, status="ready"))
+            continue
+        waiting = sorted(producers.get(node_id, ()))
+        rows.append(
+            CohortMemberVerdictV1(
+                node_id=node_id,
+                status="not_ready",
+                detail=(
+                    "waits on " + ", ".join(waiting)
+                    if waiting
+                    else "is not in this plan's ready frontier"
+                ),
+            )
+        )
+
+    if not members:
+        summary = "the proposed wave is empty"
+    elif all(row.status == "ready" for row in rows):
+        summary = f"{len(members)} calculations ready to run together"
+    else:
+        summary = "; ".join(
+            f"{row.node_id}: {row.status}"
+            for row in rows
+            if row.status != "ready"
+        )
+    return CohortValidityV1(
+        members=tuple(members), rows=tuple(rows), summary=summary
+    )
+
+
 def cohort_frontier(
     ready: tuple[str, ...],
     cohort_node_ids: tuple[str, ...] | None,
@@ -226,5 +362,9 @@ __all__ = [
     "CohortManifestV1",
     "build_cohort_manifest",
     "cohort_frontier",
+    "CohortMemberVerdictV1",
+    "CohortValidityV1",
+    "COHORT_MEMBER_STATUSES",
+    "validate_wave",
     "read_cohort_manifest",
 ]
