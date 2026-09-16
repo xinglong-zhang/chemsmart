@@ -342,3 +342,62 @@ def test_a_test_submission_writes_the_scripts_and_submits_nothing(
         "chemsmart_run_array_0.py",
         "chemsmart_run_array_1.py",
     ]
+
+
+def test_every_registered_scheduler_can_write_its_own_directives(
+    tmp_path, monkeypatch
+):
+    """A submitter that cannot write a header is a scheduler CHEMSMART
+    advertises and cannot use.
+
+    ``SLFSubmitter`` read ``self.server.num_nodes``, which ``Server`` does
+    not define, so every LSF submission raised AttributeError -- on a
+    class the registry hands out by name. Nothing drove it.
+    """
+
+    import io
+
+    from chemsmart.settings import submitters as submitters_module
+    from chemsmart.settings.submitters import Submitter
+
+    # Keys a scheduler legitimately requires of the user's own settings.
+    # Supplying them means anything still failing is a code defect rather
+    # than an unconfigured host.
+    if submitters_module.user_settings is not None:
+        data = dict(submitters_module.user_settings.data)
+        data.setdefault("RSCGRP", "small")
+        data.setdefault("PROJECT", "probe-project")
+        monkeypatch.setattr(
+            submitters_module.user_settings, "data", data, raising=False
+        )
+
+    job = SimpleNamespace(label="probe", folder=str(tmp_path), PROGRAM="XTB")
+    failures = {}
+    for submitter_class in Submitter.subclasses():
+        name = submitter_class.NAME
+        if not name:
+            continue
+        profile = Server(
+            f"canned-{name}",
+            SCHEDULER=name,
+            SUBMIT_COMMAND="true",
+            NUM_CORES=6,
+            MEM_GB=52,
+            NUM_HOURS=24,
+            NUM_GPUS=0,
+            QUEUE_NAME="compute",
+        )
+        submitter = submitter_class(name=name, job=job, server=profile)
+        buffer = io.StringIO()
+        try:
+            submitter._write_scheduler_options(buffer)
+        except Exception as error:  # noqa: BLE001 - the point of the test
+            failures[name] = f"{type(error).__name__}: {error}"
+            continue
+        written = buffer.getvalue()
+        assert written.strip(), f"{name} wrote no directives at all"
+
+    assert not failures, (
+        "these registered schedulers cannot write their own directives: "
+        f"{failures}"
+    )

@@ -834,11 +834,12 @@ class PBSSubmitter(Submitter):
         """
         f.write(f"#PBS -o {self.job.label}.pbsout\n")
         f.write(f"#PBS -e {self.job.label}.pbserr\n")
-        if self.server.num_gpus > 0:
-            f.write(f"#PBS -l gpus={self.server.num_gpus}\n")
+        request = self.scheduler_request
+        if request.gpu_count > 0:
+            f.write(f"#PBS -l gpus={request.gpu_count}\n")
         f.write(
-            f"#PBS -l select=1:ncpus={self.server.num_cores}:"
-            f"mpiprocs={self.server.num_cores}:mem={self.server.mem_gb}G\n"
+            f"#PBS -l select=1:ncpus={request.cores}:"
+            f"mpiprocs={request.cores}:mem={request.memory_gb}G\n"
         )
         # using only one node here
         if self.server.queue_name:
@@ -1066,9 +1067,15 @@ class SLFSubmitter(Submitter):
             project_number = user_settings.data.get("PROJECT")
         if project_number is not None:
             f.write(f"#BSUB -P {project_number}\n")
-        f.write(f"#BSUB -nnodes {self.server.num_nodes}\n")
-        if self.server.num_gpus:
-            f.write(f"#BSUB -gpu num={self.server.num_gpus}\n")
+        # One node per job, as #SBATCH --nodes=1 and #PJM -L node=1 both
+        # already say: a shared-memory chemistry program cannot span
+        # nodes. This read self.server.num_nodes, which Server does not
+        # define, so every LSF submission raised AttributeError. Unverified
+        # against a live LSF cluster; the directive is the documented one
+        # and the crash was certain.
+        f.write("#BSUB -nnodes 1\n")
+        if self.scheduler_request.gpu_count:
+            f.write(f"#BSUB -gpu num={self.scheduler_request.gpu_count}\n")
         f.write(f"#BSUB -W {self.server.num_hours}\n")
         f.write("#BSUB -alloc_flags gpumps\n")
         f.write("\n")
@@ -1131,12 +1138,21 @@ class FUGAKUSubmitter(Submitter):
         Args:
             f: File handle for writing PJM directives.
         """
+        # The resource group and the project are user settings, read the
+        # way every other submitter reads them. This block indexed
+        # ``data["RSCGRP"]`` directly (a bare KeyError on an unconfigured
+        # host) and then wrote ``self.project``, an attribute this class
+        # has never defined -- so a Fugaku submission raised
+        # AttributeError before it could reach the scheduler at all.
         if user_settings is not None:
-            f.write(f'#PJM -L rscgrp={user_settings.data["RSCGRP"]}\n')
+            resource_group = user_settings.data.get("RSCGRP")
+            if resource_group:
+                f.write(f"#PJM -L rscgrp={resource_group}\n")
         f.write("#PJM -L node=1\n")  # using one node here
         f.write(f"#PJM -L elapse={self.server.num_hours}\n")
-        f.write(f"#PJM --mpi proc={self.server.num_cores}\n")
-        f.write(f"#PJM -g {self.project}\n")
+        f.write(f"#PJM --mpi proc={self.scheduler_request.cores}\n")
+        if user_settings is not None and user_settings.data.get("PROJECT"):
+            f.write(f'#PJM -g {user_settings.data["PROJECT"]}\n')
         f.write("#PJM -o pjm.%j.out\n")
         f.write("#PJM -e pjm.%j.err\n")
         f.write("#PJM -x PJM_LLIO_GFSCACHE=/vol0005:/vol0004\n")

@@ -396,3 +396,90 @@ def test_a_ceiling_below_the_headroom_is_refused_not_negated():
             server=server,
             sealed=True,
         )
+
+
+def test_a_clamp_reaches_the_goal_s_own_record_not_only_a_sidecar(
+    tmp_path, monkeypatch
+):
+    """The ledger is what a later process reads.
+
+    A clamp recorded only in dispatch.receipt.json is a clamp the goal's
+    own record cannot be audited for -- which is exactly how a live goal
+    displayed 4 cores / 8 GB, was allocated 32 / 160, and left nothing in
+    its ledger saying so.
+    """
+
+
+    seen: dict = {}
+    monkeypatch.setattr(
+        "chemsmart.settings.server.subprocess.run", _fake_sbatch(seen)
+    )
+    monkeypatch.setattr(
+        "chemsmart.settings.server.Server.current",
+        classmethod(lambda cls: _slurm_server()),
+    )
+    run_directory = tmp_path / "run"
+    receipt = dispatch_run_to_scheduler(
+        approval_file=tmp_path / "bundle.json",
+        workspace=tmp_path / "ws",
+        run_directory=run_directory,
+        goal_id="g1",
+        cycle=1,
+        python="/opt/env/bin/python",
+        resources=_resources(cores=64, memory_gb=300),
+        sealed=True,
+    )
+    request = receipt.scheduler_request
+    assert request is not None, "the receipt records no scheduler request"
+    assert request["applied"] == {"cores": 6, "memory_gb": 46, "gpu_count": 0}
+    assert request["requested"]["cores"] == 64
+    assert request["ceiling"]["memory_gb"] == 46
+    assert request["clamped"] is True
+    assert len(request["observations"]) == 2
+
+    # The driver copies a subset of the receipt into the ledger row; the
+    # scheduler request must be inside that subset, so drive the filter
+    # rather than trusting it.
+    from chemsmart.agent.driver import _record_of
+
+    payload_keys = {
+        "scheduler",
+        "job_id",
+        "submitted_at",
+        "submit_script",
+        "wake_job_id",
+        "scheduler_request",
+    }
+    carried = {
+        key: value
+        for key, value in _record_of(receipt).items()
+        if key in payload_keys
+    }
+    assert "scheduler_request" in carried, (
+        "the run_dispatched ledger row drops the scheduler request, so a "
+        "clamp is invisible to every later reader of the goal record"
+    )
+    assert carried["scheduler_request"]["clamped"] is True
+
+
+def test_the_resolver_is_the_only_author_of_an_sbatch_resource_line():
+    """No path may still read the profile's cores or memory directly.
+
+    A resolver that one writer bypasses is a resolver that is true in the
+    tests and false on whichever path was missed.
+    """
+
+    import re
+    from pathlib import Path
+
+    source = Path("chemsmart/settings/submitters.py").read_text()
+    offenders = [
+        line.strip()
+        for line in source.splitlines()
+        if re.search(r"#SBATCH|#PBS|#BSUB|#PJM", line)
+        and re.search(r"server\.(num_cores|mem_gb|num_gpus)", line)
+    ]
+    assert not offenders, (
+        "these scheduler directives still author resources from the "
+        f"profile instead of the resolved request: {offenders}"
+    )

@@ -4146,6 +4146,13 @@ class GoalDriver:
                         "submitted_at",
                         "submit_script",
                         "wake_job_id",
+                        # What the scheduler was asked for, beside what the
+                        # envelope requested and the ceiling that bounded
+                        # it. A clamp that lives only in a sidecar file is
+                        # a clamp the goal's own record cannot be audited
+                        # for, and the goal record is what a later process
+                        # reads.
+                        "scheduler_request",
                     }
                 },
             }
