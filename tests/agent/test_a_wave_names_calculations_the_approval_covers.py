@@ -153,7 +153,12 @@ def test_a_wave_from_a_workflow_the_session_replanned_away_from_is_dropped(
     ]
     dropped = [r for r in rows if r["kind"] == "wave_members_dropped"]
     assert dropped, "what was dropped must reach the record"
-    assert dropped[0]["payload"]["dropped"] == ["stale-from-w1"]
+    rows = dropped[0]["payload"]["dropped"]
+    assert [row["node_id"] for row in rows] == ["stale-from-w1"]
+    assert "another workflow" in rows[0]["reason"], (
+        "a member the review never carried was reported with the "
+        "retained-stage reason, which is the wrong cause"
+    )
 
 
 def test_a_review_that_names_no_nodes_leaves_the_wave_alone(tmp_path):
@@ -214,3 +219,27 @@ def test_a_cycle_with_no_wave_records_none(tmp_path):
         if line.strip()
     ]
     assert not [r for r in rows if r["kind"] == "wave_selected"]
+
+
+def test_the_two_causes_of_a_drop_are_told_apart(tmp_path):
+    """A retained stage and a stale id are different mistakes."""
+
+    driver = _driver_with_reviewed_nodes(
+        tmp_path,
+        reviewed=("opt-a", "irc-blocked"),
+        non_executable=("irc-blocked",),
+        wave=("opt-a", "irc-blocked", "stale-from-w1"),
+    )
+    assert driver._dispatchable_wave() == ("opt-a",)
+
+    rows = [
+        json.loads(line)
+        for line in driver.ledger.ledger_path.read_text().splitlines()
+        if line.strip()
+    ]
+    dropped = next(
+        r for r in rows if r["kind"] == "wave_members_dropped"
+    )["payload"]["dropped"]
+    reasons = {row["node_id"]: row["reason"] for row in dropped}
+    assert "non-executable intent" in reasons["irc-blocked"]
+    assert "another workflow" in reasons["stale-from-w1"]

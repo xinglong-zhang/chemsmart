@@ -34,7 +34,6 @@ TERMINAL_JOB_STATES = frozenset(
 )
 
 #: job id|state|time used|submit|start|end -- pinned, never human default.
-_SQUEUE_FORMAT = "%i|%T|%M|%V|%S|%e"
 
 #: element|array job id|task id|state|time used|submit|start|end.
 #: `%F` is the join: `%i` prints ``<arrayid>_<task>`` and never the bare
@@ -111,19 +110,6 @@ def parse_submission(returncode: int, stdout: str, stderr: str) -> str:
 
 def scontrol_job_command(job_id: str) -> tuple[str, ...]:
     return ("scontrol", "show", "job", str(job_id))
-
-
-def squeue_job_command(job_id: str) -> tuple[str, ...]:
-    return (
-        "squeue",
-        "-h",
-        "-t",
-        "all",
-        "-j",
-        str(job_id),
-        "-o",
-        _SQUEUE_FORMAT,
-    )
 
 
 def parse_elapsed_seconds(text: str) -> int | None:
@@ -317,41 +303,15 @@ def parse_squeue_array(
     )
 
 
-def parse_squeue_job(
-    returncode: int, stdout: str, stderr: str, *, job_id: str
-) -> SchedulerJobStateV1:
-    """State from ``squeue -t all`` in the pinned format; unknown when the
-    job is absent, whatever the reason."""
-
-    if returncode != 0:
-        return _unknown(job_id)
-    for line in (stdout or "").splitlines():
-        parts = [part.strip() for part in line.split("|")]
-        if len(parts) != 6 or parts[0] != str(job_id):
-            continue
-        return SchedulerJobStateV1(
-            job_id=str(job_id),
-            known=True,
-            state=parts[1],
-            submit_time=parts[3],
-            start_time=parts[4],
-            end_time=parts[5],
-            run_seconds=parse_elapsed_seconds(parts[2]),
-        )
-    return _unknown(job_id)
-
-
 __all__ = [
     "TERMINAL_JOB_STATES",
     "SchedulerJobStateV1",
     "parse_elapsed_seconds",
     "parse_scontrol_job",
     "parse_squeue_array",
-    "parse_squeue_job",
     "squeue_array_command",
     "SchedulerArrayElementV1",
     "SchedulerArrayStateV1",
     "parse_submission",
     "scontrol_job_command",
-    "squeue_job_command",
 ]

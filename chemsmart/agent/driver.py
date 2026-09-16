@@ -4219,7 +4219,13 @@ class GoalDriver:
                     ),
                     None,
                 )
-                if existing is None:
+                abandoned = any(
+                    entry.get("kind") == "run_dispatch_abandoned"
+                    and int((entry.get("payload") or {}).get("cycle") or 0)
+                    == self.cycles
+                    for entry in self.ledger.entries()
+                )
+                if existing is None and not abandoned:
                     # Claimed and never dispatched: a controller killed
                     # inside the submission window. Whether a job exists
                     # is not decidable from here, and submitting again is
@@ -4236,21 +4242,31 @@ class GoalDriver:
                         ),
                     )
                     return
-                payload = dict(existing.get("payload") or {})
-                self.result = GoalLoopResultV1(
-                    goal_id=self.goal_id,
-                    settlement="parked",
-                    cycles=self.cycles,
-                    revisions_admitted=self.revisions_admitted,
-                    reasons=(
-                        f"cycle {self.cycles} is already submitted as "
-                        f"{payload.get('scheduler', 'scheduler')} job "
-                        f"{payload.get('job_id', '?')}; resume with "
-                        f"chemsmart agent wake --goal {self.goal_id}",
-                    ),
-                )
-                self.phase = "parked"
-                return
+                if existing is None:
+                    # Claimed, abandoned, and recorded as abandoned:
+                    # this cycle may be dispatched again, because
+                    # nothing reached a scheduler.
+                    self.ledger.append(
+                        "run_dispatch_reclaimed",
+                        {"cycle": self.cycles, "run": run_reference},
+                    )
+                else:
+                    payload = dict(existing.get("payload") or {})
+                    self.result = GoalLoopResultV1(
+                        goal_id=self.goal_id,
+                        settlement="parked",
+                        cycles=self.cycles,
+                        revisions_admitted=self.revisions_admitted,
+                        reasons=(
+                            f"cycle {self.cycles} is already submitted "
+                            f"as {payload.get('scheduler', 'scheduler')} "
+                            f"job {payload.get('job_id', '?')}; resume "
+                            "with chemsmart agent wake --goal "
+                            f"{self.goal_id}",
+                        ),
+                    )
+                    self.phase = "parked"
+                    return
             try:
                 receipt = self.dispatch_run(
                     approval_file=self.bundle_file,
@@ -4271,7 +4287,27 @@ class GoalDriver:
                     # did not ask for is not a wave.
                     cohort_node_ids=self._dispatchable_wave(),
                 )
-            except ContractError as exc:
+            except (ContractError, ValueError, OSError) as exc:
+                # A dispatch that could not happen is not an ambiguous
+                # submission. The claim is written before `sbatch` so two
+                # attempts cannot both reach the scheduler, and a claimed
+                # cycle with no job is reported as pending human
+                # reconciliation -- right for a controller killed inside
+                # the submission window, and wrong for a submission that
+                # provably never left this process. `_require_array_support`
+                # raises `ValueError` and `parse_submission` raises
+                # `ProbeUnitError(ValueError)`, and catching only
+                # `ContractError` left the goal unsettled with a claim on
+                # the ledger, so the next invocation sent a human looking
+                # for a job that was never submitted.
+                self.ledger.append(
+                    "run_dispatch_abandoned",
+                    {
+                        "cycle": self.cycles,
+                        "run": run_reference,
+                        "reason": str(exc),
+                    },
+                )
                 self._typed_error("scheduler dispatch", exc)
                 return
             self.dispatch_receipt = receipt
@@ -4577,7 +4613,28 @@ class GoalDriver:
             return approved is None or node_id in approved
 
         wave = tuple(item for item in selected if _covered(item))
-        dropped = tuple(item for item in selected if not _covered(item))
+        # Two causes, and one fixed sentence told a reader the wrong one
+        # for half of them. A retained stage was displayed and refused
+        # execution; an id the review never carried is a selection made
+        # against a workflow this approval is not for, which is the
+        # stale-selection case a re-plan produces -- and a re-plan is how
+        # the live sequence's second wave was made.
+        dropped = tuple(
+            {
+                "node_id": item,
+                "reason": (
+                    "the displayed review retained this as "
+                    "non-executable intent, so this approval cannot "
+                    "launch it"
+                    if item in retained
+                    else "this approval's review does not carry this "
+                    "calculation, so the selection was made against "
+                    "another workflow"
+                ),
+            }
+            for item in selected
+            if not _covered(item)
+        )
         if dropped:
             self.ledger.append(
                 "wave_members_dropped",
@@ -4585,11 +4642,6 @@ class GoalDriver:
                     "cycle": self.cycles,
                     "selected": list(selected),
                     "dropped": list(dropped),
-                    "reason": (
-                        "the displayed review retained these as "
-                        "non-executable intent, so this approval cannot "
-                        "launch them"
-                    ),
                 },
             )
         if wave:

@@ -432,3 +432,69 @@ def test_conceding_without_a_run_directory_is_still_a_concession(tmp_path):
     driver.cycles = 1
     driver._concede("goals/g1/runs/cycle-1")
     assert driver.result is not None and driver.phase == "parked"
+
+
+def test_a_dispatch_that_could_not_happen_is_not_an_ambiguous_submission(
+    tmp_path,
+):
+    """A crash after the claim is worse than a crash before it.
+
+    The claim is written before `sbatch` so that two attempts cannot both
+    reach the scheduler, and a claimed cycle with no recorded job is
+    reported as ambiguous and pending human reconciliation -- which is
+    right for a controller killed inside the submission window.
+
+    It is wrong for a dispatch that provably never reached a scheduler.
+    `_require_array_support` raises `ValueError` and `parse_submission`
+    raises `ProbeUnitError`, and `_execute` caught only `ContractError`,
+    so either crashed the driver with the claim already on the ledger and
+    the goal unsettled. The next invocation then told a human to go
+    looking for a job that was never submitted.
+    """
+
+    from chemsmart.agent.driver import GoalDriver
+
+    from .test_the_goal_loop_recovers_or_returns import (
+        _envelope_file,
+        _planning_session,
+        _review_payload,
+    )
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    def dispatch_run(**_kwargs):
+        # What `_require_array_support` does on a scheduler with no
+        # arrays, and what `parse_submission` does on a nonzero sbatch.
+        raise ValueError(
+            "SLURMSubmitter declares no array task-id variable, so "
+            "CHEMSMART cannot express an array job on this scheduler"
+        )
+
+    driver = GoalDriver(
+        task="the goal task",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path),
+        goal_id="goal-w9",
+        granted_by="tester",
+        plan_session=lambda **kw: _planning_session(
+            "live-1", review=_review_payload()
+        )(workspace, kw),
+        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        dispatch_run=dispatch_run,
+        dispatch="scheduler",
+        server="canned-slurm",
+    )
+
+    result = driver.run()
+    assert result.settlement == "returned_to_human", (
+        "the driver crashed instead of settling, so the goal is left "
+        "with a dispatch claim and no job and no settlement"
+    )
+    reasons = " ".join(result.reasons).lower()
+    assert "array" in reasons or "scheduler" in reasons, result.reasons
+    assert "ambiguous" not in reasons, (
+        "a submission that provably never reached a scheduler was "
+        "reported as ambiguous, sending a human to look for a job that "
+        "does not exist"
+    )

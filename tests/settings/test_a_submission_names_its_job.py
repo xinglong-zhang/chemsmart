@@ -18,7 +18,6 @@ from chemsmart.settings.probe.scheduler_job import (
     TERMINAL_JOB_STATES,
     parse_elapsed_seconds,
     parse_scontrol_job,
-    parse_squeue_job,
     parse_submission,
 )
 from chemsmart.settings.server import Server
@@ -74,14 +73,6 @@ def test_a_forgotten_job_is_unknown_not_an_error():
     state = parse_scontrol_job(1, "", _UNKNOWN_STDERR, job_id="999999")
     assert not state.known
     assert not state.terminal
-    assert parse_squeue_job(0, "", "", job_id="999999").known is False
-
-
-def test_squeue_pinned_format_parses_to_the_same_state():
-    state = parse_squeue_job(0, _SQUEUE, "", job_id="191")
-    assert state.known and state.terminal
-    assert state.run_seconds == 2
-    assert state.start_time == "2026-09-02T12:39:50"
 
 
 def test_elapsed_fields_in_every_slurm_shortening():
