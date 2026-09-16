@@ -477,6 +477,31 @@ class TestScratchYamlOverride:
         )
         assert runner.scratch is False
 
+    def test_missing_scratch_dir_falls_back_to_job_folder(
+        self, pbs_server, tmp_path, monkeypatch
+    ):
+        runner = FakeGaussianJobRunner(
+            server=pbs_server, scratch=False, fake=True
+        )
+        runner.scratch = True
+        runner._scratch_dir = None
+        runner._set_scratch.cache_clear()
+        fake_exe = SimpleNamespace(
+            scratch_dir=str(tmp_path / "does_not_exist"),
+            local_run=None,
+        )
+        monkeypatch.setattr(
+            type(runner),
+            "executable",
+            property(lambda self: fake_exe),
+        )
+        runner._set_scratch()
+        job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt")
+        runner._assign_variables(job)
+
+        assert runner.scratch is False
+        assert runner.running_directory == job.folder
+
 
 class TestSubResourceOverrides:
     def test_cli_resources_reach_submission_server(
