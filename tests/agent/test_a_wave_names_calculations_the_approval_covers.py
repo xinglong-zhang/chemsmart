@@ -163,3 +163,54 @@ def test_a_review_that_names_no_nodes_leaves_the_wave_alone(tmp_path):
         tmp_path, reviewed=(), non_executable=(), wave=("opt-a", "opt-b")
     )
     assert driver._dispatchable_wave() == ("opt-a", "opt-b")
+
+
+def test_the_goal_records_which_wave_each_cycle_ran(tmp_path):
+    """"Which waves did this goal try" must be answerable from the record.
+
+    The verdict lived in a tool reply and, at best, in the public
+    transcript. The dispatch receipt names the current cycle's members
+    and is overwritten per cycle; the goal ledger is the durable spine
+    and carried nothing, so a reader of a four-cycle goal could not say
+    what was grouped with what -- which is the one thing a barriered
+    design is about.
+    """
+
+    driver = _driver_with_reviewed_nodes(
+        tmp_path,
+        reviewed=("opt-a", "opt-b", "hess-a"),
+        non_executable=(),
+        wave=("opt-b", "opt-a"),
+    )
+    assert driver._dispatchable_wave() == ("opt-b", "opt-a")
+
+    rows = [
+        json.loads(line)
+        for line in driver.ledger.ledger_path.read_text().splitlines()
+        if line.strip()
+    ]
+    selected = [r for r in rows if r["kind"] == "wave_selected"]
+    assert selected, "the goal cannot say which calculations ran together"
+    assert selected[0]["payload"]["cycle"] == 1
+    assert selected[0]["payload"]["node_ids"] == ["opt-b", "opt-a"], (
+        "the order the Agent chose is the order the elements take, and "
+        "the record must not sort it"
+    )
+
+
+def test_a_cycle_with_no_wave_records_none(tmp_path):
+    driver = _driver_with_reviewed_nodes(
+        tmp_path, reviewed=("opt-a",), non_executable=(), wave=()
+    )
+    assert driver._dispatchable_wave() == ()
+    # Nothing is written at all, so the file need not even exist.
+    rows = [
+        json.loads(line)
+        for line in (
+            driver.ledger.ledger_path.read_text().splitlines()
+            if driver.ledger.ledger_path.exists()
+            else []
+        )
+        if line.strip()
+    ]
+    assert not [r for r in rows if r["kind"] == "wave_selected"]

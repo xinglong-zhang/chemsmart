@@ -4592,6 +4592,18 @@ class GoalDriver:
                     ),
                 },
             )
+        if wave:
+            # The goal's own spine has to answer "which calculations ran
+            # together", because the barrier is the whole design and the
+            # dispatch receipt is overwritten every cycle. The order is
+            # the Agent's and is recorded unsorted.
+            self.ledger.append(
+                "wave_selected",
+                {
+                    "cycle": self.cycles,
+                    "node_ids": list(wave),
+                },
+            )
         return wave
 
     def _unanswerable_terminal_states(self) -> dict[str, str]:
