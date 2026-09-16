@@ -439,46 +439,74 @@ def test_a_clamp_reaches_the_goal_s_own_record_not_only_a_sidecar(
     # The driver copies a subset of the receipt into the ledger row; the
     # scheduler request must be inside that subset, so drive the filter
     # rather than trusting it.
-    from chemsmart.agent.driver import _record_of
+    from chemsmart.agent.driver import _dispatch_ledger_keys, _record_of
 
-    payload_keys = {
-        "scheduler",
-        "job_id",
-        "submitted_at",
-        "submit_script",
-        "wake_job_id",
-        "scheduler_request",
-    }
+    # The filter is read from the driver rather than restated here: a
+    # test that re-types the producer's key set is the pattern that let
+    # the array rot, and one of the driver's keys ("wake_job_id") has no
+    # producer at all -- asserting it would pin a dead literal as if it
+    # were a contract.
     carried = {
         key: value
         for key, value in _record_of(receipt).items()
-        if key in payload_keys
+        if key in _dispatch_ledger_keys()
     }
     assert "scheduler_request" in carried, (
         "the run_dispatched ledger row drops the scheduler request, so a "
         "clamp is invisible to every later reader of the goal record"
     )
     assert carried["scheduler_request"]["clamped"] is True
+    # wake_command is the only durable record of how this goal is meant
+    # to be resumed, and the filter used to drop it.
+    assert carried["wake_command"].endswith("--goal g1")
 
 
-def test_the_resolver_is_the_only_author_of_an_sbatch_resource_line():
-    """No path may still read the profile's cores or memory directly.
+def test_the_resolver_is_the_only_author_of_a_scheduler_resource_line():
+    """No submitter may read a resource off the profile directly.
 
-    A resolver that one writer bypasses is a resolver that is true in the
-    tests and false on whichever path was missed.
+    The first form of this guard matched a directive prefix and a
+    ``server.<attr>`` on the *same physical line*, from a relative path.
+    It missed three things at once: the PBS block spells its request over
+    two lines, so the line carrying ``mem=`` has no ``#PBS`` token;
+    ``num_nodes`` and ``num_threads`` were not in the alternation, and
+    ``num_nodes`` was a live AttributeError; and reading
+    ``Path("chemsmart/...")`` made the whole check depend on the working
+    directory. A lint that can be walked around is a lint that will be.
+
+    So this reads the module by AST, from the package itself, and refuses
+    any attribute access of the form ``self.server.<resource>`` anywhere
+    in it -- the resolver owns every one of them.
     """
 
-    import re
+    import ast
     from pathlib import Path
 
-    source = Path("chemsmart/settings/submitters.py").read_text()
-    offenders = [
-        line.strip()
-        for line in source.splitlines()
-        if re.search(r"#SBATCH|#PBS|#BSUB|#PJM", line)
-        and re.search(r"server\.(num_cores|mem_gb|num_gpus)", line)
-    ]
+    import chemsmart.settings.submitters as submitters_module
+
+    source_path = Path(submitters_module.__file__)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    owned = {
+        "num_cores",
+        "mem_gb",
+        "num_gpus",
+        "num_nodes",
+        "num_threads",
+    }
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute) or node.attr not in owned:
+            continue
+        value = node.value
+        if (
+            isinstance(value, ast.Attribute)
+            and value.attr == "server"
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "self"
+        ):
+            offenders.append(f"{source_path.name}:{node.lineno} .{node.attr}")
+
     assert not offenders, (
-        "these scheduler directives still author resources from the "
-        f"profile instead of the resolved request: {offenders}"
+        "these read a resource straight off the server profile instead of "
+        "the resolved request, so the ceiling does not bound them: "
+        f"{offenders}"
     )

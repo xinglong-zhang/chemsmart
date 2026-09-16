@@ -466,6 +466,15 @@ class Submitter(RegistryMixin):
             runscript = RunScript(
                 os.path.join(self.submit_folder, runscript_name),
                 job_cli_args,
+                # The single-job writer has always passed this. The array
+                # writer did not, so RunScript emitted `pass` instead of
+                # os.chdir and every element inherited the submit
+                # directory -- an array of N molecules in N directories
+                # ran N times in the first molecule's, with N sets of
+                # outputs colliding on program-default filenames.
+                execution_cwd=getattr(
+                    job, "submission_execution_cwd", job.folder
+                ),
             )
             logger.debug(
                 f"Writing array run script for task {task_id}: "
@@ -839,7 +848,7 @@ class PBSSubmitter(Submitter):
             f.write(f"#PBS -l gpus={request.gpu_count}\n")
         f.write(
             f"#PBS -l select=1:ncpus={request.cores}:"
-            f"mpiprocs={request.cores}:mem={request.memory_gb}G\n"
+            f"mpiprocs={request.cores}:mem={request.memory_directive}\n"
         )
         # using only one node here
         if self.server.queue_name:
@@ -924,7 +933,7 @@ class SLURMSubmitter(Submitter):
         if request.gpu_count:
             f.write(f"#SBATCH --gres=gpu:{request.gpu_count}\n")
         f.write(
-            f"#SBATCH --nodes=1 --ntasks-per-node={request.cores} --mem={request.memory_gb}G\n"
+            f"#SBATCH --nodes=1 --ntasks-per-node={request.cores} --mem={request.memory_directive}\n"
         )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
@@ -983,7 +992,7 @@ class SLURMSubmitter(Submitter):
         # resources are per task, so a cohort's footprint is this
         # allocation times the %N throttle above.
         f.write(
-            f"#SBATCH --nodes=1 --ntasks-per-node={request.cores} --mem={request.memory_gb}G\n"
+            f"#SBATCH --nodes=1 --ntasks-per-node={request.cores} --mem={request.memory_directive}\n"
         )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
@@ -995,6 +1004,12 @@ class SLURMSubmitter(Submitter):
             if user_settings.data.get("EMAIL"):
                 f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
                 f.write("#SBATCH --mail-type=END,FAIL\n")
+        # The operator's own directives -- reservation, QoS, anything the
+        # site requires -- reach the array exactly as they reach a single
+        # job. The single-job writer has always called this and the array
+        # writer did not, so moving the Agent onto an array would have
+        # dropped the reservation that is the only route to some nodes.
+        self._write_extra_scheduler_directives(f)
         f.write("\n")
         f.write("\n")
 

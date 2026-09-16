@@ -82,6 +82,28 @@ class SchedulerRequestV1:
     observations: tuple[str, ...] = ()
 
     @property
+    def memory_directive(self) -> str:
+        """The memory this request asks for, as a scheduler will parse it.
+
+        Every scheduler here takes an integer with a unit suffix, so a
+        fractional gigabyte is expressed in megabytes rather than rounded:
+        ``#SBATCH --mem=87.5G`` is not a specification Slurm accepts, and
+        a node with 93.5 GB minus the sealed headroom is exactly how one
+        arises. Flooring to 87G would quietly shrink an approved
+        allocation, so nothing is rounded -- the same quantity is simply
+        named in a unit that can hold it.
+
+        Integral gigabytes keep the ``NG`` spelling they always had, so a
+        profile of whole gigabytes renders byte-identically.
+        """
+
+        value = float(self.memory_gb)
+        if value.is_integer():
+            return f"{int(value)}G"
+        megabytes = int(round(value * 1024))
+        return f"{megabytes}M"
+
+    @property
     def clamped(self) -> bool:
         """Whether any dimension was reduced to its ceiling."""
 

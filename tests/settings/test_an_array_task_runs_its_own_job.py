@@ -401,3 +401,108 @@ def test_every_registered_scheduler_can_write_its_own_directives(
         "these registered schedulers cannot write their own directives: "
         f"{failures}"
     )
+
+
+def test_an_array_carries_the_operator_s_own_scheduler_directives(
+    tmp_path, monkeypatch
+):
+    """Reservation, QoS and every site directive survive the array path.
+
+    The single-job writer calls _write_extra_scheduler_directives; the
+    array writer did not. Switching the Agent to an array would therefore
+    have dropped exactly the directives the plan lists as a *fairness*
+    criterion -- and on CUHK the group's reservation is the only route to
+    the nodes a large ceiling needs.
+    """
+
+    config = tmp_path / "server-config"
+    config.mkdir()
+    (config / f"{_SERVER_NAME}.yaml").write_text(_SERVER_YAML)
+    monkeypatch.setattr(
+        CHEMSMARTUserSettings,
+        "user_server_dir",
+        property(lambda self: str(config)),
+    )
+    server = Server(
+        _SERVER_NAME,
+        SCHEDULER="SLURM",
+        SUBMIT_COMMAND="sbatch",
+        NUM_CORES=6,
+        MEM_GB=52,
+        NUM_HOURS=24,
+        QUEUE_NAME="compute",
+        EXTRA_SCHEDULER_DIRECTIVES=(
+            "#SBATCH --reservation=xlzhang_1\n#SBATCH --qos=high\n"
+        ),
+    )
+    folder = tmp_path / "jobs"
+    folder.mkdir()
+    jobs = [
+        SimpleNamespace(label=f"mol{i}", folder=str(folder), PROGRAM="XTB")
+        for i in range(2)
+    ]
+    submitter = server.get_submitter(jobs[0])
+
+    import io
+
+    single = io.StringIO()
+    submitter._write_scheduler_options(single)
+    array = io.StringIO()
+    submitter.jobs = jobs
+    submitter._write_array_scheduler_options(array, None)
+
+    for directive in ("--reservation=xlzhang_1", "--qos=high"):
+        assert directive in single.getvalue(), "fixture is wrong"
+        assert directive in array.getvalue(), (
+            f"the array path drops {directive!r}, which the single-job "
+            "path carries"
+        )
+
+
+def test_each_array_element_runs_in_its_own_job_s_directory(server, tmp_path):
+    """An array of N molecules in N directories must not run N times in
+    the first molecule's directory.
+
+    The single-job runscript passes execution_cwd; the array runscript did
+    not, so RunScript emitted `pass` instead of os.chdir and every element
+    inherited $SLURM_SUBMIT_DIR -- jobs[0].folder. N sets of outputs then
+    collide on program-default filenames, in one directory, silently.
+    """
+
+    submit_folder = tmp_path / "jobs"
+    submit_folder.mkdir()
+    folders = []
+    jobs = []
+    for index in range(3):
+        own = tmp_path / f"mol{index}-dir"
+        own.mkdir()
+        folders.append(own)
+        jobs.append(
+            SimpleNamespace(
+                label=f"mol{index}",
+                folder=str(submit_folder) if index == 0 else str(own),
+                PROGRAM="XTB",
+            )
+        )
+    # The array is submitted from the first job's folder, as the submitter
+    # already assumes; each element still belongs somewhere of its own.
+    jobs[0].submission_execution_cwd = str(folders[0])
+    for index in range(1, 3):
+        jobs[index].submission_execution_cwd = str(folders[index])
+
+    submitter = server.get_submitter(jobs[0])
+    submitter.write_array_job(
+        jobs=jobs,
+        num_nodes=None,
+        cli_args=[["run", "--label", f"mol{i}"] for i in range(3)],
+    )
+
+    task_ids = submitter.array_task_ids(len(jobs))
+    for index, task_id in enumerate(task_ids):
+        body = (
+            submit_folder / submitter.array_run_script(task_id)
+        ).read_text()
+        assert str(folders[index]) in body, (
+            f"element {task_id} does not enter its own job's directory; "
+            f"it would run wherever the array was submitted from:\n{body}"
+        )

@@ -4824,14 +4824,91 @@ def _parse_execution_resources(value: Any) -> ExecutionResourceSpecV1:
         ) from exc
 
 
+def _allocated_execution_resources(
+    run_directory: Path,
+    resources: ExecutionResourceSpecV1,
+) -> ExecutionResourceSpecV1:
+    """The approved allocation, reduced to what the scheduler granted.
+
+    Reads the dispatch receipt this run directory already holds, which is
+    the host's own record of what it asked the scheduler for. A local run
+    writes no receipt, so the envelope is the whole truth and nothing
+    changes.
+
+    Args:
+        run_directory (Path): The cycle's run directory.
+        resources (ExecutionResourceSpecV1): The approved allocation.
+
+    Returns:
+        ExecutionResourceSpecV1: The allocation to run under.
+    """
+
+    from chemsmart.agent.dispatch import DISPATCH_RECEIPT_FILE
+    from chemsmart.agent.execution import build_execution_resource_spec
+
+    receipt_path = Path(run_directory) / DISPATCH_RECEIPT_FILE
+    try:
+        record = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return resources
+    applied = (record or {}).get("scheduler_request", {}).get("applied")
+    if not isinstance(applied, Mapping):
+        return resources
+    try:
+        cores = min(int(resources.cores), int(applied["cores"]))
+        memory_gb = min(
+            float(resources.memory_gb), float(applied["memory_gb"])
+        )
+        gpu_count = min(
+            int(resources.gpu_count), int(applied.get("gpu_count", 0))
+        )
+    except (KeyError, TypeError, ValueError):
+        return resources
+    if (cores, memory_gb, gpu_count) == (
+        resources.cores,
+        float(resources.memory_gb),
+        resources.gpu_count,
+    ):
+        return resources
+    return build_execution_resource_spec(
+        execution_target=resources.execution_target,
+        cores=cores,
+        memory_gb=memory_gb,
+        gpu_count=gpu_count,
+        scratch_policy=resources.scratch_policy,
+        node_timeout_seconds=resources.node_timeout_seconds,
+    )
+
+
 def _write_execution_server_profile(
     run_directory: Path,
     resources: ExecutionResourceSpecV1,
     *,
     scratch_root: Path | None = None,
 ) -> Path:
-    """Write the local CPU profile from the user-approved allocation."""
+    """Write the local CPU profile the engine will actually run under.
 
+    Normally that is the user-approved allocation. When the run was handed
+    to a scheduler and the request was clamped to the server profile's
+    ceiling, it is the clamped allocation instead: the engine may never be
+    told it has more than the scheduler granted.
+
+    That was not true when the ceiling shipped. The clamp reached the
+    ``#SBATCH`` line and nothing else, so a sealed job clamped from 64
+    cores to 32 asked Slurm for 32 and wrote ``NUM_CORES: 64`` here --
+    ORCA taking ``%pal nprocs 64`` inside a 32-core cgroup, or a
+    ``%maxcore`` sized for memory the job does not have. The failure then
+    arrives as an OOM kill or a native program error, both repairable
+    terminal states, and the woken session is offered a *scientific*
+    repair menu for a host arithmetic decision it never made. Found by an
+    adversarial review of the implementation, not by the suite, which
+    asserted only what the submit script said.
+
+    A clamp only ever reduces: a receipt claiming more than the human
+    approved is a contradiction, and the approval wins.
+    """
+
+    resources = _allocated_execution_resources(run_directory, resources)
     profile = run_directory / "execution-server.yaml"
     num_hours = max(1, math.ceil(resources.node_timeout_seconds / 3600))
     text = (

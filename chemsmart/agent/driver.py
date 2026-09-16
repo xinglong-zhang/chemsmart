@@ -1058,6 +1058,36 @@ def _goal_terms_context(
     }
 
 
+def _dispatch_ledger_keys() -> frozenset[str]:
+    """Dispatch-receipt fields the goal ledger keeps, named once.
+
+    ``scheduler_request`` carries what the scheduler was asked for beside
+    what the envelope requested and the ceiling that bounded it: a clamp
+    living only in a sidecar file is a clamp the goal record cannot be
+    audited for, and the goal record is what a later process reads.
+
+    ``wake_command`` is the only durable record of how this goal is meant
+    to be resumed, and was dropped.
+
+    ``wake_job_id`` has **no producer anywhere in the tree**. It is kept
+    because the dependent wake job that will populate it is this round's
+    next step; until then it selects nothing, and nothing should assert
+    it as though it were a contract.
+    """
+
+    return frozenset(
+        {
+            "scheduler",
+            "job_id",
+            "submitted_at",
+            "submit_script",
+            "wake_command",
+            "wake_job_id",
+            "scheduler_request",
+        }
+    )
+
+
 def _goal_envelope_record(shown: Mapping[str, Any]) -> dict[str, Any]:
     """The budget lines a goal is granted, from the envelope it was shown.
 
@@ -4139,21 +4169,7 @@ class GoalDriver:
                 **{
                     key: value
                     for key, value in _record_of(receipt).items()
-                    if key
-                    in {
-                        "scheduler",
-                        "job_id",
-                        "submitted_at",
-                        "submit_script",
-                        "wake_job_id",
-                        # What the scheduler was asked for, beside what the
-                        # envelope requested and the ceiling that bounded
-                        # it. A clamp that lives only in a sidecar file is
-                        # a clamp the goal's own record cannot be audited
-                        # for, and the goal record is what a later process
-                        # reads.
-                        "scheduler_request",
-                    }
+                    if key in _dispatch_ledger_keys()
                 },
             }
             # One cycle is dispatched once. A retried dispatch that
