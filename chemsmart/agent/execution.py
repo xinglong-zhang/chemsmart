@@ -7447,14 +7447,15 @@ def build_real_execution_argv(
     root.append(
         "--no-scratch" if resources.scratch_policy == "none" else "--scratch"
     )
-    root.extend(("--num-cores", str(resources.cores)))
-    root.extend(("--num-gpus", str(resources.gpu_count)))
-    memory = (
-        str(int(resources.memory_gb))
-        if resources.memory_gb.is_integer()
-        else str(resources.memory_gb)
-    )
-    root.extend(("--mem-gb", memory))
+    # No resource flags. The execution profile named by --server carries
+    # the allocation the scheduler actually granted, and `JobRunner`
+    # prefers an explicit CLI value over the profile -- so these three
+    # flags meant the granted allocation was written down and then
+    # ignored. A bundle asking 64 cores inside a 32-core allocation gave
+    # ORCA `%pal nprocs 64 end` and a `%maxcore` sized for memory the job
+    # did not have, and the resulting OOM or native error arrives as a
+    # repairable *scientific* terminal state for a host arithmetic
+    # decision. One number, one place.
     if server:
         root.extend(("--server", str(server)))
     return tuple(root + list(argv[program_index:]))

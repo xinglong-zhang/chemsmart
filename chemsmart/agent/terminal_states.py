@@ -705,11 +705,20 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
         jobtype = str(validation.get("jobtype") or "")
         wall = None
         host = None
-        if execution:
+        # A call is spent when it is **taken**, not when it returns --
+        # the launch fence has counted it that way all along
+        # (`engine_calls_spent`). Counting receipts here meant the two
+        # authorities disagreed exactly where it matters: a controller
+        # killed between the reservation and the receipt left a node the
+        # fence had charged and the outcome had not, so the grant
+        # silently regained a call that the engine had already begun
+        # burning, and the next cycle was handed budget that omitted it.
+        if execution or node_id in reservations:
             if node_id in excursion_nodes:
                 excursion_calls += 1
             else:
                 engine_calls += 1
+        if execution:
             wall = _wall_seconds(
                 execution.get("started_at") or "",
                 execution.get("finished_at") or "",

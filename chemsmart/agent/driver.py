@@ -4158,6 +4158,63 @@ class GoalDriver:
         self.run_directory.mkdir(parents=True, exist_ok=True)
         run_reference = f"goals/{self.goal_id}/runs/cycle-{self.cycles}"
         if self.dispatch_run is not None:
+            # The claim precedes the submission, because the submission
+            # is the irreversible act. `run_dispatched` is keyed too, but
+            # its key was taken *after* sbatch: two attempts on one cycle
+            # both reached the scheduler, got different job ids, and only
+            # then did the conflicting payload raise -- with a second job
+            # already queued, two jobs writing one run directory, and the
+            # ledger and the receipt sidecar naming different jobs.
+            claimed = self.ledger.append(
+                "run_dispatch_claimed",
+                {"cycle": self.cycles, "run": run_reference},
+                idempotency_key=(
+                    f"run-dispatch-claimed:{self.goal_id}:{self.cycles}"
+                ),
+            )
+            if not claimed:
+                existing = next(
+                    (
+                        entry
+                        for entry in reversed(self.ledger.entries())
+                        if entry.get("kind") == "run_dispatched"
+                        and int((entry.get("payload") or {}).get("cycle") or 0)
+                        == self.cycles
+                    ),
+                    None,
+                )
+                if existing is None:
+                    # Claimed and never dispatched: a controller killed
+                    # inside the submission window. Whether a job exists
+                    # is not decidable from here, and submitting again is
+                    # how one grant buys two jobs. This is the state
+                    # CHEMSMART already has a word for.
+                    self._typed_error(
+                        "scheduler dispatch",
+                        ContractError(
+                            f"cycle {self.cycles} was claimed for dispatch "
+                            "and no job was recorded: the submission is "
+                            "ambiguous and pending human reconciliation. "
+                            "Check the scheduler for a job naming "
+                            f"{run_reference} before resubmitting."
+                        ),
+                    )
+                    return
+                payload = dict(existing.get("payload") or {})
+                self.result = GoalLoopResultV1(
+                    goal_id=self.goal_id,
+                    settlement="parked",
+                    cycles=self.cycles,
+                    revisions_admitted=self.revisions_admitted,
+                    reasons=(
+                        f"cycle {self.cycles} is already submitted as "
+                        f"{payload.get('scheduler', 'scheduler')} job "
+                        f"{payload.get('job_id', '?')}; resume with "
+                        f"chemsmart agent wake --goal {self.goal_id}",
+                    ),
+                )
+                self.phase = "parked"
+                return
             try:
                 receipt = self.dispatch_run(
                     approval_file=self.bundle_file,
@@ -4269,7 +4326,7 @@ class GoalDriver:
             # letting the derivation's own contract error escape left
             # the goal unsettled. Settle from the run stream's typed
             # delivery, exactly as a no-partition planning cycle does.
-            self.ledger.append(
+            recorded = self.ledger.append(
                 "run_recorded",
                 {
                     "cycle": self.cycles,
@@ -4285,6 +4342,9 @@ class GoalDriver:
                 # it is recorded.
                 idempotency_key=(f"run-recorded:{self.goal_id}:{self.cycles}"),
             )
+            if not recorded:
+                self._concede(run_reference)
+                return
             self.events_path = events_path
             self._record_workspace(events_path, run_reference)
             self._settle_delivery("complete")
@@ -4322,11 +4382,21 @@ class GoalDriver:
         # fact once instead of subtracting its engine calls from the
         # grant again. `resume` filtering already-recorded cycles is a
         # read-then-act; this is the guarantee.
-        self.ledger.append(
+        if not self.ledger.append(
             "run_recorded",
             payload,
             idempotency_key=(f"run-recorded:{self.goal_id}:{self.cycles}"),
-        )
+        ):
+            # Another process recorded this cycle. The key deduplicated
+            # the row, and for years that was read as "nothing to do" and
+            # returned silently -- so the loser carried straight on into
+            # workspace recording, settlement and, for a repairable
+            # ending, a second planning turn over the same evidence. One
+            # cohort is one wake is one turn: the row that charges the
+            # cycle is also what hands over the continuation, and this
+            # process did not win it.
+            self._concede(run_reference)
+            return
         self._record_workspace(events_path, run_reference)
         # What the host detected belongs to the goal, not to the host
         # that detected it: two live goals settled plain "achieved" over
@@ -4359,6 +4429,30 @@ class GoalDriver:
                 analysis_status="",
             )
         self.phase = "settle"
+
+    def _concede(self, run_reference: str) -> None:
+        """Stand down: another process owns this cycle's continuation.
+
+        Exactly-once is about the *turn*, not the row. Two wakes on one
+        parked cycle -- a duplicate scheduler notification, a dependent
+        wake job firing beside a tail, a human running the public
+        command twice -- both pass ``resume`` before either writes, and
+        only the keyed append can tell them apart. The loser stops here
+        with the evidence intact; the winner records the workspace,
+        settles, and takes the one model turn the cohort earned.
+        """
+
+        self.result = GoalLoopResultV1(
+            goal_id=self.goal_id,
+            settlement="parked",
+            cycles=self.cycles,
+            revisions_admitted=self.revisions_admitted,
+            reasons=(
+                f"cycle {self.cycles} was recorded by another process; "
+                f"its continuation owns {run_reference}",
+            ),
+        )
+        self.phase = "parked"
 
     def _record_qualification(self) -> None:
         _record_goal_qualification(

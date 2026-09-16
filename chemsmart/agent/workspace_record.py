@@ -124,6 +124,24 @@ def _review_rows(review_file: str | Path | None) -> dict[str, dict]:
     return rows
 
 
+def _evidence_receipts(evidence_ref: Any) -> tuple[str, ...]:
+    """Every receipt an evidence reference names, in the order given.
+
+    An expression input's reference is built by appending segments, so a
+    value composed from an earlier composed value carries more than one
+    ``receipt:`` hop and the outermost is not the only one that matters.
+    Reading only the first would silently drop a level.
+    """
+
+    text = str(evidence_ref or "")
+    found = []
+    for segment in text.split(";"):
+        key, _, value = segment.partition(":")
+        if key.strip() == "receipt" and value.strip():
+            found.append(value.strip())
+    return tuple(found)
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -186,12 +204,22 @@ def record_run(
     artifact_by_receipt: dict[str, str] = {}
     # And which level that node was computed at.
     level_by_artifact: dict[str, str] = {}
+    # Which receipts each expression receipt composed, so a derived
+    # value can name every level underneath it rather than the run's.
+    receipts_by_expression: dict[str, tuple[str, ...]] = {}
     for line in lines:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if event.get("kind") == "result_quantities_extracted":
+        # Both receipts that read one result name the artifact they read:
+        # an extraction in its payload, a thermochemistry derivation in
+        # its own. Only the first was joined, so every free energy fell
+        # to the run-level fallback below.
+        if event.get("kind") in {
+            "result_quantities_extracted",
+            "thermochemistry_derived",
+        }:
             payload = event.get("payload") or {}
             record = payload.get("record") or {}
             receipt = str(payload.get("receipt_sha256") or "")
@@ -202,6 +230,20 @@ def record_run(
             )
             if receipt and artifact:
                 artifact_by_receipt[receipt] = artifact
+        # An expression stands on every receipt it read, and says so:
+        # each input's evidence reference names the receipt it came from.
+        if event.get("kind") == "quantity_expression_evaluated":
+            payload = event.get("payload") or {}
+            record = payload.get("record") or {}
+            receipt = str(payload.get("receipt_sha256") or "")
+            sources = tuple(
+                found
+                for item in record.get("inputs") or ()
+                if isinstance(item, Mapping)
+                for found in _evidence_receipts(item.get("evidence_ref"))
+            )
+            if receipt and sources:
+                receipts_by_expression[receipt] = sources
         if event.get("kind") != "optimized_geometry_handed_off":
             continue
         payload = event.get("payload") or {}
@@ -379,22 +421,51 @@ def record_run(
     # nothing. A wave cohort is the first design that deliberately puts
     # several independent calculations, and so several levels, in one run.
     #
-    # Where the join does not resolve -- a claim standing on an expression
-    # or a thermochemistry receipt rather than an extraction -- the run's
-    # own level is used when the run has exactly one, because then it is
-    # unambiguous, and nothing is claimed otherwise. An absent level reads
-    # as unknown; a wrong one reads as fact.
+    # The receipt is followed to the results underneath it, however many
+    # hops that takes: an extraction and a thermochemistry derivation
+    # each name their artifact, and an expression names the receipts it
+    # composed, so a value built from a cheap geometry and an expensive
+    # single point carries both levels rather than one of them.
+    #
+    # Where the walk reaches no result at all, the run's own level is
+    # used when the run has exactly one, because then it is unambiguous.
+    # Where it *does* reach a result this run did not compute -- a claim
+    # on an earlier cycle's or an already-registered result -- the answer
+    # is that this run cannot say, and the fallback is not consulted: it
+    # would answer with whatever single level this run happened to carry.
+    # An absent level reads as unknown; a wrong one reads as fact.
     single_level = (
         tuple(sorted(levels_in_run)) if len(levels_in_run) == 1 else ()
     )
+
+    def _levels_under(receipt: str, seen: frozenset[str]) -> tuple[bool, set]:
+        """(reached a result, the levels those results were computed at)."""
+
+        if not receipt or receipt in seen:
+            return False, set()
+        seen = seen | {receipt}
+        artifact = artifact_by_receipt.get(receipt)
+        if artifact:
+            level = level_by_artifact.get(artifact)
+            return True, ({level} if level else set())
+        reached = False
+        levels: set = set()
+        for source in receipts_by_expression.get(receipt, ()):
+            source_reached, source_levels = _levels_under(source, seen)
+            reached = reached or source_reached
+            levels |= source_levels
+        return reached, levels
+
     for entry in entries:
         if entry["kind"] != "claim":
             continue
-        artifact = artifact_by_receipt.get(
-            str(entry.get("source_receipt_sha256") or "")
+        reached, levels = _levels_under(
+            str(entry.get("source_receipt_sha256") or ""), frozenset()
         )
-        level = level_by_artifact.get(artifact or "")
-        entry["level_sha256s"] = (level,) if level else single_level
+        if reached:
+            entry["level_sha256s"] = tuple(sorted(levels))
+        else:
+            entry["level_sha256s"] = single_level
     if not entries:
         return 0
     path = workspace_record_path(workspace)

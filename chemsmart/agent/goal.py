@@ -257,7 +257,7 @@ class GoalLedger:
         payload: Mapping[str, Any],
         *,
         idempotency_key: str | None = None,
-    ) -> None:
+    ) -> bool:
         """Append one row, at most once per key.
 
         Most rows are a running account and repeat legitimately, so a row
@@ -277,11 +277,24 @@ class GoalLedger:
         its appends all along; two implementations of "serialise writers
         to a JSONL file" is two answers to one question.
 
+        Deduplicating the row is not the same as deduplicating the
+        *work*, and the silent no-op this used to return is what hid the
+        difference. A keyed row says which process owns the continuation
+        that follows it; two wakes that both passed ``resume`` before
+        either wrote both carried on into workspace recording, settlement
+        and a fresh planning turn, because neither was told it had lost.
+        The caller is now told.
+
         Args:
             kind (str): Row kind.
             payload (Mapping[str, Any]): Row body.
             idempotency_key (str | None): When given, at most one row may
                 exist under it.
+
+        Returns:
+            bool: True when this call wrote the row -- so the caller owns
+            whatever the row admits -- and False when a row already stood
+            under the key, which only a keyed append can report.
 
         Raises:
             ContractError: If the key already names a row with a different
@@ -330,11 +343,12 @@ class GoalLedger:
                             "goal ledger idempotency key conflicts with a "
                             f"persisted row: {idempotency_key}"
                         )
-                    return
+                    return False
             with self.ledger_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(entry, sort_keys=True) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            return True
         finally:
             _release_lock(lock_handle)
             lock_handle.close()

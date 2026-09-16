@@ -182,26 +182,42 @@ def test_inside_an_allocation_the_probe_is_not_run(tmp_path, monkeypatch):
 
 @pytest.mark.capability("rule:compile.the_probe_is_the_programs_check")
 def test_a_probe_event_is_never_an_engine_call(tmp_path):
+    """What the probe costs is the difference it makes, not a zero.
+
+    This asserted an absolute zero over a stream that also carried the
+    launch reservation its scaffolding needed, so the number it read was
+    the scaffolding's and the probe could have cost anything. It is now
+    the same stream twice, with the probe event and without it.
+    """
+
     from chemsmart.agent.runtime.event_store import RuntimeEventStore
 
-    store = RuntimeEventStore(tmp_path / "events.jsonl", session_id="s")
-    _reserve(store, tmp_path)
-    store.append(
-        turn_id="t1",
-        kind=EventKind.INPUT_CHECK_PROBED.value,
-        payload={
-            "receipt_sha256": "f" * 64,
-            "node_id": "opt",
-            "program": "orca",
-            "status": "aborted",
-            "reason": "ORCA aborted the run at its input check",
-            "input_sha256": "a" * 64,
-            "engine_lines": ("... aborting the run",),
-            "wall_seconds": 0.4,
-            "cap_seconds": 20.0,
-            "charged": False,
-        },
-        idempotency_key="input_check_probed:" + "f" * 64,
-    )
-    outcome = derive_run_outcome(read_run_events(tmp_path / "events.jsonl"))
-    assert outcome.engine_calls_consumed == 0
+    def _engine_calls(directory, *, probe: bool) -> int:
+        directory.mkdir(parents=True, exist_ok=True)
+        store = RuntimeEventStore(directory / "events.jsonl", session_id="s")
+        _reserve(store, directory)
+        if probe:
+            store.append(
+                turn_id="t1",
+                kind=EventKind.INPUT_CHECK_PROBED.value,
+                payload={
+                    "receipt_sha256": "f" * 64,
+                    "node_id": "opt",
+                    "program": "orca",
+                    "status": "aborted",
+                    "reason": "ORCA aborted the run at its input check",
+                    "input_sha256": "a" * 64,
+                    "engine_lines": ("... aborting the run",),
+                    "wall_seconds": 0.4,
+                    "cap_seconds": 20.0,
+                    "charged": False,
+                },
+                idempotency_key="input_check_probed:" + "f" * 64,
+            )
+        return derive_run_outcome(
+            read_run_events(directory / "events.jsonl")
+        ).engine_calls_consumed
+
+    with_probe = _engine_calls(tmp_path / "probed", probe=True)
+    without_probe = _engine_calls(tmp_path / "bare", probe=False)
+    assert with_probe == without_probe

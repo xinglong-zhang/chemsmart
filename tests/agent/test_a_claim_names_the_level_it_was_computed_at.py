@@ -202,3 +202,144 @@ def test_two_levels_of_one_quantity_are_seen_rather_than_suppressed(
         (_CHEAP,),
         (_COSTLY,),
     }, f"the reader cannot tell which value is which level: {levels}"
+
+
+# --- What the fallback claimed, and could not know -------------------
+#
+# Where the receipt join did not resolve, the run's own level was used
+# "when the run has exactly one, because then it is unambiguous". Three
+# cases make that false. Two of them have an exact answer the record
+# already carries and nobody read; the third has none, and answering it
+# anyway is how a number acquires a level it was never computed at.
+
+
+def _thermochemistry(receipt, artifact):
+    return {
+        "kind": "thermochemistry_derived",
+        "payload": {
+            "receipt_sha256": receipt,
+            "artifact_sha256": artifact,
+            "record": {},
+        },
+    }
+
+
+def _expression(receipt, source_receipts):
+    """An expression receipt names, per input, the receipt it read."""
+
+    return {
+        "kind": "quantity_expression_evaluated",
+        "payload": {
+            "receipt_sha256": receipt,
+            "record": {
+                "inputs": [
+                    {
+                        "quantity_id": f"q{index}",
+                        "evidence_ref": (
+                            f"run:r;receipt:{source};quantity:q{index}"
+                        ),
+                    }
+                    for index, source in enumerate(source_receipts)
+                ],
+            },
+        },
+    }
+
+
+def _record(tmp_path, rows, *, review=None):
+    workspace = tmp_path / "ws"
+    stream = tmp_path / "events.jsonl"
+    stream.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8"
+    )
+    record_run(
+        workspace,
+        goal_id="g",
+        cycle=1,
+        run_events_path=stream,
+        run="goals/g/runs/cycle-1",
+        review_file=review or _review(tmp_path),
+    )
+    return _claims(workspace)
+
+
+def test_a_claim_on_a_result_this_run_never_computed_has_no_level(tmp_path):
+    """An imported result is not this run's level, and not any level here.
+
+    A goal's later cycle claims from a result an earlier cycle computed,
+    or from a registered result the workspace already held. The receipt
+    resolves to an artifact; the artifact is simply not one this run
+    produced, so this run cannot say what level it was computed at. The
+    fallback answered anyway, with whatever single level this run
+    happened to have -- a wrong level, which reads as fact where an
+    absent one reads as unknown.
+    """
+
+    claims = _record(
+        tmp_path,
+        [
+            _node("conformer-a-opt", "c" * 64, "opt"),
+            # The extraction reads an artifact no node here produced.
+            _extraction("1" * 64, "e" * 64),
+            _claim("imported_energy", "1" * 64),
+        ],
+    )
+    assert tuple(claims["imported_energy"]["level_sha256s"]) == (), (
+        "a claim on a result this run never computed was stamped with "
+        "this run's level: "
+        f"{claims['imported_energy']['level_sha256s']}"
+    )
+
+
+def test_a_thermochemistry_claim_names_the_result_it_stands_on(tmp_path):
+    """The exact answer was in the receipt all along.
+
+    A thermochemistry receipt carries the artifact it derived from. The
+    join skipped it and fell to the run's single level, which is right
+    only by luck: in a two-level cohort it is a coin toss.
+    """
+
+    claims = _record(
+        tmp_path,
+        [
+            _node("conformer-a-opt", "c" * 64, "opt"),
+            _node("conformer-a-sp", "d" * 64, "sp"),
+            _thermochemistry("3" * 64, "c" * 64),
+            _claim("gibbs_free_energy", "3" * 64),
+        ],
+    )
+    assert tuple(claims["gibbs_free_energy"]["level_sha256s"]) == (_CHEAP,), (
+        "the thermochemistry receipt names its own artifact and the "
+        "record read the run instead: "
+        f"{claims['gibbs_free_energy']['level_sha256s']}"
+    )
+
+
+def test_an_expression_claim_names_every_level_it_composed(tmp_path):
+    """A composed number stands on every level underneath it.
+
+    An expression's own receipt names, per input, the receipt it read.
+    Following that to the extraction and on to the artifact gives the
+    levels the value was actually built from -- which for the ordinary
+    high-level-single-point-on-a-cheap-geometry protocol is two, and for
+    the run's single-level fallback was one or, in a mixed cohort,
+    whichever one the run happened to carry.
+    """
+
+    claims = _record(
+        tmp_path,
+        [
+            _node("conformer-a-opt", "c" * 64, "opt"),
+            _node("conformer-a-sp", "d" * 64, "sp"),
+            _extraction("1" * 64, "c" * 64),
+            _extraction("2" * 64, "d" * 64),
+            _expression("4" * 64, ["1" * 64, "2" * 64]),
+            _claim("reaction_energy", "4" * 64),
+        ],
+    )
+    assert tuple(claims["reaction_energy"]["level_sha256s"]) == tuple(
+        sorted((_CHEAP, _COSTLY))
+    ), (
+        "an expression composing two levels reported "
+        f"{claims['reaction_energy']['level_sha256s']}"
+    )
