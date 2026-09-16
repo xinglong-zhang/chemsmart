@@ -105,6 +105,44 @@ class ExecutionBundleAlreadyConsumedError(ContractError):
     """
 
 
+def engine_calls_spent(
+    events: Any,
+    *,
+    excursion_node_ids: frozenset = frozenset(),
+    excursions: bool = False,
+) -> int:
+    """How many engine calls one run has spent, from its durable stream.
+
+    A call is spent when it is **taken**, not when it returns. Counting
+    only finished receipts is what let four concurrent elements each read
+    "zero spent" and all launch against a grant of three: none of them
+    had finished yet. A node that reserved and then finished is one call,
+    not two.
+
+    The excursion line is counted separately, because an excursion is
+    charged to the grant's own investigation line and the engine-call
+    line never sees it.
+    """
+
+    taken = set()
+    for event in events:
+        if getattr(event, "kind", "") not in {
+            WORKFLOW_LAUNCH_RESERVED,
+            PROGRAM_EXECUTED,
+        }:
+            continue
+        payload = getattr(event, "payload", None) or {}
+        record = payload.get("record") or {}
+        node_id = str(
+            payload.get("node_id") or (record or {}).get("node_id") or ""
+        )
+        if node_id:
+            taken.add(node_id)
+    if excursions:
+        return sum(1 for node_id in taken if node_id in excursion_node_ids)
+    return sum(1 for node_id in taken if node_id not in excursion_node_ids)
+
+
 class RuntimeEventStore:
     """One crash-stable stream with atomic one-shot approval consumption."""
 
@@ -498,6 +536,10 @@ class RuntimeEventStore:
         timestamp: str,
         lease_seconds: int = 0,
         reserver: str = "",
+        max_engine_calls: int | None = None,
+        max_excursion_calls: int | None = None,
+        excursion_node_ids: frozenset = frozenset(),
+        excursion: bool = False,
     ) -> LaunchFenceResultV1:
         """Atomically consume approval and reserve one node before launch.
 
@@ -511,6 +553,37 @@ class RuntimeEventStore:
 
         with self._locked_handle(exclusive=True) as handle:
             events = self._read_locked(handle)
+            # The grant is counted here, inside the one lock that
+            # serialises every launch of this run. It used to be counted
+            # from a per-process dict, so with one process per array
+            # element every element read "zero spent" and all of them
+            # launched against the same grant -- N processes authorising
+            # N times the approved budget, which the ledger then clamped
+            # to zero and hid.
+            granted = max_excursion_calls if excursion else max_engine_calls
+            if granted is not None:
+                spent = engine_calls_spent(
+                    events,
+                    excursion_node_ids=excursion_node_ids,
+                    excursions=bool(excursion),
+                )
+                # A node already taken is a replay, not a new call.
+                already = any(
+                    str(
+                        (getattr(event, "payload", None) or {}).get("node_id")
+                        or ""
+                    )
+                    == invocation.node_id
+                    for event in events
+                    if getattr(event, "kind", "")
+                    in {WORKFLOW_LAUNCH_RESERVED, PROGRAM_EXECUTED}
+                )
+                if not already and spent >= int(granted):
+                    line = "excursion-call" if excursion else "engine-call"
+                    raise ContractError(
+                        f"bounded execution {line} budget exhausted: "
+                        f"{spent} of {int(granted)} already taken by this run"
+                    )
             state = replay_events(events)
             # A run directory belongs to one workflow run. Every guard
             # below compares against what the frontier found for THIS

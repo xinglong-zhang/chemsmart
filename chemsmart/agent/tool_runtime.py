@@ -12030,6 +12030,22 @@ class CommandCompiledToolHostV1:
                 self.execution_resources, self.bounded_execution_envelope
             ),
             reserver=_launch_reserver(),
+            # The approved grant, checked inside the fence's own lock.
+            # The process-local count below stays as a cheap early
+            # refusal; this is the one that is exact when several array
+            # elements reserve at the same moment.
+            max_engine_calls=(
+                None
+                if self.bounded_execution_envelope is None
+                else self.bounded_execution_envelope.max_engine_calls
+            ),
+            max_excursion_calls=(
+                None
+                if self.bounded_execution_envelope is None
+                else self.bounded_execution_envelope.max_excursion_calls
+            ),
+            excursion_node_ids=frozenset(excursion_node_ids),
+            excursion=node_id in excursion_node_ids,
         )
         if fence.status == "terminal_replay":
             replayed = fence.execution_receipt
