@@ -118,3 +118,41 @@ def test_the_symmetry_walk_offers_its_edits_to_the_sensor():
         "coordinate edited onto its own saddle is never observed"
     )
     assert "edits.append(edit_receipt)" in source
+
+
+def test_the_observation_reports_the_lattice_and_not_the_chemistry():
+    """"starts on its own saddle" is periodicity-dependent, and the host
+    does not know the periodicity.
+
+    For the threefold methyl rotor this function was written from,
+    60/180/300 are all saddles and the sentence holds. For butane's
+    C-C-C-C backbone torsion it is false in the most visible way
+    possible: 180 degrees is the global minimum and 0 degrees is the
+    saddle. The host cannot tell the two apart -- it sees a number on a
+    lattice, not a rotor's order.
+
+    On the live run this mattered immediately: `opt-anti-r2` was built by
+    an edit to exactly 180.00 degrees, so it carried a host observation
+    saying it starts on its own saddle while its Hessian was computing
+    the frequencies that say otherwise. The charter's own line is that
+    the host reports what its convention said and how narrowly, and the
+    scientist draws the chemical conclusion.
+    """
+
+    counts = idealised_internal_coordinate_count(
+        (), edit_receipts=(_edit("dihedral", 180.0),)
+    )
+    observation = idealised_coordinate_observation(counts)
+
+    # The measurement stays.
+    assert "1 of 1" in observation
+    assert "60°" in observation
+
+    # The conclusion goes.
+    assert "starts on its own saddle" not in observation
+    # What is actually known: it is a stationary point of the symmetry it
+    # was built with, and which kind is a question for the frequencies.
+    assert "stationary point" in observation
+    assert "frequencies" in observation or "minimum or a saddle" in (
+        observation
+    )

@@ -1070,10 +1070,13 @@ def _dispatch_ledger_keys() -> frozenset[str]:
     ``wake_command`` is the only durable record of how this goal is meant
     to be resumed, and was dropped.
 
-    ``wake_job_id`` has **no producer anywhere in the tree**. It is kept
-    because the dependent wake job that will populate it is this round's
-    next step; until then it selects nothing, and nothing should assert
-    it as though it were a contract.
+    ``wake_job_id`` names the job that will re-enter the goal when this
+    cycle's elements are done -- a cohort's own elements deliberately
+    wake nothing, because N tails would wake the model N times. It had no
+    producer when this was written and the comment said so; the
+    dispatcher populates it now (live: goal `butane-wave-2`, arrays
+    2135242/2135266/2135285 each with their own wake job), so a reader of
+    a parked goal can say which job is going to wake it.
     """
 
     return frozenset(

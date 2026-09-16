@@ -1603,6 +1603,33 @@ class ApprovedWorkflowExecutor:
             timestamp=stamp,
         )
 
+    def _admits_as_continuation(self) -> bool:
+        """Whether this process is a *later invocation* of the approval.
+
+        `run()` reads "a durable run state exists" as "a continuation",
+        which was true while one process walked every node in turn. A
+        wave is N processes starting at once: whichever arrives first
+        creates the run state, and every sibling after it then saw one
+        and was admitted through the continuation path -- which demands
+        the workspace consumption ledger a cohort never writes, because
+        membership replaces the claim.
+
+        Measured live on CUHK (array 2135285): two of three elements died
+        in eight seconds with "this bundle was never claimed in this
+        workspace" while the third ran. The two earlier waves of the same
+        goal survived only because all three elements reached the check
+        before any had written the run state -- the same code, the same
+        wave, decided by milliseconds.
+
+        A member of the wave that is running *now* is not a re-invocation
+        of its own approval. Membership is its admission, at entry as at
+        launch.
+        """
+
+        if not self.claim_workspace_bundle:
+            return False
+        return getattr(self, "cohort_element", None) is None
+
     def _cohort_scope(self) -> tuple[str, ...] | None:
         """Which approved calculations *this process* may run.
 
@@ -1897,7 +1924,7 @@ class ApprovedWorkflowExecutor:
             # launch -- a re-invocation whose remaining work is zero
             # launches must still be recorded as resumed, and a completed
             # approval must refuse before it re-delivers anything.
-            if self.claim_workspace_bundle:
+            if self._admits_as_continuation():
                 from chemsmart.agent.live_session import (
                     continue_workflow_execution_approval_bundle,
                 )

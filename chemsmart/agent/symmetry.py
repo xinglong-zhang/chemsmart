@@ -339,12 +339,32 @@ def idealised_internal_coordinate_count(
 
 
 def idealised_coordinate_observation(counts: dict[str, Any]) -> str:
+    """The count and the lattice, and no chemical conclusion.
+
+    This used to end "an exactly idealised rotor starts on its own
+    saddle", which is periodicity-dependent and therefore not something
+    the host can say: for the threefold methyl rotor the function was
+    written from, 60/180/300 are all saddles and it holds; for butane's
+    C-C-C-C backbone torsion 180° is the global *minimum* and 0° is the
+    saddle. The host sees a number on a lattice, never a rotor's order.
+
+    It went wrong the first time it met real physics: a live conformer
+    study built its anti minimum by editing that torsion to exactly
+    180.00°, so the node carried a host sentence saying it starts on its
+    own saddle while its own Hessian computed the frequencies that say
+    otherwise. What the host knows is that the structure is a stationary
+    point of the symmetry it was built with; which kind is the
+    frequencies' answer and the scientist's claim.
+    """
+
     total = counts.get("built_coordinates", counts["appended_atoms"])
     return (
         f"{counts['idealised_torsions']} of {total} built coordinates "
         "sit at torsions on the exact 60° lattice and "
         f"{counts['idealised_angles']} at exactly idealised angles; an "
-        "exactly idealised rotor starts on its own saddle"
+        "exactly idealised coordinate makes the structure a stationary "
+        "point of the symmetry it was built with, and whether that is a "
+        "minimum or a saddle is what the frequencies say"
     )
 
 
