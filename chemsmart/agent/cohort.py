@@ -132,6 +132,36 @@ class CohortManifestV1:
         return path
 
 
+def cohort_frontier(
+    ready: tuple[str, ...],
+    cohort_node_ids: tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    """The ready nodes this wave may run: its own members and no others.
+
+    The executor's walk maximises throughput -- run whatever is ready --
+    and that is the wrong shape here. The Agent asked for these
+    calculations as one scientific experiment, and their *collective*
+    evidence is what triggers the next reasoning turn. A node whose
+    dependency cleared mid-wave is a decision the Agent has not made yet,
+    so it waits for the wake even though the scheduler could start it.
+
+    ``None`` means no cohort: a single-job dispatch and every run
+    recorded before waves existed keep the walk they had.
+
+    Args:
+        ready: What the DAG authority says is runnable, in its order.
+        cohort_node_ids: This wave's members, or None.
+
+    Returns:
+        tuple[str, ...]: The subset to run, in the order offered.
+    """
+
+    if cohort_node_ids is None:
+        return tuple(ready)
+    members = set(cohort_node_ids)
+    return tuple(node_id for node_id in ready if node_id in members)
+
+
 def build_cohort_manifest(
     *,
     goal_id: str,
@@ -195,5 +225,6 @@ __all__ = [
     "COHORT_MANIFEST_FILE",
     "CohortManifestV1",
     "build_cohort_manifest",
+    "cohort_frontier",
     "read_cohort_manifest",
 ]

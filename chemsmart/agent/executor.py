@@ -28,6 +28,10 @@ from chemsmart.agent.api_access import (
 )
 from chemsmart.agent.capabilities import load_program_capabilities
 from chemsmart.agent.cli_schema import build_live_click_schema
+from chemsmart.agent.cohort import (
+    cohort_frontier,
+    read_cohort_manifest,
+)
 from chemsmart.agent.execution import (
     WorkflowExecutionApprovalBundleV1,
     build_workflow_run_state,
@@ -1895,6 +1899,10 @@ class ApprovedWorkflowExecutor:
             )
             data_edge_bindings = ()
         record_of = self._record_component_index()
+        # This cycle's wave, if one was dispatched. None keeps the walk
+        # every recorded run had.
+        manifest = read_cohort_manifest(self.run_directory)
+        cohort_node_ids = None if manifest is None else manifest.node_ids
         while True:
             ready = tuple(
                 node_id
@@ -1915,6 +1923,16 @@ class ApprovedWorkflowExecutor:
             # Every attempted node enters ``seen``, so the walk terminates
             # without a progress check, and one record's failure leaves
             # later records' roots ready on the next pass.
+            # A wave runs its own members and stops. Asked before the
+            # record-major narrowing, because the two answer different
+            # questions: the narrowing is a *delivery order* choice
+            # (finish a record before opening the next), and the cohort is
+            # what the Agent asked to see before reasoning again. A node
+            # whose dependency cleared mid-wave is a decision the Agent
+            # has not made yet.
+            ready = cohort_frontier(ready, cohort_node_ids)
+            if not ready:
+                break
             earliest = min(record_of[node_id] for node_id in ready)
             ready = tuple(
                 node_id for node_id in ready if record_of[node_id] == earliest
