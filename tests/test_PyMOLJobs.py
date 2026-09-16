@@ -947,6 +947,33 @@ class TestPyMOLFileProcessingUsesSourceFilename:
         assert kwargs["label"] == custom_label
         assert kwargs["spin_basename"] == custom_label
 
+    def test_mo_cli_forwards_phase_color_options(
+        self, gaussian_benzene_opt_outfile, invoke_mol_cli
+    ):
+        from unittest.mock import patch
+
+        with patch("chemsmart.jobs.mol.mo.PyMOLMOJob") as mock_mo_job:
+            result = invoke_mol_cli(
+                [
+                    "-f",
+                    gaussian_benzene_opt_outfile,
+                    "mo",
+                    "-h",
+                    "-sw",
+                    "-cp",
+                    "[0,1,0]",
+                    "-cn",
+                    "[1,0,0]",
+                ]
+            )
+
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_mo_job.call_args
+        assert kwargs["homo"] is True
+        assert kwargs["swap"] is True
+        assert kwargs["color_positive"] == "[0,1,0]"
+        assert kwargs["color_negative"] == "[1,0,0]"
+
     def test_generate_fchk_uses_source_basename_not_label(
         self,
         tmpdir,
