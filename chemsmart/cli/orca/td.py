@@ -383,9 +383,6 @@ def td(
                 f"--root ({effective_root}) exceeds --nroots ({nroots}); "
                 "increase --nroots or lower --root."
             )
-        if not excited_task and root is None:
-            # Keep IRoot off for pure vertical TD unless the user opted in.
-            effective_root = None
 
     if follow_root is not None and not excited_task:
         raise click.UsageError(
