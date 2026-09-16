@@ -2623,6 +2623,24 @@ class TestGaussianWBIOutput:
             g16_output.get_electronic_configuration("Ni1")
             == "[core]4S(0.27)3d(8.70)4p(0.51)"
         )
+        perturbations = g16_output.second_order_perturbation_analysis
+        assert len(perturbations) == 2092
+        assert perturbations[0]["donor_nbo_index"] == 1
+        assert perturbations[0]["donor_nbo"] == "BD (   1)Ni   1 - C  61"
+        assert perturbations[0]["donor_atom_numbers"] == [1, 61]
+        assert perturbations[0]["acceptor_nbo_index"] == 239
+        assert perturbations[0]["acceptor_nbo"] == "LP*(   5)Ni   1"
+        assert perturbations[0]["acceptor_atom_numbers"] == [1]
+        assert perturbations[0]["stabilization_energy_kcal_per_mol"] == 2.15
+        top_perturbations = g16_output.get_second_order_perturbations(
+            min_e2=100.0, max_entries=2
+        )
+        assert len(top_perturbations) == 2
+        assert (
+            top_perturbations[0]["stabilization_energy_kcal_per_mol"] == 309.04
+        )
+        assert top_perturbations[0]["donor_nbo_index"] is None
+        assert top_perturbations[0]["acceptor_nbo_index"] is None
         assert g16_output.input_orientations is None
         assert g16_output.standard_orientations is not None
         assert len(g16_output.standard_orientations) == 1
