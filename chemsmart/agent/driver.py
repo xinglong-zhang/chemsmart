@@ -1152,6 +1152,23 @@ def _deliverables_record(delivery: _AnalysisDelivery) -> dict[str, Any]:
     }
 
 
+def _approved_bundle_digest_or_empty(approval_file: Any) -> str:
+    """The bundle's declared digest, or empty when it has none.
+
+    A local run's manifest binds to the same digest the scheduler path
+    binds to, so an element and a local walk are admitted by one rule.
+    A bundle written before that field existed simply binds to nothing,
+    which is what it always did.
+    """
+
+    from chemsmart.agent.dispatch import _approved_bundle_digest
+
+    try:
+        return _approved_bundle_digest(approval_file)
+    except ContractError:
+        return ""
+
+
 def _goal_anomalies(ledger: GoalLedger) -> tuple[dict[str, Any], ...]:
     """Every anomaly any cycle of the goal recorded, one per receipt."""
 
@@ -4298,6 +4315,30 @@ class GoalDriver:
         # finished (live, 2026-09-03: a launcher timeout killed a goal
         # three relaxations into its second cycle and nothing could
         # resume it).
+        # A wave the session selected bounds a local run too. The stem
+        # promises every session, without qualification, that a wave is
+        # what runs and then it reasons again; on the local path -- the
+        # default, and what the terminal interface uses -- no manifest
+        # was written, so the walk was unbounded and the executor ran
+        # straight past the barrier. Concurrency was never the promise
+        # and one process cannot offer it; the barrier is the promise,
+        # and one process keeps it exactly. Written before the executor
+        # is handed the directory, for the same reason the scheduler
+        # path writes it before submitting.
+        local_wave = self._dispatchable_wave()
+        if local_wave:
+            from chemsmart.agent.cohort import build_cohort_manifest
+
+            build_cohort_manifest(
+                goal_id=self.goal_id,
+                cycle=self.cycles,
+                bundle_sha256=_approved_bundle_digest_or_empty(
+                    self.bundle_file
+                ),
+                node_ids=local_wave,
+                max_concurrent_tasks=1,
+                created_at=_utc_now(),
+            ).write(self.run_directory)
         prior = _goal_anomalies(self.ledger)
         if prior:
             (self.run_directory / PRIOR_ANOMALIES_FILE).write_text(

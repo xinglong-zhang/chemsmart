@@ -304,3 +304,57 @@ def test_a_bundle_that_names_no_digest_is_refused_before_sbatch(tmp_path, submit
             cohort_node_ids=_NODES,
         )
     assert submitted == [], "the scheduler was called before the check"
+
+
+def test_a_scheduler_with_no_arrays_says_so_rather_than_running_one_job(
+    tmp_path, monkeypatch
+):
+    """The guard exists and the cohort builder walked around it.
+
+    `_require_array_support` was written for exactly this: without an
+    array directive the base `_write_array_scheduler_options` falls back
+    to an ordinary single-job header, so a wave of three becomes one job
+    that runs one calculation with an empty `--cohort-element`. Its own
+    docstring says a scheduler failure must not wear a job's failure
+    word, and `build_cohort_dispatch_script` called the writer directly.
+    """
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.dispatch import build_cohort_dispatch_script
+
+    submitter = _server().get_submitter(
+        SimpleNamespace(label="goal-g1-cycle-1", PROGRAM=None, folder=".")
+    )
+    monkeypatch.setattr(type(submitter), "ARRAY_TASK_ID_VARIABLE", "")
+
+    with pytest.raises(ValueError, match="array"):
+        build_cohort_dispatch_script(
+            submitter=submitter,
+            python="/env/bin/python",
+            approval_file=tmp_path / "bundle.json",
+            workspace=tmp_path / "ws",
+            run_directory=tmp_path / "run",
+            cohort_size=3,
+        )
+
+
+def test_the_element_index_is_the_submitters_own_variable(tmp_path):
+    """Two authorities for one index agree only by luck on Slurm."""
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.dispatch import build_cohort_dispatch_script
+
+    submitter = _server().get_submitter(
+        SimpleNamespace(label="goal-g1-cycle-1", PROGRAM=None, folder=".")
+    )
+    script = build_cohort_dispatch_script(
+        submitter=submitter,
+        python="/env/bin/python",
+        approval_file=tmp_path / "bundle.json",
+        workspace=tmp_path / "ws",
+        run_directory=tmp_path / "run",
+        cohort_size=2,
+    )
+    assert "${" + submitter.ARRAY_TASK_ID_VARIABLE + "}" in script

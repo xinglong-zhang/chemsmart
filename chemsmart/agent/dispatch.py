@@ -235,6 +235,13 @@ def build_cohort_dispatch_script(
     the cycle by whoever finished last.
     """
 
+    # The guard the submitter layer already owns: without an array
+    # directive the base writer falls back to an ordinary single-job
+    # header, so a wave of N becomes one job running one calculation with
+    # an empty element index. "A scheduler failure must not wear a job's
+    # failure word" is that guard's own sentence, and this builder
+    # called the writer directly and walked past it.
+    submitter._require_array_support()
     buffer = io.StringIO()
     submitter._write_bash_header(buffer)
     submitter._write_array_scheduler_options(buffer, None, count=cohort_size)
@@ -243,7 +250,9 @@ def build_cohort_dispatch_script(
     # The element index is a shell variable here, so the host's own
     # naming is applied to a placeholder and then substituted: two
     # authors for one path is how a writer and a reader stop agreeing.
-    element = "${SLURM_ARRAY_TASK_ID}"
+    # The submitter declares its own index variable; spelling Slurm's
+    # here was a second authority that agrees only on Slurm.
+    element = "${" + str(submitter.ARRAY_TASK_ID_VARIABLE) + "}"
     # The directory is quoted and the element index expands inside the
     # quotes. Every other path in this script is quoted and this one was
     # not: with a workspace under "My Drive", bash redirects to `/My` and
