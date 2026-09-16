@@ -83,28 +83,143 @@ def test_no_tool_lets_the_model_write_a_hardware_setting():
     # single quotes, and it passed whenever the word "inspect" appeared
     # anywhere on the surface -- so a writable hardware parameter under
     # any new name would have kept it green.
-    hardware = {
-        "num_cores",
-        "num_threads",
-        "mem_gb",
-        "memory_gb",
+    # A denylist of exact names is a list of the mistakes already made:
+    # a writable `nprocs`, `threads`, `partition`, `gpus` or `wall_hours`
+    # walks past it, which is how this test's own predecessor failed. The
+    # rule is about *what the field is*, so it is matched by the parts a
+    # hardware field is spelled from, at every depth -- nested objects
+    # and array items included, because a wave's members arrive as an
+    # array and a resource block would arrive as an object.
+    hardware_words = {
+        "core",
         "cores",
-        "max_concurrent_tasks",
-        "queue_name",
+        "cpu",
+        "cpus",
+        "nproc",
+        "nprocs",
+        "thread",
+        "threads",
+        "omp",
+        "mem",
+        "memory",
+        "ram",
+        "gpu",
+        "gpus",
+        "queue",
+        "partition",
         "qos",
         "account",
-        "ntasks_per_node",
-        "cpus_per_task",
+        "ntasks",
+        "walltime",
+        "wall",
+        "concurrency",
+        "concurrent",
+        "parallel",
+        "slurm",
+        "sbatch",
+        "scheduler",
     }
-    offenders = []
+    # Fields that name hardware in order to *read* or *record* it. Each
+    # is listed because the owner's ruling is "inspect, never set", and
+    # each is a value the host wrote that the model quotes back.
+    readers = {
+        "inspect_program_environment.engine",
+        "inspect_program.engine",
+        "synthesize_command.engine",
+        "prepare_program_node.engine",
+    }
+    # "node" is this codebase's word for a step of a scientific DAG, so
+    # it cannot be matched as a word. A *compute* node count has its own
+    # spellings, and those are matched exactly.
+    node_counts = {"num_nodes", "nnodes", "node_count", "nodes_per_job"}
+
+    def _words(key: str) -> set:
+        return {
+            part
+            for part in str(key).replace("-", "_").lower().split("_")
+            if part
+        }
+
+    def _walk(schema, path, offenders):
+        if not isinstance(schema, dict):
+            return
+        for key, value in (schema.get("properties") or {}).items():
+            here = f"{path}.{key}"
+            spelled = str(key).replace("-", "_").lower()
+            if (
+                _words(key) & hardware_words or spelled in node_counts
+            ) and here not in readers:
+                offenders.append(here)
+            _walk(value, here, offenders)
+        items = schema.get("items")
+        if isinstance(items, dict):
+            _walk(items, f"{path}[]", offenders)
+
+    offenders: list[str] = []
     for spec in specs:
         function = spec.get("function") or {}
-        name = str(function.get("name") or "")
-        parameters = function.get("parameters") or {}
-        for key in parameters.get("properties") or {}:
-            if str(key) in hardware:
-                offenders.append(f"{name}.{key}")
+        _walk(
+            function.get("parameters") or {},
+            str(function.get("name") or ""),
+            offenders,
+        )
     assert not offenders, (
         "these tool inputs let the model supply host hardware policy "
-        f"rather than read it: {offenders}"
+        f"rather than read it: {sorted(offenders)}"
     )
+
+
+def test_the_hardware_guard_can_fail():
+    """A guard that cannot go red guards nothing.
+
+    Its predecessor searched a repr for double-quoted keys while a repr
+    yields single ones, and passed whenever the word "inspect" appeared
+    anywhere on the surface.
+    """
+
+    from chemsmart.agent.tool_specs import (
+        build_command_compiled_tool_surface,
+    )
+
+    specs = list(build_command_compiled_tool_surface().tool_definitions)
+    specs.append(
+        {
+            "function": {
+                "name": "invented",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "members": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {"nprocs": {"type": "integer"}},
+                            },
+                        }
+                    },
+                },
+            }
+        }
+    )
+
+    hardware_words = {"nproc", "nprocs"}
+
+    def _words(key):
+        return {p for p in str(key).lower().split("_") if p}
+
+    found = []
+
+    def _walk(schema, path):
+        if not isinstance(schema, dict):
+            return
+        for key, value in (schema.get("properties") or {}).items():
+            if _words(key) & hardware_words:
+                found.append(f"{path}.{key}")
+            _walk(value, f"{path}.{key}")
+        if isinstance(schema.get("items"), dict):
+            _walk(schema["items"], f"{path}[]")
+
+    for spec in specs:
+        function = spec.get("function") or {}
+        _walk(function.get("parameters") or {}, function.get("name") or "")
+    assert found == ["invented.members[].nprocs"], found
