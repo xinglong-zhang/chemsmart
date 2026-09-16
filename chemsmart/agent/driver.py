@@ -4156,7 +4156,16 @@ class GoalDriver:
                     }
                 },
             }
-            self.ledger.append("run_dispatched", payload)
+            # One cycle is dispatched once. A retried dispatch that
+            # reached the scheduler twice would park the goal on the
+            # second job and orphan the first.
+            self.ledger.append(
+                "run_dispatched",
+                payload,
+                idempotency_key=(
+                    f"run-dispatched:{self.goal_id}:{self.cycles}"
+                ),
+            )
             self.result = GoalLoopResultV1(
                 goal_id=self.goal_id,
                 settlement="parked",
@@ -4242,6 +4251,9 @@ class GoalDriver:
                         _analysis_delivery(events_path).stopped_by
                     ),
                 },
+                # The same cycle by another route: recorded once, however
+                # it is recorded.
+                idempotency_key=(f"run-recorded:{self.goal_id}:{self.cycles}"),
             )
             self.events_path = events_path
             self._record_workspace(events_path, run_reference)
@@ -4273,7 +4285,18 @@ class GoalDriver:
             payload["queue_wait_seconds"] = _queue_wait_seconds(
                 self.dispatch_receipt, events_path
             )
-        self.ledger.append("run_recorded", payload)
+        # The charge is keyed on the goal, the cycle and the bundle that
+        # ran, so a second wake on one parked cycle -- a duplicate
+        # scheduler notification, a human running `agent wake` twice, a
+        # dependent wake job that fires beside a tail -- records the same
+        # fact once instead of subtracting its engine calls from the
+        # grant again. `resume` filtering already-recorded cycles is a
+        # read-then-act; this is the guarantee.
+        self.ledger.append(
+            "run_recorded",
+            payload,
+            idempotency_key=(f"run-recorded:{self.goal_id}:{self.cycles}"),
+        )
         self._record_workspace(events_path, run_reference)
         # What the host detected belongs to the goal, not to the host
         # that detected it: two live goals settled plain "achieved" over

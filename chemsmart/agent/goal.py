@@ -22,6 +22,7 @@ wise -- grading a route is what execution and validation are for.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -250,14 +251,93 @@ class GoalLedger:
         raw = json.loads(self.goal_path.read_text(encoding="utf-8"))
         return GoalRecordV1(**raw)
 
-    def append(self, kind: str, payload: Mapping[str, Any]) -> None:
-        entry = {
+    def append(
+        self,
+        kind: str,
+        payload: Mapping[str, Any],
+        *,
+        idempotency_key: str | None = None,
+    ) -> None:
+        """Append one row, at most once per key.
+
+        Most rows are a running account and repeat legitimately, so a row
+        without a key is appended as it always was. A row that *charges*
+        something -- a cycle's engine calls, a settlement -- carries a key,
+        and then this is the goal's exactly-once guarantee rather than
+        ``GoalDriver.resume`` re-reading the file and hoping nothing else
+        is between its read and its write.
+
+        ``budgets`` subtracts ``engine_calls_consumed`` from every
+        ``run_recorded`` row, so a second row for one cycle spends the
+        human's grant twice. ``chemsmart agent wake`` is a public command
+        and a dependent wake job makes a second wake an ordinary scheduler
+        event, so this needed no accident to happen.
+
+        The lock is the runtime event store's own, which has held one for
+        its appends all along; two implementations of "serialise writers
+        to a JSONL file" is two answers to one question.
+
+        Args:
+            kind (str): Row kind.
+            payload (Mapping[str, Any]): Row body.
+            idempotency_key (str | None): When given, at most one row may
+                exist under it.
+
+        Raises:
+            ContractError: If the key already names a row with a different
+                kind or payload.
+        """
+
+        from chemsmart.agent.runtime.event_store import (
+            _acquire_lock,
+            _release_lock,
+            _secure_open_text,
+        )
+
+        entry: dict[str, Any] = {
             "kind": str(kind),
             "at": _utc_now(),
             "payload": canonical_data(payload),
         }
-        with self.ledger_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+        if idempotency_key:
+            entry["idempotency_key"] = str(idempotency_key)
+
+        self.directory.mkdir(parents=True, exist_ok=True)
+        lock_handle = _secure_open_text(
+            self.ledger_path.with_suffix(".jsonl.lock")
+        )
+        try:
+            _acquire_lock(lock_handle, exclusive=True)
+            if idempotency_key:
+                # The timestamp differs between two racers, so identity is
+                # what the row says, never when it was written.
+                identity = canonical_sha256(
+                    {"kind": entry["kind"], "payload": entry["payload"]}
+                )
+                for existing in self.entries():
+                    if existing.get("idempotency_key") != idempotency_key:
+                        continue
+                    if (
+                        canonical_sha256(
+                            {
+                                "kind": existing.get("kind"),
+                                "payload": existing.get("payload"),
+                            }
+                        )
+                        != identity
+                    ):
+                        raise ContractError(
+                            "goal ledger idempotency key conflicts with a "
+                            f"persisted row: {idempotency_key}"
+                        )
+                    return
+            with self.ledger_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, sort_keys=True) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+        finally:
+            _release_lock(lock_handle)
+            lock_handle.close()
 
     def entries(self) -> tuple[dict[str, Any], ...]:
         if not self.ledger_path.exists():

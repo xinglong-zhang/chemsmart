@@ -409,7 +409,6 @@ def test_a_clamp_reaches_the_goal_s_own_record_not_only_a_sidecar(
     its ledger saying so.
     """
 
-
     seen: dict = {}
     monkeypatch.setattr(
         "chemsmart.settings.server.subprocess.run", _fake_sbatch(seen)
