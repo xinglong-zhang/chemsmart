@@ -268,6 +268,52 @@ def validate_wave(
     )
 
 
+def authorise_cohort_element(
+    run_directory: str | Path,
+    *,
+    element: int | None,
+    bundle_sha256: str,
+) -> str | None:
+    """The calculation this element is authorised to run, or None.
+
+    The approval bundle is one-shot, which is right: a human approved one
+    execution of one plan. "One-shot" was implemented as "one process",
+    and a wave is N processes running N members of that same approved
+    plan -- so the second element was either admitted through the
+    continuation path, whose own contract says it authorises nothing, or
+    refused outright as "a second independent execution of a consumed
+    bundle".
+
+    Membership replaces the second claim. The manifest already names
+    exactly which calculations this approval covers and which element
+    runs which, it is digest-bound, and it was written before any element
+    started. An element is authorised by being in it. The approval is
+    still consumed once, by the dispatcher.
+
+    Authority is checked against *this* approval: a manifest written for
+    another bundle authorises nothing here, so a stale run directory
+    cannot lend its membership to a different decision.
+
+    Returns:
+        str | None: The node id, or None when no cohort governs this run.
+
+    Raises:
+        ContractError: If the element is outside the cohort, or the
+            cohort belongs to another approval.
+    """
+
+    manifest = read_cohort_manifest(run_directory)
+    if manifest is None or element is None:
+        return None
+    if manifest.bundle_sha256 != str(bundle_sha256):
+        raise ContractError(
+            "this cohort was dispatched for another approval "
+            f"({manifest.bundle_sha256[:12]}...), so it authorises nothing "
+            "for this one"
+        )
+    return manifest.node_for_element(element)
+
+
 def execution_result_file(
     run_directory: str | Path, *, element: int | None = None
 ) -> Path:
@@ -452,6 +498,7 @@ def read_cohort_manifest(
 __all__ = [
     "COHORT_MANIFEST_FILE",
     "CohortManifestV1",
+    "authorise_cohort_element",
     "build_cohort_manifest",
     "cohort_completion",
     "cohort_frontier",

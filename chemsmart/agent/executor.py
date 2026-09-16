@@ -29,6 +29,7 @@ from chemsmart.agent.api_access import (
 from chemsmart.agent.capabilities import load_program_capabilities
 from chemsmart.agent.cli_schema import build_live_click_schema
 from chemsmart.agent.cohort import (
+    authorise_cohort_element,
     cohort_frontier,
     read_cohort_manifest,
 )
@@ -393,6 +394,7 @@ class ApprovedWorkflowExecutor:
         approval_workspace: Path,
         claim_workspace_bundle: bool = True,
         should_stop: Any = None,
+        cohort_element: int | None = None,
     ) -> None:
         self.host = host
         self.plan = plan
@@ -407,6 +409,12 @@ class ApprovedWorkflowExecutor:
         self.execution_bundle = execution_bundle
         self.approval_workspace = approval_workspace
         self.claim_workspace_bundle = bool(claim_workspace_bundle)
+        #: Which element of this cycle's wave this process is. ``None``
+        #: is the single-job path: one process walks every approved node
+        #: and claims the bundle itself, exactly as before.
+        self.cohort_element = (
+            None if cohort_element is None else int(cohort_element)
+        )
         self.should_stop = should_stop
         self._bundle_claimed = False
         self._turn = 0
@@ -444,6 +452,23 @@ class ApprovedWorkflowExecutor:
         )
         self._refuse_launch_the_program_already_refused(node_id)
         if self._bundle_claimed:
+            return
+        # A wave's elements are authorised by membership, not by a second
+        # claim. The manifest names which calculations this approval
+        # covers and which element runs which; it is digest-bound and was
+        # written before any element started. The approval is still
+        # consumed once, by the dispatcher. Without this the second
+        # element is either admitted through the continuation path --
+        # whose own contract says it authorises nothing -- or refused as
+        # "a second independent execution of a consumed bundle".
+        cohort_element = getattr(self, "cohort_element", None)
+        if cohort_element is not None:
+            authorise_cohort_element(
+                self.run_directory,
+                element=cohort_element,
+                bundle_sha256=self.execution_bundle.bundle_sha256,
+            )
+            self._bundle_claimed = True
             return
         if self.claim_workspace_bundle:
             from chemsmart.agent.live_session import (
