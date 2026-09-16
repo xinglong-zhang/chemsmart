@@ -280,6 +280,32 @@ class Submitter(RegistryMixin):
             return f"chemsmart_sub_array_{self.job.label}.sh"
         return "chemsmart_sub_array.sh"
 
+    @property
+    def scheduler_request(self):
+        """The allocation this submission asks the scheduler for.
+
+        Passed in by a caller that holds an approved execution envelope
+        (``server.get_submitter(job, scheduler_request=...)``); otherwise
+        resolved from the server profile alone, which is the profile's
+        own numbers and therefore byte-identical to what this class wrote
+        before the envelope had any route here at all.
+
+        The submitter deliberately holds no envelope and no JobRunner:
+        one resolved object is the single channel, so there is one place
+        that answers "what is this allocation" rather than one per caller.
+        """
+
+        from chemsmart.settings.scheduler_request import (
+            resolve_scheduler_request,
+        )
+
+        request = self.kwargs.get("scheduler_request")
+        if request is not None:
+            return request
+        return resolve_scheduler_request(
+            resources=None, server=self.server, sealed=False
+        )
+
     def array_run_script(self, task_id):
         """The runscript one array task runs, named by that task's own id.
 
@@ -893,10 +919,11 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --job-name={self.job.label}\n")
         f.write(f"#SBATCH --output={self.job.label}.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}.slurmerr\n")
-        if self.server.num_gpus:
-            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
+        request = self.scheduler_request
+        if request.gpu_count:
+            f.write(f"#SBATCH --gres=gpu:{request.gpu_count}\n")
         f.write(
-            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
+            f"#SBATCH --nodes=1 --ntasks-per-node={request.cores} --mem={request.memory_gb}G\n"
         )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
@@ -947,12 +974,15 @@ class SLURMSubmitter(Submitter):
         else:
             f.write(f"#SBATCH --array={span}\n")
 
-        if self.server.num_gpus:
-            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
-        # Each array task runs one Gaussian job → always 1 node per task.
-        # Gaussian uses shared memory only and cannot use MPI across nodes.
+        request = self.scheduler_request
+        if request.gpu_count:
+            f.write(f"#SBATCH --gres=gpu:{request.gpu_count}\n")
+        # Each array task runs one job → always 1 node per task. A
+        # shared-memory program cannot use MPI across nodes, and the
+        # resources are per task, so a cohort's footprint is this
+        # allocation times the %N throttle above.
         f.write(
-            f"#SBATCH --nodes=1 --ntasks-per-node={self.server.num_cores} --mem={self.server.mem_gb}G\n"
+            f"#SBATCH --nodes=1 --ntasks-per-node={request.cores} --mem={request.memory_gb}G\n"
         )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")

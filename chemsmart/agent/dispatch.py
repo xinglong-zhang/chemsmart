@@ -20,7 +20,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from chemsmart.agent._contracts import ContractError
 
@@ -47,6 +47,12 @@ class DispatchReceiptV1:
     cycle: int
     wake_command: str
     schema_version: str = "chemsmart.goal-dispatch-receipt.v1"
+    #: What the scheduler was asked for, what the envelope requested, and
+    #: the profile ceiling that bounded it -- kept because the approved
+    #: review renders the envelope's numbers and a reader of this receipt
+    #: is entitled to see whether the two agree. Absent on receipts minted
+    #: before the envelope had any route to a scheduler directive.
+    scheduler_request: Optional[dict[str, Any]] = None
 
     def public_record(self) -> dict[str, Any]:
         return asdict(self)
@@ -125,8 +131,22 @@ def dispatch_run_to_scheduler(
     server: str | None = None,
     python: str | None = None,
     wake: bool = True,
+    resources: Any = None,
+    sealed: bool = True,
 ) -> DispatchReceiptV1:
-    """Submit one approved run and return the receipt naming its job."""
+    """Submit one approved run and return the receipt naming its job.
+
+    Args:
+        resources: The approved ``ExecutionResourceSpecV1``, which becomes
+            the scheduler request. ``None`` falls back to the server
+            profile's own numbers, which is what this function did before
+            the envelope had any route here -- kept so an older caller
+            behaves as it did rather than silently changing allocation.
+        sealed: Whether the sealed-job memory ceiling applies. The Agent's
+            scheduler path is the sealed path in this release; if the two
+            ever need to differ, this is the parameter that separates them
+            rather than a second rule somewhere else.
+    """
 
     from chemsmart.settings.server import Server
 
@@ -144,7 +164,14 @@ def dispatch_run_to_scheduler(
     job = _AgentRunJob(
         label=f"goal-{goal_id}-cycle-{cycle}", folder=str(run_directory)
     )
-    submitter = resolved.get_submitter(job)
+    from chemsmart.settings.scheduler_request import (
+        resolve_scheduler_request,
+    )
+
+    request = resolve_scheduler_request(
+        resources=resources, server=resolved, sealed=sealed
+    )
+    submitter = resolved.get_submitter(job, scheduler_request=request)
     script = build_dispatch_script(
         submitter=submitter,
         python=interpreter,
@@ -173,6 +200,7 @@ def dispatch_run_to_scheduler(
             workspace=Path(workspace).resolve(),
             goal_id=goal_id,
         ),
+        scheduler_request=request.public_record(),
     )
     (run_directory / DISPATCH_RECEIPT_FILE).write_text(
         json.dumps(receipt.public_record(), indent=2, sort_keys=True),

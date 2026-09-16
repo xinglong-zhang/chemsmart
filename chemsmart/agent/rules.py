@@ -156,6 +156,18 @@ HOST_POLICIES: tuple[tuple[str, str, str, bool], ...] = (
         False,
     ),
     (
+        "sealed_memory_headroom",
+        "chemsmart.settings.scheduler_request.SEALED_MEMORY_HEADROOM_GB",
+        "6 GB: a sealed job's memory ceiling is the server profile's "
+        "maximum less this headroom, so a clamped request can never claim "
+        "a node's entire RAM and leaves the operating system, the "
+        "filesystem cache and the scheduler's own accounting somewhere to "
+        "live (owner ruling 2026-09-16). A bound, not a target: a cohort's "
+        "footprint is this ceiling times the concurrency limit, and both "
+        "are displayed",
+        False,
+    ),
+    (
         "divergence_relative_tolerance",
         "chemsmart.agent.workspace_record.DIVERGENCE_RELATIVE_TOLERANCE",
         "0.05: the relative agreement two records must reach before the "

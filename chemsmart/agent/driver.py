@@ -1077,6 +1077,13 @@ def _goal_envelope_record(shown: Mapping[str, Any]) -> dict[str, Any]:
             shown.get("episode_wall_time_seconds") or 0.0
         ),
         "max_excursion_calls": int(shown.get("max_excursion_calls") or 0),
+        # The cores and memory the human approved. They were dropped from
+        # this record, so a goal whose scheduler request disagreed with
+        # its own review could not be audited from the ledger afterwards
+        # -- which is how a live goal displayed 4 cores / 8 GB and was
+        # allocated 32 / 160 with nothing on disk saying so.
+        "cores": int(shown.get("cores") or 0),
+        "memory_gb": float(shown.get("memory_gb") or 0.0),
     }
 
 
@@ -2952,6 +2959,8 @@ class GoalDriver:
                         self.envelope.episode_wall_time_seconds
                     ),
                     "max_excursion_calls": self.envelope.max_excursion_calls,
+                    "cores": self.envelope.resources.cores,
+                    "memory_gb": self.envelope.resources.memory_gb,
                 }
             )
 
@@ -4113,6 +4122,12 @@ class GoalDriver:
                     run_directory=self.run_directory,
                     goal_id=self.goal_id,
                     cycle=self.cycles,
+                    # The driver has held the approved resources all
+                    # along; the scheduler request is now made from them
+                    # rather than from the operator's profile alone.
+                    resources=getattr(
+                        getattr(self, "envelope", None), "resources", None
+                    ),
                 )
             except ContractError as exc:
                 self._typed_error("scheduler dispatch", exc)

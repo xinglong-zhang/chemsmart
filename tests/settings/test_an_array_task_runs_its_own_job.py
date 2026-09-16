@@ -94,7 +94,9 @@ def _write_array(server, folder, count, num_nodes=None):
     # runscript names the job it belongs to rather than merely existing.
     cli_args = [["run", "--label", f"mol{index}"] for index in range(count)]
     submitter = server.get_submitter(jobs[0])
-    submitter.write_array_job(jobs=jobs, num_nodes=num_nodes, cli_args=cli_args)
+    submitter.write_array_job(
+        jobs=jobs, num_nodes=num_nodes, cli_args=cli_args
+    )
     return submitter, jobs
 
 
@@ -131,9 +133,9 @@ def _resolve(script_text, task_id, cwd):
         capture_output=True,
         text=True,
     )
-    assert completed.returncode == 0, (
-        f"task {task_id}: the dispatch shell failed: {completed.stderr}"
-    )
+    assert (
+        completed.returncode == 0
+    ), f"task {task_id}: the dispatch shell failed: {completed.stderr}"
     resolved = [
         line[len("RESOLVED:") :]
         for line in completed.stdout.splitlines()
@@ -146,7 +148,9 @@ def _resolve(script_text, task_id, cwd):
     return resolved[0]
 
 
-def test_every_array_task_runs_exactly_its_own_job(server, tmp_path, monkeypatch):
+def test_every_array_task_runs_exactly_its_own_job(
+    server, tmp_path, monkeypatch
+):
     """The whole contract, driven end to end: task k runs job k, once."""
 
     folder = tmp_path / "jobs"

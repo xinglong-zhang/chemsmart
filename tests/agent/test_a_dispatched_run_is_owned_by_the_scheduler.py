@@ -244,3 +244,155 @@ def test_the_wake_command_resumes_from_the_recorded_driver(tmp_path):
         agent, ["wake", "--workspace", str(workspace), "--goal", "goal-w1"]
     )
     assert again.exit_code != 0 and "is settled" in again.output
+
+
+# --- The scheduler is asked for what the human approved -------------------
+#
+# The review panel the human reads renders the envelope's resources
+# (tui/review.py:_bounds_panel), digest-sealed as resource_sha256. Until
+# this section existed, the #SBATCH line came from the operator's server
+# profile and the two never met: a live CUHK goal (sm3-run3-cuhk, job
+# 2134343) displayed and approved 4 cores / 8 GB and was allocated 32
+# cores / 160 GB for a water molecule that ran 31 s at 424 MB peak RSS.
+#
+# The profile is a ceiling, not a request (owner ruling, 2026-09-16). For
+# a sealed job the ceiling is the server's maximum cores and its maximum
+# memory less a declared headroom, so a clamped request can never claim a
+# node's entire RAM.
+
+
+def _resources(cores, memory_gb):
+    from chemsmart.agent.execution import build_execution_resource_spec
+
+    return build_execution_resource_spec(
+        execution_target="run",
+        cores=cores,
+        memory_gb=memory_gb,
+        gpu_count=0,
+        scratch_policy="server",
+        node_timeout_seconds=900,
+    )
+
+
+def _sbatch_lines(script):
+    return [line for line in script.splitlines() if line.startswith("#SBATCH")]
+
+
+def test_the_scheduler_is_asked_for_the_resources_the_human_approved(
+    tmp_path,
+):
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
+
+    server = _slurm_server()  # NUM_CORES=6, MEM_GB=52
+    request = resolve_scheduler_request(
+        resources=_resources(cores=4, memory_gb=8), server=server, sealed=True
+    )
+    job = SimpleNamespace(label="goal-g1-cycle-1", PROGRAM=None)
+    script = build_dispatch_script(
+        submitter=server.get_submitter(job, scheduler_request=request),
+        python="/opt/env/bin/python",
+        approval_file=tmp_path / "bundle.json",
+        workspace=tmp_path / "ws",
+        run_directory=tmp_path / "ws" / "run",
+        goal_id="g1",
+    )
+    lines = _sbatch_lines(script)
+    assert "#SBATCH --nodes=1 --ntasks-per-node=4 --mem=8G" in lines, lines
+    # The profile still owns queue, wall time and account.
+    assert "#SBATCH --partition=compute" in lines
+    assert "#SBATCH --time=24:00:00" in lines
+    assert not request.clamped
+
+
+def test_a_sealed_request_is_clamped_to_the_server_s_own_ceiling(tmp_path):
+    """The ceiling is max cores and max memory less the declared headroom."""
+
+    from chemsmart.settings.scheduler_request import (
+        SEALED_MEMORY_HEADROOM_GB,
+        resolve_scheduler_request,
+    )
+
+    server = _slurm_server()  # NUM_CORES=6, MEM_GB=52
+    request = resolve_scheduler_request(
+        resources=_resources(cores=64, memory_gb=300),
+        server=server,
+        sealed=True,
+    )
+    assert request.requested_cores == 64
+    assert request.requested_memory_gb == pytest.approx(300.0)
+    assert request.cores == 6
+    assert request.memory_gb == pytest.approx(52.0 - SEALED_MEMORY_HEADROOM_GB)
+    assert request.clamped
+
+    job = SimpleNamespace(label="goal-g1-cycle-1", PROGRAM=None)
+    script = build_dispatch_script(
+        submitter=server.get_submitter(job, scheduler_request=request),
+        python="/opt/env/bin/python",
+        approval_file=tmp_path / "bundle.json",
+        workspace=tmp_path / "ws",
+        run_directory=tmp_path / "ws" / "run",
+        goal_id="g1",
+    )
+    assert "#SBATCH --nodes=1 --ntasks-per-node=6 --mem=46G" in _sbatch_lines(
+        script
+    )
+    # A clamp is a displayed observation naming both numbers, never a
+    # silent edit.
+    rendered = " | ".join(request.observations)
+    assert "cores" in rendered and "64" in rendered and "6" in rendered
+    assert "memory" in rendered and "300" in rendered and "46" in rendered
+
+
+def test_an_unsealed_request_is_the_profile_s_own_numbers(tmp_path):
+    """`chemsmart sub` must be byte-identical: no envelope, no headroom."""
+
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
+
+    server = _slurm_server()
+    request = resolve_scheduler_request(
+        resources=None, server=server, sealed=False
+    )
+    assert (request.cores, request.memory_gb) == (6, 52.0)
+    assert not request.clamped
+
+    job = SimpleNamespace(label="j", PROGRAM=None)
+    with_request = build_dispatch_script(
+        submitter=server.get_submitter(job, scheduler_request=request),
+        python="/p",
+        approval_file=tmp_path / "b.json",
+        workspace=tmp_path / "ws",
+        run_directory=tmp_path / "ws" / "run",
+        goal_id="g1",
+    )
+    without = build_dispatch_script(
+        submitter=server.get_submitter(job),
+        python="/p",
+        approval_file=tmp_path / "b.json",
+        workspace=tmp_path / "ws",
+        run_directory=tmp_path / "ws" / "run",
+        goal_id="g1",
+    )
+    assert with_request == without
+
+
+def test_a_ceiling_below_the_headroom_is_refused_not_negated():
+    """A 4 GB profile must not resolve to a request for -2 GB."""
+
+    from chemsmart.agent._contracts import ContractError
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
+
+    server = Server(
+        "tiny",
+        SCHEDULER="SLURM",
+        SUBMIT_COMMAND="sbatch",
+        NUM_CORES=2,
+        MEM_GB=4,
+        NUM_HOURS=1,
+        QUEUE_NAME="compute",
+    )
+    with pytest.raises(ContractError, match="headroom"):
+        resolve_scheduler_request(
+            resources=_resources(cores=1, memory_gb=2),
+            server=server,
+            sealed=True,
+        )
