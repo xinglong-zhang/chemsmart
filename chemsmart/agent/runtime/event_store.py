@@ -708,6 +708,7 @@ class RuntimeEventStore:
                 reserved_at=timestamp,
                 lease_seconds=int(lease_seconds or 0),
                 reserver=str(reserver or ""),
+                excursion=bool(excursion),
             )
             reservation_record = canonical_record(reservation)
             self._append_locked(

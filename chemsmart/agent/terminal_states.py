@@ -655,6 +655,10 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
             )
         elif event.kind == "workflow_node_launch_reserved":
             reservations.add(node_id)
+            # Which line this call came from, for a launch that never
+            # wrote a receipt to say so.
+            if (payload.get("record") or {}).get("excursion"):
+                excursion_nodes.add(node_id)
             # The lease the reservation was taken under, so a node still
             # inside it can be told from one whose process is gone.
             record = event.payload.get("record") or {}

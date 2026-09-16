@@ -359,6 +359,13 @@ class WorkflowNodeLaunchReservationV1:
     #: absent means "nothing can be concluded" rather than "alive".
     lease_seconds: int = 0
     reserver: str = ""
+    #: Whether this call was taken from the excursion line. The run
+    #: outcome learned it from the execution receipt, which a launch
+    #: killed mid-engine never writes, so a killed excursion was charged
+    #: to the engine-call budget -- the one line the charter says an
+    #: excursion never touches. Absent on every reservation written
+    #: before this, which reads as the ordinary line, as it did then.
+    excursion: bool = False
 
     def __post_init__(self) -> None:
         if (
@@ -432,6 +439,8 @@ class WorkflowNodeLaunchReservationV1:
         if self.lease_seconds:
             body["lease_seconds"] = int(self.lease_seconds)
             body["reserver"] = str(self.reserver)
+        if self.excursion:
+            body["excursion"] = True
         if self.reservation_sha256 != canonical_sha256(body):
             raise ContractError("workflow launch reservation digest mismatch")
 
@@ -498,6 +507,7 @@ def build_workflow_node_launch_reservation(
     reserved_at: str,
     lease_seconds: int = 0,
     reserver: str = "",
+    excursion: bool = False,
 ) -> WorkflowNodeLaunchReservationV1:
     if materialized_workflow.workflow_id != plan.workflow_id:
         raise ContractError("materialized workflow belongs to another plan")
@@ -648,6 +658,14 @@ def build_workflow_node_launch_reservation(
     if int(lease_seconds or 0) > 0:
         body["lease_seconds"] = int(lease_seconds)
         body["reserver"] = str(reserver or "")
+    if excursion:
+        # Which budget line this call was taken from. The run outcome
+        # learned it from the execution receipt, which a launch killed
+        # mid-engine never writes -- so once a bare reservation became a
+        # spent call, a killed excursion was charged to the engine-call
+        # budget and the anomaly investigation was paid for out of the
+        # science. This is the only place such a launch leaves anything.
+        body["excursion"] = True
     return WorkflowNodeLaunchReservationV1(
         **body, reservation_sha256=canonical_sha256(body)
     )
