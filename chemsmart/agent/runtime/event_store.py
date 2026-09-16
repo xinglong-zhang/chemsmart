@@ -496,8 +496,18 @@ class RuntimeEventStore:
         invocation: ProgramExecutionInvocationV1,
         run_id: str,
         timestamp: str,
+        lease_seconds: int = 0,
+        reserver: str = "",
     ) -> LaunchFenceResultV1:
-        """Atomically consume approval and reserve one node before launch."""
+        """Atomically consume approval and reserve one node before launch.
+
+        ``lease_seconds`` is how long this reservation may still be a
+        live engine -- the approved node timeout, which is the host's own
+        bound on an engine's life. Without it a reservation in state
+        ``running`` with no receipt is indistinguishable from a process
+        that died, which is exactly what a healthy concurrent sibling
+        looks like.
+        """
 
         with self._locked_handle(exclusive=True) as handle:
             events = self._read_locked(handle)
@@ -623,6 +633,8 @@ class RuntimeEventStore:
                 data_edge_bindings=frontier.data_edge_bindings,
                 consumes_approval=consumes_approval,
                 reserved_at=timestamp,
+                lease_seconds=int(lease_seconds or 0),
+                reserver=str(reserver or ""),
             )
             reservation_record = canonical_record(reservation)
             self._append_locked(

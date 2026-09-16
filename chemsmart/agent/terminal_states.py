@@ -534,6 +534,59 @@ def read_run_events(path: str | Path) -> tuple[Any, ...]:
     return tuple(events)
 
 
+def run_live_leases(events: Any) -> tuple[str, ...]:
+    """Nodes whose launch reservation may still be a running engine.
+
+    The cohort barrier is "every member terminal", and a member inside
+    its lease is not terminal -- it is being run right now by another
+    array element. Asking this is how a wave avoids waking the model
+    over a half-finished cohort.
+
+    A node that also holds a receipt has finished and is never live,
+    whatever its reservation says. A reservation with no lease, or an
+    unreadable one, is not live: every reservation written before leases
+    existed carries none, and a lease the host cannot read is not a
+    licence to wait forever.
+
+    Args:
+        events: The run's own events, as `derive_run_outcome` takes them.
+
+    Returns:
+        tuple[str, ...]: Node ids still inside a live lease, sorted.
+    """
+
+    from chemsmart.agent.runtime.records import reservation_lease_is_live
+
+    leases: dict[str, tuple[str, Any]] = {}
+    finished: set[str] = set()
+    for event in events:
+        payload = getattr(event, "payload", None) or {}
+        record = payload.get("record") or {}
+        node_id = str(
+            payload.get("node_id") or (record or {}).get("node_id") or ""
+        )
+        if not node_id:
+            continue
+        if getattr(event, "kind", "") == "workflow_node_launch_reserved":
+            if isinstance(record, Mapping):
+                leases[node_id] = (
+                    str(record.get("reserved_at") or ""),
+                    record.get("lease_seconds"),
+                )
+        elif getattr(event, "kind", "") == "program_execution_observed":
+            finished.add(node_id)
+    return tuple(
+        sorted(
+            node_id
+            for node_id, (reserved_at, lease_seconds) in leases.items()
+            if node_id not in finished
+            and reservation_lease_is_live(
+                reserved_at=reserved_at, lease_seconds=lease_seconds
+            )
+        )
+    )
+
+
 def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
     """Derive one run's typed endings from its sealed event stream."""
 
@@ -553,7 +606,12 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
     validation_by_node: dict[str, Mapping[str, Any]] = {}
     anomalies_by_node: dict[str, list[dict[str, Any]]] = {}
     event_hashes_by_node: dict[str, list[str]] = {}
+    # Imported here: runtime.records reaches the capability layer, and a
+    # module-level import closes a cycle through it.
+
     reservations: set[str] = set()
+    #: node id -> (reserved_at, lease_seconds) from its own reservation.
+    reservation_leases: dict[str, tuple[str, Any]] = {}
     excursion_nodes: set[str] = set()
     for event in events:
         payload = event.payload or {}
@@ -597,6 +655,14 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
             )
         elif event.kind == "workflow_node_launch_reserved":
             reservations.add(node_id)
+            # The lease the reservation was taken under, so a node still
+            # inside it can be told from one whose process is gone.
+            record = event.payload.get("record") or {}
+            if isinstance(record, Mapping):
+                reservation_leases[node_id] = (
+                    str(record.get("reserved_at") or ""),
+                    record.get("lease_seconds"),
+                )
             event_hashes_by_node.setdefault(node_id, []).append(
                 event.event_hash
             )
@@ -701,9 +767,20 @@ def derive_run_outcome(events: tuple[Any, ...]) -> RunOutcomeV1:
             else:
                 terminal = "launch_ambiguous"
         elif effective_state == "running":
-            # A reservation with no receipt: the prior invocation died
-            # mid-engine. The durable stream is the proof; no prose or
-            # in-memory field is consulted.
+            # A reservation with no receipt used to mean exactly one
+            # thing: the prior invocation died mid-engine. Under a wave
+            # cohort it is also what a *healthy sibling* looks like, and
+            # the two were indistinguishable from durable state. The
+            # lease separates them: inside it, the node may still be
+            # running and this run is simply not finished, so it is not
+            # given a terminal word at all; past it, no engine can still
+            # be alive and the interrupted reading stands.
+            # The word stays what it was: from a *run outcome's* point of
+            # view the engine's result never arrived, and "running" is not
+            # a terminal state -- NodeTerminalStateV1 would refuse it.
+            # Liveness is a different question and belongs to the cohort
+            # barrier, which must not call a wave finished while a member
+            # is still inside its lease. `run_live_leases` is what asks.
             terminal = (
                 "interrupted_mid_engine"
                 if node_id in reservations
@@ -792,4 +869,5 @@ __all__ = [
     "NodeTerminalStateV1",
     "RunOutcomeV1",
     "derive_run_outcome",
+    "run_live_leases",
 ]

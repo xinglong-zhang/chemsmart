@@ -9,6 +9,7 @@ loaders reject missing and extra fields instead of silently defaulting them.
 from __future__ import annotations
 
 from dataclasses import MISSING, dataclass, fields
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from chemsmart.agent._contracts import (
@@ -353,6 +354,11 @@ class WorkflowNodeLaunchReservationV1:
     reservation_sha256: str
     admission_sha256: str = ""
     data_edge_binding_sha256s: tuple[str, ...] = ()
+    #: How long this reservation may be a live engine, and who took it.
+    #: Absent on every reservation written before the lease existed, and
+    #: absent means "nothing can be concluded" rather than "alive".
+    lease_seconds: int = 0
+    reserver: str = ""
 
     def __post_init__(self) -> None:
         if (
@@ -421,8 +427,63 @@ class WorkflowNodeLaunchReservationV1:
             "admission_sha256": self.admission_sha256,
             "data_edge_binding_sha256s": self.data_edge_binding_sha256s,
         }
+        # Folded in only when taken, so every reservation written before
+        # the lease existed reconstructs its own digest unchanged.
+        if self.lease_seconds:
+            body["lease_seconds"] = int(self.lease_seconds)
+            body["reserver"] = str(self.reserver)
         if self.reservation_sha256 != canonical_sha256(body):
             raise ContractError("workflow launch reservation digest mismatch")
+
+
+def reservation_lease_is_live(
+    *,
+    reserved_at: str,
+    lease_seconds: int | None,
+    now: datetime | None = None,
+) -> bool:
+    """Whether a reservation may still be a running engine.
+
+    Three sites read ``state == "running"`` with no receipt and concluded
+    that a prior invocation died mid-engine. That held while one process
+    walked every node in turn; under a wave cohort it is the ordinary
+    appearance of a healthy sibling, and nothing durable told the two
+    apart.
+
+    The bound is the one the host already owns: the approved node
+    timeout. Younger than that, the reservation may be a live engine and
+    a cohort simply is not terminal yet. Older, it cannot be, and keeps
+    the interrupted reading it has always had.
+
+    Absent, unreadable or non-positive inputs are **not** live: a lease
+    the host cannot read is not a licence to wait forever, and every
+    reservation written before leases existed carries none.
+
+    Args:
+        reserved_at: The reservation's own ISO-8601 timestamp.
+        lease_seconds: The bound it was taken under, or ``None``.
+        now: Override for the comparison instant.
+
+    Returns:
+        bool: True only when the lease is present, readable and unexpired.
+    """
+
+    try:
+        bound = int(lease_seconds or 0)
+    except (TypeError, ValueError):
+        return False
+    if bound <= 0:
+        return False
+    try:
+        taken = datetime.fromisoformat(str(reserved_at))
+    except (TypeError, ValueError):
+        return False
+    if taken.tzinfo is None:
+        taken = taken.replace(tzinfo=timezone.utc)
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return (moment - taken).total_seconds() < bound
 
 
 def build_workflow_node_launch_reservation(
@@ -435,6 +496,8 @@ def build_workflow_node_launch_reservation(
     data_edge_bindings: tuple[ValidatedDataEdgeBindingV1, ...] = (),
     consumes_approval: bool,
     reserved_at: str,
+    lease_seconds: int = 0,
+    reserver: str = "",
 ) -> WorkflowNodeLaunchReservationV1:
     if materialized_workflow.workflow_id != plan.workflow_id:
         raise ContractError("materialized workflow belongs to another plan")
@@ -841,6 +904,7 @@ __all__ = [
     "ReconstructedWorkflowFrontierV1",
     "WorkflowNodeLaunchReservationV1",
     "build_workflow_node_launch_reservation",
+    "reservation_lease_is_live",
     "canonical_record",
     "frozen_workflow_approval_from_record",
     "materialized_workflow_from_record",

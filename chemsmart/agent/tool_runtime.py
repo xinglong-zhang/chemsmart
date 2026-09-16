@@ -9,6 +9,7 @@ import math
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
 import time
@@ -12020,6 +12021,15 @@ class CommandCompiledToolHostV1:
             invocation=execution_invocation,
             run_id=v2_run_id,
             timestamp=started,
+            # The host's own bound on how long this engine may live, so a
+            # concurrent sibling holding a node can be told from a
+            # process that died holding one. Plus the postprocessing
+            # reserve, because the host's own evaluation happens inside
+            # the same reservation.
+            lease_seconds=_launch_lease_seconds(
+                self.execution_resources, self.bounded_execution_envelope
+            ),
+            reserver=_launch_reserver(),
         )
         if fence.status == "terminal_replay":
             replayed = fence.execution_receipt
@@ -18071,6 +18081,49 @@ def _public_process_stream(value: str | bytes | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return str(value)
+
+
+def _launch_lease_seconds(resources: Any, envelope: Any) -> int:
+    """How long a launch reservation may still be a live engine.
+
+    The approved node timeout is the host's own bound on an engine's
+    life, plus the postprocessing reserve the human granted, because the
+    host's own reading of the result happens while the reservation is
+    still held. Nothing is invented: both numbers are already approved.
+
+    Zero when no bound is known, which reads as "nothing can be
+    concluded" rather than "alive" -- the same reading every reservation
+    written before leases existed gets.
+    """
+
+    seconds = 0.0
+    node_timeout = getattr(resources, "node_timeout_seconds", None)
+    try:
+        seconds += float(node_timeout or 0.0)
+    except (TypeError, ValueError):
+        return 0
+    reserve = getattr(envelope, "postprocess_reserve_seconds", None)
+    try:
+        seconds += float(reserve or 0.0)
+    except (TypeError, ValueError):
+        pass
+    return int(seconds) if seconds > 0 else 0
+
+
+def _launch_reserver() -> str:
+    """Who took this reservation, for a human reading the record.
+
+    Diagnosis only: liveness is decided by the lease, never by this
+    string, because a host name and a pid mean nothing to a reader on
+    another node.
+    """
+
+    parts = [socket.gethostname(), str(os.getpid())]
+    for variable in ("SLURM_JOB_ID", "SLURM_ARRAY_TASK_ID"):
+        value = os.environ.get(variable)
+        if value:
+            parts.append(f"{variable}={value}")
+    return " ".join(parts)
 
 
 def _write_branch_request(node_workspace: Path, command: list[str]) -> None:

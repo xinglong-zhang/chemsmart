@@ -1829,14 +1829,35 @@ class ApprovedWorkflowExecutor:
                     )
                     seen.add(node_state.node_id)
                 elif node_state.state == "running":
-                    # A durable reservation with no receipt: the prior
-                    # invocation died mid-engine.  Interrupted is a third
-                    # state, and the default is refusal -- the fence
-                    # forbids relaunching an engine whose original
-                    # process and outputs nobody reconciled -- but the
-                    # record must say so rather than vanish from the
-                    # delivery table as never-attempted.  Observed live
-                    # on the first mid-engine SIGTERM.
+                    # A durable reservation with no receipt used to mean
+                    # exactly one thing: the prior invocation died
+                    # mid-engine.  Under a wave cohort it is also what a
+                    # *healthy sibling* looks like -- another array
+                    # element holding the node right now -- and nothing
+                    # durable told the two apart.  Inside its lease the
+                    # node is owned by someone else and this process
+                    # neither runs it nor speaks for it; past the lease
+                    # no engine can still be alive and the interrupted
+                    # reading stands.  Interrupted is a third state, and
+                    # the default is refusal -- the fence forbids
+                    # relaunching an engine whose original process and
+                    # outputs nobody reconciled -- but the record must
+                    # say so rather than vanish from the delivery table
+                    # as never-attempted.  Observed live on the first
+                    # mid-engine SIGTERM.
+                    from chemsmart.agent.runtime.records import (
+                        reservation_lease_is_live,
+                    )
+
+                    if reservation_lease_is_live(
+                        reserved_at=getattr(node_state, "reserved_at", "")
+                        or "",
+                        lease_seconds=getattr(
+                            node_state, "lease_seconds", None
+                        ),
+                    ):
+                        seen.add(node_state.node_id)
+                        continue
                     binding = self._binding(node_state.node_id)
                     executed.append(
                         ExecutedNodeV1(
