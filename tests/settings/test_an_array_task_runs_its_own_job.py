@@ -224,14 +224,27 @@ def test_the_concurrency_throttle_is_the_scheduler_s_own(server, tmp_path):
     assert throttle == 4
 
 
-def test_an_unthrottled_array_declares_every_task(server, tmp_path):
+def test_an_array_with_no_explicit_cap_takes_the_host_default(
+    server, tmp_path
+):
+    """There is no unthrottled cohort.
+
+    This asserted `throttle is None`, which was the old opt-in
+    behaviour: a cohort submitted with no explicit argument ran with no
+    cap at all. Physical concurrency is the host's and it is on by
+    default (owner ruling, 2026-09-16), so the assertion moves with the
+    contract rather than the contract moving with the assertion.
+    """
+
+    from chemsmart.settings.submitters import DEFAULT_MAX_CONCURRENT_TASKS
+
     folder = tmp_path / "jobs"
     folder.mkdir()
     submitter, _ = _write_array(server, folder, count=2)
     script_text = (folder / submitter.array_submit_script).read_text()
     task_ids, throttle = _task_ids(script_text)
     assert len(task_ids) == 2
-    assert throttle is None
+    assert throttle == DEFAULT_MAX_CONCURRENT_TASKS
 
 
 def test_a_scheduler_without_an_array_directive_is_refused_by_name(

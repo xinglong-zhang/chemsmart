@@ -39,6 +39,18 @@ class SubmissionReceiptV1:
     stdout: str = ""
 
 
+#: How many approved calculations of one cohort may run at the same
+#: time, when the operator's profile names no other number. Physical
+#: concurrency is the host's and scientific width is the Agent's: a wave
+#: of seven is one cohort and one wake, and this only decides how many of
+#: its members Slurm runs at once (owner ruling, 2026-09-16).
+#:
+#: It was opt-in, so a cohort submitted with no explicit argument ran
+#: unthrottled, and every test passed the throttle by hand -- proving it
+#: was writable, never that it was on.
+DEFAULT_MAX_CONCURRENT_TASKS = 4
+
+
 class RunScript:
     """
     Script generator for computational job execution.
@@ -305,6 +317,33 @@ class Submitter(RegistryMixin):
         return resolve_scheduler_request(
             resources=None, server=self.server, sealed=False
         )
+
+    def max_concurrent_tasks(self, requested=None):
+        """How many of this cohort's members may run at the same time.
+
+        The caller's number, else the operator's profile, else the host
+        default. Never ``None``: an unthrottled cohort is a burst, and
+        the default is a safety and fairness choice rather than an
+        opt-in.
+
+        Args:
+            requested (int | None): An explicit cap from the caller.
+
+        Returns:
+            int: A positive concurrency bound.
+        """
+
+        for candidate in (
+            requested,
+            getattr(self.server, "max_concurrent_tasks", None),
+        ):
+            try:
+                value = int(candidate)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                return value
+        return DEFAULT_MAX_CONCURRENT_TASKS
 
     def array_run_script(self, task_id):
         """The runscript one array task runs, named by that task's own id.
@@ -975,14 +1014,14 @@ class SLURMSubmitter(Submitter):
         f.write(f"#SBATCH --error={self.job.label}_array_%a.slurmerr\n")
 
         # Array directive over this submitter's own declared task ids, so
-        # the range and the runscript filenames cannot disagree. Optionally
-        # throttled with %N so that at most num_nodes tasks run at once.
+        # the range and the runscript filenames cannot disagree. `%N`
+        # bounds simultaneously running tasks of this one array job --
+        # not nodes, not jobs, not the wave's scientific width.
         task_ids = self.array_task_ids(num_jobs)
         span = f"{task_ids[0]}-{task_ids[-1]}"
-        if num_nodes is not None:
-            f.write(f"#SBATCH --array={span}%{num_nodes}\n")
-        else:
-            f.write(f"#SBATCH --array={span}\n")
+        f.write(
+            f"#SBATCH --array={span}%{self.max_concurrent_tasks(num_nodes)}\n"
+        )
 
         request = self.scheduler_request
         if request.gpu_count:

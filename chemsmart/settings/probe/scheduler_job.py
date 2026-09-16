@@ -36,6 +36,11 @@ TERMINAL_JOB_STATES = frozenset(
 #: job id|state|time used|submit|start|end -- pinned, never human default.
 _SQUEUE_FORMAT = "%i|%T|%M|%V|%S|%e"
 
+#: element|array job id|task id|state|time used|submit|start|end.
+#: `%F` is the join: `%i` prints ``<arrayid>_<task>`` and never the bare
+#: array id, so an element cannot be matched to its cohort without it.
+_SQUEUE_ARRAY_FORMAT = "%i|%F|%K|%T|%M|%V|%S|%e"
+
 _SBATCH_LINE = re.compile(r"Submitted batch job (\d+)")
 _BARE_JOB_ID = re.compile(r"^\d+(?:\.\S+)?$")
 
@@ -165,6 +170,117 @@ def parse_scontrol_job(
     )
 
 
+@dataclass(frozen=True)
+class SchedulerArrayElementV1:
+    """One array element's own state."""
+
+    element_id: str
+    task_id: str
+    state: str
+    submit_time: str = ""
+    start_time: str = ""
+    end_time: str = ""
+    run_seconds: int | None = None
+
+    @property
+    def terminal(self) -> bool:
+        return self.state in TERMINAL_JOB_STATES
+
+
+@dataclass(frozen=True)
+class SchedulerArrayStateV1:
+    """What one array job's elements are doing, as a multiset.
+
+    The barrier's question is "has every member reached a terminal
+    state", which a scalar job state cannot answer: an array has one
+    state per element, and squashing them loses exactly the fact the
+    barrier needs.
+    """
+
+    array_job_id: str
+    known: bool
+    elements: tuple[SchedulerArrayElementV1, ...] = ()
+
+    @property
+    def unfinished(self) -> tuple[str, ...]:
+        """Task ids not yet in a terminal state."""
+
+        return tuple(
+            element.task_id
+            for element in self.elements
+            if not element.terminal
+        )
+
+    @property
+    def terminal(self) -> bool:
+        """Whether every member has ended, however it ended.
+
+        An array the scheduler cannot see is **not** terminal: "I cannot
+        find it" is not "every member finished", and treating it as such
+        would wake the model over a cohort whose evidence nobody read.
+        Terminality, not success -- a failed or cancelled element has
+        ended, and its outcome is evidence the Agent must see.
+        """
+
+        if not self.known or not self.elements:
+            return False
+        return all(element.terminal for element in self.elements)
+
+
+def squeue_array_command(array_job_id: str) -> tuple[str, ...]:
+    return (
+        "squeue",
+        "-h",
+        "-t",
+        "all",
+        "-j",
+        str(array_job_id),
+        "-o",
+        _SQUEUE_ARRAY_FORMAT,
+    )
+
+
+def parse_squeue_array(
+    returncode: int, stdout: str, stderr: str, *, array_job_id: str
+) -> SchedulerArrayStateV1:
+    """Every element of one array job, joined on ArrayJobId.
+
+    Measured on CUHK (job 2135107): ``squeue -j <arrayid>`` prints
+    ``%i`` as ``<arrayid>_<task>``, so a filter comparing it against the
+    bare array id matches nothing. ``scontrol`` is worse than useless
+    here -- it opens with the pending aggregate under the bare array id
+    and lists each started element under its *own* job id, while the
+    field harvest is first-occurrence-wins across the whole output, so
+    it reports one arbitrary record's state as the array's.
+    """
+
+    if returncode != 0:
+        return SchedulerArrayStateV1(
+            array_job_id=str(array_job_id), known=False
+        )
+    elements = []
+    for line in (stdout or "").splitlines():
+        parts = [part.strip() for part in line.split("|")]
+        if len(parts) != 8 or parts[1] != str(array_job_id):
+            continue
+        elements.append(
+            SchedulerArrayElementV1(
+                element_id=parts[0],
+                task_id=parts[2],
+                state=parts[3],
+                run_seconds=parse_elapsed_seconds(parts[4]),
+                submit_time=parts[5],
+                start_time=parts[6],
+                end_time=parts[7],
+            )
+        )
+    return SchedulerArrayStateV1(
+        array_job_id=str(array_job_id),
+        known=bool(elements),
+        elements=tuple(elements),
+    )
+
+
 def parse_squeue_job(
     returncode: int, stdout: str, stderr: str, *, job_id: str
 ) -> SchedulerJobStateV1:
@@ -194,7 +310,11 @@ __all__ = [
     "SchedulerJobStateV1",
     "parse_elapsed_seconds",
     "parse_scontrol_job",
+    "parse_squeue_array",
     "parse_squeue_job",
+    "squeue_array_command",
+    "SchedulerArrayElementV1",
+    "SchedulerArrayStateV1",
     "parse_submission",
     "scontrol_job_command",
     "squeue_job_command",

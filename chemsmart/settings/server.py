@@ -201,6 +201,21 @@ class Server(RegistryMixin):
         return self.kwargs.get("NUM_GPUS", 0)
 
     @cached_property
+    def max_concurrent_tasks(self):
+        """How many approved calculations may run at once on this host.
+
+        Physical concurrency is the operator's, like every other number
+        in this file: the Agent chooses how many independent calculations
+        the science needs and the host decides how many of them Slurm
+        runs simultaneously. Unset, the submitter's own default applies.
+
+        Returns:
+            int | None: The configured bound, or None.
+        """
+
+        return self.kwargs.get("MAX_CONCURRENT_TASKS")
+
+    @cached_property
     def num_threads(self):
         """
         Threads one process runs, inside the cores the scheduler allocated.
