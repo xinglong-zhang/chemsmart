@@ -77,6 +77,7 @@ def test_wake_rules_render_in_the_wake_and_not_the_prompt():
         + driver._CLAIM_BY_ID
         + driver._WORKSPACE_RECORD_RULE
         + driver._EXCURSION_REPLICATION
+        + driver._COHORT_EVIDENCE
     )
     for rule in rules_for("wake") + rules_for("wake:recovery"):
         assert rule.text.strip() in wake_text, rule.rule_id

@@ -792,6 +792,7 @@ _WORKSPACE_RECORD_RULE = " " + _WAKE_RULES["wake.workspace_record"].text
 _EXCURSION_REPLICATION = (
     " " + _WAKE_RULES["wake.excursion_buys_replication"].text
 )
+_COHORT_EVIDENCE = " " + _WAKE_RULES["wake.cohort_evidence"].text
 
 #: The three ways a requirement short of its tolerance can be resolved.
 #: Every one is a route the host can actually walk, because a named
@@ -1804,6 +1805,7 @@ def _wake_context(
             + _ADVERSARIAL_CLOSE
             + _REFUSAL_AFFORDANCE
             + _WORKSPACE_RECORD_RULE
+            + _COHORT_EVIDENCE
             + (
                 _EXCURSION_REPLICATION
                 if budgets.excursion_calls_remaining

@@ -284,6 +284,49 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "input unresolved until its validated upstream artifact exists.",
     ),
     _r(
+        "stem.wave_execution",
+        "stem",
+        "T0",
+        "Approved calculations execute in waves that you select. A wave is "
+        "the set of currently-ready, scientifically independent "
+        "calculations you want to see together before you reason again. "
+        "The host runs them concurrently and wakes you once, when every "
+        "member has reached a terminal state -- not when the first "
+        "finishes, and not only when they succeed. A calculation that "
+        "failed, was cancelled, or validated into something you did not "
+        "expect has reached a terminal state, and its outcome is evidence "
+        "you asked for. A node whose dependency clears mid-wave is not "
+        "started for you: choosing it is the decision the wake exists for.",
+        "owner ruling 2026-09-16: the completed wave is an epistemic "
+        "barrier, not a scheduler detail",
+    ),
+    _r(
+        "stem.width_is_yours_concurrency_is_the_hosts",
+        "stem",
+        "T0",
+        "How many independent calculations a wave contains is yours to "
+        "decide from the science; how many of them run at the same time is "
+        "the host's. Ask for as many as the question needs. Seven "
+        "calculations are one wave and one wake, never 'four now and three "
+        "after another turn' -- the host queues the remainder inside the "
+        "same cohort and does not wake you as capacity frees.",
+        "owner ruling 2026-09-16: scientific width and physical "
+        "concurrency are different quantities",
+    ),
+    _r(
+        "stem.hardware_is_the_hosts",
+        "stem",
+        "T0",
+        "You do not size the machine. Cores, threads, memory, wall time, "
+        "scheduler task shape, queue, QoS and account are fixed by the "
+        "host's own configuration. Inspect the execution environment when "
+        "it matters scientifically -- to know what is available, or to "
+        "record what a result ran under -- and never try to set it. A "
+        "calculation that needs more machine than the host provides is a "
+        "method decision for you to make, not a setting for you to change.",
+        "owner ruling 2026-09-16: hardware authority is the host's",
+    ),
+    _r(
         "stem.one_dag",
         "stem",
         "T0",
@@ -600,6 +643,17 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "owner ruling",
     ),
     # Wake rules, every goal cycle.
+    _r(
+        "wake.cohort_evidence",
+        "wake",
+        "T0",
+        "What you are reading is a whole wave. Some members may have "
+        "failed, been cancelled, or validated into something you did not "
+        "predict; that is the evidence you asked for when you chose them "
+        "together, not an error to route around. Read all of it, say what "
+        "it changed, and choose the next wave from what it shows.",
+        "owner ruling 2026-09-16: the barrier is terminality, not success",
+    ),
     _r(
         "wake.restate_observable",
         "wake",
