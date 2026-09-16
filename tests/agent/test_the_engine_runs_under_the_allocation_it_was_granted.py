@@ -20,7 +20,6 @@ opinion.
 
 from __future__ import annotations
 
-
 from chemsmart.agent.execution import (
     build_execution_resource_spec,
     build_real_execution_argv,

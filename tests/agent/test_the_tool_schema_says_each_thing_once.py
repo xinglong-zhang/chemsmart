@@ -75,4 +75,10 @@ def test_nothing_was_lost_and_the_surface_fits_the_budget():
     # stem ceiling (91,000) was not raised: every new sentence sits on a
     # leaf, and the one sentence tried on a stem tool was moved to the
     # leaf when the stem measured 53 bytes over.
-    assert len(text) < 119_500, len(text)
+    # Raised to 120,500 (2026-09-16, Round A) for select_execution_wave,
+    # the one affordance a session needs to name the wave it wants: 868
+    # bytes on the stem surface and the same tool here. Its contract
+    # sentence is a registered rule at `tool:select_execution_wave`
+    # rather than prose in the schema, so the registry stays the one
+    # author and `test_every_rule_renders_once` covers it.
+    assert len(text) < 120_500, len(text)

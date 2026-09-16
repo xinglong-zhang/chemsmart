@@ -12,6 +12,7 @@ script body and the receipt that names the job.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import shlex
@@ -19,10 +20,12 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from chemsmart.agent._contracts import ContractError
+from chemsmart.agent.cohort import build_cohort_manifest
 
 #: What a wake job asks for. It runs one host process -- reading the
 #: run's own receipts and re-entering the goal -- and nothing about the
@@ -58,9 +61,21 @@ class DispatchReceiptV1:
     #: is entitled to see whether the two agree. Absent on receipts minted
     #: before the envelope had any route to a scheduler directive.
     scheduler_request: Optional[dict[str, Any]] = None
+    #: The job that will re-enter the goal, when it is not this job's own
+    #: tail. A cohort's elements deliberately wake nothing -- N tails
+    #: would wake the model N times -- so the goal is parked on the array
+    #: and re-entered by a separate dependent job, and a reader of this
+    #: receipt is entitled to know which job that is. Empty for the
+    #: single-job path, whose own tail wakes.
+    wake_job_id: str = ""
+    #: The wave this run is, in the manifest's own order. Empty for a run
+    #: that is not a cohort.
+    cohort_node_ids: tuple[str, ...] = ()
 
     def public_record(self) -> dict[str, Any]:
-        return asdict(self)
+        record = asdict(self)
+        record["cohort_node_ids"] = list(self.cohort_node_ids)
+        return record
 
 
 class _AgentRunJob:
@@ -231,6 +246,8 @@ def dispatch_run_to_scheduler(
     resources: Any = None,
     sealed: bool = True,
     envelope: Any = None,
+    cohort_node_ids: tuple[str, ...] = (),
+    bundle_sha256: str = "",
 ) -> DispatchReceiptV1:
     """Submit one approved run and return the receipt naming its job.
 
@@ -248,6 +265,19 @@ def dispatch_run_to_scheduler(
         envelope: The approved execution envelope, whose episode window
             and postprocessing reserve are the wall clock asked for. The
             operator's NUM_HOURS caps it and no longer sets it.
+        cohort_node_ids: The wave the Agent selected, in the order it
+            selected it. Given, the run is submitted as one throttled
+            array -- one element per approved calculation -- plus one
+            dependent job that wakes the goal when every element has
+            reached a terminal state. Empty keeps the single-job path,
+            whose own tail wakes: a run of one is not a degenerate array,
+            it is the path every goal used before waves existed.
+        bundle_sha256: The approved bundle the cohort belongs to, bound
+            into the manifest digest so a manifest cannot be read against
+            a different approval. Left empty it is taken from the
+            approval file's own bytes, which is the stronger answer: a
+            digest the caller passes can disagree with what was
+            submitted, and one read here cannot.
     """
 
     from chemsmart.settings.server import Server
@@ -277,19 +307,71 @@ def dispatch_run_to_scheduler(
         envelope=envelope,
     )
     submitter = resolved.get_submitter(job, scheduler_request=request)
-    script = build_dispatch_script(
-        submitter=submitter,
-        python=interpreter,
-        approval_file=Path(approval_file).resolve(),
-        workspace=Path(workspace).resolve(),
-        run_directory=run_directory.resolve(),
-        goal_id=goal_id,
-        wake=wake,
-    )
+    wake_job_id = ""
+    if cohort_node_ids:
+        # The manifest is written first and never after: it is the only
+        # index-to-node mapping, and an element that starts promptly
+        # resolves itself through it before its author would otherwise
+        # have got there.
+        manifest = build_cohort_manifest(
+            goal_id=goal_id,
+            cycle=int(cycle),
+            bundle_sha256=(
+                str(bundle_sha256)
+                or hashlib.sha256(Path(approval_file).read_bytes()).hexdigest()
+            ),
+            node_ids=tuple(str(item) for item in cohort_node_ids),
+            max_concurrent_tasks=submitter.max_concurrent_tasks(),
+            created_at=datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "+00:00"),
+        )
+        manifest.write(run_directory)
+        script = build_cohort_dispatch_script(
+            submitter=submitter,
+            python=interpreter,
+            approval_file=Path(approval_file).resolve(),
+            workspace=Path(workspace).resolve(),
+            run_directory=run_directory.resolve(),
+            cohort_size=len(manifest.node_ids),
+        )
+    else:
+        script = build_dispatch_script(
+            submitter=submitter,
+            python=interpreter,
+            approval_file=Path(approval_file).resolve(),
+            workspace=Path(workspace).resolve(),
+            run_directory=run_directory.resolve(),
+            goal_id=goal_id,
+            wake=wake,
+        )
     (run_directory / submitter.submit_script).write_text(
         script, encoding="utf-8"
     )
     submission = resolved.submit_prepared(job)
+    if cohort_node_ids and wake:
+        # A separate job, because the barrier is the wave's and not any
+        # element's. It is submitted after the array so it can name it;
+        # `--kill-on-invalid-dep=yes` is what stops an unsatisfiable
+        # dependency from parking the goal on a PENDING job forever.
+        wake_job = _AgentRunJob(
+            label=f"goal-{goal_id}-cycle-{cycle}-wake",
+            folder=str(run_directory),
+        )
+        wake_submitter = resolved.get_submitter(
+            wake_job, scheduler_request=request
+        )
+        wake_script = build_wake_dispatch_script(
+            submitter=wake_submitter,
+            python=interpreter,
+            workspace=Path(workspace).resolve(),
+            goal_id=goal_id,
+            array_job_id=str(submission.job_id),
+        )
+        (run_directory / wake_submitter.submit_script).write_text(
+            wake_script, encoding="utf-8"
+        )
+        wake_job_id = str(resolved.submit_prepared(wake_job).job_id)
     receipt = DispatchReceiptV1(
         scheduler=submission.scheduler,
         job_id=submission.job_id,
@@ -306,6 +388,8 @@ def dispatch_run_to_scheduler(
             goal_id=goal_id,
         ),
         scheduler_request=request.public_record(),
+        wake_job_id=wake_job_id,
+        cohort_node_ids=tuple(str(item) for item in cohort_node_ids),
     )
     (run_directory / DISPATCH_RECEIPT_FILE).write_text(
         json.dumps(receipt.public_record(), indent=2, sort_keys=True),
@@ -328,6 +412,13 @@ def read_dispatch_receipt(run_directory: Path) -> DispatchReceiptV1 | None:
         for name in DispatchReceiptV1.__dataclass_fields__
         if name in record
     }
+    # JSON has one sequence and this receipt has two: a cohort read back
+    # as a list would not compare equal to the one that was written, and
+    # the cohort is membership, which is the barrier's own question.
+    if "cohort_node_ids" in fields:
+        fields["cohort_node_ids"] = tuple(
+            str(item) for item in fields["cohort_node_ids"] or ()
+        )
     return DispatchReceiptV1(**fields)
 
 

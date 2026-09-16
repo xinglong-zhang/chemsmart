@@ -1585,6 +1585,33 @@ class ApprovedWorkflowExecutor:
             timestamp=stamp,
         )
 
+    def _cohort_scope(self) -> tuple[str, ...] | None:
+        """Which approved calculations *this process* may run.
+
+        Three answers, and conflating the last two is how a wave of
+        three became three processes each trying to run all three:
+
+        - ``None`` -- no cohort was dispatched. The walk is the one every
+          recorded run had, and a single-job dispatch is not a degenerate
+          array.
+        - the whole manifest -- one process is running the wave, which is
+          what a local dispatch of a cohort does.
+        - one node -- this process is one array element, and an array
+          element is one approved scientific calculation. Its authorised
+          node is the manifest's own answer for its index; the launch
+          fence would have caught the duplicates, but only after N
+          processes had raced for one reservation and N-1 had done the
+          work of finding out.
+        """
+
+        manifest = read_cohort_manifest(self.run_directory)
+        if manifest is None:
+            return None
+        element = getattr(self, "cohort_element", None)
+        if element is None:
+            return manifest.node_ids
+        return (manifest.node_for_element(element),)
+
     def _record_component_index(self) -> dict[str, int]:
         """Map every plan node to its record via the shared derivation.
 
@@ -1958,10 +1985,7 @@ class ApprovedWorkflowExecutor:
             )
             data_edge_bindings = ()
         record_of = self._record_component_index()
-        # This cycle's wave, if one was dispatched. None keeps the walk
-        # every recorded run had.
-        manifest = read_cohort_manifest(self.run_directory)
-        cohort_node_ids = None if manifest is None else manifest.node_ids
+        cohort_node_ids = self._cohort_scope()
         while True:
             ready = tuple(
                 node_id

@@ -1496,6 +1496,22 @@ def _legacy_tool_definitions(
             ("workflow_id",),
         ),
         _tool(
+            "select_execution_wave",
+            (
+                "Name the calculations to run together as one wave, in "
+                "the order you want them."
+            ),
+            {
+                "workflow_id": _public_identifier(),
+                "node_ids": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": _public_identifier(),
+                },
+            },
+            ("workflow_id", "node_ids"),
+        ),
+        _tool(
             "prepare_program_node",
             (
                 "Prepare and safe-preview one actionable calculation node "

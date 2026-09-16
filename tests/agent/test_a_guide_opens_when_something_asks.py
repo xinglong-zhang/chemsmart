@@ -69,7 +69,19 @@ def test_the_stem_hides_every_leaf_tool_and_operation():
     # protocol. Moving it there recovered 834 bytes. What belongs in the
     # stem is what a field IS and what the host records about it; when
     # to reach for it belongs to the guide that opens for that family.
-    assert len(json.dumps(stem.tool_definitions)) < 91_000
+    # Raised 91_000 -> 92_000 (2026-09-16, Round A) for select_execution_wave,
+    # measured at 868 bytes on this surface: 275 of them are the placed
+    # rule that says an undispatchable wave is a per-member verdict
+    # rather than an error, and the rest is the schema. Nothing was
+    # trimmed to pay for it, and the record says so rather than
+    # implying a trade that did not happen: the stem held 179 bytes of
+    # headroom before this change, and the wave model is the contract
+    # the round exists for -- the only cheaper home for the tool is a
+    # guide, and a session that never opens it would plan waves it
+    # cannot name. The three sentences teaching the model *why* it has
+    # waves sit in the system prompt, not here, so this pays for the
+    # affordance and not for the lesson.
+    assert len(json.dumps(stem.tool_definitions)) < 92_000
 
 
 def test_every_guide_adds_exactly_its_tools_and_operations():

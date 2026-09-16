@@ -4229,6 +4229,14 @@ class GoalDriver:
                         getattr(self, "envelope", None), "resources", None
                     ),
                     envelope=getattr(self, "envelope", None),
+                    # The wave the session selected, in the order it
+                    # selected it. Empty is the single-job path, and
+                    # nothing here invents a cohort: a wave the Agent
+                    # did not ask for is not a wave.
+                    cohort_node_ids=tuple(
+                        getattr(self.session, "selected_execution_wave", ())
+                        or ()
+                    ),
                 )
             except ContractError as exc:
                 self._typed_error("scheduler dispatch", exc)

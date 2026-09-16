@@ -43,15 +43,99 @@ def test_the_order_the_frontier_offered_is_kept():
     assert cohort_frontier(("a3", "a1"), ("a1", "a2", "a3")) == ("a3", "a1")
 
 
-def test_the_executor_asks_the_cohort_before_it_walks():
-    """A barrier nothing reads is a paragraph, not a contract."""
+def _executor(tmp_path, *, element):
+    """A real executor over a real manifest, as an array element is."""
 
-    import inspect
+    from types import SimpleNamespace
 
-    from chemsmart.agent import executor
+    from chemsmart.agent.cohort import build_cohort_manifest
+    from chemsmart.agent.executor import ApprovedWorkflowExecutor
 
-    source = inspect.getsource(executor)
-    assert "cohort_frontier" in source, (
-        "the executor still walks the whole ready frontier, so a wave "
-        "runs work the Agent did not ask for in it"
+    run_directory = tmp_path / "run"
+    run_directory.mkdir(parents=True, exist_ok=True)
+    build_cohort_manifest(
+        goal_id="g1",
+        cycle=1,
+        bundle_sha256="e" * 64,
+        node_ids=("a1", "a2", "a3"),
+        max_concurrent_tasks=4,
+        created_at="2026-09-16T00:00:00+00:00",
+    ).write(run_directory)
+    return ApprovedWorkflowExecutor(
+        host=SimpleNamespace(),
+        plan=SimpleNamespace(
+            workflow_id="w",
+            plan_sha256="b" * 64,
+            nodes=(
+                SimpleNamespace(node_id="a1", program="orca"),
+                SimpleNamespace(node_id="a2", program="orca"),
+                SimpleNamespace(node_id="a3", program="orca"),
+            ),
+        ),
+        approval=SimpleNamespace(node_bindings=()),
+        frozen_approval=SimpleNamespace(approval_sha256="c" * 64),
+        initial_artifacts={},
+        project_artifacts=(),
+        task_spec_sha256="a" * 64,
+        run_directory=run_directory,
+        execution_bundle=SimpleNamespace(non_executable_node_ids=()),
+        approval_workspace=tmp_path / "workspace",
+        claim_workspace_bundle=False,
+        cohort_element=element,
     )
+
+
+def test_an_array_element_runs_one_calculation_not_the_whole_wave(tmp_path):
+    """An array element is one approved scientific calculation node.
+
+    ``authorise_cohort_element`` resolved exactly which one and its
+    answer was discarded, so every element bounded its walk to the whole
+    cohort: three processes each tried to run all three members. The
+    launch fence would have refused the duplicates -- after three
+    processes had raced for one reservation and two had done the work of
+    finding out they had lost.
+    """
+
+    scope = _executor(tmp_path, element=1)._cohort_scope()
+    assert scope == ("a2",), (
+        f"element 1 may run {scope}, so it walks members that belong to "
+        "other elements"
+    )
+    # Composed with the frontier, which is what the walk actually does.
+    assert cohort_frontier(("a1", "a2", "a3"), scope) == ("a2",)
+
+
+def test_one_process_running_the_whole_wave_keeps_the_whole_wave(tmp_path):
+    """A local dispatch of a cohort is one process running every member."""
+
+    executor = _executor(tmp_path, element=None)
+    assert executor._cohort_scope() == ("a1", "a2", "a3")
+
+
+def test_without_a_manifest_the_walk_is_unbounded(tmp_path):
+    """Every run recorded before waves existed keeps its own walk."""
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.executor import ApprovedWorkflowExecutor
+
+    run_directory = tmp_path / "bare"
+    run_directory.mkdir()
+    executor = ApprovedWorkflowExecutor(
+        host=SimpleNamespace(),
+        plan=SimpleNamespace(
+            workflow_id="w",
+            plan_sha256="b" * 64,
+            nodes=(SimpleNamespace(node_id="a1", program="orca"),),
+        ),
+        approval=SimpleNamespace(node_bindings=()),
+        frozen_approval=SimpleNamespace(approval_sha256="c" * 64),
+        initial_artifacts={},
+        project_artifacts=(),
+        task_spec_sha256="a" * 64,
+        run_directory=run_directory,
+        execution_bundle=SimpleNamespace(non_executable_node_ids=()),
+        approval_workspace=tmp_path / "workspace",
+        claim_workspace_bundle=False,
+    )
+    assert executor._cohort_scope() is None

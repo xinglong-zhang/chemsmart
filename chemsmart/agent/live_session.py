@@ -570,6 +570,14 @@ class LiveAgentSessionResultV1:
     event_stream_head_sha256: str
     result_sha256: str
     prepared_execution: WorkflowExecutionReviewV1 | None = None
+    #: The wave this session selected, in the order it selected it, or
+    #: empty when it selected none. Outside the digested body on purpose:
+    #: that digest covers every archived session result on disk, and
+    #: membership is digest-bound where it decides something -- the
+    #: cohort manifest, which binds goal, cycle, members and the approved
+    #: bundle together, so an element cannot resolve itself through a
+    #: manifest written for a different approval.
+    selected_execution_wave: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.live-agent-session-result.v1":
@@ -591,7 +599,12 @@ class LiveAgentSessionResultV1:
         return {
             key: value
             for key, value in asdict(self).items()
-            if key not in {"result_sha256", "prepared_execution"}
+            if key
+            not in {
+                "result_sha256",
+                "prepared_execution",
+                "selected_execution_wave",
+            }
         }
 
     def public_summary_json(self) -> str:
@@ -1264,6 +1277,9 @@ def run_live_agent_session(
         **body,
         result_sha256=canonical_sha256(body),
         prepared_execution=prepared_execution,
+        selected_execution_wave=tuple(
+            getattr(host, "selected_execution_wave", ()) or ()
+        ),
     )
 
 

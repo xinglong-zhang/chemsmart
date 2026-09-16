@@ -284,6 +284,19 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "input unresolved until its validated upstream artifact exists.",
     ),
     _r(
+        "tool.select_execution_wave",
+        "tool:select_execution_wave",
+        "T0",
+        "Nothing here is refused. A member the host cannot dispatch comes "
+        "back as a verdict naming what it waits on -- a producer that has "
+        "not run, or another member of this same wave that it consumes -- "
+        "and you select again from that. The order you give is the order "
+        "the host keeps.",
+        "Round A (2026-09-16): an undispatchable wave is typed evidence "
+        "and not an error, because an exception teaches a session to "
+        "carry workarounds for a decision that is the host's.",
+    ),
+    _r(
         "stem.wave_execution",
         "stem",
         "T0",

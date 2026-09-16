@@ -2770,6 +2770,7 @@ class CommandCompiledToolHostV1:
         "plan_scientific_workflow": "_plan_scientific_workflow",
         "amend_scientific_workflow": "_amend_scientific_workflow",
         "inspect_workflow_frontier": "_inspect_workflow_frontier",
+        "select_execution_wave": "_select_execution_wave",
         "prepare_program_node": "_prepare_program_node",
         "synthesize_command": "_synthesize_command",
         "preview_command": "_preview_command",
@@ -7829,6 +7830,74 @@ class CommandCompiledToolHostV1:
                 and artifact_id not in read
             )
         )
+
+    def _select_execution_wave(self, turn_id: str, values: dict) -> Any:
+        """Judge the wave the Agent named against the host's frontier.
+
+        The host owns readiness and owns concurrency; the Agent owns
+        which ready calculations belong in one wave. So this asks
+        ``_workflow_context`` -- the same projection
+        ``inspect_workflow_frontier`` already serves -- rather than
+        deriving a second frontier, and it never chooses, reorders or
+        refuses. The order the Agent gave is the order the array elements
+        take, because which calculation is element 0 is a scientific
+        decision the host has no basis to overrule.
+
+        A wave the host cannot dispatch comes back as a per-member
+        verdict, not an exception: an exception is what teaches a session
+        to carry workarounds for something the host should simply have
+        reported (owner ruling, 2026-09-16).
+        """
+
+        del turn_id
+        from chemsmart.agent.cohort import validate_wave
+
+        resolved = self._resolve_program_workflow(values["workflow_id"])
+        draft = resolved.draft
+        scientific = getattr(resolved, "scientific_plan", None)
+        context = self._workflow_context(
+            draft,
+            scientific_plan_sha256=(
+                getattr(scientific, "plan_sha256", "") if scientific else ""
+            ),
+        )
+        edges = tuple(
+            (
+                str(getattr(item, "producer_node_id", "") or ""),
+                str(node.node_id),
+            )
+            for node in getattr(draft, "nodes", ()) or ()
+            for item in getattr(node, "inputs", ()) or ()
+            if getattr(item, "producer_node_id", "")
+        )
+        proposed = tuple(str(item) for item in values.get("node_ids") or ())
+        verdict = validate_wave(
+            proposed=proposed,
+            ready=tuple(context.ready_node_ids),
+            edges=edges,
+        )
+        dispatchable = bool(verdict.rows) and all(
+            row.status == "ready" for row in verdict.rows
+        )
+        if dispatchable:
+            # Where the dispatcher reads it. A wave that lives only in a
+            # tool reply is a wave the array never hears about.
+            self.selected_execution_wave = tuple(verdict.members)
+        record = verdict.public_record()
+        return {
+            "status": "ready" if dispatchable else "not_dispatchable",
+            "workflow_id": str(draft.workflow_id),
+            "node_ids": list(verdict.members) if dispatchable else [],
+            "members": record.get("rows", []),
+            "summary": verdict.summary,
+            "next_action": (
+                "this wave is what will be submitted; every member runs "
+                "and you are woken once, when all of them have ended"
+                if dispatchable
+                else "select again from the members the host reports "
+                "ready, and choose the rest after reading this wave"
+            ),
+        }
 
     def _inspect_workflow_frontier(self, turn_id: str, values: dict) -> Any:
         """Return the latest connected frontier for a named workflow."""

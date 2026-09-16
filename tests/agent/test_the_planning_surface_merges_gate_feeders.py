@@ -41,7 +41,13 @@ def test_the_planning_surface_exposes_the_merged_tools_only():
     # and a guide the session never opens is an affordance it never
     # sees. Its bytes were paid for by de-duplicating the identifier
     # spelling rule, which the JSON pattern already states.
-    assert len(planning) == 17, "the stem"
+    # 17 -> 18 (2026-09-16, Round A): select_execution_wave joined the
+    # stem. Which ready calculations belong in one wave is the Agent's
+    # scientific strategy, and a tool it can only reach by opening a
+    # guide is an affordance a session that never opens that guide does
+    # not have -- so a wave would have been chosen by the host, which is
+    # exactly the decision this design moves to the model.
+    assert len(planning) == 18, "the stem"
     from chemsmart.agent.guides import GUIDES
 
     everything = _names(
@@ -49,7 +55,7 @@ def test_the_planning_surface_exposes_the_merged_tools_only():
             guides=tuple(guide.guide_id for guide in GUIDES)
         )
     )
-    assert len(everything) == 28, "the stem with every leaf open"
+    assert len(everything) == 29, "the stem with every leaf open"
 
 
 def test_the_executor_keeps_its_step_by_step_surface():
