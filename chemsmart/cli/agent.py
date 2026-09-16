@@ -864,6 +864,16 @@ def resume(
     help="Where the append-only event stream and receipts are written.",
 )
 @click.option(
+    "--cohort-element",
+    type=int,
+    default=None,
+    help="Which element of this cycle's wave this process runs. The "
+    "cohort manifest in the run directory maps the element to one "
+    "approved calculation; the array index is scheduler representation "
+    "and never a scientific identity. Omit it to run the whole approved "
+    "partition in this process, which is the single-job path.",
+)
+@click.option(
     "--task-spec-sha256",
     default="",
     help="Task specification digest the approval was frozen against.",
@@ -875,7 +885,14 @@ def resume(
     help="Print the full machine-readable execution record instead of the "
     "human summary.",
 )
-def run(approval_file, workspace, run_directory, task_spec_sha256, as_json):
+def run(
+    approval_file,
+    workspace,
+    run_directory,
+    cohort_element,
+    task_spec_sha256,
+    as_json,
+):
     """Execute an approved workflow bundle provider-free.
 
     Every scientific choice -- program, project YAML, method, node graph,
@@ -892,6 +909,7 @@ def run(approval_file, workspace, run_directory, task_spec_sha256, as_json):
         workspace=workspace,
         run_directory=run_directory,
         task_spec_sha256=task_spec_sha256,
+        cohort_element=cohort_element,
     )
     if as_json:
         click.echo(

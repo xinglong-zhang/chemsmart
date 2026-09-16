@@ -2209,6 +2209,7 @@ def _execute_workflow_bundle(
     run_directory: Path,
     claim_workspace_bundle: bool,
     stop_file: Path | None = None,
+    cohort_element: int | None = None,
 ) -> WorkflowExecutionResultV1:
     """Execute the typed ChemSmart DAG represented by an approved review."""
 
@@ -2290,6 +2291,7 @@ def _execute_workflow_bundle(
         should_stop=(
             (lambda: stop_file.exists()) if stop_file is not None else None
         ),
+        cohort_element=cohort_element,
     ).run()
 
 
@@ -2390,6 +2392,7 @@ def execute_approved_workflow(
     task_spec_sha256: str = "",
     expected_approval_file_sha256: str = "",
     stop_file: Path | None = None,
+    cohort_element: int | None = None,
 ) -> WorkflowExecutionResultV1:
     """Compatibility adapter for a previously persisted v1 approval file."""
 
@@ -2413,6 +2416,7 @@ def execute_approved_workflow(
         run_directory=run_directory,
         claim_workspace_bundle=True,
         stop_file=stop_file,
+        cohort_element=cohort_element,
     )
 
 

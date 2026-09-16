@@ -24,6 +24,11 @@ from typing import Any, Callable, Optional
 
 from chemsmart.agent._contracts import ContractError
 
+#: What a wake job asks for. It runs one host process -- reading the
+#: run's own receipts and re-entering the goal -- and nothing about the
+#: cohort's allocation applies to it.
+_WAKE_MEMORY_GB = 4
+
 #: Written in the run directory when a run is handed to a scheduler.
 DISPATCH_RECEIPT_FILE = "dispatch.receipt.json"
 
@@ -118,6 +123,98 @@ def build_dispatch_script(
             _wake_command(python=python, workspace=workspace, goal_id=goal_id)
             + "\n"
         )
+    return buffer.getvalue()
+
+
+def build_cohort_dispatch_script(
+    *,
+    submitter: Any,
+    python: str,
+    approval_file: Path,
+    workspace: Path,
+    run_directory: Path,
+    cohort_size: int,
+) -> str:
+    """One array: each element runs one approved calculation of the wave.
+
+    No element wakes the goal. N tails would wake the model N times, and
+    a wave is one reasoning point; the wake is a separate job that fires
+    once the whole array is over.
+
+    Each element writes its own result file, so N writers do not define
+    the cycle by whoever finished last.
+    """
+
+    buffer = io.StringIO()
+    submitter._write_bash_header(buffer)
+    submitter._write_array_scheduler_options(buffer, None, count=cohort_size)
+    submitter._write_extra_commands(buffer)
+    submitter._write_change_to_job_directory(buffer)
+    element = "${SLURM_ARRAY_TASK_ID}"
+    result = run_directory / f"execution-result.{element}.json"
+    buffer.write(
+        "# One approved calculation of this wave, executed provider-free.\n"
+    )
+    buffer.write(
+        f"{shlex.quote(python)} -m chemsmart agent run "
+        f"--approval-file {shlex.quote(str(approval_file))} "
+        f"--workspace {shlex.quote(str(workspace))} "
+        f"--run-directory {shlex.quote(str(run_directory))} "
+        f"--cohort-element {element} "
+        f"--json > {result}\n"
+    )
+    return buffer.getvalue()
+
+
+def build_wake_dispatch_script(
+    *,
+    submitter: Any,
+    python: str,
+    workspace: Path,
+    goal_id: str,
+    array_job_id: str,
+) -> str:
+    """The cohort's single re-entry, gated on the whole array.
+
+    ``afterany`` because the barrier is terminality and not success: a
+    failed or cancelled element has ended, and its outcome is evidence
+    the Agent must see. ``--kill-on-invalid-dep=yes`` because a
+    dependency that can never be satisfied otherwise stays PENDING
+    forever, which is a `Reason` and not a `JobState` and which nothing
+    would ever stop waiting on; cancelled is a state this tree already
+    classifies as terminal.
+
+    It asks for one task: a wake runs one host process, and a wake
+    inheriting the cohort's own allocation would queue behind real
+    science.
+    """
+
+    from chemsmart.settings.scheduler_request import SchedulerRequestV1
+
+    # A wake runs one host process. Left on the cohort's own allocation it
+    # would ask for the whole node and queue behind real science, for a
+    # job whose entire work is re-entering the goal.
+    submitter.kwargs["scheduler_request"] = SchedulerRequestV1(
+        cores=1,
+        memory_gb=_WAKE_MEMORY_GB,
+        gpu_count=0,
+        hours=int(getattr(submitter.server, "num_hours", 0) or 1),
+        sealed=False,
+    )
+    buffer = io.StringIO()
+    submitter._write_bash_header(buffer)
+    submitter._write_scheduler_options(buffer)
+    buffer.write(f"#SBATCH --dependency=afterany:{array_job_id}\n")
+    buffer.write("#SBATCH --kill-on-invalid-dep=yes\n")
+    submitter._write_extra_commands(buffer)
+    submitter._write_change_to_job_directory(buffer)
+    buffer.write(
+        "# The wave is over: the goal re-enters once, with all of it.\n"
+    )
+    buffer.write(
+        _wake_command(python=python, workspace=workspace, goal_id=goal_id)
+        + "\n"
+    )
     return buffer.getvalue()
 
 
@@ -294,7 +391,9 @@ __all__ = [
     "DISPATCH_RECEIPT_FILE",
     "EXECUTION_RESULT_FILE",
     "DispatchReceiptV1",
+    "build_cohort_dispatch_script",
     "build_dispatch_script",
+    "build_wake_dispatch_script",
     "dispatch_run_to_scheduler",
     "read_dispatch_receipt",
     "wait_for_dispatched_run",

@@ -545,7 +545,7 @@ class Submitter(RegistryMixin):
             self._write_change_to_job_directory(f)
             self._write_array_job_command(f)
 
-    def _write_array_scheduler_options(self, f, num_nodes):
+    def _write_array_scheduler_options(self, f, num_nodes, count=None):
         """
         Write scheduler options for array job submission.
 
@@ -988,7 +988,7 @@ class SLURMSubmitter(Submitter):
         f.write("\n")
         f.write("\n")
 
-    def _write_array_scheduler_options(self, f, num_nodes):
+    def _write_array_scheduler_options(self, f, num_nodes, count=None):
         """
         Write SLURM-specific array job scheduler directives.
 
@@ -1007,7 +1007,11 @@ class SLURMSubmitter(Submitter):
             num_nodes (int): Number of nodes for the array job.
         """
         # Get number of jobs in array
-        num_jobs = len(self.jobs) if hasattr(self, "jobs") else 1
+        num_jobs = (
+            int(count)
+            if count is not None
+            else (len(self.jobs) if hasattr(self, "jobs") else 1)
+        )
 
         f.write(f"#SBATCH --job-name={self.job.label}_array\n")
         f.write(f"#SBATCH --output={self.job.label}_array_%a.slurmout\n")
