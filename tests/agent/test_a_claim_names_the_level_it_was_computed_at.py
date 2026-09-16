@@ -34,6 +34,7 @@ _COSTLY = "b" * 64
 def _review(tmp_path):
     """Two nodes, two levels -- the ordinary two-stage protocol."""
 
+    tmp_path.mkdir(parents=True, exist_ok=True)
     path = tmp_path / "review.json"
     path.write_text(
         json.dumps(
@@ -262,6 +263,7 @@ def _expression(receipt, source_receipts):
 
 
 def _record(tmp_path, rows, *, review=None):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     workspace = tmp_path / "ws"
     stream = tmp_path / "events.jsonl"
     stream.write_text(
@@ -385,3 +387,73 @@ def test_a_composed_number_with_one_imported_term_claims_no_level(tmp_path):
         "a half-known ancestry was reported as a level: "
         f"{claims['reaction_energy']['level_sha256s']}"
     )
+
+
+def test_a_fallback_level_is_never_a_pair(tmp_path):
+    """The property a composed claim's qualification rests on.
+
+    A claim whose ancestry walk *worked* across two levels carries a
+    2-tuple. A claim that fell back carries `single_level`, which is a
+    1-tuple when the run has exactly one level and `()` otherwise --
+    never two. That asymmetry is what makes a composed claim the only
+    test in this machinery that cannot pass by coincidence: no run shape
+    produces a pair by accident.
+
+    It is asserted here because the live qualification of the expression
+    walk depends on it, and a later change that made the fallback return
+    the run's whole level set would silently turn that qualification
+    into a tautology without failing anything.
+    """
+
+    two = _record(
+        tmp_path / "two",
+        [
+            _node("a", "c" * 64, "opt"),
+            _node("b", "d" * 64, "sp"),
+            _extraction("1" * 64, "c" * 64),
+            _extraction("2" * 64, "d" * 64),
+            # No extraction resolves this claim's receipt, so the walk
+            # finds nothing and the fallback decides -- on a run that
+            # carries two levels.
+            _claim("unresolvable", "9" * 64),
+        ],
+    )
+    assert tuple(two["unresolvable"]["level_sha256s"]) == (), (
+        "the fallback produced a level set on a two-level run, so a "
+        "composed claim's 2-tuple would no longer prove the walk ran"
+    )
+
+    one = _record(
+        tmp_path / "one",
+        [
+            _node("a", "c" * 64, "opt"),
+            _extraction("1" * 64, "c" * 64),
+            _claim("unresolvable", "9" * 64),
+        ],
+        review=_single_level_review(tmp_path / "one"),
+    )
+    assert len(one["unresolvable"]["level_sha256s"]) == 1
+
+
+def _single_level_review(tmp_path):
+    """One node, one level -- so the fallback has exactly one answer."""
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    path = tmp_path / "review.json"
+    path.write_text(
+        json.dumps(
+            {
+                "workflow_execution_review": {
+                    "node_reviews": [
+                        {
+                            "node_id": "a",
+                            "project_settings_text": "B3LYP/def2-SVP",
+                            "project_settings_text_sha256": _CHEAP,
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
