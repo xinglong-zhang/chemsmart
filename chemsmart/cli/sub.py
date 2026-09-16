@@ -173,6 +173,11 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         if not batch_entry:
             return cli_args
 
+        if batch_entry.get("kind") == "reaction":
+            from chemsmart.cli.reaction import replace_reaction_batch_tokens
+
+            return replace_reaction_batch_tokens(cli_args, batch_entry)
+
         args = list(cli_args)
         table_option_names = {
             "-f",

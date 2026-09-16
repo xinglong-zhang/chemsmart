@@ -347,7 +347,7 @@ Transition State Search
    -  -  Subcommand
       -  Description
    -  -  ``ts``
-      -  Transition state optimization
+      -  Transition state optimization (single structure)
    -  -  ``modred``
       -  Modified redundant coordinate optimization
    -  -  ``irc``
@@ -366,18 +366,35 @@ Electronic Structure Properties
 
    -  -  Subcommand
       -  Description
+
    -  -  ``sp``
       -  Single point energy calculation
+
    -  -  ``nci``
       -  Non-covalent interaction analysis
+
    -  -  ``dias``
       -  Distortion-Interaction/Activation-Strain analysis
+
    -  -  ``resp``
       -  RESP charge fitting
+
    -  -  ``td``
       -  Time-dependent DFT calculations
+
    -  -  ``wbi``
       -  Wiberg Bond Index analysis
+
+   -  -  ``fukui``
+      -  Fukui charge-state calculations (N / N±1); analyze with ``chemsmart run fukui``. See :doc:`chain-jobs` for
+         ``chain … fukui --program gaussian``.
+
+   -  -  ``pka``
+      -  Dual-level pKa job submission; analyze with ``chemsmart run pka``. See :doc:`gaussian-pka-calculations`
+
+   -  -  ``redox``
+      -  Dual-level exchange redox submission; analyze with ``chemsmart run redox analyze``. See
+         :doc:`gaussian-redox-calculations`
 
 Other Jobs
 ==========
@@ -409,6 +426,9 @@ For detailed information on each job type:
 
 -  :doc:`gaussian-structure-optimization`
 -  :doc:`gaussian-transition-state`
+-  :doc:`reaction`
+-  :doc:`gaussian-pka-calculations`
+-  :doc:`gaussian-redox-calculations`
 -  :doc:`gaussian-conformational-sampling`
 -  :doc:`gaussian-qrc`
 -  :doc:`gaussian-electronic-structure`

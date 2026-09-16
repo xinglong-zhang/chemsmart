@@ -1,0 +1,3 @@
+# Minimal chain project: one program alias.
+# gaussian: test  ->  ~/.chemsmart/gaussian/test.yaml
+gaussian: test

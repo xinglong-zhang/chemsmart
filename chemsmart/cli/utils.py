@@ -2,6 +2,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+CHAIN_PROJECT_SETTINGS_KEY = "chain_project_settings"
+CHAIN_CLI_DEFAULTS_KEY = "chain_cli_defaults"
+
 
 def build_jobs(ctx, job_cls, settings, skip_completed, kwargs):
     """Build one or more jobs from molecules stored on the Click context."""

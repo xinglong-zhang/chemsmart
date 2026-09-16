@@ -498,6 +498,8 @@ class ORCAJobSettings(MolecularJobSettings):
             route_string = self._get_route_string_from_user_input()
         else:
             route_string = self._get_route_string_from_jobtype()
+        if self.additional_route_parameters:
+            route_string += f" {self.additional_route_parameters}"
         logger.debug(f"Route for settings {self}: {route_string}")
         return route_string
 
@@ -888,11 +890,11 @@ class ORCApKaJobSettings(ORCAJobSettings):
             conjugate_base_multiplicity=shared["conjugate_base_multiplicity"],
             solvent_model=solvent_model,
             solvent_id=solvent_id,
-            temperature=shared["temperature"],
-            concentration=shared["concentration"],
-            pressure=shared["pressure"],
-            cutoff_entropy_grimme=shared["cutoff_entropy_grimme"],
-            cutoff_enthalpy=shared["cutoff_enthalpy"],
+            temperature=shared.get("temperature"),
+            concentration=shared.get("concentration"),
+            pressure=shared.get("pressure"),
+            cutoff_entropy_grimme=shared.get("cutoff_entropy_grimme"),
+            cutoff_enthalpy=shared.get("cutoff_enthalpy"),
             charge=opt_settings.charge,
             multiplicity=opt_settings.multiplicity,
             functional=opt_settings.functional,

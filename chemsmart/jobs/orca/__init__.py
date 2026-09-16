@@ -5,12 +5,14 @@ This module provides ORCA job functionality including various job types,
 settings, and runners for ORCA quantum chemistry calculations.
 """
 
+from .fukui import ORCAFukuiJob
 from .irc import ORCAIRCJob
 from .job import ORCAGeneralJob, ORCAInpJob, ORCAJob
 from .modred import ORCAModredJob
 from .opt import ORCAOptJob
 from .qmmm import ORCAQMMMJob
 from .qrc import ORCAQRCJob
+from .redox import ORCARedoxJob
 from .runner import ORCAJobRunner
 from .scan import ORCAScanJob
 from .singlepoint import ORCASinglePointJob
@@ -21,6 +23,7 @@ jobs = ORCAJob.subclasses()
 
 
 __all__ = [
+    "ORCAFukuiJob",
     "ORCAOptJob",
     "ORCAIRCJob",
     "ORCAJob",
@@ -29,6 +32,7 @@ __all__ = [
     "ORCAModredJob",
     "ORCAJobRunner",
     "ORCAQRCJob",
+    "ORCARedoxJob",
     "ORCAScanJob",
     "ORCASinglePointJob",
     "ORCATSJob",

@@ -1,3 +1,4 @@
+from chemsmart.cli.chain import chain
 from chemsmart.cli.convert import convert
 from chemsmart.cli.crest import crest
 from chemsmart.cli.database import database
@@ -7,7 +8,6 @@ from chemsmart.cli.iterate import iterate
 from chemsmart.cli.mol import mol
 from chemsmart.cli.nciplot import nciplot
 from chemsmart.cli.orca import orca
-from chemsmart.cli.pka import pka
 from chemsmart.cli.thermochemistry import thermochemistry
 from chemsmart.cli.xtb import xtb
 
@@ -18,7 +18,7 @@ subcommands = [
     grouper,
     orca,
     xtb,
-    pka,
+    chain,
     mol,
     nciplot,
     thermochemistry,

@@ -7,11 +7,13 @@
 CHEMSMART provides pKa workflows in two separate stages:
 
 #. **Job submission** — generate and run Gaussian or ORCA calculations for HA, A⁻, and (optionally) a reference acid.
-   See :ref:`gaussian-pka-calculations` and :ref:`orca-pka-calculations`.
+   See :ref:`gaussian-pka-calculations` and :ref:`orca-pka-calculations`. Submit from the program CLI or from
+   ``chemsmart run/sub chain … pka --program {gaussian,orca}`` (see :ref:`chain-workflow-subcommands`).
 
 #. **Output analysis** — compute pKa values from completed output files using the backend-independent command
    ``chemsmart run pka``. Analysis is **program-agnostic**: the same workflow reads Gaussian ``.log`` and ORCA ``.out``
-   files and extracts the energies and thermal corrections needed for the pKa cycle.
+   files and extracts the energies and thermal corrections needed for the pKa cycle. The same analysis is also
+   registered under ``chain``; see :doc:`chain-jobs`.
 
 .. toctree::
    :maxdepth: 2
@@ -32,6 +34,8 @@ CHEMSMART provides pKa workflows in two separate stages:
 
 -  ``chemsmart run/sub gaussian ... pka [submit|batch]`` — prepare and run Gaussian pKa calculations.
 -  ``chemsmart run/sub orca ... pka [submit|batch]`` — prepare and run ORCA pKa calculations.
+-  ``chemsmart run/sub chain -p combined ... pka --program {gaussian,orca} [submit|batch]`` — same jobs, with theory and
+   solvent from the chain YAML alias. See :ref:`chain-workflow-subcommands`.
 -  Use ``chemsmart run`` for local preparation and execution; use ``chemsmart sub`` on HPC clusters to generate
    scheduler scripts (see :ref:`pka-hpc-batch-submission`).
 -  A single structure yields one job; batch input (CSV table or multi-molecule CDXML) can produce multiple jobs in one
@@ -43,7 +47,7 @@ CHEMSMART provides pKa workflows in two separate stages:
 
 -  ``chemsmart run pka analyze`` — single-system analysis from up to eight output files.
 -  ``chemsmart run pka batch-analyze`` — table-driven batch analysis.
--  Both commands use the same pKa analysis workflow. Gaussian ``.log`` and ORCA ``.out`` files can be mixed in the same
+-  These commands use the same pKa analysis workflow. Gaussian ``.log`` and ORCA ``.out`` files can be mixed in the same
    batch table; each file is read and interpreted on its own.
 -  Analysis never invokes ``gaussian`` or ``orca`` job submission — only reads completed output files.
 
@@ -155,6 +159,10 @@ The default scheme is **proton exchange**, which requires a reference acid (``-r
    # Direct cycle — no reference acid; must set -s direct explicitly
    chemsmart run gaussian -p my_project -f acid.xyz -c 0 -m 1 pka -pi 10 -s direct
    chemsmart run orca -p my_project -f acid.xyz -c 0 -m 1 pka -pi 10 -s direct
+
+   # Chain submit (theory/solvent from the chain YAML alias)
+   chemsmart run chain -p combined -f acid.xyz -c 0 -m 1 \
+       pka --program gaussian -pi 10 -s direct
 
    # Batch submission (proton exchange requires reference options on the pka group)
    chemsmart run gaussian -p my_project -f pka_input.csv pka \

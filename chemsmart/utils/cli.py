@@ -67,6 +67,7 @@ def _add_subcommand_info_to_ctx(ctx):
     secondary_opts = {
         param.name: param.secondary_opts for param in ctx.command.params
     }
+    opts = {param.name: list(param.opts) for param in ctx.command.params}
 
     subcommand["kwargs"] = {}
     for param, value in ctx.params.items():
@@ -77,6 +78,7 @@ def _add_subcommand_info_to_ctx(ctx):
         subcommand["kwargs"][param]["type"] = types[param]
         subcommand["kwargs"][param]["is_flag"] = is_flag[param]
         subcommand["kwargs"][param]["secondary_opts"] = secondary_opts[param]
+        subcommand["kwargs"][param]["opts"] = opts[param]
 
     parent = ctx.parent.info_name if ctx.parent is not None else None
 
@@ -178,7 +180,7 @@ class CtxObjArguments:
         return str(v)
 
     @staticmethod
-    def argument_keyword(arg, value, is_flag, secondary_opts):
+    def argument_keyword(arg, value, is_flag, secondary_opts, opts=None):
         """
         Generate the appropriate CLI option keyword for an argument.
 
@@ -187,10 +189,13 @@ class CtxObjArguments:
         False-valued simple flag should be omitted entirely.
 
         Args:
-            arg (str): Argument name.
+            arg (str): Argument dest name.
             value: Argument value.
             is_flag (bool): Whether the argument is a flag.
             secondary_opts (list[str]): Secondary option names from Click.
+            opts (list[str], optional): Primary Click option strings
+                (e.g. ``["--product"]``). Used so dest names such as
+                ``products`` reconstruct as ``--product``.
 
         Returns:
             str: Formatted option keyword (may be empty string).
@@ -212,6 +217,11 @@ class CtxObjArguments:
                 arg = secondary_opts[-1].strip(
                     "--"
                 )  # Instead of assert, use last option
+        elif opts:
+            long_opts = [opt for opt in opts if opt.startswith("--")]
+            if long_opts:
+                return max(long_opts, key=len)
+            return opts[0]
 
         return "-" + arg if len(arg) == 1 else "--" + arg
 
@@ -287,7 +297,11 @@ class CtxObjArguments:
                 continue
 
             keyword = self.argument_keyword(
-                k, v, arg_is_flag, arg_secondary_opts
+                k,
+                v,
+                arg_is_flag,
+                arg_secondary_opts,
+                opts=subdict.get("opts"),
             )
             if multiple_arg:
                 logger.debug(f"Keyword {keyword}, value {v}")

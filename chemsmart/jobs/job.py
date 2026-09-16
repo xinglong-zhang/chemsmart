@@ -113,7 +113,25 @@ class Job(RegistryMixin):
         """
         if not runner:
             return None
-        child_runner = runner.copy()
+        jobtypes = type(runner).JOBTYPES
+        if jobtypes is NotImplemented:
+            jobtypes = ()
+        if job.TYPE in jobtypes:
+            child_runner = runner.copy()
+        else:
+            from chemsmart.jobs.runner import JobRunner
+
+            child_runner = JobRunner.from_job(
+                job=job,
+                server=runner.server,
+                scratch=runner.scratch,
+                fake=runner.fake,
+                delete_scratch=runner.delete_scratch,
+                num_cores=runner.num_cores,
+                num_gpus=runner.num_gpus,
+                mem_gb=runner.mem_gb,
+                scratch_dir=runner._scratch_dir,
+            )
         if num_cores is not None:
             child_runner.num_cores = num_cores
         if mem_gb is not None:

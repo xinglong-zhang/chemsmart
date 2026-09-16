@@ -5,11 +5,14 @@ from click.testing import CliRunner
 
 from chemsmart.cli.run import run
 from chemsmart.cli.sub import sub
+from chemsmart.jobs.chain import ChainJob
+from chemsmart.jobs.chain_runner import ChainJobRunner, FakeChainJobRunner
 from chemsmart.jobs.gaussian.runner import (
     FakeGaussianJobRunner,
     GaussianJobRunner,
 )
 from chemsmart.jobs.iterate.runner import IterateJobRunner
+from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner, ORCAJobRunner
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
@@ -169,6 +172,123 @@ class TestJobRunnerSelection:
         assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
         assert Path(runner.job_errfile).name == "orca_opt_fake.err"
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
+
+
+class TestPropagateRunnerRetype:
+    def test_same_program_child_copies_runner(self, pbs_server):
+        parent = GaussianJobRunner(
+            server=pbs_server, scratch=False, num_cores=8
+        )
+        child = SimpleNamespace(TYPE="g16opt", jobrunner=None)
+        result = Job._propagate_runner(parent, child, num_cores=2)
+
+        assert isinstance(result, GaussianJobRunner)
+        assert result is not parent
+        assert child.jobrunner is result
+        assert result.num_cores == 2
+        assert parent.num_cores == 8
+
+    def test_different_program_child_retypes_runner(self, pbs_server):
+        parent = GaussianJobRunner(server=pbs_server, scratch=False)
+        child = SimpleNamespace(TYPE="xtbopt", jobrunner=None)
+        result = Job._propagate_runner(parent, child)
+
+        assert isinstance(result, XTBJobRunner)
+        assert not isinstance(result, FakeXTBJobRunner)
+        assert child.jobrunner is result
+        assert result.server is parent.server
+        assert result.scratch is False
+        assert result.fake is False
+
+    def test_fake_parent_retypes_to_fake_child(self, pbs_server):
+        parent = FakeGaussianJobRunner(
+            server=pbs_server, scratch=False, fake=True
+        )
+        child = SimpleNamespace(TYPE="xtbopt", jobrunner=None)
+        result = Job._propagate_runner(parent, child)
+
+        assert isinstance(result, FakeXTBJobRunner)
+        assert result.fake is True
+
+    def test_resource_overrides_apply_after_retype(self, pbs_server):
+        parent = GaussianJobRunner(
+            server=pbs_server, scratch=False, num_cores=8, mem_gb=16
+        )
+        child = SimpleNamespace(TYPE="xtbopt", jobrunner=None)
+        result = Job._propagate_runner(
+            parent, child, num_cores=2, mem_gb=4, num_gpus=1
+        )
+
+        assert isinstance(result, XTBJobRunner)
+        assert result.num_cores == 2
+        assert result.mem_gb == 4
+        assert result.num_gpus == 1
+
+    def test_untyped_parent_runner_retypes_child(self, pbs_server):
+        parent = JobRunner(server=pbs_server, scratch=False, fake=False)
+        child = SimpleNamespace(TYPE="g16opt", jobrunner=None)
+        result = Job._propagate_runner(parent, child)
+
+        assert isinstance(result, GaussianJobRunner)
+
+    def test_chain_parent_retypes_gaussian_child(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "g16_on.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        parent = ChainJobRunner(server=server, scratch_dir=str(scratch_dir))
+        child = SimpleNamespace(TYPE="g16opt", jobrunner=None)
+        result = Job._propagate_runner(parent, child)
+
+        assert isinstance(result, GaussianJobRunner)
+        assert child.jobrunner is result
+        assert result.scratch is True
+
+    def test_chain_parent_no_scratch_forces_child_off(self, pbs_server):
+        parent = ChainJobRunner(server=pbs_server, scratch=False)
+        child = SimpleNamespace(TYPE="g16opt", jobrunner=None)
+        result = Job._propagate_runner(parent, child)
+
+        assert isinstance(result, GaussianJobRunner)
+        assert result.scratch is False
+
+    def test_none_runner_returns_none(self):
+        child = SimpleNamespace(TYPE="g16opt", jobrunner="unchanged")
+        result = Job._propagate_runner(None, child)
+        assert result is None
+        assert child.jobrunner == "unchanged"
+
+
+class TestChainJobRunnerSelection:
+    def test_chain_type_selects_chain_runner(self, pbs_server):
+        job = SimpleNamespace(TYPE="chain")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=False
+        )
+        assert isinstance(runner, ChainJobRunner)
+        assert not isinstance(runner, FakeChainJobRunner)
+        assert runner.fake is False
+        assert runner.scratch is False
+
+    def test_fake_chain_type_selects_fake_chain_runner(self, pbs_server):
+        job = SimpleNamespace(TYPE="chain")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=True
+        )
+        assert isinstance(runner, FakeChainJobRunner)
+        assert runner.fake is True
+
+    def test_chain_job_instance_selects_chain_runner(self, pbs_server):
+        job = ChainJob(molecule=None, label="chain", jobrunner=None)
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=None, fake=False
+        )
+        assert isinstance(runner, ChainJobRunner)
+        assert runner.scratch is None
 
 
 class TestScratchCLI:
