@@ -12,7 +12,6 @@ script body and the receipt that names the job.
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import shlex
@@ -101,6 +100,36 @@ def _wake_command(*, python: str, workspace: Path, goal_id: str) -> str:
         f"--workspace {shlex.quote(str(workspace))} "
         f"--goal {shlex.quote(goal_id)}"
     )
+
+
+def _approved_bundle_digest(approval_file: Path | str) -> str:
+    """The bundle's own declared digest, which is what admission reads.
+
+    Hashing the file's bytes looked stronger and was a second authority
+    for one question: a bundle's digest is `canonical_sha256` over its
+    *content*, so the two never agree. Measured live on CUHK (goal
+    `butane-wave-1`, array 2135192): the manifest carried the file hash,
+    and the one element that got as far as running was refused by
+    `authorise_cohort_element` with "this cohort was dispatched for
+    another approval" -- against its own approval.
+    """
+
+    try:
+        record = json.loads(Path(approval_file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ContractError(
+            f"the approval bundle at {approval_file} cannot be read, so "
+            "a cohort cannot be bound to it"
+        ) from exc
+    body = record.get("workflow_execution_approval_bundle") or record
+    digest = str((body or {}).get("bundle_sha256") or "")
+    if not digest:
+        raise ContractError(
+            f"the approval bundle at {approval_file} declares no "
+            "bundle_sha256, so a cohort manifest cannot name the "
+            "approval it belongs to"
+        )
+    return digest
 
 
 def build_dispatch_script(
@@ -290,10 +319,9 @@ def dispatch_run_to_scheduler(
             it is the path every goal used before waves existed.
         bundle_sha256: The approved bundle the cohort belongs to, bound
             into the manifest digest so a manifest cannot be read against
-            a different approval. Left empty it is taken from the
-            approval file's own bytes, which is the stronger answer: a
-            digest the caller passes can disagree with what was
-            submitted, and one read here cannot.
+            a different approval. Left empty it is read from the
+            bundle's own declared digest, which is what admission
+            compares against.
     """
 
     from chemsmart.settings.server import Server
@@ -333,8 +361,7 @@ def dispatch_run_to_scheduler(
             goal_id=goal_id,
             cycle=int(cycle),
             bundle_sha256=(
-                str(bundle_sha256)
-                or hashlib.sha256(Path(approval_file).read_bytes()).hexdigest()
+                str(bundle_sha256) or _approved_bundle_digest(approval_file)
             ),
             node_ids=tuple(str(item) for item in cohort_node_ids),
             max_concurrent_tasks=submitter.max_concurrent_tasks(),

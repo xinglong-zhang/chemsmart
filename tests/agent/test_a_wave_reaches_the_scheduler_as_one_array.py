@@ -38,6 +38,9 @@ from chemsmart.agent.dispatch import (
 from chemsmart.settings.server import Server
 
 _NODES = ("conformer-a-opt", "conformer-b-opt", "conformer-c-opt")
+#: What a real bundle declares. The manifest must carry *this*, not a
+#: hash of the file: admission compares the bundle's own digest.
+_BUNDLE_DIGEST = "7" * 64
 
 
 def _server():
@@ -79,7 +82,9 @@ def submitted(monkeypatch):
 def _dispatch(tmp_path, **kwargs):
     run_directory = tmp_path / "run"
     bundle = tmp_path / "bundle.json"
-    bundle.write_text('{"approval_id": "a1"}', encoding="utf-8")
+    bundle.write_text(
+        json.dumps({"bundle_sha256": _BUNDLE_DIGEST}), encoding="utf-8"
+    )
     return dispatch_run_to_scheduler(
         approval_file=bundle,
         workspace=tmp_path / "ws",
@@ -248,3 +253,54 @@ def test_the_element_redirect_survives_a_path_with_a_space(tmp_path):
     # single quotes would redirect to a literal '${SLURM_ARRAY_TASK_ID}'.
     assert "${SLURM_ARRAY_TASK_ID}" in redirect
     assert "My Drive" in redirect
+
+
+def test_the_manifest_names_the_digest_admission_compares(tmp_path, submitted):
+    """Composition, not spelling: dispatch, then admit through it.
+
+    The manifest was bound to a hash of the approval *file* while
+    `authorise_cohort_element` compares the bundle's own declared digest
+    -- `canonical_sha256` over its content -- so the two never agree.
+    Measured live on CUHK: the one element of a four-member wave that
+    got as far as running was refused against its own approval, and the
+    wave was blocked rather than wrong, which is the quiet kind.
+    """
+
+    from chemsmart.agent.cohort import authorise_cohort_element
+
+    _dispatch(tmp_path, cohort_node_ids=_NODES)
+    run_directory = tmp_path / "run"
+
+    for element, expected in enumerate(_NODES):
+        assert (
+            authorise_cohort_element(
+                run_directory,
+                element=element,
+                bundle_sha256=_BUNDLE_DIGEST,
+            )
+            == expected
+        ), (
+            "the dispatcher wrote a manifest this approval's own "
+            "elements cannot be admitted through"
+        )
+
+
+def test_a_bundle_that_names_no_digest_is_refused_before_sbatch(tmp_path, submitted):
+    """A cohort that cannot be bound is not submitted and then discovered."""
+
+    from chemsmart.agent._contracts import ContractError
+
+    (tmp_path / "bundle.json").write_text("{}", encoding="utf-8")
+    run_directory = tmp_path / "run"
+    with pytest.raises(ContractError, match="bundle_sha256"):
+        dispatch_run_to_scheduler(
+            approval_file=tmp_path / "bundle.json",
+            workspace=tmp_path / "ws",
+            run_directory=run_directory,
+            goal_id="g1",
+            cycle=1,
+            server="canned-slurm",
+            python="/opt/env/bin/python",
+            cohort_node_ids=_NODES,
+        )
+    assert submitted == [], "the scheduler was called before the check"
