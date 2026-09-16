@@ -3394,6 +3394,62 @@ class GoalDriver:
         for kind, payload in deferred:
             self.ledger.append(kind, payload)
 
+    def _record_session_stream(self, session: Any) -> None:
+        """Name the stream this cycle planned in, on the goal's own spine.
+
+        The settling path resolves a missing `events_path` by taking the
+        newest `live-*` stream in the workspace. That is right for the
+        case it was written for -- a session that raised seconds ago in
+        this very process, where the guess cannot be wrong -- and wrong
+        for a woken cycle, where the window is minutes to hours *by
+        design*, because the point of `--dispatch scheduler` is that the
+        scientist does something else while the array runs. A session id
+        carries a task-spec digest and not a goal id, so two goals in one
+        workspace are indistinguishable by name and the glob has no goal
+        filter: goal A's wake would project goal B's declarations and
+        claims into goal A's ledger.
+
+        One workspace with two goals is the ordinary way a scientist
+        works on one system, so the guess is recorded away rather than
+        improved.
+        """
+
+        run_id = str(getattr(session, "run_id", "") or "")
+        if not run_id:
+            return
+        self._defer_or_append(
+            "session_stream_recorded",
+            {"cycle": self.cycles, "run_id": run_id},
+        )
+
+    def _planned_events_path(self) -> Path | None:
+        """The stream this cycle planned in, from the goal's own record.
+
+        ``None`` when this cycle recorded none -- every goal written
+        before this did -- or when the stream it named is gone, which is
+        absence rather than licence to substitute another goal's.
+        """
+
+        run_id = ""
+        for entry in reversed(self.ledger.entries()):
+            if entry.get("kind") != "session_stream_recorded":
+                continue
+            payload = entry.get("payload") or {}
+            if int(payload.get("cycle") or 0) != self.cycles:
+                continue
+            run_id = str(payload.get("run_id") or "")
+            break
+        if not run_id:
+            return None
+        candidate = (
+            self.workspace
+            / ".chemsmart-agent"
+            / "runs"
+            / run_id
+            / "events.jsonl"
+        )
+        return candidate if candidate.is_file() else None
+
     def _review_file_for_cycle(self) -> Path | None:
         """This cycle's displayed review, wherever the driver came from.
 
@@ -3634,6 +3690,10 @@ class GoalDriver:
 
         events_path = self.events_path
         if events_path is None:
+            events_path = self._planned_events_path()
+            if events_path is not None:
+                self.events_path = events_path
+        if events_path is None:
             # The session raised before the driver resolved its stream,
             # which is exactly the case that lost SUFFICIENCY-2's
             # delivery. The resolver's own fallback -- the newest
@@ -3780,6 +3840,10 @@ class GoalDriver:
             # prepared a review; it cannot settle a delivery or carry the
             # evidence a revision must cite, and those paths say so.
             self.events_path = None
+        # Named on the goal's own spine, so the wake that settles this
+        # cycle hours later resolves the stream it planned in rather than
+        # whatever is newest in a workspace it may be sharing.
+        self._record_session_stream(self.session)
         self._record_declarations()
         self._record_dispositions()
         self._record_approaches()
