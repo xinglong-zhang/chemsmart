@@ -444,7 +444,9 @@ def wait_for_dispatched_run(
 
     from chemsmart.settings.probe.scheduler_job import (
         parse_scontrol_job,
+        parse_squeue_array,
         scontrol_job_command,
+        squeue_array_command,
     )
 
     run_directory = Path(run_directory)
@@ -461,6 +463,43 @@ def wait_for_dispatched_run(
             return "result recorded"
         if receipt is None:
             return "no dispatch receipt to wait on"
+        if receipt.cohort_node_ids:
+            # An array has one state per element and `scontrol show job
+            # N` prints one record per element, each with `JobId=N_0`,
+            # `N_1`, ... and never the bare `N` the scalar reader
+            # compares against -- while its field harvest is
+            # first-occurrence-wins. A wave of three whose first printed
+            # element completed while two still ran therefore read as
+            # "job N COMPLETED", returned, and let the Agent reason over
+            # a running wave. The barrier's question is a multiset, so
+            # this asks squeue for the elements, expanded (`-r`, because
+            # a queued array prints one compressed row that names no
+            # membership at all).
+            completed = runner(
+                list(squeue_array_command(receipt.job_id)),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            array = parse_squeue_array(
+                completed.returncode,
+                completed.stdout,
+                completed.stderr,
+                array_job_id=receipt.job_id,
+            )
+            if not array.known:
+                return f"scheduler no longer knows job {receipt.job_id}"
+            if array.terminal:
+                return f"array {receipt.job_id}: every element ended"
+            polls += 1
+            if max_polls is not None and polls >= max_polls:
+                return (
+                    f"array {receipt.job_id}: "
+                    f"{len(array.unfinished)} element(s) still running"
+                )
+            sleep(poll_seconds)
+            continue
         completed = runner(
             list(scontrol_job_command(receipt.job_id)),
             capture_output=True,
