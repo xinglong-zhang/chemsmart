@@ -3380,14 +3380,16 @@ def _write_private_exact(path: Path, payload: bytes) -> None:
                 "private bootstrap artifact conflicts with existing bytes"
             )
         return
-    try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        if not _agrees():
-            raise ContractError(
-                "private bootstrap artifact conflicts with existing bytes"
-            ) from None
-        return
+    # Written in full, then published atomically. `O_EXCL` alone makes
+    # the *create* exclusive and leaves a window in which the loser of
+    # the race reads a half-written file and calls it a conflict -- the
+    # same bug one layer down, and it bit this fix's own witness.
+    # `os.link` publishes only a file that is already complete, and
+    # fails with `FileExistsError` if the name is taken.
+    staging = path.parent / f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}"
+    descriptor = os.open(
+        staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+    )
     try:
         pending = memoryview(payload)
         while pending:
@@ -3396,6 +3398,18 @@ def _write_private_exact(path: Path, payload: bytes) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+    try:
+        os.link(staging, path)
+    except FileExistsError:
+        if not _agrees():
+            raise ContractError(
+                "private bootstrap artifact conflicts with existing bytes"
+            ) from None
+    finally:
+        try:
+            os.unlink(staging)
+        except OSError:  # pragma: no cover
+            pass
 
 
 def _observe_environments() -> tuple[

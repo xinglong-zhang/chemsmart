@@ -149,7 +149,7 @@ class CohortManifestV1:
 
 
 #: What the host can say about one proposed member of a wave.
-COHORT_MEMBER_STATUSES = ("ready", "not_ready", "depends_on")
+COHORT_MEMBER_STATUSES = ("ready", "not_ready", "depends_on", "not_in_plan")
 
 
 @dataclass(frozen=True)
@@ -201,6 +201,7 @@ def validate_wave(
     proposed: tuple[str, ...],
     ready: tuple[str, ...],
     edges: tuple[tuple[str, str], ...],
+    planned: tuple[str, ...] = (),
 ) -> CohortValidityV1:
     """Judge a proposed wave against the host's own ready frontier.
 
@@ -221,11 +222,18 @@ def validate_wave(
     """
 
     members: list[str] = []
+    repeated: list[str] = []
     for node_id in proposed:
         name = str(node_id).strip()
-        if name and name not in members:
-            members.append(name)
+        if not name:
+            continue
+        if name in members:
+            if name not in repeated:
+                repeated.append(name)
+            continue
+        members.append(name)
     member_set = set(members)
+    known = {str(item) for item in planned}
     ready_set = {str(item) for item in ready}
     producers: dict[str, list[str]] = {}
     for source, target in edges:
@@ -256,6 +264,22 @@ def validate_wave(
         if node_id in ready_set:
             rows.append(CohortMemberVerdictV1(node_id=node_id, status="ready"))
             continue
+        if known and node_id not in known:
+            # A mistyped id read as `not_ready` with "is not in this
+            # plan's ready frontier" -- word for word what a node waiting
+            # on a producer says -- so the Agent was invited to wait
+            # forever for a calculation that does not exist.
+            rows.append(
+                CohortMemberVerdictV1(
+                    node_id=node_id,
+                    status="not_in_plan",
+                    detail=(
+                        "is not a calculation in this workflow; check the "
+                        "node id against the plan you made"
+                    ),
+                )
+            )
+            continue
         waiting = sorted(producers.get(node_id, ()))
         rows.append(
             CohortMemberVerdictV1(
@@ -269,15 +293,26 @@ def validate_wave(
             )
         )
 
+    note = (
+        " (" + ", ".join(repeated) + " was named more than once and "
+        "counts once)"
+        if repeated
+        else ""
+    )
     if not members:
         summary = "the proposed wave is empty"
     elif all(row.status == "ready" for row in rows):
-        summary = f"{len(members)} calculations ready to run together"
+        summary = (
+            f"{len(members)} calculations ready to run together" + note
+        )
     else:
-        summary = "; ".join(
-            f"{row.node_id}: {row.status}"
-            for row in rows
-            if row.status != "ready"
+        summary = (
+            "; ".join(
+                f"{row.node_id}: {row.status}"
+                for row in rows
+                if row.status != "ready"
+            )
+            + note
         )
     return CohortValidityV1(
         members=tuple(members), rows=tuple(rows), summary=summary

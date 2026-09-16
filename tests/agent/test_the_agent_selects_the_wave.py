@@ -306,3 +306,50 @@ def test_an_invalid_selection_clears_the_previous_one():
         "an undispatchable selection left the previous wave standing, so "
         "the driver would submit calculations the Agent has already seen"
     )
+
+
+def test_a_repeated_member_is_reported_rather_than_quietly_dropped():
+    """The docstring promised a verdict and the code deduplicated.
+
+    The Agent asks for three calculations and gets two, with nothing on
+    the record saying which one went or why -- and the wave it reads back
+    is not the wave it asked for.
+    """
+
+    verdict = validate_wave(
+        proposed=("a1", "a1", "a2"),
+        ready=("a1", "a2"),
+        edges=(),
+    )
+    statuses = {row.node_id: row.status for row in verdict.rows}
+    assert statuses["a1"] == "ready"
+    assert statuses["a2"] == "ready"
+    assert "named more than once" in verdict.summary, verdict.summary
+
+
+def test_a_node_the_plan_does_not_contain_says_so():
+    """A typo must not read as 'wait for its producer'.
+
+    Both came back `not_ready`, and 'is not in this plan's ready
+    frontier' is exactly what a node waiting on a producer says -- so a
+    mistyped id invites the Agent to wait forever for a calculation that
+    does not exist.
+    """
+
+    verdict = validate_wave(
+        proposed=("a1", "a-typo"),
+        ready=("a1",),
+        edges=(("a1", "b1"),),
+        planned=("a1", "b1"),
+    )
+    rows = {row.node_id: row for row in verdict.rows}
+    assert rows["a-typo"].status == "not_in_plan", rows["a-typo"].status
+    assert "not a calculation in this workflow" in rows["a-typo"].detail
+
+    # And a real node waiting on a producer keeps its own word.
+    waiting = validate_wave(
+        proposed=("b1",), ready=("a1",), edges=(("a1", "b1"),),
+        planned=("a1", "b1"),
+    )
+    assert waiting.rows[0].status == "not_ready"
+    assert "a1" in waiting.rows[0].detail

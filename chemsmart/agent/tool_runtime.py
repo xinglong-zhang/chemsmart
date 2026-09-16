@@ -7882,6 +7882,10 @@ class CommandCompiledToolHostV1:
             proposed=proposed,
             ready=tuple(context.ready_node_ids),
             edges=edges,
+            planned=tuple(
+                str(node.node_id)
+                for node in getattr(draft, "nodes", ()) or ()
+            ),
         )
         dispatchable = bool(verdict.rows) and all(
             row.status == "ready" for row in verdict.rows

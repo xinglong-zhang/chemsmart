@@ -60,30 +60,37 @@ def test_a_writer_with_different_bytes_is_still_refused(tmp_path):
 
 
 def test_the_loser_of_the_race_sees_the_winners_bytes(tmp_path):
-    """The race is resolved by reading, not by assuming."""
+    """The race is resolved by reading, and never by reading half a file.
+
+    The publish is a link of an already-complete file, so a loser that
+    reads the target reads all of it. An `O_EXCL` create followed by a
+    write leaves a window where the target exists and is empty, which
+    this fix's own first attempt fell into: eight concurrent writers of
+    identical bytes, and one of them called the winner a conflict.
+    """
+
 
     path = tmp_path / "execution-server.yaml"
     payload = b"SERVER:\n  NUM_CORES: 16\n"
 
-    real_open = os.open
+    real_link = os.link
     fired = {"once": False}
 
-    def racing_open(target, flags, mode=0o777, **kw):
-        # The window: the file appears between `exists()` and `open`.
-        if (
-            not fired["once"]
-            and str(target) == str(path)
-            and flags & os.O_EXCL
-        ):
+    def racing_link(source, target, **kw):
+        # The window: the name is taken between the write and the link.
+        if not fired["once"] and str(target) == str(path):
             fired["once"] = True
             Path(target).write_bytes(payload)
-        return real_open(target, flags, mode, **kw)
+        return real_link(source, target, **kw)
 
-    os.open = racing_open
+    os.link = racing_link
     try:
         _write_private_exact(path, payload)
     finally:
-        os.open = real_open
+        os.link = real_link
 
     assert fired["once"], "the race window was never entered"
     assert path.read_bytes() == payload
+    assert not [
+        item for item in tmp_path.iterdir() if item.name.startswith(".")
+    ], "a staging file was left behind"
