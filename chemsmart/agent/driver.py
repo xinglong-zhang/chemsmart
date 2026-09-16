@@ -3674,6 +3674,24 @@ class GoalDriver:
         if self.events_path is None:
             # Nothing durable to read a delivery from: the goal still ends
             # in a typed state, and the reason says why a human reads it.
+            #
+            # This arm is unreachable from the two callers that exist.
+            # `_plan` sets `events_path` a few lines before it calls here,
+            # and `_outcome`'s analysis-only branch assigns it
+            # immediately before -- so a woken cycle, which `resume`
+            # rebuilds without planning, never arrives with None. It is
+            # *absent* from that path rather than rescued on it: nothing
+            # resolves a missing stream here the way
+            # `_project_before_settling` does for `_typed_error`, and
+            # that was deliberate, because a lookup for a state no caller
+            # can produce is speculative code that would also mask the
+            # signal a third caller ought to trip.
+            #
+            # A third caller is therefore what this arm is for, and it is
+            # the worst kind of dead branch to leave unannotated: it does
+            # not crash, it *ends the goal* -- returned_to_human, with a
+            # reason naming a cause that would be wrong. Anyone adding
+            # one should give this arm a real answer first.
             reason = (
                 f"session terminal state: {terminal}; the planning session "
                 "left no event stream"
