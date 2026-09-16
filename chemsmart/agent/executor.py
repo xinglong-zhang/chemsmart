@@ -1624,6 +1624,21 @@ class ApprovedWorkflowExecutor:
         A member of the wave that is running *now* is not a re-invocation
         of its own approval. Membership is its admission, at entry as at
         launch.
+
+        What this trades, said plainly rather than left for the next
+        reader to find: the test is "is this a cohort element", which is
+        broader than "is this a sibling of the wave running now". It also
+        covers a *genuine* re-invocation of an element -- a Slurm requeue
+        after a node failure, or a human re-running one -- and for those
+        the entry-time refusal the continuation path performs is skipped:
+        the call site's own comment says admission happens there "not
+        lazily at the first launch ... a completed approval must refuse
+        before it re-delivers anything". For a cohort element that
+        refusal now happens at the launch fence instead, which returns
+        `terminal_replay` rather than launching, and `record_run` is
+        durably idempotent -- so nothing re-delivers. It is a narrower
+        refusal in a later place, not an absent one, and the requeue case
+        is on this round's deliberately-deferred list.
         """
 
         if not self.claim_workspace_bundle:
