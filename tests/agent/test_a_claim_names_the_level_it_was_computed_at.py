@@ -603,3 +603,85 @@ def test_a_composed_claim_names_its_own_terms_not_the_expressions(tmp_path):
         "same level, so divergences() skips them -- which is the "
         "suppression the per-node level exists to prevent"
     )
+
+
+def test_a_later_analysis_only_run_names_prior_results_own_levels(tmp_path):
+    """A later run can resolve the results it reads from the record.
+
+    The production provenance recheck has no new
+    ``program_result_verified`` event: it extracts three registered PySCF
+    results, composes three two-level differences, and records claims.  The
+    initial per-output repair was confined to its own event stream, so all
+    three later claims silently lost their levels.  This drives the durable
+    result rows into a second, analysis-only projection and checks the
+    exact consumer path rather than seeding a private map.
+    """
+
+    workspace = tmp_path / "ws"
+    first = tmp_path / "first-events.jsonl"
+    first.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                _node("calc-a", "1" * 64, "sp"),
+                _node("calc-b", "2" * 64, "sp"),
+                _node("calc-c", "3" * 64, "sp"),
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    record_run(
+        workspace,
+        goal_id="water-levels-1",
+        cycle=1,
+        run_events_path=first,
+        run="goals/water-levels-1/runs/cycle-1",
+        review_file=_three_level_review(tmp_path / "review"),
+    )
+
+    current = tmp_path / "analysis-only-events.jsonl"
+    current.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                _extraction("a1" + "0" * 62, "1" * 64),
+                _extraction("b1" + "0" * 62, "2" * 64),
+                _extraction("c1" + "0" * 62, "3" * 64),
+                _expression_per_output(
+                    "e1" + "0" * 62,
+                    (
+                        ("d-ab", ("a1" + "0" * 62, "b1" + "0" * 62)),
+                        ("d-bc", ("b1" + "0" * 62, "c1" + "0" * 62)),
+                        ("d-ac", ("a1" + "0" * 62, "c1" + "0" * 62)),
+                    ),
+                ),
+                _claim_of("delta-ab", "d-ab", "e1" + "0" * 62),
+                _claim_of("delta-bc", "d-bc", "e1" + "0" * 62),
+                _claim_of("delta-ac", "d-ac", "e1" + "0" * 62),
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    record_run(
+        workspace,
+        goal_id="water-levels-provenance-a1-r2",
+        cycle=1,
+        run_events_path=current,
+        run="goals/water-levels-provenance-a1-r2/runs/live",
+    )
+
+    claims = {
+        str(entry["claim_id"]): entry
+        for entry in read_workspace_record(workspace)
+        if entry.get("goal_id") == "water-levels-provenance-a1-r2"
+    }
+    assert {
+        claim_id: tuple(claim["level_sha256s"])
+        for claim_id, claim in claims.items()
+    } == {
+        "delta-ab": ("a" * 64, "b" * 64),
+        "delta-bc": ("b" * 64, "c" * 64),
+        "delta-ac": ("a" * 64, "c" * 64),
+    }

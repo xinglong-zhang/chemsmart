@@ -92,6 +92,12 @@ def _result_artifact_sha256(program: str, artifacts: Any) -> str:
             path.endswith(s) for s in suffixes
         ):
             return str(item.get("sha256") or "")
+        # PySCF's HDF5 result is deliberately typed rather than filed as
+        # the generic ``program_output``.  It is still the one reader
+        # opens, and omitting it made an otherwise durable result row lose
+        # its canonical result-artifact digest.
+        if str(program).lower() == "pyscf" and kind == "pyscf_hdf5":
+            return str(item.get("sha256") or "")
     return ""
 
 
@@ -202,11 +208,28 @@ def record_run(
     # Which result artifact each extraction receipt read, so a claim can
     # be joined to the node it stands on rather than to the run.
     artifact_by_receipt: dict[str, str] = {}
-    # And which level that node was computed at.
-    level_by_artifact: dict[str, str] = {}
+    # And which level that node was computed at.  A later analysis-only
+    # run contains extraction receipts but no new ``program_result_verified``
+    # event.  Seed the join from the prior host-written result rows, which
+    # are the durable record of exactly that fact.  An artifact shared by
+    # more than one level remains unknown: one level is evidence, a choice
+    # among several is not.
+    level_by_artifact: dict[str, set[str]] = {}
+    for prior in read_workspace_record(workspace):
+        if prior.get("kind") != "result":
+            continue
+        level_sha256 = str(prior.get("level_sha256") or "")
+        if not level_sha256:
+            continue
+        for artifact in (
+            str(prior.get("result_artifact_sha256") or ""),
+            *(str(item) for item in prior.get("output_artifact_sha256s") or ()),
+        ):
+            if artifact:
+                level_by_artifact.setdefault(artifact, set()).add(level_sha256)
     # Which receipts each expression receipt composed, so a derived
     # value can name every level underneath it rather than the run's.
-    receipts_by_expression: dict[str, tuple[str, ...]] = {}
+    receipts_by_expression: dict[tuple[str, str], tuple[str, ...]] = {}
     for line in lines:
         try:
             event = json.loads(line)
@@ -294,7 +317,9 @@ def record_run(
                 for item in record.get("output_artifacts") or ():
                     artifact = str(item.get("sha256") or "")
                     if artifact:
-                        level_by_artifact[artifact] = level_sha256
+                        level_by_artifact.setdefault(artifact, set()).add(
+                            level_sha256
+                        )
             entries.append(
                 {
                     "kind": "result",
@@ -476,8 +501,12 @@ def record_run(
         seen = seen | {key}
         artifact = artifact_by_receipt.get(receipt)
         if artifact:
-            level = level_by_artifact.get(artifact)
-            return True, ({level} if level else set()), not level
+            artifact_levels = level_by_artifact.get(artifact, set())
+            return (
+                True,
+                set(artifact_levels) if len(artifact_levels) == 1 else set(),
+                len(artifact_levels) != 1,
+            )
         # This output's own ancestors. A source names a receipt and not
         # which of its outputs, so a nested expression falls back to
         # everything that receipt carries -- the honest answer when the
