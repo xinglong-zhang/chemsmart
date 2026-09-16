@@ -127,8 +127,9 @@ def click_orca_td_options(f):
         type=int,
         default=None,
         help="Target excited-state index (IRoot). Defaults to 1 when an "
-        "excited-state Opt/Freq task is requested via -r on the orca group. "
-        "Must satisfy 1 <= root <= nroots.",
+        "excited-state Opt, Freq, or NumFreq task is requested via the "
+        "project YAML or the orca group's -r option. Must satisfy "
+        "1 <= root <= nroots.",
     )
     @click.option(
         "--root-mult",
