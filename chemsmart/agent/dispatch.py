@@ -133,6 +133,7 @@ def dispatch_run_to_scheduler(
     wake: bool = True,
     resources: Any = None,
     sealed: bool = True,
+    envelope: Any = None,
 ) -> DispatchReceiptV1:
     """Submit one approved run and return the receipt naming its job.
 
@@ -142,10 +143,14 @@ def dispatch_run_to_scheduler(
             profile's own numbers, which is what this function did before
             the envelope had any route here -- kept so an older caller
             behaves as it did rather than silently changing allocation.
-        sealed: Whether the sealed-job memory ceiling applies. The Agent's
-            scheduler path is the sealed path in this release; if the two
-            ever need to differ, this is the parameter that separates them
-            rather than a second rule somewhere else.
+        sealed: Whether the sealed-job memory ceiling applies. Sealed is
+            the default for an Agent dispatch; ``chemsmart agent goal
+            --unsealed`` drops the headroom and holds the request to the
+            profile alone, which is the escape for a profile too small to
+            leave anything above it.
+        envelope: The approved execution envelope, whose episode window
+            and postprocessing reserve are the wall clock asked for. The
+            operator's NUM_HOURS caps it and no longer sets it.
     """
 
     from chemsmart.settings.server import Server
@@ -169,7 +174,10 @@ def dispatch_run_to_scheduler(
     )
 
     request = resolve_scheduler_request(
-        resources=resources, server=resolved, sealed=sealed
+        resources=resources,
+        server=resolved,
+        sealed=sealed,
+        envelope=envelope,
     )
     submitter = resolved.get_submitter(job, scheduler_request=request)
     script = build_dispatch_script(

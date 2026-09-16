@@ -2888,6 +2888,7 @@ class GoalDriver:
         dispatch_run: Callable[..., Any] | None = None,
         dispatch: str = "local",
         server: str | None = None,
+        sealed: bool = True,
         initial_decision: str = "approve",
         stop_file: str | Path | None = None,
         session_kwargs: Mapping[str, Any] | None = None,
@@ -2916,12 +2917,20 @@ class GoalDriver:
         self.execute_bundle = execute_bundle
         self.dispatch = dispatch
         self.server = server
+        # Sealed is the default for a scheduler dispatch: the memory
+        # ceiling is the profile's maximum less the declared headroom.
+        # An unsealed run holds the request to the profile alone, which
+        # is the escape for a profile too small to leave anything above
+        # the headroom.
+        self.sealed = bool(sealed)
         if dispatch_run is None and dispatch == "scheduler":
             from functools import partial
 
             from chemsmart.agent.dispatch import dispatch_run_to_scheduler
 
-            dispatch_run = partial(dispatch_run_to_scheduler, server=server)
+            dispatch_run = partial(
+                dispatch_run_to_scheduler, server=server, sealed=sealed
+            )
         self.dispatch_run = dispatch_run
         self.initial_decision = initial_decision
         self.stop_file = stop_file
@@ -2960,6 +2969,7 @@ class GoalDriver:
                             analysis_completion_file
                         ),
                         "dispatch": dispatch,
+                        "sealed": bool(sealed),
                         "server": server,
                         "stop_file": _resolved_or_none(stop_file),
                     },
@@ -3070,6 +3080,7 @@ class GoalDriver:
             "provider_config_file",
             "analysis_completion_file",
             "dispatch",
+            "sealed",
             "server",
             "stop_file",
         ):
@@ -4158,6 +4169,7 @@ class GoalDriver:
                     resources=getattr(
                         getattr(self, "envelope", None), "resources", None
                     ),
+                    envelope=getattr(self, "envelope", None),
                 )
             except ContractError as exc:
                 self._typed_error("scheduler dispatch", exc)

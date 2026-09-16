@@ -853,8 +853,8 @@ class PBSSubmitter(Submitter):
         # using only one node here
         if self.server.queue_name:
             f.write(f"#PBS -q {self.server.queue_name}\n")
-        if self.server.num_hours:
-            f.write(f"#PBS -l walltime={self.server.num_hours}:00:00\n")
+        if request.hours:
+            f.write(f"#PBS -l walltime={request.hours}:00:00\n")
         if user_settings is not None:
             if user_settings.data.get("PROJECT"):
                 f.write(f"#PBS -P {user_settings.data['PROJECT']}\n")
@@ -937,8 +937,8 @@ class SLURMSubmitter(Submitter):
         )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
-        if self.server.num_hours:
-            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if request.hours:
+            f.write(f"#SBATCH --time={request.hours}:00:00\n")
         if user_settings is not None:
             if user_settings.data.get("PROJECT"):
                 f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
@@ -996,8 +996,8 @@ class SLURMSubmitter(Submitter):
         )
         if self.server.queue_name:
             f.write(f"#SBATCH --partition={self.server.queue_name}\n")
-        if self.server.num_hours:
-            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if request.hours:
+            f.write(f"#SBATCH --time={request.hours}:00:00\n")
         if user_settings is not None:
             if user_settings.data.get("PROJECT"):
                 f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
@@ -1091,7 +1091,7 @@ class SLFSubmitter(Submitter):
         f.write("#BSUB -nnodes 1\n")
         if self.scheduler_request.gpu_count:
             f.write(f"#BSUB -gpu num={self.scheduler_request.gpu_count}\n")
-        f.write(f"#BSUB -W {self.server.num_hours}\n")
+        f.write(f"#BSUB -W {self.scheduler_request.hours}\n")
         f.write("#BSUB -alloc_flags gpumps\n")
         f.write("\n")
         f.write("\n")
@@ -1164,7 +1164,7 @@ class FUGAKUSubmitter(Submitter):
             if resource_group:
                 f.write(f"#PJM -L rscgrp={resource_group}\n")
         f.write("#PJM -L node=1\n")  # using one node here
-        f.write(f"#PJM -L elapse={self.server.num_hours}\n")
+        f.write(f"#PJM -L elapse={self.scheduler_request.hours}\n")
         f.write(f"#PJM --mpi proc={self.scheduler_request.cores}\n")
         if user_settings is not None and user_settings.data.get("PROJECT"):
             f.write(f'#PJM -g {user_settings.data["PROJECT"]}\n')

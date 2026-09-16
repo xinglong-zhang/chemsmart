@@ -470,6 +470,16 @@ def review(
     help="Server profile for scheduler dispatch; defaults to the current "
     "server.",
 )
+@click.option(
+    "--sealed/--unsealed",
+    default=True,
+    show_default=True,
+    help="Whether the sealed-job memory ceiling applies to a scheduler "
+    "dispatch: the profile's maximum memory less the declared headroom, "
+    "so a request can never claim a node's entire RAM. --unsealed drops "
+    "the headroom and holds the request to the profile alone, which is "
+    "the escape for a profile too small to leave anything above it.",
+)
 def goal(
     task,
     task_file,
@@ -485,6 +495,7 @@ def goal(
     stop_file,
     dispatch,
     server,
+    sealed,
 ):
     """Drive one goal to settlement under one human decision.
 
@@ -523,6 +534,7 @@ def goal(
             stop_file=stop_file,
             dispatch=dispatch,
             server=server,
+            sealed=sealed,
         )
     except ContractError as exc:
         raise click.ClickException(str(exc)) from exc

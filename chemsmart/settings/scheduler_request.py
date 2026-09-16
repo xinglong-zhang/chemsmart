@@ -15,9 +15,24 @@ reached the scheduler.
 
 The profile is a **ceiling**, not a request (owner ruling, 2026-09-16).
 The envelope says what this work needs; the profile says how large the
-machine will let it get, and keeps owning queue, account, wall time and
-the host's extra commands. A clamp is a displayed observation naming both
-numbers, never a silent edit.
+machine will let it get, and keeps owning queue, account and the host's
+extra commands.
+
+A request above that ceiling is **refused**, not quietly shrunk (owner
+ruling, 2026-09-16, revised on evidence the first ruling did not have).
+How much memory a correlated calculation gets is not a resource
+preference: it selects the algorithm -- integral-direct against
+conventional, disk against in-core -- and sometimes decides whether the
+calculation is possible at all. Shrinking it is a method decision, and
+the host does not make those. A refusal naming both numbers sends the
+choice back to the session, which can re-plan the method deliberately;
+a clamp sends it to the engine, which discovers it as an OOM kill that
+arrives wearing a scientific failure's word.
+
+Wall time is the envelope's too, and here the profile is a cap rather
+than a refusal: a shorter wall clock does not change the method, and the
+host's own per-node timeout sits far below both. The asymmetry is
+deliberate and is stated where it is applied.
 
 For a **sealed** job the ceiling is the server's maximum available CPU
 cores and its maximum memory less ``SEALED_MEMORY_HEADROOM_GB``, so a
@@ -36,6 +51,7 @@ its machine is a fact about that profile, visible where it is written.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -72,12 +88,15 @@ class SchedulerRequestV1:
     cores: int
     memory_gb: Any
     gpu_count: int
+    hours: int
     requested_cores: int
     requested_memory_gb: Any
     requested_gpu_count: int
+    requested_hours: int
     ceiling_cores: int
     ceiling_memory_gb: Any
     ceiling_gpu_count: int
+    ceiling_hours: int
     sealed: bool
     observations: tuple[str, ...] = ()
 
@@ -105,7 +124,11 @@ class SchedulerRequestV1:
 
     @property
     def clamped(self) -> bool:
-        """Whether any dimension was reduced to its ceiling."""
+        """Whether any dimension was reduced to its ceiling.
+
+        Only wall time can be: cores, memory and GPUs are refused above
+        the ceiling rather than reduced.
+        """
 
         return bool(self.observations)
 
@@ -115,16 +138,19 @@ class SchedulerRequestV1:
                 "cores": self.cores,
                 "memory_gb": self.memory_gb,
                 "gpu_count": self.gpu_count,
+                "hours": self.hours,
             },
             "requested": {
                 "cores": self.requested_cores,
                 "memory_gb": self.requested_memory_gb,
                 "gpu_count": self.requested_gpu_count,
+                "hours": self.requested_hours,
             },
             "ceiling": {
                 "cores": self.ceiling_cores,
                 "memory_gb": self.ceiling_memory_gb,
                 "gpu_count": self.ceiling_gpu_count,
+                "hours": self.ceiling_hours,
             },
             "sealed": self.sealed,
             "clamped": self.clamped,
@@ -148,10 +174,36 @@ def _ceiling(server: Any, *, sealed: bool) -> tuple[int, float, int]:
                 "the server profile declares "
                 f"{getattr(server, 'mem_gb', 0)} GB, which leaves nothing "
                 f"above the {SEALED_MEMORY_HEADROOM_GB} GB sealed-job "
-                "headroom; raise MEM_GB or run this goal unsealed rather "
-                "than requesting a negative allocation"
+                "headroom, so no sealed request can be satisfied on it. "
+                "Raise MEM_GB to describe the machine, or dispatch this "
+                "goal with --unsealed, which drops the headroom and holds "
+                "the request to the profile alone."
             )
     return cores, memory_gb, gpus
+
+
+def _requested_hours(resources: Any, envelope: Any) -> int:
+    """The wall clock this allocation needs, from the approved envelope.
+
+    The job runs one whole cycle inside the allocation, so the bound is
+    the episode window plus the postprocessing reserve the human granted,
+    rounded up to the hour Slurm and PBS both want. Where no envelope
+    record is available the node timeout is the only bound the host has,
+    and it is used rather than falling back to the operator's default --
+    which on CUHK is 24 h for a 31-second job, the same defect as cores
+    and memory in the dimension a scheduler actually schedules on.
+    """
+
+    seconds = 0.0
+    for field in ("episode_wall_time_seconds", "postprocess_reserve_seconds"):
+        value = getattr(envelope, field, None)
+        if value:
+            seconds += float(value)
+    if seconds <= 0:
+        seconds = float(getattr(resources, "node_timeout_seconds", 0) or 0)
+    if seconds <= 0:
+        return 0
+    return max(1, math.ceil(seconds / 3600.0))
 
 
 def resolve_scheduler_request(
@@ -159,6 +211,7 @@ def resolve_scheduler_request(
     resources: Optional[Any],
     server: Any,
     sealed: bool = False,
+    envelope: Optional[Any] = None,
 ) -> SchedulerRequestV1:
     """Resolve one allocation request from an envelope and a profile.
 
@@ -183,64 +236,84 @@ def resolve_scheduler_request(
     ceiling_cores, ceiling_memory, ceiling_gpus = _ceiling(
         server, sealed=sealed
     )
+    ceiling_hours = int(getattr(server, "num_hours", 0) or 0)
 
     if resources is None:
-        applied_cores, applied_memory, applied_gpus = (
-            ceiling_cores,
-            ceiling_memory,
-            ceiling_gpus,
-        )
         requested_cores, requested_memory, requested_gpus = (
             ceiling_cores,
             ceiling_memory,
             ceiling_gpus,
         )
+        requested_hours = ceiling_hours
     else:
         requested_cores = int(resources.cores)
         requested_memory = float(resources.memory_gb)
         requested_gpus = int(resources.gpu_count)
-        applied_cores = min(requested_cores, ceiling_cores)
-        applied_memory = min(requested_memory, ceiling_memory)
-        applied_gpus = min(requested_gpus, ceiling_gpus)
+        requested_hours = _requested_hours(resources, envelope)
 
-    observations = []
-    if applied_cores != requested_cores:
-        observations.append(
-            f"cores clamped to the server ceiling: requested "
-            f"{requested_cores}, ceiling {ceiling_cores}, "
-            f"applied {applied_cores}"
+    # Cores, memory and GPUs are refused above the ceiling rather than
+    # reduced: each of them can change what calculation is actually run,
+    # and choosing that is the session's, not the host's.
+    excesses = []
+    if requested_cores > ceiling_cores:
+        excesses.append(
+            f"cores: {requested_cores} requested, ceiling {ceiling_cores}"
         )
-    if applied_memory != requested_memory:
-        observations.append(
-            f"memory clamped to the server ceiling: requested "
-            f"{_as_number(requested_memory)} GB, ceiling "
-            f"{_as_number(ceiling_memory)} GB, applied "
-            f"{_as_number(applied_memory)} GB"
+    if requested_memory > ceiling_memory:
+        excesses.append(
+            f"memory: {_as_number(requested_memory)} GB requested, ceiling "
+            f"{_as_number(ceiling_memory)} GB"
             + (
-                f" (the profile's {_as_number(ceiling_memory + SEALED_MEMORY_HEADROOM_GB)} GB "
+                f" (the profile's "
+                f"{_as_number(ceiling_memory + SEALED_MEMORY_HEADROOM_GB)} GB "
                 f"less the {_as_number(SEALED_MEMORY_HEADROOM_GB)} GB "
                 "sealed-job headroom)"
                 if sealed
                 else ""
             )
         )
-    if applied_gpus != requested_gpus:
+    if requested_gpus > ceiling_gpus:
+        excesses.append(
+            f"GPUs: {requested_gpus} requested, ceiling {ceiling_gpus}"
+        )
+    if excesses:
+        raise ContractError(
+            "this allocation asks for more than the server profile allows: "
+            + "; ".join(excesses)
+            + ". The host does not shrink it: how much memory or how many "
+            "cores a calculation gets can decide which algorithm runs and "
+            "whether it runs at all, so the method is re-planned by the "
+            "session rather than quietly changed here. Lower the "
+            "envelope's resources, or name a server profile that "
+            "describes a larger machine."
+        )
+
+    # Wall time is capped rather than refused: a shorter wall clock does
+    # not change the method, and the host's own per-node timeout sits far
+    # below both numbers. The cap is recorded like any other observation.
+    observations = []
+    applied_hours = requested_hours
+    if ceiling_hours and requested_hours > ceiling_hours:
+        applied_hours = ceiling_hours
         observations.append(
-            f"GPUs clamped to the server ceiling: requested "
-            f"{requested_gpus}, ceiling {ceiling_gpus}, "
-            f"applied {applied_gpus}"
+            f"wall time capped by the server profile: requested "
+            f"{requested_hours} h, ceiling {ceiling_hours} h, applied "
+            f"{applied_hours} h"
         )
 
     return SchedulerRequestV1(
-        cores=int(applied_cores),
-        memory_gb=_as_number(applied_memory),
-        gpu_count=int(applied_gpus),
+        cores=int(requested_cores),
+        memory_gb=_as_number(requested_memory),
+        gpu_count=int(requested_gpus),
+        hours=int(applied_hours),
         requested_cores=int(requested_cores),
         requested_memory_gb=_as_number(requested_memory),
         requested_gpu_count=int(requested_gpus),
+        requested_hours=int(requested_hours),
         ceiling_cores=int(ceiling_cores),
         ceiling_memory_gb=_as_number(ceiling_memory),
         ceiling_gpu_count=int(ceiling_gpus),
+        ceiling_hours=int(ceiling_hours),
         sealed=bool(sealed),
         observations=tuple(observations),
     )
