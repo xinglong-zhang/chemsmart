@@ -268,6 +268,98 @@ def validate_wave(
     )
 
 
+def execution_result_file(
+    run_directory: str | Path, *, element: int | None = None
+) -> Path:
+    """Where one element writes what it did.
+
+    A cohort's elements each redirect to their own path. They used to
+    share one: the last writer defined the cycle, every element reported
+    `partial` by construction because none walks every approved node, and
+    a shorter record written after a longer one left the first one's tail
+    behind it.
+
+    ``element=None`` is the single-job path, unchanged.
+    """
+
+    base = Path(run_directory)
+    if element is None:
+        return base / "execution-result.json"
+    return base / f"execution-result.{int(element)}.json"
+
+
+def cohort_completion(
+    run_directory: str | Path,
+) -> tuple[bool | None, tuple[str, ...]]:
+    """Whether every member of this wave has reached a terminal state.
+
+    Asked of the durable stream, never of a file's existence. The job
+    script creates its redirect target before the engine starts, so
+    ``is_file()`` was true from second zero -- for three hours of a
+    running calculation, and forever after a job killed before it wrote
+    anything.
+
+    Terminality, not success: a member that failed or was cancelled has
+    ended, and its outcome is evidence the Agent must see. A member still
+    inside its launch lease has not ended, whatever else the stream says.
+
+    Returns:
+        tuple: ``(complete, pending)``. ``complete`` is ``None`` when no
+        cohort was dispatched, which is the single-job path and not a
+        failure.
+    """
+
+    from types import SimpleNamespace
+
+    from chemsmart.agent.terminal_states import run_live_leases
+
+    manifest = read_cohort_manifest(run_directory)
+    if manifest is None:
+        return None, ()
+    # Read the stream as lines rather than as reconstructed events: this
+    # question needs only the kind and the payload, and a stream one
+    # element is still appending to must not fail the barrier.
+    try:
+        lines = (
+            (Path(run_directory) / "events.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+    except OSError:
+        return False, manifest.node_ids
+    events = []
+    for line in lines:
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        events.append(
+            SimpleNamespace(
+                kind=str(raw.get("kind") or ""),
+                payload=raw.get("payload") or {},
+            )
+        )
+
+    finished: set[str] = set()
+    for event in events:
+        if getattr(event, "kind", "") != "program_execution_observed":
+            continue
+        payload = getattr(event, "payload", None) or {}
+        record = payload.get("record") or {}
+        node_id = str(
+            payload.get("node_id") or (record or {}).get("node_id") or ""
+        )
+        if node_id:
+            finished.add(node_id)
+    live = set(run_live_leases(events))
+    pending = tuple(
+        node_id
+        for node_id in manifest.node_ids
+        if node_id not in finished or node_id in live
+    )
+    return (not pending), pending
+
+
 def cohort_frontier(
     ready: tuple[str, ...],
     cohort_node_ids: tuple[str, ...] | None,
@@ -361,7 +453,9 @@ __all__ = [
     "COHORT_MANIFEST_FILE",
     "CohortManifestV1",
     "build_cohort_manifest",
+    "cohort_completion",
     "cohort_frontier",
+    "execution_result_file",
     "CohortMemberVerdictV1",
     "CohortValidityV1",
     "COHORT_MEMBER_STATUSES",
