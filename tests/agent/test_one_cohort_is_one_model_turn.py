@@ -354,3 +354,81 @@ def test_a_reserved_call_that_never_receipted_is_still_charged(tmp_path):
         f"{outcome.engine_calls_consumed}, so a crash between the "
         "reservation and the receipt returns a spent call to the grant"
     )
+
+
+def test_conceding_still_projects_the_evidence(tmp_path):
+    """Standing down must not mean leaving the evidence unprojected.
+
+    The loser of the keyed append now returns immediately, which fixed
+    the duplicated turn and opened a smaller hole: if the *winner* dies
+    between writing the row and writing the workspace record, nothing
+    projects that cycle's receipts, and `resume` computes the parked set
+    as dispatched-minus-recorded -- now empty -- and refuses with "no
+    parked or interrupted run to resume". Evidence that survives on disk
+    and reaches no projection is unreachable to every later reader,
+    which the charter says is the same as lost.
+
+    What is asserted is that the projection was *attempted on this
+    cycle's stream*, because the shared engine-stream fixture emits a
+    reservation and an execution receipt and no verified result -- so
+    there is genuinely nothing for `record_run` to append, and counting
+    rows would pass whether or not it was called. The driver's own
+    once-per-(cycle, stream) marker is set by the call and by nothing
+    else, and `record_run` is durably idempotent, so the winner's own
+    call afterwards costs nothing.
+    """
+
+    from chemsmart.agent.driver import GoalDriver
+
+    from .test_the_goal_loop_recovers_or_returns import (
+        _engine_stream,
+        _envelope_file,
+    )
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    driver = GoalDriver(
+        task="t",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path),
+        goal_id="g1",
+        granted_by="tester",
+    )
+    driver.cycles = 1
+    driver.run_directory = driver.goal_dir / "runs" / "cycle-1"
+    driver.run_directory.mkdir(parents=True)
+    _engine_stream(tmp_path, driver.run_directory, failed=False)
+    events_path = driver.run_directory / "events.jsonl"
+    driver.events_path = events_path
+
+    assert driver._recorded_streams == set()
+    driver._concede("goals/g1/runs/cycle-1")
+
+    assert (1, str(events_path)) in driver._recorded_streams, (
+        "the process that stood down left this cycle's stream "
+        "unprojected; if the winner died before recording, no later "
+        "reader can reach its receipts"
+    )
+    assert driver.result is not None
+    assert driver.result.settlement == "parked"
+
+
+def test_conceding_without_a_run_directory_is_still_a_concession(tmp_path):
+    """A cycle that never opened a run has nothing to project."""
+
+    from chemsmart.agent.driver import GoalDriver
+
+    from .test_the_goal_loop_recovers_or_returns import _envelope_file
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    driver = GoalDriver(
+        task="t",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path),
+        goal_id="g1",
+        granted_by="tester",
+    )
+    driver.cycles = 1
+    driver._concede("goals/g1/runs/cycle-1")
+    assert driver.result is not None and driver.phase == "parked"

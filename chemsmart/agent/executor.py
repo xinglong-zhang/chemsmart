@@ -491,18 +491,36 @@ class ApprovedWorkflowExecutor:
         # A wave's elements are authorised by membership, not by a second
         # claim. The manifest names which calculations this approval
         # covers and which element runs which; it is digest-bound and was
-        # written before any element started. The approval is still
-        # consumed once, by the dispatcher. Without this the second
+        # written before any element started, so an element cannot
+        # borrow a stale run directory's membership for a different
+        # decision. Without this the second
         # element is either admitted through the continuation path --
         # whose own contract says it authorises nothing -- or refused as
         # "a second independent execution of a consumed bundle".
         cohort_element = getattr(self, "cohort_element", None)
         if cohort_element is not None:
-            authorise_cohort_element(
+            # The return value is the authority, and discarding it meant
+            # the flag alone took the place of the claim:
+            # `authorise_cohort_element` answers `None` -- without
+            # raising -- when there is no manifest, so
+            # `--cohort-element 0` against a fresh run directory skipped
+            # the one-shot claim entirely and left the walk unbounded
+            # (`_cohort_scope` is `None` for a missing manifest too).
+            # One human approval, a new run directory each time, and the
+            # whole partition ran again. It is a public documented flag,
+            # so this is reachable by typing rather than by racing.
+            authorised = authorise_cohort_element(
                 self.run_directory,
                 element=cohort_element,
                 bundle_sha256=self.execution_bundle.bundle_sha256,
             )
+            if not authorised:
+                raise ContractError(
+                    "--cohort-element names a member of a wave and this "
+                    "run directory holds no cohort manifest, so there is "
+                    "no membership to be admitted by. Omit it to run the "
+                    "whole approved partition."
+                )
             self._bundle_claimed = True
             return
         if self.claim_workspace_bundle:

@@ -454,6 +454,16 @@ def cohort_completion(
         if not node_id:
             continue
         if kind == "program_execution_observed":
+            # A receipt is trusted as terminal *because the process
+            # outlives it*: the element writes it and then exits, and the
+            # wake is gated `afterany` on the element's exit, so under a
+            # scheduler dispatch a member holding a receipt has no
+            # process still working. It is not an oversight beside the
+            # `node_state` reasoning below -- `run_live_leases`
+            # deliberately drops a node with a receipt from the live set.
+            # `--wait` and a hand-typed `agent wake` can reach this
+            # between the execution receipt and the validation receipt,
+            # and both ask `cohort_elements_may_still_run` as well.
             finished.add(node_id)
         elif kind == "workflow_node_state_changed":
             # `node_state` is this node's word. `record` is the *run's*

@@ -102,6 +102,48 @@ def _wake_command(*, python: str, workspace: Path, goal_id: str) -> str:
     )
 
 
+def _write_dispatch_receipt(
+    directory: Path,
+    *,
+    scheduler: str,
+    job_id: str,
+    submitted_at: str,
+    submit_command: str,
+    submit_script: str,
+    run_directory: Path,
+    approval_file: Path | str,
+    goal_id: str,
+    cycle: int,
+    wake_command: str,
+    request: Any,
+    wake_job_id: str,
+    cohort_node_ids: tuple[str, ...],
+) -> DispatchReceiptV1:
+    """Write the receipt, twice: once for the allocation, once for the
+    jobs. One writer, so the two spellings cannot drift."""
+
+    receipt = DispatchReceiptV1(
+        scheduler=str(scheduler),
+        job_id=str(job_id),
+        submitted_at=str(submitted_at),
+        submit_command=str(submit_command),
+        submit_script=str(submit_script),
+        run_directory=str(Path(run_directory).resolve()),
+        approval_file=str(Path(approval_file).resolve()),
+        goal_id=str(goal_id),
+        cycle=int(cycle),
+        wake_command=str(wake_command),
+        scheduler_request=request.public_record(),
+        wake_job_id=str(wake_job_id),
+        cohort_node_ids=tuple(str(item) for item in cohort_node_ids),
+    )
+    (Path(directory) / DISPATCH_RECEIPT_FILE).write_text(
+        json.dumps(receipt.public_record(), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return receipt
+
+
 def _approved_bundle_digest(approval_file: Path | str) -> str:
     """The bundle's own declared digest, which is what admission reads.
 
@@ -351,6 +393,36 @@ def dispatch_run_to_scheduler(
         envelope=envelope,
     )
     submitter = resolved.get_submitter(job, scheduler_request=request)
+    # The allocation is decided here and the job ids are not, so the
+    # allocation is written here. An element resolves what it may use
+    # from this receipt, and the receipt used to be written after both
+    # submissions -- while the manifest is written first precisely
+    # because elements start promptly, and four of them started in the
+    # same second on CUHK. An element inside that window found no
+    # receipt, fell back to the *approval's* resources, and published
+    # them: one element running outside its allocation and the rest
+    # dying on bytes that disagree. The job ids are appended when the
+    # scheduler names them.
+    _write_dispatch_receipt(
+        run_directory,
+        scheduler=scheduler,
+        job_id="",
+        submitted_at="",
+        submit_command="",
+        submit_script=str(submitter.submit_script),
+        run_directory=run_directory,
+        approval_file=approval_file,
+        goal_id=goal_id,
+        cycle=cycle,
+        wake_command=_wake_command(
+            python=interpreter,
+            workspace=Path(workspace).resolve(),
+            goal_id=goal_id,
+        ),
+        request=request,
+        wake_job_id="",
+        cohort_node_ids=cohort_node_ids,
+    )
     wake_job_id = ""
     if cohort_node_ids:
         # The manifest is written first and never after: it is the only
@@ -415,30 +487,26 @@ def dispatch_run_to_scheduler(
             wake_script, encoding="utf-8"
         )
         wake_job_id = str(resolved.submit_prepared(wake_job).job_id)
-    receipt = DispatchReceiptV1(
+    return _write_dispatch_receipt(
+        run_directory,
         scheduler=submission.scheduler,
         job_id=submission.job_id,
         submitted_at=submission.submitted_at,
         submit_command=submission.submit_command,
         submit_script=submission.submit_script,
-        run_directory=str(run_directory.resolve()),
-        approval_file=str(Path(approval_file).resolve()),
+        run_directory=run_directory,
+        approval_file=approval_file,
         goal_id=goal_id,
-        cycle=int(cycle),
+        cycle=cycle,
         wake_command=_wake_command(
             python=interpreter,
             workspace=Path(workspace).resolve(),
             goal_id=goal_id,
         ),
-        scheduler_request=request.public_record(),
+        request=request,
         wake_job_id=wake_job_id,
-        cohort_node_ids=tuple(str(item) for item in cohort_node_ids),
+        cohort_node_ids=cohort_node_ids,
     )
-    (run_directory / DISPATCH_RECEIPT_FILE).write_text(
-        json.dumps(receipt.public_record(), indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    return receipt
 
 
 def read_dispatch_receipt(run_directory: Path) -> DispatchReceiptV1 | None:

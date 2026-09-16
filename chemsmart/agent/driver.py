@@ -3387,6 +3387,25 @@ class GoalDriver:
             str(item) for item in packet.get("non_executable_node_ids") or ()
         )
 
+    def _reviewed_node_ids(self) -> tuple[str, ...]:
+        """Every node the cycle's displayed review carried.
+
+        Empty for a review packet that names none, which is absence and
+        not a reason to drop a wave.
+        """
+
+        review_file = self.goal_dir / "reviews" / f"cycle-{self.cycles}.json"
+        try:
+            review = _review_record(review_file)
+        except (OSError, json.JSONDecodeError):
+            return ()
+        packet = review.get("workflow_execution_review") or review
+        return tuple(
+            str(row.get("node_id") or "")
+            for row in packet.get("node_reviews") or ()
+            if isinstance(row, Mapping) and row.get("node_id")
+        )
+
     def _record_workspace(self, events_path: Path, run_reference: str) -> None:
         """Append what this run proved to the workspace's own record.
 
@@ -4445,8 +4464,25 @@ class GoalDriver:
         only the keyed append can tell them apart. The loser stops here
         with the evidence intact; the winner records the workspace,
         settles, and takes the one model turn the cohort earned.
+
+        It projects the workspace record first. Standing down closed the
+        duplicated turn and opened a smaller hole: if the *winner* dies
+        between writing the row and writing the record, nothing projects
+        that cycle's receipts and `resume` computes the parked set as
+        dispatched-minus-recorded, which is now empty, so the goal is
+        unresumable. `record_run` is durably idempotent, so doing it here
+        costs the winner nothing and the charter's sentence holds --
+        evidence that survives on disk and reaches no projection is
+        unreachable to every later reader, which is the same as lost.
         """
 
+        if self.run_directory is not None:
+            events_path = (
+                self.events_path
+                if getattr(self, "events_path", None) is not None
+                else self.run_directory / "events.jsonl"
+            )
+            self._record_workspace(events_path, run_reference)
         self.result = GoalLoopResultV1(
             goal_id=self.goal_id,
             settlement="parked",
@@ -4486,9 +4522,21 @@ class GoalDriver:
         )
         if not selected:
             return ()
+        # Subtracting the retained set is not intersecting with the
+        # approved one: a member in neither -- an id from a workflow the
+        # session re-planned away from, and the selection carries no
+        # workflow id -- went straight through.
         retained = set(self._declared_non_executable_ids())
-        wave = tuple(item for item in selected if item not in retained)
-        dropped = tuple(item for item in selected if item in retained)
+        reviewed = set(self._reviewed_node_ids())
+        approved = (reviewed - retained) if reviewed else None
+
+        def _covered(node_id: str) -> bool:
+            if node_id in retained:
+                return False
+            return approved is None or node_id in approved
+
+        wave = tuple(item for item in selected if _covered(item))
+        dropped = tuple(item for item in selected if not _covered(item))
         if dropped:
             self.ledger.append(
                 "wave_members_dropped",
