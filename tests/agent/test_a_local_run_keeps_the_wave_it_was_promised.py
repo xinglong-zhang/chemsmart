@@ -99,3 +99,65 @@ def test_a_local_run_without_a_selected_wave_is_unchanged(tmp_path):
     driver = _driver(tmp_path, wave=(), execute=execute)
     driver.run()
     assert seen.get("manifest") is None
+
+
+def test_a_resumed_local_run_keeps_the_manifest_it_already_had(tmp_path):
+    """Resuming must not re-mint the wave it is resuming into.
+
+    `resume` re-enters an interrupted local run at the execute phase
+    without planning, so there is no session and no selection -- and the
+    first attempt's manifest is what must still bound the resumed walk.
+    Writing a second one would give the same wave a new `created_at` and
+    a new digest, and a manifest is the thing an element's admission is
+    checked against.
+
+    This held by construction rather than by a witness, which is the
+    shape of half the defects this round found.
+    """
+
+    from chemsmart.agent.cohort import build_cohort_manifest
+    from chemsmart.agent.driver import GoalDriver
+
+    from .test_the_goal_loop_recovers_or_returns import _envelope_file
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    driver = GoalDriver(
+        task="t",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path),
+        goal_id="g1",
+        granted_by="tester",
+        execute_bundle=lambda **_kw: SimpleNamespace(
+            status="completed", analysis_status=""
+        ),
+    )
+    driver.cycles = 1
+    driver.bundle_file = tmp_path / "bundle.json"
+    driver.bundle_file.write_text(
+        json.dumps({"bundle_sha256": "7" * 64}), encoding="utf-8"
+    )
+    driver.run_directory = driver.goal_dir / "runs" / "cycle-1"
+    driver.run_directory.mkdir(parents=True)
+    first = build_cohort_manifest(
+        goal_id="g1",
+        cycle=1,
+        bundle_sha256="7" * 64,
+        node_ids=("opt-a", "opt-b"),
+        max_concurrent_tasks=1,
+        created_at="2026-09-16T00:00:00+00:00",
+    )
+    first.write(driver.run_directory)
+
+    # Exactly what `resume` leaves behind: no session, no selection.
+    assert driver.session is None
+    driver._execute()
+
+    after = read_cohort_manifest(driver.run_directory)
+    assert after is not None
+    assert after.cohort_sha256 == first.cohort_sha256, (
+        "the resumed run re-minted its own wave, so the manifest an "
+        "element would be admitted against is not the one it started "
+        "under"
+    )
+    assert after.created_at == first.created_at
