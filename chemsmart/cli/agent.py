@@ -666,12 +666,36 @@ def wake(workspace, goal_id, wait, poll_seconds):
                         run_directory, poll_seconds=poll_seconds
                     )
                 )
-            elif not (run_directory / EXECUTION_RESULT_FILE).is_file():
-                raise click.ClickException(
-                    f"goal {goal_id!r}: cycle {driver.cycles} has not "
-                    "written its result yet; pass --wait to poll the "
-                    "scheduler, or run this again when the job is over"
-                )
+            else:
+                # A wave is over when its members are, which is a
+                # question about the durable stream and not about a
+                # file. For a cohort the single-job name is one nothing
+                # ever writes -- each element writes its own -- so this
+                # refused a wave whose science was entirely finished and
+                # parked the goal forever. `complete is None` means no
+                # cohort, which is the single-job path unchanged.
+                from chemsmart.agent.cohort import cohort_completion
+
+                complete, pending = cohort_completion(run_directory)
+                if complete is False:
+                    raise click.ClickException(
+                        f"goal {goal_id!r}: cycle {driver.cycles} is a "
+                        f"wave of {len(pending)} calculation(s) that "
+                        "have not reached a terminal state yet "
+                        f"({', '.join(pending)}); pass --wait to poll "
+                        "the scheduler, or run this again when the "
+                        "array is over"
+                    )
+                if (
+                    complete is None
+                    and not (run_directory / EXECUTION_RESULT_FILE).is_file()
+                ):
+                    raise click.ClickException(
+                        f"goal {goal_id!r}: cycle {driver.cycles} has "
+                        "not written its result yet; pass --wait to "
+                        "poll the scheduler, or run this again when "
+                        "the job is over"
+                    )
         result = driver.run()
     except ContractError as exc:
         raise click.ClickException(str(exc)) from exc

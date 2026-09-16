@@ -25,7 +25,11 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from chemsmart.agent._contracts import ContractError
-from chemsmart.agent.cohort import build_cohort_manifest
+from chemsmart.agent.cohort import (
+    build_cohort_manifest,
+    cohort_completion,
+    execution_result_file,
+)
 
 #: What a wake job asks for. It runs one host process -- reading the
 #: run's own receipts and re-entering the goal -- and nothing about the
@@ -165,8 +169,13 @@ def build_cohort_dispatch_script(
     submitter._write_array_scheduler_options(buffer, None, count=cohort_size)
     submitter._write_extra_commands(buffer)
     submitter._write_change_to_job_directory(buffer)
+    # The element index is a shell variable here, so the host's own
+    # naming is applied to a placeholder and then substituted: two
+    # authors for one path is how a writer and a reader stop agreeing.
     element = "${SLURM_ARRAY_TASK_ID}"
-    result = run_directory / f"execution-result.{element}.json"
+    result = str(execution_result_file(run_directory, element=0)).replace(
+        "execution-result.0.json", f"execution-result.{element}.json"
+    )
     buffer.write(
         "# One approved calculation of this wave, executed provider-free.\n"
     )
@@ -442,7 +451,13 @@ def wait_for_dispatched_run(
     receipt = read_dispatch_receipt(run_directory)
     polls = 0
     while True:
-        if (run_directory / EXECUTION_RESULT_FILE).is_file():
+        complete, _pending = cohort_completion(run_directory)
+        if complete is True:
+            return "wave complete"
+        if (
+            complete is None
+            and (run_directory / EXECUTION_RESULT_FILE).is_file()
+        ):
             return "result recorded"
         if receipt is None:
             return "no dispatch receipt to wait on"
