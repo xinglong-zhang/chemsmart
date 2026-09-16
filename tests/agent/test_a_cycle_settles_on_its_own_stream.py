@@ -172,3 +172,71 @@ def test_the_plan_records_the_stream_it_planned_in(tmp_path):
     resolved = driver._planned_events_path()
     assert resolved is not None
     assert resolved.parent.name.endswith("aaaa-1111")
+
+
+def test_a_named_stream_that_is_gone_never_reaches_the_glob(tmp_path):
+    """Two states, one `None`, and the caller could not tell them apart.
+
+    `_planned_events_path` returns `None` both when this cycle recorded
+    no stream -- correct, and what every goal written before this needs
+    -- and when it recorded one whose directory has since gone. The
+    second fell through to the same workspace-wide glob the fix exists
+    to prevent, while the function's own docstring said it did not:
+    "absence rather than licence to substitute another goal's". The
+    sentence was right and the return type could not carry it.
+
+    Reachable without anything unusual: a `live-*` directory removed by
+    workspace tidying, a scratch-retention policy, or a workspace
+    rsynced without the session streams -- which look like logs and are
+    the first thing someone drops.
+    """
+
+    from chemsmart.agent.driver import GoalDriver
+
+    from .test_the_goal_loop_recovers_or_returns import _envelope_file
+
+    workspace = _workspace_with_two_streams(tmp_path)
+    driver = GoalDriver(
+        task="t",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path),
+        goal_id="goal-a",
+        granted_by="tester",
+    )
+    driver.cycles = 2
+    driver.ledger.directory.mkdir(parents=True, exist_ok=True)
+    driver.ledger.append(
+        "session_stream_recorded",
+        {"cycle": 2, "run_id": "live-20260916T090000000000Z-cccc-3333"},
+    )
+
+    assert driver._named_its_own_stream() is True
+    assert driver._planned_events_path() is None
+
+    driver._project_before_settling()
+    assert driver.events_path is None, (
+        "a goal that named its stream fell back to whatever was newest "
+        "in the workspace, which is the substitution this exists to stop"
+    )
+
+
+def test_a_cycle_that_named_nothing_still_uses_the_fallback(tmp_path):
+    """Unchanged for every goal written before the row existed."""
+
+    from chemsmart.agent.driver import GoalDriver
+
+    from .test_the_goal_loop_recovers_or_returns import _envelope_file
+
+    workspace = _workspace_with_two_streams(tmp_path)
+    driver = GoalDriver(
+        task="t",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path),
+        goal_id="goal-a",
+        granted_by="tester",
+    )
+    driver.cycles = 2
+    assert driver._named_its_own_stream() is False
+    driver._project_before_settling()
+    assert driver.events_path is not None
+    assert driver.events_path.parent.name.endswith("bbbb-2222")

@@ -3422,6 +3422,24 @@ class GoalDriver:
             {"cycle": self.cycles, "run_id": run_id},
         )
 
+    def _named_its_own_stream(self) -> bool:
+        """Whether this cycle recorded which stream it planned in.
+
+        The distinction `_planned_events_path`'s `None` cannot carry:
+        "no row for this cycle", which is every goal written before the
+        row existed and must keep the old fallback, against "a row whose
+        stream has since gone", which must not fall back to guessing.
+        A goal that named its stream never reaches the workspace-wide
+        glob -- that is the whole content of naming it.
+        """
+
+        return any(
+            entry.get("kind") == "session_stream_recorded"
+            and int((entry.get("payload") or {}).get("cycle") or 0)
+            == self.cycles
+            for entry in self.ledger.entries()
+        )
+
     def _planned_events_path(self) -> Path | None:
         """The stream this cycle planned in, from the goal's own record.
 
@@ -3693,6 +3711,10 @@ class GoalDriver:
             events_path = self._planned_events_path()
             if events_path is not None:
                 self.events_path = events_path
+            elif self._named_its_own_stream():
+                # Named, and gone. Absence, not licence to substitute
+                # another goal's -- which is what the glob below does.
+                return
         if events_path is None:
             # The session raised before the driver resolved its stream,
             # which is exactly the case that lost SUFFICIENCY-2's
