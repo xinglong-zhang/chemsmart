@@ -181,11 +181,27 @@ def record_run(
     # Which node's reached geometry each consumer was handed, so a later
     # reader can join a Hessian's characterisation onto the optimisation.
     handoffs: dict[str, str] = {}
+    # Which result artifact each extraction receipt read, so a claim can
+    # be joined to the node it stands on rather than to the run.
+    artifact_by_receipt: dict[str, str] = {}
+    # And which level that node was computed at.
+    level_by_artifact: dict[str, str] = {}
     for line in lines:
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if event.get("kind") == "result_quantities_extracted":
+            payload = event.get("payload") or {}
+            record = payload.get("record") or {}
+            receipt = str(payload.get("receipt_sha256") or "")
+            artifact = str(
+                payload.get("artifact_sha256")
+                or record.get("artifact_sha256")
+                or ""
+            )
+            if receipt and artifact:
+                artifact_by_receipt[receipt] = artifact
         if event.get("kind") != "optimized_geometry_handed_off":
             continue
         payload = event.get("payload") or {}
@@ -214,6 +230,10 @@ def record_run(
             level_sha256 = str(row.get("project_settings_text_sha256") or "")
             if level_sha256:
                 levels_in_run.add(level_sha256)
+                for item in record.get("output_artifacts") or ():
+                    artifact = str(item.get("sha256") or "")
+                    if artifact:
+                        level_by_artifact[artifact] = level_sha256
             entries.append(
                 {
                     "kind": "result",
@@ -347,9 +367,34 @@ def record_run(
                         "recorded_at": stamp,
                     }
                 )
+    # A claim carries the level of the node it stands on, never the run's.
+    #
+    # This collected every node's level into one set and stamped the whole
+    # set onto every claim. One run was usually one level, so it was
+    # harmless and nothing looked. It is not harmless: `divergences`
+    # skips a pair that is `same_run and same_level`, so two values of one
+    # quantity computed at two levels in one cycle were *identical* in
+    # that field and the difference was silently dropped -- the host held
+    # a cheap number and an expensive number for one quantity and said
+    # nothing. A wave cohort is the first design that deliberately puts
+    # several independent calculations, and so several levels, in one run.
+    #
+    # Where the join does not resolve -- a claim standing on an expression
+    # or a thermochemistry receipt rather than an extraction -- the run's
+    # own level is used when the run has exactly one, because then it is
+    # unambiguous, and nothing is claimed otherwise. An absent level reads
+    # as unknown; a wrong one reads as fact.
+    single_level = (
+        tuple(sorted(levels_in_run)) if len(levels_in_run) == 1 else ()
+    )
     for entry in entries:
-        if entry["kind"] == "claim":
-            entry["level_sha256s"] = tuple(sorted(levels_in_run))
+        if entry["kind"] != "claim":
+            continue
+        artifact = artifact_by_receipt.get(
+            str(entry.get("source_receipt_sha256") or "")
+        )
+        level = level_by_artifact.get(artifact or "")
+        entry["level_sha256s"] = (level,) if level else single_level
     if not entries:
         return 0
     path = workspace_record_path(workspace)
