@@ -431,6 +431,65 @@ def read_dispatch_receipt(run_directory: Path) -> DispatchReceiptV1 | None:
     return DispatchReceiptV1(**fields)
 
 
+def cohort_elements_may_still_run(
+    run_directory: Path,
+    *,
+    runner: Callable[..., "subprocess.CompletedProcess[str]"] | None = None,
+) -> bool | None:
+    """Whether any element of this wave's array could still be working.
+
+    The one question the scheduler is allowed to answer about a wave, and
+    it is not a scientific one: the durable stream owns what every
+    calculation *means*, and this owns only whether a process can still
+    add to it.
+
+    It exists because the stream cannot tell "still running" from
+    "process gone". A launch lease answers that for a node that reserved;
+    an element that died before reserving leaves nothing at all, so the
+    barrier waits on it forever -- measured live on CUHK, where three
+    elements of a wave of four died in their first second and the goal
+    could never be woken.
+
+    Returns:
+        bool | None: ``None`` when there is nothing to ask -- no cohort,
+        no dispatch receipt, or a scheduler that no longer knows the job
+        -- in which case the stream's own answer stands unchanged.
+    """
+
+    from chemsmart.settings.probe.scheduler_job import (
+        parse_squeue_array,
+        squeue_array_command,
+    )
+
+    # Resolved here rather than as a default argument: a default binds
+    # the function object at import, so a caller that replaces
+    # `subprocess.run` -- a test, or a host that routes its own
+    # processes -- would be silently ignored.
+    runner = runner or subprocess.run
+    receipt = read_dispatch_receipt(Path(run_directory))
+    if receipt is None or not receipt.cohort_node_ids:
+        return None
+    completed = runner(
+        list(squeue_array_command(receipt.job_id)),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    array = parse_squeue_array(
+        completed.returncode,
+        completed.stdout,
+        completed.stderr,
+        array_job_id=receipt.job_id,
+    )
+    if not array.known:
+        # An array the scheduler has forgotten is one whose elements have
+        # all ended -- it is purged when nothing of it is left. Saying
+        # "unknown" here would reinstate the permanent park.
+        return False
+    return not array.terminal
+
+
 def wait_for_dispatched_run(
     run_directory: Path,
     *,
@@ -537,6 +596,7 @@ __all__ = [
     "EXECUTION_RESULT_FILE",
     "DispatchReceiptV1",
     "build_cohort_dispatch_script",
+    "cohort_elements_may_still_run",
     "build_dispatch_script",
     "build_wake_dispatch_script",
     "dispatch_run_to_scheduler",

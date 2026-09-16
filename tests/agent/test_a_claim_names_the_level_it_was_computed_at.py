@@ -225,22 +225,37 @@ def _thermochemistry(receipt, artifact):
 
 
 def _expression(receipt, source_receipts):
-    """An expression receipt names, per input, the receipt it read."""
+    """An expression receipt, in the shape the host actually emits.
 
+    This invented an ``inputs`` key. ``inputs`` is on the expression
+    *request*, which is never emitted; the receipt carries
+    ``output_dependencies``, whose rows name the receipts each output
+    stands on. The reader read the invented key, so the whole ancestry
+    walk was dead code and this test was the reason nobody noticed --
+    it is the defect class the round exists to remove, committed by the
+    witness rather than by the product.
+
+    Built here from the real dataclass so the shape cannot drift again.
+    """
+
+    from chemsmart.agent._contracts import canonical_data
+    from chemsmart.analysis.quantity_expressions import (
+        QuantityExpressionOutputDependencyV1,
+    )
+
+    dependency = QuantityExpressionOutputDependencyV1(
+        output_id="composed",
+        source_receipt_sha256s=tuple(sorted(set(source_receipts))),
+        model_authored_constants=(),
+        convention_operations=(),
+        arithmetic_node_count=1,
+    )
     return {
         "kind": "quantity_expression_evaluated",
         "payload": {
             "receipt_sha256": receipt,
             "record": {
-                "inputs": [
-                    {
-                        "quantity_id": f"q{index}",
-                        "evidence_ref": (
-                            f"run:r;receipt:{source};quantity:q{index}"
-                        ),
-                    }
-                    for index, source in enumerate(source_receipts)
-                ],
+                "output_dependencies": [canonical_data(dependency)],
             },
         },
     }
@@ -341,5 +356,32 @@ def test_an_expression_claim_names_every_level_it_composed(tmp_path):
         sorted((_CHEAP, _COSTLY))
     ), (
         "an expression composing two levels reported "
+        f"{claims['reaction_energy']['level_sha256s']}"
+    )
+
+
+def test_a_composed_number_with_one_imported_term_claims_no_level(tmp_path):
+    """Partial ancestry is not a level; it is a level this run cannot say.
+
+    A value built from one result this run computed and one it imported
+    has two levels and the run knows one. Reporting that one would tell
+    `divergences` that two such claims are at the same level when they
+    are not -- the suppression per-node attribution exists to prevent,
+    reintroduced one hop further down.
+    """
+
+    claims = _record(
+        tmp_path,
+        [
+            _node("conformer-a-opt", "c" * 64, "opt"),
+            _extraction("1" * 64, "c" * 64),
+            # The other term reads a result this run never produced.
+            _extraction("2" * 64, "e" * 64),
+            _expression("4" * 64, ["1" * 64, "2" * 64]),
+            _claim("reaction_energy", "4" * 64),
+        ],
+    )
+    assert tuple(claims["reaction_energy"]["level_sha256s"]) == (), (
+        "a half-known ancestry was reported as a level: "
         f"{claims['reaction_energy']['level_sha256s']}"
     )

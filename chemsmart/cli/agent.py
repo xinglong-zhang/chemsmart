@@ -675,8 +675,23 @@ def wake(workspace, goal_id, wait, poll_seconds):
                 # parked the goal forever. `complete is None` means no
                 # cohort, which is the single-job path unchanged.
                 from chemsmart.agent.cohort import cohort_completion
+                from chemsmart.agent.dispatch import (
+                    cohort_elements_may_still_run,
+                )
 
                 complete, pending = cohort_completion(run_directory)
+                if (
+                    complete is False
+                    and cohort_elements_may_still_run(run_directory) is False
+                ):
+                    # Every element has ended and these members have no
+                    # events: their processes died before reaching the
+                    # stream. `derive_run_outcome` types a node with no
+                    # events `not_launched`, which is terminal and is
+                    # exactly what the Agent needs to read -- so the wave
+                    # is over, with three of its calculations reported as
+                    # never launched rather than the goal parked forever.
+                    complete = True
                 if complete is False:
                     raise click.ClickException(
                         f"goal {goal_id!r}: cycle {driver.cycles} is a "

@@ -3350,13 +3350,44 @@ def _local_program_server_blocks(
 
 
 def _write_private_exact(path: Path, payload: bytes) -> None:
+    """Write these exact bytes once, however many writers arrive.
+
+    The check and the create were two steps, which is a race the serial
+    path could never lose and a wave loses immediately: measured live on
+    CUHK, four array elements started in the same second, all four found
+    the file absent, all four called ``O_EXCL``, one won, and three
+    approved calculations died of ``FileExistsError``.
+
+    ``O_EXCL`` stays -- it is what makes this a create rather than an
+    overwrite -- and losing the race is now resolved by reading what the
+    winner wrote. Identical bytes are the expected case for a per-run
+    fact every element derives the same way; different bytes are still a
+    contract error, because then two elements disagree about what the
+    host granted.
+    """
+
+    def _agrees() -> bool:
+        if path.is_symlink():
+            return False
+        try:
+            return path.read_bytes() == payload
+        except OSError:
+            return False
+
     if path.exists():
-        if path.is_symlink() or path.read_bytes() != payload:
+        if not _agrees():
             raise ContractError(
                 "private bootstrap artifact conflicts with existing bytes"
             )
         return
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        if not _agrees():
+            raise ContractError(
+                "private bootstrap artifact conflicts with existing bytes"
+            ) from None
+        return
     try:
         pending = memoryview(payload)
         while pending:

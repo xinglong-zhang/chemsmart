@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from click.testing import CliRunner
 
 from chemsmart.agent.cohort import (
@@ -49,7 +48,11 @@ def _stream(run_directory, terminal):
     rows = [
         {
             "kind": "workflow_node_state_changed",
-            "payload": {"record": {"node_id": node, "state": state}},
+            "payload": {
+                "node_id": node,
+                "node_state": state,
+                "record": {"node_id": node, "state": "running"},
+            },
         }
         for node, state in terminal.items()
     ]

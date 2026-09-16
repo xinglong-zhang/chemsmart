@@ -145,7 +145,12 @@ def _state_changed(node_id, state):
         "kind": "workflow_node_state_changed",
         "payload": {
             "node_id": node_id,
-            "record": {"node_id": node_id, "state": state},
+            "node_state": state,
+            # The run's own record, whose "state" is the
+            # run summary and never this node's word. It is
+            # deliberately different, so a reader that takes
+            # it goes red instead of agreeing by accident.
+            "record": {"node_id": node_id, "state": "running"},
         },
     }
 

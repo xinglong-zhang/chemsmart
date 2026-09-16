@@ -236,11 +236,18 @@ def record_run(
             payload = event.get("payload") or {}
             record = payload.get("record") or {}
             receipt = str(payload.get("receipt_sha256") or "")
+            # `output_dependencies`, which the receipt carries, not
+            # `inputs`, which lives on the *request* and is never
+            # emitted: reading the wrong key made this whole walk dead
+            # code, and the test that should have caught it invented the
+            # key it wanted. The dependency rows already resolve each
+            # output to the receipts underneath it.
             sources = tuple(
-                found
-                for item in record.get("inputs") or ()
+                str(digest)
+                for item in record.get("output_dependencies") or ()
                 if isinstance(item, Mapping)
-                for found in _evidence_receipts(item.get("evidence_ref"))
+                for digest in item.get("source_receipt_sha256s") or ()
+                if digest
             )
             if receipt and sources:
                 receipts_by_expression[receipt] = sources
@@ -438,32 +445,48 @@ def record_run(
         tuple(sorted(levels_in_run)) if len(levels_in_run) == 1 else ()
     )
 
-    def _levels_under(receipt: str, seen: frozenset[str]) -> tuple[bool, set]:
-        """(reached a result, the levels those results were computed at)."""
+    def _levels_under(
+        receipt: str, seen: frozenset[str]
+    ) -> tuple[bool, set, bool]:
+        """(reached a result, its levels, any level this run cannot say).
+
+        The third value is what keeps a partly-known ancestry honest. A
+        composed number standing on one result this run computed and one
+        it imported has two levels and the run knows one; reporting that
+        one would say "these two claims are at the same level" to
+        ``divergences`` about numbers that are not, which is the exact
+        suppression the per-node attribution exists to prevent.
+        """
 
         if not receipt or receipt in seen:
-            return False, set()
+            return False, set(), False
         seen = seen | {receipt}
         artifact = artifact_by_receipt.get(receipt)
         if artifact:
             level = level_by_artifact.get(artifact)
-            return True, ({level} if level else set())
+            return True, ({level} if level else set()), not level
         reached = False
         levels: set = set()
+        unknown = False
         for source in receipts_by_expression.get(receipt, ()):
-            source_reached, source_levels = _levels_under(source, seen)
+            source_reached, source_levels, source_unknown = _levels_under(
+                source, seen
+            )
             reached = reached or source_reached
             levels |= source_levels
-        return reached, levels
+            unknown = unknown or source_unknown
+        return reached, levels, unknown
 
     for entry in entries:
         if entry["kind"] != "claim":
             continue
-        reached, levels = _levels_under(
+        reached, levels, unknown = _levels_under(
             str(entry.get("source_receipt_sha256") or ""), frozenset()
         )
         if reached:
-            entry["level_sha256s"] = tuple(sorted(levels))
+            # An incomplete set is worse than an empty one: absent reads
+            # as unknown, partial reads as fact.
+            entry["level_sha256s"] = () if unknown else tuple(sorted(levels))
         else:
             entry["level_sha256s"] = single_level
     if not entries:

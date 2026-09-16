@@ -421,7 +421,19 @@ def cohort_completion(
         if kind == "program_execution_observed":
             finished.add(node_id)
         elif kind == "workflow_node_state_changed":
-            state = str((record or {}).get("state") or "")
+            # `node_state` is this node's word. `record` is the *run's*
+            # state record, and `record["state"]` is the run's summary --
+            # ambiguous, running, validated, failed, blocked, cancelled.
+            # Five of those six are also node-terminal words, so reading
+            # it was a type confusion that type-checks, and it failed in
+            # both directions: a member cancelled while a sibling still
+            # ran was written under the run's "running" and never counted
+            # finished (the wave then waits forever, which is the case
+            # this function's own docstring says it fixed), while once any
+            # member ended "ambiguous" the run's word outranked the rest
+            # and the next member's ordinary pending -> running
+            # transition marked it finished with its engine starting.
+            state = str(payload.get("node_state") or "")
             if state in TERMINAL_NODE_RUN_STATES:
                 finished.add(node_id)
     live = set(run_live_leases(events))

@@ -395,6 +395,23 @@ def _is_finite_runtime_number(value: Any) -> bool:
     return type(value) is float and math.isfinite(value)
 
 
+def _reachable_node_states() -> frozenset[str]:
+    """Every node state a transition can move a node *into*.
+
+    One author: the node state machine in `chemsmart.agent.execution`.
+    `pending` is deliberately absent -- nothing transitions a node back
+    to the state it was created in -- and `deferred` is a plan-time word
+    no transition produces.
+    """
+
+    from chemsmart.agent.execution import WORKFLOW_NODE_TRANSITIONS
+
+    reachable: set[str] = set()
+    for successors in WORKFLOW_NODE_TRANSITIONS.values():
+        reachable |= set(successors)
+    return frozenset(reachable)
+
+
 def _validate_typed_receipt_payload(
     kind: str, payload: Mapping[str, Any]
 ) -> None:
@@ -495,16 +512,17 @@ def _validate_typed_receipt_payload(
         WORKFLOW_EXECUTION_STARTED: ("state", {"running"}),
         WORKFLOW_LAUNCH_RESERVED: ("state", {"running"}),
         WORKFLOW_DATA_EDGE_BOUND: ("status", {"validated"}),
+        # Derived, never typed again. This set was written out by hand
+        # and omitted `cancelled`, which the node state machine has
+        # allowed from `pending` all along -- so the human-withdrawal
+        # path, which writes exactly that transition
+        # (`executor.py`, "execution.cancelled.human"), raised
+        # `ContractError` in production. Its only test asserted two
+        # source strings, so nothing noticed. A cancelled element is
+        # evidence a wave's barrier must be able to see.
         WORKFLOW_NODE_STATE_CHANGED: (
             "node_state",
-            {
-                "running",
-                "engine_complete",
-                "validated",
-                "failed",
-                "blocked",
-                "ambiguous",
-            },
+            _reachable_node_states(),
         ),
     }
     field_and_values = enum_fields.get(kind)
