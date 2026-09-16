@@ -266,50 +266,83 @@ def symmetry_observation(
     )
 
 
+def _is_idealised_torsion(value: float) -> bool:
+    remainder = abs(
+        (
+            value % _IDEALISED_TORSION_PERIOD_DEGREES
+            + 0.5 * _IDEALISED_TORSION_PERIOD_DEGREES
+        )
+        % _IDEALISED_TORSION_PERIOD_DEGREES
+        - 0.5 * _IDEALISED_TORSION_PERIOD_DEGREES
+    )
+    return remainder <= _IDEALISED_TOLERANCE_DEGREES
+
+
+def _is_idealised_angle(value: float) -> bool:
+    return any(
+        abs(value - ideal) <= _IDEALISED_TOLERANCE_DEGREES
+        for ideal in _IDEALISED_ANGLES_DEGREES
+    )
+
+
 def idealised_internal_coordinate_count(
     append_receipts: Iterable[Any],
+    *,
+    edit_receipts: Iterable[Any] = (),
 ) -> dict[str, Any]:
-    """How many appended atoms were placed at exactly idealised values.
+    """How many built coordinates were set to exactly idealised values.
 
     Counts requested torsions on the 60-degree lattice and requested
     angles at 90, 109.47, 120 or 180 degrees, to a millidegree. A
     builder that types 60/180/300 for three methyl hydrogens has placed
     a threefold rotor exactly on its saddle.
+
+    Editing a coordinate onto the lattice is the same act as appending an
+    atom onto it, and this counted only the appends -- so a live run that
+    built its conformers by editing one torsion to exactly 0.00° and
+    exactly 180.00° raised nothing, and the 0.00° structure was butane's
+    syn-periplanar saddle, the top of the rotational barrier rather than
+    a conformer. A bond length has no idealised value and is counted as
+    a built coordinate and nothing more.
     """
 
     appended = 0
+    built = 0
     idealised_torsions = 0
     idealised_angles = 0
     for receipt in append_receipts:
         appended += 1
-        torsion = float(getattr(receipt, "dihedral_degrees", 0.0))
-        remainder = abs(
-            (
-                torsion % _IDEALISED_TORSION_PERIOD_DEGREES
-                + 0.5 * _IDEALISED_TORSION_PERIOD_DEGREES
-            )
-            % _IDEALISED_TORSION_PERIOD_DEGREES
-            - 0.5 * _IDEALISED_TORSION_PERIOD_DEGREES
-        )
-        if remainder <= _IDEALISED_TOLERANCE_DEGREES:
-            idealised_torsions += 1
-        angle = float(getattr(receipt, "angle_degrees", 0.0))
-        if any(
-            abs(angle - ideal) <= _IDEALISED_TOLERANCE_DEGREES
-            for ideal in _IDEALISED_ANGLES_DEGREES
+        built += 1
+        if _is_idealised_torsion(
+            float(getattr(receipt, "dihedral_degrees", 0.0))
         ):
+            idealised_torsions += 1
+        if _is_idealised_angle(float(getattr(receipt, "angle_degrees", 0.0))):
+            idealised_angles += 1
+    for receipt in edit_receipts:
+        built += 1
+        operation = str(getattr(receipt, "operation", "") or "").lower()
+        try:
+            requested = float(getattr(receipt, "value_requested", 0.0))
+        except (TypeError, ValueError):  # pragma: no cover
+            continue
+        if operation == "dihedral" and _is_idealised_torsion(requested):
+            idealised_torsions += 1
+        elif operation == "angle" and _is_idealised_angle(requested):
             idealised_angles += 1
     return {
         "appended_atoms": appended,
+        "built_coordinates": built,
         "idealised_torsions": idealised_torsions,
         "idealised_angles": idealised_angles,
     }
 
 
 def idealised_coordinate_observation(counts: dict[str, Any]) -> str:
+    total = counts.get("built_coordinates", counts["appended_atoms"])
     return (
-        f"{counts['idealised_torsions']} of {counts['appended_atoms']} "
-        "appended atoms sit at torsions on the exact 60° lattice and "
+        f"{counts['idealised_torsions']} of {total} built coordinates "
+        "sit at torsions on the exact 60° lattice and "
         f"{counts['idealised_angles']} at exactly idealised angles; an "
         "exactly idealised rotor starts on its own saddle"
     )

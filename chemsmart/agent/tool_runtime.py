@@ -5140,12 +5140,18 @@ class CommandCompiledToolHostV1:
         except Exception:
             return ()
         appends = []
+        edits = []
         cursor = artifact.sha256
         seen: set[str] = set()
         while cursor and cursor not in seen:
             seen.add(cursor)
             edit_receipt = self.geometry_edits.get(cursor)
             if edit_receipt is not None:
+                # Collected, not stepped past: a coordinate *edited* onto
+                # the 60° lattice starts on the same saddle as one an
+                # append placed there, and the walk saw every edit on its
+                # way to the appends and kept none of them.
+                edits.append(edit_receipt)
                 cursor = edit_receipt.parent_sha256
                 continue
             append_receipt = self.atom_appends.get(cursor)
@@ -5158,10 +5164,12 @@ class CommandCompiledToolHostV1:
                 cursor = symmetry_receipt.parent_sha256
                 continue
             break
-        if appends:
+        if appends or edits:
             observations.append(
                 idealised_coordinate_observation(
-                    idealised_internal_coordinate_count(appends)
+                    idealised_internal_coordinate_count(
+                        appends, edit_receipts=edits
+                    )
                 )
             )
         return tuple(observations)

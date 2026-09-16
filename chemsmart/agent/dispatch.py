@@ -473,6 +473,32 @@ def dispatch_run_to_scheduler(
         script, encoding="utf-8"
     )
     submission = resolved.submit_prepared(job)
+    # Rewritten the moment the scheduler names the array, before the wake
+    # script is written or submitted. Everything after this line is work
+    # that can fail with a job already on the cluster, and a receipt
+    # carrying a job id is what makes "something reached the scheduler" a
+    # fact the driver can read rather than an inference from which
+    # exception escaped.
+    _write_dispatch_receipt(
+        run_directory,
+        scheduler=submission.scheduler,
+        job_id=submission.job_id,
+        submitted_at=submission.submitted_at,
+        submit_command=submission.submit_command,
+        submit_script=submission.submit_script,
+        run_directory=run_directory,
+        approval_file=approval_file,
+        goal_id=goal_id,
+        cycle=cycle,
+        wake_command=_wake_command(
+            python=interpreter,
+            workspace=Path(workspace).resolve(),
+            goal_id=goal_id,
+        ),
+        request=request,
+        wake_job_id="",
+        cohort_node_ids=cohort_node_ids,
+    )
     if cohort_node_ids and wake:
         # A separate job, because the barrier is the wave's and not any
         # element's. It is submitted after the array so it can name it;

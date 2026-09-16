@@ -106,6 +106,10 @@ def test_idealised_appended_coordinates_are_counted_not_judged():
     counts = idealised_internal_coordinate_count(receipts)
     assert counts == {
         "appended_atoms": 4,
+        # An edit builds a coordinate exactly as an append does, so the
+        # denominator is every coordinate built rather than only the
+        # appended atoms; with no edits the two are the same number.
+        "built_coordinates": 4,
         "idealised_torsions": 3,
         "idealised_angles": 3,
     }

@@ -4300,12 +4300,30 @@ class GoalDriver:
                 # `ContractError` left the goal unsettled with a claim on
                 # the ledger, so the next invocation sent a human looking
                 # for a job that was never submitted.
+                # Which side of the irreversible act this failed on is
+                # a fact on disk, not an inference from the exception
+                # type: the dispatcher writes the receipt before the
+                # first `sbatch` with no job id and rewrites it the
+                # moment the scheduler names one. Everything after that
+                # -- the wake script, the wake submission, the final
+                # receipt -- can fail with an array already queued, and
+                # recording *that* as abandoned would tell a reader
+                # nothing reached the scheduler while the allocation
+                # burned, and would disable the one branch that sends
+                # them to look for it.
+                from chemsmart.agent.dispatch import read_dispatch_receipt
+
+                partial = read_dispatch_receipt(self.run_directory)
+                submitted = str(getattr(partial, "job_id", "") or "")
                 self.ledger.append(
-                    "run_dispatch_abandoned",
+                    "run_dispatch_submitted"
+                    if submitted
+                    else "run_dispatch_abandoned",
                     {
                         "cycle": self.cycles,
                         "run": run_reference,
                         "reason": str(exc),
+                        **({"job_id": submitted} if submitted else {}),
                     },
                 )
                 self._typed_error("scheduler dispatch", exc)

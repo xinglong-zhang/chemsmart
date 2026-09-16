@@ -498,3 +498,98 @@ def test_a_dispatch_that_could_not_happen_is_not_an_ambiguous_submission(
         "reported as ambiguous, sending a human to look for a job that "
         "does not exist"
     )
+
+
+def test_a_failure_after_sbatch_is_ambiguous_not_abandoned(tmp_path):
+    """"Abandoned" must mean nothing reached the scheduler.
+
+    The abandoned branch catches the whole dispatch, and the dispatcher
+    does real work *after* the irreversible act: it submits the array,
+    writes the wake script, submits the wake, and rewrites the receipt.
+    Three reachable failures therefore recorded "abandoned" with a job
+    already on the cluster -- `parse_submission` raising on an exit-0
+    submission whose id was unreadable, which is the textbook ambiguous
+    case; an `OSError` between the two submissions; and the wake
+    submission failing, which leaves an array running with nothing that
+    will ever wake it.
+
+    Narrowing the exception cannot separate them, because the same type
+    is raised on both sides of the line. The receipt can: the dispatcher
+    writes it before the first `sbatch` with no job id and rewrites it
+    with the array's id the moment the scheduler names one, so a
+    non-empty `job_id` is a *fact* that something reached the scheduler.
+    """
+
+    from chemsmart.agent.dispatch import (
+        DISPATCH_RECEIPT_FILE,
+        DispatchReceiptV1,
+    )
+    from chemsmart.agent.driver import GoalDriver
+
+    from .test_the_goal_loop_recovers_or_returns import (
+        _envelope_file,
+        _planning_session,
+        _review_payload,
+    )
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    def dispatch_run(**kwargs):
+        run_directory = kwargs["run_directory"]
+        run_directory.mkdir(parents=True, exist_ok=True)
+        # The array is on the cluster; the wake submission then fails.
+        (run_directory / DISPATCH_RECEIPT_FILE).write_text(
+            json.dumps(
+                DispatchReceiptV1(
+                    scheduler="SLURM",
+                    job_id="4242",
+                    submitted_at="2026-09-16T12:00:00+00:00",
+                    submit_command="sbatch x.sh",
+                    submit_script="x.sh",
+                    run_directory=str(run_directory),
+                    approval_file=str(tmp_path / "bundle.json"),
+                    goal_id="goal-w8",
+                    cycle=1,
+                    wake_command="wake",
+                ).public_record()
+            ),
+            encoding="utf-8",
+        )
+        raise OSError("read-only file system writing the wake script")
+
+    driver = GoalDriver(
+        task="the goal task",
+        workspace=workspace,
+        execution_envelope_file=_envelope_file(tmp_path),
+        goal_id="goal-w8",
+        granted_by="tester",
+        plan_session=lambda **kw: _planning_session(
+            "live-1", review=_review_payload()
+        )(workspace, kw),
+        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        dispatch_run=dispatch_run,
+        dispatch="scheduler",
+        server="canned-slurm",
+    )
+    driver.run()
+
+    rows = [
+        json.loads(line)
+        for line in driver.ledger.ledger_path.read_text().splitlines()
+        if line.strip()
+    ]
+    abandoned = [r for r in rows if r["kind"] == "run_dispatch_abandoned"]
+    assert not abandoned, (
+        "the record says nothing reached the scheduler while job 4242 "
+        "burns the allocation, and it disables the one branch that would "
+        "send a human to look for it"
+    )
+    submitted = [r for r in rows if r["kind"] == "run_dispatch_submitted"]
+    assert submitted and submitted[0]["payload"]["job_id"] == "4242", (
+        "the job that exists must be named on the record a human reads"
+    )
+    # And the cycle keeps its claim, so nothing resubmits it: the
+    # abandoned row is what releases a claim, and this is not one.
+    assert [r["kind"] for r in rows].count("run_dispatch_claimed") == 1
+    assert not [r for r in rows if r["kind"] == "run_dispatch_reclaimed"]
