@@ -246,19 +246,18 @@ def test_the_wake_command_resumes_from_the_recorded_driver(tmp_path):
     assert again.exit_code != 0 and "is settled" in again.output
 
 
-# --- The scheduler is asked for what the human approved -------------------
+# --- The server profile is the resource authority -------------------
 #
-# The review panel the human reads renders the envelope's resources
-# (tui/review.py:_bounds_panel), digest-sealed as resource_sha256. Until
-# this section existed, the #SBATCH line came from the operator's server
-# profile and the two never met: a live CUHK goal (sm3-run3-cuhk, job
-# 2134343) displayed and approved 4 cores / 8 GB and was allocated 32
-# cores / 160 GB for a water molecule that ran 31 s at 424 MB peak RSS.
+# The operator's server.yaml / SLURM.yaml decides how much machine a job
+# gets, and the agent does not argue with it: one set of numbers reaches
+# both the #SBATCH line and the engine, nothing is clamped, and nothing
+# is refused after a goal is under way (owner ruling, 2026-09-16).
 #
-# The profile is a ceiling, not a request (owner ruling, 2026-09-16). For
-# a sealed job the ceiling is the server's maximum cores and its maximum
-# memory less a declared headroom, so a clamped request can never claim a
-# node's entire RAM.
+# Two earlier designs of mine are recorded in scheduler_request.py: the
+# envelope as the request with the profile as a ceiling, and then a
+# refusal above that ceiling. A refusal mid-goal is an agent-tool failure
+# that teaches a session to carry workarounds for something the host
+# should simply have decided.
 
 
 def _resources(cores, memory_gb):
@@ -278,17 +277,9 @@ def _sbatch_lines(script):
     return [line for line in script.splitlines() if line.startswith("#SBATCH")]
 
 
-def test_the_scheduler_is_asked_for_the_resources_the_human_approved(
-    tmp_path,
-):
-    from chemsmart.settings.scheduler_request import resolve_scheduler_request
-
-    server = _slurm_server()  # NUM_CORES=6, MEM_GB=52
-    request = resolve_scheduler_request(
-        resources=_resources(cores=4, memory_gb=8), server=server, sealed=True
-    )
+def _script_for(server, request, tmp_path):
     job = SimpleNamespace(label="goal-g1-cycle-1", PROGRAM=None)
-    script = build_dispatch_script(
+    return build_dispatch_script(
         submitter=server.get_submitter(job, scheduler_request=request),
         python="/opt/env/bin/python",
         approval_file=tmp_path / "bundle.json",
@@ -296,116 +287,64 @@ def test_the_scheduler_is_asked_for_the_resources_the_human_approved(
         run_directory=tmp_path / "ws" / "run",
         goal_id="g1",
     )
-    lines = _sbatch_lines(script)
-    assert "#SBATCH --nodes=1 --ntasks-per-node=4 --mem=8G" in lines, lines
-    # The profile still owns queue and account.
-    assert "#SBATCH --partition=compute" in lines
-    # Wall time is the envelope's too. With no envelope record the node
-    # timeout is the only bound the host has -- 900 s, so one hour -- and
-    # it is used rather than the operator's 24 h default. A 31-second
-    # water job holding a day of wall clock is not backfill-eligible and
-    # charges fairshare against a shared reservation for the whole day.
-    assert "#SBATCH --time=1:00:00" in lines
-    assert not request.clamped
 
 
-def test_a_sealed_request_above_the_ceiling_is_refused_not_shrunk(
+def test_the_profile_decides_the_allocation_whatever_the_episode_asked(
     tmp_path,
 ):
-    """The host does not choose a method.
+    """The envelope is recorded, not obeyed."""
 
-    How much memory a correlated calculation gets selects the algorithm --
-    integral-direct against conventional, disk against in-core -- and
-    sometimes decides whether it runs at all. Shrinking it silently makes
-    that choice on the scientist's behalf and delivers the consequence as
-    an OOM kill wearing a native-program failure's word, in a repairable
-    terminal state, with a scientific repair menu offered for a host
-    arithmetic decision (owner ruling, 2026-09-16, revised on evidence).
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
+
+    server = _slurm_server()  # NUM_CORES=6, MEM_GB=52, NUM_HOURS=24
+    request = resolve_scheduler_request(
+        resources=_resources(cores=4, memory_gb=8), server=server, sealed=True
+    )
+    assert (request.cores, request.memory_gb) == (6, 46)
+    assert request.hours == 24
+    # What the episode asked for rides along as an observation.
+    assert request.envelope_cores == 4
+    assert request.envelope_memory_gb == 8
+    assert any("approved episode asked for" in o for o in request.observations)
+
+    lines = _sbatch_lines(_script_for(server, request, tmp_path))
+    assert "#SBATCH --nodes=1 --ntasks-per-node=6 --mem=46G" in lines, lines
+    assert "#SBATCH --partition=compute" in lines
+    assert "#SBATCH --time=24:00:00" in lines
+
+
+def test_an_episode_larger_than_the_machine_is_not_refused(tmp_path):
+    """A goal already under way is never failed for asking too much.
+
+    Submitting and then refusing is an agent-tool failure: it teaches a
+    session to build control logic for a decision the host owns.
     """
 
-    from chemsmart.agent._contracts import ContractError
-    from chemsmart.settings.scheduler_request import (
-        SEALED_MEMORY_HEADROOM_GB,
-        resolve_scheduler_request,
-    )
-
-    server = _slurm_server()  # NUM_CORES=6, MEM_GB=52
-    with pytest.raises(ContractError) as excinfo:
-        resolve_scheduler_request(
-            resources=_resources(cores=64, memory_gb=300),
-            server=server,
-            sealed=True,
-        )
-    message = str(excinfo.value)
-    # Both numbers, in both dimensions, and the headroom that made the
-    # memory ceiling what it is.
-    assert "64" in message and "6" in message
-    assert "300" in message
-    assert str(int(52 - SEALED_MEMORY_HEADROOM_GB)) in message
-    assert "headroom" in message
-    # And the routes onward, because a refusal that teaches nothing is a
-    # refusal a session meets five times in a row.
-    assert "envelope" in message and "server profile" in message
-
-
-def test_a_request_at_the_ceiling_is_allowed(tmp_path):
-    from chemsmart.settings.scheduler_request import (
-        SEALED_MEMORY_HEADROOM_GB,
-        resolve_scheduler_request,
-    )
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
 
     server = _slurm_server()
     request = resolve_scheduler_request(
-        resources=_resources(
-            cores=6, memory_gb=52 - SEALED_MEMORY_HEADROOM_GB
-        ),
+        resources=_resources(cores=512, memory_gb=4096),
         server=server,
         sealed=True,
     )
     assert (request.cores, request.memory_gb) == (6, 46)
-    assert not request.clamped
+    lines = _sbatch_lines(_script_for(server, request, tmp_path))
+    assert "#SBATCH --nodes=1 --ntasks-per-node=6 --mem=46G" in lines
 
 
-def test_an_unsealed_request_is_the_profile_s_own_numbers(tmp_path):
-    """`chemsmart sub` must be byte-identical: no envelope, no headroom."""
+def test_a_tiny_profile_is_never_a_dead_end(tmp_path):
+    """No profile size refuses a dispatch.
+
+    A 4 GB profile leaves nothing above the 6 GB headroom. That is a
+    reason to take the profile's memory whole, not a reason to refuse
+    every job on the host.
+    """
 
     from chemsmart.settings.scheduler_request import resolve_scheduler_request
 
-    server = _slurm_server()
-    request = resolve_scheduler_request(
-        resources=None, server=server, sealed=False
-    )
-    assert (request.cores, request.memory_gb) == (6, 52.0)
-    assert not request.clamped
-
-    job = SimpleNamespace(label="j", PROGRAM=None)
-    with_request = build_dispatch_script(
-        submitter=server.get_submitter(job, scheduler_request=request),
-        python="/p",
-        approval_file=tmp_path / "b.json",
-        workspace=tmp_path / "ws",
-        run_directory=tmp_path / "ws" / "run",
-        goal_id="g1",
-    )
-    without = build_dispatch_script(
-        submitter=server.get_submitter(job),
-        python="/p",
-        approval_file=tmp_path / "b.json",
-        workspace=tmp_path / "ws",
-        run_directory=tmp_path / "ws" / "run",
-        goal_id="g1",
-    )
-    assert with_request == without
-
-
-def test_a_ceiling_below_the_headroom_is_refused_not_negated():
-    """A 4 GB profile must not resolve to a request for -2 GB."""
-
-    from chemsmart.agent._contracts import ContractError
-    from chemsmart.settings.scheduler_request import resolve_scheduler_request
-
-    server = Server(
-        "tiny",
+    small = Server(
+        "small",
         SCHEDULER="SLURM",
         SUBMIT_COMMAND="sbatch",
         NUM_CORES=2,
@@ -413,24 +352,143 @@ def test_a_ceiling_below_the_headroom_is_refused_not_negated():
         NUM_HOURS=1,
         QUEUE_NAME="compute",
     )
-    with pytest.raises(ContractError, match="headroom"):
-        resolve_scheduler_request(
-            resources=_resources(cores=1, memory_gb=2),
-            server=server,
-            sealed=True,
-        )
+    request = resolve_scheduler_request(
+        resources=_resources(cores=1, memory_gb=2), server=small, sealed=True
+    )
+    assert (request.cores, request.memory_gb) == (2, 4)
+    assert request.memory_headroom_gb == 0
+    lines = _sbatch_lines(_script_for(small, request, tmp_path))
+    assert "#SBATCH --nodes=1 --ntasks-per-node=2 --mem=4G" in lines
 
 
-def test_a_clamp_reaches_the_goal_s_own_record_not_only_a_sidecar(
-    tmp_path, monkeypatch
-):
-    """The ledger is what a later process reads.
+def test_the_sealed_headroom_is_the_only_thing_sealed_changes(tmp_path):
+    from chemsmart.settings.scheduler_request import (
+        SEALED_MEMORY_HEADROOM_GB,
+        resolve_scheduler_request,
+    )
 
-    A clamp recorded only in dispatch.receipt.json is a clamp the goal's
-    own record cannot be audited for -- which is exactly how a live goal
-    displayed 4 cores / 8 GB, was allocated 32 / 160, and left nothing in
-    its ledger saying so.
+    server = _slurm_server()
+    sealed = resolve_scheduler_request(
+        resources=None, server=server, sealed=True
+    )
+    unsealed = resolve_scheduler_request(
+        resources=None, server=server, sealed=False
+    )
+    assert unsealed.memory_gb == 52
+    assert sealed.memory_gb == 52 - SEALED_MEMORY_HEADROOM_GB
+    assert (sealed.cores, sealed.hours) == (unsealed.cores, unsealed.hours)
+
+
+def test_a_fractional_memory_is_named_in_a_unit_that_can_hold_it(tmp_path):
+    """`#SBATCH --mem=87.5G` is not a specification Slurm accepts.
+
+    The live CUHK profile declares MEM_GB 160 while its own wizard comment
+    records 95777 MB (93.5 GB) per node. An operator correcting that makes
+    the sealed memory 87.5 and every dispatch on the host unsubmittable.
+    Only the integer was masking it.
     """
+
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
+
+    server = Server(
+        "cuhk-true-memory",
+        SCHEDULER="SLURM",
+        SUBMIT_COMMAND="sbatch",
+        NUM_CORES=64,
+        MEM_GB=93.5,
+        NUM_HOURS=24,
+        QUEUE_NAME="chpc",
+    )
+    request = resolve_scheduler_request(
+        resources=None, server=server, sealed=True
+    )
+    assert request.memory_gb == pytest.approx(87.5)
+    assert request.memory_directive == "89600M"
+    assert 89600 / 1024 == pytest.approx(87.5)
+    line = next(
+        line
+        for line in _sbatch_lines(_script_for(server, request, tmp_path))
+        if "--mem=" in line
+    )
+    assert "--mem=89600M" in line, line
+
+
+def test_whole_gigabytes_keep_the_spelling_they_always_had():
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
+
+    request = resolve_scheduler_request(
+        resources=None, server=_slurm_server(), sealed=False
+    )
+    assert request.memory_directive == "52G"
+
+
+def test_a_submitter_with_no_request_resolves_the_profile_unchanged(tmp_path):
+    """`chemsmart sub` is byte-identical: no envelope, no headroom."""
+
+    server = _slurm_server()
+    job = SimpleNamespace(label="j", PROGRAM=None)
+    from chemsmart.settings.scheduler_request import resolve_scheduler_request
+
+    explicit = build_dispatch_script(
+        submitter=server.get_submitter(
+            job,
+            scheduler_request=resolve_scheduler_request(
+                resources=None, server=server, sealed=False
+            ),
+        ),
+        python="/p",
+        approval_file=tmp_path / "b.json",
+        workspace=tmp_path / "ws",
+        run_directory=tmp_path / "ws" / "run",
+        goal_id="g1",
+    )
+    implicit = build_dispatch_script(
+        submitter=server.get_submitter(job),
+        python="/p",
+        approval_file=tmp_path / "b.json",
+        workspace=tmp_path / "ws",
+        run_directory=tmp_path / "ws" / "run",
+        goal_id="g1",
+    )
+    assert explicit == implicit
+
+
+def test_the_resolver_is_the_only_author_of_a_scheduler_resource_line():
+    """No submitter may read a resource off the profile directly.
+
+    Not because the profile is wrong -- it is the authority -- but because
+    one resolved object is where the headroom and the fractional-memory
+    spelling are applied, and a writer that goes around it gets neither.
+    """
+
+    import ast
+    from pathlib import Path
+
+    import chemsmart.settings.submitters as submitters_module
+
+    source_path = Path(submitters_module.__file__)
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    owned = {"num_cores", "mem_gb", "num_gpus", "num_nodes", "num_threads"}
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute) or node.attr not in owned:
+            continue
+        value = node.value
+        if (
+            isinstance(value, ast.Attribute)
+            and value.attr == "server"
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "self"
+        ):
+            offenders.append(f"{source_path.name}:{node.lineno} .{node.attr}")
+    assert not offenders, (
+        "these read a resource straight off the server profile instead of "
+        f"the resolved request: {offenders}"
+    )
+
+
+def test_the_allocation_reaches_the_goal_s_own_record(tmp_path, monkeypatch):
+    """The ledger is what a later process reads."""
 
     seen: dict = {}
     monkeypatch.setattr(
@@ -452,171 +510,25 @@ def test_a_clamp_reaches_the_goal_s_own_record_not_only_a_sidecar(
         sealed=True,
     )
     request = receipt.scheduler_request
-    assert request is not None, "the receipt records no scheduler request"
-    assert request["applied"]["cores"] == 4
-    assert request["applied"]["memory_gb"] == 8
-    assert request["ceiling"]["memory_gb"] == 46
-    assert request["ceiling"]["cores"] == 6
+    assert request is not None
+    assert request["applied"] == {
+        "cores": 6,
+        "memory_gb": 46,
+        "gpu_count": 0,
+        "hours": 24,
+    }
+    assert request["source"] == "server_profile"
+    assert request["envelope"] == {"cores": 4, "memory_gb": 8}
 
-    # The driver copies a subset of the receipt into the ledger row; the
-    # scheduler request must be inside that subset, so drive the filter
-    # rather than trusting it.
     from chemsmart.agent.driver import _dispatch_ledger_keys, _record_of
 
-    # The filter is read from the driver rather than restated here: a
-    # test that re-types the producer's key set is the pattern that let
-    # the array rot, and one of the driver's keys ("wake_job_id") has no
-    # producer at all -- asserting it would pin a dead literal as if it
-    # were a contract.
     carried = {
         key: value
         for key, value in _record_of(receipt).items()
         if key in _dispatch_ledger_keys()
     }
-    assert "scheduler_request" in carried, (
-        "the run_dispatched ledger row drops the scheduler request, so a "
-        "clamp is invisible to every later reader of the goal record"
-    )
-    assert carried["scheduler_request"]["ceiling"]["memory_gb"] == 46
-    # wake_command is the only durable record of how this goal is meant
-    # to be resumed, and the filter used to drop it.
+    assert carried["scheduler_request"]["applied"]["cores"] == 6
     assert carried["wake_command"].endswith("--goal g1")
-
-
-def test_the_resolver_is_the_only_author_of_a_scheduler_resource_line():
-    """No submitter may read a resource off the profile directly.
-
-    The first form of this guard matched a directive prefix and a
-    ``server.<attr>`` on the *same physical line*, from a relative path.
-    It missed three things at once: the PBS block spells its request over
-    two lines, so the line carrying ``mem=`` has no ``#PBS`` token;
-    ``num_nodes`` and ``num_threads`` were not in the alternation, and
-    ``num_nodes`` was a live AttributeError; and reading
-    ``Path("chemsmart/...")`` made the whole check depend on the working
-    directory. A lint that can be walked around is a lint that will be.
-
-    So this reads the module by AST, from the package itself, and refuses
-    any attribute access of the form ``self.server.<resource>`` anywhere
-    in it -- the resolver owns every one of them.
-    """
-
-    import ast
-    from pathlib import Path
-
-    import chemsmart.settings.submitters as submitters_module
-
-    source_path = Path(submitters_module.__file__)
-    tree = ast.parse(source_path.read_text(encoding="utf-8"))
-    owned = {
-        "num_cores",
-        "mem_gb",
-        "num_gpus",
-        "num_nodes",
-        "num_threads",
-    }
-    offenders = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Attribute) or node.attr not in owned:
-            continue
-        value = node.value
-        if (
-            isinstance(value, ast.Attribute)
-            and value.attr == "server"
-            and isinstance(value.value, ast.Name)
-            and value.value.id == "self"
-        ):
-            offenders.append(f"{source_path.name}:{node.lineno} .{node.attr}")
-
-    assert not offenders, (
-        "these read a resource straight off the server profile instead of "
-        "the resolved request, so the ceiling does not bound them: "
-        f"{offenders}"
-    )
-
-
-def test_the_envelope_s_episode_window_is_the_wall_clock_asked_for(tmp_path):
-    """The job runs one whole cycle, so the bound is the episode window
-    plus the postprocessing reserve the human granted."""
-
-    from types import SimpleNamespace as NS
-
-    from chemsmart.settings.scheduler_request import resolve_scheduler_request
-
-    server = _slurm_server()  # NUM_HOURS=24
-    envelope = NS(
-        episode_wall_time_seconds=5400.0,  # the live sm3-run3 envelope
-        postprocess_reserve_seconds=600.0,
-    )
-    request = resolve_scheduler_request(
-        resources=_resources(cores=4, memory_gb=8),
-        server=server,
-        sealed=True,
-        envelope=envelope,
-    )
-    # 6000 s -> 2 h, not the profile's 24.
-    assert request.requested_hours == 2
-    assert request.hours == 2
-    assert not request.clamped
-
-
-def test_the_profile_caps_a_wall_clock_it_will_not_grant(tmp_path):
-    """Wall time is capped, not refused: a shorter clock does not change
-    the method, and the host's own node timeout sits far below both.
-    The asymmetry with cores and memory is deliberate."""
-
-    from types import SimpleNamespace as NS
-
-    from chemsmart.settings.scheduler_request import resolve_scheduler_request
-
-    server = _slurm_server()  # NUM_HOURS=24
-    envelope = NS(
-        episode_wall_time_seconds=400000.0,  # ~111 h
-        postprocess_reserve_seconds=0.0,
-    )
-    request = resolve_scheduler_request(
-        resources=_resources(cores=4, memory_gb=8),
-        server=server,
-        sealed=True,
-        envelope=envelope,
-    )
-    assert request.requested_hours == 112
-    assert request.hours == 24
-    assert request.clamped
-    assert any("wall time capped" in line for line in request.observations)
-
-
-def test_an_unsealed_run_is_the_escape_from_a_profile_too_small(tmp_path):
-    """A 4 GB profile must not be a dead end for a 2 GB calculation.
-
-    The sealed ceiling subtracts the headroom before it looks at the
-    request, so on any profile declaring <= 6 GB -- a small VM, a CI
-    runner, a container queue -- every sealed request was refused,
-    including ones the machine could trivially satisfy. --unsealed drops
-    the headroom and holds the request to the profile alone.
-    """
-
-    from chemsmart.agent._contracts import ContractError
-    from chemsmart.settings.scheduler_request import resolve_scheduler_request
-
-    small = Server(
-        "small",
-        SCHEDULER="SLURM",
-        SUBMIT_COMMAND="sbatch",
-        NUM_CORES=2,
-        MEM_GB=4,
-        NUM_HOURS=1,
-        QUEUE_NAME="compute",
-    )
-    request = _resources(cores=1, memory_gb=2)
-
-    with pytest.raises(ContractError, match="headroom"):
-        resolve_scheduler_request(resources=request, server=small, sealed=True)
-
-    unsealed = resolve_scheduler_request(
-        resources=request, server=small, sealed=False
-    )
-    assert (unsealed.cores, unsealed.memory_gb) == (1, 2)
-    assert not unsealed.clamped
 
 
 def test_the_sealed_flag_reaches_the_dispatcher_from_the_command_line():
@@ -626,11 +538,8 @@ def test_the_sealed_flag_reaches_the_dispatcher_from_the_command_line():
 
     from chemsmart.agent.driver import GoalDriver
 
-    assert "sealed" in inspect.signature(GoalDriver.__init__).parameters
-    assert (
-        inspect.signature(GoalDriver.__init__).parameters["sealed"].default
-        is True
-    )
+    parameters = inspect.signature(GoalDriver.__init__).parameters
+    assert "sealed" in parameters and parameters["sealed"].default is True
 
     from chemsmart.cli.agent import goal
 
@@ -640,9 +549,4 @@ def test_the_sealed_flag_reaches_the_dispatcher_from_the_command_line():
         for option in getattr(parameter, "opts", ())
     }
     assert "--unsealed" in flags or "--sealed" in flags
-    # And it is persisted, so a resumed goal keeps the ceiling it ran
-    # under rather than silently changing it on the next cycle.
-    from chemsmart.agent.driver import GoalDriver as _D
-
-    source = inspect.getsource(_D.__init__)
-    assert '"sealed": bool(sealed)' in source
+    assert '"sealed": bool(sealed)' in inspect.getsource(GoalDriver.__init__)

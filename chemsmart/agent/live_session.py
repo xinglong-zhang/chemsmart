@@ -4828,16 +4828,20 @@ def _allocated_execution_resources(
     run_directory: Path,
     resources: ExecutionResourceSpecV1,
 ) -> ExecutionResourceSpecV1:
-    """The approved allocation, reduced to what the scheduler granted.
+    """The allocation the scheduler actually granted this run.
 
     Reads the dispatch receipt this run directory already holds, which is
-    the host's own record of what it asked the scheduler for. A local run
-    writes no receipt, so the envelope is the whole truth and nothing
-    changes.
+    the host's own record of what it asked the scheduler for. The engine
+    is told exactly that -- one set of numbers for the allocation and the
+    program inside it, so the two can never disagree. A local run writes
+    no receipt, so the envelope's own resources are the whole truth and
+    nothing changes.
 
     Args:
         run_directory (Path): The cycle's run directory.
-        resources (ExecutionResourceSpecV1): The approved allocation.
+        resources (ExecutionResourceSpecV1): The approved allocation,
+            used for the local path and for every field the scheduler
+            does not decide (the node timeout, the scratch policy).
 
     Returns:
         ExecutionResourceSpecV1: The allocation to run under.
@@ -4855,14 +4859,12 @@ def _allocated_execution_resources(
     if not isinstance(applied, Mapping):
         return resources
     try:
-        cores = min(int(resources.cores), int(applied["cores"]))
-        memory_gb = min(
-            float(resources.memory_gb), float(applied["memory_gb"])
-        )
-        gpu_count = min(
-            int(resources.gpu_count), int(applied.get("gpu_count", 0))
-        )
+        cores = int(applied["cores"])
+        memory_gb = float(applied["memory_gb"])
+        gpu_count = int(applied.get("gpu_count", 0))
     except (KeyError, TypeError, ValueError):
+        return resources
+    if cores < 1 or memory_gb <= 0:
         return resources
     if (cores, memory_gb, gpu_count) == (
         resources.cores,
@@ -4888,10 +4890,10 @@ def _write_execution_server_profile(
 ) -> Path:
     """Write the local CPU profile the engine will actually run under.
 
-    Normally that is the user-approved allocation. When the run was handed
-    to a scheduler and the request was clamped to the server profile's
-    ceiling, it is the clamped allocation instead: the engine may never be
-    told it has more than the scheduler granted.
+    On a local run that is the user-approved allocation. On a run handed
+    to a scheduler it is the allocation the server profile asked for and
+    the scheduler granted: the engine is told what it actually has, never
+    a number from somewhere else.
 
     That was not true when the ceiling shipped. The clamp reached the
     ``#SBATCH`` line and nothing else, so a sealed job clamped from 64
@@ -4904,8 +4906,6 @@ def _write_execution_server_profile(
     adversarial review of the implementation, not by the suite, which
     asserted only what the submit script said.
 
-    A clamp only ever reduces: a receipt claiming more than the human
-    approved is a contradiction, and the approval wins.
     """
 
     resources = _allocated_execution_resources(run_directory, resources)

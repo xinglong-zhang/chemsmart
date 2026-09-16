@@ -1,12 +1,11 @@
 """What the scheduler allocated is what the engine is told it may use.
 
-50281be8 made the envelope the scheduler request and the server profile a
-ceiling, and clamped the request where the two disagreed. It clamped in
-exactly one place: the object handed to the submitter, which writes
-``#SBATCH``. The executor went on writing ``execution-server.yaml`` from
-``bundle.execution_resources`` -- the *unclamped* envelope -- so a clamped
-sealed job asked Slurm for 32 cores and told ORCA to use 64, inside a
-cgroup sized for 32.
+The server profile decides the allocation, and the ``#SBATCH`` line was
+taught to read it while the executor went on writing
+``execution-server.yaml`` from ``bundle.execution_resources`` -- the
+episode's own numbers. So a job allocated 64 cores told ORCA to use 4, or
+a job allocated 46 GB told it 300: one question, two answers, and the
+engine believing the wrong one.
 
 That is one question with two answers, which is the defect class the round
 exists to remove, introduced by the commit that was removing it. It is the
@@ -80,8 +79,8 @@ def _write_receipt(run_directory: Path, *, applied, requested, ceiling):
     )
 
 
-def test_a_clamped_allocation_is_what_the_engine_is_told(tmp_path):
-    """The engine may not be told more than the scheduler granted."""
+def test_the_granted_allocation_is_what_the_engine_is_told(tmp_path):
+    """One set of numbers for the allocation and the program inside it."""
 
     run_directory = tmp_path / "run"
     run_directory.mkdir()
@@ -97,13 +96,13 @@ def test_a_clamped_allocation_is_what_the_engine_is_told(tmp_path):
     )
     values = _profile_values(profile.read_text())
     assert values["NUM_CORES"] == "32", (
-        "the engine was told to use more cores than Slurm allocated: "
+        "the engine was told a core count the allocation does not have: "
         f"{values}"
     )
     assert values["NUM_THREADS"] == "32"
     assert values["MEM_GB"] == "154", (
-        "the engine was told to use more memory than the cgroup allows, "
-        f"which is an OOM kill wearing a scientific failure's word: {values}"
+        "the engine was told a memory the cgroup does not allow, which is "
+        f"an OOM kill wearing a scientific failure's word: {values}"
     )
 
 
@@ -141,22 +140,28 @@ def test_a_local_run_has_no_receipt_and_is_unchanged(tmp_path):
     )
 
 
-def test_a_scheduler_request_never_raises_the_engine_above_the_approval(
-    tmp_path,
-):
-    """A clamp only ever reduces. A receipt claiming more than the human
-    approved is a contradiction, and the approval wins."""
+def test_a_larger_allocation_than_the_episode_asked_for_is_used(tmp_path):
+    """The profile is the authority in both directions.
+
+    A server profile of 64 cores for an episode that asked for 4 means the
+    job has 64, so the engine is told 64 -- otherwise 60 allocated cores
+    sit idle while the operator's own setting is ignored.
+    """
 
     run_directory = tmp_path / "run"
     run_directory.mkdir()
     _write_receipt(
         run_directory,
-        applied={"cores": 999, "memory_gb": 9999, "gpu_count": 0},
+        applied={"cores": 64, "memory_gb": 154, "gpu_count": 0},
         requested={"cores": 4, "memory_gb": 8, "gpu_count": 0},
-        ceiling={"cores": 999, "memory_gb": 9999, "gpu_count": 0},
+        ceiling={"cores": 64, "memory_gb": 154, "gpu_count": 0},
     )
     profile = _write_execution_server_profile(
         run_directory, _resources(cores=4, memory_gb=8)
     )
     values = _profile_values(profile.read_text())
-    assert (values["NUM_CORES"], values["MEM_GB"]) == ("4", "8")
+    assert (values["NUM_CORES"], values["NUM_THREADS"], values["MEM_GB"]) == (
+        "64",
+        "64",
+        "154",
+    )
