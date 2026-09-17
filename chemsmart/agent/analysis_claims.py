@@ -132,13 +132,13 @@ class AnalysisReportedQuantityV1:
                     "an uncertainty needs uncertainty_basis: measured, "
                     "inferred, or asserted"
                 )
-        if len(self.dimension) not in {6, 7, 8, 9} or not all(
+        if len(self.dimension) not in {6, 7, 8, 9, 10} or not all(
             isinstance(value, int) for value in self.dimension
         ):
             raise ContractError(
                 "analysis claim dimension must contain six legacy, seven "
-                "dipole-extended, eight mass-extended, or nine "
-                "charge-extended integers"
+                "dipole-extended, eight mass-extended, nine charge-extended, "
+                "or ten ir-intensity-extended integers"
             )
         _require_finite_payload(self.display_value, "display_value")
         _require_finite_payload(self.canonical_value, "canonical_value")

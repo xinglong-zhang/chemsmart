@@ -32,6 +32,7 @@ from chemsmart.analysis.result_quantities import (
     ENERGY,
     ENTROPY,
     FREQUENCY,
+    IR_INTENSITY,
     LENGTH,
     MASS,
     MOMENT_OF_INERTIA,
@@ -493,6 +494,7 @@ def canonical_unit_for_dimension(dimension: Dimension) -> str:
         MASS: "u",
         CHARGE: "e",
         ELECTRIC_POTENTIAL: "hartree e^-1",
+        IR_INTENSITY: "km/mol",
     }
     if dimension in known:
         return known[dimension]
@@ -506,6 +508,7 @@ def canonical_unit_for_dimension(dimension: Dimension) -> str:
         "debye",
         "u",
         "e",
+        "km/mol",
     )
     terms = []
     for label, exponent in zip(labels, dimension):
@@ -524,7 +527,10 @@ def _normalized_unit_key(unit: str) -> str:
         .replace("*", " ")
         .replace("å", "angstrom")
         .replace("−", "-")
-        .replace("⁻", "-")
+        # xTB labels its native IR column ``km·mol⁻¹``.  This is the only
+        # superscript spelling that reaches the public unit vocabulary here;
+        # do not broaden normalization for unrelated Unicode numerals.
+        .replace("⁻¹", "^-1")
     )
     normalized = " ".join(normalized.split())
     # A bracketed denominator is the SI-recommended spelling of a compound
@@ -853,6 +859,9 @@ def _unit_spec(unit: str) -> tuple[Dimension, str, float]:
             "hartree e^-1",
             energy_conversion("eV", "hartree", 1.0e-3),
         ),
+        "km/mol": (IR_INTENSITY, "km/mol", 1.0),
+        "km mol^-1": (IR_INTENSITY, "km/mol", 1.0),
+        "km mol-1": (IR_INTENSITY, "km/mol", 1.0),
     }
     try:
         return aliases[key]

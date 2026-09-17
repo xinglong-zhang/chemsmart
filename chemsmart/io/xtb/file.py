@@ -882,15 +882,47 @@ class XTBMainOut(XTBFileMixin):
     def ir_intensities(self):
         """Obtain list of IR intensities corresponding to the vibrational frequency."""
         for i, line in enumerate(self.contents):
-            if line.startswith("IR intensities ("):
-                ir_intensities = []
+            if "IR intensities (" in line:
+                indexed_intensities = {}
                 for j_line in self.contents[i + 1 :]:
-                    if "Raman intensities" in j_line:
+                    if "Raman intensities" in j_line or not j_line.strip():
                         break
-                    ir_intensity_line = j_line.split()[1::2]
-                    for ir_intensity in ir_intensity_line:
-                        ir_intensities.append(float(ir_intensity))
-                return ir_intensities[-self.num_vib_frequencies :]
+                    # xTB writes an indexed mode table.  Values may be packed
+                    # as ``12:3.14`` or split as ``12: 3.14``; parsing only
+                    # the value following a mode label avoids turning an
+                    # unseparated mode index into a measured intensity.  Keep
+                    # nonnumeric fields too: ``9:******`` means this source
+                    # cannot establish that mode's intensity, not zero.
+                    for mode, raw_value in re.findall(
+                        r"(?<!\S)(\d+)\s*:\s*(\S+)",
+                        j_line,
+                    ):
+                        try:
+                            indexed_intensities[int(mode)] = float(
+                                raw_value.replace("D", "E").replace("d", "e")
+                            )
+                        except ValueError:
+                            indexed_intensities[int(mode)] = None
+
+                frequencies = self.all_vibrational_frequencies
+                if not indexed_intensities or frequencies is None:
+                    return None
+                expected_modes = range(1, len(frequencies) + 1)
+                if any(
+                    mode not in indexed_intensities for mode in expected_modes
+                ):
+                    return None
+                intensities = [
+                    indexed_intensities[mode] for mode in expected_modes
+                ]
+                vibrational = [
+                    intensity
+                    for frequency, intensity in zip(frequencies, intensities)
+                    if frequency != 0.0
+                ]
+                if any(intensity is None for intensity in vibrational):
+                    return None
+                return vibrational
         return None
 
     @cached_property

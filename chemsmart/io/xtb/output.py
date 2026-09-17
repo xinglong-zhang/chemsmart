@@ -279,11 +279,48 @@ class XTBOutput:
         """Get vibrational frequencies."""
         if self.molecule.is_monoatomic:
             return []
+        # xTB's sidecars record the frequency and IR-intensity columns as
+        # one ordered mode table.  Once an IR-bearing source is present, use
+        # its frequency column too: a main-output frequency list with a
+        # sidecar intensity list has equal length often enough to look valid,
+        # while not proving that row k denotes the same normal mode.
+        source = self.ir_spectrum_source
+        if source is not None:
+            return source.vibrational_frequencies
         if self.main_out:
             return self.main_out.vibrational_frequencies
         if self.g98_file:
             return self.g98_file.vibrational_frequencies
         return None
+
+    @property
+    def ir_spectrum_source(self):
+        """Return the one native mode table supplying paired IR data.
+
+        A source is present when it declares the IR column, even if that
+        column is empty.  Empty evidence must become a typed absence at the
+        reader; it must not silently fall through to a lower-precedence file.
+        """
+        if self.molecule.is_monoatomic:
+            return None
+        if (
+            self.vibspectrum_file
+            and self.vibspectrum_file.ir_intensities is not None
+        ):
+            return self.vibspectrum_file
+        if self.g98_file and self.g98_file.ir_intensities is not None:
+            return self.g98_file
+        if self.main_out and self.main_out.ir_intensities is not None:
+            return self.main_out
+        return None
+
+    @property
+    def ir_intensities(self):
+        """Get ordered per-normal-mode IR absorption intensities in km/mol."""
+        if self.molecule.is_monoatomic:
+            return []
+        source = self.ir_spectrum_source
+        return source.ir_intensities if source is not None else None
 
     @cached_property
     def xtbopt_geometry(self):

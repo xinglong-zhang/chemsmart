@@ -186,8 +186,8 @@ def test_a_potential_can_become_a_claim():
     assert len(claim.dimension) == 9
 
 
-@pytest.mark.parametrize("length", [6, 7, 8])
-def test_shorter_dimensions_stay_valid(length):
+@pytest.mark.parametrize("length", [6, 7, 8, 9, 10])
+def test_supported_dimension_widths_stay_valid(length):
     """Widening must not invalidate a receipt already written."""
 
     claim = AnalysisReportedQuantityV1(
@@ -206,7 +206,7 @@ def test_shorter_dimensions_stay_valid(length):
     assert len(claim.dimension) == length
 
 
-def test_a_ten_integer_dimension_is_still_refused():
+def test_an_eleven_integer_dimension_is_still_refused():
     with pytest.raises(ContractError):
         AnalysisReportedQuantityV1(
             claim_id="bogus",
@@ -218,7 +218,7 @@ def test_a_ten_integer_dimension_is_still_refused():
             display_unit="hartree",
             canonical_value=1.0,
             canonical_unit="hartree",
-            dimension=(1,) + (0,) * 9,
+            dimension=(1,) + (0,) * 10,
             data_kind="scalar",
         )
     with pytest.raises(QuantityContractError):
@@ -228,7 +228,7 @@ def test_a_ten_integer_dimension_is_still_refused():
             source_unit="1",
             value=1.0,
             unit="1",
-            dimension=(0,) * 10,
+            dimension=(0,) * 11,
             evidence_ref="quantity:bogus",
         )
 

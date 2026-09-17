@@ -92,9 +92,9 @@ def _legacy_tool_definitions(
         "type": "string",
         "enum": sorted(SUPPORTED_SELECTORS),
         "description": (
-            "Program-neutral semantic selector. Support is resolved by the "
-            "registered parser for the bound program artifact; a selector that "
-            "the program or result does not provide remains explicitly blocked. "
+            "Program-neutral semantic selector. Registered parser support is "
+            "checked on the bound artifact; unavailable program/result evidence "
+            "remains explicitly blocked. "
             "The connectivity selector returns binary geometry-perceived "
             "adjacency in source atom order from covalent radii; it is not an "
             "electronic bond-order assignment. wiberg_bond_orders returns "

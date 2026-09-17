@@ -84,6 +84,10 @@ def test_the_stem_hides_every_leaf_tool_and_operation():
     # Raised 92_000 -> 93_000 (2026-09-17, Round A) for the explicit
     # continue_execution_reasoning affordance. It is a narrow second
     # execution-boundary choice, not a scheduler surface.
+    # The IR-intensity selector joined the stem on 2026-09-18. Its enum entry
+    # is needed wherever a result may be inspected, so the surrounding
+    # selector description was made equally precise with fewer repeated words
+    # instead of weakening this product-budget guard.
     assert len(json.dumps(stem.tool_definitions)) < 93_000
 
 

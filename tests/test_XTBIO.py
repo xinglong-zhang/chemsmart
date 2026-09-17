@@ -245,12 +245,10 @@ class TestXTBMainOut:
             1424.78,
             2593.07,
         ]
-        assert co2_main_out.ir_intensities == [
-            0.00,
-            68.69,
-            68.69,
-            0.00,
-        ]
+        # Mode 9 is printed as ``******``.  The remaining main-output values
+        # cannot be shifted into a complete four-mode observation; g98.out
+        # is the separate complete source for this fixture.
+        assert co2_main_out.ir_intensities is None
         assert co2_main_out.raman_intensities == [
             0.00,
             0.00,

@@ -84,6 +84,7 @@ SELECTOR_UNITS = {
     "ccsd_correlation_energy": "Eh",
     "triples_correction": "Eh",
     "vibrational_frequencies": "cm^-1",
+    "ir_intensities": "km/mol",
     "vibrational_mode_atom_participation": "",
     "vibrational_mode_degeneracy_group": "",
     "scan_energies": "Eh",
@@ -2298,6 +2299,23 @@ def _xtb_geometry_source_path(output: Any, selector: str) -> Path | None:
 def _xtb_native_evidence_paths(output: Any, selector: str) -> tuple[Path, ...]:
     """Return xTB sidecars whose bytes a selector directly consumes."""
 
+    if selector in {"ir_intensities", "vibrational_frequencies"}:
+        # These selectors are a paired observation when xTB wrote an
+        # IR-bearing mode table.  Bind both receipts to that exact table so a
+        # later comparison can establish row-wise correspondence rather than
+        # merely matching list lengths from two unrelated files.
+        source = getattr(output, "ir_spectrum_source", None)
+        path = (
+            getattr(source, "filepath", None)
+            or getattr(source, "filename", None)
+            if source is not None
+            else None
+        )
+        main_out = getattr(output, "main_out", None)
+        if path and source is not main_out:
+            return (Path(str(path)),)
+        return ()
+
     file_attribute = {
         "wiberg_bond_orders": "wbo_file",
         "xtb_scc_atomic_charges": "charges_file",
@@ -2333,6 +2351,62 @@ def _gaussian_frontier(attribute: str) -> Callable[[Any], float]:
     return _read
 
 
+def _xtb_ir_intensities(output: Any) -> list[float]:
+    """Ordered per-normal-mode IR absorption intensities in km/mol."""
+    from chemsmart.analysis.result_quantities import QuantityContractError
+
+    raw_frequencies = getattr(output, "vibrational_frequencies", None)
+    if raw_frequencies is None:
+        raise MissingQuantityError(
+            "xTB IR intensities require corresponding vibrational frequencies, "
+            "but vibrational_frequencies is absent"
+        )
+    try:
+        frequencies = [float(item) for item in raw_frequencies]
+    except (TypeError, ValueError) as err:
+        raise QuantityContractError(
+            f"malformed vibrational frequencies: {err}"
+        ) from err
+
+    if not frequencies:
+        raise MissingQuantityError(
+            "xTB IR intensities require corresponding vibrational frequencies, "
+            "but vibrational_frequencies is empty"
+        )
+
+    raw_intensities = getattr(output, "ir_intensities", None)
+    if raw_intensities is None:
+        raise MissingQuantityError(
+            "xTB result carries no IR intensity evidence"
+        )
+
+    try:
+        intensities = [float(item) for item in raw_intensities]
+    except (TypeError, ValueError) as err:
+        raise QuantityContractError(
+            f"malformed IR intensities: {err}"
+        ) from err
+
+    if not intensities:
+        raise MissingQuantityError(
+            "xTB result carries empty IR intensity evidence"
+        )
+
+    for val in intensities:
+        if not math.isfinite(val):
+            raise QuantityContractError(
+                f"non-finite IR intensity value: {val}"
+            )
+
+    if len(intensities) != len(frequencies):
+        raise QuantityContractError(
+            f"xTB IR intensities count ({len(intensities)}) does not match "
+            f"vibrational frequencies count ({len(frequencies)})"
+        )
+
+    return intensities
+
+
 def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
     # The xTB parser resolves charge, multiplicity, and (after a Hessian)
     # the free energy; an expert review found them parsed but undeclared,
@@ -2352,6 +2426,7 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
         "vibrational_frequencies": lambda output: [
             float(item) for item in output.vibrational_frequencies
         ],
+        "ir_intensities": _xtb_ir_intensities,
         "positions": _positions,
         "xtb_scc_atomic_charges": _xtb_scc_atomic_charges,
         "connectivity": lambda output: _connectivity_matrix(output.molecule),
@@ -3738,6 +3813,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "gap",
                     "gibbs_free_energy",
                     "homo",
+                    "ir_intensities",
                     "lumo",
                     "multiplicity",
                     "positions",
@@ -3806,6 +3882,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     ("reached_positions", "as_reached"),
                     ("symbols", "stateless"),
                     ("vibrational_frequencies", "as_reached"),
+                    ("ir_intensities", "as_reached"),
                     ("vibrational_mode_atom_participation", "as_reached"),
                     ("vibrational_mode_degeneracy_group", "as_reached"),
                     ("wiberg_bond_orders", "as_reached"),
@@ -3908,6 +3985,7 @@ _SELECTOR_DIMENSIONS = {
     "ccsd_correlation_energy": "ENERGY",
     "triples_correction": "ENERGY",
     "vibrational_frequencies": "FREQUENCY",
+    "ir_intensities": "IR_INTENSITY",
     "vibrational_mode_atom_participation": "DIMENSIONLESS",
     "vibrational_mode_degeneracy_group": "DIMENSIONLESS",
     "vpt2_harmonic_frequencies": "FREQUENCY",

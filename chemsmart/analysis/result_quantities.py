@@ -72,6 +72,10 @@ AREA: Dimension = (0, 2, 0, 0, 0, 0)
 
 CHARGE: Dimension = (0, 0, 0, 0, 0, 0, 0, 0, 1)
 ELECTRIC_POTENTIAL: Dimension = (1, 0, 0, 0, 0, 0, 0, 0, -1)
+#: Molar infrared absorption intensity, the tenth base, in units of km/mol.
+#: It exists so that vibrational mode IR absorption strength is a typed
+#: physical dimension rather than an unlabeled vector.
+IR_INTENSITY: Dimension = (0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
 
 SUPPORTED_PYSCF_SELECTORS = frozenset(
     {
@@ -164,6 +168,7 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         "vpt2_harmonic_frequencies",
         "vpt2_fundamental_frequencies",
         "vpt2_zero_point_rovibrational_energy",
+        "ir_intensities",
         # Method identity and convergence.  A composed workflow spanning many
         # nodes has to be able to assert that one functional and one method
         # ran across all of them -- ``all_equal_text`` is the predicate that
@@ -596,12 +601,13 @@ class QuantityValueV1:
             "text_vector",
         }:
             raise QuantityContractError("unsupported quantity data kind")
-        if len(self.dimension) not in {6, 7, 8, 9} or not all(
+        if len(self.dimension) not in {6, 7, 8, 9, 10} or not all(
             isinstance(exponent, int) for exponent in self.dimension
         ):
             raise QuantityContractError(
                 "dimension must contain six legacy, seven dipole-extended, "
-                "eight mass-extended, or nine charge-extended integers"
+                "eight mass-extended, nine charge-extended, or ten "
+                "ir-intensity-extended integers"
             )
         object.__setattr__(self, "source_value", _freeze(self.source_value))
         object.__setattr__(self, "value", _freeze(self.value))
