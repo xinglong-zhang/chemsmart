@@ -2090,6 +2090,217 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         return route_string
 
 
+class GaussianMECPJobSettings(GaussianJobSettings):
+    """Specialized settings for Gaussian MECP jobs.
+
+    Two built-in convergence presets are provided via ``convergence_preset``:
+
+    ``"standard"`` (default)
+        Suitable for most MECP searches.  Uses loose-to-medium tolerances
+        comparable to a Gaussian geometry optimisation at the ``Loose``
+        level:
+
+        ==================  ============  =====
+        Parameter           Value         Unit
+        ==================  ============  =====
+        energy_diff_tol     5.0 × 10⁻⁵   Hartree
+        force_max_tol       7.0 × 10⁻⁴   Hartree/Bohr
+        force_rms_tol       5.0 × 10⁻⁴   Hartree/Bohr
+        disp_max_tol        4.0 × 10⁻³   Bohr
+        disp_rms_tol        2.5 × 10⁻³   Bohr
+        trust_radius        0.3           Bohr
+        ==================  ============  =====
+
+    ``"tight"``
+        Publication-quality refinement.  Use for final geometry confirmation:
+
+        ==================  ============  =====
+        Parameter           Value         Unit
+        ==================  ============  =====
+        energy_diff_tol     1.0 × 10⁻⁵   Hartree
+        force_max_tol       3.0 × 10⁻⁴   Hartree/Bohr
+        force_rms_tol       1.0 × 10⁻⁴   Hartree/Bohr
+        disp_max_tol        2.0 × 10⁻³   Bohr
+        disp_rms_tol        1.0 × 10⁻³   Bohr
+        trust_radius        0.1           Bohr
+        ==================  ============  =====
+
+    Individual tolerance options (``energy_diff_tol`` etc.) always override
+    the preset values.
+    """
+
+    #: Predefined convergence thresholds.  Keys are preset names; values are
+    #: dicts mapping setting attribute names to their values.
+    CONVERGENCE_PRESETS = {
+        "standard": {
+            "energy_diff_tol": 5.0e-5,  # Hartree
+            "force_max_tol": 7.0e-4,  # Hartree/Bohr
+            "force_rms_tol": 5.0e-4,  # Hartree/Bohr
+            "disp_max_tol": 4.0e-3,  # Bohr
+            "disp_rms_tol": 2.5e-3,  # Bohr
+            "trust_radius": 0.3,  # Bohr
+        },
+        "tight": {
+            "energy_diff_tol": 1.0e-5,  # Hartree
+            "force_max_tol": 3.0e-4,  # Hartree/Bohr
+            "force_rms_tol": 1.0e-4,  # Hartree/Bohr
+            "disp_max_tol": 2.0e-3,  # Bohr
+            "disp_rms_tol": 1.0e-3,  # Bohr
+            "trust_radius": 0.1,  # Bohr
+        },
+    }
+
+    def __init__(
+        self,
+        multiplicity_a=1,
+        multiplicity_b=3,
+        charge_a=0,
+        charge_b=0,
+        title_a="First",
+        title_b="Second",
+        max_steps=500,
+        step_size=0.1,  # Bohr^2/Hartree
+        # Convergence preset: "standard" or "tight".  Individual tolerance
+        # kwargs below override the preset values when set explicitly.
+        convergence_preset="standard",
+        # Standard convergence defaults (overridden by preset if not supplied)
+        energy_diff_tol=None,  # Hartree   – None means "use preset"
+        force_max_tol=None,  # Hartree/Bohr
+        force_rms_tol=None,  # Hartree/Bohr
+        disp_max_tol=None,  # Bohr
+        disp_rms_tol=None,  # Bohr
+        trust_radius=None,  # Bohr
+        adaptive_step_size=True,
+        step_size_method="harvey",  # "harvey", "bb", or "grow_shrink"
+        step_size_grow=1.2,  # dimensionless multiplier; grow × shrink = 0.84 (mild damping per cycle)
+        step_size_shrink=0.7,  # dimensionless multiplier; stronger than 1/grow to damp oscillations
+        step_size_min=1.0e-4,  # Bohr^2/Hartree
+        step_size_max=1.0,  # Bohr^2/Hartree
+        harvey_initial_hessian=0.7,  # Angstrom^2/Hartree
+        harvey_max_component_step=0.1,  # Angstrom
+        harvey_max_condition=1.0e12,
+        # broken-symmetry link-job mode
+        use_link=False,
+        stable="opt",  # stability analysis for link mode
+        guess="mix",  # initial guess for link mode (e.g. "mix" to break α/β symmetry)
+        # seam-minimum verification via effective Hessian analysis
+        verify_seam_minimum=False,
+        hess_step_size=1.0e-3,  # Bohr; finite-difference displacement for numerical Hessian
+        restart=True,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.multiplicity_a = multiplicity_a
+        self.multiplicity_b = multiplicity_b
+        self.charge_a = charge_a
+        self.charge_b = charge_b
+        self.title_a = title_a
+        self.title_b = title_b
+        self.max_steps = max_steps
+        self.step_size = step_size
+
+        # Resolve convergence parameters: preset first, then explicit overrides.
+        if convergence_preset not in self.CONVERGENCE_PRESETS:
+            raise ValueError(
+                f"Unknown convergence_preset={convergence_preset!r}. "
+                f"Choose from: {list(self.CONVERGENCE_PRESETS)}"
+            )
+        self.convergence_preset = convergence_preset
+        preset = self.CONVERGENCE_PRESETS[convergence_preset]
+
+        self.energy_diff_tol = (
+            energy_diff_tol
+            if energy_diff_tol is not None
+            else preset["energy_diff_tol"]
+        )
+        self.force_max_tol = (
+            force_max_tol
+            if force_max_tol is not None
+            else preset["force_max_tol"]
+        )
+        self.force_rms_tol = (
+            force_rms_tol
+            if force_rms_tol is not None
+            else preset["force_rms_tol"]
+        )
+        self.disp_max_tol = (
+            disp_max_tol
+            if disp_max_tol is not None
+            else preset["disp_max_tol"]
+        )
+        self.disp_rms_tol = (
+            disp_rms_tol
+            if disp_rms_tol is not None
+            else preset["disp_rms_tol"]
+        )
+        self.trust_radius = (
+            trust_radius
+            if trust_radius is not None
+            else preset["trust_radius"]
+        )
+
+        self.adaptive_step_size = adaptive_step_size
+        valid_step_size_methods = {"harvey", "bb", "grow_shrink"}
+        if step_size_method not in valid_step_size_methods:
+            raise ValueError(
+                f"Unknown MECP step_size_method {step_size_method!r}; expected one of "
+                f"{sorted(valid_step_size_methods)}."
+            )
+        self.step_size_method = step_size_method
+        self.step_size_grow = step_size_grow
+        self.step_size_shrink = step_size_shrink
+        self.step_size_min = step_size_min
+        self.step_size_max = step_size_max
+        self.harvey_initial_hessian = harvey_initial_hessian
+        self.harvey_max_component_step = harvey_max_component_step
+        self.harvey_max_condition = harvey_max_condition
+        self.use_link = use_link
+        self.stable = stable
+        self.guess = guess
+        self.verify_seam_minimum = verify_seam_minimum
+        self.hess_step_size = hess_step_size
+        self.restart = restart
+
+        positive_values = {
+            "max_steps": max_steps,
+            "step_size": step_size,
+            "energy_diff_tol": self.energy_diff_tol,
+            "force_max_tol": self.force_max_tol,
+            "force_rms_tol": self.force_rms_tol,
+            "disp_max_tol": self.disp_max_tol,
+            "disp_rms_tol": self.disp_rms_tol,
+            "trust_radius": self.trust_radius,
+            "step_size_min": step_size_min,
+            "step_size_max": step_size_max,
+            "harvey_initial_hessian": harvey_initial_hessian,
+            "harvey_max_component_step": harvey_max_component_step,
+            "harvey_max_condition": harvey_max_condition,
+            "hess_step_size": hess_step_size,
+        }
+        invalid = [
+            name for name, value in positive_values.items() if value <= 0
+        ]
+        if invalid:
+            raise ValueError(
+                "MECP settings must be positive: " + ", ".join(invalid)
+            )
+        if step_size_min > step_size_max:
+            raise ValueError("step_size_min cannot exceed step_size_max.")
+        if multiplicity_a < 1 or multiplicity_b < 1:
+            raise ValueError("MECP multiplicities must be positive integers.")
+        if charge_a == charge_b and multiplicity_a == multiplicity_b:
+            raise ValueError("MECP states A and B must not be identical.")
+
+    @classmethod
+    def from_settings(cls, settings):
+        """Create MECP settings from generic Gaussian settings."""
+        if settings is None:
+            return cls()
+        if isinstance(settings, cls):
+            return settings.copy()
+        return cls(**settings.__dict__.copy())
+
+
 class GaussianLinkJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian multi-step link calculations.
@@ -2196,8 +2407,8 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         Generate route string for the initial stability analysis step.
 
         Creates the first route string in a link job by removing
-        optimization and frequency keywords and adding stability
-        analysis and guess method specifications.
+        optimization, frequency, and force keywords, then adding
+        stability analysis and guess method specifications.
 
         Returns:
             str: Route string for stability analysis step.
@@ -2213,6 +2424,15 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         # Remove freq keywords
         route_string_final = re.sub(
             gaussian_freq_keywords_pattern,
+            " ",
+            route_string_final,
+            flags=re.IGNORECASE,
+        )
+        # Remove force keyword: force calculations belong in the link (second)
+        # step where the stable wavefunction is read via guess=read, not in
+        # the initial stable=opt step.
+        route_string_final = re.sub(
+            r"\bforce\b\s*",
             " ",
             route_string_final,
             flags=re.IGNORECASE,

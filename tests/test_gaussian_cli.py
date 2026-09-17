@@ -1102,6 +1102,399 @@ class TestGaussianCLIQrcCommand:
         assert settings.basis == "def2svp"
 
 
+class TestGaussianCLIMecpCommand:
+    """CLI tests for the ``mecp`` subcommand."""
+
+    def test_mecp_defaults_state_b_to_plus_two_multiplicity(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Default ``multiplicity2`` is inferred as ``multiplicity1 + 2``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 1
+        assert settings.multiplicity_b == 3
+        assert settings.charge_a == 0
+        assert settings.charge_b == 0
+
+    def test_mecp_custom_spin_and_charge_options_are_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """MECP CLI options are forwarded to the GaussianMECPJob constructor."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "1",
+                "-m",
+                "2",
+                "mecp",
+                "-m1",
+                "2",
+                "-m2",
+                "4",
+                "-c1",
+                "1",
+                "-c2",
+                "1",
+                "--max-steps",
+                "120",
+                "--step-size",
+                "0.08",
+                "--trust-radius",
+                "0.12",
+                "--energy-diff-tol",
+                "2e-4",
+                "--force-max-tol",
+                "8e-4",
+                "--force-rms-tol",
+                "6e-4",
+                "--disp-max-tol",
+                "2.0e-3",
+                "--disp-rms-tol",
+                "1.5e-3",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 2
+        assert settings.multiplicity_b == 4
+        assert settings.charge_a == 1
+        assert settings.charge_b == 1
+        assert settings.max_steps == 120
+        assert settings.step_size == 0.08
+        assert settings.trust_radius == 0.12
+        assert settings.energy_diff_tol == 2e-4
+        assert settings.force_max_tol == 8e-4
+        assert settings.force_rms_tol == 6e-4
+        assert settings.disp_max_tol == 2e-3
+        assert settings.disp_rms_tol == 1.5e-3
+
+    def test_mecp_adaptive_step_size_options_are_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Adaptive step size CLI options are forwarded to GaussianMECPJob settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--no-adaptive-step-size",
+                "--step-size-grow",
+                "1.2",
+                "--step-size-shrink",
+                "0.6",
+                "--step-size-min",
+                "1e-3",
+                "--step-size-max",
+                "0.5",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.adaptive_step_size is False
+        assert settings.step_size_grow == 1.2
+        assert settings.step_size_shrink == 0.6
+        assert settings.step_size_min == 1e-3
+        assert settings.step_size_max == 0.5
+
+    def test_mecp_adaptive_step_size_enabled_by_default(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Adaptive step size is enabled by default with Barzilai-Borwein method."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.adaptive_step_size is True
+        assert settings.step_size_method == "harvey"
+        assert settings.step_size_grow == 1.2
+        assert settings.step_size_shrink == 0.7
+        assert settings.step_size_min == 1e-4
+        assert settings.step_size_max == 1.0
+
+    def test_mecp_step_size_method_option_is_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--step-size-method`` CLI option is forwarded to GaussianMECPJob settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "grow_shrink",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.step_size_method == "grow_shrink"
+
+    def test_mecp_harvey_selects_inverse_bfgs_optimizer(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """The public ``harvey`` name selects the inverse-BFGS optimizer."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                str(single_molecule_xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "harvey",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.step_size_method == "harvey"
+
+    def test_mecp_harvey_bfgs_old_name_is_rejected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """The removed implementation name is no longer part of the CLI."""
+        result, _ = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                str(single_molecule_xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "harvey_bfgs",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid value for '--step-size-method'" in result.output
+
+
+class TestGaussianCLILinkMecpCommand:
+    """CLI tests for ``link -j mecp`` (broken-symmetry MECP via link sub-jobs)."""
+
+    def test_link_mecp_dispatches_to_gaussian_mecp_job(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``link -j mecp`` dispatches to ``GaussianMECPJob`` (not GaussianLinkJob)."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "-m1",
+                "1",
+                "-m2",
+                "3",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 1
+        assert settings.multiplicity_b == 3
+        assert settings.use_link is True
+
+    def test_link_mecp_defaults_multiplicity_b_to_plus_two(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Without ``--multiplicity2``, state 2 defaults to state 1 + 2."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity1",
+                "1",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.multiplicity_a == 1
+        assert settings.multiplicity_b == 3
+
+    def test_link_mecp_stable_and_guess_are_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--stable`` and ``--guess`` are forwarded to the MECP link settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity1",
+                "1",
+                "--stable",
+                "qrhf",
+                "--guess",
+                "read",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.stable == "qrhf"
+        assert settings.guess == "read"
+
+    def test_link_mecp_functional_prefixed_with_u(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Functional is prefixed with 'u' for unrestricted broken-symmetry DFT."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "link",
+                "-j",
+                "mecp",
+                "--multiplicity1",
+                "1",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.functional.lower().startswith("u")
+
+
 class TestGaussianQMMMCLI:
     """CLI tests for the nested ``opt qmmm`` (and related) subcommands."""
 

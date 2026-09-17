@@ -86,6 +86,7 @@ class GaussianJobRunner(JobRunner):
         "g16",
         "g16com",
         "g16link",
+        "g16mecp",
         "g16qmmm",
         "g16pka",
         "g16pka_analyze",
@@ -99,6 +100,21 @@ class GaussianJobRunner(JobRunner):
     # Default to use scratch for Gaussian jobs - class attribute instead
     # of instance attribute so it needs not be set at
     # instance level - set during initialization (__init__).
+
+    def _scratch_job_directory(self, job):
+        """Return the scratch directory, optionally grouped by a job folder."""
+        if self.scratch_dir is None:
+            raise ValueError(
+                "A scratch directory is required for scratch jobs."
+            )
+        scratch_parent = job.scratch_parent_folder
+        if scratch_parent:
+            return os.path.join(
+                self.scratch_dir,
+                os.path.basename(scratch_parent),
+                job.label,
+            )
+        return os.path.join(self.scratch_dir, job.label)
 
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
@@ -213,7 +229,7 @@ class GaussianJobRunner(JobRunner):
         Args:
             job: Job object to configure scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = self._scratch_job_directory(job)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -225,7 +241,7 @@ class GaussianJobRunner(JobRunner):
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_chkfile = job.label + ".chk"
+        job_chkfile = os.path.basename(job.chkfile)
         scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
         self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 
@@ -268,6 +284,14 @@ class GaussianJobRunner(JobRunner):
 
         input_writer = GaussianInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
+
+        oldchkfile = getattr(job, "oldchkfile", None)
+        if oldchkfile and self.scratch and self.running_directory:
+            oldchk_target = os.path.join(
+                self.running_directory, os.path.basename(oldchkfile)
+            )
+            if os.path.abspath(oldchkfile) != os.path.abspath(oldchk_target):
+                copy(oldchkfile, oldchk_target)
 
     def _get_command(self, job):
         """
@@ -359,6 +383,14 @@ class GaussianJobRunner(JobRunner):
                             f"File {file} cannot be copied to job folder "
                             f"{job.folder}: {e}"
                         )
+            if os.path.isfile(self.job_chkfile):
+                checkpoint_target = os.path.join(
+                    job.folder, os.path.basename(self.job_chkfile)
+                )
+                if os.path.abspath(self.job_chkfile) != os.path.abspath(
+                    checkpoint_target
+                ):
+                    copy(self.job_chkfile, checkpoint_target)
 
 
 class FakeGaussianJobRunner(GaussianJobRunner):
@@ -447,7 +479,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         Args:
             job: Job object to configure fake scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = self._scratch_job_directory(job)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -460,7 +492,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_chkfile = job.label + ".chk"
+        job_chkfile = os.path.basename(job.chkfile)
         scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
         self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 
