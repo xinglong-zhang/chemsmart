@@ -142,6 +142,62 @@ def test_no_notice_when_the_host_has_nothing_to_say(tmp_path):
     ]
 
 
+@pytest.mark.capability("rule:wake.execution_wave_decision_pending")
+def test_a_pending_execution_boundary_reenters_the_agent_with_typed_context(
+    tmp_path,
+):
+    """The producer notice reaches the loop consumer before it can end."""
+
+    from chemsmart.agent.cohort import build_execution_wave_decision
+
+    decision = build_execution_wave_decision(
+        state="undecided",
+        workflow_id="w1",
+        ready_node_ids=("conf-a-opt", "conf-b-opt"),
+    )
+    text = (
+        rules_by_id()["wake.execution_wave_decision_pending"].text
+        + " Workflow w1 currently reports ready: conf-a-opt, conf-b-opt."
+    )
+    host = _NoticingHost(
+        {
+            "kind": "execution_wave_decision_pending",
+            "execution_wave_decision": decision.public_record(),
+            "budgets": {
+                "engine_calls_remaining": 4,
+                "excursion_calls_remaining": 0,
+                "wall_seconds_remaining": 600.0,
+                "revisions_remaining": 2,
+            },
+            "text": text,
+        }
+    )
+    result, turns, events, history = _run(
+        tmp_path,
+        host,
+        (_stop_turn(1, "I am done."), _stop_turn(2, "Still done.")),
+    )
+    assert turns == 2, "the Agent was not given a decision turn"
+    delivered = [
+        event
+        for event in events
+        if event["kind"] == "execution_wave_decision_pending"
+    ]
+    assert len(delivered) == 1
+    assert delivered[0]["payload"]["execution_wave_decision"]["state"] == (
+        "undecided"
+    )
+    assert delivered[0]["payload"]["execution_wave_decision"][
+        "ready_node_ids"
+    ] == ["conf-a-opt", "conf-b-opt"]
+    assert any(
+        message.get("role") == "user"
+        and "host will not infer a wave from silence" in message["content"]
+        for message in history
+    )
+    assert result.final_text == "Still done."
+
+
 def _host(tmp_path, **kwargs):
     from tests.agent.test_a_guide_opens_when_something_asks import _host
 

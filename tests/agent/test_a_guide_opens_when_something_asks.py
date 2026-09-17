@@ -81,7 +81,10 @@ def test_the_stem_hides_every_leaf_tool_and_operation():
     # cannot name. The three sentences teaching the model *why* it has
     # waves sit in the system prompt, not here, so this pays for the
     # affordance and not for the lesson.
-    assert len(json.dumps(stem.tool_definitions)) < 92_000
+    # Raised 92_000 -> 93_000 (2026-09-17, Round A) for the explicit
+    # continue_execution_reasoning affordance. It is a narrow second
+    # execution-boundary choice, not a scheduler surface.
+    assert len(json.dumps(stem.tool_definitions)) < 93_000
 
 
 def test_every_guide_adds_exactly_its_tools_and_operations():

@@ -26,6 +26,7 @@ from chemsmart.agent.live_session import LiveAgentSessionResultV1
 
 def _result(**overrides):
     from chemsmart.agent._contracts import canonical_sha256
+    from chemsmart.agent.cohort import build_execution_wave_decision
 
     body = {
         "schema_version": "chemsmart.live-agent-session-result.v1",
@@ -43,6 +44,16 @@ def _result(**overrides):
         "execution_review": {},
         "event_stream_head_sha256": "",
     }
+    selected = tuple(overrides.get("selected_execution_wave") or ())
+    if selected and "execution_wave_decision" not in overrides:
+        overrides["execution_wave_decision"] = (
+            build_execution_wave_decision(
+                state="selected",
+                workflow_id="w1",
+                ready_node_ids=selected,
+                node_ids=selected,
+            )
+        )
     return LiveAgentSessionResultV1(
         **body, result_sha256=canonical_sha256(body), **overrides
     )
@@ -90,6 +101,8 @@ def test_the_driver_dispatches_the_wave_the_session_chose(tmp_path):
         )
 
     def plan_session(**kw):
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
         session = _planning_session("live-1", review=_review_payload())(
             workspace, kw
         )
@@ -97,6 +110,16 @@ def test_the_driver_dispatches_the_wave_the_session_chose(tmp_path):
             session,
             "selected_execution_wave",
             ("conf-b-opt", "conf-a-opt", "conf-c-opt"),
+        )
+        object.__setattr__(
+            session,
+            "execution_wave_decision",
+            build_execution_wave_decision(
+                state="selected",
+                workflow_id="w1",
+                ready_node_ids=("conf-b-opt", "conf-a-opt", "conf-c-opt"),
+                node_ids=("conf-b-opt", "conf-a-opt", "conf-c-opt"),
+            ),
         )
         return session
 
@@ -124,8 +147,8 @@ def test_the_driver_dispatches_the_wave_the_session_chose(tmp_path):
     )
 
 
-def test_a_session_that_selected_no_wave_dispatches_as_one_job(tmp_path):
-    """Nothing is invented: no selection is the single-job path."""
+def test_an_undecided_frontier_never_dispatches_as_one_serial_job(tmp_path):
+    """Drive omission to the scheduler boundary: no decision is no launch."""
 
     from chemsmart.agent.driver import GoalDriver
 
@@ -148,22 +171,55 @@ def test_a_session_that_selected_no_wave_dispatches_as_one_job(tmp_path):
             submit_script=str(kwargs["run_directory"] / "sub.sh"),
         )
 
+    def plan_session(**kw):
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
+        session = _planning_session("live-1", review=_review_payload())(
+            workspace, kw
+        )
+        object.__setattr__(
+            session,
+            "execution_wave_decision",
+            build_execution_wave_decision(
+                state="undecided",
+                workflow_id="w1",
+                ready_node_ids=("conf-a-opt", "conf-b-opt"),
+            ),
+        )
+        return session
+
     driver = GoalDriver(
         task="the goal task",
         workspace=workspace,
         execution_envelope_file=_envelope_file(tmp_path),
         goal_id="goal-w2",
         granted_by="claude-owner-delegated-reviewer",
-        plan_session=lambda **kw: _planning_session(
-            "live-1", review=_review_payload()
-        )(workspace, kw),
+        plan_session=plan_session,
         resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
         dispatch_run=dispatch_run,
         dispatch="scheduler",
         server="canned-slurm",
     )
-    assert driver.run().settlement == "parked"
-    assert tuple(seen.get("cohort_node_ids") or ()) == ()
+    result = driver.run()
+    assert result.settlement == "execution_wave_decision_pending"
+    assert seen == {}, "the old empty cohort path submitted one serial job"
+    runs_root = (
+        workspace / ".chemsmart-agent" / "goals" / "goal-w2" / "runs"
+    )
+    assert not runs_root.exists() or not list(runs_root.glob("*"))
+    pending = [
+        entry
+        for entry in driver.ledger.entries()
+        if entry["kind"] == "execution_wave_decision_pending"
+    ]
+    assert len(pending) == 1
+    record = pending[0]["payload"]["execution_wave_decision"]
+    assert record["state"] == "undecided"
+    assert record["ready_node_ids"] == ["conf-a-opt", "conf-b-opt"]
+
+    resumed = GoalDriver.resume(workspace=workspace, goal_id="goal-w2")
+    assert resumed.run().settlement == "execution_wave_decision_pending"
+    assert seen == {}, "resume forgot the pending decision and dispatched"
 
 
 def test_the_ledger_records_which_wave_was_dispatched(tmp_path):
@@ -236,3 +292,4 @@ def test_the_attribute_the_tool_sets_is_the_attribute_the_session_reads(
 
     # Exactly what `run_live_agent_session` writes onto the result.
     assert tuple(host.selected_execution_wave or ()) == ("a1", "a2")
+    assert host.execution_wave_decision.state == "selected"

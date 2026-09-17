@@ -26,6 +26,7 @@ from types import SimpleNamespace
 
 def _driver(tmp_path, *, non_executable=(), wave=()):
     from chemsmart.agent.driver import GoalDriver
+    from chemsmart.agent.cohort import build_execution_wave_decision
 
     from .test_the_goal_loop_recovers_or_returns import _envelope_file
 
@@ -51,7 +52,15 @@ def _driver(tmp_path, *, non_executable=(), wave=()):
         ),
         encoding="utf-8",
     )
-    driver.session = SimpleNamespace(selected_execution_wave=tuple(wave))
+    driver.session = SimpleNamespace(
+        selected_execution_wave=tuple(wave),
+        execution_wave_decision=build_execution_wave_decision(
+            state="selected" if wave else "undecided",
+            workflow_id="w1" if wave else "",
+            ready_node_ids=tuple(wave),
+            node_ids=tuple(wave),
+        ),
+    )
     return driver
 
 
@@ -89,6 +98,7 @@ def test_a_session_that_selected_nothing_stays_a_single_job(tmp_path):
 
 def _driver_with_reviewed_nodes(tmp_path, *, reviewed, non_executable, wave):
     from chemsmart.agent.driver import GoalDriver
+    from chemsmart.agent.cohort import build_execution_wave_decision
 
     from .test_the_goal_loop_recovers_or_returns import _envelope_file
 
@@ -117,7 +127,15 @@ def _driver_with_reviewed_nodes(tmp_path, *, reviewed, non_executable, wave):
         ),
         encoding="utf-8",
     )
-    driver.session = SimpleNamespace(selected_execution_wave=tuple(wave))
+    driver.session = SimpleNamespace(
+        selected_execution_wave=tuple(wave),
+        execution_wave_decision=build_execution_wave_decision(
+            state="selected" if wave else "undecided",
+            workflow_id="w1" if wave else "",
+            ready_node_ids=tuple(wave),
+            node_ids=tuple(wave),
+        ),
+    )
     return driver
 
 

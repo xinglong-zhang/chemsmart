@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from chemsmart.agent._contracts import (
     ContractError,
@@ -30,6 +30,111 @@ from chemsmart.agent._contracts import (
 
 #: Written in the run directory when a cycle dispatches a wave.
 COHORT_MANIFEST_FILE = "cohort.json"
+
+
+#: A calculation frontier can be ready before the scientist has said which
+#: outcomes belong behind one epistemic barrier.  Keep that absence distinct
+#: from both a one-member wave and the legacy direct-dispatch representation.
+EXECUTION_WAVE_DECISION_STATES = (
+    "undecided",
+    "selected",
+    "continue_reasoning",
+)
+
+
+@dataclass(frozen=True)
+class ExecutionWaveDecisionV1:
+    """The Agent's explicit decision at an execution boundary.
+
+    Readiness remains a host projection.  This record carries that projection
+    only as the context in which the Agent made (or intentionally deferred)
+    its scientific decision; it never derives a second frontier or names a
+    member on the Agent's behalf.
+    """
+
+    schema_version: str
+    state: str
+    workflow_id: str = ""
+    ready_node_ids: tuple[str, ...] = ()
+    node_ids: tuple[str, ...] = ()
+    decision_sha256: str = ""
+
+    def __post_init__(self) -> None:
+        if self.schema_version != "chemsmart.execution-wave-decision.v1":
+            raise ContractError("unsupported execution wave decision schema")
+        if self.state not in EXECUTION_WAVE_DECISION_STATES:
+            raise ContractError("unsupported execution wave decision state")
+        if self.workflow_id:
+            require_identifier(self.workflow_id, "workflow_id")
+        for name, values in (
+            ("ready_node_ids", self.ready_node_ids),
+            ("node_ids", self.node_ids),
+        ):
+            for value in values:
+                require_identifier(value, name)
+            if len(set(values)) != len(values):
+                raise ContractError(f"{name} cannot repeat a calculation")
+        if self.state == "selected":
+            if not self.workflow_id or not self.node_ids:
+                raise ContractError(
+                    "a selected execution wave names its workflow and members"
+                )
+        elif self.node_ids:
+            raise ContractError(
+                "only a selected execution wave carries calculation members"
+            )
+        if self.decision_sha256 != canonical_sha256(self._body()):
+            raise ContractError("execution wave decision digest mismatch")
+
+    def _body(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "state": self.state,
+            "workflow_id": self.workflow_id,
+            "ready_node_ids": list(self.ready_node_ids),
+            "node_ids": list(self.node_ids),
+        }
+
+    def public_record(self) -> dict[str, Any]:
+        return {**self._body(), "decision_sha256": self.decision_sha256}
+
+
+def build_execution_wave_decision(
+    *,
+    state: str = "undecided",
+    workflow_id: str = "",
+    ready_node_ids: Sequence[str] = (),
+    node_ids: Sequence[str] = (),
+) -> ExecutionWaveDecisionV1:
+    """Build the small, typed state that crosses planning into dispatch."""
+
+    body = {
+        "schema_version": "chemsmart.execution-wave-decision.v1",
+        "state": str(state),
+        "workflow_id": str(workflow_id),
+        "ready_node_ids": tuple(str(item) for item in ready_node_ids),
+        "node_ids": tuple(str(item) for item in node_ids),
+    }
+    return ExecutionWaveDecisionV1(
+        **body, decision_sha256=canonical_sha256(body)
+    )
+
+
+def execution_wave_decision_from_record(
+    record: dict[str, Any],
+) -> ExecutionWaveDecisionV1:
+    """Rebuild and re-hash a durable execution-boundary decision."""
+
+    return ExecutionWaveDecisionV1(
+        schema_version=str(record.get("schema_version") or ""),
+        state=str(record.get("state") or ""),
+        workflow_id=str(record.get("workflow_id") or ""),
+        ready_node_ids=tuple(
+            str(item) for item in (record.get("ready_node_ids") or ())
+        ),
+        node_ids=tuple(str(item) for item in (record.get("node_ids") or ())),
+        decision_sha256=str(record.get("decision_sha256") or ""),
+    )
 
 
 @dataclass(frozen=True)
@@ -597,11 +702,15 @@ def read_cohort_manifest(
 
 __all__ = [
     "COHORT_MANIFEST_FILE",
+    "EXECUTION_WAVE_DECISION_STATES",
     "CohortManifestV1",
+    "ExecutionWaveDecisionV1",
     "authorise_cohort_element",
     "build_cohort_manifest",
+    "build_execution_wave_decision",
     "cohort_completion",
     "cohort_frontier",
+    "execution_wave_decision_from_record",
     "execution_result_file",
     "CohortMemberVerdictV1",
     "CohortValidityV1",

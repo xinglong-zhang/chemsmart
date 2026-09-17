@@ -2112,12 +2112,13 @@ class CommandCompiledToolHostV1:
         #: every recorded run keeps the path it was written at.
         self.cycle_label = str(cycle_label) if cycle_label else None
         #: The wave this session selected, in the order it selected it.
-        #: Declared here rather than created on first use, so the session
-        #: that carries it to the dispatcher reads an attribute that
-        #: always exists: a `getattr` default would turn a renamed
-        #: attribute into an empty wave, which dispatches as a single job
-        #: and looks exactly like a session that chose not to select one.
+        #: Kept for the manifest hand-off, while ``execution_wave_decision``
+        #: below says whether an empty tuple means *undecided* rather than a
+        #: legacy request for serial execution.
         self.selected_execution_wave: tuple[str, ...] = ()
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
+        self.execution_wave_decision = build_execution_wave_decision()
         self.execution_resources = execution_resources
         self.workflow_execution_approval = workflow_execution_approval
         self.frozen_workflow_approval = frozen_workflow_approval
@@ -2778,6 +2779,7 @@ class CommandCompiledToolHostV1:
         "amend_scientific_workflow": "_amend_scientific_workflow",
         "inspect_workflow_frontier": "_inspect_workflow_frontier",
         "select_execution_wave": "_select_execution_wave",
+        "continue_execution_reasoning": "_continue_execution_reasoning",
         "prepare_program_node": "_prepare_program_node",
         "synthesize_command": "_synthesize_command",
         "preview_command": "_preview_command",
@@ -3455,6 +3457,40 @@ class CommandCompiledToolHostV1:
         budget line remains -- ending is then the only thing left.
         """
 
+        decision = getattr(self, "execution_wave_decision", None)
+        if (
+            decision is not None
+            and decision.state != "selected"
+            and decision.ready_node_ids
+        ):
+            from chemsmart.agent.rules import rules_by_id
+
+            ready = ", ".join(decision.ready_node_ids)
+            text = (
+                rules_by_id()["wake.execution_wave_decision_pending"].text
+                + " Workflow "
+                + decision.workflow_id
+                + " currently reports ready: "
+                + ready
+                + "."
+            )
+            return {
+                "kind": "execution_wave_decision_pending",
+                "execution_wave_decision": decision.public_record(),
+                "text": text,
+                "budgets": {
+                    "engine_calls_remaining": int(
+                        self.engine_calls_remaining or 0
+                    ),
+                    "excursion_calls_remaining": int(
+                        self.excursion_calls_remaining or 0
+                    ),
+                    "wall_seconds_remaining": float(
+                        self.wall_seconds_remaining or 0.0
+                    ),
+                    "revisions_remaining": int(self.revisions_remaining or 0),
+                },
+            }
         if self.engine_calls_remaining is None:
             return None
         undelivered: list[str] = []
@@ -6779,6 +6815,16 @@ class CommandCompiledToolHostV1:
                 scientific_plan.plan_sha256 if scientific_plan else ""
             ),
         )
+        # Planning records the same host frontier that the selection tool
+        # later reads.  Its absence is meaningful: the dispatcher must never
+        # reinterpret it as a request to run the whole workflow serially.
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
+        self.execution_wave_decision = build_execution_wave_decision(
+            state="undecided",
+            workflow_id=str(draft.workflow_id),
+            ready_node_ids=tuple(context.ready_node_ids),
+        )
         finding_nodes = {item["node_id"] for item in findings} | {
             node.node_id for node in draft.nodes if node.unresolved_fields
         }
@@ -7906,6 +7952,14 @@ class CommandCompiledToolHostV1:
         self.selected_execution_wave = (
             tuple(verdict.members) if dispatchable else ()
         )
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
+        self.execution_wave_decision = build_execution_wave_decision(
+            state="selected" if dispatchable else "undecided",
+            workflow_id=str(draft.workflow_id),
+            ready_node_ids=tuple(context.ready_node_ids),
+            node_ids=tuple(verdict.members) if dispatchable else (),
+        )
         record = verdict.public_record()
         return {
             "status": "ready" if dispatchable else "not_dispatchable",
@@ -7919,6 +7973,44 @@ class CommandCompiledToolHostV1:
                 if dispatchable
                 else "select again from the members the host reports "
                 "ready, and choose the rest after reading this wave"
+            ),
+        }
+
+    def _continue_execution_reasoning(self, turn_id: str, values: dict) -> Any:
+        """Record an explicit choice to revise before dispatching a wave.
+
+        This is not a scheduler control and never changes the frontier.  It
+        lets the Agent say that the current evidence boundary is intentionally
+        deferred, instead of leaving silence for a legacy serial path to
+        misread.
+        """
+
+        del turn_id
+        resolved = self._resolve_program_workflow(values["workflow_id"])
+        draft = resolved.draft
+        scientific = getattr(resolved, "scientific_plan", None)
+        context = self._workflow_context(
+            draft,
+            scientific_plan_sha256=(
+                getattr(scientific, "plan_sha256", "") if scientific else ""
+            ),
+        )
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
+        self.selected_execution_wave = ()
+        self.execution_wave_decision = build_execution_wave_decision(
+            state="continue_reasoning",
+            workflow_id=str(draft.workflow_id),
+            ready_node_ids=tuple(context.ready_node_ids),
+        )
+        return {
+            "status": "continue_reasoning",
+            "workflow_id": str(draft.workflow_id),
+            "ready_node_ids": list(context.ready_node_ids),
+            "next_action": (
+                "continue or revise the scientific plan; before ending with "
+                "a ready calculation, explicitly select the outcomes to "
+                "observe together or continue reasoning again"
             ),
         }
 

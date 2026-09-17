@@ -46,8 +46,10 @@ def test_the_planning_surface_exposes_the_merged_tools_only():
     # scientific strategy, and a tool it can only reach by opening a
     # guide is an affordance a session that never opens that guide does
     # not have -- so a wave would have been chosen by the host, which is
-    # exactly the decision this design moves to the model.
-    assert len(planning) == 18, "the stem"
+    # exactly the decision this design moves to the model.  19
+    # (2026-09-17, Round A): continue_execution_reasoning makes the other
+    # explicit scientific choice visible without adding a hardware control.
+    assert len(planning) == 19, "the stem"
     from chemsmart.agent.guides import GUIDES
 
     everything = _names(
@@ -55,7 +57,7 @@ def test_the_planning_surface_exposes_the_merged_tools_only():
             guides=tuple(guide.guide_id for guide in GUIDES)
         )
     )
-    assert len(everything) == 29, "the stem with every leaf open"
+    assert len(everything) == 30, "the stem with every leaf open"
 
 
 def test_the_executor_keeps_its_step_by_step_surface():

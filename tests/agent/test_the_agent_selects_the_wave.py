@@ -215,6 +215,60 @@ def test_a_selected_wave_is_recorded_where_the_dispatcher_reads_it(
         "the order the Agent chose is the order the array elements take, "
         "and the host must not reorder a scientific decision"
     )
+    assert host.execution_wave_decision.state == "selected"
+    assert host.execution_wave_decision.node_ids == ("a2", "a1")
+
+
+@pytest.mark.capability("tool:select_execution_wave")
+def test_a_singleton_is_an_explicit_valid_execution_boundary(tmp_path):
+    """A one-calculation observation is science, not an omitted wave."""
+
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    host = CommandCompiledToolHostV1.__new__(CommandCompiledToolHostV1)
+    host._resolve_program_workflow = lambda workflow_id: SimpleNamespace(
+        draft=SimpleNamespace(
+            workflow_id="w1",
+            nodes=(SimpleNamespace(node_id="a1", inputs=()),),
+        ),
+        scientific_plan=SimpleNamespace(plan_sha256="d" * 64),
+    )
+    host._workflow_context = lambda draft, **_kw: _context(("a1",))
+
+    reply = host._select_execution_wave(
+        "t1", {"workflow_id": "w1", "node_ids": ["a1"]}
+    )
+    assert reply["status"] == "ready"
+    assert host.execution_wave_decision.state == "selected"
+    assert host.execution_wave_decision.node_ids == ("a1",)
+
+
+@pytest.mark.capability("tool:continue_execution_reasoning")
+def test_an_agent_can_explicitly_continue_reasoning_without_dispatching():
+    """The third state is an explicit scientific choice, not a refusal."""
+
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    host = CommandCompiledToolHostV1.__new__(CommandCompiledToolHostV1)
+    host._resolve_program_workflow = lambda workflow_id: SimpleNamespace(
+        draft=SimpleNamespace(
+            workflow_id="w1",
+            nodes=(
+                SimpleNamespace(node_id="a1", inputs=()),
+                SimpleNamespace(node_id="a2", inputs=()),
+            ),
+        ),
+        scientific_plan=SimpleNamespace(plan_sha256="d" * 64),
+    )
+    host._workflow_context = lambda draft, **_kw: _context(("a1", "a2"))
+
+    reply = host._continue_execution_reasoning(
+        "t1", {"workflow_id": "w1"}
+    )
+    assert reply["status"] == "continue_reasoning"
+    assert host.execution_wave_decision.state == "continue_reasoning"
+    assert host.execution_wave_decision.ready_node_ids == ("a1", "a2")
+    assert host.selected_execution_wave == ()
 
 
 def test_an_invalid_wave_is_not_recorded_as_the_selection():

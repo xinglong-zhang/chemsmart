@@ -624,19 +624,51 @@ class ToolLoopRunner:
                 if notice:
                     termination_notice_delivered = True
                     session.append_host_user_message(notice["text"])
+                    pending_wave = (
+                        notice.get("kind")
+                        == "execution_wave_decision_pending"
+                    )
                     self.event_store.append(
                         turn_id=envelope.turn_id,
-                        kind=EventKind.TERMINATION_NOTICE_DELIVERED.value,
-                        payload={
-                            "undelivered_declared_observable_ids": list(
-                                notice["undelivered_declared_observable_ids"]
-                            ),
-                            "budgets": dict(notice["budgets"]),
-                            "content_sha256": canonical_sha256(notice["text"]),
-                            "rule_ids": ("wake.termination_notice",),
-                        },
+                        kind=(
+                            EventKind.EXECUTION_WAVE_DECISION_PENDING.value
+                            if pending_wave
+                            else EventKind.TERMINATION_NOTICE_DELIVERED.value
+                        ),
+                        payload=(
+                            {
+                                "execution_wave_decision": dict(
+                                    notice["execution_wave_decision"]
+                                ),
+                                "budgets": dict(notice["budgets"]),
+                                "content_sha256": canonical_sha256(
+                                    notice["text"]
+                                ),
+                                "rule_ids": (
+                                    "wake.execution_wave_decision_pending",
+                                ),
+                            }
+                            if pending_wave
+                            else {
+                                "undelivered_declared_observable_ids": list(
+                                    notice[
+                                        "undelivered_declared_observable_ids"
+                                    ]
+                                ),
+                                "budgets": dict(notice["budgets"]),
+                                "content_sha256": canonical_sha256(
+                                    notice["text"]
+                                ),
+                                "rule_ids": ("wake.termination_notice",),
+                            }
+                        ),
                         idempotency_key=(
-                            "termination-notice:" + envelope.turn_id
+                            (
+                                "execution-wave-decision-pending:"
+                                if pending_wave
+                                else "termination-notice:"
+                            )
+                            + envelope.turn_id
                         ),
                     )
                     continue

@@ -55,6 +55,16 @@ def _envelope_file(tmp_path, calls=6, excursions=0):
     return target
 
 
+def _bundle_file(tmp_path, name="bundle.json"):
+    """A minimal digest-bearing approval for a selected local test wave."""
+
+    target = tmp_path / name
+    target.write_text(
+        json.dumps({"bundle_sha256": "7" * 64}), encoding="utf-8"
+    )
+    return target
+
+
 def _review_payload(identity="b" * 64):
     return {
         "review_sha256": "d" * 64,
@@ -128,7 +138,7 @@ def _loop(
     def resolve_review(**kwargs):
         if resolve is not None:
             return resolve(**kwargs)
-        return ("d" * 64, tmp_path / "bundle.json")
+        return ("d" * 64, _bundle_file(tmp_path))
 
     def execute_bundle(*, approval_file, workspace, run_directory):
         step = next(execute_iter)
@@ -159,8 +169,23 @@ def _planning_session(
             review_file = kwargs["review_file"]
             review_file.parent.mkdir(parents=True, exist_ok=True)
             review_file.write_text(json.dumps(review), encoding="utf-8")
+        # A current Agent session always carries an explicit boundary. The
+        # synthetic engine stream below executes `sp-initial`, so the shared
+        # fake supplies that smallest valid singleton when it supplies a
+        # review packet at all.
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
+        selected = ("sp-initial",) if review is not None else ()
         return SimpleNamespace(
-            terminal_state=terminal, task_spec_sha256="a" * 64
+            terminal_state=terminal,
+            task_spec_sha256="a" * 64,
+            selected_execution_wave=selected,
+            execution_wave_decision=build_execution_wave_decision(
+                state="selected" if selected else "undecided",
+                workflow_id="water-workflow" if selected else "",
+                ready_node_ids=selected,
+                node_ids=selected,
+            ),
         )
 
     return step
@@ -312,6 +337,7 @@ def test_cycle_one_approves_runs_and_settles_achieved(tmp_path):
     kinds = [entry["kind"] for entry in ledger.entries()]
     assert kinds == [
         "goal_created",
+        "wave_selected",
         "run_started",
         "run_recorded",
         "goal_settled",
@@ -633,7 +659,7 @@ def test_the_stop_file_cancels_at_the_cycle_boundary(tmp_path):
         plan_session=lambda **kwargs: (_ for _ in ()).throw(
             AssertionError("no session may start after cancel")
         ),
-        resolve_review=lambda **kwargs: ("d" * 64, tmp_path / "b.json"),
+        resolve_review=lambda **kwargs: ("d" * 64, _bundle_file(tmp_path, "b.json")),
         execute_bundle=lambda **kwargs: None,
         stop_file=stop,
     )
@@ -1042,7 +1068,7 @@ def test_an_interrupted_local_run_resumes_through_wake(tmp_path):
         plan_session=lambda **kw: _planning_session(
             "live-1", review=_review_payload()
         )(workspace, kw),
-        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **_kw: ("d" * 64, _bundle_file(tmp_path)),
     )
     driver = GoalDriver(
         task="the goal task",
@@ -1085,7 +1111,7 @@ def test_retained_intent_is_not_an_ending(tmp_path):
         goal_id="goal-t1",
         granted_by="claude-owner-delegated-reviewer",
         plan_session=lambda **kw: None,
-        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **_kw: ("d" * 64, _bundle_file(tmp_path)),
         execute_bundle=lambda **_kw: None,
     )
     driver.cycles = 1
@@ -1234,7 +1260,7 @@ def test_a_dispatched_run_parks_the_goal_and_resumes_at_its_outcome(
         plan_session=lambda **kw: _planning_session(
             "live-1", review=_review_payload()
         )(workspace, kw),
-        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **_kw: ("d" * 64, _bundle_file(tmp_path)),
         execute_bundle=never_execute,
         dispatch_run=dispatch_run,
     )
@@ -1332,7 +1358,7 @@ def test_a_failed_run_opens_a_typed_recovery_with_a_repair_menu(tmp_path):
         goal_id="goal-repair",
         granted_by="claude-owner-delegated-reviewer",
         plan_session=plan_session,
-        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **_kw: ("d" * 64, _bundle_file(tmp_path)),
         execute_bundle=lambda **kw: next(executes)(kw["run_directory"]),
     )
     result = driver.run()
@@ -1390,7 +1416,7 @@ def test_a_run_no_revision_can_answer_returns_to_the_human(tmp_path):
         goal_id="goal-unanswerable",
         granted_by="claude-owner-delegated-reviewer",
         plan_session=plan_session,
-        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **_kw: ("d" * 64, _bundle_file(tmp_path)),
         execute_bundle=lambda **kw: execute(kw["run_directory"]),
     )
     result = driver.run()
@@ -1419,7 +1445,7 @@ def _driver_after_run(tmp_path, *, calls, rows, failed, settle=True):
         goal_id="goal-t1",
         granted_by="claude-owner-delegated-reviewer",
         plan_session=lambda **kw: None,
-        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **_kw: ("d" * 64, _bundle_file(tmp_path)),
         execute_bundle=lambda **_kw: None,
     )
     driver.cycles = 1
@@ -1548,7 +1574,7 @@ def test_the_goal_keeps_every_budget_line_the_envelope_granted(tmp_path):
         goal_id="goal-t1",
         granted_by="claude-owner-delegated-reviewer",
         plan_session=lambda **kw: None,
-        resolve_review=lambda **_kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **_kw: ("d" * 64, _bundle_file(tmp_path)),
         execute_bundle=lambda **_kw: None,
     )
     assert driver.envelope_record["max_excursion_calls"] == 2
@@ -1815,7 +1841,7 @@ def test_a_denial_holds_when_the_first_cycle_only_read_results(tmp_path):
 
     def resolve_review(**kwargs):
         decisions.append(str(kwargs.get("decision")))
-        return ("d" * 64, tmp_path / "bundle.json")
+        return ("d" * 64, _bundle_file(tmp_path))
 
     def execute_bundle(*, approval_file, workspace, run_directory):
         launched.append(str(run_directory))
@@ -1905,7 +1931,7 @@ def test_a_typed_error_still_records_what_the_cycle_delivered(tmp_path):
         granted_by="claude-owner-delegated-reviewer",
         max_revisions=3,
         plan_session=plan_session,
-        resolve_review=lambda **kw: ("d" * 64, tmp_path / "bundle.json"),
+        resolve_review=lambda **kw: ("d" * 64, _bundle_file(tmp_path)),
         execute_bundle=lambda **kw: None,
     )
     assert result.settlement == "returned_to_human"
@@ -2127,7 +2153,7 @@ def test_a_transport_loss_does_not_block_the_requirement_wake(tmp_path):
         granted_by="claude-owner-delegated-reviewer",
         max_revisions=5,
         plan_session=lambda **kwargs: next(sessions)(workspace, kwargs),
-        resolve_review=lambda **kwargs: ("d" * 64, tmp_path / "b.json"),
+        resolve_review=lambda **kwargs: ("d" * 64, _bundle_file(tmp_path, "b.json")),
         execute_bundle=lambda **kwargs: None,
     )
     gates = [

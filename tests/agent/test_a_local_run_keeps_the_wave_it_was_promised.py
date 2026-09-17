@@ -44,10 +44,22 @@ def _driver(tmp_path, *, wave, execute):
     )
 
     def plan_session(**kw):
+        from chemsmart.agent.cohort import build_execution_wave_decision
+
         session = _planning_session("live-1", review=_review_payload())(
             workspace, kw
         )
         object.__setattr__(session, "selected_execution_wave", tuple(wave))
+        object.__setattr__(
+            session,
+            "execution_wave_decision",
+            build_execution_wave_decision(
+                state="selected" if wave else "undecided",
+                workflow_id="w1" if wave else "",
+                ready_node_ids=tuple(wave),
+                node_ids=tuple(wave),
+            ),
+        )
         return session
 
     return GoalDriver(
@@ -87,8 +99,8 @@ def test_a_local_run_writes_the_manifest_the_walk_reads(tmp_path):
     assert manifest.cycle == 1
 
 
-def test_a_local_run_without_a_selected_wave_is_unchanged(tmp_path):
-    """Every goal that predates waves keeps its own walk."""
+def test_a_local_run_without_an_execution_decision_never_starts(tmp_path):
+    """The local path shares the scheduler path's pending boundary."""
 
     seen: dict = {}
 
@@ -97,8 +109,8 @@ def test_a_local_run_without_a_selected_wave_is_unchanged(tmp_path):
         return SimpleNamespace(status="completed", analysis_status="")
 
     driver = _driver(tmp_path, wave=(), execute=execute)
-    driver.run()
-    assert seen.get("manifest") is None
+    assert driver.run().settlement == "execution_wave_decision_pending"
+    assert seen == {}
 
 
 def test_a_resumed_local_run_keeps_the_manifest_it_already_had(tmp_path):

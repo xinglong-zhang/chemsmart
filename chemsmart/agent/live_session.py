@@ -24,7 +24,7 @@ import re
 import shutil
 import sys
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Mapping
@@ -66,6 +66,10 @@ from chemsmart.agent.capabilities import (
 )
 from chemsmart.agent.cli_schema import build_live_click_schema
 from chemsmart.agent.commands import build_scientific_identity_binding
+from chemsmart.agent.cohort import (
+    ExecutionWaveDecisionV1,
+    build_execution_wave_decision,
+)
 from chemsmart.agent.execution import (
     ApprovedNodeBindingV1,
     ExecutionResourceSpecV1,
@@ -578,6 +582,13 @@ class LiveAgentSessionResultV1:
     #: bundle together, so an element cannot resolve itself through a
     #: manifest written for a different approval.
     selected_execution_wave: tuple[str, ...] = ()
+    #: Unlike an empty legacy member list, this says whether the Agent made
+    #: an execution-boundary decision at all.  It stays outside the archived
+    #: session body for the same compatibility reason as membership; its own
+    #: digest and the goal ledger bind the durable decision.
+    execution_wave_decision: ExecutionWaveDecisionV1 = field(
+        default_factory=build_execution_wave_decision
+    )
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.live-agent-session-result.v1":
@@ -604,6 +615,7 @@ class LiveAgentSessionResultV1:
                 "result_sha256",
                 "prepared_execution",
                 "selected_execution_wave",
+                "execution_wave_decision",
             }
         }
 
@@ -1278,6 +1290,7 @@ def run_live_agent_session(
         result_sha256=canonical_sha256(body),
         prepared_execution=prepared_execution,
         selected_execution_wave=tuple(host.selected_execution_wave or ()),
+        execution_wave_decision=host.execution_wave_decision,
     )
 
 

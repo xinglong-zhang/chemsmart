@@ -2914,6 +2914,7 @@ class GoalDriver:
         initial_decision: str = "approve",
         stop_file: str | Path | None = None,
         session_kwargs: Mapping[str, Any] | None = None,
+        manual_execution_intent: bool = False,
         _resuming: bool = False,
     ) -> None:
         if dispatch not in DISPATCH_MODES:
@@ -2957,6 +2958,10 @@ class GoalDriver:
         self.initial_decision = initial_decision
         self.stop_file = stop_file
         self.session_kwargs = dict(session_kwargs or {})
+        # `from_review` is the one human-direct review surface. It names a
+        # human execution decision, not an Agent's omitted wave, and retains
+        # its deliberately serial/manual execution behavior below.
+        self.manual_execution_intent = bool(manual_execution_intent)
 
         self.goal_dir = (
             self.workspace / ".chemsmart-agent" / "goals" / self.goal_id
@@ -3069,6 +3074,7 @@ class GoalDriver:
         #: with no calculation at all.
         self._pending_ledger_rows: tuple[tuple[str, dict[str, Any]], ...] = ()
         self.dispatch_receipt: Any = None
+        self._resuming_started_run = False
 
     # -- public surface ---------------------------------------------------
 
@@ -3147,11 +3153,24 @@ class GoalDriver:
             and int(entry["payload"].get("cycle", 0)) not in recorded_cycles
             and int(entry["payload"].get("cycle", 0)) not in dispatched_cycles
         ]
-        if not parked and not interrupted:
+        pending_decisions = [
+            entry
+            for entry in entries
+            if entry["kind"] == "execution_wave_decision_pending"
+            and int(entry["payload"].get("cycle", 0))
+            not in dispatched_cycles
+            and int(entry["payload"].get("cycle", 0))
+            not in {
+                int(item["payload"].get("cycle", 0))
+                for item in interrupted
+            }
+        ]
+        if not parked and not interrupted and not pending_decisions:
             raise ContractError(
-                f"goal {goal_id!r} has no parked or interrupted run to resume"
+                f"goal {goal_id!r} has no parked, interrupted, or pending "
+                "execution decision to resume"
             )
-        entry = (parked or interrupted)[-1]
+        entry = (parked or interrupted or pending_decisions)[-1]
         driver.goal = driver.ledger.load()
         if not driver.task:
             try:
@@ -3190,7 +3209,27 @@ class GoalDriver:
             # same bundle and run directory; the executor's continuation
             # replays finished nodes and names the interrupted one.
             driver.bundle_file = Path(str(entry["payload"]["approval_file"]))
+            driver._resuming_started_run = True
             driver.phase = "execute"
+            return driver
+        if entry["kind"] == "execution_wave_decision_pending":
+            from chemsmart.agent.cohort import (
+                execution_wave_decision_from_record,
+            )
+
+            decision = execution_wave_decision_from_record(
+                dict(entry["payload"].get("execution_wave_decision") or {})
+            )
+            driver.bundle_file = Path(
+                str(entry["payload"].get("approval_file") or "")
+            )
+            review_file = str(entry["payload"].get("review_file") or "")
+            driver.review_file = Path(review_file) if review_file else None
+            driver.session = SimpleNamespace(
+                execution_wave_decision=decision,
+                selected_execution_wave=tuple(decision.node_ids),
+            )
+            driver.phase = "execution_decision_pending"
             return driver
         driver.run_directory = (
             driver.goal_dir / "runs" / f"cycle-{driver.cycles}"
@@ -3226,6 +3265,7 @@ class GoalDriver:
             terminal_state="waiting_for_approval",
             task_spec_sha256=str(task_spec_sha256 or ""),
         )
+        driver.manual_execution_intent = True
         driver.phase = "decide"
         return driver
 
@@ -3247,6 +3287,9 @@ class GoalDriver:
             "plan": self._plan,
             "decide": self._decide,
             "execute": self._execute,
+            "execution_decision_pending": (
+                self._execution_decision_pending_resume
+            ),
             "outcome": self._outcome,
             "settle": self._settle,
         }[phase]
@@ -4321,6 +4364,39 @@ class GoalDriver:
 
     def _execute(self) -> None:
         assert self.bundle_file is not None
+        decision = self._execution_wave_decision()
+        if (
+            decision is None
+            and not self.manual_execution_intent
+            and not self._resuming_started_run
+        ):
+            from chemsmart.agent.cohort import build_execution_wave_decision
+
+            decision = build_execution_wave_decision()
+        if decision is not None and decision.state != "selected":
+            self._park_for_execution_wave_decision(
+                decision,
+                reason=(
+                    "the Agent explicitly continued scientific reasoning"
+                    if decision.state == "continue_reasoning"
+                    else "the Agent made no execution-boundary decision"
+                ),
+            )
+            return
+        wave = self._dispatchable_wave()
+        if decision is not None and not wave:
+            # A selected member can fall outside the final approval after a
+            # re-plan or a non-executable review finding.  That is evidence
+            # to return to the Agent, never permission to reinterpret an
+            # explicit cohort as the old unbounded serial path.
+            self._park_for_execution_wave_decision(
+                decision,
+                reason=(
+                    "the selected wave is not covered by this approval; "
+                    "the host did not substitute a serial execution"
+                ),
+            )
+            return
         self.run_directory = self.goal_dir / "runs" / f"cycle-{self.cycles}"
         self.run_directory.mkdir(parents=True, exist_ok=True)
         run_reference = f"goals/{self.goal_id}/runs/cycle-{self.cycles}"
@@ -4412,11 +4488,10 @@ class GoalDriver:
                         getattr(self, "envelope", None), "resources", None
                     ),
                     envelope=getattr(self, "envelope", None),
-                    # The wave the session selected, in the order it
-                    # selected it. Empty is the single-job path, and
-                    # nothing here invents a cohort: a wave the Agent
-                    # did not ask for is not a wave.
-                    cohort_node_ids=self._dispatchable_wave(),
+                    # The explicitly selected wave, in the order the Agent
+                    # selected it.  `_execute` above rejects an undecided
+                    # boundary before this irreversible scheduler call.
+                    cohort_node_ids=wave,
                 )
             except (ContractError, ValueError, OSError) as exc:
                 # A dispatch that could not happen is not an ambiguous
@@ -4510,7 +4585,7 @@ class GoalDriver:
         # and one process keeps it exactly. Written before the executor
         # is handed the directory, for the same reason the scheduler
         # path writes it before submitting.
-        local_wave = self._dispatchable_wave()
+        local_wave = wave
         if local_wave:
             from chemsmart.agent.cohort import build_cohort_manifest
 
@@ -4737,14 +4812,15 @@ class GoalDriver:
 
         This is the host checking two things it owns against each other,
         not a refusal shown to the Agent; what it drops it records, and
-        an empty result is the single-job path rather than an array of
-        nothing.
+        an empty result is a pending execution decision rather than an array
+        of nothing or an unbounded serial execution.
         """
 
-        selected = tuple(
-            str(item)
-            for item in getattr(self.session, "selected_execution_wave", ())
-            or ()
+        decision = self._execution_wave_decision()
+        selected = (
+            tuple(str(item) for item in decision.node_ids)
+            if decision is not None and decision.state == "selected"
+            else ()
         )
         if not selected:
             return ()
@@ -4806,6 +4882,67 @@ class GoalDriver:
                 },
             )
         return wave
+
+    def _execution_wave_decision(self) -> Any | None:
+        """Return the planning session's explicit execution boundary.
+
+        Every current live Agent session carries this field. A missing field
+        is therefore undecided at the production planning boundary; only the
+        separate human-direct review surface and an already-started resumed
+        run can proceed without it.
+        """
+
+        decision = getattr(self.session, "execution_wave_decision", None)
+        return decision
+
+    def _park_for_execution_wave_decision(
+        self, decision: Any, *, reason: str
+    ) -> None:
+        """Persist an unexecuted scientific boundary without inventing one."""
+
+        payload = {
+            "cycle": self.cycles,
+            "approval_file": str(self.bundle_file),
+            "review_file": str(self.review_file) if self.review_file else "",
+            "execution_wave_decision": decision.public_record(),
+            "reason": reason,
+        }
+        self.ledger.append(
+            "execution_wave_decision_pending",
+            payload,
+            idempotency_key=(
+                f"execution-wave-decision-pending:{self.goal_id}:{self.cycles}"
+            ),
+        )
+        self.result = GoalLoopResultV1(
+            goal_id=self.goal_id,
+            settlement="execution_wave_decision_pending",
+            cycles=self.cycles,
+            revisions_admitted=self.revisions_admitted,
+            reasons=(
+                reason,
+                "no scheduler submission or engine launch occurred; "
+                "the Agent may make an explicit execution decision",
+            ),
+        )
+        self.phase = "parked"
+
+    def _execution_decision_pending_resume(self) -> None:
+        """Keep a resumed pending decision pending; never replay it serially."""
+
+        decision = self._execution_wave_decision()
+        assert decision is not None
+        self.result = GoalLoopResultV1(
+            goal_id=self.goal_id,
+            settlement="execution_wave_decision_pending",
+            cycles=self.cycles,
+            revisions_admitted=self.revisions_admitted,
+            reasons=(
+                "the durable execution boundary remains " + decision.state,
+                "no scheduler submission or engine launch occurred",
+            ),
+        )
+        self.phase = "parked"
 
     def _unanswerable_terminal_states(self) -> dict[str, str]:
         """How each node ended, for the endings a human has to read.

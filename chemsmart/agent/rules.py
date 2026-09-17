@@ -297,10 +297,25 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "carry workarounds for a decision that is the host's.",
     ),
     _r(
+        "tool.continue_execution_reasoning",
+        "tool:continue_execution_reasoning",
+        "T0",
+        "Use this only when you deliberately need to continue or revise "
+        "scientific reasoning before dispatch. It records no cohort and "
+        "does not change readiness, hardware, or the approved workflow; "
+        "before ending with ready calculations, make the next execution "
+        "boundary explicit.",
+        "Round A (2026-09-17): silence is not a legacy serial request.",
+    ),
+    _r(
         "stem.wave_execution",
         "stem",
         "T0",
-        "Approved calculations execute in waves that you select. A wave is "
+        "Before execution, explicitly choose an execution boundary. Select "
+        "a wave, or explicitly continue reasoning without dispatching; do "
+        "not leave it implicit. A selected wave may contain one calculation "
+        "or several. Approved calculations execute in waves that you select. "
+        "A wave is "
         "the set of currently-ready, scientifically independent "
         "calculations you want to see together before you reason again. "
         "The host runs them concurrently and wakes you once, when every "
@@ -896,6 +911,18 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "owner ruling 2026-09-06: never force a session to spend the "
         "remaining budget; when it is about to terminate, provide the "
         "remaining budget purely as informational context",
+    ),
+    _r(
+        "wake.execution_wave_decision_pending",
+        "wake:close",
+        "T0",
+        "Execution decision pending. The host reports the ready "
+        "calculations below. Choose the complete outcomes you want to "
+        "observe together before reasoning again, or explicitly continue "
+        "reasoning without dispatching. This is a scientific epistemic-"
+        "boundary decision, not a hardware-concurrency decision; the host "
+        "will not infer a wave from silence.",
+        "Round A (2026-09-17): UNDECIDED is not serial execution.",
     ),
     _r(
         "wake.refusal_is_a_deliverable",

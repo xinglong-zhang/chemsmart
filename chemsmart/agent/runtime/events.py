@@ -98,6 +98,7 @@ class EventKind(str, Enum):
     GUIDE_ACTIVATED = "guide_activated"
     RUNTIME_TERMINATED = "runtime_terminated"
     TERMINATION_NOTICE_DELIVERED = "termination_notice_delivered"
+    EXECUTION_WAVE_DECISION_PENDING = "execution_wave_decision_pending"
     SYMMETRY_BROKEN = "symmetry_broken"
     EXECUTION_REVIEW_PREPARED = "execution_review_prepared"
 

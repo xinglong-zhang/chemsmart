@@ -1498,8 +1498,11 @@ def _legacy_tool_definitions(
         _tool(
             "select_execution_wave",
             (
-                "Name the calculations to run together as one wave, in "
-                "the order you want them."
+                "Choose the currently-ready calculation outcomes you want "
+                "completed before you reason again. One member is valid; "
+                "several mean you do not need one member's result before "
+                "deciding whether the others run. Name them in the order "
+                "you want them."
             ),
             {
                 "workflow_id": _public_identifier(),
@@ -1510,6 +1513,16 @@ def _legacy_tool_definitions(
                 },
             },
             ("workflow_id", "node_ids"),
+        ),
+        _tool(
+            "continue_execution_reasoning",
+            (
+                "Explicitly defer dispatch for this ready frontier so you "
+                "can continue or revise scientific reasoning. This does not "
+                "select any calculation or alter host resource policy."
+            ),
+            {"workflow_id": _public_identifier()},
+            ("workflow_id",),
         ),
         _tool(
             "prepare_program_node",
