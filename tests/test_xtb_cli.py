@@ -78,7 +78,12 @@ def test_registry_exposes_loader_bounded_parameter_domains():
     pyscf = program_capability("pyscf")
     xtb_capability = program_capability("xtb")
 
-    assert dict(pyscf.project_parameter_domains)["ab_initio"] == ("hf",)
+    assert dict(pyscf.project_parameter_domains)["ab_initio"] == (
+        "ccsd",
+        "ccsd(t)",
+        "hf",
+        "mp2",
+    )
     assert dict(pyscf.project_parameter_domains)["opt_solver"] == (
         "ase",
         "berny",

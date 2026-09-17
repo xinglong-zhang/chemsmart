@@ -459,6 +459,16 @@ def test_an_xtb_population_reaches_the_agent_with_its_own_scheme(tmp_path):
             "semantic_quantity": "atomic_partial_charge",
             "population_scheme": "xTB self-consistent-charge population",
             "atom_order": "zero-based molecular atom order",
-        }
+        },
+        "wiberg_bond_orders": {
+            "semantic_quantity": "bond_order",
+                "population_scheme": "Wiberg",
+                "atom_order": "zero-based molecular atom order",
+                "data_shape": "rows of [atom_i, atom_j, wiberg_bond_order]",
+                "sparsity": (
+                    "the native xTB sidecar is thresholded; omitted pairs "
+                    "have no reported Wiberg value and are not zero"
+                ),
+        },
     }
     assert inspected["level"] == {"method": "GFN2-xTB"}

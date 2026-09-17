@@ -1143,6 +1143,9 @@ def test_the_extraction_receipt_carries_the_provenance_of_each_value():
                     "absent",
                     "derived_adjacency",
                     "electronic_provenance",
+                    "selector_bindings",
+                    "structural_states",
+                    "level",
                 )
             }
         )
@@ -1161,6 +1164,9 @@ def test_the_extraction_receipt_carries_the_provenance_of_each_value():
                         "receipt_sha256",
                         "absent",
                         "derived_adjacency",
+                        "selector_bindings",
+                        "structural_states",
+                        "level",
                     )
                 },
                 electronic_provenance=(),

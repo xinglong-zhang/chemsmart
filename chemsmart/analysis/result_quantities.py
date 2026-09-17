@@ -224,6 +224,9 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         # (NOVEL-3 ino3, 2026-09-05); open shells only, sum 2S.
         "mulliken_atomic_spin_populations",
         "loewdin_atomic_spin_populations",
+        # Symmetric atom-pair electronic bond-order matrix from population
+        # analysis, in zero-based molecular atom order.
+        "wiberg_bond_orders",
     }
 )
 
@@ -632,6 +635,7 @@ def canonical_extraction_receipt_body(
     selector_bindings: Any = (),
     structural_states: Any = (),
     level: Any = (),
+    native_evidence: Any = (),
 ) -> dict[str, Any]:
     """Return the one body an extraction receipt is digested over.
 
@@ -685,6 +689,13 @@ def canonical_extraction_receipt_body(
         # This is the producer's own level record. It is displayed for a
         # scientist to compare, never used to infer equivalence.
         body["level"] = level
+    if native_evidence:
+        # Selectors such as xTB Wiberg bond orders are read from a native
+        # sidecar rather than the result's primary log.  Bind the selector,
+        # result-relative filename, and exact bytes into the same receipt as
+        # the delivered quantity.  This is deliberately selector-scoped:
+        # the quantity id is model-authored and has no parser semantics.
+        body["native_evidence"] = native_evidence
     return body
 
 
@@ -728,6 +739,12 @@ class QuantityExtractionReceiptV1:
     structural_states: Any = ()
     #: Producer level read from the same verified result artifact.
     level: Any = ()
+    #: Exact native sidecars consumed by requested selectors, as
+    #: ``(selector, result-relative filename, sha256)``.  The primary result
+    #: remains ``artifact_id``/``artifact_sha256`` above; this field prevents
+    #: a sidecar-derived value from being represented as evidence from that
+    #: log alone.
+    native_evidence: Any = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "quantities", tuple(self.quantities))
@@ -841,6 +858,32 @@ class QuantityExtractionReceiptV1:
             )
         object.__setattr__(self, "structural_states", states)
         object.__setattr__(self, "level", dict(self.level or {}))
+        native_evidence = tuple(
+            (str(selector), str(filename), str(sha256))
+            for selector, filename, sha256 in (self.native_evidence or ())
+        )
+        if native_evidence != tuple(sorted(set(native_evidence))):
+            raise QuantityContractError(
+                "native evidence must be sorted, unique selector/path/digest "
+                "records"
+            )
+        for selector, filename, sha256 in native_evidence:
+            if selector not in SUPPORTED_SELECTORS:
+                raise QuantityContractError(
+                    f"native evidence names unsupported selector {selector!r}"
+                )
+            if (
+                not filename
+                or filename.startswith("/")
+                or filename in {".", ".."}
+                or ".." in filename.split("/")
+            ):
+                raise QuantityContractError(
+                    "native evidence filename must be a non-empty "
+                    "result-relative path"
+                )
+            _require_sha256(sha256)
+        object.__setattr__(self, "native_evidence", native_evidence)
         body = canonical_extraction_receipt_body(
             schema_version=self.schema_version,
             artifact_id=self.artifact_id,
@@ -855,6 +898,7 @@ class QuantityExtractionReceiptV1:
             selector_bindings=self.selector_bindings,
             structural_states=self.structural_states,
             level=self.level,
+            native_evidence=self.native_evidence,
         )
         if self.receipt_sha256 != canonical_quantity_sha256(body):
             raise QuantityContractError(

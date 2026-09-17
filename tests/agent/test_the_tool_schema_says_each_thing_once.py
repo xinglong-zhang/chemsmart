@@ -81,4 +81,6 @@ def test_nothing_was_lost_and_the_surface_fits_the_budget():
     # sentence is a registered rule at `tool:select_execution_wave`
     # rather than prose in the schema, so the registry stays the one
     # author and `test_every_rule_renders_once` covers it.
-    assert len(text) < 120_500, len(text)
+    # Raised to 121,000 (2026-09-17) for wiberg_bond_orders entering the
+    # selector enums across all leaf tools.
+    assert len(text) < 121_000, len(text)

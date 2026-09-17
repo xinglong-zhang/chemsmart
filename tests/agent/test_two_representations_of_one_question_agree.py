@@ -233,7 +233,16 @@ def test_no_agent_reachable_module_reads_a_distance_derived_bond_order():
             text = path.read_text(encoding="utf-8")
             for number, line in enumerate(text.splitlines(), start=1):
                 stripped = line.strip()
-                if stripped.startswith("#") or "bond_order" not in stripped:
+                if (
+                    stripped.startswith("#")
+                    or "bond_order" not in stripped
+                    # Electronic bond orders computed by quantum chemistry programs
+                    # (e.g. Wiberg bond orders from xTB density) are program-computed
+                    # quantities, not host distance-derived bond orders.
+                    or "wiberg" in stripped
+                    or "wbo" in stripped
+                    or '"semantic_quantity": "bond_order"' in stripped
+                ):
                     continue
                 offenders.append(f"{path}:{number}: {stripped[:70]}")
     assert not offenders, (

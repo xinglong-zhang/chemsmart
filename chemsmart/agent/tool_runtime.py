@@ -16206,6 +16206,7 @@ class CommandCompiledToolHostV1:
                 selector_bindings=receipt.selector_bindings,
                 structural_states=receipt.structural_states,
                 level=receipt.level,
+                native_evidence=receipt.native_evidence,
             )
         )
         self._emit(

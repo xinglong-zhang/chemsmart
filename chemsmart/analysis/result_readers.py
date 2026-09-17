@@ -18,6 +18,7 @@ else in the extraction path needs to know which programs exist.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -156,6 +157,7 @@ SELECTOR_UNITS = {
     "irc_converged": "1",
     "solvent": "",
     "surface_id": "",
+    "wiberg_bond_orders": "1",
 }
 
 
@@ -193,6 +195,16 @@ _ATOM_RESOLVED_SELECTOR_METADATA: Mapping[str, Mapping[str, str]] = {
         "semantic_quantity": "atomic_spin_population",
         "population_scheme": "Loewdin",
         "atom_order": "zero-based molecular atom order",
+    },
+    "wiberg_bond_orders": {
+        "semantic_quantity": "bond_order",
+        "population_scheme": "Wiberg",
+        "atom_order": "zero-based molecular atom order",
+        "data_shape": "rows of [atom_i, atom_j, wiberg_bond_order]",
+        "sparsity": (
+            "the native xTB sidecar is thresholded; omitted pairs have no "
+            "reported Wiberg value and are not zero"
+        ),
     },
 }
 
@@ -902,6 +914,12 @@ class ResultReaderV1:
     geometry_source_path_for_selector: (
         Callable[[Any, str], Path | None] | None
     ) = None
+    #: Optional native sidecars a selector reads.  Extraction, unlike the
+    #: geometry handoff, owns the receipt that carries these bytes, so it
+    #: verifies and digests them beside the primary result artifact.
+    native_evidence_paths_for_selector: (
+        Callable[[Any, str], tuple[Path, ...]] | None
+    ) = None
     #: Program-native units that differ from the shared selector display unit.
     source_units: Mapping[str, str] = field(default_factory=dict)
     #: Selectors this parser can extract from a program job type when the
@@ -1076,6 +1094,20 @@ class ResultReaderV1:
             return None
         path = self.geometry_source_path_for_selector(output, selector)
         return Path(path) if path is not None else None
+
+    def native_evidence_paths_for_output(
+        self, output: Any, selector: str
+    ) -> tuple[Path, ...]:
+        """Return every native sidecar that this selector actually reads."""
+
+        if self.native_evidence_paths_for_selector is None:
+            return ()
+        return tuple(
+            Path(path)
+            for path in self.native_evidence_paths_for_selector(
+                output, selector
+            )
+        )
 
     def selectors_in_state(self, state: str) -> tuple[str, ...]:
         """Every selector this reader serves for one structural state."""
@@ -2161,6 +2193,81 @@ def _xtb_scc_atomic_charges(output: Any) -> list[float]:
     return charges
 
 
+def _xtb_wiberg_bond_orders(output: Any) -> list[list[Any]]:
+    """Return sparse Wiberg records in canonical zero-based atom order."""
+
+    wbo_file = getattr(output, "wbo_file", None)
+    if wbo_file is None:
+        raise MissingQuantityError(
+            "this xTB result wrote no Wiberg bond order (wbo) sidecar"
+        )
+    symbols = _symbols(output)
+    n_atoms = len(symbols)
+    try:
+        pairs = getattr(wbo_file, "bond_orders", None)
+    except ValueError as exc:
+        from chemsmart.analysis import result_quantities as rq
+
+        raise rq.QuantityExtractionError(
+            f"xTB WBO sidecar is malformed: {exc}"
+        ) from exc
+    if not pairs:
+        raise MissingQuantityError(
+            "this xTB result wrote an empty WBO sidecar (no native WBO "
+            "pair records)"
+        )
+    rows: list[list[Any]] = []
+    seen: set[tuple[int, int]] = set()
+    for atom_i, atom_j, order in pairs:
+        if atom_i < 1 or atom_i > n_atoms or atom_j < 1 or atom_j > n_atoms:
+            from chemsmart.analysis import result_quantities as rq
+
+            raise rq.QuantityExtractionError(
+                f"xTB WBO atom index out of bounds: ({atom_i}, {atom_j}) "
+                f"for molecule with {n_atoms} atoms"
+            )
+        i0, j0 = atom_i - 1, atom_j - 1
+        if i0 == j0:
+            from chemsmart.analysis import result_quantities as rq
+
+            raise rq.QuantityExtractionError(
+                f"xTB WBO sidecar names a self-pair: ({atom_i}, {atom_j})"
+            )
+        if i0 > j0:
+            i0, j0 = j0, i0
+        pair = (i0, j0)
+        if pair in seen:
+            from chemsmart.analysis import result_quantities as rq
+
+            raise rq.QuantityExtractionError(
+                "xTB WBO sidecar repeats unordered atom pair " f"({i0}, {j0})"
+            )
+        numeric_order = float(order)
+        if not math.isfinite(numeric_order) or numeric_order < 0.0:
+            from chemsmart.analysis import result_quantities as rq
+
+            raise rq.QuantityExtractionError(
+                "xTB WBO sidecar contains a non-finite or negative bond "
+                f"order for pair ({i0}, {j0})"
+            )
+        seen.add(pair)
+        rows.append([i0, j0, numeric_order])
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return rows
+
+
+def _xtb_dispersion_energy(output: Any) -> float:
+    """Return the parsed dispersion energy contribution from the summary block."""
+
+    main_out = getattr(output, "main_out", None)
+    value = getattr(main_out, "dispersion_energy", None) if main_out else None
+    if value is None:
+        raise MissingQuantityError(
+            "this xTB result records no dispersion energy in its summary block"
+        )
+    return float(value)
+
+
 def _xtb_level(output: Any) -> dict[str, Any]:
     """Return the applied xTB Hamiltonian and solvent from result bytes."""
 
@@ -2186,6 +2293,22 @@ def _xtb_geometry_source_path(output: Any, selector: str) -> Path | None:
     geometry_file = getattr(output, "xtbopt_geometry_file", None)
     path = getattr(geometry_file, "filepath", None)
     return Path(str(path)) if path else None
+
+
+def _xtb_native_evidence_paths(output: Any, selector: str) -> tuple[Path, ...]:
+    """Return xTB sidecars whose bytes a selector directly consumes."""
+
+    file_attribute = {
+        "wiberg_bond_orders": "wbo_file",
+        "xtb_scc_atomic_charges": "charges_file",
+    }.get(selector)
+    if file_attribute is None:
+        return ()
+    native_file = getattr(output, file_attribute, None)
+    path = getattr(native_file, "filepath", None) or getattr(
+        native_file, "filename", None
+    )
+    return (Path(str(path)),) if path else ()
 
 
 def _gaussian_frontier(attribute: str) -> Callable[[Any], float]:
@@ -2246,6 +2369,8 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
         "homo": lambda output: float(output.homo_energy),
         "lumo": lambda output: float(output.lumo_energy),
         "gap": lambda output: float(output.fmo_gap),
+        "dispersion_energy": _xtb_dispersion_energy,
+        "wiberg_bond_orders": _xtb_wiberg_bond_orders,
     }
 
 
@@ -3599,6 +3724,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         accessors=_xtb_accessors(),
         source_units={"dipole_moment": "e bohr"},
         geometry_source_path_for_selector=_xtb_geometry_source_path,
+        native_evidence_paths_for_selector=_xtb_native_evidence_paths,
         jobtype_selectors=(
             (
                 "hess",
@@ -3607,6 +3733,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "connectivity",
                     "dipole_moment",
                     "dipole_moment_magnitude",
+                    "dispersion_energy",
                     "energy",
                     "gap",
                     "gibbs_free_energy",
@@ -3618,6 +3745,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "vibrational_frequencies",
                     "vibrational_mode_atom_participation",
                     "vibrational_mode_degeneracy_group",
+                    "wiberg_bond_orders",
                     "xtb_scc_atomic_charges",
                 ),
             ),
@@ -3628,6 +3756,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "connectivity",
                     "dipole_moment",
                     "dipole_moment_magnitude",
+                    "dispersion_energy",
                     "energy",
                     "gap",
                     "gibbs_free_energy",
@@ -3637,6 +3766,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "positions",
                     "reached_positions",
                     "symbols",
+                    "wiberg_bond_orders",
                     "xtb_scc_atomic_charges",
                 ),
             ),
@@ -3646,12 +3776,14 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "connectivity",
                     "dipole_moment",
                     "dipole_moment_magnitude",
+                    "dispersion_energy",
                     "energy",
                     "gap",
                     "homo",
                     "lumo",
                     "positions",
                     "symbols",
+                    "wiberg_bond_orders",
                     "xtb_scc_atomic_charges",
                 ),
             ),
@@ -3663,6 +3795,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     ("connectivity", "as_reached"),
                     ("dipole_moment", "as_reached"),
                     ("dipole_moment_magnitude", "as_reached"),
+                    ("dispersion_energy", "as_reached"),
                     ("energy", "as_reached"),
                     ("gap", "as_reached"),
                     ("gibbs_free_energy", "as_reached"),
@@ -3675,6 +3808,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     ("vibrational_frequencies", "as_reached"),
                     ("vibrational_mode_atom_participation", "as_reached"),
                     ("vibrational_mode_degeneracy_group", "as_reached"),
+                    ("wiberg_bond_orders", "as_reached"),
                     ("xtb_scc_atomic_charges", "as_reached"),
                 ]
             )
@@ -3824,6 +3958,7 @@ _SELECTOR_DIMENSIONS = {
     "loewdin_atomic_charges": "CHARGE",
     "xtb_scc_atomic_charges": "CHARGE",
     "solvent": "DIMENSIONLESS",
+    "wiberg_bond_orders": "DIMENSIONLESS",
 }
 
 _TEXT_SELECTORS = frozenset(
@@ -3932,6 +4067,60 @@ def _derived_adjacency(reader: Any, output: Any) -> Any:
     return delivered
 
 
+def _verified_native_evidence(
+    *, reader: ResultReaderV1, output: Any, artifact: Path, selectors: Any
+) -> tuple[tuple[tuple[str, str, str], ...], tuple[tuple[Path, str], ...]]:
+    """Seal the sidecars a requested selector will read.
+
+    The primary output is already a trusted artifact.  A parser sidecar is
+    trustworthy only when it is a regular, non-symlink file under that
+    result's directory and its digest survives the extraction.  Keep the
+    selector association because a filename alone has no scientific meaning.
+    """
+
+    from chemsmart.analysis import result_quantities as rq
+
+    result_root = artifact.parent.resolve()
+    records: set[tuple[str, str, str]] = set()
+    observed: dict[Path, str] = {}
+    for requested in selectors:
+        selector = requested.selector
+        for supplied_path in reader.native_evidence_paths_for_output(
+            output, selector
+        ):
+            candidate = Path(supplied_path).expanduser()
+            if not candidate.is_absolute():
+                candidate = artifact.parent / candidate
+            if candidate.is_symlink():
+                raise rq.QuantityExtractionError(
+                    f"native evidence sidecar for {selector!r} is a symlink"
+                )
+            resolved = candidate.resolve()
+            try:
+                filename = resolved.relative_to(result_root).as_posix()
+            except ValueError as exc:
+                raise rq.QuantityExtractionError(
+                    f"native evidence sidecar for {selector!r} lies outside "
+                    "the verified result directory"
+                ) from exc
+            if not resolved.is_file():
+                raise rq.QuantityExtractionError(
+                    f"native evidence sidecar for {selector!r} is not a "
+                    "regular file"
+                )
+            digest = rq.result_file_sha256(resolved)
+            prior = observed.setdefault(resolved, digest)
+            if prior != digest:
+                raise rq.QuantityExtractionError(
+                    "one native evidence file resolved to inconsistent "
+                    "digests before extraction"
+                )
+            records.add((selector, filename, digest))
+    return tuple(sorted(records)), tuple(
+        sorted(observed.items(), key=lambda item: str(item[0]))
+    )
+
+
 def extract_logged_quantities(
     *,
     request: Any,
@@ -4001,6 +4190,12 @@ def extract_logged_quantities(
                 f"type. Declared here: {sorted(declared)}."
                 + rq.thermochemistry_route_hint(undeclared)
             )
+    native_evidence, native_evidence_digests = _verified_native_evidence(
+        reader=reader,
+        output=output,
+        artifact=artifact,
+        selectors=request.selectors,
+    )
     quantities = []
     absent: list[tuple[str, str, str]] = []
     # Whose density or method each delivered value belongs to, resolved
@@ -4059,6 +4254,12 @@ def extract_logged_quantities(
             value = int(source_value)
             unit = "1"
             data_kind = "integer"
+        elif selector.selector == "wiberg_bond_orders":
+            value = tuple(
+                (int(r[0]), int(r[1]), float(r[2])) for r in source_value
+            )
+            unit = "1"
+            data_kind = "matrix"
         else:
             from chemsmart.analysis.quantity_expressions import (
                 normalize_numeric_value,
@@ -4096,6 +4297,11 @@ def extract_logged_quantities(
         raise rq.QuantityExtractionError(
             "result artifact changed during extraction"
         )
+    for sidecar, expected_sha256 in native_evidence_digests:
+        if rq.result_file_sha256(sidecar) != expected_sha256:
+            raise rq.QuantityExtractionError(
+                "native evidence sidecar changed during extraction"
+            )
     body = rq.canonical_extraction_receipt_body(
         schema_version="chemsmart.quantity-extraction-receipt.v1",
         artifact_id=request.artifact_id,
@@ -4112,6 +4318,7 @@ def extract_logged_quantities(
         selector_bindings=tuple(bindings),
         structural_states=tuple(states),
         level=reader.level_for_output(output),
+        native_evidence=native_evidence,
     )
     return rq.QuantityExtractionReceiptV1(
         **body, receipt_sha256=rq.canonical_quantity_sha256(body)

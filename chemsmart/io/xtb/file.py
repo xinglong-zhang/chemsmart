@@ -2008,16 +2008,23 @@ class XTBWibergBondOrderFile(FileMixin):
     def bond_orders(self):
         """List of (atom_i, atom_j, order) with 1-based atom indices."""
         pairs = []
-        for line in self.contents:
+        for line_number, line in enumerate(self.contents, start=1):
             parts = line.split()
-            if len(parts) < 3:
+            if not parts:
                 continue
+            if len(parts) != 3:
+                raise ValueError(
+                    f"line {line_number} does not contain exactly three "
+                    "WBO fields"
+                )
             try:
                 atom_i = int(parts[0])
                 atom_j = int(parts[1])
                 order = float(parts[2])
-            except ValueError:
-                continue
+            except ValueError as exc:
+                raise ValueError(
+                    f"line {line_number} is not a numeric WBO record"
+                ) from exc
             pairs.append((atom_i, atom_j, order))
         return pairs
 
