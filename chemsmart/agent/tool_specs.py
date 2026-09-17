@@ -647,8 +647,9 @@ def _legacy_tool_definitions(
             "bind_reached_geometry",
             (
                 "Carry the structure a run actually reached into a new "
-                "geometry input. This is the ordinary answer to an "
-                "optimisation that ran out of iterations or wall time: a "
+                "geometry input. This is the ordinary answer after an "
+                "optimisation, including one that ran out of iterations or "
+                "wall time: a "
                 "fresh start from the original coordinates repeats the "
                 "same path, while the reached structure is many steps "
                 "further down the surface. The host reads the geometry "
@@ -1759,7 +1760,8 @@ def _legacy_tool_definitions(
                 "already exist, so the shape of an artifact is learned once "
                 "rather than one refused selector at a time. It cannot help "
                 "before a calculation has run: there is no artifact to probe "
-                "until the engine has produced one."
+                "until the engine has produced one. Roles, level, scheme "
+                "reported."
             ),
             {
                 "program": structured_result_program,
@@ -1792,7 +1794,7 @@ def _legacy_tool_definitions(
             (
                 "Parse selected numerical or scientific fields from a trusted "
                 "host-bound result artifact. The model supplies semantic selectors, "
-                "never a file path."
+                "never a file path. Scheme named; symbols order atoms."
             ),
             {
                 "program": structured_result_program_brief,

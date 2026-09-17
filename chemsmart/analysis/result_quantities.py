@@ -215,6 +215,10 @@ SUPPORTED_SELECTORS = SUPPORTED_PYSCF_SELECTORS | frozenset(
         "mulliken_atomic_charges",
         "loewdin_atomic_charges",
         "hirshfeld_atomic_charges",
+        # xTB's ``charges`` sidecar is a self-consistent-charge population
+        # from its tight-binding density.  It is deliberately *not* called
+        # Mulliken: a common name would claim the two partitions agree.
+        "xtb_scc_atomic_charges",
         # The second column of the same population block, read for years
         # and discarded one index from where a session needed it
         # (NOVEL-3 ino3, 2026-09-05); open shells only, sum 2S.
@@ -625,6 +629,9 @@ def canonical_extraction_receipt_body(
     absent: Any = (),
     derived_adjacency: Any = (),
     electronic_provenance: Any = (),
+    selector_bindings: Any = (),
+    structural_states: Any = (),
+    level: Any = (),
 ) -> dict[str, Any]:
     """Return the one body an extraction receipt is digested over.
 
@@ -665,6 +672,19 @@ def canonical_extraction_receipt_body(
         # ``((quantity_id, word), ...)``; present only when a reader
         # declares the axis, under the same rule as the adjacency.
         body["electronic_provenance"] = electronic_provenance
+    if selector_bindings:
+        # The quantity id is model-chosen, while the selector is the host's
+        # semantic contract. Preserve their exact pairing durably rather than
+        # only on the transient tool event.
+        body["selector_bindings"] = selector_bindings
+    if structural_states:
+        # State answers which geometry a value belongs to, including
+        # ``stateless`` values whose density provenance is absent.
+        body["structural_states"] = structural_states
+    if level:
+        # This is the producer's own level record. It is displayed for a
+        # scientist to compare, never used to infer equivalence.
+        body["level"] = level
     return body
 
 
@@ -701,6 +721,13 @@ class QuantityExtractionReceiptV1:
     #: says nothing about whose density a dipole is, and this is where the
     #: receipt says it.  Empty for a reader that declares no axis.
     electronic_provenance: Any = ()
+    #: Exact ``(quantity_id, selector)`` pairs requested from the reader.
+    #: A selector carries scheme semantics, so it cannot remain event-only.
+    selector_bindings: Any = ()
+    #: Exact structural role per delivered or explicitly absent quantity.
+    structural_states: Any = ()
+    #: Producer level read from the same verified result artifact.
+    level: Any = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "quantities", tuple(self.quantities))
@@ -795,6 +822,25 @@ class QuantityExtractionReceiptV1:
                     "delivered quantity; a stateless value is not recorded"
                 )
         object.__setattr__(self, "electronic_provenance", provenance)
+        bindings = tuple(
+            (str(quantity_id), str(selector))
+            for quantity_id, selector in (self.selector_bindings or ())
+        )
+        if bindings and len({item[0] for item in bindings}) != len(bindings):
+            raise QuantityContractError(
+                "selector bindings must name each quantity id at most once"
+            )
+        object.__setattr__(self, "selector_bindings", bindings)
+        states = tuple(
+            (str(quantity_id), str(state))
+            for quantity_id, state in (self.structural_states or ())
+        )
+        if states and len({item[0] for item in states}) != len(states):
+            raise QuantityContractError(
+                "structural states must name each quantity id at most once"
+            )
+        object.__setattr__(self, "structural_states", states)
+        object.__setattr__(self, "level", dict(self.level or {}))
         body = canonical_extraction_receipt_body(
             schema_version=self.schema_version,
             artifact_id=self.artifact_id,
@@ -806,6 +852,9 @@ class QuantityExtractionReceiptV1:
             absent=self.absent,
             derived_adjacency=self.derived_adjacency,
             electronic_provenance=self.electronic_provenance,
+            selector_bindings=self.selector_bindings,
+            structural_states=self.structural_states,
+            level=self.level,
         )
         if self.receipt_sha256 != canonical_quantity_sha256(body):
             raise QuantityContractError(

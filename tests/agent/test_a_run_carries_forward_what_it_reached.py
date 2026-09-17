@@ -20,12 +20,21 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from chemsmart.agent._contracts import ContractError, TrustedArtifactRefV1
 from chemsmart.agent.execution import build_reached_geometry
 
 _OUT = Path(__file__).resolve().parents[1] / "data" / "ORCATests" / "outputs"
+_XTB_OPT = (
+    Path(__file__).resolve().parents[1]
+    / "data"
+    / "XTBTests"
+    / "outputs"
+    / "co2_ohess"
+    / "co2_ohess.out"
+)
 
 
 def _artifact(name: str, kind: str = "orca_output") -> TrustedArtifactRefV1:
@@ -37,6 +46,17 @@ def _artifact(name: str, kind: str = "orca_output") -> TrustedArtifactRefV1:
         size_bytes=path.stat().st_size,
         path=str(path.resolve()),
         cli_value=str(path.resolve()),
+    )
+
+
+def _xtb_artifact() -> TrustedArtifactRefV1:
+    return TrustedArtifactRefV1(
+        artifact_id="xtb-result-co2-opt",
+        kind="xtb_output",
+        sha256=hashlib.sha256(_XTB_OPT.read_bytes()).hexdigest(),
+        size_bytes=_XTB_OPT.stat().st_size,
+        path=str(_XTB_OPT.resolve()),
+        cli_value=str(_XTB_OPT.resolve()),
     )
 
 
@@ -68,6 +88,156 @@ def test_the_structure_a_run_reached_becomes_a_starting_geometry(tmp_path):
     # Reading a result never edits it: the source bytes are what the
     # engine wrote, before and after.
     assert Path(source.path).read_bytes() == before
+
+
+@pytest.mark.capability("selector:xtb:opt:reached_positions")
+@pytest.mark.capability("tool:bind_reached_geometry")
+def test_a_validated_xtb_optimum_is_carried_from_its_exact_sidecar(tmp_path):
+    """The later-cycle consumer must reach xTB's actual ``xtbopt.xyz``.
+
+    The n-hexane goal proved that an xTB optimisation's sidecar is present
+    and that an in-cycle producer edge can bind it.  At the wave barrier the
+    next Agent session sees the archived ``xtb_output`` instead, so this
+    public recovery route is the discriminating consumer: it must select the
+    declared ``as_reached`` result role and write the exact final frame,
+    rather than silently falling back to the input geometry or requiring the
+    Agent to copy coordinates.
+    """
+
+    from chemsmart.analysis.result_readers import reader_for
+
+    reader = reader_for("xtb")
+    output = reader.open_output(_XTB_OPT)
+    assert output.jobtype == "opt"
+    assert "reached_positions" in reader.selectors_in_state_for_output(
+        output, "as_reached"
+    )
+
+    artifact, receipt = build_reached_geometry(
+        approved_workspace=tmp_path,
+        reached_artifact_id="co2-optimum",
+        result_artifact=_xtb_artifact(),
+        program="xtb",
+    )
+
+    expected, _unit = reader.read(output, "reached_positions")
+    observed = np.asarray(
+        [
+            line.split()[1:4]
+            for line in Path(artifact.path).read_text().splitlines()[2:]
+        ],
+        dtype=float,
+    )
+    assert np.allclose(observed, np.asarray(expected), atol=1e-12)
+    assert receipt.source_result_sha256 == _xtb_artifact().sha256
+    assert dict(receipt.source_result_level) == {"method": "GFN2-xTB"}
+    assert receipt.source_geometry_filename == "xtbopt.xyz"
+    assert (
+        receipt.source_geometry_sha256
+        == hashlib.sha256(
+            (_XTB_OPT.parent / "xtbopt.xyz").read_bytes()
+        ).hexdigest()
+    )
+    assert receipt.normal_termination is True
+
+
+@pytest.mark.capability("tool:bind_reached_geometry")
+@pytest.mark.capability("selector:xtb:opt:reached_positions")
+@pytest.mark.capability("program_jobtype:pyscf:cpu:sp")
+def test_xtb_reached_geometry_can_anchor_a_new_pyscf_calculation(tmp_path):
+    """One program-neutral handoff, then a distinct new electronic level.
+
+    The test drives the public session tools from an archived xTB result into
+    a PySCF calculation plan.  It is deliberately a *new* plan after an
+    explicit charge/multiplicity binding: the geometry travels, but neither
+    the xTB stationary-point verdict nor its electronic surface does.
+    """
+
+    from chemsmart.agent.runtime.event_store import RuntimeEventStore
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(
+            tmp_path / "events.jsonl", session_id="cross-program"
+        ),
+        artifacts={"xtb-opt": _xtb_artifact()},
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=workspace,
+    )
+    carried = host.dispatch(
+        turn_id="t1",
+        tool_name="bind_reached_geometry",
+        arguments={
+            "artifact_id": "xtb-opt",
+            "reached_artifact_id": "co2-xtb-reached",
+            "program": "xtb",
+        },
+    )["result"]
+    assert carried["artifact"]["kind"] == "geometry_xyz"
+    assert dict(carried["reached_geometry"]["source_result_level"]) == {
+        "method": "GFN2-xTB"
+    }
+    host.dispatch(
+        turn_id="t2",
+        tool_name="bind_scientific_identity",
+        arguments={
+            "input_artifact_id": "co2-xtb-reached",
+            "charge": 0,
+            "multiplicity": 1,
+        },
+    )
+    planned = host.dispatch(
+        turn_id="t3",
+        tool_name="plan_scientific_workflow",
+        arguments={
+            "plan_id": "xtb-geometry-pyscf-sp",
+            "workflow_id": "xtb-geometry-pyscf-sp",
+            "task_spec_id": "a" * 64,
+            "required_output_ids": [],
+            "analysis_nodes": [],
+            "calculation_nodes": [
+                {
+                    "node_id": "pyscf-sp",
+                    "program": "pyscf",
+                    "jobtype": "sp",
+                    "project_role": "project.pyscf",
+                    "dependencies": [],
+                    "inputs": [
+                        {
+                            "binding_id": "geometry.initial",
+                            "artifact_id": "co2-xtb-reached",
+                            "artifact_class": "xyz",
+                            "producer_node_id": "",
+                            "producer_output_id": "",
+                        }
+                    ],
+                    "expected_outputs": [
+                        {
+                            "output_id": "structured-result",
+                            "artifact_class": "pyscf_hdf5",
+                        }
+                    ],
+                    "unresolved_fields": [],
+                    "produces_observables": [],
+                    "support_state": "planned",
+                    "blocked_reason": "",
+                }
+            ],
+        },
+    )["result"]
+    assert planned["workflow_frontier"]["actionable_node_ids"] == ["pyscf-sp"]
+    draft = host._latest_program_workflows["xtb-geometry-pyscf-sp"].draft
+    node = draft.nodes[0]
+    assert node.program == "pyscf"
+    assert node.inputs[0].artifact_id == carried["artifact"]["artifact_id"]
+    assert any(
+        binding.geometry_artifact_sha256 == carried["artifact"]["sha256"]
+        and binding.charge == 0
+        and binding.multiplicity == 1
+        for binding in host.scientific_identities.values()
+    )
 
 
 @pytest.mark.capability("tool:bind_reached_geometry")

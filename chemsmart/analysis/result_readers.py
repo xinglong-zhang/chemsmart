@@ -38,6 +38,7 @@ __all__ = [
     "registered_reader_jobtype_selectors",
     "registered_reader_programs",
     "registered_reader_selectors",
+    "atom_resolved_selector_metadata",
 ]
 
 
@@ -144,6 +145,7 @@ SELECTOR_UNITS = {
     "mulliken_atomic_charges": "e",
     "hirshfeld_atomic_charges": "e",
     "loewdin_atomic_charges": "e",
+    "xtb_scc_atomic_charges": "e",
     "mulliken_atomic_spin_populations": "1",
     "loewdin_atomic_spin_populations": "1",
     "functional": "",
@@ -155,6 +157,50 @@ SELECTOR_UNITS = {
     "solvent": "",
     "surface_id": "",
 }
+
+
+# A selector is the semantic identity of an atom-resolved population.  This
+# small registry is deliberately descriptive: it tells the Agent what the
+# host extracted and how vector indices align, but never turns a Mulliken,
+# Loewdin, Hirshfeld, or xTB SCC population into a common "atomic charge".
+_ATOM_RESOLVED_SELECTOR_METADATA: Mapping[str, Mapping[str, str]] = {
+    "mulliken_atomic_charges": {
+        "semantic_quantity": "atomic_partial_charge",
+        "population_scheme": "Mulliken",
+        "atom_order": "zero-based molecular atom order",
+    },
+    "loewdin_atomic_charges": {
+        "semantic_quantity": "atomic_partial_charge",
+        "population_scheme": "Loewdin",
+        "atom_order": "zero-based molecular atom order",
+    },
+    "hirshfeld_atomic_charges": {
+        "semantic_quantity": "atomic_partial_charge",
+        "population_scheme": "Hirshfeld",
+        "atom_order": "zero-based molecular atom order",
+    },
+    "xtb_scc_atomic_charges": {
+        "semantic_quantity": "atomic_partial_charge",
+        "population_scheme": "xTB self-consistent-charge population",
+        "atom_order": "zero-based molecular atom order",
+    },
+    "mulliken_atomic_spin_populations": {
+        "semantic_quantity": "atomic_spin_population",
+        "population_scheme": "Mulliken",
+        "atom_order": "zero-based molecular atom order",
+    },
+    "loewdin_atomic_spin_populations": {
+        "semantic_quantity": "atomic_spin_population",
+        "population_scheme": "Loewdin",
+        "atom_order": "zero-based molecular atom order",
+    },
+}
+
+
+def atom_resolved_selector_metadata(selector: str) -> dict[str, str]:
+    """Return declared population semantics, or an explicit empty mapping."""
+
+    return dict(_ATOM_RESOLVED_SELECTOR_METADATA.get(selector, {}))
 
 
 def _last_energy(output: Any) -> float:
@@ -849,6 +895,13 @@ class ResultReaderV1:
     open_output: Callable[[Path], Any]
     #: Selector name to a callable reading it from the parser object.
     accessors: dict[str, Callable[[Any], Any]]
+    #: Optional native file that supplied one structural selector.  Most
+    #: readers obtain coordinates from the bound result artifact itself; xTB
+    #: reaches its final optimisation frame through ``xtbopt.*`` beside the
+    #: main log.  The shared handoff seals that sidecar's digest when present.
+    geometry_source_path_for_selector: (
+        Callable[[Any, str], Path | None] | None
+    ) = None
     #: Program-native units that differ from the shared selector display unit.
     source_units: Mapping[str, str] = field(default_factory=dict)
     #: Selectors this parser can extract from a program job type when the
@@ -1013,6 +1066,16 @@ class ResultReaderV1:
         if self.resolve_level is None:
             return {}
         return dict(self.resolve_level(output))
+
+    def geometry_source_path_for_output(
+        self, output: Any, selector: str
+    ) -> Path | None:
+        """Return the exact native geometry file behind a selector, if any."""
+
+        if self.geometry_source_path_for_selector is None:
+            return None
+        path = self.geometry_source_path_for_selector(output, selector)
+        return Path(path) if path is not None else None
 
     def selectors_in_state(self, state: str) -> tuple[str, ...]:
         """Every selector this reader serves for one structural state."""
@@ -2050,6 +2113,81 @@ def _xtb_gibbs(output: Any) -> float:
     return float(value)
 
 
+def _xtb_reached_positions(output: Any) -> list[list[float]]:
+    """Return only a converged optimisation's own final ``xtbopt`` frame.
+
+    ``XTBOutput.molecule`` is deliberately broad: a Hessian may reconstruct
+    a frame from a Gaussian-format sidecar and a single point from its input.
+    Those are inspectable structures, not proof that the stage reached a new
+    geometry.  The recovery consumer asks for this stricter role.
+    """
+
+    if str(getattr(output, "jobtype", "") or "").casefold() != "opt":
+        raise MissingQuantityError(
+            "reached positions require an xTB optimisation result"
+        )
+    molecule = getattr(output, "optimized_structure", None)
+    if molecule is None:
+        raise MissingQuantityError(
+            "this xTB optimisation did not normally converge with a readable "
+            "xtbopt final geometry"
+        )
+    return [[float(value) for value in row] for row in molecule.positions]
+
+
+def _xtb_scc_atomic_charges(output: Any) -> list[float]:
+    """Read xTB's positional SCC population without relabelling its scheme."""
+
+    charges_file = getattr(output, "charges_file", None)
+    values = getattr(charges_file, "partial_charges", None)
+    symbols = _symbols(output)
+    if values is None:
+        raise MissingQuantityError(
+            "this xTB result wrote no SCC atomic-population charges sidecar"
+        )
+    charges = [float(value) for value in values]
+    if len(charges) != len(symbols):
+        raise MissingQuantityError(
+            "xTB SCC atomic-population sidecar has "
+            f"{len(charges)} values for {len(symbols)} atoms"
+        )
+    total = getattr(output, "charge", None)
+    if total is not None and abs(sum(charges) - float(total)) > 1e-3:
+        raise MissingQuantityError(
+            "xTB SCC atomic-population charges sum to "
+            f"{sum(charges):.6f} e while the result's total charge is "
+            f"{float(total):.6f} e"
+        )
+    return charges
+
+
+def _xtb_level(output: Any) -> dict[str, Any]:
+    """Return the applied xTB Hamiltonian and solvent from result bytes."""
+
+    level: dict[str, Any] = {}
+    hamiltonian = getattr(output, "hamiltonian", None)
+    if hamiltonian not in (None, ""):
+        level["method"] = str(hamiltonian)
+    if getattr(output, "solvent_on", False):
+        model = getattr(output, "solvent_model", None)
+        solvent = getattr(output, "solvent_id", None)
+        if model not in (None, ""):
+            level["solvent_model"] = str(model)
+        if solvent not in (None, ""):
+            level["solvent"] = str(solvent)
+    return level
+
+
+def _xtb_geometry_source_path(output: Any, selector: str) -> Path | None:
+    """Name the xTB sidecar only for the reached-optimisation selector."""
+
+    if selector != "reached_positions":
+        return None
+    geometry_file = getattr(output, "xtbopt_geometry_file", None)
+    path = getattr(geometry_file, "filepath", None)
+    return Path(str(path)) if path else None
+
+
 def _gaussian_frontier(attribute: str) -> Callable[[Any], float]:
     """Closed-shell frontier value; open-shell refuses rather than collapses.
 
@@ -2081,6 +2219,7 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
         "charge": _xtb_state_integer("charge"),
         "multiplicity": _xtb_state_integer("multiplicity"),
         "gibbs_free_energy": _xtb_gibbs,
+        "reached_positions": _xtb_reached_positions,
         "vibrational_mode_atom_participation": (
             _vibrational_mode_atom_participation
         ),
@@ -2091,6 +2230,7 @@ def _xtb_accessors() -> dict[str, Callable[[Any], Any]]:
             float(item) for item in output.vibrational_frequencies
         ],
         "positions": _positions,
+        "xtb_scc_atomic_charges": _xtb_scc_atomic_charges,
         "connectivity": lambda output: _connectivity_matrix(output.molecule),
         "symbols": _symbols,
         # xTB prints vector components in atomic units but the trailing total
@@ -3458,6 +3598,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
         open_output=_xtb_output,
         accessors=_xtb_accessors(),
         source_units={"dipole_moment": "e bohr"},
+        geometry_source_path_for_selector=_xtb_geometry_source_path,
         jobtype_selectors=(
             (
                 "hess",
@@ -3477,6 +3618,7 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "vibrational_frequencies",
                     "vibrational_mode_atom_participation",
                     "vibrational_mode_degeneracy_group",
+                    "xtb_scc_atomic_charges",
                 ),
             ),
             (
@@ -3493,7 +3635,9 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "lumo",
                     "multiplicity",
                     "positions",
+                    "reached_positions",
                     "symbols",
+                    "xtb_scc_atomic_charges",
                 ),
             ),
             (
@@ -3508,9 +3652,38 @@ RESULT_READERS: dict[str, ResultReaderV1] = {
                     "lumo",
                     "positions",
                     "symbols",
+                    "xtb_scc_atomic_charges",
                 ),
             ),
         ),
+        selector_structural_states=tuple(
+            sorted(
+                [
+                    ("charge", "as_reached"),
+                    ("connectivity", "as_reached"),
+                    ("dipole_moment", "as_reached"),
+                    ("dipole_moment_magnitude", "as_reached"),
+                    ("energy", "as_reached"),
+                    ("gap", "as_reached"),
+                    ("gibbs_free_energy", "as_reached"),
+                    ("homo", "as_reached"),
+                    ("lumo", "as_reached"),
+                    ("multiplicity", "as_reached"),
+                    ("positions", "as_reached"),
+                    ("reached_positions", "as_reached"),
+                    ("symbols", "stateless"),
+                    ("vibrational_frequencies", "as_reached"),
+                    ("vibrational_mode_atom_participation", "as_reached"),
+                    ("vibrational_mode_degeneracy_group", "as_reached"),
+                    ("xtb_scc_atomic_charges", "as_reached"),
+                ]
+            )
+        ),
+        # xTB's parsed record names its Hamiltonian but does not yet carry a
+        # program-neutral electronic-surface identity.  Leave that axis
+        # absent rather than labelling every quantity ``computed_surface``
+        # without an identity a consumer can resolve.
+        resolve_level=_xtb_level,
     ),
     "pyscf": ResultReaderV1(
         program="pyscf",
@@ -3649,6 +3822,7 @@ _SELECTOR_DIMENSIONS = {
     "mulliken_atomic_charges": "CHARGE",
     "hirshfeld_atomic_charges": "CHARGE",
     "loewdin_atomic_charges": "CHARGE",
+    "xtb_scc_atomic_charges": "CHARGE",
     "solvent": "DIMENSIONLESS",
 }
 
@@ -3835,8 +4009,18 @@ def extract_logged_quantities(
     # where the number is cited.  Present on the body only when a reader
     # declares the axis, so every receipt minted before it verifies.
     provenance: list[tuple[str, str]] = []
+    # A model-selected quantity id has no scientific semantics by itself.
+    # Keep its host selector and structural role in the digest-bearing record,
+    # including explicit absences, so a later cycle need not recover them from
+    # an ephemeral tool event.
+    bindings: list[tuple[str, str]] = []
+    states: list[tuple[str, str]] = []
     positions_delivered = False
     for selector in request.selectors:
+        bindings.append((selector.quantity_id, selector.selector))
+        states.append(
+            (selector.quantity_id, reader.structural_state(selector.selector))
+        )
         try:
             source_value, source_unit = reader.read(output, selector.selector)
         except MissingQuantityError as exc:
@@ -3925,6 +4109,9 @@ def extract_logged_quantities(
             _derived_adjacency(reader, output) if positions_delivered else ()
         ),
         electronic_provenance=tuple(provenance),
+        selector_bindings=tuple(bindings),
+        structural_states=tuple(states),
+        level=reader.level_for_output(output),
     )
     return rq.QuantityExtractionReceiptV1(
         **body, receipt_sha256=rq.canonical_quantity_sha256(body)

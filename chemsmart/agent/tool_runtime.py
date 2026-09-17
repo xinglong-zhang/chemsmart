@@ -292,6 +292,7 @@ from chemsmart.analysis.result_quantities import (
     thermochemistry_receipt_from_record,
 )
 from chemsmart.analysis.result_readers import (
+    atom_resolved_selector_metadata,
     reader_for,
     registered_reader_programs,
 )
@@ -2619,15 +2620,34 @@ class CommandCompiledToolHostV1:
                     record, receipt_sha256=receipt_sha256
                 )
                 self.quantity_extractions[receipt_sha256] = receipt
-                bindings = event.payload.get("selector_bindings") or {}
-                if not isinstance(bindings, Mapping):
+                # New receipts own their selector pairing.  Earlier streams
+                # recorded it only in the event payload, so retain that
+                # compatibility route but never let a redundant event rewrite
+                # the digest-bound scientific scheme.
+                recorded_bindings = event.payload.get("selector_bindings")
+                if recorded_bindings is not None and not isinstance(
+                    recorded_bindings, Mapping
+                ):
                     raise ContractError(
                         "persisted extraction selector bindings are invalid"
                     )
-                normalized_bindings = {
+                event_bindings = {
                     str(quantity_id): str(selector)
-                    for quantity_id, selector in bindings.items()
+                    for quantity_id, selector in (
+                        recorded_bindings or {}
+                    ).items()
                 }
+                receipt_bindings = dict(receipt.selector_bindings)
+                if (
+                    receipt_bindings
+                    and event_bindings
+                    and (receipt_bindings != event_bindings)
+                ):
+                    raise ContractError(
+                        "persisted extraction event disagrees with its "
+                        "digest-bound selector bindings"
+                    )
+                normalized_bindings = receipt_bindings or event_bindings
                 self.quantity_extraction_bindings[receipt_sha256] = (
                     normalized_bindings
                 )
@@ -7937,8 +7957,7 @@ class CommandCompiledToolHostV1:
             ready=tuple(context.ready_node_ids),
             edges=edges,
             planned=tuple(
-                str(node.node_id)
-                for node in getattr(draft, "nodes", ()) or ()
+                str(node.node_id) for node in getattr(draft, "nodes", ()) or ()
             ),
         )
         dispatchable = bool(verdict.rows) and all(
@@ -16136,6 +16155,14 @@ class CommandCompiledToolHostV1:
                 )
                 for selector in requestable
             },
+            # Population values remain the scheme that produced them.  The
+            # metadata conveys that fact and the vector's atom order without
+            # asserting that different schemes are interchangeable.
+            "atom_resolved_metadata": {
+                selector: atom_resolved_selector_metadata(selector)
+                for selector in requestable
+                if atom_resolved_selector_metadata(selector)
+            },
             # The level this artifact computed at, from its own record --
             # method, basis, frozen core, the response and the followed
             # root -- so a session names it beside the number it delivers
@@ -16176,6 +16203,9 @@ class CommandCompiledToolHostV1:
                 absent=receipt.absent,
                 derived_adjacency=receipt.derived_adjacency,
                 electronic_provenance=receipt.electronic_provenance,
+                selector_bindings=receipt.selector_bindings,
+                structural_states=receipt.structural_states,
+                level=receipt.level,
             )
         )
         self._emit(

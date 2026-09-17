@@ -43,6 +43,7 @@ _PHENOXIDE = Path(
 _DEFAULT_SCHEMES = ("mulliken_atomic_charges", "loewdin_atomic_charges")
 #: Every declared scheme, including the one a route directive must request.
 _SCHEMES = _DEFAULT_SCHEMES + ("hirshfeld_atomic_charges",)
+_XTB_SCC = "xtb_scc_atomic_charges"
 _HIRSHFELD = Path("tests/data/ORCATests/outputs/udc3_ts1_c15_sp_hirshfeld.out")
 
 
@@ -96,6 +97,27 @@ def test_each_scheme_is_typed_as_a_charge(selector):
     assert getattr(rq, _SELECTOR_DIMENSIONS[selector]) == CHARGE
 
 
+def test_xtb_scc_population_is_typed_and_stays_out_of_mulliken_names():
+    """The xTB sidecar is positional, but its SCC scheme is not Mulliken."""
+
+    import chemsmart.analysis.result_quantities as rq
+
+    assert _XTB_SCC in SUPPORTED_SELECTORS
+    assert SELECTOR_UNITS[_XTB_SCC] == "e"
+    assert getattr(rq, _SELECTOR_DIMENSIONS[_XTB_SCC]) == CHARGE
+    reader = RESULT_READERS["xtb"]
+    output = reader.open_output(
+        Path("tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out")
+    )
+    values, unit = reader.read(output, _XTB_SCC)
+    symbols, _ = reader.read(output, "symbols")
+    total, _ = reader.read(output, "charge")
+    assert unit == "e"
+    assert len(values) == len(symbols) == 3
+    assert sum(values) == pytest.approx(float(total), abs=1e-3)
+    assert "mulliken_atomic_charges" not in reader.accessors
+
+
 @pytest.mark.parametrize("selector", _DEFAULT_SCHEMES)
 def test_the_charges_sum_to_the_molecular_charge(selector):
     """The physical checksum that also proves the ordering is complete.
@@ -142,11 +164,13 @@ def test_each_program_declares_only_the_schemes_its_output_carries():
         "orca": set(_SCHEMES),
         "pyscf": {"mulliken_atomic_charges"},
         "gaussian": set(),
-        "xtb": set(),
+        "xtb": {_XTB_SCC},
         "xyz": set(),
     }
     for program, reader in RESULT_READERS.items():
-        carried = {name for name in _SCHEMES if name in reader.accessors}
+        carried = {
+            name for name in (*_SCHEMES, _XTB_SCC) if name in reader.accessors
+        }
         assert carried == expected[program], program
 
     # Parsed and deliberately undeclared: reaching Hirshfeld or CM5 needs a

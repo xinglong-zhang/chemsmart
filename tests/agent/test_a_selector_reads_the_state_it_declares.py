@@ -418,3 +418,47 @@ def test_the_inspection_reply_names_the_level_beside_each_selectors_axes(
     assert correlated["electronic_provenance"]["energy"] == "correlated"
     assert correlated["electronic_provenance"]["scf_energy"] == "reference"
     assert "triples_correction" in correlated["requestable_selectors"]
+
+
+@pytest.mark.capability("tool:inspect_run")
+@pytest.mark.capability("selector:xtb:opt:xtb_scc_atomic_charges")
+def test_an_xtb_population_reaches_the_agent_with_its_own_scheme(tmp_path):
+    """The inspection reply must not call an SCC population generic charge."""
+
+    from chemsmart.agent._contracts import TrustedArtifactRefV1, file_sha256
+    from chemsmart.agent.runtime.event_store import RuntimeEventStore
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    path = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+    )
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(
+            tmp_path / "events.jsonl", session_id="xtb-populations"
+        ),
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=tmp_path / "workspace",
+    )
+    host.artifacts["co2-opt"] = TrustedArtifactRefV1(
+        artifact_id="co2-opt",
+        kind="xtb_output",
+        sha256=file_sha256(path),
+        size_bytes=path.stat().st_size,
+        path=str(path),
+        cli_value=str(path),
+    )
+
+    inspected = host._inspect_run(
+        "t1", {"program": "xtb", "artifact_id": "co2-opt"}
+    )
+    assert "xtb_scc_atomic_charges" in inspected["requestable_selectors"]
+    assert "mulliken_atomic_charges" not in inspected["requestable_selectors"]
+    assert inspected["atom_resolved_metadata"] == {
+        "xtb_scc_atomic_charges": {
+            "semantic_quantity": "atomic_partial_charge",
+            "population_scheme": "xTB self-consistent-charge population",
+            "atom_order": "zero-based molecular atom order",
+        }
+    }
+    assert inspected["level"] == {"method": "GFN2-xTB"}

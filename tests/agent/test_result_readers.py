@@ -19,7 +19,10 @@ import pytest
 
 from chemsmart.agent._contracts import ContractError, TrustedArtifactRefV1
 from chemsmart.agent.capabilities import CapabilityQueryV1, query_capability
-from chemsmart.agent.postprocessing import extract_trusted_result_quantities
+from chemsmart.agent.postprocessing import (
+    derive_trusted_thermochemistry,
+    extract_trusted_result_quantities,
+)
 from chemsmart.agent.tool_specs import build_command_compiled_tool_surface
 from chemsmart.analysis.result_quantities import (
     QuantitySelectorV1,
@@ -754,6 +757,144 @@ def test_xtb_optimised_geometry_enters_the_shared_quantity_plane():
     # Linear CO2: both oxygens bond the carbon and neither bonds the other.
     assert values["c"] == ((0, 0, 1), (0, 0, 1), (1, 1, 0))
     assert values["r"][0][0] == pytest.approx(-values["r"][1][0])
+
+
+@pytest.mark.capability("selector:xtb:opt:xtb_scc_atomic_charges")
+def test_xtb_evidence_keeps_geometry_role_population_scheme_and_level():
+    """A later Agent turn receives host facts, not parser folklore.
+
+    This is the receipt consumer of the xTB reader: it proves that the
+    optimised geometry, exact SCC population selector, atom order and applied
+    Hamiltonian survive beyond a tool reply in one digest-bound artifact.
+    """
+
+    path = "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+    receipt = extract_trusted_result_quantities(
+        artifact=_artifact(path, "xtb", "co2-opt"),
+        program="xtb",
+        selectors=(
+            QuantitySelectorV1(
+                quantity_id="charges", selector="xtb_scc_atomic_charges"
+            ),
+            QuantitySelectorV1(
+                quantity_id="optimum", selector="reached_positions"
+            ),
+            QuantitySelectorV1(quantity_id="elements", selector="symbols"),
+        ),
+    )
+    assert receipt.selector_bindings == (
+        ("charges", "xtb_scc_atomic_charges"),
+        ("optimum", "reached_positions"),
+        ("elements", "symbols"),
+    )
+    assert receipt.structural_states == (
+        ("charges", "as_reached"),
+        ("optimum", "as_reached"),
+        ("elements", "stateless"),
+    )
+    assert receipt.level == {"method": "GFN2-xTB"}
+    delivered = {item.quantity_id: item.value for item in receipt.quantities}
+    assert delivered["elements"] == ("O", "O", "C")
+    assert sum(delivered["charges"]) == pytest.approx(0.0, abs=1e-3)
+
+
+@pytest.mark.capability("selector:xtb:hess:vibrational_frequencies")
+@pytest.mark.capability("tool:derive_thermochemistry")
+def test_xtb_hessian_fixture_reaches_frequency_and_rrho_consumers():
+    """A real xTB Hessian is readable after the geometry handoff boundary.
+
+    This is deliberately an extraction and thermochemistry consumer, rather
+    than a declaration check: once a later xTB Hessian exists, the host must
+    carry its native frequencies and the deterministic RRHO result forward.
+    """
+
+    path = (
+        "tests/data/XTBTests/outputs/acetaldehyde_hess/acetaldehyde_hess.out"
+    )
+    artifact = _artifact(path, "xtb", "acetaldehyde-hess")
+    extracted = extract_trusted_result_quantities(
+        artifact=artifact,
+        program="xtb",
+        selectors=(
+            QuantitySelectorV1(
+                quantity_id="frequencies",
+                selector="vibrational_frequencies",
+            ),
+            QuantitySelectorV1(
+                quantity_id="printed_gibbs",
+                selector="gibbs_free_energy",
+            ),
+        ),
+    )
+    delivered = {item.quantity_id: item for item in extracted.quantities}
+    assert len(delivered["frequencies"].value) == 15
+    assert delivered["frequencies"].unit == "cm^-1"
+    assert delivered["printed_gibbs"].value == pytest.approx(-10.327400274869)
+
+    thermochemistry = derive_trusted_thermochemistry(
+        artifact=artifact,
+        program="xtb",
+        temperature_k=298.15,
+        pressure_atm=1.0,
+    )
+    rrho = {item.quantity_id: item for item in thermochemistry.quantities}
+    assert rrho["gibbs_free_energy"].value == pytest.approx(
+        -10.327407800782598
+    )
+    assert rrho["gibbs_free_energy"].evidence_ref == (
+        f"artifact:{artifact.artifact_id}#{artifact.sha256}"
+    )
+
+
+@pytest.mark.capability("tool:extract_result_quantities")
+@pytest.mark.capability("selector:xtb:opt:xtb_scc_atomic_charges")
+def test_an_extracted_xtb_population_rehydrates_from_its_durable_record(
+    tmp_path,
+):
+    """A later Agent session reads the receipt, not a lost event-only key."""
+
+    from chemsmart.agent.runtime.event_store import RuntimeEventStore
+    from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+
+    path = "tests/data/XTBTests/outputs/co2_ohess/co2_ohess.out"
+    artifact = _artifact(path, "xtb", "co2-opt")
+    event_path = tmp_path / "events.jsonl"
+    host = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(event_path, session_id="x1"),
+        artifacts={artifact.artifact_id: artifact},
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=tmp_path / "workspace",
+    )
+    receipt = host._extract_result_quantities(
+        "turn-1",
+        {
+            "program": "xtb",
+            "artifact_id": artifact.artifact_id,
+            "selectors": [
+                {
+                    "quantity_id": "charges",
+                    "selector": "xtb_scc_atomic_charges",
+                },
+                {
+                    "quantity_id": "optimum",
+                    "selector": "reached_positions",
+                },
+            ],
+        },
+    )
+    rehydrated = CommandCompiledToolHostV1(
+        event_store=RuntimeEventStore(event_path, session_id="x1"),
+        task_spec_sha256s=("a" * 64,),
+        approved_workspace=tmp_path / "workspace",
+    )
+    restored = rehydrated.quantity_extractions[receipt.receipt_sha256]
+    assert restored.selector_bindings == receipt.selector_bindings
+    assert restored.structural_states == receipt.structural_states
+    assert restored.level == {"method": "GFN2-xTB"}
+    assert rehydrated.quantity_extraction_bindings[receipt.receipt_sha256] == {
+        "charges": "xtb_scc_atomic_charges",
+        "optimum": "reached_positions",
+    }
 
 
 def test_gaussian_does_not_infer_multiplicity_from_open_shell_td_labels():

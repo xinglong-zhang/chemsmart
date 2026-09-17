@@ -4245,6 +4245,17 @@ class ReachedGeometryReceiptV1:
     atom_count: int
     formula: str
     receipt_sha256: str
+    #: An optimisation adapter may read its final geometry from a native
+    #: sidecar rather than from the result file itself.  These optional fields
+    #: seal that exact source bytes without breaking older receipts whose
+    #: geometry was in the primary artifact.
+    source_geometry_filename: str = ""
+    source_geometry_sha256: str = ""
+    #: The source result's own level record.  A geometry can travel to a new
+    #: calculation, but the source level must stay visible rather than be
+    #: inferred from an old project file or mistaken for the new stage's
+    #: level.  Empty means this program result did not declare one.
+    source_result_level: tuple[tuple[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if self.schema_version != "chemsmart.reached-geometry.v1":
@@ -4252,6 +4263,32 @@ class ReachedGeometryReceiptV1:
         require_identifier(self.reached_artifact_id, "reached_artifact_id")
         require_sha256(self.reached_artifact_sha256, "reached_artifact_sha256")
         require_sha256(self.source_result_sha256, "source_result_sha256")
+        if bool(self.source_geometry_filename) != bool(
+            self.source_geometry_sha256
+        ):
+            raise ContractError(
+                "reached geometry source filename and digest travel together"
+            )
+        if self.source_geometry_sha256:
+            require_sha256(
+                self.source_geometry_sha256, "source_geometry_sha256"
+            )
+            if (
+                Path(self.source_geometry_filename).name
+                != self.source_geometry_filename
+            ):
+                raise ContractError(
+                    "reached geometry source filename must not contain a path"
+                )
+        if self.source_result_level != tuple(
+            sorted(self.source_result_level)
+        ) or len({key for key, _value in self.source_result_level}) != len(
+            self.source_result_level
+        ):
+            raise ContractError(
+                "reached geometry source-result level keys must be sorted "
+                "and unique"
+            )
         require_identifier(self.program, "program")
         if self.recorded_node_id:
             require_identifier(self.recorded_node_id, "recorded_node_id")
@@ -4261,7 +4298,7 @@ class ReachedGeometryReceiptV1:
             raise ContractError("reached geometry digest mismatch")
 
     def _body(self) -> dict[str, Any]:
-        return {
+        body = {
             "schema_version": self.schema_version,
             "reached_artifact_id": self.reached_artifact_id,
             "reached_artifact_sha256": self.reached_artifact_sha256,
@@ -4274,6 +4311,12 @@ class ReachedGeometryReceiptV1:
             "atom_count": self.atom_count,
             "formula": self.formula,
         }
+        if self.source_geometry_sha256:
+            body["source_geometry_filename"] = self.source_geometry_filename
+            body["source_geometry_sha256"] = self.source_geometry_sha256
+        if self.source_result_level:
+            body["source_result_level"] = self.source_result_level
+        return body
 
 
 def _recorded_ending_for(
@@ -4324,7 +4367,16 @@ def build_reached_geometry(
             f"carrying a reached geometry out of {normalized} requires a "
             f"{reader.artifact_kind} artifact, not {result_artifact.kind!r}"
         )
-    output = reader.open_output(Path(result_artifact.path))
+    source_result_path = _require_current_artifact(
+        result_artifact, "source result artifact"
+    )
+    output = reader.open_output(source_result_path)
+    source_result_level = tuple(
+        sorted(
+            (str(key), canonical_data(value))
+            for key, value in reader.level_for_output(output).items()
+        )
+    )
     # Ask for the *role*, not an accessor name. This called
     # `accessors["positions"]` directly, and for ORCA that selector
     # reads `thermochemistry_molecule` -- the geometry the Hessian was
@@ -4373,6 +4425,26 @@ def build_reached_geometry(
                 or "none"
             )
         )
+    sidecar_path = reader.geometry_source_path_for_output(
+        output, geometry_selectors[0]
+    )
+    source_geometry_filename = ""
+    source_geometry_sha256 = ""
+    if sidecar_path is not None:
+        if not sidecar_path.is_file() or sidecar_path.is_symlink():
+            raise ContractError(
+                "the result's native geometry sidecar is not a regular file"
+            )
+        resolved_sidecar = sidecar_path.resolve()
+        try:
+            resolved_sidecar.relative_to(source_result_path.parent)
+        except ValueError as exc:
+            raise ContractError(
+                "the result's native geometry sidecar escapes its result "
+                "directory"
+            ) from exc
+        source_geometry_filename = resolved_sidecar.name
+        source_geometry_sha256 = file_sha256(resolved_sidecar)
     try:
         positions = np.asarray(
             reader.accessors[geometry_selectors[0]](output), dtype=float
@@ -4383,6 +4455,16 @@ def build_reached_geometry(
             f"this {normalized} result carries no readable geometry, so "
             "there is no reached structure to carry forward"
         ) from error
+    if file_sha256(source_result_path) != result_artifact.sha256:
+        raise ContractError(
+            "source result artifact changed while carrying geometry"
+        )
+    if sidecar_path is not None and (
+        file_sha256(sidecar_path) != source_geometry_sha256
+    ):
+        raise ContractError(
+            "native geometry sidecar changed while carrying geometry"
+        )
     if (
         positions.ndim != 2
         or positions.shape[1] != 3
@@ -4451,6 +4533,19 @@ def build_reached_geometry(
         "normal_termination": normal,
         "atom_count": len(symbols),
         "formula": formula,
+        **(
+            {
+                "source_geometry_filename": source_geometry_filename,
+                "source_geometry_sha256": source_geometry_sha256,
+            }
+            if source_geometry_sha256
+            else {}
+        ),
+        **(
+            {"source_result_level": source_result_level}
+            if source_result_level
+            else {}
+        ),
     }
     return artifact, ReachedGeometryReceiptV1(
         **body, receipt_sha256=canonical_sha256(body)
