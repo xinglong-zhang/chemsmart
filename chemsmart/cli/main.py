@@ -15,6 +15,7 @@ from .config import config
 from .run import run
 from .sub import sub
 from .update import update
+from .plugins import COMMANDS, add_commands
 
 
 @click.group(cls=MyGroup)
@@ -69,6 +70,7 @@ entry_point.add_command(run)
 entry_point.add_command(sub)
 entry_point.add_command(config)
 entry_point.add_command(update)
+add_commands(COMMANDS, entry_point, ())
 
 
 def main():  # pragma: no cover
