@@ -457,6 +457,7 @@ def _delivery_rows(
     failed_rule=False,
     claim_source="",
     doubt_ref="",
+    validation_ref="",
 ):
     """Stream shapes drawn from the live goal round's three sessions."""
 
@@ -472,6 +473,7 @@ def _delivery_rows(
                 "kind": "scientific_validation_evaluated",
                 "payload": {
                     "receipt_sha256": "f" * 64,
+                    "all_rules_passed": False,
                     "record": {
                         "rule_results": ({"rule_id": "same", "passed": False},)
                     },
@@ -497,9 +499,17 @@ def _delivery_rows(
         )
     if decision:
         decision_payload = {}
-        if doubt_ref:
+        references = tuple(
+            item
+            for item in (
+                "doubt:" + doubt_ref if doubt_ref else "",
+                "receipt:" + validation_ref if validation_ref else "",
+            )
+            if item
+        )
+        if references:
             decision_payload["record"] = {
-                "evidence_refs": ("doubt:" + doubt_ref,)
+                "evidence_refs": references,
             }
         rows.append(
             {
@@ -614,12 +624,10 @@ def test_an_uncertified_delivery_returns_naming_the_gate(tmp_path):
     assert any("completion gate" in reason for reason in result.reasons)
 
 
-def test_a_failed_rule_is_not_a_refusal(tmp_path):
-    """The hazard the seal named and the round left unexercised: a
-    delivering session whose stream holds one honestly failed
-    validation rule must not settle as a refusal."""
+def test_a_failed_rule_requires_a_scientist_to_answer_it(tmp_path):
+    """A failed validation is evidence, not a refusal or clean delivery."""
 
-    result = _loop(
+    unanswered = _loop(
         tmp_path,
         sessions=[
             _planning_session(
@@ -630,7 +638,26 @@ def test_a_failed_rule_is_not_a_refusal(tmp_path):
         ],
         executes=[],
     )
-    assert result.settlement == "achieved"
+    assert unanswered.settlement == "returned_to_human"
+    assert any(
+        "no recorded decision cites" in reason for reason in unanswered.reasons
+    )
+
+    answered = _loop(
+        tmp_path / "answered",
+        sessions=[
+            _planning_session(
+                "live-1",
+                terminal="complete",
+                wake_rows=_delivery_rows(
+                    failed_rule=True,
+                    validation_ref="f" * 64,
+                ),
+            ),
+        ],
+        executes=[],
+    )
+    assert answered.settlement == "achieved"
 
 
 def test_a_goal_is_not_a_resumable_queue(tmp_path):

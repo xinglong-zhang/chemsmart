@@ -787,6 +787,9 @@ _APPROACHES_TRIED = " " + _WAKE_RULES["wake.approaches_already_tried"].text
 _MENU_DISPOSITIONS = (
     " " + _WAKE_RULES["wake.menu_dispositions_are_recorded"].text
 )
+_FAILED_VALIDATION_CITATION = (
+    " " + _WAKE_RULES["wake.failed_validation_receipt_answers_verdict"].text
+)
 _REFUSAL_AFFORDANCE = _WAKE_RULES["wake.refusal_is_a_deliverable"].text
 _WORKSPACE_RECORD_RULE = " " + _WAKE_RULES["wake.workspace_record"].text
 _EXCURSION_REPLICATION = (
@@ -1051,6 +1054,7 @@ def _goal_terms_context(
             _GOAL_AUTHORITY
             + " This session plans cycle 1; the budgets above are the "
             "whole grant. "
+            + _FAILED_VALIDATION_CITATION
             + _OBSERVABLE_RESTATEMENT_ASK
             + _ADVERSARIAL_CLOSE
             + _REFUSAL_AFFORDANCE
@@ -1820,6 +1824,7 @@ def _wake_context(
             + (_APPROACHES_TRIED + " " if approaches_tried else "")
             + (_MENU_DISPOSITIONS + " " if repair_menu else "")
             + _DISPOSITION_BRANCH
+            + _FAILED_VALIDATION_CITATION
             + _CLAIM_BY_ID
             + _OBSERVABLE_RESTATEMENT_ASK
             + _ADVERSARIAL_CLOSE

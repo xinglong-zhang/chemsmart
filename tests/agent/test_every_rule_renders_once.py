@@ -74,6 +74,7 @@ def test_wake_rules_render_in_the_wake_and_not_the_prompt():
         + driver._DISPOSITION_BRANCH
         + driver._APPROACHES_TRIED
         + driver._MENU_DISPOSITIONS
+        + driver._FAILED_VALIDATION_CITATION
         + driver._CLAIM_BY_ID
         + driver._WORKSPACE_RECORD_RULE
         + driver._EXCURSION_REPLICATION

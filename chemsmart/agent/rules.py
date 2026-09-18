@@ -1108,6 +1108,21 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "mechanisms in prose the next cycle never saw",
     ),
     _r(
+        "wake.failed_validation_receipt_answers_verdict",
+        "wake",
+        "T1",
+        "When evaluate_scientific_validation returns all_rules_passed=false, "
+        "cite that exact validation receipt_sha256 in "
+        "record_scientific_decision's postprocessing_receipt_sha256s when "
+        "you interpret or accept the finding. A claim, completion, or "
+        "stationary-point receipt does not substitute: the host will not "
+        "infer that a decision answered a failed verdict.",
+        "CUHK acetamide r8 (2026-09-18): the decision discussed the "
+        "first-order saddle and cited its characterisation and completed "
+        "analysis, but not the failed no-imag-below-20 validation receipt; "
+        "settlement correctly returned the goal to the human",
+    ),
+    _r(
         "wake.claim_by_id_costs_no_engine_call",
         "wake:recovery",
         "T1",

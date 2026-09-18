@@ -94,6 +94,51 @@ def test_bounded_review_affordance_reaches_the_model_prompt():
     assert prompt.count(rule.text) == 1
 
 
+@pytest.mark.capability("rule:wake.failed_validation_receipt_answers_verdict")
+def test_failed_validation_citation_affordance_reaches_each_goal_context(
+    tmp_path,
+):
+    """A failed typed verdict must name its receipt at both goal entries.
+
+    CUHK acetamide r8 delivered an honest saddle but cited only its
+    characterisation and completion receipts.  The settlement correctly
+    returned it to the human; this witness reaches the actual initial and
+    recovery contexts rather than testing a detached policy string.
+    """
+
+    contexts = []
+
+    def capture(inner):
+        def step(workspace, kwargs):
+            contexts.append(kwargs["goal_context"])
+            return inner(workspace, kwargs)
+
+        return step
+
+    _loop(
+        tmp_path,
+        sessions=[
+            capture(_planning_session("live-1", review=_review_payload())),
+            capture(_planning_session("live-2", review=_review_payload())),
+        ],
+        executes=[
+            _execute(
+                tmp_path, failed=True, status="partial", analysis="partial"
+            ),
+            _execute(
+                tmp_path, failed=True, status="partial", analysis="partial"
+            ),
+        ],
+        max_revisions=1,
+    )
+    rule = rules_by_id()["wake.failed_validation_receipt_answers_verdict"]
+    assert rule.placement == "wake"
+    assert len(contexts) == 2
+    assert all(
+        context["authority"].count(rule.text) == 1 for context in contexts
+    )
+
+
 def test_the_budget_block_leads_with_the_binding_line(tmp_path):
     """Production path: the second cycle's wake context, after one run
     whose slowest node took five seconds."""
