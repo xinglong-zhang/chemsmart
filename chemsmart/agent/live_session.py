@@ -747,54 +747,40 @@ def run_live_agent_session(
         if analysis_completion_file is not None
         else None
     )
-    analysis_only_session = bool(
-        not observations and result_observations and not execution_enabled
-    )
     session_id = _session_id(task_spec_sha256)
     run_directory = _private_run_directory(workspace_path, session_id)
 
-    if analysis_only_session:
-        registry = load_program_capabilities()
-        live_schema = build_live_click_schema()
-        conformance = ()
-        environment_targets, compute_receipts, environment_records = (
-            _observe_environments()
+    registry = load_program_capabilities()
+    live_schema = build_live_click_schema()
+    conformance, conformance_records = _bootstrap_conformance(
+        run_directory=run_directory,
+        # A database-only workspace has no user geometry yet; the
+        # conformance probe needs any exact coordinate file (it runs
+        # fake previews, neutral, at the multiplicity the geometry's
+        # electron count permits), so the host writes a private
+        # mechanical probe that never becomes a session artifact.
+        input_artifact=(
+            observations[0].artifact
+            if observations
+            else _conformance_probe_artifact(run_directory)
+        ),
+        registry_sha256=registry.registry_sha256,
+        live_schema=live_schema,
+        resources=(
+            bounded_envelope.resources
+            if bounded_envelope is not None
+            else None
+        ),
+    )
+    environment_targets, compute_receipts, environment_records = (
+        _observe_environments()
+    )
+    conformance_records = tuple(
+        sorted(
+            (*conformance_records, *environment_records),
+            key=_record_sort_key,
         )
-        conformance_records = tuple(
-            sorted(environment_records, key=_record_sort_key)
-        )
-    else:
-        registry = load_program_capabilities()
-        live_schema = build_live_click_schema()
-        conformance, conformance_records = _bootstrap_conformance(
-            run_directory=run_directory,
-            # A database-only workspace has no user geometry yet; the
-            # conformance probe needs any exact coordinate file (it runs
-            # fake previews, neutral, at the multiplicity the geometry's
-            # electron count permits), so the host writes a private
-            # mechanical probe that never becomes a session artifact.
-            input_artifact=(
-                observations[0].artifact
-                if observations
-                else _conformance_probe_artifact(run_directory)
-            ),
-            registry_sha256=registry.registry_sha256,
-            live_schema=live_schema,
-            resources=(
-                bounded_envelope.resources
-                if bounded_envelope is not None
-                else None
-            ),
-        )
-        environment_targets, compute_receipts, environment_records = (
-            _observe_environments()
-        )
-        conformance_records = tuple(
-            sorted(
-                (*conformance_records, *environment_records),
-                key=_record_sort_key,
-            )
-        )
+    )
 
     # A live provider session plans and previews only; the approved-execution
     # surface belongs to the provider-free executor.

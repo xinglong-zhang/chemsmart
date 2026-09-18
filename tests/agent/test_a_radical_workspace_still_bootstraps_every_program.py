@@ -73,3 +73,30 @@ def test_every_program_bootstraps_over_the_supplied_molecule(
     assert ("cpu", "opt") in pyscf.effective_engine_job_pairs
     assert ("cpu", "hess") in pyscf.effective_engine_job_pairs
     assert ("cpu", "td") in pyscf.effective_engine_job_pairs
+
+
+def test_probe_artifact_bootstraps_every_program_without_workspace_xyz(tmp_path):
+    from chemsmart.agent.live_session import _conformance_probe_artifact
+
+    probe = _conformance_probe_artifact(tmp_path)
+    registry = load_program_capabilities()
+    receipts, records = _bootstrap_conformance(
+        run_directory=tmp_path,
+        input_artifact=probe,
+        registry_sha256=registry.registry_sha256,
+        live_schema=build_live_click_schema(),
+    )
+    by_program = {receipt.program: receipt for receipt in receipts}
+    assert "pyscf" in by_program, [
+        (r.get("program"), r.get("status"), r.get("error_class"))
+        for r in records
+    ]
+    pyscf = by_program["pyscf"]
+    assert pyscf.compiler_status == "passed"
+    assert pyscf.preview_status == "passed"
+    assert pyscf.preflight_status == "passed"
+    assert ("cpu", "sp") in pyscf.effective_engine_job_pairs
+    assert ("cpu", "opt") in pyscf.effective_engine_job_pairs
+    assert ("cpu", "hess") in pyscf.effective_engine_job_pairs
+    assert ("cpu", "td") in pyscf.effective_engine_job_pairs
+
