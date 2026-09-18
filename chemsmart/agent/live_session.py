@@ -3745,11 +3745,6 @@ def _system_prompt(
         "non_executable: retain it as scientific intent, but it needs no "
         "green preview and will not be approved or launched. At least one "
         "release-executable stage is required for human execution review. "
-        "In this pre-approval session, a preview_only program binding or "
-        "execution_ready=false after a green preview says only that this "
-        "model cannot launch it yet, not an unsupported scientific stage: "
-        "when the capability is preview_only and the environment is "
-        "available, keep that node planned for the host review. "
         "Read approval_readiness for preview_required, deferred, and "
         "non-executable nodes. "
         if bounded_review

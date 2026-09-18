@@ -899,6 +899,21 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "two cycles ended planned",
     ),
     _r(
+        "stem.preview_only_is_review_authority",
+        "stem",
+        "T0",
+        "During a bounded pre-approval review, a preview_only program "
+        "binding or execution_ready=false after a green preview means the "
+        "provider lacks launch authority, not that the program or scientific "
+        "stage is unsupported. When the declared capability is preview_only "
+        "and the environment is available, keep that node as planned intent "
+        "for host review.",
+        "CUHK acetamide r4 (2026-09-18): an available, "
+        "execution-supported xTB path was read as unsupported because the "
+        "pre-approval binding was necessarily preview_only; the goal then "
+        "left no stage for the one human review",
+    ),
+    _r(
         "wake.termination_notice",
         "wake:close",
         "T0",
