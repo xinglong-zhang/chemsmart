@@ -844,6 +844,189 @@ class Gaussian16Output(GaussianFileMixin):
             return None
 
     @cached_property
+    def irc_structures(self):
+        """Return recorded IRC points as Molecule objects in file order.
+
+        Selects the last orientation before each Point Number / Path Number record.
+        Nonzero points must also have the following NET REACTION COORDINATE record.
+        Predictor/corrector trial geometries and a trailing incomplete point are excluded.
+
+        Each molecule's info contains irc_point, irc_path, irc_coordinate,
+        geometry_line and point_line. Point zero is the initial structure.
+        """
+        from chemsmart.io.molecules.structure import Molecule
+
+        point_label = "Point Number:"
+        coordinate_label = "NET REACTION COORDINATE UP TO THIS POINT"
+        lines = self.contents
+        if not any(line.startswith(point_label) for line in lines):
+            return []
+        termination_status = (
+            "normal" if self.normal_termination else "not_confirmed"
+        )
+        structures, seen, previous_points = [], set(), {}
+        latest = pending = atom_symbols = None
+        last_geometry_line = -1
+
+        def commit(point, path, coordinate, marker_line):
+            nonlocal atom_symbols, last_geometry_line
+            if latest is None or latest[2] <= last_geometry_line:
+                raise ValueError(
+                    f"IRC point at line {marker_line} has no new geometry."
+                )
+            symbols, positions, geometry_line = latest
+            if (path, point) in seen:
+                raise ValueError(
+                    "Repeated IRC path/point. Read restarted or concatenated "
+                    "calculations separately."
+                )
+            if atom_symbols is not None and symbols != atom_symbols:
+                raise ValueError(
+                    "Atom identities/order changed along the IRC."
+                )
+            if path in previous_points and point != previous_points[path] + 1:
+                raise ValueError("Missing or out-of-order IRC point records.")
+            if path not in previous_points and point != 0:
+                logger.warning("IRC path %s starts at point %s.", path, point)
+            atom_symbols = symbols
+            structures.append(
+                Molecule(
+                    symbols=list(symbols),
+                    positions=positions.copy(),
+                    charge=self.charge,
+                    multiplicity=self.multiplicity,
+                    structure_index_in_file=len(structures) + 1,
+                    info={
+                        "irc_point": point,
+                        "irc_path": path,
+                        "irc_coordinate": coordinate,
+                        "geometry_line": geometry_line,
+                        "point_line": marker_line,
+                        "gaussian_termination_status": termination_status,
+                    },
+                )
+            )
+            seen.add((path, point))
+            previous_points[path] = point
+            last_geometry_line = geometry_line
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if line in {"Input orientation:", "Standard orientation:"}:
+                if pending is not None:
+                    raise ValueError(
+                        "Missing IRC coordinate before next geometry."
+                    )
+                numbers, positions, end = self._read_irc_orientation(i)
+                symbols = [p.to_symbol(number) for number in numbers]
+                latest = (symbols, positions, i + 1)
+                i = end
+            else:
+                if line.startswith(point_label):
+                    if pending is not None:
+                        raise ValueError(
+                            "Incomplete preceding IRC point record."
+                        )
+                    fields = line.split()
+                    if (
+                        len(fields) != 6
+                        or fields[:2] != ["Point", "Number:"]
+                        or fields[3:5] != ["Path", "Number:"]
+                    ):
+                        raise ValueError(
+                            f"Invalid IRC point record at line {i + 1}."
+                        )
+                    point, path = int(fields[2]), int(fields[5])
+                    if point < 0 or path < 0:
+                        raise ValueError(
+                            f"Negative IRC point/path at line {i + 1}."
+                        )
+                    if point == 0:
+                        commit(point, path, 0.0, i + 1)
+                    else:
+                        pending = (point, path, i + 1)
+                if line.startswith(coordinate_label) and pending is not None:
+                    point, path, marker_line = pending
+                    label, equals, value_text = line.partition("=")
+                    if label.strip() != coordinate_label or not equals:
+                        raise ValueError(
+                            f"Invalid IRC coordinate record at line {i + 1}."
+                        )
+                    value = float(
+                        value_text.strip().replace("D", "E").replace("d", "e")
+                    )
+                    if not np.isfinite(value):
+                        raise ValueError("Non-finite IRC reaction coordinate.")
+                    commit(point, path, value, marker_line)
+                    pending = None
+            i += 1
+        if pending is not None:
+            logger.warning(
+                "Excluded final IRC point with no coordinate record."
+            )
+        if termination_status != "normal":
+            logger.warning(
+                "Normal Gaussian file termination not confirmed; "
+                "only recorded IRC points included."
+            )
+        return structures
+
+    def _read_irc_orientation(self, start):
+        """Read and validate one orientation table for IRC selection only.
+
+        General Input/Standard readers remain unchanged. This helper keeps
+        the table's line association and atom-order checks needed for IRC.
+        """
+        lines = self.contents
+
+        def is_separator(line):
+            return bool(line) and set(line) == {"-"}
+
+        i, separators = start + 1, 0
+        while i < len(lines) and i <= start + 8:
+            if is_separator(lines[i]):
+                separators += 1
+                if separators == 2:
+                    break
+            i += 1
+        if separators != 2 or "Coordinates (Angstroms)" not in " ".join(
+            lines[start:i]
+        ):
+            raise ValueError(
+                f"Unsupported Gaussian orientation at line {start + 1}."
+            )
+        numbers, positions = [], []
+        i += 1
+        while i < len(lines) and not is_separator(lines[i]):
+            fields = lines[i].split()
+            if len(fields) != 6:
+                raise ValueError(f"Invalid Gaussian atom row at line {i + 1}.")
+            center, number, _ = map(int, fields[:3])
+            if (
+                center != len(numbers) + 1
+                or not 1 <= number < len(p.PERIODIC_TABLE)
+            ):
+                raise ValueError(
+                    "IRC reader requires ordinary consecutively numbered atoms."
+                )
+            coordinates = [
+                float(v.replace("D", "E").replace("d", "e"))
+                for v in fields[3:6]
+            ]
+            numbers.append(number)
+            positions.append(coordinates)
+            i += 1
+        if i == len(lines):
+            raise ValueError(
+                f"Incomplete Gaussian geometry at line {start + 1}."
+            )
+        if not numbers or not np.isfinite(positions).all():
+            raise ValueError(
+                f"Incomplete or non-finite IRC geometry at line {start + 1}."
+            )
+        return numbers, np.asarray(positions), i
+    @cached_property
     def last_structure(self):
         """
         Return the last molecular structure from the calculation.
@@ -2453,6 +2636,14 @@ class Gaussian16Output(GaussianFileMixin):
     def get_molecule(self, index="-1"):
         index = string2index_1based(index)
         return self.all_structures[index]
+        
+    def get_irc_molecule(self, index="-1"):
+        """Select recorded IRC geometries separately from the general reader.
+        """
+        index = string2index_1based(index)
+        if not self.irc_structures:
+            raise ValueError("No supported IRC point records found.")
+        return self.irc_structures[index]
 
     @cached_property
     def temperature_in_K(self):
