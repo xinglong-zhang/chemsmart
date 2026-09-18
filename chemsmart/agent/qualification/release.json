@@ -181,6 +181,14 @@
       "run": "ax41-refine-100/pyscf-round-2/workspaces/E3-hcn-hnc goals/goal-e3-hcn-hnc/runs/cycle-1 + ax41-refine-100/pyscf-round-2/workspaces/E4-formic-acid goals/goal-e4-formic-acid/runs/cycle-1",
       "commit": "006a65bf",
       "date": "2026-09-13"
+    },
+    {
+      "kind": "selector",
+      "id": "xtb:hess:ir_intensities",
+      "status": "recorded",
+      "run": "CUHK Charles /project/xlzhang/jiseung/xtb-ir-acetamide-pyscf-stability-r10 goals/xtb-ir-acetamide-pyscf-stability-r10/runs/cycle-3 + cycle-5 analysis",
+      "commit": "c21454b1",
+      "date": "2026-09-18"
     }
   ]
 }
