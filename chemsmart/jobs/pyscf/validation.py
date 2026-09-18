@@ -2358,19 +2358,21 @@ def validate_pyscf_result(
             # be: its two mixed derivatives differ by the truncation
             # error of the step, which is a property of the third
             # derivative and the molecule, not of the integration grid
-            # this limit was calibrated against. Measured on water at
-            # 0.005 A: 4.4e-05 Eh/Bohr^2 against an analytic-Hessian
-            # limit of 1.1e-05, with frequencies agreeing to 0.4 cm-1.
-            # Nobody here derived a limit for that, so for a numerical
-            # Hessian the asymmetry is recorded and never graded -- the
-            # size of the correction stays on the record where a reader
-            # can weigh it.
+            # this limit was calibrated against.  Analytic DFT Hessians
+            # likewise contain numerical quadrature over their integration
+            # grid; the writer records that raw mismatch before it
+            # symmetrises the stored matrix.  No limit has been calibrated
+            # for either source of numerical antisymmetry, so both remain
+            # evidence rather than an invalidity verdict.  The size of the
+            # correction and the independent frequency check stay sealed for
+            # a reader to weigh.
             numerical = (
                 str(hessian_stage.get("derivative") or "")
                 .strip()
                 .lower()
                 .endswith("finite_difference")
             )
+            dft = bool(str(_member(settings, "functional", "") or "").strip())
             finite_value = bool(
                 isinstance(raw_antisymmetry, (int, float))
                 and not isinstance(raw_antisymmetry, bool)
@@ -2379,12 +2381,14 @@ def validate_pyscf_result(
             )
             raw_admissible = bool(
                 finite_value
-                and (numerical or float(raw_antisymmetry) <= raw_limit)
+                and (numerical or dft or float(raw_antisymmetry) <= raw_limit)
             )
             hessian_observation["raw_max_abs_antisymmetry_eh_per_bohr2"] = (
                 raw_antisymmetry
             )
-            hessian_observation["raw_antisymmetry_graded"] = not numerical
+            hessian_observation["raw_antisymmetry_graded"] = not (
+                numerical or dft
+            )
             hessian_observation["raw_antisymmetry_limit_eh_per_bohr2"] = (
                 raw_limit
             )

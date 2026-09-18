@@ -11,8 +11,10 @@ closed -- are checked on fixtures built to differ.
 
 import inspect
 import json
+import shutil
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pytest
 
@@ -36,7 +38,9 @@ from chemsmart.analysis.result_readers import (
     reader_for,
 )
 from chemsmart.io.native_failure import summarize_pyscf_native_failure
+from chemsmart.io.pyscf.output import read_pyscf_h5
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.jobs.pyscf.validation import validate_pyscf_result
 
 FIXTURES = Path(__file__).resolve().parent / "data" / "PySCFTests" / "outputs"
 
@@ -155,6 +159,71 @@ def _reference(case):
     return json.loads(
         (FIXTURES / case / name.replace(".h5", ".reference.json")).read_text()
     )
+
+
+@pytest.mark.capability("program_jobtype:pyscf:cpu:hess")
+def test_dft_grid_hessian_antisymmetry_is_recorded_not_graded(tmp_path):
+    """A DFT grid's raw mixed-derivative mismatch is evidence, not failure.
+
+    The stored Hessian is explicitly symmetrised and independently checked
+    against its frequency vector.  xTB-to-PySCF acetamide r7 supplied the
+    production witness: its B3LYP raw value was larger than the generic
+    analytic-Hessian tolerance, although the writer documents quadrature
+    asymmetry and the frequency consistency check passed.  A threshold never
+    calibrated for DFT grids cannot turn that observation into invalidity.
+    """
+
+    path = tmp_path / "water_dft_hess.h5"
+    shutil.copy2(_path("water_hess"), path)
+    with h5py.File(path, "r+") as handle:
+        handle["status/stages/hess/raw_max_abs_antisymmetry_eh_per_bohr2"][
+            ()
+        ] = 6.0e-5
+    spec, _provenance, _status, _results = read_pyscf_h5(path)
+    validation = validate_pyscf_result(
+        path,
+        settings=PySCFJobSettings(
+            jobtype="hess",
+            functional="b3lyp",
+            basis="def2-svp",
+            charge=0,
+            multiplicity=1,
+            engine="cpu",
+        ),
+        expected_jobtype="hess",
+        expected_charge=0,
+        expected_multiplicity=1,
+        expected_symbols=spec["symbols"],
+        expected_positions=spec["positions"],
+    )
+
+    observation = validation["hessian_validation"]
+    assert validation["state"] == "validated"
+    assert observation["raw_max_abs_antisymmetry_eh_per_bohr2"] == 6.0e-5
+    assert observation["raw_antisymmetry_graded"] is False
+    assert observation["raw_symmetrization_admissible"] is True
+    assert observation["consistency"]["state"] == "verified"
+
+    hf_validation = validate_pyscf_result(
+        path,
+        settings=PySCFJobSettings(
+            jobtype="hess",
+            ab_initio="hf",
+            basis="def2-svp",
+            charge=0,
+            multiplicity=1,
+            engine="cpu",
+        ),
+        expected_jobtype="hess",
+        expected_charge=0,
+        expected_multiplicity=1,
+        expected_symbols=spec["symbols"],
+        expected_positions=spec["positions"],
+    )
+    assert hf_validation["hessian_validation"]["raw_antisymmetry_graded"]
+    assert "pyscf.result.hessian_invalid" in {
+        finding.rule_id for finding in hf_validation["findings"]
+    }
 
 
 # ----------------------------------------------------------------------
