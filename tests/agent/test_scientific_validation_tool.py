@@ -3,7 +3,20 @@ from __future__ import annotations
 import pytest
 
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
+from chemsmart.agent.scientific_toolchain import (
+    AnalysisInputIntentV1,
+    AnalysisNodeIntentV1,
+    AnalysisOutputIntentV1,
+    AnalysisValidationRuleIntentV1,
+    ScientificToolchainContractError,
+    build_scientific_toolchain_plan,
+)
 from chemsmart.agent.tool_runtime import CommandCompiledToolHostV1
+from chemsmart.agent.workflows import (
+    ArtifactInputIntentV1,
+    ArtifactOutputIntentV1,
+    CommandNodeIntentV1,
+)
 
 TASK_SPEC_SHA256 = "a" * 64
 
@@ -152,6 +165,89 @@ def _decision(host, *, receipts):
             "postprocessing_receipt_sha256s": list(receipts),
         },
     )["result"]
+
+
+def test_validation_refuses_raw_program_output_before_any_engine_runs():
+    """A validation judges a typed quantity, never an opaque result file.
+
+    CUHK acetamide r10 planned a stationary-point validation directly from a
+    PySCF Hessian output.  The plan was admitted, then failed only after the
+    engine had completed because the evaluator correctly requires the
+    extraction/expression receipt that carries the quantity being judged.
+    The same boundary must be enforced while planning, when the repair costs
+    no engine call.
+    """
+
+    calculation = CommandNodeIntentV1(
+        node_id="hess",
+        program="orca",
+        jobtype="opt",
+        project_role="project.orca",
+        dependencies=(),
+        inputs=(
+            ArtifactInputIntentV1(
+                binding_id="geometry.initial",
+                artifact_class="geometry_xyz",
+                artifact_id="input-geometry",
+                producer_node_id="",
+                producer_output_id="",
+            ),
+        ),
+        expected_outputs=(
+            ArtifactOutputIntentV1(
+                output_id="typed-result", artifact_class="orca_output"
+            ),
+        ),
+        unresolved_fields=(),
+    )
+    validation = AnalysisNodeIntentV1(
+        node_id="validate-minimum",
+        analysis_kind="scientific_validation",
+        dependencies=("hess",),
+        inputs=(
+            AnalysisInputIntentV1(
+                input_id="raw-hessian",
+                source_kind="program_output",
+                producer_node_id="hess",
+                producer_output_id="typed-result",
+            ),
+        ),
+        selectors=(),
+        outputs=(
+            AnalysisOutputIntentV1(
+                output_id="minimum-verdict",
+                quantity_kind="validation_verdict",
+                unit="1",
+            ),
+        ),
+        expression_nodes=(),
+        expression_output_node_ids=(),
+        temperature_k=None,
+        pressure_atm=None,
+        support_state="planned",
+        blocked_reason="",
+        validation_rules=(
+            AnalysisValidationRuleIntentV1(
+                rule_id="all-finite",
+                predicate="all_finite",
+                input_ids=("raw-hessian",),
+            ),
+        ),
+    )
+
+    with pytest.raises(ScientificToolchainContractError) as refusal:
+        build_scientific_toolchain_plan(
+            plan_id="raw-validation-plan",
+            workflow_id="raw-validation-workflow",
+            command_workflow_draft_sha256="9" * 64,
+            calculation_nodes=(calculation,),
+            calculation_observables={"hess": ("typed-result",)},
+            analysis_nodes=(validation,),
+            required_output_ids=("minimum-verdict",),
+        )
+
+    assert "typed analysis quantity" in str(refusal.value)
+    assert refusal.value.failure_report["cost"] == "no engine call"
 
 
 @pytest.mark.parametrize(

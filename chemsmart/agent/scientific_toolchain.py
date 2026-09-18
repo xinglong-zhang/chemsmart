@@ -65,6 +65,7 @@ TOOLCHAIN_REFUSAL_CAUSES = frozenset(
         "expression_read_order",
         "extraction_unit_dimension",
         "expression_unit_dimension",
+        "validation_requires_typed_analysis",
         "required_output_has_no_producer",
         "claim_output_unrendered",
     }
@@ -96,6 +97,10 @@ TOOLCHAIN_REFUSAL_INVARIANTS: Mapping[str, str] = {
     "expression_unit_dimension": (
         "arithmetic across the analysis DAG is dimension-checked; an "
         "operation combines only what its dimension rules admit."
+    ),
+    "validation_requires_typed_analysis": (
+        "a scientific validation judges a typed quantity from an upstream "
+        "analysis receipt, never an opaque program result artifact."
     ),
     "required_output_has_no_producer": (
         "every required output id is produced by some node of the plan, or "
@@ -1199,6 +1204,33 @@ def build_scientific_toolchain_plan(
                 raise ScientificToolchainContractError(
                     "analysis input references an unknown producer"
                 )
+            if node.analysis_kind == "scientific_validation":
+                analysis_producer = analysis_by_id.get(producer)
+                typed_kinds = {
+                    "result_extraction",
+                    "thermochemistry",
+                    "quantity_expression",
+                    "scientific_validation",
+                }
+                if (
+                    analysis_producer is None
+                    or analysis_producer.analysis_kind not in typed_kinds
+                ):
+                    raise ScientificToolchainContractError(
+                        f"scientific validation node {node.node_id!r} "
+                        f"input {item.input_id!r} must consume a typed "
+                        "analysis quantity from result_extraction, "
+                        "thermochemistry, quantity_expression or an earlier "
+                        "scientific_validation node; a program output is an "
+                        "opaque result artifact, not the quantity to judge.",
+                        cause="validation_requires_typed_analysis",
+                        next_legal_route=(
+                            "add an upstream result_extraction, "
+                            "thermochemistry or quantity_expression node for "
+                            "the quantity the rule judges, then bind that "
+                            "analysis output here"
+                        ),
+                    )
             expected_kind = (
                 "program_output"
                 if producer in calculation_by_id
