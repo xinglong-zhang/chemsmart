@@ -675,12 +675,12 @@ Adding ``--soc-type 3`` additionally writes:
      SOCType 3
    end
 
-Excited-state optimization on the first singlet root (``-r Opt td --nroots 5 --root 1``) produces a route line ending in
-``Opt`` and adds ``IRoot 1`` / ``IRootMult singlet`` inside ``%tddft``:
+Excited-state optimization on the first singlet root (``-r Opt td --nroots 5 --root 1``) produces a route line beginning
+with ``Opt`` and adds ``IRoot 1`` / ``IRootMult singlet`` inside ``%tddft``:
 
 .. code::
 
-   ! CAM-B3LYP def2-SVP defgrid3 SMD(water) Opt
+   ! Opt CAM-B3LYP def2-SVP defgrid3 SMD(water)
    %tddft
      NRoots 5
      TDA false
