@@ -1586,6 +1586,48 @@ def test_a_failed_run_with_receipts_in_hand_is_not_exhausted(tmp_path):
     ]
 
 
+def test_a_terminal_result_at_zero_engine_budget_gets_analysis_only_wake(
+    tmp_path,
+):
+    """r9's Hessian preserved a real saddle but had no claims yet.
+
+    A zero-engine budget cannot buy another calculation, but it must not
+    prevent the Agent from reading the host-recorded terminal outcome,
+    extracting admissible evidence, and deciding whether the failure is the
+    scientific finding.  This is distinct from the older unclaimed-claim
+    witness above: no analysis-completion receipt has been minted yet.
+    """
+
+    driver = _driver_after_run(
+        tmp_path,
+        calls=1,
+        failed=True,
+        rows=(),
+        settle=False,
+    )
+    driver.outcome = SimpleNamespace(
+        nodes=(
+            SimpleNamespace(
+                node_id="pyscf-hess",
+                state="failed_wrong_stationary_point",
+            ),
+        )
+    )
+    driver._settle()
+
+    assert driver.phase == "plan"
+    (opened,) = [
+        entry
+        for entry in driver.ledger.entries()
+        if entry["kind"] == "recovery_opened"
+    ]
+    assert opened["payload"]["analysis_only"] is True
+    assert opened["payload"]["engine_calls_remaining"] == 0
+    assert opened["payload"]["terminal_states"] == {
+        "pyscf-hess": "failed_wrong_stationary_point"
+    }
+
+
 def test_the_goal_keeps_every_budget_line_the_envelope_granted(tmp_path):
     """Two hand-listed copies of the goal's envelope record dropped the
     excursion line: every woken cycle of every excursion arm in two

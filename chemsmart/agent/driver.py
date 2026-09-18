@@ -5262,18 +5262,29 @@ class GoalDriver:
             budgets.engine_calls_remaining <= 0
             and budgets.revisions_remaining > 0
             and budgets.wall_seconds_remaining > 0
-            and run_delivery.undelivered_declared_ids
         ):
-            # The engine line is spent and the run did not complete,
-            # yet declared observables sit unclaimed with receipts in
-            # hand: an analysis-only cycle can still claim them by id,
-            # and the plan-time budget gate refuses any engine node.
+            # The engine line is spent, but a provider-free cycle can
+            # still read the terminal outcome, extract the evidence that
+            # exists, and decide what a scientific failure means.  This
+            # used to require an analysis-completion receipt with an
+            # undelivered declared id; a failed Hessian has native bytes
+            # and a host-recorded anomaly before any such receipt exists,
+            # so it settled exhausted before the Agent could interpret it
+            # (CUHK acetamide r9, 2026-09-18).  The next plan is explicitly
+            # analysis-only: the ordinary plan-time budget gate still
+            # refuses every engine node, and the host neither selects a
+            # recovery calculation nor decides what the finding means.
+            terminal_states = self._unanswerable_terminal_states()
             self.ledger.append(
                 "recovery_opened",
                 {
                     "cycle": self.cycles,
+                    "terminal_states": dict(sorted(terminal_states.items())),
                     "undelivered_declared_observable_ids": list(
                         run_delivery.undelivered_declared_ids
+                    ),
+                    "unclaimed_output_ids": list(
+                        run_delivery.unclaimed_output_ids
                     ),
                     "engine_calls_remaining": 0,
                     "analysis_only": True,
