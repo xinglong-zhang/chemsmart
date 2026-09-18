@@ -753,25 +753,6 @@ def run_live_agent_session(
     session_id = _session_id(task_spec_sha256)
     run_directory = _private_run_directory(workspace_path, session_id)
 
-    if (
-        not observations
-        and not database_observations
-        and not analysis_only_session
-    ):
-        return _local_result(
-            session_id=session_id,
-            task_spec_sha256=task_spec_sha256,
-            terminal_state="blocked",
-            execution_requested=execution_enabled,
-            execution_profile_status="not_started",
-            final_text=(
-                "No exact XYZ artifact, chemsmart .db database, or "
-                "supported completed-result artifact is present in the "
-                "approved workspace. Add user-approved input or result "
-                "data; coordinates and results were not generated."
-            ),
-        )
-
     if analysis_only_session:
         registry = load_program_capabilities()
         live_schema = build_live_click_schema()

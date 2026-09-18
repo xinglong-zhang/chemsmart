@@ -22,9 +22,11 @@ rather than an empty molecule.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from chemsmart.agent import live_session
 from chemsmart.agent._contracts import ContractError, RoutedContractError
 from chemsmart.agent.runtime.event_store import RuntimeEventStore
 from chemsmart.agent.runtime.events import EventKind
@@ -103,6 +105,45 @@ def test_the_model_names_an_identifier_and_the_host_owns_the_bytes(
         "t1", {"artifact_id": "ref-cid", "identifier": "962"}
     )
     assert other["pubchem_geometry"].identifier_kind == "cid"
+
+
+def test_an_empty_workspace_reaches_the_model_visible_fetch_surface(
+    tmp_path, monkeypatch
+):
+    """No input must not pre-empt the stem's host-owned lookup route.
+
+    The session need not manufacture coordinates: this only proves it reaches
+    its private run directory, where the real Agent can invoke
+    ``fetch_pubchem_geometry``.  The host-consumer tests above prove the
+    lookup itself owns the bytes and records the receipt.
+    """
+
+    workspace = tmp_path / "empty-workspace"
+    workspace.mkdir()
+
+    class ReachedRunDirectory(Exception):
+        pass
+
+    def reached(*_args, **_kwargs):
+        raise ReachedRunDirectory
+
+    monkeypatch.setattr(
+        live_session,
+        "load_agent_provider_selection",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            active_profile=SimpleNamespace(provider="test-provider")
+        ),
+    )
+    monkeypatch.setattr(live_session, "_private_run_directory", reached)
+
+    with pytest.raises(ReachedRunDirectory):
+        live_session.run_live_agent_session(
+            task="Fetch a trusted geometry through the typed tool.",
+            provider=None,
+            workspace=workspace,
+            execution_enabled=False,
+            approval_file=None,
+        )
 
 
 def test_the_fetch_is_an_event_with_its_lineage(tmp_path, monkeypatch):
