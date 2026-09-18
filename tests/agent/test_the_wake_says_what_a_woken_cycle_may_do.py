@@ -80,6 +80,28 @@ def test_a_goal_prompt_never_denies_the_execution_it_grants(bounded):
     assert "Execution is not exposed" in cold
 
 
+@pytest.mark.capability("rule:wake.goal_authority")
+def test_bounded_goal_distinguishes_review_authority_from_support():
+    """A green preview is not an unsupported scientific stage.
+
+    CUHK acetamide r4 observed an available xTB executable and an
+    ``execution_supported`` capability, but its pre-approval binding was
+    necessarily ``preview_only``.  The model read the lack of launch
+    authority as a reason to declare xTB non-executable, so the host had no
+    stage left to review.  The prompt must state the phase distinction without
+    granting the provider execution authority.
+    """
+
+    prompt = _system_prompt(
+        {},
+        bounded_review_requested=True,
+        goal_record={"goal_id": "goal-t1"},
+    )
+
+    assert "not an unsupported scientific stage" in prompt
+    assert "keep that node planned for the host review" in prompt
+
+
 def test_the_budget_block_leads_with_the_binding_line(tmp_path):
     """Production path: the second cycle's wake context, after one run
     whose slowest node took five seconds."""
