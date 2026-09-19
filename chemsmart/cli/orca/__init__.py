@@ -19,7 +19,7 @@ from .pka import pka
 from .qrc import qrc
 from .scan import scan
 from .singlepoint import sp
-from .td import td
+from .tddft import td
 from .ts import ts
 
 __all__ = [
