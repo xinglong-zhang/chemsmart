@@ -570,16 +570,8 @@ def gaussian(
 
     # obtain Gaussian Settings from filename, if supplied;
     #  otherwise return defaults
-
-    # Defer filetype validation if the pka subcommand is being invoked,
-    # as it has its own table file handling.
-    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
-    from chemsmart.utils.datasets import PKaTableEntry
-
-    is_pka_subcommand = ctx.invoked_subcommand == "pka"
-    is_pka_table_input = is_pka_subcommand and (
-        PKaTableEntry.is_submission_table(filename)
-        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
+    skip_structure_load = bool(filename) and str(filename).lower().endswith(
+        (".csv", ".tsv", ".txt")
     )
 
     if filename is None:
@@ -629,12 +621,6 @@ def gaussian(
             job_settings = GaussianJobSettings.default()
     # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
     #  ".cif", ".traj", ".gro")):
-    elif is_pka_table_input:
-        job_settings = GaussianJobSettings.default()
-        logger.info(
-            "pka subcommand invoked with table or CDXML file; "
-            "skipping filetype validation and using default Gaussian settings"
-        )
     else:
         logger.debug(
             f"Falling back to default Gaussian job settings for file {filename}."
@@ -704,10 +690,12 @@ def gaussian(
     # obtain molecule structure
     molecules = None
 
-    # Skip molecule loading for pKa table files (handled by pKa batch)
-    if is_pka_table_input:
+    # Skip molecule loading for table files (parsed by the subcommand).
+    if skip_structure_load:
         logger.debug(
-            f"Skipping molecule loading for pKa table file: {filename}"
+            "Skipping molecule loading for %s table file: %s",
+            ctx.invoked_subcommand,
+            filename,
         )
         molecules = None
     else:
@@ -722,7 +710,7 @@ def gaussian(
                 "Please specify only one of them."
             )
 
-    if filename and not is_pka_table_input:
+    if filename and not skip_structure_load:
         if is_chemsmart_db:
             if structure_id is not None:
                 molecules = Molecule.from_filepath(
@@ -756,7 +744,7 @@ def gaussian(
                 f"Obtained {len(molecules)} molecule {molecules} from {filename}"
             )
 
-    if pubchem and not is_pka_table_input:
+    if pubchem and not skip_structure_load:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None

@@ -10,8 +10,8 @@ This page covers **Gaussian pKa job submission** — generating input files and 
 .. note::
 
    Output-file analysis is backend-independent. After calculations finish, use ``chemsmart run pka analyze`` or
-   ``chemsmart run pka batch-analyze``. See :ref:`pka-calculations` for the full analysis workflow, table formats, and
-   thermochemistry options.
+   ``chemsmart run pka batch-analyze``. See :ref:`pka-calculations` for the full analysis workflow. The same analysis is
+   also registered under ``chain``; see :doc:`chain-jobs`.
 
 .. contents:: Table of Contents
    :local:
@@ -51,6 +51,13 @@ Where:
 
 This runs gas-phase opt+freq and solvent single-points for HA, A⁻, HRef, and Ref⁻ (default solvent: SMD/water from
 project or CLI).
+
+The same submit path is available from chain, using the Gaussian alias in the chain YAML:
+
+.. code:: bash
+
+   chemsmart run chain -p combined -f acid.xyz -c 0 -m 1 pka --program gaussian \
+       -pi 10 -r ref_acid.xyz -rpi 21 -rc 1 -rm 1
 
 **Direct cycle**
 

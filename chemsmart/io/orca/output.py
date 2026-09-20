@@ -1714,6 +1714,9 @@ class ORCAOutput(ORCAFileMixin):
         for i, line_i in enumerate(self.contents):
             mulliken_atomic_charges = {}
             if "MULLIKEN ATOMIC CHARGES" in line_i:
+                # Restricted: last column is charge. Unrestricted tables
+                # add a spin column, so charge is second-to-last.
+                charge_column = -2 if "SPIN POPULATIONS" in line_i else -1
                 for line_j in self.contents[i + 2 :]:
                     if "Sum of atomic charges" in line_j:
                         break
@@ -1724,7 +1727,7 @@ class ORCAOutput(ORCAFileMixin):
                     # use 1-indexed
                     element_num_1idx = increment_numbers(element_num, 1)
                     mulliken_atomic_charges[element_num_1idx] = float(
-                        line_j_elements[-1]
+                        line_j_elements[charge_column]
                     )
                 all_mulliken_atomic_charges.append(mulliken_atomic_charges)
         return all_mulliken_atomic_charges[-1]
@@ -1738,6 +1741,7 @@ class ORCAOutput(ORCAFileMixin):
         for i, line_i in enumerate(self.contents):
             loewdin_atomic_charges = {}
             if "LOEWDIN ATOMIC CHARGES" in line_i:
+                charge_column = -2 if "SPIN POPULATIONS" in line_i else -1
                 for line_j in self.contents[i + 2 :]:
                     line_j_elements = line_j.split()
                     if (
@@ -1750,7 +1754,7 @@ class ORCAOutput(ORCAFileMixin):
                     element_num = f"{element}{line_j_elements[0]}"
                     element_num_1idx = increment_numbers(element_num, 1)
                     loewdin_atomic_charges[element_num_1idx] = float(
-                        line_j_elements[-1]
+                        line_j_elements[charge_column]
                     )
                 all_loewdin_atomic_charges.append(loewdin_atomic_charges)
         return all_loewdin_atomic_charges[-1]
@@ -3860,7 +3864,7 @@ class ORCApKaOutput(ORCAOutput):
         energy_units="hartree",
     ):
         """Compute thermochemistry for pKa species (HA, A-, HRef, Ref-)."""
-        from chemsmart.cli.pka import compute_pka_thermochemistry
+        from chemsmart.analysis.pka import compute_pka_thermochemistry
 
         return compute_pka_thermochemistry(
             ha_file=ha_file,
@@ -3900,7 +3904,7 @@ class ORCApKaOutput(ORCAOutput):
         delta_G_proton=None,
     ):
         """Compute pKa using a dual-level thermodynamic cycle."""
-        from chemsmart.cli.pka import compute_pka
+        from chemsmart.analysis.pka import compute_pka
 
         return compute_pka(
             ha_gas_file=ha_gas_file,
@@ -3943,7 +3947,9 @@ class ORCApKaOutput(ORCAOutput):
         delta_G_proton=None,
     ):
         """Print formatted pKa summary."""
-        from chemsmart.cli.pka import print_pka_summary as _print_pka_summary
+        from chemsmart.analysis.pka import (
+            print_pka_summary as _print_pka_summary,
+        )
 
         return _print_pka_summary(
             ha_gas_file=ha_gas_file,
@@ -3964,3 +3970,19 @@ class ORCApKaOutput(ORCAOutput):
             scheme=scheme,
             delta_G_proton=delta_G_proton,
         )
+
+
+class ORCARedoxOutput(ORCAOutput):
+    """Thin wrapper for exchange redox analysis of ORCA outputs."""
+
+    @staticmethod
+    def compute_redox_potential(**kwargs):
+        from chemsmart.analysis.redox import compute_redox_potential
+
+        return compute_redox_potential(**kwargs)
+
+    @staticmethod
+    def format_redox_summary(result):
+        from chemsmart.analysis.redox import format_redox_summary
+
+        return format_redox_summary(result)

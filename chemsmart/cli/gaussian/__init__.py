@@ -2,6 +2,7 @@ from .com import com
 from .crest import crest
 from .custom import userjob
 from .dias import dias
+from .fukui import fukui
 from .gaussian import gaussian
 from .irc import irc
 from .link import link
@@ -10,6 +11,7 @@ from .nci import nci
 from .opt import opt
 from .pka import pka
 from .qrc import qrc
+from .redox import redox
 from .resp import resp
 from .scan import scan
 from .singlepoint import sp
@@ -23,6 +25,7 @@ __all__ = [
     "crest",
     "userjob",
     "dias",
+    "fukui",
     "gaussian",
     "irc",
     "link",
@@ -31,6 +34,7 @@ __all__ = [
     "opt",
     "pka",
     "qrc",
+    "redox",
     "resp",
     "scan",
     "traj",

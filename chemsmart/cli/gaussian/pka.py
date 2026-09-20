@@ -30,6 +30,7 @@ from chemsmart.cli.pka import (
     resolve_pka_batch_row,
     resolve_pka_submit_proton_options,
     resolve_proton_index,
+    store_pka_shared,
     validate_reference_options,
 )
 from chemsmart.io.file import PKaCDXFile
@@ -45,69 +46,15 @@ logger = logging.getLogger(__name__)
 @click_pka_shared_options
 @click_pka_proton_options
 @click.pass_context
-def pka(
-    ctx,
-    skip_completed,
-    scheme,
-    reference,
-    reference_proton_index,
-    reference_color_code,
-    reference_charge,
-    reference_multiplicity,
-    reference_conjugate_base_charge,
-    reference_conjugate_base_multiplicity,
-    delta_g_proton,
-    conjugate_base_charge,
-    conjugate_base_multiplicity,
-    solvent_model,
-    solvent_id,
-    temperature,
-    concentration,
-    pressure,
-    cutoff_entropy_grimme,
-    cutoff_entropy_truhlar,
-    cutoff_enthalpy,
-    proton_index,
-    color_code,
-    **kwargs,
-):
+def pka(ctx, **kwargs):
     """Gaussian pKa job submission.
 
     For output analysis (backend-independent), use:
       chemsmart run pka analyze ...
       chemsmart run pka batch-analyze ...
     """
-    from chemsmart.cli.pka import resolve_pka_entropy_cutoff
-
-    s_freq_cutoff, entropy_method = resolve_pka_entropy_cutoff(
-        cutoff_entropy_grimme, cutoff_entropy_truhlar
-    )
-    shared = dict(
-        scheme=scheme,
-        reference=reference,
-        reference_proton_index=reference_proton_index,
-        reference_color_code=reference_color_code,
-        reference_charge=reference_charge,
-        reference_multiplicity=reference_multiplicity,
-        reference_conjugate_base_charge=reference_conjugate_base_charge,
-        reference_conjugate_base_multiplicity=reference_conjugate_base_multiplicity,
-        delta_g_proton=delta_g_proton,
-        conjugate_base_charge=conjugate_base_charge,
-        conjugate_base_multiplicity=conjugate_base_multiplicity,
-        solvent_model=solvent_model,
-        solvent_id=solvent_id,
-        temperature=temperature,
-        concentration=concentration,
-        pressure=pressure,
-        cutoff_entropy_grimme=s_freq_cutoff,
-        cutoff_enthalpy=cutoff_enthalpy,
-        entropy_method=entropy_method,
-        skip_completed=skip_completed,
-    )
-    ctx.ensure_object(dict)
-    ctx.obj["pka_shared"] = shared
-    ctx.obj["pka_proton_index"] = proton_index
-    ctx.obj["pka_color_code"] = color_code
+    store_pka_shared(ctx, kwargs)
+    skip_completed = kwargs["skip_completed"]
 
     if ctx.invoked_subcommand is None:
         from chemsmart.utils.datasets import PKaTableEntry

@@ -146,6 +146,48 @@ conda activate ~/anaconda3/envs/chemsmart
         assert "#PBS -m abe\n" in buffer.getvalue()
 
 
+class TestChainSubmitterExecutable:
+    def test_merges_unique_child_program_environments(self, server_yaml_file):
+        from chemsmart.jobs.chain import ChainJob
+
+        server = Server.from_yaml(server_yaml_file)
+        job = ChainJob(
+            molecule=None,
+            label="styrene",
+            jobrunner=None,
+            programs=("crest", "xtb", "gaussian", "orca"),
+        )
+        submitter = SLURMSubmitter(job=job, server=server)
+        executable = submitter.executable
+        assert executable.conda_env.count("conda activate") == 1
+        assert "module load craype-x86-rome" in executable.modules
+        assert executable.modules.count("module purge") == 1
+        assert "g16.login" in executable.scripts
+        assert "GAUSS_EXEDIR" in executable.envars
+        assert "openmpi" in executable.envars
+
+    def test_empty_programs_skips_program_block(self, server_yaml_file):
+        from chemsmart.jobs.chain import ChainJob
+
+        server = Server.from_yaml(server_yaml_file)
+        job = ChainJob(
+            molecule=None, label="empty", jobrunner=None, programs=()
+        )
+        submitter = SLURMSubmitter(job=job, server=server)
+        buffer = StringIO()
+        submitter._write_program_specifics(buffer)
+        assert buffer.getvalue() == ""
+
+    def test_missing_program_raises_value_error(self, server_yaml_file):
+        import pytest
+
+        server = Server.from_yaml(server_yaml_file)
+        job = type("DummyJob", (), {"label": "job1", "PROGRAM": None})()
+        submitter = SLURMSubmitter(job=job, server=server)
+        with pytest.raises(ValueError, match="PROGRAM is not set"):
+            _ = submitter.executable
+
+
 class TestMissingProgramSectionFallback:
     """Tests that Executable.from_servername raises ValueError when the
     program block (e.g. XTB, CREST) is absent from the server YAML, and

@@ -2684,6 +2684,9 @@ class TestORCAOutput:
             (-0.381082 - (-0.721020)) * units.Hartree,
             rtol=1e-6,
         )
+        # Last Mulliken/Loewdin table (not the earlier SCF table)
+        assert orca_out.mulliken_atomic_charges["Fe1"] == 1.103711
+        assert orca_out.loewdin_atomic_charges["Fe1"] == 0.701580
 
     def test_fe2_quintet_orbital_properties(self, fe2_quintet_output):
         """Test HOMO/LUMO/SOMO properties for Fe2 quintet state."""
@@ -2832,6 +2835,18 @@ class TestORCAOutput:
             (-0.775129 - (-1.045382)) * units.Hartree,
             rtol=1e-6,
         )
+
+    def test_unrestricted_population_tables_use_charge_not_spin(
+        self, fe3_sextet_output
+    ):
+        """Unrestricted ORCA tables list charge then spin; charges are not spin."""
+        orca_out = ORCAOutput(filename=fe3_sextet_output)
+        assert orca_out.mulliken_atomic_charges["Fe1"] == 1.494429
+        assert orca_out.mulliken_atomic_charges["O2"] == -0.261665
+        assert orca_out.mulliken_atomic_charges["H3"] == 0.323693
+        assert orca_out.molecule.mulliken_atomic_charges["Fe1"] == 1.494429
+        assert orca_out.loewdin_atomic_charges["Fe1"] == 1.174978
+        assert orca_out.loewdin_atomic_charges["O2"] == 0.087045
 
 
 class TestORCAEngrad:
