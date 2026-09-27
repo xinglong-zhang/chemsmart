@@ -16,7 +16,7 @@ falsifier: "retire when every host-signed word is recomputed from the evidence a
 home: prose
 supersedes: []
 earned: 2026-09-24
-last_verified: "2026-09-25 @ e6020abf"
+last_verified: "2026-09-28 @ 04c2e5aa"
 ---
 A word the host signs -- a settlement, a verified refusal, a certification -- is computed from the evidence as it stands when the word is signed, and says what it read.
 A check made earlier (at planning, in another cycle, over another run's stream) describes that moment only; carrying it into a later word is how a verified word goes false.
