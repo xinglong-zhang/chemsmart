@@ -544,3 +544,9 @@ code files I touched.
   leased probes: both models served.
 - Next: issue the baseline runner under one lease; read nothing but
   infrastructure fields until it ends.
+- 2026-09-28 ~06:10 KST: baseline read (9f6a5023); arm M issued
+  (ef730721) and running under two leases; Phase I position memo written
+  (above). Handing back, waiting on arm M (deepseek ~07:00, qwen ~08:30
+  KST). If the runner processes do not survive the hand-back, resume me
+  and I relaunch the missing indices with `run_arm.py --only <cell>
+  --from <position>` (completed rows are kept per sample).
