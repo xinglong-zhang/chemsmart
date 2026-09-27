@@ -53,7 +53,12 @@ def printed_code(folder: Path) -> tuple[str, str, str]:
         digest = re.search(r"code tree digest ([0-9a-f]{64})", text)
         commit = re.search(r"code commit ([0-9a-f]{40})", text)
         if code and digest and (best is None or job > best[0]):
-            best = (job, code.group(1), digest.group(1), commit.group(1) if commit else "")
+            best = (
+                job,
+                code.group(1),
+                digest.group(1),
+                commit.group(1) if commit else "",
+            )
     if best is None:
         return "", "", ""
     return best[1], best[2], best[3]
@@ -61,7 +66,11 @@ def printed_code(folder: Path) -> tuple[str, str, str]:
 
 def tree_digest(code: Path, listing: Path | None) -> str:
     if listing is not None and listing.is_file():
-        names = sorted(l.strip() for l in listing.read_text().splitlines() if l.strip())
+        names = sorted(
+            line.strip()
+            for line in listing.read_text().splitlines()
+            if line.strip()
+        )
     else:
         names = []
         for folder, dirs, files in os.walk(code / "chemsmart"):
@@ -93,16 +102,24 @@ def main() -> None:
         label, agent, goal_id = line.split("|")
         folder = goal_dir(Path(agent))
         code, printed, commit = printed_code(folder)
-        row = {"label": label, "agent": agent, "goal_id": goal_id,
-               "code": code, "printed_digest": printed, "commit": commit}
+        row = {
+            "label": label,
+            "agent": agent,
+            "goal_id": goal_id,
+            "code": code,
+            "printed_digest": printed,
+            "commit": commit,
+        }
         if not code:
             row["status"] = "no_job_output"
         else:
             listing = folder / "code-files.at-run.txt"
             if not listing.is_file():
                 campaign = Path(code).parent
-                for candidate in (campaign / f"{Path(code).name}.files.txt",
-                                  campaign / "code-files.txt"):
+                for candidate in (
+                    campaign / f"{Path(code).name}.files.txt",
+                    campaign / "code-files.txt",
+                ):
                     if candidate.is_file():
                         listing = candidate
                         break

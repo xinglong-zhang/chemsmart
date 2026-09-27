@@ -41,22 +41,30 @@ def main() -> None:
         for stamp, role, path, event in goal.events:
             payload = event.get("payload") or {}
             digest = str(payload.get("receipt_sha256") or "")
-            if digest and event.get("kind") not in {"tool_started", "tool_failed"}:
+            if digest and event.get("kind") not in {
+                "tool_started",
+                "tool_failed",
+            }:
                 minted.append((stamp, role, path, digest))
         for stamp, role, path, event in goal.events:
             if event.get("kind") != "tool_failed":
                 continue
             payload = event.get("payload") or {}
-            report = payload.get("failure_report") or (
-                payload.get("canonical_result") or {}
-            ).get("failure_report") or {}
+            report = (
+                payload.get("failure_report")
+                or (payload.get("canonical_result") or {}).get(
+                    "failure_report"
+                )
+                or {}
+            )
             if report.get("gate") != GATE:
                 continue
             diagnosis = str(report.get("diagnosis") or "")
             match = _PREFIX.search(diagnosis)
             prefix = match.group(1) if match else ""
             before = [
-                (s, r, p, d) for (s, r, p, d) in minted
+                (s, r, p, d)
+                for (s, r, p, d) in minted
                 if prefix and d.startswith(prefix) and s <= stamp
             ]
             if not prefix:
@@ -69,25 +77,39 @@ def main() -> None:
                 where = "minted in a run stream"
             else:
                 where = "minted by an earlier planning session"
-            kinds = sorted({
-                e.get("kind")
-                for (_s, _r, p, d) in before
-                for (_s2, _r2, p2, e) in goal.events
-                if p2 == p and str((e.get("payload") or {}).get("receipt_sha256") or "") == d
-            })
-            rows.append({
-                "label": item["label"], "goal_id": item["goal_id"],
-                "session": Path(path).parent.name, "prefix": prefix,
-                "where": where, "minted_by": kinds,
-                "diagnosis": diagnosis[:240], "tool": payload.get("tool"),
-            })
+            kinds = sorted(
+                {
+                    e.get("kind")
+                    for (_s, _r, p, d) in before
+                    for (_s2, _r2, p2, e) in goal.events
+                    if p2 == p
+                    and str(
+                        (e.get("payload") or {}).get("receipt_sha256") or ""
+                    )
+                    == d
+                }
+            )
+            rows.append(
+                {
+                    "label": item["label"],
+                    "goal_id": item["goal_id"],
+                    "session": Path(path).parent.name,
+                    "prefix": prefix,
+                    "where": where,
+                    "minted_by": kinds,
+                    "diagnosis": diagnosis[:240],
+                    "tool": payload.get("tool"),
+                }
+            )
     (out_dir / "receipt_refusals.json").write_text(json.dumps(rows, indent=1))
     counts = collections.Counter(row["where"] for row in rows)
     print(f"{len(rows)} refusals at {GATE}")
     for where, n in counts.most_common():
         print(f"  {n:3d} {where}")
     for row in rows:
-        print(f"  {row['goal_id'][:32]:32} {row['prefix']} {row['where'][:40]:40} {row['minted_by']}")
+        print(
+            f"  {row['goal_id'][:32]:32} {row['prefix']} {row['where'][:40]:40} {row['minted_by']}"
+        )
 
 
 if __name__ == "__main__":

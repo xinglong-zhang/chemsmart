@@ -108,7 +108,9 @@ def discover(specs: list[str]) -> list[dict]:
             )
     unique: dict[tuple[str, str], dict] = {}
     for item in found:
-        goal_file = Path(item["agent"]) / "goals" / item["goal_id"] / "goal.json"
+        goal_file = (
+            Path(item["agent"]) / "goals" / item["goal_id"] / "goal.json"
+        )
         try:
             digest = json.loads(goal_file.read_text()).get("goal_sha256", "")
         except (OSError, json.JSONDecodeError):
@@ -441,7 +443,8 @@ def replay(source: Path, goal_id: str, out: Path) -> dict:
         candidates = sorted(
             p
             for p in (agent / "runs").glob("live-*/events.jsonl")
-            if not settled_stamp or stream_stamp(p.parent.name) <= settled_stamp
+            if not settled_stamp
+            or stream_stamp(p.parent.name) <= settled_stamp
         )
         session_stream = candidates[-1] if candidates else None
     goal_record = json.loads(
@@ -456,7 +459,11 @@ def replay(source: Path, goal_id: str, out: Path) -> dict:
         stream = session_stream
         if run_state == "analysis_only":
             stream = (
-                agent / "goals" / goal_id / "runs" / f"cycle-{cycles}"
+                agent
+                / "goals"
+                / goal_id
+                / "runs"
+                / f"cycle-{cycles}"
                 / "events.jsonl"
             )
         terminal = terminal_of(session_stream) if session_stream else ""
@@ -612,9 +619,13 @@ def main() -> None:
             if not any(e.get("kind") == "goal_settled" for e in ledger):
                 result = {"path": "unsettled"}
             else:
-                work = out_root / "work" / hashlib.sha256(
-                    f"{item['agent']}|{goal_id}".encode()
-                ).hexdigest()[:16]
+                work = (
+                    out_root
+                    / "work"
+                    / hashlib.sha256(
+                        f"{item['agent']}|{goal_id}".encode()
+                    ).hexdigest()[:16]
+                )
                 try:
                     result = replay(source, goal_id, work)
                 except Exception as exc:  # noqa: BLE001 - reported

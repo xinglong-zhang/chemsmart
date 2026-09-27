@@ -56,26 +56,42 @@ def main() -> None:
                     continue
                 payload = event.get("payload") or {}
                 result = payload.get("canonical_result") or {}
-                report = payload.get("failure_report") or result.get(
-                    "failure_report"
-                ) or {}
+                report = (
+                    payload.get("failure_report")
+                    or result.get("failure_report")
+                    or {}
+                )
                 tool = str(payload.get("tool") or result.get("tool") or "")
-                error = str(payload.get("error_class") or result.get("error_class") or "")
+                error = str(
+                    payload.get("error_class")
+                    or result.get("error_class")
+                    or ""
+                )
                 gate = str(report.get("gate") or "")
-                message = str(result.get("message") or report.get("diagnosis") or "")
+                message = str(
+                    result.get("message") or report.get("diagnosis") or ""
+                )
                 key = (tool, error, gate or template(message))
                 recovered = None
                 for later in events[index + 1 :]:
                     later_payload = later.get("payload") or {}
                     later_tool = str(
                         later_payload.get("tool")
-                        or (later_payload.get("canonical_result") or {}).get("tool")
+                        or (later_payload.get("canonical_result") or {}).get(
+                            "tool"
+                        )
                         or ""
                     )
-                    if later.get("kind") == "tool_succeeded" and later_tool == tool:
+                    if (
+                        later.get("kind") == "tool_succeeded"
+                        and later_tool == tool
+                    ):
                         recovered = True
                         break
-                    if later.get("kind") == "tool_failed" and later_tool == tool:
+                    if (
+                        later.get("kind") == "tool_failed"
+                        and later_tool == tool
+                    ):
                         recovered = False
                         break
                 group = groups.setdefault(
@@ -108,8 +124,12 @@ def main() -> None:
                     group["examples"].append(
                         {
                             "goal": f"{item['label']}:{item['goal_id']}",
-                            "invariant": str(report.get("invariant") or "")[:300],
-                            "diagnosis": str(report.get("diagnosis") or "")[:400],
+                            "invariant": str(report.get("invariant") or "")[
+                                :300
+                            ],
+                            "diagnosis": str(report.get("diagnosis") or "")[
+                                :400
+                            ],
                             "route": str(report.get("route") or "")[:300],
                             "message": message[:500] if not gate else "",
                         }

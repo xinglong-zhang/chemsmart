@@ -61,11 +61,13 @@ def sha256_of(path: Path) -> str:
 
 
 def main() -> None:
+    import chemsmart
     from chemsmart.agent._contracts import TrustedArtifactRefV1
-    from chemsmart.agent.execution import build_stationary_point_characterisation
+    from chemsmart.agent.execution import (
+        build_stationary_point_characterisation,
+    )
     from chemsmart.analysis.result_quantities import free_energy_surface
     from chemsmart.analysis.result_readers import reader_for
-    import chemsmart
 
     print("chemsmart imported from", chemsmart.__file__, flush=True)
     out_dir = Path(sys.argv[1])
@@ -79,21 +81,34 @@ def main() -> None:
         for _s, _r, _p, payload in goal.of("program_result_verified"):
             record = payload.get("record") or {}
             for artifact in record.get("output_artifacts") or ():
-                artifacts.setdefault(str(artifact.get("sha256") or ""), {
-                    "path": str(artifact.get("path") or ""),
-                    "kind": str(artifact.get("kind") or ""),
-                    "size": int(artifact.get("size_bytes") or 0),
-                    "node": str(payload.get("node_id") or record.get("node_id") or ""),
-                    "verified": str(payload.get("status") or ""),
-                })
+                artifacts.setdefault(
+                    str(artifact.get("sha256") or ""),
+                    {
+                        "path": str(artifact.get("path") or ""),
+                        "kind": str(artifact.get("kind") or ""),
+                        "size": int(artifact.get("size_bytes") or 0),
+                        "node": str(
+                            payload.get("node_id")
+                            or record.get("node_id")
+                            or ""
+                        ),
+                        "verified": str(payload.get("status") or ""),
+                    },
+                )
         claimed_from: set[str] = set()
         for _stamp, claim in goal.claims():
             claimed_from.add(str(claim.get("source_receipt_sha256") or ""))
         for _s, _r, _p, payload in goal.of("quantity_expression_evaluated"):
             if str(payload.get("receipt_sha256") or "") in claimed_from:
-                for binding in (payload.get("record") or {}).get("input_bindings") or payload.get("input_bindings") or ():
+                for binding in (
+                    (payload.get("record") or {}).get("input_bindings")
+                    or payload.get("input_bindings")
+                    or ()
+                ):
                     if isinstance(binding, dict):
-                        claimed_from.add(str(binding.get("source_receipt_sha256") or ""))
+                        claimed_from.add(
+                            str(binding.get("source_receipt_sha256") or "")
+                        )
 
         def resolve(sha: str) -> tuple[Path | None, dict, str]:
             meta = artifacts.get(sha)
@@ -102,7 +117,7 @@ def main() -> None:
             recorded = meta["path"]
             candidate = Path(recorded)
             if prefix and recorded.startswith(prefix):
-                candidate = local_root / recorded[len(prefix):].lstrip("/")
+                candidate = local_root / recorded[len(prefix) :].lstrip("/")
             if not candidate.is_file():
                 return None, meta, "file absent"
             if sha256_of(candidate) != sha:
@@ -110,19 +125,32 @@ def main() -> None:
             return candidate, meta, ""
 
         seen: set[str] = set()
-        for _s, _r, _p, payload in goal.of("thermochemistry_derived", "stationary_point_characterised"):
+        for _s, _r, _p, payload in goal.of(
+            "thermochemistry_derived", "stationary_point_characterised"
+        ):
             receipt = str(payload.get("receipt_sha256") or "")
             if receipt in seen:
                 continue
             seen.add(receipt)
             record = payload.get("record") or {}
             characterisation = "order_claimed" in record
-            sha = str(record.get("result_artifact_sha256") if characterisation else (payload.get("artifact_sha256") or record.get("artifact_sha256") or ""))
+            sha = str(
+                record.get("result_artifact_sha256")
+                if characterisation
+                else (
+                    payload.get("artifact_sha256")
+                    or record.get("artifact_sha256")
+                    or ""
+                )
+            )
             program = str(record.get("program") or "").lower()
             row = {
-                "label": item["label"], "goal_id": item["goal_id"], "word": goal.word,
+                "label": item["label"],
+                "goal_id": item["goal_id"],
+                "word": goal.word,
                 "class": "W10" if characterisation else "W11",
-                "receipt": receipt[:12], "program": program,
+                "receipt": receipt[:12],
+                "program": program,
                 "delivered": receipt in claimed_from,
             }
             path, meta, why = resolve(sha)
@@ -136,12 +164,16 @@ def main() -> None:
             try:
                 if characterisation:
                     ref = TrustedArtifactRefV1(
-                        artifact_id="archived-result", kind=reader.artifact_kind,
-                        sha256=sha, size_bytes=path.stat().st_size,
-                        path=str(path.resolve()), cli_value=str(path.resolve()),
+                        artifact_id="archived-result",
+                        kind=reader.artifact_kind,
+                        sha256=sha,
+                        size_bytes=path.stat().st_size,
+                        path=str(path.resolve()),
+                        cli_value=str(path.resolve()),
                     )
                     build_stationary_point_characterisation(
-                        result_artifact=ref, program=program,
+                        result_artifact=ref,
+                        program=program,
                         order_claimed=int(record.get("order_claimed")),
                     )
                     row["pin"] = "certified"
@@ -150,15 +182,27 @@ def main() -> None:
                     surface = free_energy_surface(program, output)
                     row["pin"] = f"surface {surface.surface}"
                     row["stationarity"] = surface.stationarity.stationarity
-                    row["basis"] = str(getattr(surface.stationarity, "basis", ""))
-            except Exception as exc:  # noqa: BLE001 - the refusal is the finding
+                    row["basis"] = str(
+                        getattr(surface.stationarity, "basis", "")
+                    )
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - the refusal is the finding
                 gate = getattr(exc, "gate", "")
                 row["pin"] = "refused" + (f" ({gate})" if gate else "")
                 row["reason"] = str(exc)[:300]
             rows_out.append(row)
     (out_dir / "stationarity.json").write_text(json.dumps(rows_out, indent=1))
     counts = collections.Counter(
-        (r["class"], r["pin"].split(":")[0] if r["pin"].startswith("unread") else r["pin"], r["delivered"])
+        (
+            r["class"],
+            (
+                r["pin"].split(":")[0]
+                if r["pin"].startswith("unread")
+                else r["pin"]
+            ),
+            r["delivered"],
+        )
         for r in rows_out
     )
     for (cls, pin, delivered), n in sorted(counts.items()):
