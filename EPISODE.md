@@ -238,7 +238,7 @@ Predictions, as pre-registered (pooled; per-corpus where it differs):
   10 (all ax41; 0 in CUHK R8-R10). A further 16 same-tool refusals cite
   in-session digests of the wrong kind. Decisions citing digests that
   are not receipts (plan, binding, wake-shown digests) are refused with
-  a route naming what the digest is: 57 CUHK, ~20 ax41 -- citation
+  a route naming what the digest is: 54 CUHK, 25 ax41 -- citation
   hygiene, not chemistry.
 - P6 HOLDS on its pre-registered definition ("a value in a typed tool
   reply"): of 5,039 unit-bearing numbers in delivered prose (final
@@ -290,8 +290,9 @@ Two behaviours read beside the counts:
 - It composes selections inside the typed layer: the pre-R8
   `xtb-ir-acetamide-pyscf-stability` series found the PySCF mode nearest
   the strongest xTB band with `subtract` -> `abs` -> `min` and
-  `coordinate_at_minimum(absdiff, frequencies)` (r3-r10;
-  `coordinate_at_maximum/minimum` in 38 of 38 transcripts from r3 on).
+  `coordinate_at_minimum(absdiff, frequencies)` (r3-r10:
+  `coordinate_at_maximum` in 29 of 31 transcripts, `coordinate_at_minimum`
+  in 25; corrected from a miscount "38 of 38" first written here).
   Argmax-then-select over aligned vectors is already expressible.
 
 Numbers the model puts into the typed layer (host-recorded): 658 of
