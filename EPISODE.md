@@ -181,6 +181,12 @@ What each outcome does to C2:
   d54aee39b738; COMPLETED in 34 s. Its derived outputs (rows,
   sessions, summary; 8 MB) were fetched to scratch for analysis; the
   records themselves were read in place with read-only greps.
+- CUHK probe M (slot job, 1 core, 4 GB, <= 30 min, reads only):
+  `/project/xlzhang/jiseung/r11/evid/probe-m/job.sh` sha256 e542f405...;
+  probe = `git show 23c08541:.agents/research/loop/probe_mode_selection.py`
+  sha256 a114fe1b...; code packed from 23c08541 (426 files, tree digest
+  1371776d..., `chemsmart/` identical to 9185770e), unpacked at
+  `/project/xlzhang/jiseung/r11/evid/code`, verified on the node.
 
 ## Census E -- READ (ax41 mirror + experiments-public local; CUHK 2157056/2157060)
 
