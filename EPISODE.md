@@ -255,6 +255,21 @@ turns) is not established; candidates: the window (archived notices came
 at turns 1-4 when the reading tools were in view at the first request,
 and at turn 16 once), the tree, and sampling.
 
+Was the diagnostic sentence readable when the baseline declarations were
+composed? (checked before arm M's first sample; `declare_visibility.py`
+over the D2 rows' exposure records and calls): yes. In 11/11 deepseek
+samples that declared and 12/12 qwen samples, `declare_requested_observable`
+was already callable -- loaded by search_capabilities, so its description
+(which carries `declare.diagnostic_has_standing`) and its `role` field
+were in view -- when the first declaration was composed; no declaration
+went through schema_loaded. deepseek's declarations carried a complete
+diagnostic in 0/12 (one call named the role without completing it);
+qwen's first attempts carried one in 11/12. First declarations rejected by
+the host: deepseek 1, qwen 5. search_capabilities calls within four
+turns: deepseek 125, qwen 106 (about 10 per sample). So arm M tests the
+same sentence shown earlier and more prominently (the system prompt from
+the first request), not a sentence the model had never seen.
+
 ## The one arm -- PRE-REGISTRATION, conditional on the baseline (written before any baseline outcome was read)
 
 Definitions used below. A message lever shows the same sentence at a
