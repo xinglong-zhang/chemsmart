@@ -1497,6 +1497,50 @@ mine to decide:
 Then items 1-4; merge the integration before hand-back and restore
 EPISODE.md after it.
 
+### The master's post-E2 items -- done (after merging 4486f247 as cb383f21; EPISODE.md survived the merge)
+
+0. Spin-square target (189ba146, `shared:`). Measured on E2's real outputs
+   through the reader: FlipSpin 1/FinalMs 0 and BrokenSym 2,2 (mult 5)
+   read target 6.0, deviation -4.002, `broken_symmetry_requested` False,
+   no symmetry word; the GuessMix controls read truly (p-benzyne 0.0,
+   +0.970, broken; H2 unbroken). Corrected premise: two organs computed
+   the target (the reader's `_spin_square_target` and tool_runtime's
+   `_spin_square_observation`, which feeds the anomaly). Decision: S(S+1)
+   of S = |Ms| where the program records a converged Ms, else the
+   coordinate line (evid-2's proposal; ordinary results unchanged); a flip
+   reads "broken", +1.998, like a GuessMix singlet; the anomaly stands,
+   true, with `final_ms` beside `bound_multiplicity`. Level: a flip counts
+   as a broken-symmetry request (so the unbroken observation can fire for
+   a collapsed flip), plus `final_ms` and, for the typed flip,
+   `site_spin_flip` in host numbering (none is a level identity field).
+   Witness `tests/agent/test_a_flipped_result_is_measured_against_the_
+   state_it_reached.py` (through `_evaluate_execution_outputs`, the
+   executor's validation, and the reader).
+1. Guidance sentences. rules.py `reference.crossprogram.a_broken_
+   symmetry_singlet_is_one_request` (6a0fdc2c, `shared:`): one inserted
+   sentence (measured on one-electron sites; S = 1 centres -> ORCA's
+   typed site_spin_flip; other programs refuse it) and two host-checked
+   boundaries (ORCA admits, PySCF refuses at render). Found on the way: a
+   Gaussian boundary is not expressible -- Gaussian's candidate render
+   admits the key (xTB's too, with a basis); its loader refuses it (E2's
+   CLI test). Charter crossprogram.md (45acf78c, own commit, the master's
+   to take or drop): the "measured to reach" sentence scoped to
+   one-electron sites, and "site-specific flips ... not represented"
+   replaced by the measured miss and the typed flip.
+2. `setting:orca:site_spin_flip` record: NOT earned; no row added; the
+   ladder keeps it at "tested". Grounds: all 19 setting records in
+   release.json were earned by Agent goals through the approval chain and
+   the executor; CUHK 2157103 was a provider-free CLI run, which exercised
+   the translation, the engine and the reader but not the executor's
+   validation and sensors -- the very layer where item 0 found a false
+   anomaly on every flipped result. It is earned by a flipped result that
+   runs through an approved execution (an Agent goal) on a tree carrying
+   item 0's repair.
+
+Pristine red checks (`truth/t3/red_all.sh`, witnesses from HEAD, HOME
+fenced): on 376c6c43 and on 4486f247 alike, 8 red (item 1: 2, item 2: 2,
+item 4: 1, item 0: 3) and 5 controls green.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
