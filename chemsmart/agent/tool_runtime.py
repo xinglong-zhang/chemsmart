@@ -7259,27 +7259,56 @@ class CommandCompiledToolHostV1:
         }
     )
 
-    def _recorded_run_receipt(self, receipt_sha256: str) -> bool:
-        """Whether a recorded run of this workspace minted the receipt.
+    #: The streams a workspace records, as inspect_run lists them.
+    _RECORDED_STREAM_PATTERNS = (
+        "replays/*/run/events.jsonl",
+        "executions/*/events.jsonl",
+        "goals/*/runs/*/events.jsonl",
+        "runs/*/events.jsonl",
+    )
+    #: The recorded streams a decision may cite a receipt from: every one
+    #: inspect_run lists except a research replay's, because listing a
+    #: stream is not citing from it. Planning sessions are among them --
+    #: inspect_run lists a session that launched no workflow and will not
+    #: read it as a run, so the gate reads it directly.
+    _CITABLE_STREAM_PATTERNS = (
+        "goals/*/runs/*/events.jsonl",
+        "runs/*/events.jsonl",
+        "executions/*/events.jsonl",
+    )
 
-        A woken session reads the previous cycle's executed chain through
-        inspect_run and was refused when its decision cited one of that
-        chain's receipts: the session host held only its own (NOVEL-3
-        po1 and ino2, 2026-09-05). The run streams are the host's own
-        durable record; a receipt they carry is one the host minted.
-        """
+    def _recorded_streams(self, patterns: Sequence[str]) -> dict[str, Path]:
+        """Reference to path for each stream the workspace records."""
 
         root = getattr(self, "run_evidence_root", None)
-        if not root or not receipt_sha256:
-            return False
+        if not root:
+            return {}
+        records_root = Path(root) / ".chemsmart-agent"
+        streams: dict[str, Path] = {}
+        for pattern in patterns:
+            for path in sorted(records_root.glob(pattern)):
+                if path.is_symlink() or not path.is_file():
+                    continue
+                streams[str(path.parent.relative_to(records_root))] = path
+        return streams
+
+    def _recorded_receipt_events(
+        self, receipt_sha256: str
+    ) -> tuple[tuple[str, str], ...]:
+        """(event kind, stream reference) of every event a citable
+        recorded stream holds that minted this receipt."""
+
+        if not receipt_sha256:
+            return ()
+        found: list[tuple[str, str]] = []
         # The digest is searched as itself and the record is read as the
         # store wrote it. The needle used to spell the JSON with a space
         # after the colon, which the event store never writes, so every
         # citation of a recorded run's receipt was refused -- including
         # the failed validation receipt the wake tells a session to cite.
-        for stream in sorted(
-            Path(root).glob(".chemsmart-agent/goals/*/runs/*/events.jsonl")
-        ):
+        for reference, stream in self._recorded_streams(
+            self._CITABLE_STREAM_PATTERNS
+        ).items():
             try:
                 text = stream.read_text(encoding="utf-8")
             except OSError:
@@ -7293,14 +7322,37 @@ class CommandCompiledToolHostV1:
                     event = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                kind = str(event.get("kind") or "")
                 payload = event.get("payload") or {}
                 if (
-                    event.get("kind") in self._RUN_RECEIPT_KINDS
+                    not kind.startswith("tool_")
                     and str(payload.get("receipt_sha256") or "")
                     == receipt_sha256
                 ):
-                    return True
-        return False
+                    found.append((kind, reference))
+        return tuple(dict.fromkeys(found))
+
+    def _recorded_run_receipt(self, receipt_sha256: str) -> bool:
+        """Whether a recorded stream of this workspace minted the receipt,
+        as one of the kinds a decision may cite from another stream.
+
+        A woken session reads the previous cycle's executed chain through
+        inspect_run and was refused when its decision cited one of that
+        chain's receipts: the session host held only its own (NOVEL-3
+        po1 and ino2, 2026-09-05). The recorded streams are the host's own
+        durable record; a receipt they carry is one the host minted. Only
+        the goal runs' streams were read, so a failed validation receipt
+        an earlier planning session minted -- the one the wake tells the
+        session to cite -- was refused as never minted (R11 truth, census
+        3: r10/q22 gh2).
+        """
+
+        return any(
+            kind in self._RUN_RECEIPT_KINDS
+            for kind, _reference in self._recorded_receipt_events(
+                receipt_sha256
+            )
+        )
 
     def _record_scientific_decision(self, turn_id: str, values: dict) -> Any:
         task_spec_sha256 = self._resolve_task_spec_reference(
@@ -7377,11 +7429,7 @@ class CommandCompiledToolHostV1:
                 # backs, and the interpretation stays prose beside it.
                 receipt_sha256 = reference[len(prefix) :]
                 require_sha256(receipt_sha256, "anomaly_receipt_sha256")
-                known = set(self.anomaly_observations) | {
-                    str(item.get("receipt_sha256") or "")
-                    for item in self.prior_anomaly_observations
-                }
-                if receipt_sha256 not in known:
+                if receipt_sha256 not in self._anomaly_receipts():
                     raise ContractError(
                         "scientific decision cites an unknown anomaly "
                         "observation"
@@ -8583,9 +8631,46 @@ class CommandCompiledToolHostV1:
                 # cited one has made a different mistake from a reader
                 # who invented a digest.
                 return f"a {keyed_by} digest ({name}), not a receipt"
-        if self._recorded_run_receipt(receipt_sha256):
-            return "a receipt a recorded run of this workspace minted"
+        # A digest another stream of the workspace recorded is the host's
+        # own, whatever its kind, and the refusal says which receipt it is,
+        # where it was recorded and -- only where the host would accept
+        # it -- where it may be cited. "No digest this host minted" was
+        # written over 25 receipts the host had minted, an anomaly that
+        # inspect_run shows and the route told the session to cite among
+        # them (R11 truth, census 3).
+        recorded = self._recorded_receipt_events(receipt_sha256)
+        for kind, reference in recorded:
+            if kind in self._RUN_RECEIPT_KINDS:
+                return f"the {kind} receipt that {reference} recorded"
+        anomaly_route = (
+            "; an anomaly is cited in evidence_refs as "
+            f"anomaly:{receipt_sha256}"
+            if receipt_sha256 in self._anomaly_receipts()
+            else ""
+        )
+        if recorded:
+            kind, reference = recorded[0]
+            return (
+                f"the {kind} receipt that {reference} recorded, and a "
+                "decision cites a receipt another stream recorded only when "
+                "it is an extraction, thermochemistry, expression, "
+                "validation or claim receipt" + anomaly_route
+            )
+        if anomaly_route:
+            return "an anomaly an earlier cycle of this goal recorded" + (
+                anomaly_route
+            )
         return ""
+
+    def _anomaly_receipts(self) -> frozenset[str]:
+        """The anomaly receipts a decision may cite as ``anomaly:<digest>``:
+        this session's, and the earlier cycles' the wake handed it."""
+
+        return frozenset(getattr(self, "anomaly_observations", {}) or {}) | {
+            str(item.get("receipt_sha256") or "")
+            for item in getattr(self, "prior_anomaly_observations", ()) or ()
+            if str(item.get("receipt_sha256") or "")
+        }
 
     def _receipt_known(self, receipt_sha256: str) -> bool:
         """A receipt this session or a recorded run of the workspace minted."""
@@ -8663,10 +8748,7 @@ class CommandCompiledToolHostV1:
         tagged = {k: v for k, v in tagged.items() if v}
         if not tagged:
             return
-        known = set(self.anomaly_observations) | {
-            str(item.get("receipt_sha256") or "")
-            for item in self.prior_anomaly_observations
-        }
+        known = self._anomaly_receipts()
         for node_id, digest in sorted(tagged.items()):
             if digest not in known:
                 raise ContractError(
@@ -19117,19 +19199,7 @@ class CommandCompiledToolHostV1:
             read_run_events,
         )
 
-        records_root = self.run_evidence_root / ".chemsmart-agent"
-        streams: dict[str, Path] = {}
-        for pattern in (
-            "replays/*/run/events.jsonl",
-            "executions/*/events.jsonl",
-            "goals/*/runs/*/events.jsonl",
-            "runs/*/events.jsonl",
-        ):
-            for path in sorted(records_root.glob(pattern)):
-                if path.is_symlink() or not path.is_file():
-                    continue
-                reference = str(path.parent.relative_to(records_root))
-                streams[reference] = path
+        streams = self._recorded_streams(self._RECORDED_STREAM_PATTERNS)
 
         requested = str(values.get("run", "") or "").strip()
         if not requested:
