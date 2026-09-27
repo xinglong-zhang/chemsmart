@@ -603,6 +603,17 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
 - Instruments committed (43b160e7, b89b6108, 2e7f0e23, 213843e6); local
   census, three CUHK census jobs and era replays read; position memo
   written. Phase I ends here; waiting for the master's exchange.
+- Repair A (master's instruction): 4ec8957d; census 4 read (1 of 254
+  words moves: r10/q7 g2-scan-modred). Merge: r11-integration is still
+  9185770e, an ancestor of this branch, so there was nothing to merge.
+  Hand-back gates on a pristine `git archive` export of 2232445a (its
+  `chemsmart/` and `tests/` equal d5045952's): tests/agent 3344 passed,
+  20 skipped, 2 xfailed, exit 0 (baseline 3340 + the 4 witness cases);
+  full suite 23 failed, 4897 passed, 25 skipped, 3 xfailed, the failing
+  set identical to `~/.chemsmart-r11-run/baseline/suite.set`; ruff,
+  black --check and isort --check clean on driver.py, the witness and
+  the seven loop instruments. Held until Exchange 1: Repair B, the
+  reading-turn replay harness, the Ni(II)2 oracle.
 
 ## Jobs issued
 
@@ -612,4 +623,7 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   reader, refusal census, stationarity re-sign. COMPLETED.
 - CUHK 2157065 (r11-truth-a), census 3, prereg 9802e216478f: receipt
   refusals, refined reader, replay on 002f91cf. COMPLETED.
+- CUHK 2157070 (r11-truth-a), census 4, prereg 41adf5a4eeb4: re-sign on
+  the repaired tree (2232445a, digest 9d1da30c) and the reader over its
+  words. COMPLETED.
 - No provider arm, no live goal.
