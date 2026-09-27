@@ -1212,6 +1212,123 @@ observations); receipt kinds and receipt reuse as an expression input;
 the reading-turn settlement replay harness; class (d) `standing_stale`
 unless item 1's census measures it along the way.
 
+## Exchange 1 (master to truth-3, 2026-09-28, while item 1 was being oriented)
+
+The Behaviour lens reported; its findings reach this lens as evidence,
+not verdicts: the model is the first-order locus at matched decision
+points (72 samples, 0 INFRA; D1 deepseek 12/12 vs qwen 5/12, D2 falsifiable
+diagnostics deepseek 0/12 vs qwen 11/12); a host sentence moved at most
+qwen's first move; 0/24 noticed the task's false premise at the first
+moment on the R11 tree (6/7 in the unmatched archive, unexplained); the
+reading-turn contradiction is real text but 0/8 R10 Q6 reading turns
+acted on it; 12 of 16 always-rendered rules name an act that starts out
+of view under host_search (about 10 searches per four turns, no loss
+shown); tools in view are now host records (d4e63923).
+My items do not change. Queued after items 1 and 2 merge (not before):
+one renderer change -- report rows name the model-authored constants a
+claim stands on (item 5, DP6), and observations beside a receipt appear
+as facts beside the claims they concern (E1); its own witness and
+pre-registration; report words mine, observation content Evidence's,
+wake placement Behaviour's (a `shared:` note).
+Charter check for the hand-back (read-only): does `plan` -> `agent
+review` -> `agent run` decide and execute outside GoalDriver, making the
+kernel's "one driver runs every goal, and every entry point is a view of
+it" untrue?
+
+## Item 1 -- the certificate reads the goal's records: witness arms (measured on 376c6c43, before any code)
+
+Probe (`tests/agent/test_zz_truth3_scratch_probe.py`, untracked, never
+committed), through `run_goal_loop` with real hosts over the archived
+PySCF O2 singlet bytes (truth-2's and R10 Q19's harness):
+- RUN arm (truth-2's dropped arm): cycle 2's woken session cites
+  7fec8ea3 (cycle 1's run's failed validation receipt, the route
+  `wake.failed_validation_receipt_answers_verdict` prescribes); cycle 2's
+  run judges the same verdict again. Run 2's walk re-mints e34a715e and
+  7fec8ea3 byte for byte, and its certificate 858ea179 is `partial`
+  (`analysis.claim_on_failed_criterion.ref-energy`, `...rks-external-
+  eigenvalue`; `failed_criterion:...:unanswered:e34a715e`) because the run
+  host holds no decision. Word: `returned_to_human`, "cycle 2: this run's
+  completion receipt 858ea179 is partial, so no completion gate certified
+  the delivery, and no revision remains to certify it". FALSE: the goal's
+  records hold a decision citing a receipt of that verdict.
+- SESSION arm (new; the same class in a second organ): cycle 2's woken
+  session records the decision citing 7fec8ea3, then plans the o2r
+  analysis-only chain; the host walks it at once (as the wake promises,
+  "under the goal's standing decision"). The walk re-judges the verdict as
+  e34a715e on the session's host, which holds the decision but not
+  7fec8ea3's validation record, so it cannot join the two receipts into
+  one verdict: certificate 858ea179 partial, then the session's own
+  completion 28a415c2 partial. Word: `returned_to_human`, "...its
+  completion receipt 28a415c2 is partial, naming analysis.claim_on_failed_
+  criterion.ref-energy, ...". FALSE for the same reason.
+Corrected premise (the brief's "reads only its own host's decisions"):
+the certificate reads only its own host's decisions AND its own host's
+validation records; the second matters whenever the answered receipt was
+minted in another stream (the session arm), because `failed_criteria`
+joins receipts into one verdict only from the validation records it is
+given. Both organs call `CommandCompiledToolHostV1._failed_criteria`.
+
+Design, fixed before code:
+- The one function every certificate organ calls, `_failed_criteria`,
+  reads the goal's records at signing: validations, decisions' citations
+  and lineage maps of every stream the goal's ledger names
+  (`driver._goal_streams`, the settlement's own set, through the
+  settlement's own readers `_verdict_records` / `_merge_verdict_records`),
+  merged after the host's own (own first, as the settlement merges `here`
+  first), and it returns only verdicts that carry at least one of the
+  host's own receipts, each restricted to its own receipts for the
+  unanswered id (as the settlement's `unanswered_criteria` is), so a
+  completion never starts listing earlier cycles' verdicts it neither
+  judged nor claimed from.
+- Which goal: a session host is told (`live_session` passes the goal's
+  record directory from `goal_context["goal_id"]`; nothing is added to
+  the rendered goal record). A run host's stream IS its goal's run stream
+  (`goals/<id>/runs/cycle-N/events.jsonl`, the driver's run reference, on
+  the local and the scheduler path alike; cohort elements share it), so
+  the host finds the goal beside its own stream, and no file or wire has
+  to be written before dispatch. (A file channel was rejected on evidence:
+  the existing one, `prior-anomalies.json`, is written only on the local
+  path -- `GoalDriver._execute` returns from the scheduler branch before
+  the write -- so every CUHK goal's run was never handed its earlier
+  anomalies. Reported below as a separate defect.)
+- Witness file `tests/agent/test_a_certificate_reads_the_decisions_of_
+  the_whole_goal.py`: the RUN arm (emulated run, its host built as the
+  harness builds every run host); the SESSION arm through the real
+  `run_live_agent_session` with only the provider transport scripted (the
+  harness of `test_a_refused_input_says_why.py`), so live_session's own
+  wiring is what is tested; a control per arm with no citing decision
+  (`returned_to_human` naming the verdict on both trees). Expected on
+  376c6c43: both cited arms red, both controls green; after: 4 green.
+
+### Census 8 -- the certificate at goal grain (written before the instrument runs)
+
+Instrument `.agents/research/loop/certificate_census.py` (new). For every
+archived `analysis_completion_evaluated` row whose status is `partial`
+and whose findings include `analysis.claim_on_failed_criterion.*`: the
+failed verdicts the minting host held (validations and decisions of the
+same stream up to that row), re-joined with the validations and decisions
+of every other stream the goal's ledger names whose rows precede the
+completion's timestamp, through `chemsmart.agent.goal.failed_criteria`.
+Faithfulness first: the host-grain recomputation must reproduce the
+completion's own `failed_criterion:*:unanswered:*` ids, else "record
+insufficient" (never counted). A completion is a FLIP when every verdict
+it names unanswered at host grain is answered at goal grain. Counted
+separately for run streams and session streams, with whether the goal's
+settlement (or a `recovery_opened` row) read that completion.
+Population: the 254 goals of censuses 4-5 (local 175, CUHK 79).
+Expected: flips 1-3, at least one in a session stream -- r10/q22 G-h2's
+cycle-2 session (driver.py's comment records that its decision cited the
+run's receipt while it judged the verdict again) -- and 0 in run streams;
+final settlement words that read a flip: 0 (G-h2 settled after a later
+cycle cited its own receipt). No-change control: `resign.py` on the
+repaired tree signs byte-identical words to census 5 for all 254 goals
+(settlements re-sign from archived certificates; nothing re-mints them).
+Falsifiers: a flip in a run stream (the run class was live in the
+archive); a final word that read a flip (the defect changed a delivered
+word); any replayed word that moves (collateral change in the repair);
+host-grain recomputation that does not reproduce the archived ids for
+more than 10 % of the partial completions (instrument not faithful).
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
