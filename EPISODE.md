@@ -198,6 +198,47 @@ they are kept in `baseline-void-401/`, and the run restarts from
 position 0 with the same manifest, the same runner (7ae49bd5b9ee266d)
 and the fixed instrument. Nothing else in the pre-registration changes.
 
+## Amendment A2 -- the NOTICE hand-read criterion (before any D2 outcome was read)
+
+Reading archived po3 sessions (below) showed two false-positive modes of
+the mechanical NOTICE rule, which stays as committed: (1) "ester-at-c4 /
+ester-at-c5" used as a route or orientation name next to a file name
+(deepseek round 3, turn 1); (2) "swapped" said of something else within
+300 characters of "label" ("the assignment is swapped exactly as
+intended", deepseek round 4, turn 7, about its own TS guesses). The hand
+read, reported beside the mechanical count, counts NOTICE only when the
+words state that the task's file labels, or its locant claim, disagree
+with the structures, SMILES or IUPAC numbering -- explicitly ("the labels
+are swapped / inverted / the wrong way round") or by mapping a named file
+to the other locant's IUPAC name ("your file ...c5, i.e. the standard
+4-carboxylate").
+
+## Observational evidence (archives, provider-free, not matched)
+
+- Census of typed hypothesis acts (scratch `hyp_census.py` over the ax41
+  mirror 2026-09-14 and `experiments-public/`; sessions on or after
+  2026-09-06, the first day any session declared a diagnostic; unit a
+  live session with a known observed model): deepseek-v4-flash-0731 34
+  sessions, 21 declaring, 7 with a diagnostic carrying a
+  failure_update_rule; qwen3.8-max 59 sessions, 36 declaring, 32 with one.
+  Within the one campaign directory both ran (ax41-refine-100): deepseek
+  7/21, qwen 17/20 of declaring sessions. No task family was run by both
+  under one name; tasks, dates and trees differ, so this is a lead, not a
+  comparison.
+- The po3 task was run by both models with the identical task text and
+  the same mislabelled product files: deepseek as `po3-triazole-regio`
+  (novel rounds 3-5, 2026-09-05/06), qwen as `po3-r17`, `po3-r18`,
+  `po3-r19` (2026-09-11). Cycle-1 sessions, hand-read with the criterion
+  above: deepseek stated the transposition in 2 of 3 (round 3 turn 2;
+  round 5 turn 4, explicitly turn 12; round 4 never), qwen in 4 of 4
+  (r17 twice at turn 1-3, r19 turn 2, r18 only at turn 16-17). Both
+  models read the product connectivity in every cycle-1 session (typed
+  LOOK: deepseek 3/3, qwen 4/4). Diagnostics declared: qwen 3/4, deepseek
+  0/3 -- but deepseek's sessions are on or before the day the diagnostic
+  role first appears. My pre-registered prior for D2 (deepseek NOTICE
+  about 1/12) is contradicted by the archive already; D2 stands as
+  registered and says what the R11 tree does.
+
 ## Jobs issued
 
 - 2026-09-28: baseline runner (run_baseline.py 7ae49bd5b9ee266d), local,
