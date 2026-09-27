@@ -614,6 +614,47 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   black --check and isort --check clean on driver.py, the witness and
   the seven loop instruments. Held until Exchange 1: Repair B, the
   reading-turn replay harness, the Ni(II)2 oracle.
+- truth-2 succeeds truth at 808f0e0e (context hand-back); integration
+  04c2e5aa holds Repair A. `date`: Mon Sep 28 04:01:09 KST 2026. This
+  worktree starts at the integration head 79e5639a (verified with
+  `git rev-parse HEAD`).
+
+## The master's adjudication of Repair A (copied from the succession brief)
+
+Merged as `04c2e5aa`. The master verified three things itself:
+
+- the witness on pristine exports: 3 red plus the control green on
+  `9185770e`, and 4 green on `808f0e0e`;
+- `tests/agent`: 3344 passed on the head's export;
+- the transcript: 795 of 795 turns on claude-opus-5-5.
+
+Class A was re-derived from the CUHK r10/q7 ledger before approval.
+`rsl: VERIFY verify-when-signing` is recorded; a REPLACE that names scope
+as well as time waits for Repair B's witness.
+
+## Phase II program (approved by the master, in this order)
+
+1. Run-path failed criteria, witness first: `GoalDriver._settle` does not
+   pass goal streams, so the run path reads failed criteria from one
+   stream while the planning path reads them at goal grain. Witness
+   through the goal loop; repair at the owning function if red at
+   79e5639a; if green, the class is closed by evidence, no code.
+2. Repair B, truth half: `_digest_names` says truly what a host-minted
+   digest is and where it may be cited; `_recorded_run_receipt` also
+   reads the goal's planning-session streams. Receipt kinds the gate
+   accepts do not change here. Witness: memo's (a) and (b). Census: the
+   71 refusals at that gate re-read on the repaired tree, pre-registered.
+3. C3, the Gibbs refusal at a held, non-stationary dihedral (r10/q21
+   g1-hooh, r10/q24 g2r): re-sign at the integration head
+   (`resign_stationarity.py`); does the pin's route now yield the free
+   energy, and did the refusal the Agent met name that route?
+4. C3, the named-site spin flip: one ORCA oracle on the ino2 Ni(II)2
+   geometry, GuessMix vs FlipSpin on one site, same level; pre-registered.
+5. (b) rendered reports and model-authored literals: examine only; code
+   only if the count is load-bearing.
+
+Held for the full exchange: the reading-turn settlement replay harness,
+any change to receipt kinds, receipt reuse as an expression input.
 
 ## Jobs issued
 
