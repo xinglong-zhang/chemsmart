@@ -204,10 +204,13 @@ A D2-qwen sample takes about 16 minutes (982 s at position 5, four real
 turns; qwen at reasoning effort max with thinking on) against about 1
 minute for a D1 sample and 7 for D2-deepseek, so one lease would need
 about five more hours. The key was otherwise idle (slot_status: no
-cluster goal; one local lease, mine). From position 8 the cell
-d2-head-qwen runs in a second runner under a second provider lease
+cluster goal; one local lease, mine). The first runner was stopped
+while position 8 (d1-control-qwen #1) ran; that sample finished and
+wrote its row (the stopped runner never logged it). The cell
+d2-head-qwen then runs in a second runner under a second provider lease
 (`--only d2-head-qwen --from 6`), and the first runner continues the
-manifest with that cell skipped (`--from 8 --skip d2-head-qwen`); runner
+manifest from position 9 with that cell skipped (`--from 9 --skip
+d2-head-qwen`, log `runner.log`; the second logs `runner-d2-head-qwen.log`); runner
 sha256 prefix 5e8d12844710a059 (adds only these two filters). Two of the
 round's three Agent slots are held until the run ends. Samples, cells,
 N, outcomes and analysis are unchanged.
