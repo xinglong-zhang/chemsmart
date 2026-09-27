@@ -4230,10 +4230,12 @@ def _quantity_expression_node_schema(
             },
             "indices": {
                 "type": "array",
-                "items": {"type": "integer", "minimum": 0},
+                "items": {"type": ["integer", "null"], "minimum": 0},
                 "description": (
                     "For ref, select nested zero-based indices. Create one indexed "
-                    "ref node per coordinate vector before distance or angle."
+                    "ref node per coordinate vector before distance or angle. "
+                    "A null keeps that whole axis: [null, 3] is column 3 of a "
+                    "matrix, one value per row."
                 ),
             },
             "literal_value": {
