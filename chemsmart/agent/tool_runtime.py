@@ -1438,7 +1438,7 @@ def _pyscf_result_receipt_expectation(
     return expected
 
 
-def _spin_square_observation(output: Any, multiplicity: Any) -> dict[str, Any]:
+def _spin_square_observation(output: Any) -> dict[str, Any]:
     """<S^2> as the program printed it beside what the bound state implies.
 
     An observation, deliberately not a finding: contamination is a fact
@@ -1466,11 +1466,20 @@ def _spin_square_observation(output: Any, multiplicity: Any) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 - a reader without the table
         return {}
     record: dict[str, Any] = {"spin_square_observed": observed}
+    # The reader's own target (one function): S(S+1) of the coordinate
+    # line's state, or of S = |Ms| where the program converged a flipped
+    # determinant to another Ms. Restated here from the multiplicity, it
+    # measured every flipped Ni(II)2 result against the quintet it started
+    # from and raised spin.s2_deviation_ge_0.2 at -4.0 (R11 truth-3).
+    from chemsmart.analysis.result_readers import _spin_square_target
+
     try:
-        spin = (int(multiplicity) - 1) / 2.0
-    except (TypeError, ValueError):
+        expected = _spin_square_target(output)
+    except Exception:  # noqa: BLE001 - no positive multiplicity, no target
         return record
-    expected = spin * (spin + 1.0)
+    final_ms = getattr(output, "broken_symmetry_ms", None)
+    if final_ms is not None:
+        record["final_ms"] = float(final_ms)
     record["spin_square_expected"] = expected
     record["spin_square_deviation"] = observed - expected
     return record
@@ -1957,6 +1966,14 @@ def _observed_spin_deviation(
 ) -> float | None:
     """The ⟨S²⟩ deviation a program's observation carries, or None."""
 
+    return _observed_spin_field(observation, program, "spin_square_deviation")
+
+
+def _observed_spin_field(
+    observation: Mapping[str, Any], program: str, name: str
+) -> float | None:
+    """One number of a program's ⟨S²⟩ observation, or None."""
+
     block = observation.get(program)
     if not isinstance(block, Mapping):
         return None
@@ -1965,7 +1982,7 @@ def _observed_spin_deviation(
         if len(rows) != 1 or not isinstance(rows[0], Mapping):
             return None
         block = rows[0]
-    value = block.get("spin_square_deviation")
+    value = block.get(name)
     try:
         return float(value) if value is not None else None
     except (TypeError, ValueError):
@@ -18482,9 +18499,7 @@ class CommandCompiledToolHostV1:
                                 if frequencies
                                 else None
                             ),
-                            **_spin_square_observation(
-                                output, output.multiplicity
-                            ),
+                            **_spin_square_observation(output),
                         }
                     )
                     if jobtype == "neb":
@@ -18859,9 +18874,7 @@ class CommandCompiledToolHostV1:
                                 "wavefunction_stability_history": (
                                     stability_history
                                 ),
-                                **_spin_square_observation(
-                                    output, output.multiplicity
-                                ),
+                                **_spin_square_observation(output),
                             }
                         )
                         if observed_jobtype in {"ircf", "ircr"}:
@@ -19095,11 +19108,16 @@ class CommandCompiledToolHostV1:
             # ⟨S²⟩ is an observation, never a gate; a deviation this size
             # is the surprise a scientist weighs (a wrong state, a
             # multireference character), recorded with its numbers.
+            final_ms = _observed_spin_field(observation, program, "final_ms")
             anomalies.append(
                 {
                     "signal_id": "spin.s2_deviation_ge_0.2",
                     "spin_square_deviation": float(f"{deviation:.4f}"),
                     "bound_multiplicity": multiplicity,
+                    # Where the run converged a flipped determinant to
+                    # another Ms, the deviation is from S(S+1) of S = |Ms|,
+                    # not of the bound multiplicity; the record says so.
+                    **({"final_ms": final_ms} if final_ms is not None else {}),
                 }
             )
         unbroken = _observed_broken_symmetry_unbroken(observation, program)
