@@ -263,6 +263,9 @@ _STATED = {
         "scf_convergence": ("verytight", {}),
         "scf_maxiter": (77, {}),
         "semiempirical": ("pm3", {"functional": None, "basis": None}),
+        # On the census's singlet water a flip has no high-spin state to
+        # start from, so it ends refused at compile with its sentence.
+        "site_spin_flip": ({"atoms": [1], "final_ms": 0}, {}),
         "solvent_id": ("toluene", {"solvent_model": "cpcm"}),
         "solvent_model": ("smd", {"solvent_id": "water"}),
         "solventfilename": ("census.cosmorsxyz", {"solvent_model": "cosmors"}),

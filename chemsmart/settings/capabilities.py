@@ -280,6 +280,12 @@ _ORCA_PROJECT_PARAMETERS = tuple(
             "relativistic",
             "response_method",
             "ri_approximation",
+            # The other broken-symmetry mechanism: a flip of named centres
+            # from the high-spin state (FlipSpin/FinalMs, written in ORCA's
+            # 0-based numbering), for centres with more than one unpaired
+            # electron, where the singlet mixing guess reached another
+            # state (ino2's Ni(II)2, R11 truth-2, CUHK 2157086).
+            "site_spin_flip",
             "state_manifold",
             # A saddle search's tuning controls. These are method
             # rationale and reusable across molecules, which is what

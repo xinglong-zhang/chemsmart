@@ -10,8 +10,10 @@ state and IRC calculations.
 
 import copy
 import logging
+import math
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from chemsmart.io.orca import (
@@ -990,9 +992,12 @@ def _orca_route_word_route(word):
     if key.startswith(_ORCA_BROKEN_SYMMETRY_WORDS):
         return (
             "a broken-symmetry guess",
-            "broken_symmetry: true (the host writes HFTyp UHF with GuessMix "
-            "and reads back from <S**2> whether the symmetry broke); a spin "
-            "flip on named sites has no typed form",
+            "broken_symmetry: true for the singlet of one-electron sites "
+            "(the host writes HFTyp UHF with GuessMix and reads back from "
+            "<S**2> whether the symmetry broke), or site_spin_flip: {atoms: "
+            "[...], final_ms: ...} to flip named centres of the high-spin "
+            "state the bound multiplicity names (the host writes FlipSpin, "
+            "counting from 0, and FinalMs)",
         )
     reference = {"uks": "uhf", "rks": "rhf", "roks": "rohf"}.get(key, key)
     if reference in ORCA_REFERENCE_DETERMINANTS:
@@ -1456,6 +1461,30 @@ def describe_broken_symmetry(settings, *, multiplicity=None):
     from chemsmart.jobs.settings import BROKEN_SYMMETRY_EVIDENCE_SENTENCE
 
     values = settings if isinstance(settings, dict) else dict(settings)
+    if values.get("site_spin_flip"):
+        try:
+            request = site_spin_flip_request(values["site_spin_flip"])
+        except ValueError as exc:
+            return str(exc)
+        refusal = site_spin_flip_state_refusal(request, multiplicity)
+        if refusal:
+            return refusal
+        atoms = request["atoms"]
+        state = (
+            f"multiplicity {int(multiplicity)} this node binds"
+            if multiplicity is not None
+            else "the multiplicity the node binds"
+        )
+        return (
+            "site_spin_flip: ORCA converges the unrestricted high-spin "
+            f"determinant of {state} (%scf HFTyp UHF), flips the spin on "
+            f"atom(s) {', '.join(str(atom) for atom in atoms)} -- written "
+            f"FlipSpin {','.join(str(atom - 1) for atom in atoms)}, ORCA "
+            "counting from 0 -- and converges to FinalMs "
+            f"{request['final_ms']:.1f}. Whether the flip held is read from "
+            "the result: spin_square gives <S**2>, and the atomic spin "
+            "populations are read at the Ms ORCA reports converging to."
+        )
     if values.get("broken_symmetry") is not True:
         return ""
     return (
@@ -1466,6 +1495,105 @@ def describe_broken_symmetry(settings, *, multiplicity=None):
         "1,1 and its own stability following reach. "
         + BROKEN_SYMMETRY_EVIDENCE_SENTENCE
     )
+
+
+def site_spin_flip_request(value):
+    """The flip of named centres a ``site_spin_flip`` setting asks for.
+
+    ``{atoms: [...], final_ms: ...}``: the host's 1-based positions of the
+    centres whose spin is flipped from the high-spin determinant the
+    bound multiplicity names -- the numbering modred, scan and
+    hybrid_hess_atoms take -- and the Ms of the determinant asked for.
+    ORCA's FlipSpin counts atoms from 0; the host translates, so ax41
+    ino2's ``FlipSpin 1,2``, meant as the two nickels, cannot flip one
+    nickel and the bridging oxygen again (R11 truth-2). Normalised to a
+    sorted tuple of distinct atoms and a float Ms, so a merged or
+    read-back request is fed through unchanged. None asks for nothing.
+    """
+
+    if value is None:
+        return None
+    if not isinstance(value, Mapping) or set(value) != {"atoms", "final_ms"}:
+        raise ValueError(
+            f"site_spin_flip takes {{atoms: [...], final_ms: ...}}, got "
+            f"{value!r}: the 1-based atoms whose spin is flipped from the "
+            "high-spin state the bound multiplicity names, and the Ms asked "
+            "for."
+        )
+    atoms = value["atoms"]
+    if (
+        not isinstance(atoms, (list, tuple))
+        or not atoms
+        or any(
+            isinstance(atom, bool) or not isinstance(atom, int) or atom < 1
+            for atom in atoms
+        )
+        or len(set(atoms)) != len(atoms)
+    ):
+        raise ValueError(
+            f"site_spin_flip atoms {atoms!r} must list the centres to flip, "
+            "each once, by their 1-based position in the geometry."
+        )
+    final_ms = value["final_ms"]
+    if (
+        isinstance(final_ms, bool)
+        or not isinstance(final_ms, (int, float))
+        or not math.isfinite(final_ms)
+        or abs(2 * final_ms - round(2 * final_ms)) > 1e-9
+    ):
+        raise ValueError(
+            f"site_spin_flip final_ms {final_ms!r} must be an Ms: a whole or "
+            "half-whole number."
+        )
+    return {
+        "atoms": tuple(sorted(int(atom) for atom in atoms)),
+        "final_ms": float(final_ms),
+    }
+
+
+def site_spin_flip_state_refusal(request, multiplicity, *, atom_count=None):
+    """Why a normalised flip cannot be written for this state, or None.
+
+    The flip starts from the high-spin determinant the bound multiplicity
+    names, M = 2S + 1, and reaches Ms S - 1, S - 2, ... down to -S: Ms = S
+    flips nothing, and no flip leaves that ladder. None where nothing was
+    asked, or where the state or the geometry is not yet bound.
+    """
+
+    if not request:
+        return None
+    if multiplicity is not None:
+        multiplicity = int(multiplicity)
+        if multiplicity <= 1:
+            return (
+                "site_spin_flip flips centres of the high-spin state the "
+                f"bound multiplicity names; multiplicity {multiplicity} has "
+                "no unpaired spin to flip. Bind the multiplicity with every "
+                "centre's spin aligned (two S = 1 centres: 5) and name "
+                "final_ms; broken_symmetry: true is the singlet mixing "
+                "guess, measured on one-electron sites."
+            )
+        spin = (multiplicity - 1) / 2.0
+        reachable = [spin - step for step in range(1, multiplicity)]
+        if not any(
+            abs(request["final_ms"] - value) < 1e-9 for value in reachable
+        ):
+            return (
+                f"site_spin_flip final_ms {request['final_ms']:g} is not "
+                f"reached by flipping spins of multiplicity {multiplicity} "
+                f"(Ms {spin:g} before the flip); a flip reaches "
+                + ", ".join(f"{value:g}" for value in reachable)
+                + "."
+            )
+    if atom_count is not None:
+        outside = [atom for atom in request["atoms"] if atom > atom_count]
+        if outside:
+            return (
+                f"site_spin_flip atoms {outside} are outside this "
+                f"{atom_count}-atom geometry; atoms are 1-based positions "
+                "in the geometry, as in its file."
+            )
+    return None
 
 
 def _normalize_orca_semiempirical(value):
@@ -1577,6 +1705,7 @@ class ORCAJobSettings(MolecularJobSettings):
         relativistic=None,
         reference=None,
         broken_symmetry=None,
+        site_spin_flip=None,
         frozen_core=None,
         frozen_core_electrons=None,
         ri_approximation=None,
@@ -1746,6 +1875,28 @@ class ORCAJobSettings(MolecularJobSettings):
                     "use reference: uhf, or leave reference unset."
                 )
             self.reference = "uhf"
+        # A flip of named centres from the high-spin state: the other
+        # broken-symmetry mechanism, for centres with more than one
+        # unpaired electron, where the singlet mixing guess reached a
+        # state 33.40 mEh above the site-flip one with the spin on the
+        # bridges (ino2's Ni(II)2, R11 truth-2, CUHK 2157086).
+        self.site_spin_flip = site_spin_flip_request(site_spin_flip)
+        if self.site_spin_flip:
+            if self.broken_symmetry:
+                raise ValueError(
+                    "site_spin_flip and broken_symmetry: true are two "
+                    "mechanisms for one broken-symmetry determinant: the "
+                    "flip of named centres from the high-spin state, and "
+                    "the singlet mixing guess. Keep one."
+                )
+            if self.reference in ("rhf", "rohf"):
+                raise ValueError(
+                    "site_spin_flip flips spins of an unrestricted "
+                    f"determinant and reference={self.reference!r} names a "
+                    "restricted one; use reference: uhf, or leave reference "
+                    "unset."
+                )
+            self.reference = "uhf"
         self.frozen_core = _normalize_choice(
             frozen_core, ORCA_FROZEN_CORE_POLICIES, "frozen_core"
         )
@@ -1910,6 +2061,54 @@ class ORCAJobSettings(MolecularJobSettings):
             return ()
         return (f"GuessMix {BROKEN_SYMMETRY_GUESS_MIX_DEGREES}",)
 
+    def site_spin_flip_refusal(self, *, multiplicity=None, atom_count=None):
+        """Why this job writes no named-site flip, or None.
+
+        ORCA converges the high-spin determinant of the bound multiplicity,
+        flips the spin on the named atoms (``FlipSpin``, counting from 0)
+        and converges to ``FinalMs``. A state or stage the request does not
+        define is refused here, and again by the writer, where the bound
+        multiplicity and the geometry are known.
+        """
+
+        request = getattr(self, "site_spin_flip", None)
+        if not request:
+            return None
+        if self.semiempirical is not None:
+            return (
+                "site_spin_flip is written for HF, DFT and correlated "
+                "methods; ChemSmart writes no unrestricted semiempirical "
+                "input. Name a functional or ab_initio method."
+            )
+        if self.input_string:
+            return (
+                "site_spin_flip is written into the input ChemSmart builds; "
+                "an input_string replaces that input, so the request would "
+                "be silently dropped. Remove one."
+            )
+        if self.jobtype in ("td", "qmmm"):
+            return (
+                f"site_spin_flip is not written into a {self.jobtype} "
+                "stage; run the flipped state as an ordinary sp, opt, ts or "
+                "irc stage."
+            )
+        if multiplicity is None:
+            multiplicity = self.multiplicity
+        return site_spin_flip_state_refusal(
+            request, multiplicity, atom_count=atom_count
+        )
+
+    def site_spin_flip_scf_lines(self):
+        """The ``%scf`` lines that write the flip, after ``HFTyp``."""
+
+        request = getattr(self, "site_spin_flip", None)
+        if not request:
+            return ()
+        return (
+            "FlipSpin " + ",".join(str(atom - 1) for atom in request["atoms"]),
+            f"FinalMs {request['final_ms']:.1f}",
+        )
+
     def _validate_electronic_structure_consistency(self):
         """Refuse electronic-structure settings that cannot describe the state.
 
@@ -1930,6 +2129,9 @@ class ORCAJobSettings(MolecularJobSettings):
             )
 
         refusal = self.broken_symmetry_refusal()
+        if refusal:
+            raise ValueError(refusal)
+        refusal = self.site_spin_flip_refusal()
         if refusal:
             raise ValueError(refusal)
 
