@@ -22,7 +22,7 @@ falsifier: "wrong if a reader whose expectations are derived from the writer's o
 home: prose
 supersedes: []
 earned: 2026-09-19
-last_verified: "2026-09-25 @ 48685803"
+last_verified: "2026-09-28 @ 8045b45f"
 ---
 A reader's expectation of what a writer produced (units, names, shapes, fields) is derived from the writer's own table, never restated beside it.
 A test that stands in for a live object uses the live type or a real archived artifact: a stand-in that supplies the attribute the code reads proves only that the code reads it.

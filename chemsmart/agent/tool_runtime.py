@@ -299,6 +299,7 @@ from chemsmart.analysis.quantity_expressions import (
     QuantityExpressionRequestV1,
     canonical_unit_for_dimension,
     convert_normalized_value,
+    expression_extremum_observations,
     expression_kind_observations,
     expression_level_observations,
     expression_node_from_plan,
@@ -19824,6 +19825,16 @@ class CommandCompiledToolHostV1:
             )
         except Exception:  # noqa: BLE001 - an observation never fails a call
             kind_observations = ()
+        # Where each coordinate_at_maximum/minimum's runner-up falls, from
+        # the same arrays. In the stream as well as the reply: an approved
+        # chain's walk keeps only the receipt of a reply, and a selection
+        # planned before its result exists is read by nobody else in-turn.
+        try:
+            extremum_observations = expression_extremum_observations(
+                request, receipt
+            )
+        except Exception:  # noqa: BLE001 - an observation never fails a call
+            extremum_observations = ()
         self._emit(
             turn_id,
             EventKind.QUANTITY_EXPRESSION_EVALUATED,
@@ -19875,12 +19886,23 @@ class CommandCompiledToolHostV1:
                 if kind_observations
                 else {}
             ),
+            **(
+                {"extremum_observations": extremum_observations}
+                if extremum_observations
+                else {}
+            ),
         )
-        if geometry_observations or level_observations or kind_observations:
+        if (
+            geometry_observations
+            or level_observations
+            or kind_observations
+            or extremum_observations
+        ):
             self._reply_observations = (
                 tuple(geometry_observations)
                 + level_observations
                 + tuple(kind_observations)
+                + tuple(extremum_observations)
             )
         return receipt
 
@@ -19999,7 +20021,8 @@ class CommandCompiledToolHostV1:
             node = by_id.get(node_id)
             if node is None or node.operation != "ref":
                 return None
-            if len(node.indices) != 1:
+            # A null keeps the whole axis: every atom, not one.
+            if len(node.indices) != 1 or node.indices[0] is None:
                 return None
             receipt = source_by_input.get(node.reference, "")
             return (receipt, int(node.indices[0])) if receipt else None
