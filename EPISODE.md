@@ -375,9 +375,12 @@ local runs in the scratchpad (`truth/replays`, `truth/reader`).
 3. Reader on the pin's words (254): 0 achieved words over an
    uncertified delivery, over an undelivered id or over a later verified
    refusal; 0 qualified rows under a false word; 0 of 440+ completions
-   passed with an unanswered criterion; 0 of 1,061 expectation rows
-   against their arithmetic beyond ino2's documented pre-conversion row;
-   0 of 723 relations false; 0 category answers against their receipt;
+   passed with an unanswered criterion; 0 of 1,061 expectation rows of
+   the re-signed goals against their arithmetic (over all archived rows
+   the only disagreement is ino2's documented pre-conversion
+   not_comparable, a sign that diverged); 0 of 369 finding relations
+   false (the ax41 archive predates findings); 0 category answers
+   against their receipt;
    every re-signed characterisation and free energy either stands (CUHK
    15/15 and 85/85; local 11/14 and 190/195) or is refused by a named
    later rule (R10 Q21/Q33: unconverged ORCA saddle searches, a planar
@@ -413,9 +416,12 @@ local runs in the scratchpad (`truth/replays`, `truth/reader`).
    falsified expectations 14 of 39 (of the unnamed: 5 are class A, 5 a
    zero given a sign in goal-h4, the rest under recovery_opened,
    returned_to_human or a superseding refusal). Every unnamed
-   unrequested finding, falsified diagnostic, answered criterion and
-   verified refusal sits under `returned_to_human` or `exhausted`: those
-   two words carry what is missing or spent, never what the goal found.
+   unrequested finding (8), falsified diagnostic (3) and answered
+   criterion (1), and 8 of the 10 unnamed verified refusals, sit under
+   `returned_to_human` or `exhausted`: those two words carry what is
+   missing or spent, never what the goal found. The other 2 verified
+   refusals are under r9/xtb g2's unreachable word and were not examined
+   (possibly superseded by later claims).
    An unasked finding is carried by the reasons of an achieved word and
    never by the word itself (pair4-a's anomeric N-CH2Cl shortening is
    plain `achieved`).
