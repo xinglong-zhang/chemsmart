@@ -307,6 +307,18 @@ p <= 0.05 -> the act moves that model (support for "acts"); <= 2 -> the
 act does not (narrows C4). Cost about 12 x (0.4 + 0.3) M tokens; the
 provider total stays under the 40 M cap.
 
+Arm M issued (2026-09-28 ~06:05 KST): tree `tree-armM` = the R11 head's
+chemsmart (content of d4e63923) with the one placement line changed
+(`diff -r` shows exactly rules.py:1378 "tool:declare_requested_observable"
+-> "stem"; package .py digest e9769377ccb90ca2; stub check: the sentence
+is in the first system prompt, 1 occurrence against 0 on the head).
+Runner `run_arm.py` (sha256 prefix 32c982cf321e1a4c; the baseline runner
+with arm M's two cells and output `arm-m/`), one runner per model
+(`--only d2-armM-deepseek`, `--only d2-armM-qwen`), two leases; the key
+was idle (no cluster goal, no local lease). Same D2 inputs, profiles,
+4 real turns, goal id and delegated label as the baseline. No outcome of
+either arm cell is read until both runners are DONE.
+
 ## Amendment A3 -- execution only (before any outcome was read)
 
 A D2-qwen sample takes about 16 minutes (982 s at position 5, four real
