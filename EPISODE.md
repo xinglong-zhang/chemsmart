@@ -578,6 +578,22 @@ expectation is already named); every other CUHK word byte-identical to
 census 1's pin words. Falsifier: any other word moves (a further
 instance of the class, read against its records, or over-reach).
 
+### Census 4 -- read (CUHK 2157070, prereg 41adf5a4eeb4, code 2232445a digest 9d1da30c)
+
+Exactly as pre-registered. Of the 79 CUHK goals re-signed on both trees,
+78 sign byte-identical words on the repaired tree and the pin; one moves:
+r10/q7 g2-scan-modred, `achieved` -> `achieved_with_observations`, whose
+first reason now reads "the host completion gate certified the delivery;
+criteria and predictions the session itself stated that did not hold:
+falsified_expectation:cis-barrier, falsified_expectation:oo160-torsion",
+followed by the same "delivered in an earlier cycle", finding and
+uncertainty lines as before. r10/q24 g2r is unchanged. With the local
+175 (all unchanged): 1 archived word of 254 changes. Reader over the
+repaired CUHK words: 0 achieved words hiding what the run found, 0
+unnamed falsified expectations, 0 qualified rows under a false word;
+the one remaining W1 flag is r10/q1 gdev1's archival category
+certificate (out of scope). LOUD for the owner: q7's word changes.
+
 ## Status
 
 - 2026-09-28: pin verified; briefs, kernel, CONDUCT, RSL, charter topics
