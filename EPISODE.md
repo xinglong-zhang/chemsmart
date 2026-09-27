@@ -1060,6 +1060,52 @@ of that table would take the model's number for the host's. Carried
 literals equal to the host number are counted (provenance lost, number
 unchanged) and are not load-bearing by themselves. Otherwise: no code.
 
+### Item 5 -- read (local; CUHK 2157093 census 7, 2157095 census 7b)
+
+Population: 430 host-rendered reports (296 ax41 + public, 134 CUHK
+R8-R10), 1,394 claim rows.
+- host 1,276 (91.5 %); dimensionless literals only 26; a temperature
+  literal 8; a dimensioned ("physical") literal 76 rows (5.5 %; local 53,
+  CUHK 23); unread 8 (local: no dependency row for the output).
+- the physical literals: 113 foreign, 4 carried (equal to one host
+  number). Post hoc (9dc94695, labelled so): 28 of the foreign are exact
+  2x or 3x multiples of a host number (local 1, CUHK 27: two-mon,
+  three-g-h2, two-g-nh3, ...) -- host numbers the model scaled by a
+  stoichiometric count and typed back, the workaround the Evidence lens
+  traced to receipts that cannot cross runs; value exact, provenance
+  lost. The rest are literature or convention values (R, 5/2 RT for a
+  hydrogen atom, a 20 cm-1 cut-off, experimental reference geometries,
+  a task threshold), mostly named so in the claim id.
+- pure rows -- the table shows the model's own number: 12 (0.9 %), all
+  ax41: goal-s5 x9 (`placed-*` bond lengths and angles the model placed,
+  beside host-measured `relaxed-*` values under the same expression
+  receipt), goal-s11 x2 (`h-e-src` = -0.5 hartree, the exact
+  non-relativistic hydrogen energy, and `hcorr-h-src` = 0.00236044
+  hartree), one qualification replay (`cn_given_claim` 1.47 A).
+Against the expectations: host >= 80 % held; physical <= 15 % held;
+pure <= 10 did not (12).
+Load-bearing, by the rule fixed before the census: yes. Pure literal
+rows are presented under "Host-rendered numerical claims" with a host
+expression receipt and no mark. The consequential one: goal-s11 (ORCA
+B3LYP 6-311G(d,p), general round) delivers the phenol O-H BDE
+`bde-src` = 81.83 kcal/mol from the phenol and phenoxyl enthalpies the
+host derived and a hydrogen enthalpy of -0.5 + 0.00236044 hartree the
+model typed, so the number mixes an exact atom with a DFT molecule; a
+reader of the report would take -0.5 hartree for the host's B3LYP
+hydrogen energy. No record of the goal measures the shift (it ran no
+hydrogen calculation). The mark is also live at the head: the renderer
+(`render_completed_analysis_report`, `_render_toolchain_analysis_report`
+in tool_runtime.py) lists registered literature constants with their
+conventions and never a `literal` node.
+Proposal (code not written here): each rendered claim row names the
+model-authored constants its value stands on -- node, value, unit, from
+the expression receipt's `output_dependencies` (already recorded) -- and
+a row whose value is only the model's own says so. On the Evidence
+lens's argument about a column select: I agree that atom indices
+resolved against the bound geometry are identity references the host
+can check, not model-authored numbers; the mark covers `literal` nodes
+only.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
@@ -1082,7 +1128,9 @@ unchanged) and are not load-bearing by themselves. Otherwise: no code.
   (16 cores), read through the host's reader. COMPLETED in 4 min 7 s,
   exit 0, 16 cores -- about 1.1 core-hours.
 - CUHK 2157093 (r11-truth-a), census 7 (item 5's literal census on the
-  CUHK population), prereg 3caa0e0bd0f3.
+  CUHK population), prereg 3caa0e0bd0f3. COMPLETED in 37 s, exit 0.
+- CUHK 2157095 (r11-truth-a), census 7b (the same with the post-hoc
+  scaled-copy field), prereg bb6f86fe91cb. COMPLETED in 12 s, exit 0.
 - Error, stated: to pre-register census 6 I ran a json-only Python
   script (`anomaly_seeding.py`, no chemsmart import) on the CUHK login
   node with the private environment's interpreter, outside a slot job.
