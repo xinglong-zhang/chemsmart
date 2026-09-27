@@ -177,6 +177,149 @@ What each outcome does to C2:
 - CUHK census E v2: the same roots and prunes, `census-v2.sh` sha256
   1dfef59d..., instrument `git show 4c38357b:...` sha256 6f005dc9...
   (the grouped-number tokenizer and witness fields; see its commit).
+  Submitted as CUHK Slurm 2157060 (r11-evid-a), pre-registration
+  d54aee39b738; COMPLETED in 34 s. Its derived outputs (rows,
+  sessions, summary; 8 MB) were fetched to scratch for analysis; the
+  records themselves were read in place with read-only greps.
+
+## Census E -- READ (ax41 mirror + experiments-public local; CUHK 2157056/2157060)
+
+Corpus (behavioural sessions; infrastructure -- zero provider turns or
+`turn_deadline_exceeded` -- counted apart): ax41 + public 642 of 660
+distinct (594 deepseek-v4-flash-0731, 48 qwen3.8-max); CUHK R8-R10 197
+of 199 (all deepseek-v4-flash-0731); CUHK pre-R8 96 of 109. Pooled 935
+sessions, 24,451 tool calls, 2,389 refusals. The instrument reproduces
+Q28 exactly where they overlap (ax41: 1,237 authoring calls, hatches
+in 9 sessions; CUHK: 82 hatch calls in 7 sessions -- none after q27).
+Instrument corrected once after running (4c38357b: grouped numbers and
+Unicode exponents were split; effect on ax41 delivered 4-digit numbers:
+bound 1,092/1,252 -> 1,101/1,255); both versions ran on CUHK.
+
+Predictions, as pre-registered (pooled; per-corpus where it differs):
+- P1 HOLDS pooled: hatch sessions 18/935 (1.9%); per corpus ax41 1.4%,
+  CUHK R8-R10 3.6% (fails alone), pre-R8 2.1% (PySCF numeric scf_tol).
+  Untyped-intent hatch calls on 9185770e: Q28's 12 (Hirshfeld x3,
+  named-site FlipSpin x8, NoUseSym x1); none added after Q28.
+- P2 HOLDS: operative (non-prose) path/shell/native strings outside
+  project sections in 13 of 24,451 calls (0.05%); 12 are
+  `search_capabilities` query text my patterns mis-tag, 1 is
+  `bind_scientific_identity(input_artifact_id="binol.xyz")`, refused
+  (`artifact.id_is_registered`). No tool call reached a shell or native
+  input outside the project sections Q28 already closed.
+- P3 HOLDS: 311 selector refusals; 34 distinct requested names; 32
+  declared somewhere on 9185770e; declared nowhere: `stationary_point_gradient`
+  and xTB `solvation_shift_energy` (a naming slip for
+  `xtb_solvation_shift_energy`). Refusals are dominated by deliberate
+  semantic routing: ORCA-printed `gibbs_free_energy` on opt/ts x155
+  (-> `derive_thermochemistry`), `spin_square` on closed shells x41 (->
+  `multiplicity`); closed since: `solvent` x19, ORCA IRC trajectories
+  x10, ORCA sp frequencies x16 (now an ORCA `freq` job type).
+  Vocabulary refusals fell from 435 of 1,426 refusals (ax41) to 22 of
+  563 (CUHK R8-R10).
+- P4 FAILS: Agent-declared gaps (`blocked_unsupported`,
+  `plan_unsupported_external`) in 108 of 861 analysis-planning sessions
+  (12.5%). Read by reason, they are mostly not vocabulary: missing
+  producers 32 workspaces, thermochemistry refused at a non-minimum 27,
+  engine/envelope/execution 5, "other" 20 (read: evidence and
+  execution). Vocabulary gaps: 23 workspaces over 11 types -- ORCA sp
+  frequencies 9, frontier orbitals 3, IRC path geometry 3, atomic spin
+  populations 2, and one each for energy->cm-1, scan coverage, NEB
+  energies, Gaussian <R^2>, adaptive mode selection, categorical
+  claims, per-root excited-state <S^2>; settings gaps: counterpoise
+  ghost atoms 3 (open), functional MN15 3 (ORCA 6.1.1 itself refuses
+  it); literature constants 7 (closed: `literature_constants.py` now
+  carries the aqueous proton, SHE and ferrocene references with
+  sources). On 9185770e every vocabulary type is closed except NEB
+  energies (NEB is not executable), per-root excited-state <S^2> (a
+  program limit), and adaptive mode selection (below).
+- P5 HOLDS on its stated definition: re-extraction of a
+  context-shown artifact in 301 sessions; expression or claim inputs
+  citing a receipt no earlier reply of the session carried, refused:
+  10 (all ax41; 0 in CUHK R8-R10). A further 16 same-tool refusals cite
+  in-session digests of the wrong kind. Decisions citing digests that
+  are not receipts (plan, binding, wake-shown digests) are refused with
+  a route naming what the digest is: 57 CUHK, ~20 ax41 -- citation
+  hygiene, not chemistry.
+- P6 HOLDS on its pre-registered definition ("a value in a typed tool
+  reply"): of 5,039 unit-bearing numbers in delivered prose (final
+  messages, finding and unreachable statements), 4,770 (94.7%) equal a
+  host-returned value at the displayed precision (control 12.8%);
+  prose-computed 2.0% (control 9.9%: the arithmetic class is not
+  evidence), context-only 1.7%, own-argument + unmatched 1.6%. The
+  stricter typed-record class is 63.4% (control 3.8%); at >= 4
+  significant digits it is 88% (ax41 final messages), 86% (CUHK final
+  messages) and 94% (CUHK finding statements: 216/229, control 0).
+- P7 (reading): every unmatched delivered number (ax41 final messages
+  51; CUHK findings 53 and final messages 38) and the ax41 residue with
+  witnesses (149 rows, 101 sessions) read in context. The residue is
+  correct prose restatements and unit conversions of host values,
+  earlier-cycle claim values shown by the wake without receipts,
+  labelled literature priors and expectation bands, and structural
+  descriptions of input geometries. Exits that changed a delivered
+  conclusion, as pre-registered: 3 goals --
+  (a) r10/q17 hc1 `dE-h2occ-U1` (achieved): the final text says
+      "-0.214269064 hartree (about -13.46 eV, -5.62 kcal/mol)"; the
+      correct conversions are -5.83 eV and -134.46 kcal/mol; the claim
+      of record is the correct host value (the sibling S1 wrote
+      "-134.5 kcal/mol"). A wrong number delivered beside a right claim.
+  (b) ax41 novel-round-3 `ino2-dinickel-exchange` (returned_to_human):
+      J in the declared unit cm-1 "stated in prose using 1 kcal/mol =
+      349.755 cm^-1" because energy->wavenumber was refused then; all
+      six conversions check (e.g. 2.9850 x 349.755 = 1044.0). Closed
+      since (`energy_to_wavenumber`).
+  (c) CUHK r8/orca `goal-ts` (unreachable_from_evidence): IRC direction
+      "delivered in prose from the typed extraction" because claims
+      were numeric-only. Closed since (categorical answers).
+  Plus one truncation (r10/q23 rt1: -56.50003 for -56.500035850 Eh,
+  0.004 kcal/mol). Refusals for missing vocabulary prevented a
+  requested observable in the 23 vocabulary-gap workspaces above; all
+  but three types are closed on 9185770e.
+- benchmark-v2 (pre-R10 baseline, 63 runs): its final messages carry
+  almost no computed numbers (0-15 per run, none prose-computed); when
+  the host lost a delivery (F7, the <S^2> crash, the arity crash) the
+  Agent did not substitute prose numbers -- the referee's "reader told
+  nothing".
+
+Two behaviours read beside the counts:
+- The Agent refuses to leave the typed layer when the value is in
+  sight: r10/q10 lg1 saw Gaussian's printed <R**2> = 18.9424 in host
+  text and rejected "reading the value by hand and binding it through a
+  literal-bearing quantity expression ... that is fabricated evidence",
+  declaring the observable unreachable (the selector gap is closed on
+  9185770e).
+- It composes selections inside the typed layer: the pre-R8
+  `xtb-ir-acetamide-pyscf-stability` series found the PySCF mode nearest
+  the strongest xTB band with `subtract` -> `abs` -> `min` and
+  `coordinate_at_minimum(absdiff, frequencies)` (r3-r10;
+  `coordinate_at_maximum/minimum` in 38 of 38 transcripts from r3 on).
+  Argmax-then-select over aligned vectors is already expressible.
+
+Numbers the model puts into the typed layer (host-recorded): 658 of
+4,160 expression outputs (16%, 125 streams, ax41) depend on a
+model-authored constant -- exponents, cutoffs, 298.15, R, kT/hc, a
+Sackur-Tetrode constant, atomic masses, and literature values (an
+experimental band 1746 cm-1; oxidant potentials 0.27 and 0.7 V). The
+host names every one in the receipt and treats it as asserted for
+sufficiency; the rendered report does not appear to mark a claim whose
+value rests on one (open question, not yet checked on a CUHK record).
+
+The one open vocabulary gap with a delivered loss: adaptive mode
+selection. `vibrational_mode_atom_participation` is modes x atoms; `ref`
+selects a mode's row by static index but never an atom's column, and
+`sum/mean/max/min` take no axis. So "the mode with the most C+O
+participation" cannot be planned before the Hessian exists. 46 ax41
+sessions requested participation and chose modes by reading it, then
+pulled the chosen numbers with static `ref`s in a later cycle (typed,
+replayable); it failed only in r9/xtb g3 (exhausted), whose last wave
+had no further cycle (the graph's
+`negative.an_analysis_chain_cannot_plan_a_mode_it_has_not_read`).
+
+Route shapes (C5 by-product): 538 accepted plans with calculation
+nodes -- 462 single-program (ORCA 364, PySCF 68, xTB 29, Gaussian 1),
+76 cross-program (PySCF+xTB 23, ORCA+PySCF 19, ORCA+xTB 17,
+Gaussian+ORCA 9, three programs 8); 1 node 162, 2-4 nodes 267, 5+ 109.
+248 goals executed nodes: 208 single-program, 40 cross-program
+(ORCA+PySCF 26); 264 geometry handoffs and 269 data edges recorded.
 
 ## Status
 
