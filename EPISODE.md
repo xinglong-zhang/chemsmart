@@ -462,10 +462,84 @@ rates differing materially from deepseek's (C2 becomes model-specific --
 48 qwen sessions are too few to say); a measure of route change after
 refused exploratory reads (would decide widening).
 
+## Probe M -- PRE-REGISTRATION (master's instruction after the memo; provider-free only)
+
+Question (the master's): can a typed plan, written before the Hessian
+exists, select a vibrational mode by its atom participation and return
+mode 99 on R9 xtb g3's archived Hessian? If today's vocabulary
+expresses it, no code; if not, the smallest change and what it replaces
+(the extra wake cycle). No implementation beyond a witness before
+Exchange 1.
+
+Inputs, read in place and read-only on CUHK (`/project/xlzhang/jiseung/r9/xtb/goals/g3/workspace/`):
+- route 2: `cycle-2/gf2_hess_gf2min_r2/.../geom-gf2min-cyc1_hess.out`
+  (GFN2-xTB Hessian at the GFN2 minimum; the one the Agent read);
+- route 1: `cycle-3/gf2_hess_gffgeom_r3/.../gff-relaxed-geometry-r3_hess.out`
+  (GFN2-xTB Hessian at the GFN-FF geometry; the last wave, whose
+  assignment the goal could not plan).
+Atom sets, 0-based, exactly the indices the Agent's own `ref` nodes used
+(`[96..98, 1|2|4|10|14|16]` in live-20260921T103342...): lactam C=O
+{10, 1}, amide C=O {14, 2}, carboxyl C=O {16, 4}.
+
+Instrument: `.agents/research/loop/probe_mode_selection.py` (committed
+before the run). It drives `CommandCompiledToolHostV1.dispatch`
+(`extract_result_quantities`, `evaluate_quantity_expression`), the
+public tool surface. Its mechanics were checked locally on
+`tests/data/XTBTests/outputs/acetaldehyde_hess` (not g3): C=O {2, 0} ->
+mode 11, 1798.58 cm-1, share 0.980; runner-up share 0.556 (mode 2, 501.81
+cm-1). Every blind construction was refused or reduced to a scalar there.
+Tree: this worktree's committed `chemsmart/` (identical to 9185770e),
+packed by `pack_code.sh`, digest re-verified on the node; HOME fenced to
+the job directory.
+
+Oracle: the Agent's reading of route 2 in its transcript --
+mode 99 = 1866.33 cm-1, lactam, 0.649 + 0.320 = 0.969; mode 97 = 1752.42,
+amide, 0.634 + 0.346 = 0.980; mode 98 = 1778.55, carboxyl; "an all-real
+117-mode spectrum (min 10.68 cm-1)".
+
+Predictions (never tuned after a result):
+- M0 (replay gate): route 2 extracts 117 modes x 41 atoms; symbols at
+  {10, 1}, {14, 2} and {16, 4} are C and O; the static-index route
+  returns 0.969 (3 decimals) and 1866.33 cm-1 for row 98, and 0.980 and
+  1752.42 for row 96. If M0 fails, the probe is void (reader drift since
+  R9), and nothing after it is read.
+- M1 (today's vocabulary): every blind construction is refused or
+  non-selecting on both routes. B1 `coordinate_at_maximum` over the
+  table and B2 `multiply` by an atom mask raise shape errors; B3 (column
+  select in `ref`, as a null index and as an `axis` field) is refused by
+  the tool schema; B4 `sum`/`max` reduce to a scalar. Falsified if any
+  construction returns the target frequency.
+- M2 (the criterion): on route 2 the argmax of summed participation
+  selects row 98 (mode 99, 1866.33) for {10, 1}, row 96 (1752.42) for
+  {14, 2} and row 97 (1778.55) for {16, 4}. The Agent's by-eye choice is
+  exactly this argmax. Falsified if any row differs.
+- M3 (route 1, what the goal could not deliver): each set selects one
+  mode with share >= 0.85 and runner-up share <= 0.15. If falsified,
+  argmax alone is not a safe selector at a non-stationary geometry, and
+  the typed form must also carry the margin.
+- M4 (the wake-cycle route): the static-index route at route 1's argmax
+  rows returns typed receipts equal to the targets (share to 1e-12,
+  frequency exact).
+
+Outcome -> proposal:
+- M1 and M2 hold: today's vocabulary does not select the mode at plan
+  time. The only formal route, reasoned from code and not run, enumerates
+  every mode: for cephalexin about 590 expression nodes over at least five
+  stages (128 nodes per expression, 64 inputs per node) plus one
+  validation node per mode as a selector, 116 of whose verdicts would read
+  "failed". I do not count that as expressing it. The smallest change is
+  a column select in `ref` (null in `indices` meaning every element along
+  that axis). With `add` and `coordinate_at_maximum` it makes the
+  selection a four-node plan written before the Hessian, and it replaces
+  the wake cycle that reads the table and then plans static refs.
+- M1 fails: no code; report the construction.
+- M2 fails: report what the Agent chose instead of the argmax.
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
   evidence surfaces read; census E pre-registered before any detector
   run; instrument committed (223c66ed, corrected 4c38357b, 7982c0b3) and
   run on the local corpus and on CUHK (2157056, 2157060); census read;
-  position memo written. Phase I ends here; waiting for the exchange.
+  position memo written. Master's exchange message received: C2
+  "narrowed" logged as provisional; probe M pre-registered (above).
