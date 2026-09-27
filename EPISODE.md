@@ -875,3 +875,12 @@ target rows.
   isort --check clean on the five touched files; `rsl.py check` 0
   failures (one budget prompt, the kernel's line count); `graph.py
   check` 0 problems, `orphans` unchanged (no graph edit yet).
+- The master rebound `evid` to this worktree and ruled: ebdbaaed keeps
+  its `analysis:` label (schema and handler are the evidence tool's,
+  named by E1's approval); A3's computed shares (75% by form, 88% by
+  purpose, 71% unsupported) go to the owner as computed, Q28's twelfth
+  FlipSpin stays open; the unconsumed-observations defect goes to the
+  full exchange and does not block E1. Submitting the g3 replay exactly
+  as pre-registered above (files unchanged since their hashes were
+  recorded); a reading that contradicts a fixed target is reported as it
+  stands.
