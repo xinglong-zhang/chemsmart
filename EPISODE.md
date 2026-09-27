@@ -255,6 +255,25 @@ turns) is not established; candidates: the window (archived notices came
 at turns 1-4 when the reading tools were in view at the first request,
 and at turn 16 once), the tree, and sampling.
 
+Exploratory, post hoc, hand-read unblinded (a lead for a registered test,
+not a result): what the baseline D2 declarations say about direction.
+- qwen's 11 diagnostics are procedural commitments -- each saddle will
+  print exactly one imaginary mode (9 samples), the favoured barrier lies
+  in 20-32 kcal/mol (2) -- each with a concrete update rule; none predicts
+  the regiochemical direction (the archived po3-r19 qwen diagnostic did,
+  against the chemist's "ester at C4").
+- In the requested observables' declared expectation (a typed field),
+  qwen opposes the chemist's stated prior in 6/12 samples (s00, s01, s02,
+  s05, s06, s09: frontier-orbital control puts the ester at C5), agrees in
+  5/12 (s11 after weighing both arguments explicitly) and gives no
+  direction in 1/12 ("the sign is fixed by the reporting convention").
+  deepseek opposes it in 0/12, agrees in 4/12 -- citing it as the basis
+  ("the user's own expectation", "the user reports the same prior") -- and
+  declares no directional expectation in 8/12. The direction itself is
+  unresolved at the levels involved (po3-r19's own cycle 6 found the sign
+  flips between B3LYP and DSD-BLYP), so this is about who authors a
+  hypothesis against the requester, not who is right.
+
 Was the diagnostic sentence readable when the baseline declarations were
 composed? (checked before arm M's first sample; `declare_visibility.py`
 over the D2 rows' exposure records and calls): yes. In 11/11 deepseek
