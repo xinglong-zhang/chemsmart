@@ -643,6 +643,74 @@ Answer to the master's question:
   - acetaldehyde C=O {2,0}: 1798.58 / 0.9803607214428858.
   Nothing is implemented; the decision is Exchange 1's.
 
+## Probe M -- the master's rulings (copied verbatim in substance, 2026-09-28)
+
+- **M0 failed as written.** The cause was a pre-registration indexing
+  error (rows read as 1-based), not reader drift.
+  - The void clause guarded against drift, and drift is excluded by
+    evidence independent of that numbering. R9 g3's own records carry
+    node `r99c10` = 0.6490384615384617, and probe M's output holds the
+    identical float at `mode_row` 99.
+  - M1-M4 therefore stand as read, disclosed as a deviation.
+  - M2 is judged by its pre-registered frequencies (1866.33, 1752.42 and
+    1778.55 cm-1), which hold, not by its row numbers.
+- **M3's pre-registered consequence binds:** "argmax alone is not a safe
+  selector ... the typed form must also carry the margin". The margin is
+  part of the change. It is not an optional candidate. (This supersedes
+  the memo's "The margin (M3) is a separate, optional candidate".)
+
+## Phase II item E1 -- approved by the master before Exchange 1
+
+Approved because it lies inside the radius, depends on no other lens,
+answers one delivered loss (R9 xtb g3, route 1's assignment could not be
+planned), and replaces a wake cycle. One item, these parts:
+
+- **Column select.** `null` in `ref`'s `indices` means every element
+  along that axis. Touches the evaluator in
+  `chemsmart/analysis/quantity_expressions.py` (which indexes one step at
+  a time today) and the tool schema (`indices` items become integer or
+  null), plus one factual sentence in the schema description (the
+  Behaviour lens may reword it after Exchange 1).
+- **The margin travels with the selection.** A receipt of
+  `coordinate_at_maximum` / `coordinate_at_minimum` lets its reader see
+  the runner-up (its coordinate and its value), and so how decisive the
+  selection was: the smallest general form, computed from the same array
+  and stated as a fact, never as a verdict. Host-authored text (an
+  observation) is quoted exactly in the hand-back for the Truth lens.
+- **Witness** through `CommandCompiledToolHostV1.dispatch`, red on
+  `9185770e`, green after. Oracle: probe M's `target` step, computed
+  outside the vocabulary; its values for each fixture are recorded below
+  BEFORE any code changes and are fixed from then on. Locally: a
+  `tests/agent` test at the owning function on
+  `tests/data/XTBTests/outputs/acetaldehyde_hess` (C=O {2, 0}). On CUHK:
+  once, on the two g3 Hessians, through `slot_submit` (provider-free),
+  against probe M's recorded targets and runner-ups
+  (`/project/xlzhang/jiseung/r11/evid/probe-m/probe.jsonl`, rows with
+  `"step": "target"`).
+- **Commit body** says what the change replaces (the wake cycle that
+  reads the table and then plans static refs) and what it deletes.
+- **No live Agent session and no provider.** The claim is a capability
+  of the vocabulary, not a behaviour.
+- **Merge readiness** per the common brief: merge current
+  `r11-integration` first; pristine export; failing set equal to the
+  baseline; formatters; `rsl.py check`; `graph.py check` and `orphans`.
+- **Graph and charter.** Answers
+  `negative.an_analysis_chain_cannot_plan_a_mode_it_has_not_read`: add
+  the `supersedes` edge or annotation `graph.py` asks for, no more. Edit
+  `.agents/charter/vibrational-modes.md` only if one of its sentences
+  becomes false.
+
+Also now (provider-free, short): **A3 flag 2** -- read the CUHK sessions
+behind `FlipSpin` x12 and `input_string "%scf FlipSpin 1,6 end"` x6 and
+say, with counts, which the Agent meant in each (a flip on named sites,
+or any broken-symmetry guess). Report only; Q28's records are not
+edited.
+
+Held for Exchange 1 (not implemented): a frequency window or any
+elementwise comparison; counterpoise ghost atoms; receipt reuse across
+runs; typed forms for Hirshfeld, NoUseSym, `scf=verytight` or named-site
+flips; anything else in the memo.
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
@@ -653,3 +721,5 @@ Answer to the master's question:
   "narrowed" logged as provisional. Probe M pre-registered, run (CUHK
   2157069) and read above; witness defined, nothing implemented. Waiting
   for Exchange 1.
+- evid-2 succeeds evid at bccb4b29 (context hand-back), Mon Sep 28
+  03:49:54 KST 2026.
