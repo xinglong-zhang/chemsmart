@@ -155,7 +155,9 @@ po3-r19 and ino3-r12 are the mirror's research copies).
 - Re-signed at the pin (`resign.py`, walk mode): 9 unsettled, 4 typed
   errors (not replayed), 1 error (a copy of ino1 with no `goal.json`:
   record insufficient), 1 planning goal with no stream; of 175 compared,
-  identical 10, wording only 30, content 86, state 49.
+  identical 9, wording only 30, content 86, state 50 (corrected: the
+  first entry of this record said 10 and 49; the transitions below sum
+  to 50).
 - State changes (a): achieved -> recovery_opened 35, exhausted ->
   recovery_opened 5, returned_to_human -> recovery_opened 3,
   achieved_with_observations -> recovery_opened 2, achieved ->
@@ -177,6 +179,88 @@ po3-r19 and ino3-r12 are the mirror's research copies).
   for an imaginary-mode count whose value is 0 -- a zero has no sign, and
   the pin now refuses such a declaration where it is written. The
   expectation (a minimum) was met; the word is defensible.
+
+## Census 1 on CUHK -- first read (job 2157057, pin replay and readers done)
+
+89 goals after deduplication (81 settled). Reader over the archived
+words: achieved over an uncertified delivery 7 (Q24's six empty-chain
+words plus r10/q6 gdev1, which Q24 did not read), over undelivered ids 5,
+over a later verified refusal 1 (Q24's g2r), plain achieved hiding what
+the run found 2, qualified rows under a false word 10. Reader over the
+pin's words: 0 uncertified, 0 later refusal, 0 qualified rows under a
+false word; two flags survive and were read against their records:
+
+- r10/q7 g2-scan-modred, plain `achieved` at the pin (bucket identical:
+  the archived word reproduces). Cycle 1's run completion passed and
+  listed `falsified_expectation:cis-barrier` (8.30 kcal/mol against the
+  pre-registered band 2-8, role requested, not declared after evidence)
+  and `falsified_expectation:oo160-torsion` (141.5 deg against 100-135).
+  The goal settled in cycle 2 on a session completion that re-rendered
+  nothing (four rows not_comparable, anomaly list empty) and names those
+  numbers only as "delivered in an earlier cycle". The first word hides
+  two pre-registered expectations the physics left, for numbers it
+  certifies as delivered. Candidate F1 (see the class below).
+- r10/q1 gdev1, `achieved_with_observations` at the pin (wording only):
+  the declared category `rks-stability-verdict` is answered by a finding
+  whose own reason line, signed by the pin, says it "rests on no word the
+  host read, so it answers nothing", under "the host completion gate
+  certified the delivery". The certificate is the archived completion,
+  minted before a category had to be answered by a word the host read;
+  at the pin such a finding is refused where it is written
+  (`finding.answers_through_a_word_the_host_read`), so production cannot
+  make this record. Classed: word changed by a rule the old certificate
+  predates (the settlement trusts the completion's delivered list while
+  the finding reason recomputes; two organs, one question).
+
+The same mechanism as q7, found locally by the refined reader: ax41
+goal-ino3-r17 settles `unreachable_from_evidence` at the pin; cycle 3's
+passed session completion recorded three pre-registered expectations as
+falsified (E vs Fc -0.494 V against [-0.3, 0.9]; quartet-doublet gap
+103 kJ/mol against [5, 90]; spin population 0.002 against [0.05,
+0.45]); the final word, signed from the last session's completion, names
+none of them. CLASS (candidate): the settlement reads falsified
+expectations from the completion its delivery stands on, while it
+certifies ids an earlier cycle delivered; the observation an earlier
+cycle's certificate recorded for those ids never reaches the goal's word
+(the goal-grain rule already covers claims, anomalies and failed
+criteria). Owning function: `driver._achieved_word` /
+`_AnalysisDelivery` (inputs to the observed set).
+
+Stationarity re-signed at the pin (local, `resign_stationarity.py`): of
+370 archived free energies, 195 re-read (190 still on a stationary point,
+43 of them delivered through a claim; 5 now refused -- po3-r19
+ts-esterc4 x4, po3-triazole-regio ts-c4 -- all on ORCA saddle searches
+that printed their own non-convergence, none delivered through a claim
+the census can link; the charter records po3-r19's 23.194 kcal/mol as
+claimed through an expression that predates recorded input bindings),
+170 unread (105 digests name no verified result, 67 files absent). Of 16
+characterisations, 11 certified again, 3 refused (po3-r19 ts-esterc4,
+po3-triazole-regio ts-c5b: not converged; g5-phosphine planar Hessian
+at 0.0138 Eh/Bohr), 2 unread. These are rule changes (R10 Q21/Q33).
+
+Refusals met by the Agent (local, `refusal_census.py`): 826 in 190
+groups. Read so far: `gibbs_free_energy` on ORCA opt/ts (150 of the
+selector refusals) names its route (a thermochemistry stage with bound
+temperature, pressure and standard state): P. The decision refused for a
+functional-convention word (VWN3/VWN5/PZ81/PW92) without a resolution
+receipt (18 instances, 16 goals): every one of the 18 sessions recorded a
+decision later in the same session (0 buried); the message at the pin
+still names neither invariant nor route (a wording defect, Behaviour's).
+Named-site spin flips: ax41 ino2 returned to the human with no J under
+its declared ids (no delivered answer changed); R10 Q15's flips were on
+p-benzyne, where R10 Q18's oracles showed GuessMix and FlipSpin reach one
+solution to the printed digit. Neither changed a delivered answer.
+
+## Census 2 on CUHK -- what it runs (written before submission)
+
+Job `/project/xlzhang/jiseung/r11/truth/census2/job.sh`, same code tree
+and population as census 1, instruments at 2e7f0e23 copied to `tools2/`
+(census 1's `tools/` is left untouched while it runs): the refined
+reader over the archived words and over census 1's pin words; the
+refusal census; the stationarity re-sign at the pin. Expected: the new
+W1 check finds q7 g2-scan-modred on the pin's words and possibly further
+instances of the same class; refusal groups beyond the local ones are
+read and classed P/R/L/U by the scheme above.
 
 ## Status
 
