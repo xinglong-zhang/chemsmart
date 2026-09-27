@@ -695,6 +695,67 @@ On the unrepaired tree (worktree chemsmart/ == 79e5639a): 3 red, 1 green.
 - judges-again, not cited (control): `returned_to_human` naming the
   verdict. Green.
 
+Repair (10f09617, one organ: the run-path settlement): `_settle` reads
+failed criteria through `goal_streams`, drops the carried rejection set
+(`self.rejected_artifacts` and its `resume()` rebuild); a number standing
+on another stream's unanswered verdict is held as a carried-stale one was
+and, with no budget, named by the planning path's own sentence
+(`_inherited_verdict_reason`); `recovery_opened` rows name every holding
+verdict; an answered criterion on the run path cites its receipts
+(`_anomaly_evidence`) -- without that the cited arm ended in a typed
+settle error ("achieved_with_observations settles on receipts, never
+prose alone"). c7102cc2 deletes the dead parameter and field. 104632c3
+gives resume() and the census one restoration function
+(`_restore_standing_delivery`), because `resign.py` restated resume()'s
+loop and would have broken on this tree.
+
+Final witness (3 cases). Pristine export of 79e5639a with the witness
+copied in: 2 red (reclaims cited: state; reclaims not cited: the verdict
+unnamed), control green. Worktree at 10f09617: 3 green; neighbouring
+modules 58 passed, then 69 and 126 passed after the deletion and the
+restoration refactor.
+
+Found and NOT repaired (a second organ): the cited judges-again arm now
+signs `returned_to_human` on "cycle 2: this run's completion receipt
+858ea179 is partial, so no completion gate certified the delivery, and no
+revision remains to certify it" -- true of the receipt, but the receipt
+itself was minted by the executor's walk, which judges claims standing on
+a failed criterion with its own host's decisions, and a run's host never
+holds one. A run that re-judges a verdict the goal already answered
+therefore mints a partial certificate over an answered verdict, and the
+settlement trusts it. Owner: the executor's approved-toolchain completion
+(`tool_runtime.evaluate_approved_toolchain_completion` via
+`_claims_on_a_failed_criterion`), W5, not the settlement. A precedent
+channel exists (`executor._prior_anomalies`: the driver hands earlier
+cycles' anomalies to the run through the run directory).
+Also left: `standing_stale` is still a carried, answer-blind check for a
+run that renders no claims; it approximates class (d) below, which is
+unmeasured: a declared id delivered in an earlier cycle standing on a
+verdict (answered or not) that the settling stream neither types nor
+re-claims -- by code reading, neither path reads it
+(`_analysis_delivery`'s standing walk covers this stream's claims only).
+
+### Census 5 -- item 1's tree (written before it runs)
+
+Tree 104632c3; comparison base: census 4's replayed words on Repair A's
+tree 4ec8957d, whose `chemsmart/` equals 79e5639a's (`git diff 808f0e0e
+79e5639a -- chemsmart pyproject.toml` empty). Population: the 254 goals
+census 4 re-signed (local 175 of the 190 specs in
+`truth/local-specs.txt`; CUHK 79 of census 1's `specs.txt`).
+Expected: 0 of 254 replayed words differ from census 4's, in state or
+reasons. Grounds: the reader found no archived verdict answered in
+another stream at a run-path settle; no census-4 word, local or CUHK,
+carries the carried-rejection reason ("computed from and no budget") or a
+run-path inherited-verdict reason (the one inherited-verdict word, ax41
+goal-h1b, is on the planning path, which this repair does not touch);
+held `recovery_opened` rows compare by state.
+Falsifier: any differing word, read against its records -- a further
+instance of the class (a verdict answered elsewhere, signed unanswered),
+a carried rejection the goal-grain read now words differently, or
+over-reach. The harness change (the tree's own restoration instead of a
+restated loop) is part of what is tested: a difference with no verdict in
+the goal's streams would be the harness's, and reported as such.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
