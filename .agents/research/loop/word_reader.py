@@ -469,6 +469,28 @@ def check_settlement(goal: Goal, report: Report) -> list[str]:
             flag("achieved_hides_what_the_run_found", "; ".join(hidden))
         else:
             report.add(goal, "W1", "achieved_hides_what_the_run_found", "ok")
+    if goal.word in ACHIEVED | {"unreachable_from_evidence"}:
+        # Every pre-registered expectation the physics left, for an id the
+        # goal still delivers, is named by the word's reasons: the latest
+        # row per id across every completion of the goal, any cycle.
+        text = " ".join(goal.reasons)
+        last: dict[str, dict] = {}
+        for _stamp, _r, _p, payload in completions:
+            for row in payload.get("declared_observable_predictions") or ():
+                oid = str(row.get("observable_id") or "")
+                if oid and row.get("delivered_claim_id"):
+                    last[oid] = row
+        unnamed = sorted(
+            oid
+            for oid, row in last.items()
+            if row.get("agreement") == "diverged"
+            and oid not in goal.retired()
+            and f"falsified_expectation:{oid}" not in text
+        )
+        if unnamed:
+            flag("reasons_name_each_falsified_expectation", ", ".join(unnamed))
+        else:
+            report.add(goal, "W1", "reasons_name_each_falsified_expectation", "ok")
     if goal.word == "unreachable_from_evidence":
         text = " ".join(goal.reasons)
         named = sorted(
@@ -616,9 +638,17 @@ def check_prediction(goal: Goal, report: Report, row: dict) -> None:
         report.add(goal, "W6", "verdict_is_its_arithmetic",
                    "ok" if recorded == "not_comparable" else "insufficient")
         return
+    declared_unit = str(
+        (goal.declared.get(str(row.get("observable_id") or "")) or {}).get("unit")
+        or ""
+    )
     if "delivered_value_in_declared_unit" in row:
         comparable = _number(row.get("delivered_value_in_declared_unit"))
     elif row.get("band_untestable"):
+        comparable = None
+    elif declared_unit and str(row.get("delivered_unit") or "") != declared_unit:
+        # A row written before the host converted units: the band was in
+        # another unit and is untestable here; a sign is unit-free.
         comparable = None
     else:
         comparable = value
@@ -834,7 +864,14 @@ def dissent(goal: Goal) -> list[dict]:
     markers: list[dict] = []
 
     def add(kind: str, name: str, extra: str = "") -> None:
-        markers.append({"kind": kind, "id": name, "named": bool(name) and name in text,
+        # A falsification is named by its own token, not by its id, which a
+        # refusal or an earlier-cycle delivery line also prints.
+        needle = (
+            f"falsified_expectation:{name}"
+            if kind in {"falsified_expectation", "falsified_diagnostic"}
+            else name
+        )
+        markers.append({"kind": kind, "id": name, "named": bool(name) and needle in text,
                         "extra": extra})
 
     last_row: dict[str, dict] = {}
