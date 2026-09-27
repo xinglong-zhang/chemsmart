@@ -183,6 +183,15 @@ whose records name `/lustre` paths and needs CUHK and 180-310 k tokens a
 turn. Issued only if the baseline leaves budget and the master confirms
 whether the doorway counts a key-using non-goal slot job as an Agent.
 
+## Jobs issued
+
+- 2026-09-28: baseline runner (run_baseline.py 7ae49bd5b9ee266d), local,
+  one provider lease, 72 samples in the manifest order, pre-registration
+  commit 1ace84a3. Pre-launch checks (provider-free): the qwen profile
+  loads on the R10 control tree and its D1 prefix reproduces 9 of 9; both
+  R10 trees resolve the fenced configuration directory with the real
+  HOME.
+
 ## Status
 
 - 2026-09-28: kernel, CONDUCT, RSL and lessons, charter topics
