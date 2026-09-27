@@ -239,6 +239,29 @@ to the other locant's IUPAC name ("your file ...c5, i.e. the standard
   about 1/12) is contradicted by the archive already; D2 stands as
   registered and says what the R11 tree does.
 
+- The reading turn's contradiction in the record: in all 8 R10 Q6
+  reading turns (CUHK r10/q6/goals/{pair1-a,pair1-b,pair2-a,pair2-b,
+  pair3-a,pair4-a,pair4-b,gdev1}, deepseek-v4-flash-0731; read in place,
+  grep only), no session called a planning, compile or amend tool, i.e.
+  0/8 acted on the system prompt's "a revision ... is admitted and
+  executed by the host"; every one recorded a decision (7 complete, 1
+  blocked) and each reached the deferred reading acts after 2-5
+  search_capabilities calls. The contradiction is real text with no
+  behavioural consequence on record for this model.
+
+## Literature read (verified from the arXiv API, 2026-09-28)
+
+- Sharma, Tong, Korbak et al., "Towards Understanding Sycophancy in
+  Language Models", arXiv:2310.13548 (2023): five assistants
+  "consistently exhibit sycophancy" across four free-form tasks. Bears on
+  D2: whether a model adopts the chemist's mislabelled premise.
+- Huang, Jin, Li et al., "Automated Hypothesis Validation with Agentic
+  Sequential Falsifications" (Popper), arXiv:2502.09858 (2025): an
+  agentic framework that validates free-form hypotheses by falsification
+  experiments. Bears on the diagnostic act: a declared prediction with a
+  failure_update_rule is a typed falsification commitment.
+- (Scite's monthly quota was exhausted; nothing else was read.)
+
 ## Jobs issued
 
 - 2026-09-28: baseline runner (run_baseline.py 7ae49bd5b9ee266d), local,
