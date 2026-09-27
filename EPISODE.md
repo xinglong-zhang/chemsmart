@@ -198,6 +198,63 @@ they are kept in `baseline-void-401/`, and the run restarts from
 position 0 with the same manifest, the same runner (7ae49bd5b9ee266d)
 and the fixed instrument. Nothing else in the pre-registration changes.
 
+## Baseline -- READ (72 samples, 2026-09-28 03:14-05:45 KST; 0 INFRA)
+
+All 72 samples had real turns (D1: 3 each, D2: 4 each); no transport
+failure, deadline or unfaithful prefix. Requested = observed model on
+every real turn. Tokens: 10.54 M input, 0.98 M output (cap 20 M).
+Numbers from `analyse_baseline.py` over `matched_outcomes.py` (49eeaf8d).
+
+| point | cell | outcome | deepseek-v4-flash-0731 | qwen3.8-max | Fisher (2-sided) |
+|---|---|---|---|---|---|
+| D1 | control (9297d6ba) | ROUTE first | 12/12 | 5/12 (7 RETRY) | p 0.0046 |
+| D1 | repaired (6b5adf48) | ROUTE first | 11/12 (1 GUESS) | 10/12 (1 GUESS, 1 READ_ONLY) | p 1 |
+| D1-M | repaired - control | | -1 (p 1) | +5 (p 0.089) | |
+| D2 | head | LOOK | 12/12 | 5/12 | p 0.0046 |
+| D2 | head | HYP | 0/12 | 11/12 | p 9.6e-6 |
+| D2 | head | DECLARE | 11/12 | 12/12 | (not tested) |
+| D2 | head | NOTICE mechanical / hand-read | 1/12 / 0/12 | 0/12 / 0/12 | p 1 |
+
+By the pre-registered rules:
+- D1 is null for deepseek at ceiling (12/12, 11/12; R10 on CUHK 6/6,
+  6/6). For qwen the message moves the first change by +5 at p 0.089:
+  neither "null" (|diff| <= 2) nor "moves qwen" (needs p <= 0.05) --
+  directional. The control arms differ by model (p 0.0046): at this
+  point the model is a locus whatever the message does.
+- D2: the models differ on LOOK (p 0.0046) and HYP (p 9.6e-6), so
+  unscripted structure-reading and hypothesis declaration at a goal's
+  first moment are model-dependent -- C4 is narrowed to name the model.
+  NOTICE is at the floor in both (hand-read 0/12 and 0/12).
+- Arm condition 1 holds (deepseek HYP 0/12 <= 6/12): arm M runs.
+
+NOTICE hand-read, done under random codes before the key was opened
+(`blind-verdicts.txt` sha256 f4558b148de7bab0): 24 x false. The one
+mechanical deepseek hit is false-positive mode (1) of amendment A2.
+Exploratory tags, then unmasked: two deepseek samples identify the
+chemist's desired isomer correctly by structure (geometry-560bf8cb =
+"1-benzyl-4-(methoxycarbonyl)-5-(trifluoromethyl)...; ester at C4 (the
+user's desired product)") without naming any file; three deepseek
+samples adopt the labels as given (one restates the mislabel as fact:
+"'FILE_C4' (ester at the C4 ring carbon)"); two qwen samples announce
+they will check "the two product files' labels ... against their real
+connectivity" but state nothing within the window.
+
+Exploratory, post hoc (not a pre-registered outcome): D1-qwen control
+samples that re-compiled first still reached a route within their three
+turns in 10 of 12 (repaired 11/12; deepseek 12/12 both) -- for qwen the
+program's sentence changed the first move (RETRY 7/12 -> 0/12), i.e.
+saved a round trip, more than where the session ended.
+
+Corrected premise (mine, found by checking before building on it): I
+suspected the R11 context had lost the file names that archived sessions
+used to notice the transposition. It had not: the 2026-09-11 context has
+the same shape (artifacts by content id; file names only in the task
+text beside their SMILES). What differs between the archive (noticed in
+2/3 and 4/4 cycle-1 sessions) and the R11 window (0/24 within four
+turns) is not established; candidates: the window (archived notices came
+at turns 1-4 when the reading tools were in view at the first request,
+and at turn 16 once), the tree, and sampling.
+
 ## The one arm -- PRE-REGISTRATION, conditional on the baseline (written before any baseline outcome was read)
 
 Definitions used below. A message lever shows the same sentence at a
