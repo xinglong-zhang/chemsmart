@@ -377,7 +377,11 @@ sessions, deepseek-v4.1-flash in 1, qwen3.8-max in 48): census E over
 24,451 tool calls, 2,389 refusals, ax41 mirror + experiments-public +
 CUHK R8-R10 and pre-R8 (Slurm 2157056, 2157060), with a
 shuffled-session control; the reading of every unmatched delivered
-number and of the Agent's 108 declared-gap sessions by reason;
+number and of the Agent's 108 declared-gap sessions by reason.
+DEVIATION from the pre-registration: P7 promised to read "every V/R
+refusal in a delivered goal"; the 311 selector refusals and the reuse
+refusals were read by class and host diagnosis, with a few opened, not
+one by one;
 benchmark-v2's referee report as the pre-R10 baseline. Instruments:
 `evidence_census.py` (223c66ed, 4c38357b, 7982c0b3) and
 `evidence_census_report.py` (7982c0b3).
@@ -388,15 +392,19 @@ P4 failed).
   host values -- at >= 4 significant digits the typed-record class is
   86% of final-message numbers and 94% of finding-statement numbers
   (216/229; control 0/229); the looser pre-registered class is 94.7% of
-  all 5,039 (control 12.8%). Bypass is absent: 1 operative path exit in
-  24,451 calls, refused; no hatch after Q28's gate (46 authoring calls
-  in q28-q36). When the value was in sight the Agent refused to type it
+  all 5,039 (control 12.8%). Outside project sections, one operative
+  exit in 24,451 calls (a file name given as an artifact id), refused;
+  inside them, Q28's 109 hatch calls in 18 sessions all predate its gate
+  and none follow it (0 in 46 authoring calls, 15 sessions -- a small
+  n). When the value was in sight the Agent refused to type it
   by hand (r10/q10 lg1), and it composed selections inside the DAG
   (xtb-ir `coordinate_at_minimum`).
 - Narrowed to: the archive's exits that changed a delivered conclusion
   are three final messages -- two where a missing typed form forced
   prose (energy->wavenumber, ino2; categorical answer, r8 goal-ts; both
-  forms built since and both numbers correct) and one wrong prose
+  forms built since, both restate typed values -- ino2's six
+  conversions checked; goal-ts's direction is a word restated from its
+  typed extraction, not checked against the trajectory) and one wrong prose
   conversion beside a correct claim (r10/q17 dE-h2occ-U1). Vocabulary
   refusals prevented a requested observable in 23 workspaces over 11
   types; on 9185770e all are closed except NEB energies (not
