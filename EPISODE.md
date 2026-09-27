@@ -371,8 +371,9 @@ goals the host delivers claims, categorical answers and finding
 statements (bound through `rests_on`); a session's final message is
 delivered only when a person runs a session directly (CLI, TUI).
 
-**Evidence** (all model-labelled; deepseek-v4-flash-0731 in 887 of 935
-sessions, qwen3.8-max in 48): census E over 935 behavioural sessions,
+**Evidence** (all model-labelled; deepseek-v4-flash-0731 in 886 of 935
+sessions, deepseek-v4.1-flash in 1, qwen3.8-max in 48): census E over
+935 behavioural sessions,
 24,451 tool calls, 2,389 refusals, ax41 mirror + experiments-public +
 CUHK R8-R10 and pre-R8 (Slurm 2157056, 2157060), with a
 shuffled-session control; the reading of every unmatched delivered
