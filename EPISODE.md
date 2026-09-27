@@ -659,6 +659,23 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   1 and 2. `date`: Mon Sep 28 05:44:59 KST 2026. This worktree starts at
   the integration head 376c6c43 (verified with `git rev-parse HEAD`);
   EPISODE.md restored from a7718095.
+- truth-3 hand-back, 2026-09-28 about 07:10 KST: items 1, 2 and 4 and the
+  master's post-E2 items 0-2 done; item 3 reported (no scope field;
+  nothing changed); the charter question answered (borne out). Merged
+  r11-integration 4486f247 (cb383f21, clean; EPISODE.md survived). Gates
+  on a pristine `git archive` export of 5a3e662a (PYTHONPATH = the export,
+  HOME fenced): tests/agent 3381 passed, 20 skipped, 2 xfailed, exit 0;
+  full suite 23 failed, 4934 passed, 25 skipped, 3 xfailed, the failing
+  set identical to `~/.chemsmart-r11-run/baseline/suite.set` (23 tests);
+  ruff, black --check and isort --check clean on
+  the 14 files this session touched; `rsl.py check` 0 failures (the
+  kernel-length budget prompt predates this session); `graph.py check`
+  579 nodes, 572 edges. This status commit changes no chemsmart/ or
+  tests/ byte relative to 5a3e662a, so the gated export stands for HEAD.
+  Ready to merge: 0e105c18 (item 1), 4bcc2e3d (item 2), 8067763e (item
+  4), 189ba146 (item 0), 6a0fdc2c (rule sentence); 45acf78c (charter) is
+  the master's to take or drop. Not started (queued after items 1 and 2
+  merge): the renderer change.
 
 ## The master's adjudication of Repair A (copied from the succession brief)
 
@@ -1566,6 +1583,13 @@ item 4: 1, item 0: 3) and 5 controls green.
   CUHK population), prereg 3caa0e0bd0f3. COMPLETED in 37 s, exit 0.
 - CUHK 2157095 (r11-truth-a), census 7b (the same with the post-hoc
   scaled-copy field), prereg bb6f86fe91cb. COMPLETED in 12 s, exit 0.
+- CUHK 2157105 (r11-truth-a), census 8 (truth-3), prereg 0b26cc1b0ffb:
+  `certificate_census.py` over census 1's 89 CUHK specs, then the
+  no-change re-sign on item 1's tree (code-cert = 0e105c18's chemsmart/,
+  426 files; the job printed remote tree digest dae2a768a0aa82c2, equal to
+  the local pack, and 0 AppleDouble files; certificate_census.py sha256
+  73ed9a29, the committed 81cb7730 file) compared with census 5.
+  COMPLETED, exit 0, 05:23:28 to 05:27:24 (+08:00) on one node, 4 cores.
 - Error, stated: to pre-register census 6 I ran a json-only Python
   script (`anomaly_seeding.py`, no chemsmart import) on the CUHK login
   node with the private environment's interpreter, outside a slot job.
