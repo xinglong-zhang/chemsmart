@@ -777,6 +777,61 @@ settlements (as the reader had found), the carried rejection set never
 changed an archived word, and the census harness now rebuilds state
 through the tree's own function without moving a word.
 
+## Item 2 -- Repair B, the truth half: pre-registration (written before any code)
+
+Corrected premise (census 3's own rows, `truth/census3/receipts` and
+`truth/refusals/receipts-local`): the 22 citations of a run stream's
+receipt are 10 `program_result_verified` and 12 `anomaly_observed`, not
+11 and 11 as the Phase I memo said. The 29 host-minted citations are: 4
+earlier in the same session (all ax41: a capability query, a
+characterisation, a completion, a PubChem fetch); 3 by an earlier
+planning session (CUHK: r10/q22 gh2 6135c9ad `scientific_validation_
+evaluated`; r10/q21 g1-hooh 26754884 `stationary_point_characterised`;
+r10/q5 g1 5dd43cca `project_validated`); 22 by a run stream (10
+verification, 12 anomaly). Every one of the 71 was a
+`record_scientific_decision` citation.
+
+Design, decided before code: the receipt kinds the gate accepts from a
+recorded stream stay the five (extraction, thermochemistry, expression,
+validation, claim). The streams it reads become those the workspace
+records and `inspect_run` lists, minus research replays: `goals/*/runs/*`
+(as now), `runs/*` (planning sessions) and `executions/*`. Corrected
+premise of the approval ("the goal's planning-session streams"): the
+session host is not told its goal and the invariant is workspace-scoped
+("a recorded run of this workspace"), so the implementable scope is every
+planning-session stream of the workspace, which contains the goal's.
+`_digest_names` names, for a digest a recorded stream holds under a kind
+the gate does not take, the event kind and the stream that recorded it,
+and that a decision cites another stream's receipt only when it is one of
+the five kinds; for an `anomaly_observed` receipt the host was seeded
+with, it names the walkable route (`anomaly:<digest>` in `evidence_refs`)
+and no route otherwise; for other kinds it invents none. `_receipt_known`
+(refusal and disposition receipts) widens the same way.
+
+Census 6 (on the repaired tree; the 71 refusals of census 3):
+- 42 cite a digest no stream of the goal recorded: still refused, the
+  diagnosis still "no digest this host minted"; expected 0 of 42 found
+  by the wider stream read elsewhere in their workspaces.
+- 4 same-session: accepted at the pin by the session's registry; not
+  re-read (a replay host holds no session registry).
+- 1 newly accepted: r10/q22 gh2 6135c9ad (the failed validation receipt
+  the wake tells the session to cite).
+- 24 still refused, each diagnosis naming the kind and the stream the
+  census found it in: 2 planning-session (characterisation, project
+  validation), 10 `program_result_verified`, 12 `anomaly_observed` --
+  and 12 of 12 anomaly diagnoses name `anomaly:<digest>` in
+  `evidence_refs`, because each cited anomaly was on its goal's ledger
+  (`anomalies_observed`) before the refusing session began (checked from
+  the ledgers: CUHK g1-hooh x2, bt2 x2, rt1, rt2, r7m-h3 x2; ax41
+  ino3-r15, ino3-r17 x2, g5-phosphine), so a woken host is seeded with it.
+- Totals: 5 of 29 minted accepted (4 + 1), 24 of 29 refused truthfully;
+  71 - 5 = 66 refusals remain, none saying "no digest this host minted"
+  about a digest a recorded stream holds.
+Falsifiers: any other count; a diagnosis naming a kind or stream the
+records do not hold; an anomaly route named for a digest the replay host
+was not seeded with; the stream a diagnosis names written after the
+refusal (a later mint, not the one cited).
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
