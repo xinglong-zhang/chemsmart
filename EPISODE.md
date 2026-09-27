@@ -1173,3 +1173,17 @@ references, not re-typed host numbers. A model claim needs matched tasks
 - Replay CUHK 2157071 COMPLETED and read GREEN (six of six, section
   above); graph edge committed (017ac5a8). E1 is ready to merge; handing
   back.
+- E1 merged by the master (8045b45f). E2 approved: pre-registered
+  (372ca782), reader e31d124b, typed request dc72cc79, scoped claim
+  a5ba8dc4, all `shared:`; local red then green; CUHK witness 2157103
+  GREEN (abdc846b). E3 reported (b9b8dee2). r11-integration ca8d5cfc
+  merged (efb88e53).
+- E2 merge gates on efb88e53: full suite from a pristine `git archive`
+  export (PYTHONPATH and cwd the export): 23 failed, equal as a set to
+  `baseline/suite.set`, 4,919 passed, 25 skipped, 3 xfailed, 0 errors
+  (tests/agent inside it, no failure there); export deleted. ruff, black
+  --check and isort --check clean on the ten files E2 touched;
+  `rsl.py check` 0 failures (one budget prompt, the kernel's line count);
+  `graph.py check` 577 nodes, 570 edges, no problems; `orphans`
+  unchanged. No graph edit for E2 (the master asked for none; no node
+  names the named-site flip). E2 is ready to merge; handing back.
