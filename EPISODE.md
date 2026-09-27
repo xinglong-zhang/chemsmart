@@ -198,6 +198,43 @@ they are kept in `baseline-void-401/`, and the run restarts from
 position 0 with the same manifest, the same runner (7ae49bd5b9ee266d)
 and the fixed instrument. Nothing else in the pre-registration changes.
 
+## The one arm -- PRE-REGISTRATION, conditional on the baseline (written before any baseline outcome was read)
+
+Definitions used below. A message lever shows the same sentence at a
+different place, with no new act and no new turn; an act lever makes a
+typed operation callable from the first request. The decision point is
+D2 exactly as registered (po3-r19, goal cycle 1, 4 real turns); the
+controls are the baseline's D2 cells; the arm cells are new, N = 12 per
+model, on the R11 head plus the one change, run after the baseline
+(the time gap is a stated confound; nothing else differs).
+
+Which arm runs (the first condition that holds, read from the
+baseline's counted D2 samples):
+1. Arm M (message: the diagnostic sentence where the model reads it
+   first) if deepseek's D2 HYP is at most 6/12. Change: rule
+   `declare.diagnostic_has_standing` placed at `stem` (rendered in the
+   system prompt from the first request) instead of
+   `tool:declare_requested_observable` (rendered only once that deferred
+   tool's definition is in view); its text unchanged. Primary outcome
+   HYP; LOOK, NOTICE and DECLARE read for displacement.
+2. Arm A (act: the structure-reading act in view) if either model's D2
+   LOOK is at most 6/12. Change: when a goal cycle's workspace holds
+   geometry artifacts, `extract_result_quantities` is pinned before the
+   first request (a typed-state promotion, like the existing workspace
+   and ending promotions). Primary outcome LOOK; NOTICE secondary.
+3. Otherwise no arm; the budget goes unspent and the memo says why.
+
+What arm M does to C4: deepseek HYP arm minus control >= 5 with Fisher
+p <= 0.05 -> a message moves deepseek at a point off its ceiling, so
+R10's message nulls were ceiling effects and C4's "not the messages" is
+contradicted for this model; difference <= 2 -> the message null holds
+off-ceiling (support); in between -> directional, stated with its p.
+The same rules read qwen's cells; a qwen control at or above 10/12 is a
+ceiling and says nothing. Arm A: a model's LOOK arm minus control >= 5,
+p <= 0.05 -> the act moves that model (support for "acts"); <= 2 -> the
+act does not (narrows C4). Cost about 12 x (0.4 + 0.3) M tokens; the
+provider total stays under the 40 M cap.
+
 ## Amendment A3 -- execution only (before any outcome was read)
 
 A D2-qwen sample takes about 16 minutes (982 s at position 5, four real
