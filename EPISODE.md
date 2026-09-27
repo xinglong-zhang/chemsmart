@@ -989,6 +989,32 @@ Not evidence: HS unconverged or <S**2> far from 6 (the level cannot
 carry the question); FS1 and BS22 disagreeing beyond 1e-4 Eh or in
 state (the site-flip reference is itself uncertain: both reported).
 
+## Item 5 -- rendered reports and model-authored literals: pre-registration (examine only)
+
+What a human reads: the executor's `completed-analysis-report.md` /
+`partial-analysis-report.md` (and a session's final text when a
+task-owned completion policy rendered it), whose table is headed
+"Host-rendered numerical claims" (value, unit, source receipt). The toolchain
+report lists host-registered literature constants with their conventions;
+nothing marks a claim that stands on a model-authored `literal` node.
+Instrument `.agents/research/loop/literal_claims.py`: every report row,
+classed from the run's own stream as host / count (dimensionless
+literals only) / condition (a temperature or pressure literal) / physical
+(any other dimensioned literal, "carried" when it equals to 1e-9 a number
+an extraction or thermochemistry receipt of the workspace minted,
+"foreign" otherwise); "pure" when the output does no arithmetic on any
+receipt. Population: every report under the ax41 mirror (campaign and
+research) and experiments-public/, and on CUHK the r8, r9 and r10 roots
+of census 1.
+Expected: host >= 80 % of rows; physical <= 15 %; pure <= 10 rows.
+Load-bearing rule, fixed now: the count is load-bearing, and code is
+proposed, if at least one rendered row presents a pure literal, or a
+foreign physical literal that sets the value of a declared observable of
+its goal, under "Host-rendered numerical claims" with no mark -- a reader
+of that table would take the model's number for the host's. Carried
+literals equal to the host number are counted (provenance lost, number
+unchanged) and are not load-bearing by themselves. Otherwise: no code.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
