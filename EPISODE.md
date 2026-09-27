@@ -1057,6 +1057,61 @@ oracle reached (the site-flip state C3 found suppressed). Not established:
 that an Agent plans it (no live session was run), nor its reach on any
 system but this one (one geometry; one flipped centre).
 
+## E3 -- census E's figures split by observed model (reporting only)
+
+The master's item, provider-free, no code in the tree. Method: the
+committed report module's loaders and class definitions
+(`evidence_census_report.py`, 7982c0b3) over the same four output
+directories (ax41 v2, experiments-public, CUHK R8-R10 and pre-R8), each
+session assigned the model that answered most of its turns; carried
+literals re-read from the local ax41 transcripts by the committed rule and
+attributed by transcript digest. Scratch scripts `e3_by_model.py`
+(sha256 0b248104...) and `e3_confound.py` (42ee1f34...). Wilson 95%
+intervals throughout; for delivered numbers also a session-cluster
+bootstrap (4,000 resamples of sessions, seed 20260928), because numbers
+from one session are not independent. Sessions: deepseek-v4-flash-0731
+886, qwen3.8-max 48, deepseek-v4.1-flash 1.
+
+Corrected premise first: the memo's "4,770 of 5,039 (94.7%)" omitted the
+experiments-public slice (89 numbers) while its session count (935)
+included it; with it, 4,858 of 5,128, still 94.7%.
+
+| figure | deepseek-v4-flash-0731 | qwen3.8-max |
+|---|---|---|
+| delivered numbers that are host values | 4,352/4,606 = 94.5% (Wilson 93.8-95.1; cluster 93.3-95.5; 670 sessions) | 506/522 = 96.9% (Wilson 95.1-98.1; cluster 94.7-98.7; 44 sessions) |
+| of them in the typed record | 2,873/4,606 = 62.4% (cluster 59.4-65.1) | 394/522 = 75.5% (cluster 66.3-83.5) |
+| shuffled-session control, host values | 615/4,606 = 13.4% | 56/522 = 10.7% |
+| finding statements >= 4 sig. digits, typed record | 216/229 = 94.3% (90.5-96.7) | none (0 finding statements) |
+| final messages >= 4 sig. digits, typed record | 1,363/1,577 = 86.4% (84.7-88.0) | 182/220 = 82.7% (77.2-87.1) |
+| operative exits, per tool call | 1/22,522 = 0.0044% (0.0008-0.0251) | 0/1,884 (0-0.2) |
+| sessions with a hatch or free-word key | 18/886 = 2.0% (1.3-3.2) | 0/48 (0-7.4) |
+| sessions carrying a task/wake number as a literal | 0/886 (0-0.43) | 8/48 = 16.7% (8.7-29.6) |
+| sessions re-typing an earlier typed reply as a literal | 1/886 = 0.11% (0.02-0.64) | 10/48 = 20.8% (11.7-34.3) |
+| carried literals (count) | 0 of 20 long literals | all 18, of 47 long literals |
+| analysis-planning sessions declaring a gap | 103/826 = 12.5% (10.4-14.9) | 5/34 = 14.7% (6.4-30.1) |
+
+deepseek-v4.1-flash: one session, 45 tool calls, no delivered numbers --
+nothing to measure.
+
+What 48 sessions cannot separate: delivered host values (the cluster
+intervals overlap), final-message precision, operative exits (qwen's
+upper bound, 0.2% per call, does not exclude deepseek's rate), hatch
+sessions, declared gaps. The finding-statement figure (216/229) is
+deepseek's alone: that surface arrived with the CUHK R8-R10 goals, where
+qwen never ran.
+
+Where the archive does separate, it cannot say why: the typed-record
+share of delivered numbers (cluster intervals 59.4-65.1 against
+66.3-83.5, barely apart) and literals (every carried literal and 20 of
+26 re-typed ones are qwen's). Every qwen session sits in 6 rounds (33 in
+novel-round-7, 6 in po3-r19, 3 in ino3-r12, 4 developer, 2 others), and
+in those rounds the census holds no deepseek session; deepseek's 886 span
+116 rounds. So each contrast is model and task set together, and the
+archive cannot attribute it to the model. The paper review's correction
+applies inside the qwen set: 7 of the 18 carried literals are task-given
+references, not re-typed host numbers. A model claim needs matched tasks
+(the Behaviour lens's po3-r19 design), which this census is not.
+
 ## Exchange 1 -- what reached this lens (the master, as evidence)
 
 - Behaviour: at matched decision points the model is the first-order
