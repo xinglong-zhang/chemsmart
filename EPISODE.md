@@ -498,8 +498,10 @@ this model; <= 2 -> the message null holds off-ceiling; between ->
 directional. qwen's control (11/12) is a registered ceiling. Because the
 sentence was already readable at composition, arm M tests the same
 sentence shown earlier and more prominently. Samples expected in: deepseek
-about 07:00 KST, qwen about 08:30 KST (runners under two leases since
-05:50; logs `behav/arm-m/runner-*.log`).
+about 07:00-07:30 KST, qwen about 08:30-09:00 KST (baseline per-sample
+times: deepseek 226-470 s, qwen 701-982 s; runners under two leases since
+05:50, lease PIDs 64256 and 64264; logs
+`behav/arm-m/runner-d2-armM-deepseek.log` and `...-qwen.log`).
 
 **The program I propose next.**
 1. Read arm M by its rule; close C4's message clause for deepseek either
@@ -546,7 +548,7 @@ code files I touched.
   infrastructure fields until it ends.
 - 2026-09-28 ~06:10 KST: baseline read (9f6a5023); arm M issued
   (ef730721) and running under two leases; Phase I position memo written
-  (above). Handing back, waiting on arm M (deepseek ~07:00, qwen ~08:30
-  KST). If the runner processes do not survive the hand-back, resume me
+  (above). Handing back, waiting on arm M (deepseek ~07:00-07:30, qwen
+  ~08:30-09:00 KST). If the runner processes do not survive the hand-back, resume me
   and I relaunch the missing indices with `run_arm.py --only <cell>
   --from <position>` (completed rows are kept per sample).
