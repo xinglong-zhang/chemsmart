@@ -308,12 +308,50 @@ The one open vocabulary gap with a delivered loss: adaptive mode
 selection. `vibrational_mode_atom_participation` is modes x atoms; `ref`
 selects a mode's row by static index but never an atom's column, and
 `sum/mean/max/min` take no axis. So "the mode with the most C+O
-participation" cannot be planned before the Hessian exists. 46 ax41
-sessions requested participation and chose modes by reading it, then
-pulled the chosen numbers with static `ref`s in a later cycle (typed,
-replayable); it failed only in r9/xtb g3 (exhausted), whose last wave
-had no further cycle (the graph's
+participation" cannot be planned before the Hessian exists. CORRECTED
+(an inference first written here as fact, from operation counts): 46
+ax41 sessions request participation, but what most did with it is not
+established; the one opened (general-round h1) used its many `ref`s for
+atom positions. Read instead: 8 transcripts in 7 workspaces index
+participation with static `[mode, atom]` refs, mostly the imaginary mode
+of a saddle, whose index is known before the Hessian exists. The need
+fails exactly where the mode's index is not known in advance: r9/xtb g3
+(exhausted), whose last wave had no further cycle (the graph's
 `negative.an_analysis_chain_cannot_plan_a_mode_it_has_not_read`).
+
+Retained numbers the Agent could not cite (`evidence_census_report.py
+carried-literals`, ax41): of 67 literal values with >= 5 significant
+digits that are not conditions or physical constants, 26 re-type a
+number an earlier typed reply of the same session carried and 18 carry
+one only the task or wake message showed -- earlier cycles' uncertainty
+terms in ino3-r13b and ino3-r14a (nodes named `*-carried-v`), a cycle-one
+Delta G in sm2-hcn-hnc, and two task-given experimental references. The
+host then records them as model-authored. Claims standing on any
+model-authored constant: 332 of 2,580 (12.9%, 86 streams; mostly counts,
+exponents, cutoffs, 298.15, R). Rendered reports name model-authored
+constants only in uncertainty rows (6 of 288 local reports), never beside
+a claim value.
+
+Where the three P7 cases live: the goal driver never reads a session's
+`final_text` (only `live_session.py`, `loop.py` and the TUI do; the goal
+CLI prints settlement and reasons), so in goals the final message is a
+transcript surface, not a host-delivered one; all three cases are final
+messages. Finding statements are delivered at goal grain and their
+numbers are bound through `rests_on`: r10/q18 g1's restated 4.26/2.22
+kcal/mol rest on `dst-proj > dst-unproj`, host claims -- so the
+`context` class in findings restates bound claims, and the wake's dropped
+receipts are a citation gap for expression inputs, not a delivery gap.
+
+Gap typing after one fix (7982c0b3's reader types a "non-stationary"
+reason first): ORCA sp frequencies 8 workspaces (not 9); r10/q21 g1-hooh
+and r10/q24 g2r are the thermochemistry-at-a-held-dihedral gate. P2 with
+`query` read as prose: 1 of 24,451 calls. q28-q36 (after Q28's native
+gate): 15 sessions, 614 calls, 46 authoring calls, 0 hatch rows, 0
+native-word refusals. The CUHK count of participation requests was
+abandoned (a login-node grep over engine outputs; stopped, not counted).
+Every figure in this section is recomputed by
+`.agents/research/loop/evidence_census_report.py` (7982c0b3) from the
+census outputs.
 
 Route shapes (C5 by-product): 538 accepted plans with calculation
 nodes -- 462 single-program (ORCA 364, PySCF 68, xTB 29, Gaussian 1),
@@ -322,9 +360,103 @@ Gaussian+ORCA 9, three programs 8); 1 node 162, 2-4 nodes 267, 5+ 109.
 248 goals executed nodes: 208 single-program, 40 cross-program
 (ORCA+PySCF 26); 264 geometry handoffs and 269 data edges recorded.
 
+## POSITION MEMO (Phase I)
+
+**The question, as I now understand it.** Not "is the typed layer
+complete" but: when the Agent's chemistry reaches a human, does it pass
+through host values, and where it does not, is that because the
+vocabulary lacked something, because a receipt could not travel, or
+because the Agent chose prose? The delivery surfaces differ by era: in
+goals the host delivers claims, categorical answers and finding
+statements (bound through `rests_on`); a session's final message is
+delivered only when a person runs a session directly (CLI, TUI).
+
+**Evidence** (all model-labelled; deepseek-v4-flash-0731 in 887 of 935
+sessions, qwen3.8-max in 48): census E over 935 behavioural sessions,
+24,451 tool calls, 2,389 refusals, ax41 mirror + experiments-public +
+CUHK R8-R10 and pre-R8 (Slurm 2157056, 2157060), with a
+shuffled-session control; the reading of every unmatched delivered
+number and of the Agent's 108 declared-gap sessions by reason;
+benchmark-v2's referee report as the pre-R10 baseline. Instruments:
+`evidence_census.py` (223c66ed, 4c38357b, 7982c0b3) and
+`evidence_census_report.py` (7982c0b3).
+
+**What it says about C2: NARROWED** (by the pre-registered map: P7 = 3,
+P4 failed).
+- Supported where the claim is strongest today: delivered numbers are
+  host values -- at >= 4 significant digits the typed-record class is
+  86% of final-message numbers and 94% of finding-statement numbers
+  (216/229; control 0/229); the looser pre-registered class is 94.7% of
+  all 5,039 (control 12.8%). Bypass is absent: 1 operative path exit in
+  24,451 calls, refused; no hatch after Q28's gate (46 authoring calls
+  in q28-q36). When the value was in sight the Agent refused to type it
+  by hand (r10/q10 lg1), and it composed selections inside the DAG
+  (xtb-ir `coordinate_at_minimum`).
+- Narrowed to: the archive's exits that changed a delivered conclusion
+  are three final messages -- two where a missing typed form forced
+  prose (energy->wavenumber, ino2; categorical answer, r8 goal-ts; both
+  forms built since and both numbers correct) and one wrong prose
+  conversion beside a correct claim (r10/q17 dE-h2occ-U1). Vocabulary
+  refusals prevented a requested observable in 23 workspaces over 11
+  types; on 9185770e all are closed except NEB energies (not
+  executable), per-root excited-state <S^2> (a program limit), and
+  adaptive mode selection (one delivered loss, r9/xtb g3).
+- Failed prediction P4, and what it hid: the Agent declares a gap in
+  12.5% of analysis-planning sessions, but by reason (post hoc) most are
+  missing producers and host physics gates, not vocabulary. The
+  declaration mechanism is how the Agent keeps scientific intent honest;
+  it is not a measure of vocabulary lack.
+- The retained-number gap is real and small: receipts cannot be
+  expression inputs across runs (10 refusals, all pre-R10 ax41), and the
+  Agent's workaround re-types earlier results as literals (18 carried, 5
+  workspaces), turning host numbers into model-authored ones. Findings
+  are not affected (bound at goal grain).
+- Widening stays open: I measured no route change after a refused read
+  in exploration; two anecdotes point both ways (r9/xtb g3 blocked;
+  xtb-ir composed).
+
+**Program proposed next.**
+1. No implementation for the delivery path. Three cases in ~5,000
+   delivered numbers, two already closed by typed forms, earn no gate;
+   a host check on prose numbers is not proposed.
+2. Witness-first candidate, not a commitment: an axis on
+   `sum/mean/max/min` (or a column select in `ref`) for matrix
+   quantities (participation, populations, bond orders). It replaces a
+   wake cycle, not a tool. First probe, provider-free: plan the C=O
+   selection against r9/xtb g3's archived xTB Hessian and check the
+   typed chain returns the mode the Agent chose by eye (mode 99, C10+O1
+   0.969). Whether the model would plan it is Q17's use-not-sight
+   question and belongs to a later live check.
+3. Receipt reuse across runs: evidence for it is the carried literals
+   (ino3-r13b/r14a uncertainty budgets); the smallest home is letting
+   `_typed_quantity_from_receipt` resolve a recorded run's receipt as
+   decisions already do (`_recorded_run_receipt`, Truth's hotspot).
+   Proposed only if Truth finds a sufficiency word changed by a carried
+   literal; otherwise leave it.
+4. Routed to the master, not ruled on: Gibbs energy refused at a held,
+   non-stationary dihedral (r10/q21 g1-hooh, r10/q24 g2r) -- a possible
+   C3 suppression, since projected-Hessian thermochemistry at a
+   constrained point is a legitimate route; ORCA MDCI launched with more
+   MPI ranks than electron pairs (r10/q12 g1-hi; execution contract);
+   rendered reports never mark a claim value that rests on a
+   model-authored literal (Truth, host words; load 332/2,580 claims, the
+   literature-valued ones few); counterpoise ghost atoms have no typed
+   form (open settings gap; a designed boundary in benchmark-v2 b7).
+
+**What would change my mind.** A host-delivered claim, answer or finding
+whose number disagrees with its receipt on a tree after R10 (narrows
+C2 further toward contradiction); the provider-free probe failing to
+return the Agent's mode (the axis reduction is not the missing form);
+a live check where the Agent, given the form, still does not plan the
+selection (use, not sight: no implementation); a second model's exit
+rates differing materially from deepseek's (C2 becomes model-specific --
+48 qwen sessions are too few to say); a measure of route change after
+refused exploratory reads (would decide widening).
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
-  evidence surfaces read; census E pre-registered (above) before any
-  detector run; instrument committed (223c66ed) and run on the local
-  corpus; CUHK census submitted (above).
+  evidence surfaces read; census E pre-registered before any detector
+  run; instrument committed (223c66ed, corrected 4c38357b, 7982c0b3) and
+  run on the local corpus and on CUHK (2157056, 2157060); census read;
+  position memo written. Phase I ends here; waiting for the exchange.
