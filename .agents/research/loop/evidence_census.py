@@ -307,6 +307,10 @@ PROSE_KEYS = frozenset(
         "limitations",
         "purpose",
         "why",
+        # A search_capabilities query is words the host indexes, never an
+        # argument anything executes; the first CUHK run tagged twelve of
+        # them ("orca project yaml ...", "from pyscf hdf5") as operative.
+        "query",
     }
 )
 
