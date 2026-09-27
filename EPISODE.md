@@ -1025,6 +1025,38 @@ c6280b74...), unpacked at `e2flip/code`, 0 AppleDouble files. One command:
 red was shown locally through `--fake` on the pre-change tree (R1); this
 job is the green half, not a second red.
 
+## E2 -- CUHK witness: READ (Slurm 2157103, pre-registration 9ebacec0d6e3)
+
+Run: COMPLETED in 1 min 19 s on chpc-cn071 (16 tasks); imported
+`e2flip/code` (remote tree digest 94c9cd1a... = local pack, commit
+a5ba8dc4, 0 AppleDouble files); inputs hashed as recorded (xyz be1a5c68...,
+flip.yaml f62b3174..., read_flip.py 0e73699c...). Outputs:
+`ni2_flip_typed_gas_phase.inp` 56240ad2..., `.out` 46a73557...,
+`e2.json` 5de514b4....
+
+GREEN on every pre-registered criterion:
+- written `%scf`: HFTyp UHF, FlipSpin 1, FinalMs 0.0, maxiter 500,
+  convergence tight; coordinate line `* xyz 2 5`;
+- ORCA TERMINATED NORMALLY; "Flipping spin on atom Ni 1" (ORCA's atom 1
+  = host atom 2); "converge to the broken symmetry state with Ms= 0.0";
+- FINAL SINGLE POINT ENERGY -3890.968544659585, the oracle's value to
+  every printed digit (|difference| 0 < 1e-5 Eh);
+- the reader's spin_square (last) 1.998044 (the oracle's, within 0.005);
+- the reader accepts the Mulliken spin populations: Ni(1) +1.726172,
+  Ni(2) -1.722662, sum 1e-6 over 29 atoms (Loewdin +1.710982 / -1.707443,
+  accepted too); broken_symmetry_ms 0.0; multiplicity 5; the output reads
+  back to {atoms: [2], final_ms: 0.0}.
+Recorded beside, for truth-3: the reader's spin_square_target is 6.0
+(the quintet) and spin_square_deviation -4.001956, so
+spin.s2_deviation_ge_0.2 fires on this result against the bound
+high-spin multiplicity.
+
+What it establishes: executed, engine-complete and parsed through the
+public CLI with the typed request, reaching the state truth-2's native
+oracle reached (the site-flip state C3 found suppressed). Not established:
+that an Agent plans it (no live session was run), nor its reach on any
+system but this one (one geometry; one flipped centre).
+
 ## Exchange 1 -- what reached this lens (the master, as evidence)
 
 - Behaviour: at matched decision points the model is the first-order
