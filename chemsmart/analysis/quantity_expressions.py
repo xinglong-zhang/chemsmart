@@ -1014,7 +1014,11 @@ class QuantityExpressionNodeV1:
     operation: str
     input_ids: tuple[str, ...] = ()
     reference: str = ""
-    indices: tuple[int, ...] = ()
+    #: For ``ref``: one index per axis, outermost first. ``None`` keeps that
+    #: whole axis, so ``(None, 3)`` is column 3 of a matrix -- one value per
+    #: row -- and a selection by what a result measured can be planned
+    #: before the result exists.
+    indices: tuple[int | None, ...] = ()
     literal_value: Any = None
     literal_unit: str = "1"
     constant_name: str = ""
@@ -1047,9 +1051,10 @@ class QuantityExpressionNodeV1:
             raise QuantityContractError(
                 "constant_name applies only to the constant operation"
             )
-        if any(index < 0 for index in self.indices):
+        if any(index is not None and index < 0 for index in self.indices):
             raise QuantityContractError(
-                "reference indices must be non-negative"
+                "reference indices must be non-negative, or null to keep a "
+                "whole axis"
             )
         if self.scale_factor is not None and not math.isfinite(
             self.scale_factor
@@ -1105,7 +1110,10 @@ def expression_node_from_plan(
         operation=str(item.get("operation", "")),
         input_ids=tuple(str(value) for value in item.get("input_ids", ())),
         reference=str(item.get("reference", "") or ""),
-        indices=tuple(int(value) for value in item.get("indices", ())),
+        indices=tuple(
+            None if value is None else int(value)
+            for value in item.get("indices", ())
+        ),
         literal_value=item.get("literal_value"),
         literal_unit=str(item.get("literal_unit", "1")),
         constant_name=str(item.get("constant_name", "")),
@@ -1645,10 +1653,15 @@ def _node_value(
                 evidence_ref=source.evidence_ref,
                 data_kind=source.data_kind,
             )
-        selected = _numeric(source)
+        # One index per axis, taken together, so a null can keep its whole
+        # axis: a mode's row was selectable and an atom's column was not, and
+        # the mode in which given atoms move most could be chosen only by an
+        # index read after the Hessian existed (R9 xtb g3).
+        key = tuple(
+            slice(None) if index is None else index for index in node.indices
+        )
         try:
-            for index in node.indices:
-                selected = np.asarray(selected[index])
+            selected = np.asarray(_numeric(source)[key])
         except IndexError as exc:
             raise QuantityExpressionError(
                 "reference index is out of range"
@@ -3616,7 +3629,9 @@ def _expression_linear_terms(
             source = node.reference or (inputs[0] if inputs else "")
             single[name] = single.get(source)
             lin[name] = lin.get(source) if not node.indices else None
-            if node.indices and source in single:
+            # A null keeps a whole axis: the selection is a vector, not one
+            # element, and a vector is no linear term.
+            if node.indices and None not in node.indices and source in single:
                 facts = single[source]
                 kind = (
                     energy_kind(facts.name)
@@ -4313,6 +4328,88 @@ def expression_kind_observations(
     return tuple(observations)
 
 
+def _quantity_text(value: float, unit: str) -> str:
+    text = f"{float(value):.6g}"
+    return text if unit in {"", "1"} else f"{text} {unit}"
+
+
+def expression_extremum_observations(
+    request: QuantityExpressionRequestV1,
+    receipt: QuantityExpressionReceiptV1,
+) -> tuple[dict[str, Any], ...]:
+    """Name the runner-up beside every coordinate_at_maximum and _minimum.
+
+    Where an extremum falls says nothing about how far ahead of the rest it
+    was. Summed C=O participation picked the carbonyl stretches of both R9
+    xtb g3 Hessians at shares of 0.96-0.98 while the next modes in rank --
+    low-frequency motions loading the same two atoms -- held 0.36-0.63 (R11
+    probe M, CUHK 2157069). Each selection's runner-up is read from the
+    arrays the evaluation read, for every such node whether or not it is an
+    output: a fact beside the receipt, never a verdict, and never inside
+    it, so the receipt's digest stays what the arithmetic makes it.
+    """
+
+    known = {quantity.quantity_id: quantity for quantity in request.inputs}
+    known.update({item.quantity_id: item for item in receipt.node_values})
+    observations: list[dict[str, Any]] = []
+    for node in request.nodes:
+        if node.operation not in {
+            "coordinate_at_maximum",
+            "coordinate_at_minimum",
+        }:
+            continue
+        operands = [known.get(item) for item in node.input_ids]
+        if len(operands) != 2 or None in operands:
+            continue
+        series, measured_at = operands
+        values = np.asarray(series.value, dtype=float).reshape(-1)
+        coordinates = np.asarray(measured_at.value, dtype=float).reshape(-1)
+        if values.size != coordinates.size or values.size < 2:
+            continue
+        largest = node.operation == "coordinate_at_maximum"
+        pick = np.argmax if largest else np.argmin
+        chosen = int(pick(values))
+        rest = np.delete(np.arange(values.size), chosen)
+        runner_up = int(rest[pick(values[rest])])
+        separation = abs(float(values[chosen]) - float(values[runner_up]))
+
+        def point(index: int) -> dict[str, Any]:
+            return {
+                "index": index,
+                "coordinate": float(coordinates[index]),
+                "value": float(values[index]),
+            }
+
+        rank, side = (
+            ("largest", "lower") if largest else ("smallest", "higher")
+        )
+        observations.append(
+            {
+                "kind": "extremum_runner_up",
+                "node_id": node.node_id,
+                "operation": node.operation,
+                "points": int(values.size),
+                "selected": point(chosen),
+                "runner_up": point(runner_up),
+                "separation": separation,
+                "coordinate_unit": measured_at.unit,
+                "value_unit": series.unit,
+                "meaning": (
+                    f"{node.operation} returned "
+                    f"{_quantity_text(coordinates[chosen], measured_at.unit)}"
+                    f", where the {rank} of its {values.size} values falls "
+                    f"({_quantity_text(values[chosen], series.unit)}); the "
+                    f"next {rank} "
+                    f"({_quantity_text(values[runner_up], series.unit)}) "
+                    "falls at "
+                    f"{_quantity_text(coordinates[runner_up], measured_at.unit)}"
+                    f", {_quantity_text(separation, series.unit)} {side}"
+                ),
+            }
+        )
+    return tuple(observations)
+
+
 def quantity_expression_receipt_from_record(
     record: Mapping[str, Any], *, receipt_sha256: str
 ) -> QuantityExpressionReceiptV1:
@@ -4371,6 +4468,7 @@ __all__ = [
     "convert_normalized_value",
     "evaluate_quantity_expression",
     "ExpressionOperandV1",
+    "expression_extremum_observations",
     "expression_kind_observations",
     "expression_level_observations",
     "expression_output_sources",
