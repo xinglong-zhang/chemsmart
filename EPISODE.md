@@ -929,6 +929,66 @@ legitimate route. Owner: `chemsmart/agent/capabilities.py` (the
 registry's derivation; outside this lens's radius) -- reported for the
 master, no code here.
 
+## Item 4 -- C3, the named-site spin flip: one ORCA oracle (pre-registration, written before submission)
+
+Question: for two S = 1 Ni(II) centres, does the host's typed
+broken-symmetry request -- ORCA `%scf HFTyp UHF / GuessMix 45` at
+multiplicity 1, what `broken_symmetry: true` writes and where the refusal
+of named-site flips routes a session -- reach the antiferromagnetic Ms = 0
+state a spin flip on one Ni site reaches?
+
+System: ax41 ino2-dinickel-exchange's `dinickel-oh-cl.xyz` (sha256
+be1a5c68...), the structure the ino2 Agent asked FlipSpin on; charge +2,
+29 atoms, unoptimised (as the Agent's single points were); Ni are atoms 1
+and 2 one-based, ORCA indices 0 and 1. (ino2's own `FlipSpin 1,2` would
+flip Ni(1) and the bridging O(2) in ORCA's 0-based numbering; FS1 below
+flips one Ni.)
+Level, one route for every arm: the host's ORCA project {functional:
+b3lyp, basis: def2-svp, scf_convergence: tight, scf_maxiter: 500,
+scf_algorithm: slowconv} -> `! B3LYP/G def2-svp slowconv`, `%pal nprocs
+16`, `%maxcore 1500`, `%scf maxiter 500 / convergence tight`, ORCA 6.1.1
+defaults otherwise; single points.
+Arms (one CLI job, `truth/item4/job`, 16 cores / 32 GB / 2 h, four
+`chemsmart run` lines, no Agent, no provider):
+- HS: multiplicity 5, typed (hs.yaml b4e784fc...).
+- BS-typed: multiplicity 1, `broken_symmetry: true` (bs-typed.yaml
+  d3f35820...; `--fake` shows HFTyp UHF + GuessMix 45 written).
+- FS1: a person-authored project `input_string` (fs1.yaml cb8be162...) =
+  the HS input the host writes, byte for byte, plus `FlipSpin 1` and
+  `FinalMs 0.0` in `%scf` (converge high-spin, flip one Ni, continue at
+  Ms = 0); `--fake` shows it written verbatim.
+- BS22: the same plus `BrokenSym 2,2` instead (ORCA's own procedure for
+  two unpaired electrons per site; bs22.yaml f0266f19...).
+Read through the host's ORCA reader (`reader.read` of energy,
+spin_square, Mulliken and Loewdin spin populations; read_arms.py
+ef5abc2a..., dry-run on the archived p-benzyne BS output: <S**2>
+0.970279 as its README records), beside the raw last-block values.
+Expected:
+- HS converges; <S**2> 6.00-6.10; each Ni's Mulliken spin +1.5 to +1.9.
+- FS1 and BS22 converge at Ms = 0; <S**2> 1.9-2.2; the two Ni of
+  opposite sign, |pop| 1.5-1.9 each; E(FS1) and E(BS22) within 1e-4 Eh;
+  |E(HS) - E(FS1)| < 5 mEh (weak coupling).
+- BS-typed, my prediction (about 65 % confidence): it does NOT reach the
+  FS1 state. A 45-degree mix of one alpha HOMO/LUMO pair breaks one pair
+  of a determinant started at Ms = 0; a Ni(II) site carries two unpaired
+  electrons. Expected signatures: <S**2> < 1.5, or Ni populations not
+  antiparallel near +-1.7, or an energy >= 10 mEh above FS1, or no
+  convergence.
+Criterion, "the typed route reaches the state a site flip does":
+|E(BS-typed) - E(FS1)| <= 1e-5 Eh AND |<S**2> difference| <= 0.02 AND
+each Ni's spin population within 0.05 of FS1's (whichever Ni is down).
+Anything else: it does not.
+Consequence: reaches -> the typed route reaches the site-flip state for
+this S = 1 pair; the refusal of named-site flips suppresses no
+legitimate choice here; no code. Does not reach -> the refusal routes an
+S = 1 session to a request that cannot express its state: a typed-form
+request to the Evidence lens (a named-site or high-spin-flip
+broken-symmetry form) and input to the owner's pending ruling on the
+native channel.
+Not evidence: HS unconverged or <S**2> far from 6 (the level cannot
+carry the question); FS1 and BS22 disagreeing beyond 1e-4 Eh or in
+state (the site-flip reference is itself uncertain: both reported).
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
