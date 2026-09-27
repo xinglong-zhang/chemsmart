@@ -968,6 +968,79 @@ A result in another state (for instance <S**2> near 1.76 with the spin on
 the bridges) is reported as it stands and is not re-run; nor is any
 target moved after a result.
 
+## E2 -- local RED then GREEN
+
+R2 (reader), on 372ca782 with `chemsmart` from this worktree:
+`tests/agent/test_a_flipped_result_is_read_at_its_final_ms.py` over
+truth-2's FlipSpin and BrokenSym 2,2 outputs (fetched byte-identical,
+sha256 e39eb420... and 6c8c5cd4..., added as fixtures with README rows):
+4 failed, "mulliken_atomic_spin_populations sums to 0.000 where 2S for
+multiplicity 5 is 4.0" (and Loewdin alike). G2 on e31d124b: 4 passed
+(Mulliken Ni +1.726172 / -1.722662, Loewdin +1.710982 / -1.707443, sum 0).
+
+R1 (the request), on e31d124b:
+`tests/agent/test_a_named_site_flip_is_one_typed_request.py`: 8 failed --
+not offered, and every ORCA fake run refused by the loader ("Keyword
+`site_spin_flip` is not in list of keywords"), the refusal tests being
+written to count only a refusal by the request's own check; the native
+FlipSpin word's route named no typed flip. The 2 that passed pin
+behaviour E2 keeps: Gaussian and PySCF refuse the key through their
+loaders. G1 after the change: 10 passed -- through the planning
+session's preview chain the written input carries `* xyz 2 5` and
+`%scf HFTyp UHF / FlipSpin 1 / FinalMs 0.0` (no GuessMix), the preview
+receipt is valid with no findings, and a scratch check showed the
+comparison is live (`_settings_match` passes the same request and flags
+`site_spin_flip` for another atom) and that truth-2's own FlipSpin output
+reads back as {atoms: (2,), final_ms: 0.0}. The census test
+`test_every_advertised_setting_has_a_stated_value` asked for a `_STATED`
+row; one was added (on singlet water the flip ends refused at compile
+with its sentence, one of the census's four admissible endings).
+
+One deliberate difference from the oracle's input, stated before the CUHK
+run: the host writes `HFTyp UHF` explicitly; truth-2's native input left
+it out and ORCA printed "Switching to HFTyp=UHF", so both run the same
+unrestricted determinant.
+
+Commits: e31d124b (reader, `shared:`), dc72cc79 (the typed request,
+`shared:`), a5ba8dc4 (the scoped broken_symmetry claim, and ORCA's refusal
+of it on a high-spin node naming the flip, `shared:`).
+
+## E2 -- CUHK witness: job inputs (recorded before submission)
+
+Directory `/project/xlzhang/jiseung/r11/evid/cli/e2flip/`: `job.sh` sha256
+02697db3... (make_cli_job.py's environment and allocation -- 16 tasks,
+32 GB, 1:10 h, reservation xlzhang_1 -- written by hand so that the code,
+its file list and its commit are the job's own; the campaign root holds
+probe M's older pack); `flip.yaml` f62b3174... (truth's hs.yaml plus
+`site_spin_flip: {atoms: [2], final_ms: 0}`); `dinickel-oh-cl.xyz`
+be1a5c68... (copied from truth-2's oracle directory, read only there);
+`read_flip.py` 0e73699c... (reads the result through
+`reader_for("orca")`: energy, spin_square, spin_square_target and
+deviation, both population schemes, broken_symmetry_ms, multiplicity and
+the read-back request; dry-checked locally on the FlipSpin fixture). Code
+packed from a5ba8dc4 (426 files, tree digest 94c9cd1a..., tarball
+c6280b74...), unpacked at `e2flip/code`, 0 AppleDouble files. One command:
+`chemsmart run -s CUHK -n 16 -m 32 orca -p flip.yaml -f dinickel-oh-cl.xyz
+-c 2 -m 5 -l ni2_flip_typed sp`. No Agent session, no provider. The CLI's
+red was shown locally through `--fake` on the pre-change tree (R1); this
+job is the green half, not a second red.
+
+## Exchange 1 -- what reached this lens (the master, as evidence)
+
+- Behaviour: at matched decision points the model is the first-order
+  locus (po3-r19: deepseek read 12/12 structures and declared 0/12
+  falsifiable diagnostics; qwen read 5/12 and declared 11/12, mostly
+  procedural). "Use, not reach" is partly a property of the model, so
+  C2's widening question will differ by model.
+- Rendering: observations beside receipts reach neither reports nor the
+  wake view; one renderer change, owned by truth-3; the observation
+  content is this lens's to review.
+- Paper review #2 narrowed A5, to keep in the next count: 216/229 are
+  numbers in CUHK findings (not all findings); "bypass attempt"
+  overstates what was seen; 7 of the 18 carried literals are task-given
+  references, not re-typed host numbers; the pre-registered P4 failed at
+  12.5%.
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
