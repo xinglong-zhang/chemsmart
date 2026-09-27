@@ -756,6 +756,27 @@ over-reach. The harness change (the tree's own restoration instead of a
 restated loop) is part of what is tested: a difference with no verdict in
 the goal's streams would be the harness's, and reported as such.
 
+### Census 5 -- read (local + CUHK 2157072, prereg 534d59f42330)
+
+Exactly as pre-registered: 0 of 254 replayed words move.
+- Local (ax41 mirror + public, `truth/replays/local-item1`): 175 of 175
+  byte-identical to census 4's words (state and reasons); the same 15
+  goals unreplayed on both trees. Correction to my own run: the
+  predecessor's `local-specs.txt` names the three public goals inside its
+  worktree, which this session may not read; they were replayed from
+  this worktree's identical `experiments-public/` instead
+  (`truth/public-specs-mine.txt`), and the comparison joins on the agent
+  path with the two worktree prefixes normalised.
+- CUHK (job 2157072, code 19d1b322 = 104632c3's chemsmart/, remote
+  digest 6bf5aa95 equal to the local pack, 0 AppleDouble files): 79 of 79
+  byte-identical, 10 unreplayed on both; the independent reader's
+  summary and flags over the new words are byte-identical to census 4's
+  (`cmp` on the cluster).
+Reading: item 1's class has no archived instance at the round's
+settlements (as the reader had found), the carried rejection set never
+changed an archived word, and the census harness now rebuilds state
+through the tree's own function without moving a word.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
@@ -767,4 +788,7 @@ the goal's streams would be the harness's, and reported as such.
 - CUHK 2157070 (r11-truth-a), census 4, prereg 41adf5a4eeb4: re-sign on
   the repaired tree (2232445a, digest 9d1da30c) and the reader over its
   words. COMPLETED.
+- CUHK 2157072 (r11-truth-a), census 5 (truth-2), prereg 534d59f42330:
+  re-sign on item 1's tree (19d1b322, digest 6bf5aa95), compare with
+  census 4, reader. COMPLETED in 63 s, exit 0.
 - No provider arm, no live goal.
