@@ -539,6 +539,45 @@ local runs in the scratchpad (`truth/replays`, `truth/reader`).
 - C1 widened, not narrowed, if recomputing standing and category
   delivery at settlement changes no pin word over the archive.
 
+## Repair A (master's instruction after Phase I, 2026-09-28)
+
+Instruction: read falsified expectations at goal grain, as failed
+criteria already are; one general commit at the owning function; a
+witness through the goal loop, red on the pin and green after; re-run the
+census on the repaired tree; LOUD for the owner. Repair B, the reading-
+turn harness and the Ni(II)2 oracle are held until Exchange 1.
+
+- 4ec8957d driver (LOUD): `_carried_expectations` reads every completion
+  of the goal's streams (`_goal_streams`, the set failed criteria are
+  read from) in order, this stream last; the latest row that scored a
+  delivered claim is each id's score; a diverged score the settling
+  completion did not itself score is named `falsified_expectation:<id>`
+  by `_achieved_word` (unless a later verified refusal superseded the
+  claim) and its completion receipt is cited. Both settlement paths pass
+  the streams.
+- Witness `tests/agent/test_a_goal_word_names_every_expectation_the_
+  physics_left.py` (4 cases): on a pristine export of 9185770e 3 red
+  (requested/planning, requested/run, diagnostic), control green; on
+  4ec8957d 4 green.
+- Local census on 4ec8957d: 175 of 175 replayed words byte-identical to
+  the pin's. Corrected prediction: ino3-r17 does not change (its ledger
+  names the cycle-3 session only as analysis evidence, which
+  `_goal_streams` does not read -- for failed criteria either). A first
+  draft that also carried the settling completion's own rows moved
+  goal-h4 over sign-on-zero rows; narrowed before commit.
+
+### Census 4 on CUHK -- what it runs (written before submission)
+
+Job `/project/xlzhang/jiseung/r11/truth/census4/job.sh`: `resign.py` on
+the repaired tree 4ec8957d over census 1's specs, then the reader over
+the repaired words. Expected: r10/q7 g2-scan-modred moves `achieved` ->
+`achieved_with_observations` naming `falsified_expectation:cis-barrier`
+and `falsified_expectation:oo160-torsion`; r10/q24 g2r unchanged (its
+90-degree claim is superseded by the verified refusal; its 180-degree
+expectation is already named); every other CUHK word byte-identical to
+census 1's pin words. Falsifier: any other word moves (a further
+instance of the class, read against its records, or over-reach).
+
 ## Status
 
 - 2026-09-28: pin verified; briefs, kernel, CONDUCT, RSL, charter topics
