@@ -854,3 +854,24 @@ target rows.
   for Exchange 1.
 - evid-2 succeeds evid at bccb4b29 (context hand-back), Mon Sep 28
   03:49:54 KST 2026.
+- evid-2, same day: master's rulings and E1 approval recorded; E1 oracle
+  fixed (2057bf9c); r11-integration 79e5639a merged (507521f9); witness
+  red on 507521f9, E1 implemented green (ebdbaaed); probe records
+  observations (d3d12a46); A3 flag 2 read (c7326301). The g3 replay's
+  files are staged and verified at `/project/xlzhang/jiseung/r11/evid/e1/`
+  but NOT SUBMITTED: `slot_submit evid` refuses -- "episode evid is
+  registered to .../worktrees/agent-a5e22524ad752e800, not
+  .../worktrees/agent-ae4e9cab835af0a94". The registry
+  (`~/.chemsmart-r11-run/episodes.tsv`) is the master's; blocked on
+  re-registration. The graph's supersedes edge waits for the replay.
+- Merge-readiness gates on c7326301 (r11-integration 79e5639a merged,
+  nothing newer on it): full suite from a pristine `git archive` export
+  (PYTHONPATH and cwd the export): 23 failed, 4899 passed, 25 skipped,
+  3 xfailed, 0 errors; failing set equal as a set to
+  `baseline/suite.set` (no new failure, none of the 23 passing), all 23
+  outside `tests/agent`. (A first export run with `-p no:logging` showed
+  3 errors, all "fixture 'caplog' not found" from that flag; rerun
+  without it, reported above.) Export deleted. ruff, black --check and
+  isort --check clean on the five touched files; `rsl.py check` 0
+  failures (one budget prompt, the kernel's line count); `graph.py
+  check` 0 problems, `orphans` unchanged (no graph edit yet).
