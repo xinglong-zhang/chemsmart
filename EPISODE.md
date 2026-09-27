@@ -633,6 +633,28 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   (Repair B). Held for the master: the certificate organ, the coverage
   cell, the reader's final-Ms check, the typed site-flip form, report
   rows naming their model-authored constants, and class (d).
+- Qualifications stated before hand-back:
+  - `_anomaly_evidence` now adds an answered criterion's receipts on
+    both settlement paths (the planning path calls it too), not only
+    the run path as 10f09617's body says; census 5 compared state and
+    reasons, so the evidence block of an archived
+    achieved_with_observations with an answered criterion may gain
+    receipts although no word moved.
+  - Repair B's red was shown on this worktree at 104632c3 (chemsmart/
+    unmodified), not on a pristine export as item 1's was.
+  - `recovery_opened.verdicts` now also names inherited verdicts, and
+    that key is allowlisted into the wake trajectory: a change in what
+    a woken session is told (for the Behaviour lens), beside the gate's
+    route strings.
+  - Item 5: the pre-registered population named session-rendered
+    reports (a completion policy's final text); the instrument reads
+    executor report files only, so those are excluded; the rule's
+    second clause (a foreign literal setting a declared observable) was
+    not evaluated -- the first clause decided; 8 local rows unread (no
+    dependency row for the output).
+  - My own census-6 result file (`census6/gate-replay/gate_replay.json`,
+    32 KB) was fetched to the Mac for the named-stream check; no archive
+    record was copied.
 
 ## The master's adjudication of Repair A (copied from the succession brief)
 
@@ -1027,7 +1049,11 @@ signature was the Ni populations and the energy, not <S**2> < 1.5).
 What it means for J (Yamaguchi, H = -2J S1.S2, this unoptimised
 structure, B3LYP/G def2-SVP): from the site-flip state J = -(E_HS -
 E_BS)/(<S**2>_HS - <S**2>_BS) = -46.6 cm-1 / 4.007 = -11.6 cm-1
-(antiferromagnetic, the magnitude the task's susceptibility allows);
+(antiferromagnetic; corrected: this is not "the magnitude the task's
+susceptibility allows" -- the task's bracket is |J| about 3-4 cm-1, so
+-11.6 cm-1 at an unoptimised def2-SVP structure has a sign the data
+admit and is a factor of about 3 outside the bracket; the oracle's
+finding is which state each route reaches, not J's accuracy);
 from the typed state the same formula gives +1718 cm-1, the wrong sign
 at 150 times the size -- the order of the |J| 1040-1690 cm-1 the ino2
 Agent delivered from its M = 3 substitution.
