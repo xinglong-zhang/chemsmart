@@ -495,6 +495,12 @@ RECORDED: dict[tuple[str, str, str | None, tuple[str, ...]], str] = {
     "bounded admission and the frontier each spelled the four out and "
     "now read this one",
     # R10 Q4 composition: end
+    # R11 truth: append entries below this line
+    # R11 truth: end
+    # R11 evidence: append entries below this line
+    # R11 evidence: end
+    # R11 behaviour: append entries below this line
+    # R11 behaviour: end
 }
 
 

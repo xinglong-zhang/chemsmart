@@ -1737,6 +1737,12 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "in view answered with the call (R10 Q32 census)",
     ),
     # R10 Q4 composition: end
+    # R11 truth: append rules below this line
+    # R11 truth: end
+    # R11 evidence: append rules below this line
+    # R11 evidence: end
+    # R11 behaviour: append rules below this line
+    # R11 behaviour: end
 )
 
 
