@@ -517,23 +517,33 @@ def replay(source: Path, goal_id: str, out: Path) -> dict:
     driver.revisions_admitted = sum(
         1 for e in kept if e["kind"] == "revision_admitted"
     )
-    for item in kept:
-        if (
-            item["kind"] != "run_recorded"
-            or int(item["payload"].get("cycle") or 0) >= cycles
-        ):
-            continue
-        delivery = drv._analysis_delivery(
-            agent
-            / Path(*str(item["payload"].get("run") or "").split("/"))
-            / "events.jsonl",
-            inherited_rejected_artifacts=tuple(
-                sorted(driver.rejected_artifacts)
-            ),
-        )
-        driver.rejected_artifacts.update(delivery.rejected_artifact_sha256s)
-        if delivery.claims_rendered:
-            driver.standing_stale = delivery.stale_quantity_ids
+    earlier_runs = [
+        item
+        for item in kept
+        if item["kind"] == "run_recorded"
+        and int(item["payload"].get("cycle") or 0) < cycles
+    ]
+    if hasattr(driver, "_restore_standing_delivery"):
+        # The tree's own restoration, the one its resume() calls, so the
+        # replay rebuilds exactly the state the tree would.
+        driver._restore_standing_delivery(earlier_runs)
+    else:
+        # Trees before that function (to c7102cc2): the loop their
+        # resume() ran, restated.
+        for item in earlier_runs:
+            delivery = drv._analysis_delivery(
+                agent
+                / Path(*str(item["payload"].get("run") or "").split("/"))
+                / "events.jsonl",
+                inherited_rejected_artifacts=tuple(
+                    sorted(driver.rejected_artifacts)
+                ),
+            )
+            driver.rejected_artifacts.update(
+                delivery.rejected_artifact_sha256s
+            )
+            if delivery.claims_rendered:
+                driver.standing_stale = delivery.stale_quantity_ids
     run_directory = agent / "goals" / goal_id / "runs" / f"cycle-{cycles}"
     run_rows = rows(run_directory / "events.jsonl")
     word, how = executor_word_walk(

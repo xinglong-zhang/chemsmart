@@ -31,74 +31,92 @@ GATE = "decision.receipt_is_one_the_host_minted"
 _PREFIX = re.compile(r"\b([0-9a-f]{8})\b")
 
 
+def gate_refusals(goal: Goal) -> list[dict]:
+    """Every refusal at the gate in one goal's streams, classified by where
+    the digest it named was minted before it (full digests included)."""
+
+    out: list[dict] = []
+    minted: list[tuple[str, str, str, str]] = []
+    for stamp, role, path, event in goal.events:
+        payload = event.get("payload") or {}
+        digest = str(payload.get("receipt_sha256") or "")
+        if digest and event.get("kind") not in {
+            "tool_started",
+            "tool_failed",
+        }:
+            minted.append((stamp, role, path, digest))
+    for stamp, role, path, event in goal.events:
+        if event.get("kind") != "tool_failed":
+            continue
+        payload = event.get("payload") or {}
+        report = (
+            payload.get("failure_report")
+            or (payload.get("canonical_result") or {}).get("failure_report")
+            or {}
+        )
+        if report.get("gate") != GATE:
+            continue
+        diagnosis = str(report.get("diagnosis") or "")
+        match = _PREFIX.search(diagnosis)
+        prefix = match.group(1) if match else ""
+        before = [
+            (s, r, p, d)
+            for (s, r, p, d) in minted
+            if prefix and d.startswith(prefix) and s <= stamp
+        ]
+        if not prefix:
+            where = "no digest in the diagnosis"
+        elif not before:
+            where = "minted nowhere the goal recorded"
+        elif any(p == path for (_s, _r, p, _d) in before):
+            where = "minted earlier in the same session"
+        elif any(r == "run" for (_s, r, _p, _d) in before):
+            where = "minted in a run stream"
+        else:
+            where = "minted by an earlier planning session"
+        kinds = sorted(
+            {
+                e.get("kind")
+                for (_s, _r, p, d) in before
+                for (_s2, _r2, p2, e) in goal.events
+                if p2 == p
+                and str((e.get("payload") or {}).get("receipt_sha256") or "")
+                == d
+            }
+        )
+        out.append(
+            {
+                "stamp": stamp,
+                "session": Path(path).parent.name,
+                "prefix": prefix,
+                "where": where,
+                "minted_by": kinds,
+                "minted_in": sorted({str(p) for (_s, _r, p, _d) in before}),
+                "digests": sorted({d for (_s, _r, _p, d) in before}),
+                "diagnosis": diagnosis[:240],
+                "tool": payload.get("tool"),
+            }
+        )
+    return out
+
+
 def main() -> None:
     out_dir = Path(sys.argv[1])
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for item in discover(sys.argv[2:]):
         goal = Goal(Path(item["agent"]), item["goal_id"])
-        minted: list[tuple[str, str, str, str]] = []
-        for stamp, role, path, event in goal.events:
-            payload = event.get("payload") or {}
-            digest = str(payload.get("receipt_sha256") or "")
-            if digest and event.get("kind") not in {
-                "tool_started",
-                "tool_failed",
-            }:
-                minted.append((stamp, role, path, digest))
-        for stamp, role, path, event in goal.events:
-            if event.get("kind") != "tool_failed":
-                continue
-            payload = event.get("payload") or {}
-            report = (
-                payload.get("failure_report")
-                or (payload.get("canonical_result") or {}).get(
-                    "failure_report"
-                )
-                or {}
-            )
-            if report.get("gate") != GATE:
-                continue
-            diagnosis = str(report.get("diagnosis") or "")
-            match = _PREFIX.search(diagnosis)
-            prefix = match.group(1) if match else ""
-            before = [
-                (s, r, p, d)
-                for (s, r, p, d) in minted
-                if prefix and d.startswith(prefix) and s <= stamp
-            ]
-            if not prefix:
-                where = "no digest in the diagnosis"
-            elif not before:
-                where = "minted nowhere the goal recorded"
-            elif any(p == path for (_s, _r, p, _d) in before):
-                where = "minted earlier in the same session"
-            elif any(r == "run" for (_s, r, _p, _d) in before):
-                where = "minted in a run stream"
-            else:
-                where = "minted by an earlier planning session"
-            kinds = sorted(
-                {
-                    e.get("kind")
-                    for (_s, _r, p, d) in before
-                    for (_s2, _r2, p2, e) in goal.events
-                    if p2 == p
-                    and str(
-                        (e.get("payload") or {}).get("receipt_sha256") or ""
-                    )
-                    == d
-                }
-            )
+        for refusal in gate_refusals(goal):
             rows.append(
                 {
                     "label": item["label"],
                     "goal_id": item["goal_id"],
-                    "session": Path(path).parent.name,
-                    "prefix": prefix,
-                    "where": where,
-                    "minted_by": kinds,
-                    "diagnosis": diagnosis[:240],
-                    "tool": payload.get("tool"),
+                    "session": refusal["session"],
+                    "prefix": refusal["prefix"],
+                    "where": refusal["where"],
+                    "minted_by": refusal["minted_by"],
+                    "diagnosis": refusal["diagnosis"],
+                    "tool": refusal["tool"],
                 }
             )
     (out_dir / "receipt_refusals.json").write_text(json.dumps(rows, indent=1))
