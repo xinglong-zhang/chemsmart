@@ -128,11 +128,16 @@ def _summary(reply):
         item.get("quantity_id"): item.get("value")
         for item in result.get("outputs") or ()
     }
-    return {
+    summary = {
         "status": "ok",
         "receipt_sha256": result.get("receipt_sha256"),
         "outputs": values,
     }
+    # What the host says beside the receipt (E1: the runner-up of every
+    # coordinate_at_maximum/minimum), recorded as the reply carried it.
+    if reply.get("observations"):
+        summary["observations"] = reply["observations"]
+    return summary
 
 
 def probe(label, program, path, sets, emit):
