@@ -549,9 +549,20 @@ def place_selector(selector, program, jobtype, declarations):
 # Numbers
 # --------------------------------------------------------------------------
 
+#: A number as prose writes it: an ASCII or Unicode minus, thousands
+#: grouped by commas or thin spaces (-147,707.15 is one number, not the
+#: fragment 707.15), and an exponent that may carry a Unicode minus.
 NUMBER = re.compile(
-    r"(?<![\w.])[-−+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?!\w)(?!\.\d)"
+    r"(?<![\w.,  ])[-−+]?(?:\d{1,3}(?:[,  ]\d{3})+|\d+)"
+    r"(?:\.\d+)?(?:[eE][-−+]?\d+)?(?!\w)(?!\.\d)(?![,  ]\d)"
 )
+_SEPARATORS = str.maketrans({",": None, " ": None, " ": None, "−": "-"})
+
+
+def clean_number(text):
+    return text.translate(_SEPARATORS)
+
+
 UNIT_AFTER = re.compile(
     r"\s*(?:±\s*[\d.]+\s*)?(?P<unit>kcal\s*/?\s*mol|kcal\s*mol|kJ\s*/?\s*mol|"
     r"kJ\s*mol|meV|eV|mEh|mHa|cm\s*(?:-1|⁻¹|\^-1|\^\{-1\})|"
@@ -597,7 +608,7 @@ def numbers_in_text(text):
     out = []
     for match in NUMBER.finditer(text or ""):
         try:
-            out.append(float(match.group(0).replace("−", "-")))
+            out.append(float(clean_number(match.group(0))))
         except ValueError:
             continue
     return out
@@ -608,7 +619,7 @@ def target_numbers(text):
 
     out = []
     for match in NUMBER.finditer(text or ""):
-        raw = match.group(0).replace("−", "-")
+        raw = clean_number(match.group(0))
         after = UNIT_AFTER.match(text, match.end())
         if not after:
             continue
@@ -720,11 +731,15 @@ class SeenSet:
         self.values = sorted({round(abs(v), 12) for v in values if v == v})
 
     def near(self, target, tolerance):
+        """The seen magnitude within tolerance of target, or None."""
+
         index = bisect.bisect_left(self.values, target - tolerance)
-        return (
+        if (
             index < len(self.values)
             and self.values[index] <= target + tolerance
-        )
+        ):
+            return self.values[index]
+        return None
 
     def __len__(self):
         return len(self.values)
@@ -740,18 +755,20 @@ def matches_direct(number, seen):
 
 def matches_computed(number, singles, pairs):
     """One factor on a seen value; a sum or difference of two seen scalar
-    values, optionally times one factor; or a reciprocal conversion."""
+    values, optionally times one factor; or a reciprocal conversion.
+    Returns (how, witness) or None; the witness names the operands."""
 
     x = abs(number["value"])
     tol = tolerance_of(number)
     for factor in FACTORS:
-        if singles.near(x / factor, tol / factor):
-            return "factor"
+        hit = singles.near(x / factor, tol / factor)
+        if hit is not None:
+            return "factor", {"operand": hit, "factor": factor}
     for constant in RECIPROCAL:
-        if x > 0 and singles.near(
-            constant / x, tol * constant / (x * x) + 1e-12
-        ):
-            return "reciprocal"
+        if x > 0:
+            hit = singles.near(constant / x, tol * constant / (x * x) + 1e-12)
+            if hit is not None:
+                return "reciprocal", {"operand": hit, "constant": constant}
     values = pairs.values
     if not values:
         return None
@@ -761,26 +778,32 @@ def matches_computed(number, singles, pairs):
         for v in values:
             # v - w = +-y  ->  w = v - y  or  w = v + y ; v + w = y -> w = y - v
             for w in (v - y, v + y, y - v):
-                if w >= 0 and pairs.near(w, t) and abs(w - v) > t:
-                    return (
+                if w < 0 or abs(w - v) <= t:
+                    continue
+                hit = pairs.near(w, t)
+                if hit is not None:
+                    how = (
                         "difference"
                         if factor == 1.0
                         else "difference_converted"
                     )
+                    return how, {"operands": (v, hit), "factor": factor}
     return None
 
 
 def classify_number(number, direct, singles, pairs):
     """The first direct class whose seen set holds the number, else a
-    one-step computation over typed scalars, else unmatched."""
+    one-step computation over typed scalars, else unmatched; with the
+    witness that decided it."""
 
     for name, seen in direct:
-        if matches_direct(number, seen):
-            return name
-    how = matches_computed(number, singles, pairs)
-    if how:
-        return "prose_computed:" + how
-    return "unmatched"
+        hit = matches_direct(number, seen)
+        if hit is not None:
+            return name, {"matched": hit}
+    found = matches_computed(number, singles, pairs)
+    if found:
+        return "prose_computed:" + found[0], found[1]
+    return "unmatched", {}
 
 
 def precision_band(number):
@@ -1360,7 +1383,7 @@ def classify_numbers(rows, seen, control_seen=None):
             ("own_argument", SeenSet(source["own"])),
         )
         scalars = source["typed_scalars"] + source["context_scalars"]
-        row[key] = classify_number(
+        row[key], row[key + "_witness"] = classify_number(
             row["number"], direct, SeenSet(scalars), SeenSet(scalars)
         )
         row["precision"] = precision_band(row["number"])
