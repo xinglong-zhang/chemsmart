@@ -579,6 +579,16 @@ def replay(source: Path, goal_id: str, out: Path) -> dict:
 
 
 def main() -> None:
+    if sys.argv[1] == "--list":
+        # The census population, written before anything is replayed.
+        goals = discover(sys.argv[3:])
+        Path(sys.argv[2]).write_text(
+            "".join(
+                f"{g['label']}|{g['agent']}|{g['goal_id']}\n" for g in goals
+            )
+        )
+        print(f"listed {len(goals)} goal(s) after dedupe")
+        return
     import chemsmart
 
     imported = str(Path(chemsmart.__file__).resolve())
