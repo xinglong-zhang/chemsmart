@@ -1491,8 +1491,12 @@ def describe_broken_symmetry(settings, *, multiplicity=None):
         "broken_symmetry: ORCA runs the unrestricted determinant (%scf "
         f"HFTyp UHF) from GuessMix {BROKEN_SYMMETRY_GUESS_MIX_DEGREES}, the "
         "alpha LUMO mixed into the alpha HOMO of its guess 50:50, on the "
-        "singlet (Ms = 0); measured to reach the solution ORCA's BrokenSym "
-        "1,1 and its own stability following reach. "
+        "singlet (Ms = 0); measured on one-electron sites (H2, twisted "
+        "ethylene, p-benzyne) to reach the solution ORCA's BrokenSym 1,1 "
+        "and its own stability following reach. On two S = 1 Ni(II) "
+        "centres it reached a state 33.40 mEh above the one a flip of one "
+        "centre from the quintet reaches, with the spin on the bridges; "
+        "site_spin_flip names the centres to flip. "
         + BROKEN_SYMMETRY_EVIDENCE_SENTENCE
     )
 
@@ -2017,16 +2021,26 @@ class ORCAJobSettings(MolecularJobSettings):
         the alpha HOMO, 50:50 at 45 degrees (the ORCA 6.1 manual, "Choice of
         Initial Guess"). R10 Q18 oracle O0 (CUHK Slurm 2153330) measured it
         reaching the solution ORCA's BrokenSym 1,1 and its own stability
-        following reach, to 1e-10 Eh. A job whose input this settings
-        object does not write, or whose reference the request does not
-        define, is refused here rather than run without the request.
+        following reach, to 1e-10 Eh, on one-electron sites. One orbital
+        pair is mixed, so on two S = 1 Ni(II) centres it reached a state
+        33.40 mEh above the one FlipSpin of one centre reaches from the
+        quintet (R11 truth-2, CUHK 2157086); site_spin_flip writes that
+        flip. A job whose input this settings object does not write, or
+        whose reference the request does not define, is refused here rather
+        than run without the request.
         """
 
         if not getattr(self, "broken_symmetry", False):
             return None
         state = broken_symmetry_refusal(True, self.multiplicity)
         if state:
-            return state
+            # A high-spin node asking for a broken-symmetry determinant is
+            # also the state a named-site flip starts from; the singlet
+            # route alone sent ino2's Ni(II)2 to the mixing guess.
+            return (
+                state + " To flip named centres of this high-spin state "
+                "instead, use site_spin_flip: {atoms: [...], final_ms: ...}."
+            )
         if self.semiempirical is not None:
             return (
                 "broken_symmetry is written for HF, DFT and correlated "
