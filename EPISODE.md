@@ -1372,6 +1372,131 @@ no-change control (re-sign over the same specs, compared with census 5's
 streams, 0 final words that read a flip; the re-signed words
 byte-identical to census 5's for all 79 replayed CUHK goals.
 
+### Census 8 on CUHK -- read (job 2157105, prereg 0b26cc1b0ffb, code-cert dae2a768)
+
+As pre-registered. 89 goals; 7 partial certificates on a criterion, 6
+faithful, 1 record insufficient (r10/q16 l1-o2r's session bad4811a:
+minted before a session's certificate read its own decisions -- the older
+class R10 Q16/Q19 repaired). Run streams: 2 faithful, 0 flips (gh2
+cycle-1 80e8407, bs2 cycle-1 3e81a5dc: both unanswered at goal grain,
+rightly partial). Session streams: 4 faithful, 2 FLIPS, both r10/q22 gh2:
+2f191295 (cycle 2's session 08bc3c65, its last completion; the session's
+decision cited run 1's receipt of val-real-stab/real-stable while its own
+chain judged the verdict again -- the session arm of item 1, live in the
+archive) and a57fabdc (cycle 3's session 9dfb4583, not its last). The
+other two (gh2 719d2a7f earlier in cycle 2's session, bt1 5b2858de) are
+unanswered at goal grain as well. Final words that stood on a flip: 0.
+gh2 settled `returned_to_human` on "the completion certified the chain,
+but these declared observables have no claim carrying their id in any
+cycle" (a57fabdc appears only in the word's evidence list, which is why
+the instrument's mention test lists `goal_settled`); cycle 2's rewake
+(`goal.cycle_delivers_or_returns`) was opened by declared ids claimed
+under other names, and 2f191295's partial status only coloured its
+diagnosis ("no completion was certified"). No-change control: 79 of 79
+re-signed CUHK words byte-identical to census 5's (10 unreplayed on
+both). Reading: the certificate class was live in the archive (2 of 6
+faithful partial certificates, one goal), cost the goal a false "no
+completion was certified" and changed no delivered word.
+
+## Item 2 -- the capability coverage cell (4bcc2e3d, `shared:`)
+
+Corrected premise (the brief's witness): `chemsmart agent capabilities
+--json` renders no coverage cell (0 of 1,380 records mention the
+thermochemistry axis; `truth/t3/capabilities-before.json`). The cell
+reaches a session through `inspect_program`'s capability receipt
+(`job_result_selector_coverage`). Witness `tests/agent/test_a_capability_
+cell_says_what_the_derivation_serves.py`: through the host's tools, for
+every stage with an archived result in the repository, the cell says
+readable exactly where `derive_thermochemistry` (with the coordinates the
+result held) returns a free energy. Unrepaired: orca/modred and
+gaussian/modred red (served, "unsupported"); orca/opt and the orca/scan
+control green. Repair: `result_quantities.HELD_COORDINATE_SELECTORS` (the
+selectors `_held_by_result` reads) and `coverage_for` reads it. Two cells
+move; scan, sp and irc cells stay unsupported. Left for Evidence: the
+modred readers declare the held coordinates but not
+`vibrational_frequencies` (checked: extracting them from the ORCA modred
+result is refused, "not declared for orca jobtype 'modred'"), while the
+stationarity refusal says "its frequencies ... stay readable".
+
+## Item 3 -- the broken_symmetry record's scope: no field, nothing changed
+
+`release.json` (103 records) carries exactly the keys commit, date, id,
+kind, run, source, status, values; `values` is the setting value
+(["true"]), not a scope, and `capability_registry.load_release_records`
+reads nothing else. There is no scope or conditions field, so, as
+instructed, nothing is changed. What the records say: orca:broken_
+symmetry and pyscf:broken_symmetry are `recorded` on R10 Q18's runs
+(p-benzyne and twisted ethylene: one unpaired electron per site); CUHK
+2157086 (truth-2, item 4) shows the typed request does not reach the
+site-flip state of two S = 1 Ni(II) centres (+33.40 mEh, Ni spin -0.04
+against +-1.72). The ladder would therefore show the setting as qualified
+without the class it was qualified on. No E2 proposal has been forwarded
+yet.
+
+## Item 4 -- the decision gate's route (pre-commit reading)
+
+What `inspect_run` shows of a recorded run: per node, event hashes,
+artifact digests and anomaly receipts (`NodeTerminalStateV1.public_
+record`); none of the five receipt kinds a decision may cite from another
+stream. So "or one inspect_run shows on a recorded run" was untrue both
+ways. Witness `tests/agent/test_a_decision_gate_route_can_be_walked.py`:
+through the goal loop, a woken session is refused once, then walks the
+route as written (the tool it names and the receipts that tool shows, or
+the receipts of the kinds it names, as the wake hands them); on the
+unrepaired route the walk cites the anomaly receipt inspect_run shows and
+is refused again (red); repaired, it cites the run's failed validation
+receipt the wake names and is accepted. Repair: `_RUN_RECEIPT_KINDS`
+becomes the one table (event kind -> noun) that the membership test, the
+four route strings (`_citable_route`) and `_digest_names` read; the
+route says "an extraction, thermochemistry, expression, validation or
+claim receipt that a recorded run of this workspace minted". One line of
+`test_a_goal_settles_from_every_cycle.py` that pinned the old wording
+("inspect_run" in route) is deleted.
+
+## Charter check for the master (read-only)
+
+Borne out. `goal` (cli/agent.py:549 `run_goal_loop`), `plan` (:224-240,
+one `GoalDriver.step()`), `wake` (:685 `GoalDriver.resume`) and the
+terminal interface (tui/controller.py:176-179 plans with
+`GoalDriver.step()`, :391-400 executes with `GoalDriver.from_review` and
+steps to settlement) are views of the driver. `review` (:330, :370:
+`live_session.inspect_workflow_execution_replay` /
+`resolve_workflow_execution_review`, the decision logged under
+`.chemsmart-agent/replays/<approval_id>/`) and `run` (:971
+`executor.execute_approved_workflow`) are not: the file pipeline's
+decision and execution never touch a goal ledger, so such a run gets no
+`run_recorded`, no settlement word, no recovery or wake and no
+`qualified` row, and the `plan-<uuid>` ledger its planning step wrote
+(the session's stream is recorded there; a goal record is created only at
+the driver's decision phase, which this pipeline never reaches) never
+learns what was decided. The kernel sentence is true of the three entry
+points it names and untrue of `review` and `run`.
+
+## Master to truth-3 after E2's merge (r11-integration 4486f247; merge 3dc11ef6) -- ahead of items 1-4
+
+`site_spin_flip: {atoms, final_ms}` is one typed ORCA request (FlipSpin /
+FinalMs written on the bound high-spin multiplicity); the reader takes
+spin populations at the Ms ORCA recorded; broken_symmetry: true's
+measured reach is scoped to one-electron sites; on ino2's Ni(II)2 it
+reproduced the oracle's FlipSpin 1 state to every digit. Consequences,
+mine to decide:
+0. The spin-square target: `_spin_square_target` compares <S**2> with the
+   bound quintet's 6.0, so `spin.s2_deviation_ge_0.2` fires on every
+   flipped result (deviation -4.0), a false anomaly. Decide the target
+   (evid-2 proposes the recorded Ms: a flip then reads "broken", +1.998,
+   like a GuessMix singlet) and whether `_add_reference_identity` needs a
+   level field saying a flip ran. Witness red then green on the E2
+   fixtures `tests/data/ORCATests/broken_symmetry/`.
+1. Two guidance sentences this merge narrows -- make the route each
+   names true, minimal wording: rules.py `reference.crossprogram.a_broken_
+   symmetry_singlet_is_one_request` (still routes an S = 1 session to
+   GuessMix) and `.agents/charter/crossprogram.md` line 72.
+2. `setting:orca:site_spin_flip` has no release.json record; its witness
+   is a CLI reference run (CUHK 2157103): does that earn a record or stay
+   claimed?
+Then items 1-4; merge the integration before hand-back and restore
+EPISODE.md after it.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
