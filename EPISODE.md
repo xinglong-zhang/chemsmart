@@ -163,9 +163,19 @@ What each outcome does to C2:
 - widened: exits concentrate in exploration (refused reads or prose
   arithmetic that changed the route taken) rather than in delivery.
 
+## Jobs issued
+
+- CUHK census E (slot job, 1 core, 8 GB, <= 1 h, reads only):
+  `/project/xlzhang/jiseung/r11/evid/census/census.sh` sha256 a00ecf84...;
+  `evidence_census.py` = `git show 223c66ed:.agents/research/loop/evidence_census.py`
+  sha256 9ab91894...; `declarations-9185770e.json` (its
+  `--dump-declarations` on this worktree at 223c66ed) sha256 3986d46b....
+  Roots: r8, r9, r10/q1-q24, q26-q28, q30-q36 named one by one (q25 does
+  not exist; q29 excluded), Q28's 32 pre-R8 directories.
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
   evidence surfaces read; census E pre-registered (above) before any
-  detector run. Next: write the instrument, run it on the local
-  corpus, then the CUHK slot job.
+  detector run; instrument committed (223c66ed) and run on the local
+  corpus; CUHK census submitted (above).
