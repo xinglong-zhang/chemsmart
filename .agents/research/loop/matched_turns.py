@@ -12,17 +12,21 @@ give two arms whose only difference is the host or the model.
 The tree is whatever ``chemsmart`` PYTHONPATH resolves -- this file never
 edits ``sys.path`` -- and every sample row names it (``chemsmart.__file__``
 and a digest of the package's Python sources); ``--expect-tree`` refuses
-to run when the import is not the tree named. HOME is fenced to
-``--home`` before ``chemsmart`` is imported, so nothing a session writes
-or reads by default lives in the developer's home; the credential file is
-passed through by path (``--secret-file``) and never opened here.
+to run when the import is not the tree named. The configuration directory
+is fenced to ``--home`` before ``chemsmart`` is imported (the server
+profile the session reads is the one written there), and the provider
+profile is the file named. The credential is never named or opened here:
+a real sample leaves HOME as it is, so the session's own lease resolves
+the credential store exactly as any local session does (run it under the
+round's provider lease), and ``--stub`` fences HOME as well and hands the
+session a placeholder.
 
     PYTHONPATH=<tree> python .agents/research/loop/matched_turns.py \\
         --home DIR --out DIR --arm NAME --task FILE --inputs FILE [...] \\
         --envelope FILE --provider-config FILE --profile NAME \\
         [--prefix TRANSCRIPT --cut K] [--probe-turns P] [--samples N] \\
         [--goal GOAL_ID --granted-by LABEL --max-revisions R] \\
-        [--secret-file PATH | --stub] [--expect-tree SUBSTRING]
+        [--stub] [--expect-tree SUBSTRING]
 
 Setup: without ``--goal`` the session is ``run_live_agent_session`` over
 the envelope (a planning session, as R10 Q26's counterfactual turn ran);
@@ -91,31 +95,37 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--granted-by", default="")
     parser.add_argument("--max-revisions", type=int, default=5)
     parser.add_argument("--exposure-mode", default="")
-    parser.add_argument("--secret-file", type=Path)
     parser.add_argument("--stub", action="store_true")
     parser.add_argument("--expect-tree", default="")
     args = parser.parse_args(argv)
     if args.cut and args.prefix is None:
         parser.error("--cut needs --prefix")
-    if not args.stub and args.secret_file is None:
-        parser.error("a real sample needs --secret-file (passed, never read)")
     if args.goal and not args.granted_by:
         parser.error("--goal needs --granted-by (a delegated label)")
     return args
 
 
-def _fence(home: Path, envelope: Path) -> Path:
-    """Fence HOME before chemsmart is imported; declare the envelope's
-    programs through discovery stubs so they are discoverable here."""
+def _fence(home: Path, envelope: Path, stub: bool) -> Path | None:
+    """Fence the configuration before chemsmart is imported, and declare
+    the envelope's programs through discovery stubs so they are
+    discoverable here. HOME itself is fenced only for a stub, which gets
+    a placeholder credential; a real sample's lease resolves the
+    credential store the way every local session does.
+
+    A planning session resolves nothing else under HOME: the provider
+    profile is named explicitly, and the host's qualification store is
+    written only when the driver settles a goal achieved, which a sample
+    never reaches.
+    """
 
     home = home.resolve()
     config = home / ".chemsmart"
     (config / "server").mkdir(parents=True, exist_ok=True)
-    os.environ["HOME"] = str(home)
+    if stub:
+        os.environ["HOME"] = str(home)
     os.environ["CHEMSMART_CONFIG_DIR"] = str(config)
     os.environ.pop("CHEMSMART_AGENT_SERVER", None)
     os.environ.pop("CHEMSMART_AGENT_CONFIG", None)
-    os.environ.pop("CHEMSMART_AGENT_KEYS", None)
     text = envelope.read_text(encoding="utf-8")
     blocks = []
     for program, executable in sorted(STUB_PROGRAMS.items()):
@@ -135,7 +145,9 @@ def _fence(home: Path, envelope: Path) -> Path:
         "    NUM_HOURS: 1\n" + "".join(blocks),
         encoding="utf-8",
     )
-    placeholder = home / "stub-keys.env"
+    if not stub:
+        return None
+    placeholder = home / "stub-credential"
     placeholder.write_text("ALIBABA_TOKEN_PLAN_KEY=sk-sp-stub-not-a-key\n")
     placeholder.chmod(0o600)
     return placeholder
@@ -331,7 +343,15 @@ def _hybrid(real_class, turns, replies, cut, probe_turns, stub, record):
                         index,
                     )
                 else:
-                    response = self.real(payload)
+                    try:
+                        response = self.real(payload)
+                    except Exception:
+                        # The loop retries a failed attempt; the retry is
+                        # the same real turn, not the transport's ending.
+                        state["served"] -= 1
+                        record.setdefault("failed_attempts", 0)
+                        record["failed_attempts"] += 1
+                        raise
                 choice = (response.get("choices") or [{}])[0]
                 message = choice.get("message") or {}
                 record["probe"].append(
@@ -500,7 +520,8 @@ def _local_envelope(source: Path, out: Path) -> Path:
 def main(argv: list[str] | None = None) -> None:
     args = _arguments(argv)
     args.envelope = _local_envelope(args.envelope, args.out)
-    placeholder = _fence(args.home, args.envelope)
+    # None for a real sample: the session's own lease resolves it.
+    secret = _fence(args.home, args.envelope, args.stub)
     tree = _tree_record(args.expect_tree)
     print("chemsmart from", tree["chemsmart_file"], flush=True)
 
@@ -512,7 +533,6 @@ def main(argv: list[str] | None = None) -> None:
     if args.cut > len(turns):
         raise SystemExit(f"--cut {args.cut} exceeds {len(turns)} turns")
     task = args.task.read_text(encoding="utf-8").strip()
-    secret = placeholder if args.stub else args.secret_file
     args.out.mkdir(parents=True, exist_ok=True)
 
     class _StopAfterSession(Exception):
