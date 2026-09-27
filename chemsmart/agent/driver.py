@@ -201,19 +201,32 @@ def _anomaly_evidence(
     live in a session's stream and the executor's run stream carries
     none, so a word that requires receipts must bring its own. So does an
     expectation an earlier cycle's completion scored: the word names it
-    from that completion, and cites it.
+    from that completion, and cites it. So does a failed criterion a
+    decision in another stream answered: the word cites the receipts that
+    state the verdict, the one the decision cites among them.
     """
 
-    digests = {
-        str(item.get("receipt_sha256") or "")
-        for item in ledger_anomalies
-        if str(item.get("receipt_sha256") or "")
-    } | {
-        str(row.get("completion_receipt_sha256") or "")
-        for row in (delivery.carried_expectations if delivery else ())
-        if str(row.get("completion_receipt_sha256") or "")
-        and str(row.get("observable_id") or "") not in set(superseded)
-    }
+    digests = (
+        {
+            str(item.get("receipt_sha256") or "")
+            for item in ledger_anomalies
+            if str(item.get("receipt_sha256") or "")
+        }
+        | {
+            str(row.get("completion_receipt_sha256") or "")
+            for row in (delivery.carried_expectations if delivery else ())
+            if str(row.get("completion_receipt_sha256") or "")
+            and str(row.get("observable_id") or "") not in set(superseded)
+        }
+        | {
+            str(receipt)
+            for verdict, _standing in (
+                delivery.answered_criteria if delivery else ()
+            )
+            for receipt in (*verdict.receipt_sha256s, *verdict.answered_by)
+            if receipt
+        }
+    )
     merged = dict(evidence or {})
     receipts = set(merged.get("receipt_sha256s") or ()) | digests
     if receipts:
@@ -383,6 +396,38 @@ def _inherited_verdict_reason(delivery: "_AnalysisDelivery") -> str:
             f"{', '.join(standing)} on {verdict.statement()} (receipt "
             f"{verdict.receipt_sha256s[-1][:8]})"
             for verdict, standing in delivery.inherited_unanswered
+        )
+    )
+
+
+def _holding_verdicts(delivery: "_AnalysisDelivery") -> tuple[str, ...]:
+    """Every unanswered verdict that holds this delivery open: those its
+    own stream typed, then those another stream of the goal typed that
+    its numbers stand on."""
+
+    return tuple(
+        dict.fromkeys(
+            delivery.unanswered_verdicts
+            + tuple(
+                verdict.label for verdict, _ in delivery.inherited_unanswered
+            )
+        )
+    )
+
+
+def _held_quantity_ids(delivery: "_AnalysisDelivery") -> tuple[str, ...]:
+    """The numbers a run's delivery holds on a criterion nobody answered:
+    those standing on a verdict its own stream typed, and those standing
+    on a verdict another stream of the goal typed."""
+
+    return tuple(
+        dict.fromkeys(
+            delivery.stale_quantity_ids
+            + tuple(
+                quantity_id
+                for _verdict, standing in delivery.inherited_unanswered
+                for quantity_id in standing
+            )
         )
     )
 
@@ -4553,15 +4598,17 @@ class GoalDriver:
         self.failure_report: dict[str, Any] | None = None
         self.cycles = 0
         self.revisions_admitted = 0
-        # A rejection is a fact about bytes and does not expire, so the
-        # rejected results accumulate; the *standing* delivery is
-        # whatever the most recent claim-rendering cycle said, because
-        # that is what the goal currently answers with. Keying this on
-        # quantity ids instead would ask a later cycle to reuse an
-        # earlier cycle's names: one live recovery re-derived a torsion
-        # correctly under a new id and would have been held open forever
-        # over a number it had already replaced.
-        self.rejected_artifacts: set[str] = set()
+        # A rejection is a verdict about bytes and does not expire: the
+        # settlement reads every verdict of the goal's streams again when
+        # it signs, with every decision that answered one, so a result an
+        # earlier cycle's criterion rejected holds a later claim on it
+        # until a decision cites that verdict (R11 truth). The *standing*
+        # delivery is whatever the most recent claim-rendering cycle
+        # held, because that is what the goal currently answers with.
+        # Keying this on quantity ids instead would ask a later cycle to
+        # reuse an earlier cycle's names: one live recovery re-derived a
+        # torsion correctly under a new id and would have been held open
+        # forever over a number it had already replaced.
         #: (cycle, stream) pairs already projected into the workspace
         #: record, because record_run appends and never deduplicates.
         self._recorded_streams: set[tuple[int, str]] = set()
@@ -4734,7 +4781,11 @@ class GoalDriver:
             1 for item in entries if item["kind"] == "revision_admitted"
         )
         # Replay the standing delivery from every earlier recorded run, in
-        # order, so a rejection made in cycle 1 still taints cycle 3.
+        # order, read as the settlement reads it -- against every verdict
+        # and every decision of the goal's streams -- so a rejection made
+        # in cycle 1 still holds a number cycle 3 claimed from the same
+        # result, unless a decision has answered it.
+        streams = _goal_streams(driver.ledger, driver.workspace, goal_id)
         for item in entries:
             if item["kind"] != "run_recorded":
                 continue
@@ -4743,15 +4794,10 @@ class GoalDriver:
                 / ".chemsmart-agent"
                 / Path(*str(item["payload"].get("run") or "").split("/"))
                 / "events.jsonl",
-                inherited_rejected_artifacts=tuple(
-                    sorted(driver.rejected_artifacts)
-                ),
-            )
-            driver.rejected_artifacts.update(
-                delivery.rejected_artifact_sha256s
+                goal_streams=streams,
             )
             if delivery.claims_rendered:
-                driver.standing_stale = delivery.stale_quantity_ids
+                driver.standing_stale = _held_quantity_ids(delivery)
         if entry["kind"] == "run_started":
             # An interrupted local run: re-enter the execute phase with the
             # same bundle and run directory; the executor's continuation
@@ -6970,8 +7016,18 @@ class GoalDriver:
             # was retired. I dropped it here to keep an earlier commit
             # scoped and never put it back.
             declared_observables=_first_declarations(self.ledger),
-            inherited_rejected_artifacts=tuple(
-                sorted(self.rejected_artifacts)
+            # The plan's failed acceptance criteria, read at the goal's
+            # grain as the planning path reads them: every verdict of the
+            # goal's streams, answered by a decision in any of them. A
+            # run's own stream never holds a decision, and this path read
+            # only it -- with earlier cycles' rejections carried as a set
+            # of results no later decision could answer -- so a verdict a
+            # woken session had answered by citing the failed receipt, as
+            # the wake prescribes, was signed "no budget remains to answer
+            # it", and a number standing on it was held stale (R11 truth,
+            # test_a_goal_word_reads_every_criterion_the_goal_holds).
+            goal_streams=_goal_streams(
+                self.ledger, self.workspace, self.goal_id
             ),
             failed_artifact_sha256s=failed_artifacts(self.workspace),
             uncharacterised_artifact_sha256s=uncharacterised_artifacts(
@@ -7048,9 +7104,8 @@ class GoalDriver:
             run_delivery.completion_status
             or _required_declared_ids(self.ledger)
         )
-        self.rejected_artifacts.update(run_delivery.rejected_artifact_sha256s)
         if run_delivery.claims_rendered:
-            self.standing_stale = run_delivery.stale_quantity_ids
+            self.standing_stale = _held_quantity_ids(run_delivery)
         unrefreshed = self.standing_stale
         budgets = self.ledger.budgets(self.goal)
         # A verdict or a stale number needs an engine to answer it; a
@@ -7213,7 +7268,7 @@ class GoalDriver:
                 "recovery_opened",
                 {
                     "cycle": self.cycles,
-                    "verdicts": list(run_delivery.unanswered_verdicts),
+                    "verdicts": list(_holding_verdicts(run_delivery)),
                     "stale_quantity_ids": list(unrefreshed),
                     "unclaimed_output_ids": list(
                         run_delivery.unclaimed_output_ids
@@ -7288,6 +7343,23 @@ class GoalDriver:
                     + _unanswered_verdicts_named(run_delivery)
                 )
                 open_items = run_delivery.unanswered_verdicts
+            elif run_delivery.inherited_unanswered:
+                # The planning path's own sentence: the verdict, its
+                # number and receipt, and the numbers standing on it.
+                reason = (
+                    f"cycle {self.cycles}: "
+                    + _inherited_verdict_reason(run_delivery)
+                    + "; no budget remains to answer it"
+                )
+                open_items = tuple(
+                    dict.fromkeys(
+                        quantity_id
+                        for _verdict, standing in (
+                            run_delivery.inherited_unanswered
+                        )
+                        for quantity_id in standing
+                    )
+                )
             elif unrefreshed:
                 reason = (
                     f"cycle {self.cycles}: a verdict rejected the result "
@@ -7481,7 +7553,7 @@ class GoalDriver:
                 # chain partial, so every such run arrives here -- and
                 # this row wrote "verdicts": [] over L-S2's failed
                 # external-stability criterion (CUHK Slurm 2153514).
-                "verdicts": list(run_delivery.unanswered_verdicts),
+                "verdicts": list(_holding_verdicts(run_delivery)),
                 "stale_quantity_ids": list(unrefreshed),
                 "unclaimed_output_ids": list(
                     run_delivery.unclaimed_output_ids
