@@ -7259,15 +7259,39 @@ class CommandCompiledToolHostV1:
             }
         return {"status": "no_scientific_workflow_planned"}
 
-    _RUN_RECEIPT_KINDS = frozenset(
-        {
-            "result_quantities_extracted",
-            "thermochemistry_derived",
-            "quantity_expression_evaluated",
-            "scientific_validation_evaluated",
-            "analysis_claims_recorded",
-        }
-    )
+    #: The receipts a decision may cite from another recorded stream, by the
+    #: event that minted them, and what a route calls each. One table: the
+    #: gate's membership test, its route and its diagnosis read it, so the
+    #: route never names a receipt the gate refuses.
+    _RUN_RECEIPT_KINDS = {
+        "result_quantities_extracted": "extraction",
+        "thermochemistry_derived": "thermochemistry",
+        "quantity_expression_evaluated": "expression",
+        "scientific_validation_evaluated": "validation",
+        "analysis_claims_recorded": "claim",
+    }
+
+    def _citable_route(self) -> str:
+        """The route of a refused citation: what the gate accepts.
+
+        It used to say "or one inspect_run shows on a recorded run", and
+        what inspect_run shows of a run -- each node's event hashes,
+        artifact digests and anomaly receipts -- is none of what a
+        decision may cite from another stream; a session that followed
+        it cited an anomaly receipt and was refused again (R11 truth-3).
+        """
+
+        return (
+            "cite the receipt_sha256 a tool returned in this session, or "
+            + self._citable_run_receipts()
+            + " that a recorded run of this workspace minted"
+        )
+
+    def _citable_run_receipts(self) -> str:
+        """'an extraction, ..., validation or claim receipt', from the table."""
+
+        nouns = list(self._RUN_RECEIPT_KINDS.values())
+        return "an " + ", ".join(nouns[:-1]) + f" or {nouns[-1]} receipt"
 
     #: The streams a workspace records, as inspect_run lists them.
     _RECORDED_STREAM_PATTERNS = (
@@ -7401,11 +7425,7 @@ class CommandCompiledToolHostV1:
                         + ", so it cannot stand as postprocessing "
                         "evidence here."
                     ),
-                    route=(
-                        "cite the receipt_sha256 a tool returned in this "
-                        "session, or one inspect_run shows on a recorded "
-                        "run of this goal"
-                    ),
+                    route=self._citable_route(),
                 )
         evidence_refs = tuple(values["evidence_refs"]) + tuple(
             f"receipt:{receipt_sha256}"
@@ -7507,11 +7527,7 @@ class CommandCompiledToolHostV1:
                             + f", and this citation asks for "
                             f"{receipt_kind!r}."
                         ),
-                        route=(
-                            "cite the receipt_sha256 a tool returned in "
-                            "this session, or one inspect_run shows on a "
-                            "recorded run of this goal"
-                        ),
+                        route=self._citable_route(),
                     )
                 continue
             prefix = "analysis_completion_policy:"
@@ -7743,10 +7759,7 @@ class CommandCompiledToolHostV1:
                             )
                             + "."
                         ),
-                        route=(
-                            "cite the receipt_sha256 a tool returned, or "
-                            "one inspect_run shows on a recorded run"
-                        ),
+                        route=self._citable_route(),
                     )
             selector = str(entry.get("selector") or "").strip()
             jobtype = str(entry.get("jobtype") or "").strip().lower()
@@ -7957,10 +7970,7 @@ class CommandCompiledToolHostV1:
                             )
                             + "."
                         ),
-                        route=(
-                            "cite the receipt_sha256 a tool returned, or "
-                            "one inspect_run lists."
-                        ),
+                        route=self._citable_route(),
                     )
             verified.append(
                 {
@@ -8663,8 +8673,7 @@ class CommandCompiledToolHostV1:
             return (
                 f"the {kind} receipt that {reference} recorded, and a "
                 "decision cites a receipt another stream recorded only when "
-                "it is an extraction, thermochemistry, expression, "
-                "validation or claim receipt" + anomaly_route
+                f"it is {self._citable_run_receipts()}" + anomaly_route
             )
         if anomaly_route:
             return "an anomaly an earlier cycle of this goal recorded" + (
