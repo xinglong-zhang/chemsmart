@@ -3084,6 +3084,7 @@ class CommandCompiledToolHostV1:
         task_spec_sha256s: tuple[str, ...] = (),
         approved_workspace: str | Path | None = None,
         run_evidence_root: str | Path | None = None,
+        goal_directory: str | Path | None = None,
         cycle_label: str | None = None,
         execution_resources: ExecutionResourceSpecV1 | None = None,
         granted_execution_resources: ExecutionResourceSpecV1 | None = None,
@@ -3202,6 +3203,14 @@ class CommandCompiledToolHostV1:
         self.run_evidence_root = (
             Path(run_evidence_root).resolve()
             if run_evidence_root is not None
+            else None
+        )
+        #: The goal a woken session serves, whose ledger names the streams
+        #: its certificates read (``_goal_record_directory``). A run host is
+        #: not told: its stream is its goal's run stream.
+        self.goal_directory = (
+            Path(goal_directory).resolve()
+            if goal_directory is not None
             else None
         )
         #: The cycle this host is executing, as a folder name. A branch
@@ -13370,16 +13379,98 @@ class CommandCompiledToolHostV1:
             validations.append(record)
         if not validations:
             return ()
+        own = {str(item["receipt_sha256"]) for item in validations}
         cited: set[str] = set()
         for decision in getattr(self, "scientific_decisions", {}).values():
             cited |= cited_receipts(getattr(decision, "evidence_refs", ()))
         result_artifacts, expression_sources = self._result_lineage_maps()
-        return failed_criteria(
-            validations,
-            cited=cited,
-            result_artifacts=result_artifacts,
-            expression_sources=expression_sources,
+        # Whether a verdict is answered is a question about the goal, and
+        # the settlement asks it of every stream the goal holds. Asked of
+        # this host alone, a run that judged again a verdict the woken
+        # session had answered -- and a woken session whose own walk judged
+        # it again -- held a receipt nobody in it had cited and certified
+        # partial, and the goal returned to the human over a verdict its
+        # records answered (R11 truth-3, item 1). The goal's records join
+        # after this host's own, as the settlement joins its own stream's
+        # first, so an answered verdict is named by the same receipt.
+        if any(not item.get("all_rules_passed", True) for item in validations):
+            goal = self._goal_verdict_records()
+            if goal is not None:
+                validations.extend(
+                    item
+                    for item in goal.validations
+                    if str(item.get("receipt_sha256") or "") not in own
+                )
+                cited |= set(goal.cited)
+                result_artifacts = {
+                    **goal.result_artifacts,
+                    **result_artifacts,
+                }
+                expression_sources = {
+                    **goal.expression_sources,
+                    **expression_sources,
+                }
+        # Only verdicts this host judged, each named by its own receipts: a
+        # certificate says what its own chain found, never an earlier
+        # cycle's verdict it neither judged nor claimed from.
+        return tuple(
+            replace(
+                verdict,
+                receipt_sha256s=tuple(
+                    receipt
+                    for receipt in verdict.receipt_sha256s
+                    if receipt in own
+                ),
+            )
+            for verdict in failed_criteria(
+                validations,
+                cited=cited,
+                result_artifacts=result_artifacts,
+                expression_sources=expression_sources,
+            )
+            if own.intersection(verdict.receipt_sha256s)
         )
+
+    def _goal_record_directory(self) -> Path | None:
+        """The directory of the goal this host's records belong to.
+
+        A woken session is told (``goal_directory``). A run is not, and
+        need not be: its stream is its goal's run stream,
+        ``<workspace>/.chemsmart-agent/goals/<goal>/runs/<cycle>/events.jsonl``
+        -- the reference the goal's ledger records it by, on the local and
+        the scheduler path alike, cohort elements included. A stream
+        anywhere else belongs to no goal this host can name.
+        """
+
+        told = getattr(self, "goal_directory", None)
+        if told is not None:
+            return Path(told)
+        path = getattr(getattr(self, "event_store", None), "path", None)
+        if path is None:
+            return None
+        run = Path(path).resolve().parent
+        goal = run.parent.parent
+        if (
+            run.parent.name == "runs"
+            and goal.parent.name == "goals"
+            and goal.parent.parent.name == ".chemsmart-agent"
+            and (goal / "ledger.jsonl").is_file()
+        ):
+            return goal
+        return None
+
+    def _goal_verdict_records(self) -> Any:
+        """The validations and decisions of every other stream of this
+        host's goal, read when a certificate is signed (None when the host
+        serves no goal)."""
+
+        goal = self._goal_record_directory()
+        if goal is None:
+            return None
+        from chemsmart.agent.driver import goal_verdict_records
+
+        path = getattr(getattr(self, "event_store", None), "path", None)
+        return goal_verdict_records(goal, excluding=path)
 
     def _result_lineage_maps(
         self,

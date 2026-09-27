@@ -969,6 +969,18 @@ def run_live_agent_session(
     )
     if prior_anomalies:
         host_kwargs["prior_anomaly_observations"] = prior_anomalies
+    # The goal this session serves, so a certificate it mints reads the
+    # verdicts and decisions of the goal's other streams, as the
+    # settlement does. Told to the host only: the goal record the model
+    # reads is unchanged.
+    goal_id = str((goal_context or {}).get("goal_id") or "").strip()
+    if goal_id:
+        goal_id = require_identifier(goal_id, "goal_id")
+        goal_directory = (
+            workspace_path / _PRIVATE_ROOT_NAME / "goals" / goal_id
+        )
+        if (goal_directory / "ledger.jsonl").is_file():
+            host_kwargs["goal_directory"] = goal_directory
     declared = tuple((goal_context or {}).get("declared_observables") or ())
     if declared and "approved_requested_observable_declarations" not in (
         host_kwargs
