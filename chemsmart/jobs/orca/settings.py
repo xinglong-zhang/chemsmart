@@ -1508,9 +1508,10 @@ def site_spin_flip_request(value):
     centres whose spin is flipped from the high-spin determinant the
     bound multiplicity names -- the numbering modred, scan and
     hybrid_hess_atoms take -- and the Ms of the determinant asked for.
-    ORCA's FlipSpin counts atoms from 0; the host translates, so ax41
-    ino2's ``FlipSpin 1,2``, meant as the two nickels, cannot flip one
-    nickel and the bridging oxygen again (R11 truth-2). Normalised to a
+    ORCA's FlipSpin counts atoms from 0; the host translates, so a request
+    meant as the two nickels cannot name one nickel and the bridging
+    oxygen, as ax41 ino2's ``FlipSpin 1,2`` would have in ``%scf`` (it
+    never ran: on the simple input line ORCA refused it). Normalised to a
     sorted tuple of distinct atoms and a float Ms, so a merged or
     read-back request is fed through unchanged. None asks for nothing.
     """

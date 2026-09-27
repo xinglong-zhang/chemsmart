@@ -6,9 +6,12 @@ twisted ethylene, p-benzyne). On ino2's Ni(II)2, two S = 1 centres, it
 landed 33.40 mEh above that state with the spin on the O and Cl bridges,
 while ORCA's FlipSpin of one nickel from the high-spin quintet reached it
 (R11 truth-2, CUHK 2157086: -3890.968544659585 Eh, <S**2> 1.998044). Every
-FlipSpin word was refused and sent to the singlet mixing guess, and the
-archived ``FlipSpin 1,2`` had flipped one nickel and the bridging oxygen,
-because ORCA counts atoms from 0.
+FlipSpin word was refused and sent to the singlet mixing guess. The
+archived ``FlipSpin 1,2`` never ran: written on ORCA's simple input line,
+it was refused as an unrecognised keyword, and the session took J from
+M = 3 against M = 5 single points instead. In ``%scf`` those numbers would
+have named one nickel and the bridging oxygen, because ORCA counts atoms
+from 0.
 
 ``site_spin_flip`` names the centres by the host's own 1-based atom
 numbers and the Ms asked for; the bound multiplicity is the high-spin
