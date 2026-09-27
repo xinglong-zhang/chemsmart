@@ -496,6 +496,38 @@ local runs in the scratchpad (`truth/replays`, `truth/reader`).
    whether the typed broken_symmetry request reaches the state a
    site flip does for S = 1 centres.
 
+### Errors, unmet pre-registered steps and qualifications (stated first in the hand-back)
+
+- Population differs from the ARCHIVES.md index and was not chased: R8
+  yields 12 ledgers under the named subdirectories (index 17); R10 yields
+  82 under the named episodes, 73 without q17 (index 89 readable).
+- The ax41 half of the control sample was not replayed on producing
+  commits: no ax41 record names the code that ran it. The local
+  population is attributed by era replays instead. A pre-registered
+  step not met.
+- W4 on CUHK: the reader found no executor word it could read (115
+  insufficient; the word lives in recovery rows and execution-result
+  files the reader does not open there). W4 is covered on CUHK only by
+  the replay's own walk, not by the reader; the class table overstates.
+- Class B "live at the pin" is a code reading (the five kinds
+  `_recorded_run_receipt` accepts, the lookups `_digest_names` makes, and
+  `live_session` seeding a woken session with prior anomalies,
+  declarations and budgets but no receipt an earlier planning session
+  minted), plus 20 instances on R8-R10 trees; no refusal was replayed on
+  the pin.
+- Class A: q7's producing-code replay was one of the 12 harness errors;
+  the archived plain `achieved` (signed on its own tree 01c34759) is
+  byte-identical to the words 002f91cf and the pin sign.
+- Reader corrections (F3), each reported where found: goal-h4's five
+  "falsified" rows are a sign declared on a zero; g2r's 90-degree row
+  belongs to a claim its verified refusal superseded; r9 plan-draft
+  nodes are undescribed in the records, not false bases.
+- Class B is an instance of R10 Q36's candidate "every route the host
+  names is walkable" (a98fa92f): the refusal's route ("cite ... one
+  inspect_run shows on a recorded run") is the act it refuses. Its
+  acceptance half (which receipt kinds count as postprocessing evidence)
+  is the Evidence lens's; the truth of the diagnosis is mine.
+
 ### What would change my mind
 
 - A: if the witness shows a production goal at the pin re-renders an
