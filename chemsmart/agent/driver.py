@@ -4772,24 +4772,7 @@ class GoalDriver:
         driver.revisions_admitted = sum(
             1 for item in entries if item["kind"] == "revision_admitted"
         )
-        # Replay the standing delivery from every earlier recorded run, in
-        # order, read as the settlement reads it -- against every verdict
-        # and every decision of the goal's streams -- so a rejection made
-        # in cycle 1 still holds a number cycle 3 claimed from the same
-        # result, unless a decision has answered it.
-        streams = _goal_streams(driver.ledger, driver.workspace, goal_id)
-        for item in entries:
-            if item["kind"] != "run_recorded":
-                continue
-            delivery = _analysis_delivery(
-                driver.workspace
-                / ".chemsmart-agent"
-                / Path(*str(item["payload"].get("run") or "").split("/"))
-                / "events.jsonl",
-                goal_streams=streams,
-            )
-            if delivery.claims_rendered:
-                driver.standing_stale = _held_quantity_ids(delivery)
+        driver._restore_standing_delivery(entries)
         if entry["kind"] == "run_started":
             # An interrupted local run: re-enter the execute phase with the
             # same bundle and run directory; the executor's continuation
@@ -4854,6 +4837,34 @@ class GoalDriver:
         driver.manual_execution_intent = True
         driver.phase = "decide"
         return driver
+
+    def _restore_standing_delivery(
+        self, entries: Sequence[Mapping[str, Any]]
+    ) -> None:
+        """The numbers the recorded runs among ``entries`` left held.
+
+        Replayed in order and read as the settlement reads them -- against
+        every verdict and every decision of the goal's streams -- so a
+        rejection made in cycle 1 still holds a number cycle 3 claimed
+        from the same result, unless a decision has answered it. One
+        function, because a resumed goal and a replayed settlement must
+        rebuild the same state: a census that restated this loop broke on
+        the first tree that changed it (R11 truth).
+        """
+
+        streams = _goal_streams(self.ledger, self.workspace, self.goal_id)
+        for item in entries:
+            if item["kind"] != "run_recorded":
+                continue
+            delivery = _analysis_delivery(
+                self.workspace
+                / ".chemsmart-agent"
+                / Path(*str(item["payload"].get("run") or "").split("/"))
+                / "events.jsonl",
+                goal_streams=streams,
+            )
+            if delivery.claims_rendered:
+                self.standing_stale = _held_quantity_ids(delivery)
 
     def run(self) -> GoalLoopResultV1:
         """Step until the goal settles or parks."""
