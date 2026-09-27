@@ -133,9 +133,12 @@ def _fence(home: Path, envelope: Path, stub: bool) -> Path | None:
             continue
         folder = home / "stubs" / program
         folder.mkdir(parents=True, exist_ok=True)
-        stub = folder / executable
-        stub.write_text(STUB_EXECUTABLE)
-        stub.chmod(0o755)
+        # Never ``stub``: that name is the argument read below, and a
+        # path rebound to it made every real sample whose envelope named
+        # a stubbed program send the placeholder credential (HTTP 401).
+        stub_executable = folder / executable
+        stub_executable.write_text(STUB_EXECUTABLE)
+        stub_executable.chmod(0o755)
         blocks.append(
             f"{program.upper()}:\n    EXEFOLDER: {folder}\n"
             "    LOCAL_RUN: true\n    SCRATCH: false\n"
@@ -316,8 +319,8 @@ def _hybrid(real_class, turns, replies, cut, probe_turns, stub, record):
                     "reasoning_content": "",
                 }
                 calls = []
-                for call in archived_turn.get("tool_calls") or ():
-                    call = json.loads(json.dumps(call))
+                for archived_call in archived_turn.get("tool_calls") or ():
+                    call = json.loads(json.dumps(archived_call))
                     function = call.setdefault("function", {})
                     text = str(function.get("arguments") or "")
                     for old, new in state["map"].items():
