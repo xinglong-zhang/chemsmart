@@ -41,6 +41,7 @@ from chemsmart.agent._contracts import (
 )
 from chemsmart.agent.delivery import (
     current_assessments,
+    superseded_observable_ids,
     unresolved_requirement_ids,
 )
 from chemsmart.agent.execution import STRUCTURE_MOVING_STAGES, anomaly_standing
@@ -191,18 +192,27 @@ _VERIFIED_REFUSAL_LEAD = (
 def _anomaly_evidence(
     evidence: Mapping[str, Any] | None,
     ledger_anomalies: Sequence[Mapping[str, Any]],
+    delivery: "_AnalysisDelivery | None" = None,
+    superseded: Collection[str] = (),
 ) -> dict[str, Any]:
     """The receipts a settlement with observations stands on.
 
     The anomaly receipts are the observation's own evidence: decisions
     live in a session's stream and the executor's run stream carries
-    none, so a word that requires receipts must bring its own.
+    none, so a word that requires receipts must bring its own. So does an
+    expectation an earlier cycle's completion scored: the word names it
+    from that completion, and cites it.
     """
 
     digests = {
         str(item.get("receipt_sha256") or "")
         for item in ledger_anomalies
         if str(item.get("receipt_sha256") or "")
+    } | {
+        str(row.get("completion_receipt_sha256") or "")
+        for row in (delivery.carried_expectations if delivery else ())
+        if str(row.get("completion_receipt_sha256") or "")
+        and str(row.get("observable_id") or "") not in set(superseded)
     }
     merged = dict(evidence or {})
     receipts = set(merged.get("receipt_sha256s") or ()) | digests
@@ -484,7 +494,9 @@ def _what_the_delivery_carries(
         delivery, ledger_anomalies, superseded=superseded
     )
     if word == "achieved_with_observations":
-        evidence = _anomaly_evidence(evidence, ledger_anomalies)
+        evidence = _anomaly_evidence(
+            evidence, ledger_anomalies, delivery, superseded
+        )
     return lines, dict(evidence)
 
 
@@ -510,6 +522,15 @@ def _achieved_word(
     # names each from the records as they stand now; a completion's
     # listing, minted before a decision that answered it, describes that
     # earlier moment.
+    # So is a pre-registered expectation the physics left: read as the
+    # goal's latest score of each number it delivers, whichever cycle's
+    # completion scored it, except a claim a later verified refusal
+    # superseded -- the number that expectation judged is not delivered.
+    carried = tuple(
+        row
+        for row in delivery.carried_expectations
+        if str(row.get("observable_id") or "") not in set(superseded)
+    )
     observed = tuple(
         sorted(
             {
@@ -521,6 +542,10 @@ def _achieved_word(
             | {
                 verdict.observation_id
                 for verdict, _standing in delivery.answered_criteria
+            }
+            | {
+                f"falsified_expectation:{row.get('observable_id')}"
+                for row in carried
             }
         )
     )
@@ -594,9 +619,11 @@ def _achieved_word(
     if delivery.findings:
         provenance = provenance + _finding_reasons(delivery.findings)
     post_hoc = tuple(
-        str(row.get("observable_id") or "")
-        for row in delivery.prediction_rows
-        if row.get("declared_after_evidence")
+        dict.fromkeys(
+            str(row.get("observable_id") or "")
+            for row in (*delivery.prediction_rows, *carried)
+            if row.get("declared_after_evidence")
+        )
     )
     if post_hoc:
         # An expectation written once the numbers existed is a
@@ -884,6 +911,7 @@ def _delivery_settlement(
         declared_observables=_first_declarations(ledger),
         goal_findings=_goal_findings(workspace, goal_id),
         goal_streams=_goal_streams(ledger, workspace, goal_id),
+        expectation_streams=_goal_streams(ledger, workspace, goal_id),
     )
     evidence = _settlement_evidence(delivery)
     # An earlier cycle's claim this cycle's verified refusal superseded:
@@ -1072,7 +1100,9 @@ def _delivery_settlement(
             delivery, goal_anomalies, superseded=superseded
         )
         if settled == "achieved_with_observations":
-            evidence = _anomaly_evidence(evidence, goal_anomalies)
+            evidence = _anomaly_evidence(
+                evidence, goal_anomalies, delivery, superseded
+            )
         if terminal != "complete":
             reasons = reasons + (
                 f"the session ended {terminal!r} after the completion "
@@ -2959,6 +2989,11 @@ class _AnalysisDelivery:
     #: each pre-registered prediction said beside what was delivered,
     #: so the next cycle reads its own score rather than re-declaring.
     prediction_rows: tuple[dict[str, Any], ...] = ()
+    #: Expectations another completion of the goal scored diverged, for a
+    #: number the goal still delivers, which this stream's latest
+    #: completion did not score again. Each row as it was scored, with
+    #: the ``completion_receipt_sha256`` that scored it.
+    carried_expectations: tuple[dict[str, Any], ...] = ()
     #: What the session did with each route the wake's repair menu
     #: offered, host-verified against that menu.
     route_dispositions: tuple[dict[str, Any], ...] = ()
@@ -3336,6 +3371,72 @@ def _stream_lines(path: Path) -> list[str]:
         return []
 
 
+def _carried_expectations(
+    streams: Sequence[Path],
+    events_path: Path,
+    *,
+    scored_here: Collection[str],
+    retired: Collection[str],
+) -> tuple[dict[str, Any], ...]:
+    """Diverged expectations the goal scored outside this stream's latest
+    completion, for numbers it still delivers.
+
+    A pre-registered expectation the physics left is a result of the goal,
+    and the settlement read it from one completion: the one its delivery
+    stood on. A later cycle that re-rendered nothing scored nothing, so
+    the earlier score of the number the goal still delivers never reached
+    the word. R11 truth's census: CUHK r10/q7 g2-scan-modred settled plain
+    achieved over cis-barrier 8.30 kcal/mol (declared 2-8) and
+    oo160-torsion 141.5 deg (declared 100-135), which its cycle-1 run had
+    scored diverged.
+
+    Every completion of the goal's streams is read in the order the goal
+    wrote them, this stream last; the latest row that scored a delivered
+    claim is each id's score, so a later claim that agrees replaces an
+    earlier divergence. Only an id the settling completion did not score
+    (``scored_here``: the ids its own rows scored against a delivered
+    claim) is carried -- what that completion scored reaches the word
+    through its own receipt, as it always did -- and an id a later
+    declaration retired is not scored at all.
+    """
+
+    if not streams:
+        return ()
+    here = Path(events_path).resolve()
+    ordered = [path for path in streams if Path(path).resolve() != here] + [
+        Path(events_path)
+    ]
+    latest: dict[str, dict[str, Any]] = {}
+    for path in ordered:
+        for line in _stream_lines(path):
+            if '"analysis_completion_evaluated"' not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("kind") != "analysis_completion_evaluated":
+                continue
+            payload = event.get("payload") or {}
+            receipt = str(payload.get("receipt_sha256") or "")
+            for row in payload.get("declared_observable_predictions") or ():
+                if not isinstance(row, Mapping):
+                    continue
+                observable_id = str(row.get("observable_id") or "")
+                if observable_id and row.get("delivered_claim_id"):
+                    latest[observable_id] = {
+                        **dict(row),
+                        "completion_receipt_sha256": receipt,
+                    }
+    return tuple(
+        row
+        for observable_id, row in sorted(latest.items())
+        if row.get("agreement") == "diverged"
+        and observable_id not in set(retired)
+        and observable_id not in set(scored_here)
+    )
+
+
 def _verdict_records(lines: Sequence[str]) -> _VerdictRecords:
     validations: list[Mapping[str, Any]] = []
     cited: set[str] = set()
@@ -3451,6 +3552,7 @@ def _analysis_delivery(
     inherited_unreachable: Mapping[str, str] = {},
     goal_findings: Sequence[Mapping[str, Any]] = (),
     goal_streams: Sequence[Path] = (),
+    expectation_streams: Sequence[Path] = (),
 ) -> _AnalysisDelivery:
     """Read the delivery facts a settlement stands on.
 
@@ -3460,6 +3562,11 @@ def _analysis_delivery(
     typed with is answered by the decision a later session records, and a
     number this stream delivers from a result an earlier verdict rejected
     stands on that verdict whichever stream typed it.
+
+    ``expectation_streams`` are the goal's streams whose completions
+    scored its pre-registered expectations; a settlement passes them so
+    the word carries the goal's latest score of every number it delivers
+    (``_carried_expectations``).
 
     Every field is a typed record the host itself wrote: the
     completion receipt with its stated limitations, the claim and
@@ -4185,6 +4292,16 @@ def _analysis_delivery(
         ),
         verified_unreachable_ids=tuple(sorted(verified_unreachable)),
         prediction_rows=prediction_rows,
+        carried_expectations=_carried_expectations(
+            expectation_streams,
+            events_path,
+            scored_here={
+                str(row.get("observable_id") or "")
+                for row in prediction_rows
+                if row.get("delivered_claim_id")
+            },
+            retired=superseded_observable_ids(declared_observables),
+        ),
         route_dispositions=route_dispositions,
         unverified_unreachable_ids=tuple(
             sorted(unverified_unreachable - verified_unreachable)
@@ -6870,6 +6987,11 @@ class GoalDriver:
             # session recorded before this run reaches the word's
             # reasons only through the record.
             goal_findings=_goal_findings(self.workspace, self.goal_id),
+            # The word carries the goal's latest score of every number it
+            # delivers, not only the one this run's completion scored.
+            expectation_streams=_goal_streams(
+                self.ledger, self.workspace, self.goal_id
+            ),
         )
         run_delivery = _analysis_delivery(
             self.run_directory / "events.jsonl", **delivery_kwargs
@@ -7222,7 +7344,9 @@ class GoalDriver:
             )
             evidence = _settlement_evidence(run_delivery)
             if word == "achieved_with_observations":
-                evidence = _anomaly_evidence(evidence, goal_anomalies)
+                evidence = _anomaly_evidence(
+                    evidence, goal_anomalies, run_delivery, superseded
+                )
             reasons = (
                 (
                     chainless_prefix + "; " + why[0]
