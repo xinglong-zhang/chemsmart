@@ -269,6 +269,54 @@ def probe(label, program, path, sets, emit):
 
     # 3. The target, and 4. the static-index route a later cycle takes.
     for set_name, atoms in sets.items():
+        # W: the candidate plan itself, written before the Hessian exists --
+        # one column select per atom, their sum, the frequency at its
+        # maximum and the maximum share. Today's tree refuses it at the
+        # column select; the witness is green when it returns the target.
+        plan = [
+            {
+                "node_id": f"col{i}",
+                "operation": "ref",
+                "reference": "part",
+                "indices": [None, a],
+            }
+            for i, a in enumerate(atoms)
+        ]
+        running = "col0"
+        for i in range(1, len(atoms)):
+            plan.append(
+                {
+                    "node_id": f"sum{i}",
+                    "operation": "add",
+                    "input_ids": [running, f"col{i}"],
+                }
+            )
+            running = f"sum{i}"
+        plan += [
+            {
+                "node_id": "nu",
+                "operation": "coordinate_at_maximum",
+                "input_ids": [running, "freq"],
+            },
+            {"node_id": "top", "operation": "max", "input_ids": [running]},
+        ]
+        reply = _expression(
+            host,
+            f"t-plan-{set_name}",
+            f"plan-{set_name}",
+            receipt,
+            plan,
+            ["nu", "top"],
+        )
+        emit(
+            {
+                "label": label,
+                "step": "candidate_plan",
+                "set": set_name,
+                "nodes": len(plan),
+                "reply": _summary(reply),
+            }
+        )
         share = table[:, list(atoms)].sum(axis=1)
         order = np.argsort(share)[::-1]
         best, runner = int(order[0]), int(order[1])

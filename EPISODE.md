@@ -541,6 +541,95 @@ Outcome -> proposal:
 - M1 fails: no code; report the construction.
 - M2 fails: report what the Agent chose instead of the argmax.
 
+## Probe M -- READ (CUHK Slurm 2157069, pre-registration d3b4787f1946)
+
+Run: COMPLETED in 12 s on chpc-cn071. It imported the packed tree
+(`/project/xlzhang/jiseung/r11/evid/code`), remote digest 1371776d =
+local, commit 23c08541. Inputs were hashed in place (route 2 `.out`
+6c78dc46..., route 1 `.out` 3017d95a...). Output:
+`/project/xlzhang/jiseung/r11/evid/probe-m/probe.jsonl` (27 rows).
+
+ERROR FIRST -- my pre-registration, not the reader. M0 and M2 named
+rows 98/96/97 because I read the Agent's "mode 99" as 1-based. The
+Agent labelled modes 0-based, as it did atoms: its `ref` nodes read rows
+96-99, and on the R9 tree `ref [99,10]` returned 0.6490384615384617 and
+`ref [99,1]` 0.3200120192307692 (transcript
+live-20260921T103342..., nodes r99c10, r99o1). Today's reader returns
+those identical values at the identical rows: lactam row 99, carboxyl
+row 98 (C 0.6094017956219107), amide row 97 (C 0.6339746132487108).
+So M0 FAILED AS WRITTEN. Its purpose, detecting reader drift, is decided
+by the Agent's own receipts, and it shows none. I read M1-M4 after that
+diagnosis; whether the gate stands is the master's call.
+
+- M0 in substance: route 2 extracts 117 modes x 41 atoms (lowest 10.68
+  cm-1, as the Agent recorded); every set's atoms are C and O; the static
+  route returns the Agent's values to the last digit.
+- M1 HOLDS on both routes: B1 `coordinate_at_maximum` over the table
+  raises "needs one coordinate per value; got 4797 values and 117
+  coordinates"; B2 `multiply` by an atom mask raises "multiply accepts
+  scalar broadcasting or identical shapes"; B3a/B3b are refused by the
+  tool schema ("nodes[0].indices[0] must be integer, but got NoneType
+  None"; "supplied ['axis'], which this object does not accept"); B4
+  `sum` returns 117.0 and `max` 0.943/0.941, selecting nothing.
+- M2 HOLDS in substance: the argmax of summed participation is exactly
+  the Agent's by-eye choice -- lactam {10,1} row 99, 1866.33 cm-1, 0.969;
+  amide {14,2} row 97, 1752.42, 0.980; carboxyl {16,4} row 98, 1778.55,
+  0.962.
+- M3 FALSIFIED as written. All six selected shares are >= 0.96, but the
+  runner-up shares are 0.36-0.63 on BOTH routes (route 1: 0.364 at
+  136.58 cm-1, 0.633 at 71.34, 0.516 at 743.52; route 2: 0.358, 0.358,
+  0.494). Low-frequency group torsions and bends load the same C and O,
+  so an atom pair's share is not small for non-stretch modes. The argmax
+  still separates by >= 0.33. As pre-registered, the typed form must
+  also carry the margin. The instability is not specific to the
+  non-stationary geometry.
+- M4 HOLDS: the static-index route at route 1's argmax rows returns typed
+  receipts equal to the targets (shares identical as floats, frequencies
+  exact).
+
+What the probe also showed:
+- The Agent was right to refuse index reuse across the two Hessians.
+  Amide and carboxyl swap rows: route 2 has amide at 97 and carboxyl at
+  98; route 1 has carboxyl at 97 (1699.03) and amide at 98 (1714.42). Route
+  2's amide index reused on route 1 would have delivered the carboxyl
+  stretch as the amide. Selection by participation is right on both.
+- Route 1's assignment, the one the goal could not deliver (probe output,
+  not a delivery). GFN2-xTB Hessian at the GFN-FF geometry, three
+  imaginary modes (-56.06, -35.65, -22.09 cm-1): lactam 1754.65 cm-1
+  (share 0.981), amide 1714.42 (0.972), carboxyl 1699.03 (0.964). The
+  lactam-amide separation is 40.2 cm-1 against 113.9 at the GFN2 minimum:
+  curvature at a point that is not stationary.
+
+Answer to the master's question:
+- Today's vocabulary does not select the mode at plan time (M1). The
+  only formal route is the per-mode enumeration reasoned from code
+  (about 590 expression nodes and 117 validation verdicts for
+  cephalexin), not run and not counted.
+- The smallest change is a column select in `ref`: null in `indices`
+  means every element along that axis. The plan is then written before
+  the Hessian exists, in five nodes: `ref(part,[null,10])`,
+  `ref(part,[null,1])`, `add`, `coordinate_at_maximum(share, freq)` for
+  the frequency, and `max(share)` for its share. It has no model-authored
+  literal; the atom indices are identity facts of the bound geometry.
+  It replaces the wake cycle between a Hessian and its assignment, which
+  g3 did not have. An axis on `sum/mean/max/min` alone does not do it: it
+  also needs vector-matrix broadcasting and a literal atom mask
+  (model-authored) -- two changes and weaker provenance.
+- The margin (M3) is a separate, optional candidate: the host names the
+  second extremum beside every `coordinate_at_maximum/minimum` receipt
+  as an observation, the pattern it already uses for geometry over
+  non-bonded atoms. No new operation.
+- Witness: `probe_mode_selection.py` step `candidate_plan`. It is red on
+  9185770e (the schema refuses the null index; shown locally on the
+  acetaldehyde fixture after 2157069, whose B3a is the one-column form of
+  the same refusal on g3). It turns green when it returns these targets:
+  - route 2: lactam 1866.33 / 0.9690504807692308, amide 1752.42 /
+    0.9799682665608885, carboxyl 1778.55 / 0.9624735196207002;
+  - route 1: lactam 1754.65 / 0.9813981398139814, amide 1714.42 /
+    0.971859296482412, carboxyl 1699.03 / 0.9640676608948053;
+  - acetaldehyde C=O {2,0}: 1798.58 / 0.9803607214428858.
+  Nothing is implemented; the decision is Exchange 1's.
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
@@ -548,4 +637,6 @@ Outcome -> proposal:
   run; instrument committed (223c66ed, corrected 4c38357b, 7982c0b3) and
   run on the local corpus and on CUHK (2157056, 2157060); census read;
   position memo written. Master's exchange message received: C2
-  "narrowed" logged as provisional; probe M pre-registered (above).
+  "narrowed" logged as provisional. Probe M pre-registered, run (CUHK
+  2157069) and read above; witness defined, nothing implemented. Waiting
+  for Exchange 1.
