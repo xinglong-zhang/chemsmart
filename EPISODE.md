@@ -126,6 +126,58 @@ R resolves a reference the model got wrong (unknown id, schema); L refuses
 a chemically legitimate choice (counted as a suppression only if it changed
 a delivered answer); U names a route the host would refuse in that state.
 
+## Census 1 on CUHK -- what it runs (written before submission)
+
+Job `/project/xlzhang/jiseung/r11/truth/census1/job.sh`, one node, 4 cores,
+16 GB, 3 h, provider-free. Code: this worktree at b89b6108, whose
+`chemsmart/` tree equals the pin's (`git diff 9185770e HEAD -- chemsmart
+pyproject.toml` is empty); tree digest 1371776d5dd0704c. Population: the
+goal ledgers under r8/{gaussian,integration,orca,pyscf} (12),
+r9/{gaussian,master,orca,pyscf,xtb} (14) and r10/{q1..q16,q18..q24,q26,
+q27,q28,q30,q32} (73 ledgers, q32's ten replay copies of one goal among
+them), deduplicated by goal digest and written to `census1/specs.txt`
+before anything is replayed. r10/q6 is included (R10's report discusses
+its goals openly; pair4-a is the unasked-finding case); r10/q17 is not
+(sealed-study guard). The job: (1) `signed_words.py`; (2) `resign.py` at
+the pin; (3) `word_reader.py` over the archived words and over the pin's;
+(4) `resign_producing.py`: every goal whose job output names a code tree
+that still hashes to its printed digest is replayed on it.
+
+Expected, from the pre-registration: the producing-code replays reproduce
+the archived words (else F2 for that goal); bucket (a) and (b) words at
+the pin are rule changes named by commit; the reader's flags on the pin's
+words lie only in classes Q24 or later rounds repaired (else F1).
+
+## Local census (ax41 mirror + public; provider-free, on this Mac)
+
+190 goals after deduplication (195 ax41 ledgers + 3 public; the in-repo
+po3-r19 and ino3-r12 are the mirror's research copies).
+- Re-signed at the pin (`resign.py`, walk mode): 9 unsettled, 4 typed
+  errors (not replayed), 1 error (a copy of ino1 with no `goal.json`:
+  record insufficient), 1 planning goal with no stream; of 175 compared,
+  identical 10, wording only 30, content 86, state 49.
+- State changes (a): achieved -> recovery_opened 35, exhausted ->
+  recovery_opened 5, returned_to_human -> recovery_opened 3,
+  achieved_with_observations -> recovery_opened 2, achieved ->
+  returned_to_human 2, achieved -> achieved_with_observations 2,
+  unreachable_from_evidence -> returned_to_human 1. Q24 reported 34
+  achieved -> recovery_opened at ec41a57c (historical classes repaired
+  before R10); attribution needs producing-commit replays (pending).
+- Reader over the archived words: 13 achieved over undelivered declared
+  ids (equals Q24's count), 1 over an uncertified delivery, 2 plain
+  achieved over what the run found, 13 qualified rows under a word that
+  is not true, 4 expectation verdicts that disagree with their arithmetic
+  (ino2, not_comparable where the numbers compare), 11 free energies
+  from a result its verification did not pass (po3-r19 ts-esterc4 x8,
+  po3-triazole-regio x3).
+- Reader over the pin's words: 0 achieved over undelivered, uncertified
+  or later-refused ids, 0 qualified rows under a false word; 1 plain
+  achieved flagged (goal-h4). F3, my reader: goal-h4's five "diverged"
+  rows are a declaration with `expected_sign: positive` and band [0, 0]
+  for an imaginary-mode count whose value is 0 -- a zero has no sign, and
+  the pin now refuses such a declaration where it is written. The
+  expectation (a minimum) was met; the word is defensible.
+
 ## Status
 
 - 2026-09-28: pin verified; briefs, kernel, CONDUCT, RSL, charter topics
