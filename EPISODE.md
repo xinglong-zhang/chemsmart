@@ -198,6 +198,20 @@ they are kept in `baseline-void-401/`, and the run restarts from
 position 0 with the same manifest, the same runner (7ae49bd5b9ee266d)
 and the fixed instrument. Nothing else in the pre-registration changes.
 
+## Amendment A3 -- execution only (before any outcome was read)
+
+A D2-qwen sample takes about 16 minutes (982 s at position 5, four real
+turns; qwen at reasoning effort max with thinking on) against about 1
+minute for a D1 sample and 7 for D2-deepseek, so one lease would need
+about five more hours. The key was otherwise idle (slot_status: no
+cluster goal; one local lease, mine). From position 8 the cell
+d2-head-qwen runs in a second runner under a second provider lease
+(`--only d2-head-qwen --from 6`), and the first runner continues the
+manifest with that cell skipped (`--from 8 --skip d2-head-qwen`); runner
+sha256 prefix 5e8d12844710a059 (adds only these two filters). Two of the
+round's three Agent slots are held until the run ends. Samples, cells,
+N, outcomes and analysis are unchanged.
+
 ## Amendment A2 -- the NOTICE hand-read criterion (before any D2 outcome was read)
 
 Reading archived po3 sessions (below) showed two false-positive modes of
