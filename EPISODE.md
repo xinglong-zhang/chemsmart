@@ -832,6 +832,103 @@ records do not hold; an anomaly route named for a digest the replay host
 was not seeded with; the stream a diagnosis names written after the
 refusal (a later mint, not the one cited).
 
+### Repair B -- the change and census 6 (read)
+
+945186b0 (witness `tests/agent/test_a_decision_gate_names_what_the_host_
+minted.py`, 2 cases through the goal loop, both red on 104632c3 --
+(a) the woken decision refused at the gate, (b) "c1c1c1c1 is no digest
+this host minted" -- and green after). f9161c63: the census instrument
+(`receipt_gate_replay.py`; `receipt_refusals.gate_refusals` factored out,
+its own output unchanged: locally the same 24 rows, on CUHK `cmp`-identical
+to census 3's file).
+
+Census 6 (local + CUHK 2157075, prereg f99a8f4a4a63, code f9161c63 =
+945186b0's chemsmart/, remote digest e698bee9): exactly as pre-registered.
+Of 71 refusals: 4 same-session (accepted at the pin by the session's
+registry, not re-read); 1 newly accepted (r10/q22 gh2 6135c9ad, "the
+scientific_validation_evaluated receipt that runs/live-...-08bc3c65
+recorded"); 24 still refused, each naming its kind and the stream that
+recorded it -- 2 planning-session (a characterisation, a project
+validation), 10 `program_result_verified` (9 CUHK, 1 ax41), 12
+`anomaly_observed` (8 CUHK, 4 ax41), and 12 of 12 anomaly diagnoses name
+`anomaly:<digest>` in `evidence_refs`; 42 cite a digest no stream of the
+goal recorded and still read "no digest this host minted", 0 of 42
+found elsewhere in their workspaces. Falsifier check: every one of the
+25 re-read digests' diagnoses names a stream census 3 found minting it
+before the refusal (`truth/item1/check_named_streams.py`). Class B's
+truth half is closed at the pin: 0 of 66 remaining refusals says a
+host-minted digest was never minted.
+
+## Item 3 -- C3, the Gibbs refusal at a held, non-stationary dihedral
+
+Provider-free, at this tree (chemsmart/ = 945186b0's; the free-energy
+code equals the integration head's). The result the g1-hooh Agent was
+refused on is `orca-result-3863610af1300088`, ORCA 6.1.1 `! Opt Freq`
+with H3-O1-O2-H4 held at 90 deg (CUHK 2153623); the repository's fixture
+`tests/data/ORCATests/constrained_dihedral/h2o2_b3lypg_d3bj_def2svp_
+hooh90_freq.out` has that sha256 (3863610a...), so a re-sign on it is a
+re-sign of the record (`truth/item1/held_route.py`):
+- `free_energy_surface` finds `held_surface`, held ((3,1,2,4)),
+  stationarity `not_stationary`;
+- the naive `derive_thermochemistry` refusal names the route: "call
+  derive_thermochemistry with projected_coordinates [[3, 1, 2, 4]] ...
+  the free energy of the 3N-7 modes of the surface they are held on";
+  the extraction hint (`thermochemistry_route_hint`) names it too;
+- walking it: G(held 90) - G(eq) = 0.346 kcal/mol (5 of 6 modes kept),
+  the value R10 Q27 recorded, and R10 Q27's live goal (CUHK 2153714)
+  delivered G(90 deg) through this route.
+
+What the Agent met (records read in place on CUHK):
+- g1-hooh (R10 Q21, sessions 2026-09-24 18:38-19:15 UTC, before
+  b419dc77 at 00:24 UTC on 09-25): the derivation refused
+  "...a free energy along a path needs the path direction projected out
+  of the Hessian, which this derivation does not do. For a free energy,
+  reach a stationary point of the same surface -- relax without the
+  constraint..." (true of that tree: the capability did not exist); the
+  extraction refused with "A structure held or driven along a coordinate
+  (modred, scan) is not a stationary point and has no free energy: relax
+  it without the constraint first" (false physics: a held structure has
+  the free energy of its held surface; replaced by b419dc77). Neither
+  named a walkable route to G(90 deg): relaxing destroys the 90-deg
+  point. The Agent named the right producer itself ("harmonic RRHO
+  thermochemistry with the frozen dihedral projected out of the
+  Hessian"), refused g-rel-90-deg and barrier-trans with receipts, and
+  delivered the electronic e-rel-90-mod90 = 0.760 kcal/mol, explicitly
+  "not a Gibbs value"; the goal returned to the human. Delivered answer
+  changed: the head's route gives 0.346 kcal/mol at the same point.
+- g2r (R10 Q24, sessions 21:29-22:04 UTC on 09-24): met no free-energy
+  refusal; its 90-deg point came from a relaxed scan (no Hessian); cycle
+  1's dg-torsion-90deg = 7.95 kcal/mol came from a saddle search seeded
+  at 90 deg that converged to the cis saddle, which the Agent caught
+  itself (unasked finding ts-d90-is-cis-duplicate: 7.952 vs 7.953
+  kcal/mol) before refusing the observable through a blocked node of its
+  own plan ("untestable in this envelope"). At the head the route needs
+  one engine call (a modred with Freq at 90 deg) and then the projection.
+
+Classification. C3 finding in the archive: a legitimate choice (the free
+energy of a point on a torsional profile) met refusals that named no
+walkable route, one of them stating false physics, and the delivered
+answer changed (g1-hooh: G(90) undelivered, 0.760 kcal/mol electronic
+instead of 0.346 kcal/mol). Repaired for the refusals by R10 Q27
+(b419dc77): at the head both refusals name a true, walkable route, which
+yields the free energy asked for -- "a refusal that still stands with a
+true route" (not a finding at the head).
+Still live at the head (a new signed-word class, not in the Phase I
+table): the capability coverage cell. `capabilities.coverage_for`
+derives the thermochemistry axis from the reader's declared selectors
+only, so it signs `thermochemistry: unsupported` for orca/modred and
+gaussian/modred (`truth/item1/coverage_cell.py`: orca/modred, orca/scan,
+gaussian/modred unsupported; orca/opt, orca/ts, pyscf/hess readable),
+while `derive_thermochemistry` with `projected_coordinates` derives the
+held-surface free energy of a modred result with its Hessian (ORCA and
+Gaussian, R10 Q27's tests on archived bytes). g1-hooh's refusal cites
+those very receipts ("modred/sp/scan capability receipts declare the
+thermochemistry axis unsupported (7d7e484a.., aa08bc82.., 79ef1e3a..)").
+A capability word false of what the host does, steering away from a
+legitimate route. Owner: `chemsmart/agent/capabilities.py` (the
+registry's derivation; outside this lens's radius) -- reported for the
+master, no code here.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
@@ -846,4 +943,14 @@ refusal (a later mint, not the one cited).
 - CUHK 2157072 (r11-truth-a), census 5 (truth-2), prereg 534d59f42330:
   re-sign on item 1's tree (19d1b322, digest 6bf5aa95), compare with
   census 4, reader. COMPLETED in 63 s, exit 0.
+- CUHK 2157075 (r11-truth-a), census 6 (truth-2), prereg f99a8f4a4a63:
+  refusal classification (identical to census 3) and the gate replay on
+  Repair B's tree (f9161c63, digest e698bee9). COMPLETED in 32 s, exit 0.
+- Error, stated: to pre-register census 6 I ran a json-only Python
+  script (`anomaly_seeding.py`, no chemsmart import) on the CUHK login
+  node with the private environment's interpreter, outside a slot job.
+  The round puts all Python inside slot jobs; the guard did not stop it.
+  It read 5 ledgers (g1-hooh, bt2, rt1, rt2, r7m-h3); nothing was
+  written but the script and its argument file under
+  `r11/truth/prereg-b/`.
 - No provider arm, no live goal.
