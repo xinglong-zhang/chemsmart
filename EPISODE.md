@@ -262,6 +262,55 @@ W1 check finds q7 g2-scan-modred on the pin's words and possibly further
 instances of the same class; refusal groups beyond the local ones are
 read and classed P/R/L/U by the scheme above.
 
+## Census 1 -- producing code and eras (read)
+
+Producing-code replays (CUHK, `resign_producing.py`): of 89 goals, the
+code a goal's job printed still hashes to its printed digest for 66
+(6 code moved, 17 no job output). Of those 66: 47 reproduce the archived
+word byte for byte, 2 do not (r10/q6 pair3-a, pair4-a), 12 raise in the
+harness on the old tree (older driver lacks a function the harness
+calls: record insufficient), 5 unsettled or typed errors. F2 for the two:
+both goals ran a reading turn; the harness compares the word held at
+`reading_opened` but replays over streams that already hold the
+reading's finding, so reading-turn goals are not faithfully replayed by
+this harness (a harness limitation, not a host fact). pair4-a's final
+archived word is plain `achieved` whose reasons carry "the session's
+finding n-ch2cl-anomeric-shortening (not asked for)" with the relations
+the host checked (N1-C 1.386 A vs N1-CH3 1.445 A).
+
+CUHK pin changes, attributed: 12 state changes, of which 6 reproduce on
+their producing code (g1-hono, g2-hooh, merged-smoke: achieved ->
+recovery_opened, Q24's empty-chain repair; g2r: awo -> unreachable,
+Q24 41f607d4; r10/q3 g2 and q9 g1: returned_to_human -> an achieved
+word, Q16 H2's known repairs), 1 errors on its old tree (r9/orca g5,
+whose producing replay raises the same contract error the archive
+settled on), 1 code moved (r10/q6 gdev1: achieved over a partial newest
+completion, false by the reader, repaired at the pin), 4 have no job
+output (r8 goal-irc2, r9 gaussian g1 and g3, r9 infra-smoke: Q24
+reproduced three of them on their commits).
+
+Eras (local, 180 goals replayed on ec41a57c = R10 base, 002f91cf = Q24
+merged, and the pin): 49 state changes happened between the archive and
+the R10 base (34 achieved -> recovery_opened, Q24's historical classes;
+5 exhausted -> recovery_opened; 3 returned -> recovery_opened; 2 awo ->
+recovery_opened; 2 achieved -> returned; 2 achieved -> awo; 1 unreachable
+-> returned), 1 at Q24's merge (e2-acetone, the empty chain), and none
+after it: the pin and 002f91cf sign byte-identical words (state and
+reasons) for all 175 local goals both replayed. The brief's prior "the
+pin may sign what Q24's tree signed" holds for this population.
+
+## Census 3 on CUHK -- what it runs (written before submission)
+
+Job `/project/xlzhang/jiseung/r11/truth/census3/job.sh`, instruments at
+213843e6 in `tools3/`: `receipt_refusals.py` over the CUHK population;
+the refined reader over archived and pin words; `resign.py` on Q24's
+merged tree 002f91cf (uploaded as `code-002f91cf/`) over census 1's
+specs, to place each CUHK pin change before or after that tree.
+Expected: decision-gate refusals of receipts a recorded run minted
+recur in R10 (the gate's run-stream reader knows five receipt kinds);
+CUHK words at 002f91cf equal the pin's except for goals whose records
+postdate what that tree can read.
+
 ## Status
 
 - 2026-09-28: pin verified; briefs, kernel, CONDUCT, RSL, charter topics
