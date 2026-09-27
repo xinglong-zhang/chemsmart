@@ -372,9 +372,14 @@ def _orca_spin_populations(output: Any, *, quantity: str) -> list[float]:
     """Per-atom spin populations of an open-shell ORCA result, in order.
 
     Refused on a closed shell, where the block has one column and there
-    is no spin to partition; checked against 2S = multiplicity - 1, the
-    sum ORCA prints beneath the block, so a dropped or duplicated atom
-    cannot pass as a population.
+    is no spin to partition; checked against the sum ORCA prints beneath
+    the block, so a dropped or duplicated atom cannot pass as a
+    population. That sum is 2 Ms of the determinant the run ended on:
+    2S = multiplicity - 1 for the state the coordinate line names, and
+    2 Ms of the state ORCA says it converged to where a FlipSpin or
+    BrokenSym request flipped it. Checking every result against the
+    coordinate line refused both routes to ino2's antiferromagnetic
+    Ni(II)2 state (R11 truth-2, CUHK 2157086).
     """
 
     labelled = getattr(output, quantity)
@@ -390,14 +395,23 @@ def _orca_spin_populations(output: Any, *, quantity: str) -> list[float]:
         multiplicity = int(output.multiplicity)
     except (TypeError, ValueError):
         multiplicity = None
-    if multiplicity is not None:
+    final_ms = getattr(output, "broken_symmetry_ms", None)
+    expected = basis = None
+    if final_ms is not None:
+        expected = 2.0 * float(final_ms)
+        basis = (
+            f"2 Ms for the Ms ORCA converged its broken-symmetry request "
+            f"to ({float(final_ms):.1f}) is {expected:.1f}"
+        )
+    elif multiplicity is not None:
         expected = float(multiplicity - 1)
+        basis = f"2S for multiplicity {multiplicity} is {expected:.1f}"
+    if expected is not None:
         total = sum(values)
         if abs(total - expected) > 0.05:
             raise MissingQuantityError(
-                f"{quantity} sums to {total:.3f} where 2S for multiplicity "
-                f"{multiplicity} is {expected:.1f}; the vector is not the "
-                "complete molecule in order"
+                f"{quantity} sums to {total:.3f} where {basis}; the vector "
+                "is not the complete molecule in order"
             )
     return values
 

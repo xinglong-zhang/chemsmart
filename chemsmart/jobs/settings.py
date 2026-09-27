@@ -363,7 +363,12 @@ def td_manifold_reference_refusal(manifold, multiplicity):
 #: the unrestricted equations at Ms = 0 -- the bound multiplicity 1 -- where
 #: one lies below the spin-symmetric solution, and the spin-symmetric one
 #: where none does.  Each program's settings write it with the mechanism
-#: measured to reach that solution there, and say which:
+#: measured to reach that solution there on one-electron sites, and say
+#: which (the measurements below).  A mixing guess mixes one orbital pair:
+#: on two S = 1 Ni(II) centres ORCA's reached a state 33.40 mEh above the
+#: one a flip of one centre from the quintet reaches, with the spin on the
+#: bridges (R11 truth-2, CUHK 2157086), which ORCA's ``site_spin_flip``
+#: writes; Gaussian's and PySCF's mechanisms were not measured there:
 #:
 #: - Gaussian: the method unrestricted (``U``) from ``guess=mix``, the alpha
 #:   HOMO and LUMO of Gaussian's guess mixed 50:50;
