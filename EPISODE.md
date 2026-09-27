@@ -311,15 +311,212 @@ recur in R10 (the gate's run-stream reader knows five receipt kinds);
 CUHK words at 002f91cf equal the pin's except for goals whose records
 postdate what that tree can read.
 
+## Census 3 (read; job 2157065)
+
+- Q24's merged tree 002f91cf and the pin sign byte-identical words for
+  all 79 CUHK goals both replayed; with the local 175, for all 254.
+- Decision-gate refusals (`decision.receipt_is_one_the_host_minted`),
+  every one the Agent met: 71 (24 local, 47 CUHK). 42 cite a digest no
+  stream of the goal ever minted (the refusal holds). 29 cite a receipt
+  the host did mint, and every one of the 29 told the session so falsely
+  ("no receipt of this session or of any recorded run" / "no digest this
+  host minted"): same session 4 (capability, characterisation,
+  completion, PubChem fetch), an earlier cycle's run stream 22
+  (program-result verification 11, anomaly observation 11), an earlier
+  planning session 3 (a characterisation, a scientific validation, a
+  project validation). At the pin the 4 same-session kinds are now in
+  `_RECEIPT_REGISTRY_NAMES` and would be accepted; the other 25 would be
+  refused with the same false diagnosis, because `_recorded_run_receipt`
+  reads only goal run streams and only five receipt kinds, and
+  `_digest_names` asks nothing else. One of the 25 (r10/q22 gh2,
+  6135c9ad) is the failed scientific-validation receipt that
+  `wake.failed_validation_receipt_answers_verdict` tells the session to
+  cite in exactly that field: the host names a route and refuses it. In
+  session, 37 of the 71 refusals were followed by a successful decision
+  and 34 by another refusal of the same tool.
+
+## POSITION MEMO (Phase I, 2026-09-28)
+
+### The question as I now understand it
+
+Not "is each archived word true" -- most archived words that were false
+were repaired before R10 and the pin re-signs them differently -- but:
+at the pin, does every class of word the host signs follow from the
+records it cites when it is signed, and where the pin carries a word
+signed earlier (in a session, by an older signer), is what it carries
+still true? And for C3: does the word a human reads carry the Agent's
+evidence-bound dissent, and does any refusal the Agent met obstruct a
+legitimate scientific act?
+
+### Evidence (denominators and pointers)
+
+Population: 279 goals after deduplication (ax41 mirror 190 including the
+3 public cases; CUHK R8 12, R9 14, R10 63 unique of 73 ledgers), 262
+settled, 254 re-signed at the pin (`resign.py`; 8 typed errors, 1 goal
+record missing, 1 planning goal without a stream, 17 unsettled not
+asked). Instruments: `.agents/research/loop/{signed_words,resign,
+resign_producing,word_reader,resign_stationarity,refusal_census,
+receipt_refusals}.py` (commits 43b160e7, b89b6108, 2e7f0e23, 213843e6).
+Jobs: CUHK 2157057 (census 1), 2157064 (census 2), 2157065 (census 3);
+local runs in the scratchpad (`truth/replays`, `truth/reader`).
+
+1. The pin signs what Q24's tree signed: byte-identical words for all
+   254 goals re-signed on both. Every state change between the archive
+   and the pin happened before or at Q24 (local: 49 before R10, 1 at
+   Q24; CUHK: 12, of which 6 reproduce on their producing code and are
+   named repairs -- Q24's empty chain x3, Q24's later-refusal rule, Q16
+   H2 x2).
+2. Harness faithfulness (F2): on their own producing code, 47 of 49 CUHK
+   goals reproduce the archived word byte for byte; the 2 that do not
+   ran a reading turn (harness limit); 12 raise on old trees (record
+   insufficient); ax41 producing commits are not recorded anywhere in
+   the archive, so the local population is attributed by era replays
+   (ec41a57c, 002f91cf, pin), not by producing commits.
+3. Reader on the pin's words (254): 0 achieved words over an
+   uncertified delivery, over an undelivered id or over a later verified
+   refusal; 0 qualified rows under a false word; 0 of 440+ completions
+   passed with an unanswered criterion; 0 of 1,061 expectation rows
+   against their arithmetic beyond ino2's documented pre-conversion row;
+   0 of 723 relations false; 0 category answers against their receipt;
+   every re-signed characterisation and free energy either stands (CUHK
+   15/15 and 85/85; local 11/14 and 190/195) or is refused by a named
+   later rule (R10 Q21/Q33: unconverged ORCA saddle searches, a planar
+   Hessian at 0.0138 Eh/Bohr).
+4. False words the pin still signs, in classes the host computes (F1):
+   - A (W1): a settlement drops the falsified expectations an earlier
+     cycle's certificate recorded for numbers it still certifies as
+     delivered. r10/q7 g2-scan-modred signs plain `achieved` over
+     cis-barrier 8.30 kcal/mol (band 2-8) and oo160-torsion 141.5 deg
+     (band 100-135), pre-registered; ax41 ino3-r17 signs
+     `unreachable_from_evidence` naming none of three pre-registered
+     expectations cycle 3 recorded as falsified. 2 goals of 254, 5
+     expectations. Mechanism: `_achieved_word` reads falsified
+     expectations from the completion its delivery stands on; the
+     goal-grain rule already covers claims, anomalies and failed
+     criteria, not this. Live in production at the pin.
+   - B (W17): the decision gate says "no digest this host minted" about
+     receipts the host minted: 29 of 71 refusals at that gate, 25 of
+     which the pin would still word that way, one of them blocking the
+     route the host's own wake rule prescribes. Mechanism:
+     `_recorded_run_receipt` (tool_runtime.py ~7262) reads goal run
+     streams only and five receipt kinds only; `_digest_names` asks it
+     and nothing else. Live in production at the pin.
+5. Words the pin carries without re-signing them (archival only at the
+   pin, because the in-session signers were repaired): finding standing
+   "on the requested answer" over an undeclared operand (6 findings, 3
+   CUHK goals: q7, q11 g2, q6 pair1-a); a category certified by a
+   pre-rule completion while the pin's own reason line says nothing
+   answered it (r10/q1 gdev1).
+6. Dissent (C3), under the pin's words: CUHK 46 of 79 goals and local 17
+   of 175 bear dissent markers. Named by the word: verified refusals 47
+   of 57, unrequested findings 46 of 54, answered criteria 3 of 4,
+   falsified expectations 14 of 39 (of the unnamed: 5 are class A, 5 a
+   zero given a sign in goal-h4, the rest under recovery_opened,
+   returned_to_human or a superseding refusal). Every unnamed
+   unrequested finding, falsified diagnostic, answered criterion and
+   verified refusal sits under `returned_to_human` or `exhausted`: those
+   two words carry what is missing or spent, never what the goal found.
+   An unasked finding is carried by the reasons of an achieved word and
+   never by the word itself (pair4-a's anomeric N-CH2Cl shortening is
+   plain `achieved`).
+7. Refusals (C3): 1,313 met (826 local in 190 groups; 487 CUHK in 140).
+   Read by group: the selector refusals for ORCA `gibbs_free_energy`
+   and the ORCA-opt coordinate refusal name walkable routes (P); the
+   legacy thermochemistry refusal of imaginary modes guards the
+   stationary-point rule (P; its raw message routes only "re-optimize");
+   the functional-convention gate (31) never cost a decision (18 of 18
+   local sessions recorded one later) but names no invariant or route;
+   PySCF TD on a Hartree-Fock reference (6, one goal) is a truthfully
+   stated capability boundary; R9's "could not convert 'stable'" was a
+   reader defect since repaired; ORCA scans' reached-geometry route
+   (U at the time) was repaired by R10 Q32. Named-site spin flips: no
+   archived flip changed a delivered answer (ino2 returned to the human
+   with no J; Q15's p-benzyne, where R10 Q18's oracles showed GuessMix
+   and FlipSpin reach one solution). The only obstruction of a
+   legitimate evidence-bound act found is class B.
+
+### What it says about the claims
+
+- C1: CONTRADICTED in two named classes (A, B) the host computes, and
+  NARROWED: "recomputed at signing" holds for settlements, qualified
+  rows, the executor word and the stationarity words; the session-signed
+  classes (certification, expectation verdicts, refusal verification,
+  finding standing, category answers) are true of the records they cite
+  at the pin (0 flags) but are carried, not recomputed, by the
+  settlement, and two of them were carried false over archival records.
+  The prior "the pin may sign what Q24's tree signed" is supported: it
+  does, for every goal.
+- C3: NARROWED. Evidence-bound dissent reaches achieved,
+  achieved-with-observations and unreachable words, except class A; it
+  never reaches exhausted or returned words; an unasked finding reaches
+  reasons, never the first word; one host control (class B) told the
+  Agent false facts about its own ledger 29 times and blocked a
+  host-prescribed citation once. No refusal was shown to have changed a
+  delivered answer by suppressing a legitimate choice; the named-site
+  spin-flip rule's claim ("one project request in every program") is
+  unverified for centres with more than one unpaired electron, which no
+  archived answer exercised.
+
+### The program I propose next
+
+1. Repair A at the owning function: the falsified expectations the
+   settlement names are read at goal grain (every completion of the
+   goal's streams, the latest row per delivered id), as failed criteria
+   already are. Witness through the goal loop, red on the pin: a
+   two-cycle goal whose cycle-1 run claims a number outside its
+   pre-registered band and whose cycle-2 session settles without
+   re-claiming it. Then re-run the census: q7 moves to
+   achieved_with_observations, ino3-r17 gains three lines, nothing else
+   moves (a falsifier for the repair's scope).
+2. Repair B's truth half at the gate: `_digest_names` says what a
+   host-minted digest is and where it may be cited (a prior run's
+   anomaly: `anomaly:<digest>` in evidence_refs), reading every stream
+   of the goal; and `_recorded_run_receipt` reads the goal's planning
+   sessions too, so the failed-validation receipt the wake prescribes is
+   accepted whichever cycle's session minted it. Which receipt kinds
+   count as postprocessing evidence is shared with the Evidence lens
+   (a `shared:` commit if it moves). Witness: a woken session citing (a)
+   an earlier session's failed validation receipt, accepted; (b) a
+   prior run's anomaly in the postprocessing field, refused with a true
+   diagnosis.
+3. For the owner, not code: whether the one-word ruling covers exhausted
+   and returned_to_human (should those words carry what the goal found),
+   and whether an unasked finding should reach the first word.
+4. Harness: replay `_settle_after_reading` for reading-turn goals, so
+   the two q6 goals can be compared.
+5. Only if the master wants the spin-flip candidate closed beyond "no
+   archived answer changed": one ORCA oracle on the ino2 Ni(II)2 geometry
+   (GuessMix versus FlipSpin on one site, same level), which decides
+   whether the typed broken_symmetry request reaches the state a
+   site flip does for S = 1 centres.
+
+### What would change my mind
+
+- A: if the witness shows a production goal at the pin re-renders an
+  earlier cycle's claims into its settling completion, class A is
+  archival only. B: if every host-minted receipt the Agent cited in the
+  postprocessing field is one the gate should refuse and the diagnosis
+  were true, B shrinks to a wording defect; gh2's prescribed citation
+  already contradicts that for one case.
+- C1 widened, not narrowed, if recomputing standing and category
+  delivery at settlement changes no pin word over the archive.
+
 ## Status
 
 - 2026-09-28: pin verified; briefs, kernel, CONDUCT, RSL, charter topics
   (settlement, goal grain, validity, analysis chain, delivery), CLAIMS,
   ARCHIVES, Q24's record and tools read. Trial: Q24's replay at the pin
   on the public po3-r19 runs in 2.5 s and keeps the state.
-- Next: commit the instruments, run the local census (ax41 + public), pack
-  and submit the CUHK census job.
+- Instruments committed (43b160e7, b89b6108, 2e7f0e23, 213843e6); local
+  census, three CUHK census jobs and era replays read; position memo
+  written. Phase I ends here; waiting for the master's exchange.
 
 ## Jobs issued
 
-None.
+- CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
+  re-sign, readers, producing-code replays. COMPLETED.
+- CUHK 2157064 (r11-truth-b), census 2, prereg caaa6e3d2f83: refined
+  reader, refusal census, stationarity re-sign. COMPLETED.
+- CUHK 2157065 (r11-truth-a), census 3, prereg 9802e216478f: receipt
+  refusals, refined reader, replay on 002f91cf. COMPLETED.
+- No provider arm, no live goal.
