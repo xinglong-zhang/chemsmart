@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Mapping
@@ -648,6 +649,7 @@ class ToolLoopRunner:
                                 "rule_ids": (
                                     "wake.execution_wave_decision_pending",
                                 ),
+                                **self._in_view(notice["text"]),
                             }
                             if pending_wave
                             else {
@@ -661,6 +663,7 @@ class ToolLoopRunner:
                                     notice["text"]
                                 ),
                                 "rule_ids": ("wake.termination_notice",),
+                                **self._in_view(notice["text"]),
                             }
                         ),
                         idempotency_key=(
@@ -1142,6 +1145,7 @@ class ToolLoopRunner:
                         "ordinal": reinjection_ordinal,
                         "content_sha256": canonical_sha256(reinjection_text),
                         "reason": ("approved goal terms restated at cadence"),
+                        **self._in_view(reinjection_text),
                     },
                     idempotency_key=(
                         f"host-reinjection:{envelope.turn_id}:"
@@ -1243,6 +1247,41 @@ class ToolLoopRunner:
             idempotency_key=f"tool-exposure:{turn_id}:{digest}",
         )
         return digest
+
+    def _in_view(self, text: str) -> dict[str, Any]:
+        """What the model could call when the host spoke to it.
+
+        A message the host places mid-session is recorded with the
+        exposure in force when it was shown and, for every catalogue
+        name the message itself mentions, whether that call was one the
+        model could make. Otherwise "the affordance was visible" is a
+        reconstruction from the last exposure record before the event:
+        R10 Q32 found 5 of 6 apparent prose decisions made with the
+        named tool not in view, and learned it only by replaying streams.
+        """
+
+        exposure = getattr(self.host.surface, "exposure", None)
+        if exposure is not None:
+            digest = exposure.exposure_sha256
+            callable_names = list(exposure.available_names())
+            known = exposure.catalogue.names()
+        else:
+            digest = self.host.surface.tool_schema_sha256
+            callable_names = [
+                item["function"]["name"]
+                for item in self.host.surface.tool_definitions
+            ]
+            known = tuple(callable_names)
+        mentioned = set(re.findall(r"[a-z][a-z0-9_]*", str(text or "")))
+        return {
+            "exposure_sha256": digest,
+            "callable": callable_names,
+            "named_tools_in_view": {
+                name: name in callable_names
+                for name in sorted(known)
+                if name in mentioned
+            },
+        }
 
     def _validate_run_contract(
         self,

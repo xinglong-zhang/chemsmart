@@ -19,6 +19,9 @@ under `chemsmart/` imports it.
 | `loop/receipt_refusals.py` | whether a receipt the decision gate refused as "not one it minted" was in fact minted by the host |
 | `loop/receipt_gate_replay.py` | every refusal the decision gate made, re-read through the imported tree's own gate functions |
 | `loop/literal_claims.py` | every row a host-rendered analysis report shows, classed by whether it stands on a model-authored literal, and of what dimension |
+| `loop/matched_turns.py` | an archived goal prefix replayed through the tree `PYTHONPATH` names, then real provider turns, recording the model, the calls in view and the prefix's faithfulness |
+| `loop/matched_outcomes.py` | matched-turn outcomes classified from the host's own records by rules fixed before the first sample |
+| `loop/r11_behav/` | R11's two-model baseline and arm runners, analyses and blind classifiers, byte for byte as run |
 | `loop/evidence_census.py` | where the Agent's work leaves the typed evidence layer (native words, unbound prose numbers, vocabulary refusals, reuse attempts), with denominators and a shuffled-session control |
 | `loop/evidence_census_report.py` | the census's figures recomputed from its outputs |
 | `loop/probe_mode_selection.py` | whether a plan written before a Hessian picks a mode by which atoms move, through the host's public tool surface, with each selection's runner-up |

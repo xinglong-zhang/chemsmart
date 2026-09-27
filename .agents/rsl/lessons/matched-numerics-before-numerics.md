@@ -16,7 +16,7 @@ falsifier: "a literal that agrees across programs to about 1e-6 Eh at matched ti
 home: prose
 supersedes: []
 earned: 2026-09-24
-last_verified: "2026-09-25 @ 48685803"
+last_verified: "2026-09-28 @ 3dc11ef6"
 ---
 Call a difference between programs "numerics" only after the same literal has been run at matched tight numerics in each program (no RI or density fitting, fine grids, tight SCF).
 Agreement to about 1e-6 Eh means one Hamiltonian; the spread at default settings is 1e-4 to 3.5e-4 Eh, large enough to hide a real functional difference in totals and small enough to be mistaken for one.

@@ -414,6 +414,24 @@ class ORCAInputWriter(InputWriter):
         broken_symmetry = getattr(
             self.settings, "broken_symmetry_scf_lines", lambda: ()
         )()
+        # A named-site flip is refused where the geometry is known too: an
+        # atom past its end would have ORCA flip nothing, or another atom.
+        flip_refusal = getattr(self.settings, "site_spin_flip_refusal", None)
+        if callable(flip_refusal):
+            molecule = getattr(getattr(self, "job", None), "molecule", None)
+            multiplicity = self.settings.multiplicity
+            if multiplicity is None:
+                multiplicity = getattr(molecule, "multiplicity", None)
+            symbols = getattr(molecule, "chemical_symbols", None)
+            refusal = flip_refusal(
+                multiplicity=multiplicity,
+                atom_count=None if symbols is None else len(symbols),
+            )
+            if refusal:
+                raise ValueError(refusal)
+        broken_symmetry += tuple(
+            getattr(self.settings, "site_spin_flip_scf_lines", lambda: ())()
+        )
         if (
             self.settings.scf_convergence
             or self.settings.scf_maxiter

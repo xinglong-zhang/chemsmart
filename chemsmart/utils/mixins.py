@@ -1449,6 +1449,63 @@ class ORCAFileMixin(FileMixin):
             )
         )
 
+    @property
+    def site_spin_flip(self):
+        """The flip of named centres the input asks ORCA for, or None.
+
+        ``FlipSpin`` and ``FinalMs`` in ``%scf`` -- or their echo in an
+        output -- which is how ``site_spin_flip`` is written, with ORCA's
+        0-based atoms read back as the host's 1-based ones, so the written
+        input reads back to the request that produced it. None unless both
+        words are there and the settings would accept the pair with the
+        multiplicity read beside them, so an archived native input (ax41
+        ino2 wrote ``FlipSpin 1,2``) never reads back as a request the
+        settings would refuse.
+        """
+
+        from chemsmart.jobs.orca.settings import (
+            site_spin_flip_request,
+            site_spin_flip_state_refusal,
+        )
+
+        echo = re.compile(r"^\|\s*\d+>\s?(.*)$")
+        atoms = final_ms = None
+        for raw_line in self.contents:
+            stripped = raw_line.strip()
+            match = echo.match(stripped)
+            if match is not None:
+                stripped = match.group(1)
+            words = stripped.split("#", 1)[0].replace(",", " ").split()
+            # Only a word followed by its value counts: ORCA's own warning
+            # "... not allowed for FlipSpin" names the word with none.
+            for index, word in enumerate(words):
+                key = word.casefold()
+                if key == "flipspin":
+                    found = []
+                    for token in words[index + 1 :]:
+                        if not token.isdigit():
+                            break
+                        found.append(int(token) + 1)
+                    if found:
+                        atoms = found
+                elif key == "finalms" and index + 1 < len(words):
+                    try:
+                        final_ms = float(words[index + 1])
+                    except ValueError:
+                        pass
+        if not atoms or final_ms is None or self.broken_symmetry:
+            return None
+        try:
+            request = site_spin_flip_request(
+                {"atoms": atoms, "final_ms": final_ms}
+            )
+        except ValueError:
+            return None
+        multiplicity = getattr(self, "multiplicity", None)
+        if site_spin_flip_state_refusal(request, multiplicity):
+            return None
+        return request
+
     @cached_property
     def _orca_method_values(self):
         """Read the last native or echoed ORCA ``%method`` block.
@@ -2096,6 +2153,7 @@ class ORCAFileMixin(FileMixin):
             opt_convergence=getattr(self, "opt_convergence", None),
             reference=self.reference,
             broken_symmetry=self.broken_symmetry,
+            site_spin_flip=self.site_spin_flip,
             frozen_core=self.frozen_core,
             frozen_core_electrons=self.frozen_core_electrons,
             charge=self.charge,

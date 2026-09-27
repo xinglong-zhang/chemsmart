@@ -1312,6 +1312,28 @@ class ORCAOutput(ORCAFileMixin):
         return None
 
     @property
+    def broken_symmetry_ms(self):
+        """The Ms a FlipSpin or BrokenSym request converged this run to.
+
+        Both start from the high-spin determinant the coordinate line
+        names -- ``multiplicity`` stays that state -- and ORCA prints the
+        one they converge to: "and then try to converge to the broken
+        symmetry state with Ms=  0.0". None when no such request ran,
+        where Ms is (multiplicity - 1) / 2.
+        """
+
+        pattern = re.compile(
+            r"converge to the broken symmetry state with Ms=\s*"
+            r"(-?\d+(?:\.\d*)?)"
+        )
+        found = None
+        for line in self.contents:
+            match = pattern.search(line)
+            if match is not None:
+                found = float(match.group(1))
+        return found
+
+    @property
     def spin(self):
         """
         Determine if calculation uses restricted or unrestricted spin.
