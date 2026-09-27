@@ -183,6 +183,21 @@ whose records name `/lustre` paths and needs CUHK and 180-310 k tokens a
 turn. Issued only if the baseline leaves budget and the master confirms
 whether the doorway counts a key-using non-goal slot job as an Agent.
 
+## Amendment A1 (before any model output existed, 2026-09-28)
+
+The first launch (03:00 KST) lost its first two samples (D1
+control-deepseek #0, D1 repaired-deepseek #0) to HTTP 401, and five
+diagnostic requests after them were refused the same way. Cause: my
+instrument, not the provider or the trees -- `_fence` rebound its
+`stub` argument to a stub executable's path inside a loop, so every
+real sample whose envelope names ORCA, Gaussian or xTB sent the
+placeholder credential (fixed in 2e5c9334; instrument sha256 prefix now
+168cc1f70c7ab15c). No request reached a model, so no outcome exists.
+Disposition: those rows are void, not INFRA of the pre-registered run;
+they are kept in `baseline-void-401/`, and the run restarts from
+position 0 with the same manifest, the same runner (7ae49bd5b9ee266d)
+and the fixed instrument. Nothing else in the pre-registration changes.
+
 ## Jobs issued
 
 - 2026-09-28: baseline runner (run_baseline.py 7ae49bd5b9ee266d), local,
