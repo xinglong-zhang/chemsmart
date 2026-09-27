@@ -90,6 +90,21 @@ def carried(value: float, pool: list[float]) -> bool:
     )
 
 
+#: Post hoc (added after census 7 was read, and reported as such): a host
+#: number the model multiplied by a stoichiometric count before typing it
+#: back is no single receipt's value.
+_MULTIPLES = (2, 3, 4, 6, 0.5)
+
+
+def scaled_copy(value: float, pool: list[float]) -> str:
+    """The multiple of a host number this literal equals, to 1e-9, or ''."""
+
+    for factor in _MULTIPLES:
+        if carried(value / factor, pool):
+            return f"{factor:g} x a host number"
+    return ""
+
+
 def main() -> None:
     out_dir = Path(sys.argv[1])
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -191,6 +206,12 @@ def main() -> None:
                             "value": node.get("source_value"),
                             "unit": node.get("source_unit"),
                             "carried": is_carried,
+                            "scaled": (
+                                ""
+                                if is_carried
+                                or not isinstance(value_c, (int, float))
+                                else scaled_copy(float(value_c), pool)
+                            ),
                         }
                     )
             if "physical" in kinds:
@@ -218,6 +239,11 @@ def main() -> None:
                     "physical literal "
                     + ("carried" if literal["carried"] else "foreign")
                 ] += 1
+                if literal["scaled"]:
+                    counts[
+                        "physical literal foreign, post hoc: "
+                        + literal["scaled"]
+                    ] += 1
             results.append(row)
     (out_dir / "literal_claims.json").write_text(json.dumps(results, indent=1))
     for key, n in sorted(counts.items()):
@@ -230,6 +256,7 @@ def main() -> None:
                 + "; ".join(
                     f"{lit['node']}={lit['value']} {lit['unit']}"
                     f"{' (carried)' if lit['carried'] else ''}"
+                    f"{' (' + lit['scaled'] + ')' if lit['scaled'] else ''}"
                     for lit in row.get("literals") or ()
                 )[:140]
                 + f"  <- {Path(row['report']).parts[-5]}/{Path(row['report']).parts[-4]}"
