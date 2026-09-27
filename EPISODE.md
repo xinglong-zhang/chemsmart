@@ -172,6 +172,11 @@ What each outcome does to C2:
   `--dump-declarations` on this worktree at 223c66ed) sha256 3986d46b....
   Roots: r8, r9, r10/q1-q24, q26-q28, q30-q36 named one by one (q25 does
   not exist; q29 excluded), Q28's 32 pre-R8 directories.
+  Submitted as CUHK Slurm 2157056 (r11-evid-a), pre-registration
+  a4d88ca2304f; COMPLETED in 2 min 55 s, 45 MB.
+- CUHK census E v2: the same roots and prunes, `census-v2.sh` sha256
+  1dfef59d..., instrument `git show 4c38357b:...` sha256 6f005dc9...
+  (the grouped-number tokenizer and witness fields; see its commit).
 
 ## Status
 
