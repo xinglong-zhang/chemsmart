@@ -656,6 +656,45 @@ as well as time waits for Repair B's witness.
 Held for the full exchange: the reading-turn settlement replay harness,
 any change to receipt kinds, receipt reuse as an expression input.
 
+## Item 1 -- run-path failed criteria: the witness (truth-2, 2026-09-28)
+
+Code reading at 79e5639a. `_delivery_settlement` (planning path) builds
+its delivery with `goal_streams`, so `goal.failed_criteria` sees every
+stream's verdicts and every stream's decisions. `GoalDriver._settle`
+(run path) builds the run's delivery without them: it reads the verdicts
+and citations of the run's own stream -- which never holds a decision --
+and carries earlier cycles' rejections as `self.rejected_artifacts` and
+`self.standing_stale`, sets computed when each run settled and never
+re-read against a later decision (the `verify-when-signing` shape).
+
+Witness `tests/agent/test_a_goal_word_reads_every_criterion_the_goal_
+holds.py`, through `run_goal_loop` with real hosts over the archived
+PySCF O2 singlet bytes (R10 Q19's harness): cycle 1's run fails
+`val-rks-stability/external_no_spin_instability` (-0.0926 Eh against
+>= 0) and claims the energy; cycle 2's woken session inspects that run
+and, in the cited arm, records a decision citing the failed receipt
+(the route `wake.failed_validation_receipt_answers_verdict` prescribes);
+cycle 2's run (the goal's last revision) reads the same result again,
+either judging it with the same criterion ("judges-again") or only
+re-claiming the energy ("reclaims"). Expected at goal grain: cited ->
+`achieved_with_observations` naming `failed_criterion:<rule>:answered`;
+not cited -> `returned_to_human` naming the verdict.
+
+On the unrepaired tree (worktree chemsmart/ == 79e5639a): 3 red, 1 green.
+- judges-again, cited: `returned_to_human`, "a validation verdict failed
+  and no budget remains to answer it: val-rks-stability/external_no_
+  spin_instability read -0.0926 ... (receipt 7fec8ea3)" -- while the
+  goal's own records hold a decision citing that verdict (self-check in
+  the witness: the decision stands in the woken stream). FALSE word.
+- reclaims, cited: `returned_to_human`, "a verdict rejected the result
+  these quantities were computed from and no budget remains to re-derive
+  them: ref-energy" -- over an answered verdict. FALSE word.
+- reclaims, not cited: `returned_to_human` (the right word), reason
+  names only `ref-energy`, never the verdict (the charter: "the reason
+  names the verdict"). Content, bucket (b).
+- judges-again, not cited (control): `returned_to_human` naming the
+  verdict. Green.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
