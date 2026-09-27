@@ -989,6 +989,51 @@ Not evidence: HS unconverged or <S**2> far from 6 (the level cannot
 carry the question); FS1 and BS22 disagreeing beyond 1e-4 Eh or in
 state (the site-flip reference is itself uncertain: both reported).
 
+### Item 4 -- read (CUHK 2157086, prereg 97ce64d4faab, code-repairb f9161c63, 4 min 7 s)
+
+All four arms terminated normally and converged. Energies and <S**2>
+through the host's reader (the reader took the last block: FS1's and
+BS22's outputs print the high-spin 6.004821 first, then 1.998):
+- HS (mult 5): E = -3890.968332373 Eh, <S**2> 6.004821, Mulliken spin
+  Ni(0) +1.7306, Ni(1) +1.7275.
+- FS1 (FlipSpin 1, FinalMs 0): E = -3890.968544660 Eh, <S**2> 1.998044;
+  raw last Mulliken block Ni(0) +1.726172, Ni(1) -1.722662 (so ORCA's
+  FlipSpin index is 0-based: atom 1 is the second Ni).
+- BS22 (BrokenSym 2,2): E = -3890.968534752 Eh, <S**2> 1.998045, Ni(0)
+  +1.726159, Ni(1) -1.722658 -- the FS1 state (dE 9.9e-6 Eh).
+- BS-typed (HFTyp UHF + GuessMix 45, mult 1): E = -3890.935141782 Eh,
+  <S**2> 1.764763, Mulliken Ni(0) -0.0396, Ni(1) -0.0399, O -0.129,
+  Cl +0.157: almost no spin on either Ni, spin on the bridges.
+Against the pre-registration: HS, FS1 and BS22 all inside their bands;
+|E(HS) - E(FS1)| = 0.212 mEh. The typed request does NOT reach the
+site-flip state: +33.40 mEh (20.96 kcal/mol) above it, <S**2> 0.233
+lower, the Ni populations -0.04 against +-1.72. Prediction held (the
+signature was the Ni populations and the energy, not <S**2> < 1.5).
+What it means for J (Yamaguchi, H = -2J S1.S2, this unoptimised
+structure, B3LYP/G def2-SVP): from the site-flip state J = -(E_HS -
+E_BS)/(<S**2>_HS - <S**2>_BS) = -46.6 cm-1 / 4.007 = -11.6 cm-1
+(antiferromagnetic, the magnitude the task's susceptibility allows);
+from the typed state the same formula gives +1718 cm-1, the wrong sign
+at 150 times the size -- the order of the |J| 1040-1690 cm-1 the ino2
+Agent delivered from its M = 3 substitution.
+Classification: C3 finding -- for two S = 1 centres the refusal of
+named-site flips routes a session to a typed request that cannot reach
+the state the science needs; the legitimate choice (flip one site from
+the high-spin determinant, Noodleman's procedure) has no typed form, and
+following the route delivers a J of the wrong sign. Consequence as
+pre-registered: a typed-form request to the Evidence lens (a
+high-spin-flip broken-symmetry form naming the site's atoms, or
+BrokenSym M,N) and input to the owner's pending ruling on the native
+channel.
+Found beside it: the host's ORCA reader refuses the spin populations of
+both site-flip results -- "mulliken_atomic_spin_populations sums to
+0.000 where 2S for multiplicity 5 is 4.0; the vector is not the complete
+molecule in order" -- because it checks the sum against 2S of the
+coordinate line's multiplicity, while FinalMs 0 / BrokenSym end at
+Ms = 0. A typed site-flip form needs that check made against the final
+Ms (`_orca_spin_populations`, chemsmart/analysis/result_readers.py:371),
+or the host could not read the state it had asked for.
+
 ## Item 5 -- rendered reports and model-authored literals: pre-registration (examine only)
 
 What a human reads: the executor's `completed-analysis-report.md` /
@@ -1032,6 +1077,12 @@ unchanged) and are not load-bearing by themselves. Otherwise: no code.
 - CUHK 2157075 (r11-truth-a), census 6 (truth-2), prereg f99a8f4a4a63:
   refusal classification (identical to census 3) and the gate replay on
   Repair B's tree (f9161c63, digest e698bee9). COMPLETED in 32 s, exit 0.
+- CUHK 2157086 (r11-truth-a), item 4's oracle `cli/ni2flip` (truth-2),
+  prereg 97ce64d4faab: four ORCA single points through `chemsmart run`
+  (16 cores), read through the host's reader. COMPLETED in 4 min 7 s,
+  exit 0, 16 cores -- about 1.1 core-hours.
+- CUHK 2157093 (r11-truth-a), census 7 (item 5's literal census on the
+  CUHK population), prereg 3caa0e0bd0f3.
 - Error, stated: to pre-register census 6 I ran a json-only Python
   script (`anomaly_seeding.py`, no chemsmart import) on the CUHK login
   node with the private environment's interpreter, outside a slot job.
