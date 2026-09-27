@@ -711,6 +711,52 @@ elementwise comparison; counterpoise ghost atoms; receipt reuse across
 runs; typed forms for Hirshfeld, NoUseSym, `scf=verytight` or named-site
 flips; anything else in the memo.
 
+## A3 flag 2 -- READ (CUHK FlipSpin calls; transcripts read in place)
+
+Denominator. Census E's CUHK R8-R10 rows (Slurm 2157060) hold 17
+FlipSpin-bearing authoring calls, not 18, all in R10 Q15 (the Bergman
+cyclization: singlet-diradical p-benzyne and its TS): FlipSpin in
+`additional_route_parameters` x11 (Q28 wrote x12) and `input_string
+"%scf FlipSpin 1,6 end"` x6. The census reproduces Q28's 82 CUHK hatch
+calls in total, so one of Q28's twelve sits under another of its labels
+(not resolved; Q28's records untouched).
+
+What the Agent meant, in its own words (public transcripts on CUHK):
+- **A flip on named sites -- 14 calls, one session** (q15 g1, run
+  live-20260924T141631...-86028501, transcript a8537cf6...): FlipSpin 1,6
+  x8 and the input_string x6. "The hexagon is derived (radical pair =
+  atoms 1 and 6 ...)"; "the broken-symmetry `flipspin 1,6` guess on the two
+  dehydro centers"; "flipspin 1,6 = the two forming-bond carbons". The
+  sites are named, and named as the two radical centres of a two-centre
+  singlet diradical; no purpose beyond that singlet is stated.
+- **Any broken-symmetry guess -- 3 calls, two sessions**: `FlipSpin 1,1`
+  (q15 g2, run ...-430ae860), one of "five candidate spellings" (bare
+  BrokenSym, a %scf-block BrokenSym 1,1, FlipSpin, `BrokenSym 1 1`, plain
+  UKS) probed for "a broken-symmetry spelling this ORCA accepts" -- its
+  "1,1" is BrokenSym's syntax, not atoms; `["FlipSpin 1"]` and
+  `["FlipSpin"]` (q15 g1, run ...-b099c3dc), variants tried after
+  `BrokenSym 1,1` was refused, the second chosen because "ORCA's
+  documented default flips atom 1's spin ... seeds the SCF guess so the
+  diradical solution can emerge" -- no site chosen for its chemistry.
+
+The typed form on 9185770e is `broken_symmetry: true` (HFTyp UHF from
+GuessMix, "measured to reach the solution ORCA's BrokenSym 1,1 and its own
+stability following reach"); "a spin flip on named sites has no typed
+form" (`jobs/orca/settings.py`). Share of Q28's 104 hatch calls whose
+intent is typed, one rule applied to both corpora:
+- by form (a written site list is a named-site intent): 92 - 14 = 78/104
+  (75%);
+- by purpose (typed if the typed form reaches the state the Agent said it
+  wanted): 92/104 (88%) as Q28 wrote -- consistent only if ax41 ino2's
+  FlipSpin 1,2 (a Ni(II) dimer, S = 1 centres) wants a state GuessMix does
+  not reach, which truth-2's ORCA oracle is to decide;
+- 71% (74/104) would need all 18 to be named-site intents; the
+  transcripts give 14 by form and none by purpose.
+Side note, my reading of ORCA's FlipSpin and not checked by a run: it
+flips the listed atoms' spins from the high-spin solution, so listing both
+radical centres, as the named-site session did, does not by itself give
+Ms = 0.
+
 ## E1 -- ORACLE (fixed before any code change; never tuned after a result)
 
 Probe M's `target` step, computed outside the vocabulary (numpy over the
@@ -742,6 +788,59 @@ returns each selected frequency exactly and each selected share equal as
 a float, and the same reply lets its reader see each runner-up's
 frequency and share, equal to the values above. It is red on 9185770e
 (the schema refuses the null index).
+
+## E1 -- witness RED (before any implementation)
+
+`tests/agent/test_a_plan_picks_a_mode_by_which_atoms_move.py` (written
+first; drives `CommandCompiledToolHostV1.dispatch`), run on 507521f9 --
+the merge of r11-integration 79e5639a, whose evaluator and tool schema
+are 9185770e's -- with `chemsmart` imported from this worktree: 2 failed
+(maximum and minimum), both at argument validation:
+"2 arguments are invalid: (1) tool argument nodes[0].indices[0] must be
+integer, but got NoneType None; (2) tool argument nodes[1].indices[0]
+must be integer, but got NoneType None".
+
+## E1 -- implemented, locally GREEN
+
+ebdbaaed (`analysis:`): `ref` indices take null (every element along that
+axis; the evaluator indexes all axes at once);
+`expression_extremum_observations` names each
+coordinate_at_maximum/minimum node's selected and runner-up points
+(index, coordinate, value), their separation and units, from the arrays
+the evaluation read; the evaluate handler puts it in the reply and in the
+`quantity_expression_evaluated` event (`extremum_observations`); the
+schema's `indices` items are integer or null, with one sentence. Witness
+green on ebdbaaed (both cases); `tests/agent` from this worktree 3346
+passed, 20 skipped, 2 xfailed. A scratch check showed the planner's
+analysis-node admission accepts the column-select nodes (the planner's
+`expression_nodes` share the schema and `expression_node_from_plan`).
+
+The host-authored sentence, verbatim on the acetaldehyde fixture (local,
+d3d12a46's probe): "coordinate_at_maximum returned 1798.58 cm^-1, where
+the largest of its 15 values falls (0.980361); the next largest
+(0.556489) falls at 501.81 cm^-1, 0.423872 lower".
+
+## E1 -- CUHK replay: PRE-REGISTRATION (before submission)
+
+Job: `/project/xlzhang/jiseung/r11/evid/e1/job.sh` sha256 ab86330b...;
+probe = `git show d3d12a46:.agents/research/loop/probe_mode_selection.py`
+sha256 bddb6b80... (d3d12a46 adds only the reply's observations to the
+summary); code packed from d3d12a46 (426 files, tree digest b2138aba...,
+`chemsmart/` = ebdbaaed's; tarball ca3eb67e...), unpacked at `e1/code`,
+0 AppleDouble files. Inputs read in place, read-only: the two g3
+Hessians probe M read (6c78dc46..., 3017d95a...). Provider-free, HOME
+fenced, 1 core, <= 30 min.
+
+Green, as pre-registered: all six `candidate_plan` rows (route 2 and
+route 1 x lactam, amide, carboxyl) reply ok with `nu` equal to the
+oracle frequency and `top` equal to the oracle share as floats, and
+carry exactly one `extremum_runner_up` observation for node `nu` whose
+selected point equals (frequency, share) and whose runner-up equals the
+oracle's (runner-up frequency, runner-up share), all from the E1 ORACLE
+section above (fixed at 2057bf9c). Any other row is reported as it is,
+never re-run to tune. Read with a comparator whose oracle is hard-coded
+from that section (scratch `e1_compare.py`), not from the run's own
+target rows.
 
 ## Status
 
