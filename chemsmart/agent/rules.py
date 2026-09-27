@@ -1569,7 +1569,13 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
         "restricted solution's own RHF/RKS -> UHF/UKS instability -- and "
         "the compile reply names it, so no FlipSpin, BrokenSym or guess=mix "
         "is yours to write; a guess=mix on a restricted Gaussian route "
-        "stays restricted. Whether the symmetry broke is read from "
+        "stays restricted. That request was measured on sites with one "
+        "unpaired electron each; on two S = 1 centres ORCA's mixing guess "
+        "reached a state 33.40 mEh above the one a flip of one centre from "
+        "the high-spin state reaches, and that flip is ORCA's typed "
+        "site_spin_flip: {atoms: [...], final_ms: ...} on the high-spin "
+        "multiplicity (other programs refuse it). Whether the symmetry "
+        "broke is read from "
         "the result: its level states the reference that ran and "
         "broken_symmetry, spin_square gives <S^2> (near 1 for a two-centre "
         "diradical, 0 when the solution stayed spin-symmetric), and a "
@@ -1623,6 +1629,27 @@ POLICY_RULES: tuple[PolicyRuleV1, ...] = (
                 state_manifold="singlet",
                 nstates=3,
                 broken_symmetry=True,
+            ),
+            # The named-centre flip the sentence routes S = 1 centres to:
+            # ORCA's typed request, refused by the other programs (PySCF's
+            # at render; Gaussian's candidate render is lenient and its
+            # loader refuses the key, test_a_named_site_flip_is_one_typed_
+            # request.py).
+            _b(
+                "orca",
+                "sp",
+                "admitted",
+                functional="b3lyp",
+                basis="def2-svp",
+                site_spin_flip={"atoms": [2], "final_ms": 0},
+            ),
+            _b(
+                "pyscf",
+                "sp",
+                "refused",
+                functional="b3lyp",
+                basis="def2-svp",
+                site_spin_flip={"atoms": [2], "final_ms": 0},
             ),
         ),
     ),

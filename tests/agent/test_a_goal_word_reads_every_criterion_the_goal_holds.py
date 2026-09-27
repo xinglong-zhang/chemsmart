@@ -20,12 +20,11 @@ criterion, under the same two receipts. Cycle 2 is the goal's last
 revision, so its run's settlement is final.
 
 Not driven here: a second run that re-judges the verdict the woken session
-answered. The settlement now reads that verdict as answered, and the word
-still returns to the human, because the run's own completion receipt is
-partial -- the executor's walk judges the claims standing on a failed
-criterion with the decisions of its own host, which holds none. That is the
-certificate's organ, not the settlement's, and it is reported rather than
-repaired here.
+answered. That word turned on the run's own completion certificate, which
+judged the claims standing on a failed criterion with its own host's
+decisions and validations only; the certificate's organ now reads the
+goal's, and its witness is
+``test_a_certificate_reads_the_decisions_of_the_whole_goal.py``.
 """
 
 from __future__ import annotations

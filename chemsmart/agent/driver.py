@@ -3580,6 +3580,35 @@ def _goal_streams(
     return tuple(dict.fromkeys(path for path in streams if path.is_file()))
 
 
+def goal_verdict_records(
+    goal_directory: str | Path, *, excluding: str | Path | None = None
+) -> _VerdictRecords:
+    """The verdict records of every stream a goal's ledger names.
+
+    A completion certificate asks of its goal what the settlement asks of
+    it: which failed acceptance criteria stand, and whether a recorded
+    decision answered each. The settlement reads every stream this ledger
+    names; a host that mints a certificate reads the same streams through
+    this, less its own (``excluding``), whose records it holds itself. A
+    certificate that read its own host alone was partial over a verdict a
+    decision in another stream had answered, and the goal returned to the
+    human (R11 truth-3, item 1).
+    """
+
+    directory = Path(goal_directory)
+    workspace = directory.parent.parent.parent
+    skip = Path(excluding).resolve() if excluding is not None else None
+    return _merge_verdict_records(
+        *(
+            _verdict_records(_stream_lines(path))
+            for path in _goal_streams(
+                GoalLedger(directory), workspace, directory.name
+            )
+            if skip is None or path.resolve() != skip
+        )
+    )
+
+
 def _analysis_delivery(
     events_path: Path,
     *,

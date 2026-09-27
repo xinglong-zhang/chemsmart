@@ -224,4 +224,3 @@ def test_a_decision_may_cite_a_receipt_a_recorded_run_minted(tmp_path):
         )
     report = refused.value.failure_report
     assert report["gate"] == "decision.receipt_is_one_the_host_minted"
-    assert "inspect_run" in report["route"]

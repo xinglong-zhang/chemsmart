@@ -662,6 +662,23 @@ def _last_spin_square(output: Any, key: str | None = None) -> float:
 
 
 def _spin_square_target(output: Any) -> float:
+    """S(S+1) of the pure spin state the result's determinant stands for.
+
+    S is the coordinate line's, (multiplicity - 1) / 2, unless the program
+    records that it converged the determinant to another Ms -- ORCA's
+    FlipSpin/FinalMs and BrokenSym start from the high-spin determinant the
+    coordinate line names and converge to the Ms they ask for. Such a
+    determinant is an eigenfunction of S_z at that Ms and a mixture of total
+    spins, and the pure state it stands for is S = |Ms|, as a GuessMix
+    singlet's is S = 0. Measured against the coordinate line, every flipped
+    Ni(II)2 result read <S**2> 4.0 below a quintet it never targeted and
+    raised spin.s2_deviation_ge_0.2 (R11 E2; truth-3).
+    """
+
+    final_ms = getattr(output, "broken_symmetry_ms", None)
+    if final_ms is not None:
+        spin = abs(float(final_ms))
+        return spin * (spin + 1.0)
     multiplicity = getattr(output, "multiplicity", None)
     if not isinstance(multiplicity, int) or multiplicity <= 0:
         raise MissingQuantityError(
@@ -746,6 +763,10 @@ def spin_symmetry_record(reader: Any, output: Any) -> dict[str, Any] | None:
         "reference": str(reference),
         "broken_symmetry_requested": bool(level.get("broken_symmetry")),
     }
+    if level.get("final_ms") is not None:
+        # The Ms the target below is S(S+1) of, where not the coordinate
+        # line's (``_spin_square_target``).
+        record["final_ms"] = level["final_ms"]
     followed = getattr(output, "broken_symmetry_record", None)
     if isinstance(followed, Mapping):
         # The program's own stability answer about the restricted solution
@@ -3344,7 +3365,21 @@ def _orca_level(output: Any) -> dict[str, Any]:
         requested = bool(getattr(output, "broken_symmetry", False))
     except Exception:  # noqa: BLE001 - an unreadable echo requests nothing
         requested = False
-    _add_reference_identity(level, _orca_scf_reference(output), requested)
+    # A flip of named centres is a broken-symmetry request too: ORCA's own
+    # record says which Ms it converged the determinant to, and the typed
+    # request reads back from the input echo in the host's numbering.
+    try:
+        final_ms = getattr(output, "broken_symmetry_ms", None)
+        flip = getattr(output, "site_spin_flip", None)
+    except Exception:  # noqa: BLE001 - an unreadable echo requests nothing
+        final_ms = flip = None
+    _add_reference_identity(
+        level,
+        _orca_scf_reference(output),
+        requested or final_ms is not None,
+        final_ms=final_ms,
+        site_spin_flip=flip,
+    )
     return level
 
 
@@ -3448,14 +3483,21 @@ def _gaussian_level(output: Any) -> dict[str, Any]:
     return level
 
 
-def _add_reference_identity(level, reference, broken_symmetry):
+def _add_reference_identity(
+    level, reference, broken_symmetry, *, final_ms=None, site_spin_flip=None
+):
     """State, on a level, the determinant that ran and the request behind it.
 
     ``reference`` is the family the program itself printed (a word of
     ``SCF_REFERENCE_WORDS``); ``broken_symmetry`` is true where the
-    program's own record shows the broken-symmetry request applied.  Both
-    are shown and never compared: a closed-shell molecule and a radical in
-    one reaction energy run different determinants by necessity, so the
+    program's own record shows the broken-symmetry request applied.
+    ``final_ms`` is the Ms the program says it converged a flipped
+    determinant to, where that is not the coordinate line's, and
+    ``site_spin_flip`` the named-centre flip that ran, read back in the
+    host's numbering: GuessMix and a site flip reach different states of two
+    S = 1 centres (R11 truth-2, CUHK 2157086), so the level says which ran.
+    All are shown and never compared: a closed-shell molecule and a radical
+    in one reaction energy run different determinants by necessity, so the
     reference is not a ``LEVEL_IDENTITY_FIELDS`` field, and an operation is
     never told its operands differ in level because their states do.
     """
@@ -3464,6 +3506,13 @@ def _add_reference_identity(level, reference, broken_symmetry):
         level["reference"] = reference
     if broken_symmetry is True:
         level["broken_symmetry"] = True
+    if final_ms is not None:
+        level["final_ms"] = float(final_ms)
+    if isinstance(site_spin_flip, Mapping):
+        level["site_spin_flip"] = {
+            "atoms": [int(atom) for atom in site_spin_flip["atoms"]],
+            "final_ms": float(site_spin_flip["final_ms"]),
+        }
 
 
 def _orca_solvent(output: Any) -> str:

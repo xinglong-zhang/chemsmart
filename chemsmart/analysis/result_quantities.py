@@ -2699,15 +2699,23 @@ def _coordinate_words(
     return f"{kind} {label} at {value:.2f} {unit}"
 
 
+#: The selectors through which a result says which coordinates it held. The
+#: held-surface free energy is derived from exactly these (``_held_by_result``),
+#: so a stage whose reader declares one of them is a stage the derivation
+#: serves a free energy of -- the capability cell reads this table too
+#: (``capabilities.coverage_for``).
+HELD_COORDINATE_SELECTORS = (
+    "constrained_bond_atoms",
+    "constrained_angle_atoms",
+    "constrained_dihedral_atoms",
+)
+
+
 def _held_by_result(reader: Any, output: Any) -> tuple[tuple[int, ...], ...]:
     """The coordinates this result itself held, canonical and one-based."""
 
     held = set()
-    for selector in (
-        "constrained_bond_atoms",
-        "constrained_angle_atoms",
-        "constrained_dihedral_atoms",
-    ):
+    for selector in HELD_COORDINATE_SELECTORS:
         for row in _reader_answer(reader, output, selector) or ():
             held.add(
                 _canonical_coordinate(

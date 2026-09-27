@@ -547,6 +547,8 @@ def coverage_for(
     host validity rules, derived from the reader's declared selectors and
     the validator's own reach -- never asserted per program by hand."""
 
+    from chemsmart.analysis.result_quantities import HELD_COORDINATE_SELECTORS
+
     declared = set(selectors)
     validated = program in _VALIDATED_PROGRAMS
     axes = {
@@ -554,11 +556,19 @@ def coverage_for(
         "spin": "readable" if "spin_square" in declared else "unsupported",
         # Readable when the reader serves a Gibbs energy, or serves the
         # frequencies the host's own RRHO derivation needs; xtb/opt declares
-        # the former and not the latter, orca/opt the reverse.
+        # the former and not the latter, orca/opt the reverse. Or when the
+        # stage's results say which coordinates they held: the derivation
+        # then serves the free energy of the surface they are held on, with
+        # those coordinates projected out of the result's Hessian (R10
+        # Q27). The cell said unsupported for orca/modred and
+        # gaussian/modred while the derivation served both, and a session
+        # gave up that free energy citing these receipts (R10 Q21 g1-hooh;
+        # R11 truth-3).
         "thermochemistry": (
             "readable"
             if "gibbs_free_energy" in declared
             or "vibrational_frequencies" in declared
+            or declared.intersection(HELD_COORDINATE_SELECTORS)
             else "unsupported"
         ),
         "electronic": "readable" if "energy" in declared else "unsupported",

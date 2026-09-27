@@ -1438,7 +1438,7 @@ def _pyscf_result_receipt_expectation(
     return expected
 
 
-def _spin_square_observation(output: Any, multiplicity: Any) -> dict[str, Any]:
+def _spin_square_observation(output: Any) -> dict[str, Any]:
     """<S^2> as the program printed it beside what the bound state implies.
 
     An observation, deliberately not a finding: contamination is a fact
@@ -1466,11 +1466,20 @@ def _spin_square_observation(output: Any, multiplicity: Any) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 - a reader without the table
         return {}
     record: dict[str, Any] = {"spin_square_observed": observed}
+    # The reader's own target (one function): S(S+1) of the coordinate
+    # line's state, or of S = |Ms| where the program converged a flipped
+    # determinant to another Ms. Restated here from the multiplicity, it
+    # measured every flipped Ni(II)2 result against the quintet it started
+    # from and raised spin.s2_deviation_ge_0.2 at -4.0 (R11 truth-3).
+    from chemsmart.analysis.result_readers import _spin_square_target
+
     try:
-        spin = (int(multiplicity) - 1) / 2.0
-    except (TypeError, ValueError):
+        expected = _spin_square_target(output)
+    except Exception:  # noqa: BLE001 - no positive multiplicity, no target
         return record
-    expected = spin * (spin + 1.0)
+    final_ms = getattr(output, "broken_symmetry_ms", None)
+    if final_ms is not None:
+        record["final_ms"] = float(final_ms)
     record["spin_square_expected"] = expected
     record["spin_square_deviation"] = observed - expected
     return record
@@ -1957,6 +1966,14 @@ def _observed_spin_deviation(
 ) -> float | None:
     """The ⟨S²⟩ deviation a program's observation carries, or None."""
 
+    return _observed_spin_field(observation, program, "spin_square_deviation")
+
+
+def _observed_spin_field(
+    observation: Mapping[str, Any], program: str, name: str
+) -> float | None:
+    """One number of a program's ⟨S²⟩ observation, or None."""
+
     block = observation.get(program)
     if not isinstance(block, Mapping):
         return None
@@ -1965,7 +1982,7 @@ def _observed_spin_deviation(
         if len(rows) != 1 or not isinstance(rows[0], Mapping):
             return None
         block = rows[0]
-    value = block.get("spin_square_deviation")
+    value = block.get(name)
     try:
         return float(value) if value is not None else None
     except (TypeError, ValueError):
@@ -3084,6 +3101,7 @@ class CommandCompiledToolHostV1:
         task_spec_sha256s: tuple[str, ...] = (),
         approved_workspace: str | Path | None = None,
         run_evidence_root: str | Path | None = None,
+        goal_directory: str | Path | None = None,
         cycle_label: str | None = None,
         execution_resources: ExecutionResourceSpecV1 | None = None,
         granted_execution_resources: ExecutionResourceSpecV1 | None = None,
@@ -3202,6 +3220,14 @@ class CommandCompiledToolHostV1:
         self.run_evidence_root = (
             Path(run_evidence_root).resolve()
             if run_evidence_root is not None
+            else None
+        )
+        #: The goal a woken session serves, whose ledger names the streams
+        #: its certificates read (``_goal_record_directory``). A run host is
+        #: not told: its stream is its goal's run stream.
+        self.goal_directory = (
+            Path(goal_directory).resolve()
+            if goal_directory is not None
             else None
         )
         #: The cycle this host is executing, as a folder name. A branch
@@ -7250,15 +7276,39 @@ class CommandCompiledToolHostV1:
             }
         return {"status": "no_scientific_workflow_planned"}
 
-    _RUN_RECEIPT_KINDS = frozenset(
-        {
-            "result_quantities_extracted",
-            "thermochemistry_derived",
-            "quantity_expression_evaluated",
-            "scientific_validation_evaluated",
-            "analysis_claims_recorded",
-        }
-    )
+    #: The receipts a decision may cite from another recorded stream, by the
+    #: event that minted them, and what a route calls each. One table: the
+    #: gate's membership test, its route and its diagnosis read it, so the
+    #: route never names a receipt the gate refuses.
+    _RUN_RECEIPT_KINDS = {
+        "result_quantities_extracted": "extraction",
+        "thermochemistry_derived": "thermochemistry",
+        "quantity_expression_evaluated": "expression",
+        "scientific_validation_evaluated": "validation",
+        "analysis_claims_recorded": "claim",
+    }
+
+    def _citable_route(self) -> str:
+        """The route of a refused citation: what the gate accepts.
+
+        It used to say "or one inspect_run shows on a recorded run", and
+        what inspect_run shows of a run -- each node's event hashes,
+        artifact digests and anomaly receipts -- is none of what a
+        decision may cite from another stream; a session that followed
+        it cited an anomaly receipt and was refused again (R11 truth-3).
+        """
+
+        return (
+            "cite the receipt_sha256 a tool returned in this session, or "
+            + self._citable_run_receipts()
+            + " that a recorded run of this workspace minted"
+        )
+
+    def _citable_run_receipts(self) -> str:
+        """'an extraction, ..., validation or claim receipt', from the table."""
+
+        nouns = list(self._RUN_RECEIPT_KINDS.values())
+        return "an " + ", ".join(nouns[:-1]) + f" or {nouns[-1]} receipt"
 
     #: The streams a workspace records, as inspect_run lists them.
     _RECORDED_STREAM_PATTERNS = (
@@ -7392,11 +7442,7 @@ class CommandCompiledToolHostV1:
                         + ", so it cannot stand as postprocessing "
                         "evidence here."
                     ),
-                    route=(
-                        "cite the receipt_sha256 a tool returned in this "
-                        "session, or one inspect_run shows on a recorded "
-                        "run of this goal"
-                    ),
+                    route=self._citable_route(),
                 )
         evidence_refs = tuple(values["evidence_refs"]) + tuple(
             f"receipt:{receipt_sha256}"
@@ -7498,11 +7544,7 @@ class CommandCompiledToolHostV1:
                             + f", and this citation asks for "
                             f"{receipt_kind!r}."
                         ),
-                        route=(
-                            "cite the receipt_sha256 a tool returned in "
-                            "this session, or one inspect_run shows on a "
-                            "recorded run of this goal"
-                        ),
+                        route=self._citable_route(),
                     )
                 continue
             prefix = "analysis_completion_policy:"
@@ -7734,10 +7776,7 @@ class CommandCompiledToolHostV1:
                             )
                             + "."
                         ),
-                        route=(
-                            "cite the receipt_sha256 a tool returned, or "
-                            "one inspect_run shows on a recorded run"
-                        ),
+                        route=self._citable_route(),
                     )
             selector = str(entry.get("selector") or "").strip()
             jobtype = str(entry.get("jobtype") or "").strip().lower()
@@ -7948,10 +7987,7 @@ class CommandCompiledToolHostV1:
                             )
                             + "."
                         ),
-                        route=(
-                            "cite the receipt_sha256 a tool returned, or "
-                            "one inspect_run lists."
-                        ),
+                        route=self._citable_route(),
                     )
             verified.append(
                 {
@@ -8654,8 +8690,7 @@ class CommandCompiledToolHostV1:
             return (
                 f"the {kind} receipt that {reference} recorded, and a "
                 "decision cites a receipt another stream recorded only when "
-                "it is an extraction, thermochemistry, expression, "
-                "validation or claim receipt" + anomaly_route
+                f"it is {self._citable_run_receipts()}" + anomaly_route
             )
         if anomaly_route:
             return "an anomaly an earlier cycle of this goal recorded" + (
@@ -13370,16 +13405,98 @@ class CommandCompiledToolHostV1:
             validations.append(record)
         if not validations:
             return ()
+        own = {str(item["receipt_sha256"]) for item in validations}
         cited: set[str] = set()
         for decision in getattr(self, "scientific_decisions", {}).values():
             cited |= cited_receipts(getattr(decision, "evidence_refs", ()))
         result_artifacts, expression_sources = self._result_lineage_maps()
-        return failed_criteria(
-            validations,
-            cited=cited,
-            result_artifacts=result_artifacts,
-            expression_sources=expression_sources,
+        # Whether a verdict is answered is a question about the goal, and
+        # the settlement asks it of every stream the goal holds. Asked of
+        # this host alone, a run that judged again a verdict the woken
+        # session had answered -- and a woken session whose own walk judged
+        # it again -- held a receipt nobody in it had cited and certified
+        # partial, and the goal returned to the human over a verdict its
+        # records answered (R11 truth-3, item 1). The goal's records join
+        # after this host's own, as the settlement joins its own stream's
+        # first, so an answered verdict is named by the same receipt.
+        if any(not item.get("all_rules_passed", True) for item in validations):
+            goal = self._goal_verdict_records()
+            if goal is not None:
+                validations.extend(
+                    item
+                    for item in goal.validations
+                    if str(item.get("receipt_sha256") or "") not in own
+                )
+                cited |= set(goal.cited)
+                result_artifacts = {
+                    **goal.result_artifacts,
+                    **result_artifacts,
+                }
+                expression_sources = {
+                    **goal.expression_sources,
+                    **expression_sources,
+                }
+        # Only verdicts this host judged, each named by its own receipts: a
+        # certificate says what its own chain found, never an earlier
+        # cycle's verdict it neither judged nor claimed from.
+        return tuple(
+            replace(
+                verdict,
+                receipt_sha256s=tuple(
+                    receipt
+                    for receipt in verdict.receipt_sha256s
+                    if receipt in own
+                ),
+            )
+            for verdict in failed_criteria(
+                validations,
+                cited=cited,
+                result_artifacts=result_artifacts,
+                expression_sources=expression_sources,
+            )
+            if own.intersection(verdict.receipt_sha256s)
         )
+
+    def _goal_record_directory(self) -> Path | None:
+        """The directory of the goal this host's records belong to.
+
+        A woken session is told (``goal_directory``). A run is not, and
+        need not be: its stream is its goal's run stream,
+        ``<workspace>/.chemsmart-agent/goals/<goal>/runs/<cycle>/events.jsonl``
+        -- the reference the goal's ledger records it by, on the local and
+        the scheduler path alike, cohort elements included. A stream
+        anywhere else belongs to no goal this host can name.
+        """
+
+        told = getattr(self, "goal_directory", None)
+        if told is not None:
+            return Path(told)
+        path = getattr(getattr(self, "event_store", None), "path", None)
+        if path is None:
+            return None
+        run = Path(path).resolve().parent
+        goal = run.parent.parent
+        if (
+            run.parent.name == "runs"
+            and goal.parent.name == "goals"
+            and goal.parent.parent.name == ".chemsmart-agent"
+            and (goal / "ledger.jsonl").is_file()
+        ):
+            return goal
+        return None
+
+    def _goal_verdict_records(self) -> Any:
+        """The validations and decisions of every other stream of this
+        host's goal, read when a certificate is signed (None when the host
+        serves no goal)."""
+
+        goal = self._goal_record_directory()
+        if goal is None:
+            return None
+        from chemsmart.agent.driver import goal_verdict_records
+
+        path = getattr(getattr(self, "event_store", None), "path", None)
+        return goal_verdict_records(goal, excluding=path)
 
     def _result_lineage_maps(
         self,
@@ -18382,9 +18499,7 @@ class CommandCompiledToolHostV1:
                                 if frequencies
                                 else None
                             ),
-                            **_spin_square_observation(
-                                output, output.multiplicity
-                            ),
+                            **_spin_square_observation(output),
                         }
                     )
                     if jobtype == "neb":
@@ -18759,9 +18874,7 @@ class CommandCompiledToolHostV1:
                                 "wavefunction_stability_history": (
                                     stability_history
                                 ),
-                                **_spin_square_observation(
-                                    output, output.multiplicity
-                                ),
+                                **_spin_square_observation(output),
                             }
                         )
                         if observed_jobtype in {"ircf", "ircr"}:
@@ -18995,11 +19108,16 @@ class CommandCompiledToolHostV1:
             # ⟨S²⟩ is an observation, never a gate; a deviation this size
             # is the surprise a scientist weighs (a wrong state, a
             # multireference character), recorded with its numbers.
+            final_ms = _observed_spin_field(observation, program, "final_ms")
             anomalies.append(
                 {
                     "signal_id": "spin.s2_deviation_ge_0.2",
                     "spin_square_deviation": float(f"{deviation:.4f}"),
                     "bound_multiplicity": multiplicity,
+                    # Where the run converged a flipped determinant to
+                    # another Ms, the deviation is from S(S+1) of S = |Ms|,
+                    # not of the bound multiplicity; the record says so.
+                    **({"final_ms": final_ms} if final_ms is not None else {}),
                 }
             )
         unbroken = _observed_broken_symmetry_unbroken(observation, program)
