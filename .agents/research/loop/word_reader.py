@@ -480,11 +480,27 @@ def check_settlement(goal: Goal, report: Report) -> list[str]:
                 oid = str(row.get("observable_id") or "")
                 if oid and row.get("delivered_claim_id"):
                     last[oid] = row
+        # An id whose latest typed word is a verified refusal delivers no
+        # number, so an earlier claim's verdict no longer describes it.
+        # A refused precision leaves its number standing (the host's own
+        # rule, driver._claims_a_later_refusal_supersedes), so only an id
+        # declared without a tolerance is superseded by its refusal.
+        refused_after: set[str] = set()
+        for stamp, _path, item in goal.refusals():
+            oid = str(item.get("observable_id") or "")
+            tolerance = (goal.declared.get(oid) or {}).get("required_tolerance")
+            if (
+                item.get("verified")
+                and tolerance is None
+                and stamp > claimed.get(oid, "")
+            ):
+                refused_after.add(oid)
         unnamed = sorted(
             oid
             for oid, row in last.items()
             if row.get("agreement") == "diverged"
             and oid not in goal.retired()
+            and oid not in refused_after
             and f"falsified_expectation:{oid}" not in text
         )
         if unnamed:
@@ -678,9 +694,18 @@ def check_prediction(goal: Goal, report: Report, row: dict) -> None:
 
 
 def _plans_hold_blocked(goal: Goal, node_id: str, output_id: str, path: str | None):
-    """Where a blocked_unsupported node with that output was recorded."""
+    """Where a blocked_unsupported node with that output was recorded.
+
+    Returns (places, described): the streams whose records hold the node
+    blocked with that output, and whether any record describes the node's
+    outputs at all. Tool arguments are recorded only as a digest, so a node
+    built through the plan-draft constructors can be named by id in the
+    records with its outputs nowhere: that is an insufficient record, not a
+    false basis.
+    """
 
     places = []
+    described = False
     for _stamp, _role, stream, event in goal.events:
         if path is not None and stream != path:
             continue
@@ -688,6 +713,8 @@ def _plans_hold_blocked(goal: Goal, node_id: str, output_id: str, path: str | No
         for mapping in walk(payload):
             if mapping.get("node_id") != node_id:
                 continue
+            if "outputs" in mapping or "support_state" in mapping:
+                described = True
             if mapping.get("support_state") != "blocked_unsupported" and not (
                 event.get("kind") == "workflow_analysis_node_settled"
                 and mapping.get("state") == "blocked_unsupported"
@@ -700,7 +727,7 @@ def _plans_hold_blocked(goal: Goal, node_id: str, output_id: str, path: str | No
             ):
                 places.append(stream)
                 break
-    return places
+    return places, described
 
 
 def check_refusals(goal: Goal, report: Report) -> None:
@@ -714,12 +741,16 @@ def check_refusals(goal: Goal, report: Report) -> None:
         selector = str(item.get("selector") or "")
         basis = str(item.get("basis") or "")
         if node and "blocked_unsupported in this session's plan" in basis:
-            here = _plans_hold_blocked(goal, node, oid, path)
+            here, _ = _plans_hold_blocked(goal, node, oid, path)
+            anywhere, described = _plans_hold_blocked(goal, node, oid, None)
             if here:
                 report.add(goal, "W7", "blocked_basis_in_its_plan", "ok")
-            elif _plans_hold_blocked(goal, node, oid, None):
+            elif anywhere:
                 report.add(goal, "W7", "blocked_basis_in_its_plan", "flag",
                            f"{oid}: node {node} recorded blocked only in another stream")
+            elif not described:
+                report.add(goal, "W7", "blocked_basis_in_its_plan", "insufficient",
+                           f"{oid}: no record describes {node}'s outputs")
             else:
                 report.add(goal, "W7", "blocked_basis_in_its_plan", "flag",
                            f"{oid}: no recorded plan holds {node} blocked with that output")
