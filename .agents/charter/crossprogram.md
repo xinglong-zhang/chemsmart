@@ -70,7 +70,8 @@ single orbital ladder.
 
 An open-shell singlet is one typed request (`broken_symmetry: true`,
 R10 Q18). Each program writes it as the mechanism measured to reach the
-broken-symmetry solution: Gaussian U + guess=mix; ORCA UHF with GuessMix
+broken-symmetry solution on sites with one unpaired electron each:
+Gaussian U + guess=mix; ORCA UHF with GuessMix
 45; PySCF following its own RKS -> UKS instability, because PySCF's
 documented `init_guess_breaksym` and an explicit HOMO/LUMO mix left H2 at
 2.00 A and p-benzyne restricted (oracle O0, CUHK Slurm 2153330). The
@@ -82,10 +83,14 @@ threshold), and a request that did not break raises
 90-degree ethylene twist, Gaussian's U guess=mix reached a solution 26
 kcal/mol above ORCA's with the same <S**2> ~ 1.00, while Gaussian's
 stable=opt reached the lowest (O0b, 2153375). Equal <S**2> is therefore
-not equal solutions, and no sensor yet compares them. A spin-coupled
-multi-site state (site-specific flips) is not represented: "broken"
-says the symmetry broke, not that an intended multi-site state was
-reached.
+not equal solutions, and no sensor yet compares them. On two S = 1
+Ni(II) centres ORCA's GuessMix reached a state 33.40 mEh above the one a
+flip of one centre from the quintet reaches (R11 truth-2, CUHK 2157086);
+that flip is ORCA's typed `site_spin_flip: {atoms, final_ms}` on the
+high-spin multiplicity, read at the Ms it converged to and measured
+against S = |Ms| (R11 E2, CUHK 2157103); Gaussian and PySCF refuse it.
+"broken" says the symmetry broke, not that an intended multi-site state
+was reached.
 
 A dispersion correction is one word only where each program means one
 correction by it, and is written only where the program has parameters
