@@ -842,6 +842,52 @@ never re-run to tune. Read with a comparator whose oracle is hard-coded
 from that section (scratch `e1_compare.py`), not from the run's own
 target rows.
 
+## E1 -- CUHK replay: READ (Slurm 2157071, pre-registration 4071ac2aca0a)
+
+Run: COMPLETED in 13 s on chpc-cn071; imported `e1/code` (remote tree
+digest b2138aba... = local pack, commit d3d12a46, 0 AppleDouble files);
+inputs hashed in place, identical to probe M's (6c78dc46..., 3017d95a...);
+output `e1/probe.jsonl` sha256 f44db53d..., 33 rows.
+
+GREEN, as pre-registered: all six `candidate_plan` rows reply ok with
+`nu` equal to the oracle frequency and `top` equal to the oracle share as
+floats, each with exactly one `extremum_runner_up` observation for `nu`
+whose selected point equals (frequency, share) and whose runner-up equals
+the oracle's. Nothing was re-run.
+
+The host-authored sentences, verbatim:
+- route 2 lactam: "coordinate_at_maximum returned 1866.33 cm^-1, where
+  the largest of its 117 values falls (0.96905); the next largest
+  (0.357928) falls at 582.62 cm^-1, 0.611123 lower"
+- route 2 amide: "coordinate_at_maximum returned 1752.42 cm^-1, where the
+  largest of its 117 values falls (0.979968); the next largest (0.357908)
+  falls at 42.13 cm^-1, 0.62206 lower"
+- route 2 carboxyl: "coordinate_at_maximum returned 1778.55 cm^-1, where
+  the largest of its 117 values falls (0.962474); the next largest
+  (0.493916) falls at 712.91 cm^-1, 0.468558 lower"
+- route 1 lactam: "coordinate_at_maximum returned 1754.65 cm^-1, where
+  the largest of its 117 values falls (0.981398); the next largest
+  (0.363891) falls at 136.58 cm^-1, 0.617508 lower"
+- route 1 amide: "coordinate_at_maximum returned 1714.42 cm^-1, where the
+  largest of its 117 values falls (0.971859); the next largest (0.633114)
+  falls at 71.34 cm^-1, 0.338746 lower"
+- route 1 carboxyl: "coordinate_at_maximum returned 1699.03 cm^-1, where
+  the largest of its 117 values falls (0.964068); the next largest
+  (0.515996) falls at 743.52 cm^-1, 0.448072 lower"
+
+The other rows, against probe M: extractions, target steps and the
+static-index route are identical to CUHK 2157069's (no reader drift
+between 23c08541 and d3d12a46). B1, B2 and B3b are refused as before and
+B4 still reduces to a scalar; B3a, one atom's column alone, is now
+admitted and returns 1866.33 / 1754.65 (the lactam carbon's column
+alone already peaks at the lactam stretch).
+
+Graph: 017ac5a8 adds `commit.ebdbaaed` and its `supersedes` edge to
+`negative.an_analysis_chain_cannot_plan_a_mode_it_has_not_read`, with the
+rung stated (expressible and replayed provider-free; no approved chain
+has planned it). graph.py check 574 nodes, 567 edges, no problems;
+orphans unchanged. No charter sentence became false.
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
@@ -884,3 +930,6 @@ target rows.
   as pre-registered above (files unchanged since their hashes were
   recorded); a reading that contradicts a fixed target is reported as it
   stands.
+- Replay CUHK 2157071 COMPLETED and read GREEN (six of six, section
+  above); graph edge committed (017ac5a8). E1 is ready to merge; handing
+  back.
