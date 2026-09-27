@@ -3000,11 +3000,6 @@ class _AnalysisDelivery:
     #: with the superseded number standing as the answer. Stale is not
     #: wrong: the arithmetic held, the structure beneath it did not.
     stale_quantity_ids: tuple[str, ...] = ()
-    #: Artifact digests a verdict rejected. A rejection is a fact about
-    #: bytes and does not expire, so a goal carries these across cycles:
-    #: a later cycle may render a claim from a result an earlier cycle
-    #: already rejected.
-    rejected_artifact_sha256s: tuple[str, ...] = ()
     #: Whether this run rendered any claim at all. A run that rendered
     #: none did not replace the standing delivery -- which is exactly how
     #: a recovery that fixed the structure and claimed nothing left the
@@ -3591,7 +3586,6 @@ def _analysis_delivery(
     goal_delivered_ids: Mapping[str, Mapping[str, Any]] | None = None,
     declared_observables: Sequence[Mapping[str, Any]] = (),
     uncharacterised_artifact_sha256s: tuple[str, ...] = (),
-    inherited_rejected_artifacts: Sequence[str] = (),
     flagged_artifact_sha256s: Sequence[str] = (),
     failed_artifact_sha256s: Sequence[str] = (),
     inherited_unreachable: Mapping[str, str] = {},
@@ -4131,14 +4125,13 @@ def _analysis_delivery(
             sorted(uncharacterised_artifacts - characterised)
         ),
     )
-    stale, rejected_artifacts = _stale_quantity_ids(
+    stale, _rejected_artifacts = _stale_quantity_ids(
         claim_pairs=claim_pairs,
         rejected_bindings=rejected_bindings,
         expression_outputs=expression_outputs,
         # The verdict join reads every receipt that read a result,
         # thermochemistry derivations included.
         artifact_by_receipt=here.result_artifacts,
-        inherited_rejected_artifacts=inherited_rejected_artifacts,
     )
     # The same walk, seeded with the artifacts of every node an anomaly
     # flagged: which delivered numbers stand on a flagged result. Not a
@@ -4321,7 +4314,6 @@ def _analysis_delivery(
         ),
         stale_quantity_ids=stale,
         flagged_quantity_ids=flagged,
-        rejected_artifact_sha256s=rejected_artifacts,
         claims_rendered=bool(claims),
         failed_source_quantity_ids=failed_quantities,
         characterised_source_quantity_ids=characterised_quantities,
