@@ -10,6 +10,13 @@ under `chemsmart/` imports it.
 | `loop/graph.py` | the graph, derived on every call from the live registries (rules, gates, policies, guides, tests, charter sections and topics, and the capability registry's concepts) and joined to `graph.yaml`; nothing is stored, so it cannot go stale |
 | `loop/census.py` | what each instruction surface costs, measured from the live tree |
 | `loop/replay.py` | what archived Agent runs did, recomputed from their hash-chained event streams; `--transcripts ROOT` prints their public transcripts as readable turns |
+| `loop/signed_words.py` | the classes of word the host signs, each with its one signer, the record it lands in, and how a census checks it |
+| `loop/resign.py` | archived goals' settlement words re-signed on the imported tree |
+| `loop/resign_producing.py` | each archived goal re-signed on the code that produced it, where that code still hashes to the digest its job printed |
+| `loop/resign_stationarity.py` | archived stationarity words (a stationary-point order, a free energy) re-signed on the imported tree |
+| `loop/word_reader.py` | an independent reader, importing nothing from `chemsmart`: is each signed word true of the records it cites? |
+| `loop/refusal_census.py` | every refusal the Agent met, grouped by what refused it and how the goal ended |
+| `loop/receipt_refusals.py` | whether a receipt the decision gate refused as "not one it minted" was in fact minted by the host |
 
 ```bash
 PY=/opt/anaconda3/bin/python          # never pip install
