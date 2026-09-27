@@ -618,6 +618,21 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   04c2e5aa holds Repair A. `date`: Mon Sep 28 04:01:09 KST 2026. This
   worktree starts at the integration head 79e5639a (verified with
   `git rev-parse HEAD`).
+- truth-2 hand-back, 2026-09-28 05:31 KST: Phase II items 1-5 closed or
+  reported (sections above). Merged r11-integration 9c042877 into this
+  branch (b5dd25a3, clean). Gates on a pristine `git archive` export of
+  b5dd25a3 (PYTHONPATH = the export, HOME fenced): tests/agent 3351
+  passed, 20 skipped, 2 xfailed, exit 0 (3344 at the base + 5 witness
+  cases here + the merged Evidence test file); full suite 23 failed,
+  4904 passed, 25 skipped, 3 xfailed, the failing set identical to
+  `~/.chemsmart-r11-run/baseline/suite.set`; ruff, black --check and
+  isort --check clean on the eight files this session touched
+  (driver.py, tool_runtime.py, the two witnesses, resign.py,
+  receipt_refusals.py, receipt_gate_replay.py, literal_claims.py).
+  Ready to merge: 10f09617, c7102cc2, 104632c3 (item 1) and 945186b0
+  (Repair B). Held for the master: the certificate organ, the coverage
+  cell, the reader's final-Ms check, the typed site-flip form, report
+  rows naming their model-authored constants, and class (d).
 
 ## The master's adjudication of Repair A (copied from the succession brief)
 
