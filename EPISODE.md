@@ -615,10 +615,23 @@ Answer to the master's question:
   g3 did not have. An axis on `sum/mean/max/min` alone does not do it: it
   also needs vector-matrix broadcasting and a literal atom mask
   (model-authored) -- two changes and weaker provenance.
+- Size of the change, from the code read: `ref` indexes sequentially
+  (`selected = selected[index]` per index, quantity_expressions.py
+  ~1648), so a null cannot be a slice in that loop. The change touches
+  the evaluator (tuple indexing with a slice for null) and the tool
+  schema (`indices` items integer or null), not the schema alone. A null
+  index is preferred to an `axis` field because it generalises to any
+  axis, and to mixed selections, with no second parameter.
 - The margin (M3) is a separate, optional candidate: the host names the
   second extremum beside every `coordinate_at_maximum/minimum` receipt
   as an observation, the pattern it already uses for geometry over
-  non-bonded atoms. No new operation.
+  non-bonded atoms. No new operation. A second observation for
+  Exchange 1, not a proposal: every runner-up is a low-frequency group
+  motion (42-744 cm-1). A chemist would exclude those by a frequency
+  window, and today's vocabulary cannot express that either (no
+  elementwise comparison).
+- The archive was read, not written: no file in either g3 Hessian
+  directory is newer than the job's start.
 - Witness: `probe_mode_selection.py` step `candidate_plan`. It is red on
   9185770e (the schema refuses the null index; shown locally on the
   acetaldehyde fixture after 2157069, whose B3a is the one-column form of
