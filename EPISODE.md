@@ -711,6 +711,38 @@ elementwise comparison; counterpoise ghost atoms; receipt reuse across
 runs; typed forms for Hirshfeld, NoUseSym, `scf=verytight` or named-site
 flips; anything else in the memo.
 
+## E1 -- ORACLE (fixed before any code change; never tuned after a result)
+
+Probe M's `target` step, computed outside the vocabulary (numpy over the
+extraction receipt's own values: summed participation over the atom set,
+its argmax row, and the second-ranked row of the same vector). Copied
+verbatim from the recorded rows:
+- local fixture `tests/data/XTBTests/outputs/acetaldehyde_hess`
+  (artifact 0dd845b1..., 15 modes x 7 atoms), C=O {2, 0}: selected
+  1798.58 cm-1 at share 0.9803607214428858; runner-up 501.81 cm-1 at
+  share 0.556488702259548 (scratch `probe-acetaldehyde.jsonl`, run on
+  23c08541's tree).
+- R9 xtb g3, from `/project/xlzhang/jiseung/r11/evid/probe-m/probe.jsonl`
+  (sha256 c309f80c..., CUHK Slurm 2157069):
+  - route 2 (artifact 6c78dc46..., 117 x 41): lactam {10, 1} 1866.33 /
+    0.9690504807692308, runner-up 582.62 / 0.3579276282632799; amide
+    {14, 2} 1752.42 / 0.9799682665608885, runner-up 42.13 /
+    0.3579084443554042; carboxyl {16, 4} 1778.55 / 0.9624735196207002,
+    runner-up 712.91 / 0.49391581887093555.
+  - route 1 (artifact 3017d95a..., 117 x 41): lactam 1754.65 /
+    0.9813981398139814, runner-up 136.58 / 0.3638905532254843; amide
+    1714.42 / 0.971859296482412, runner-up 71.34 / 0.6331136409027361;
+    carboxyl 1699.03 / 0.9640676608948053, runner-up 743.52 /
+    0.5159955595922899.
+
+E1 is green when, through `CommandCompiledToolHostV1.dispatch` and with
+no index that names a mode, the five-node plan (`ref(part, [null, a])`
+per atom, `add`, `coordinate_at_maximum(share, freq)`, `max(share)`)
+returns each selected frequency exactly and each selected share equal as
+a float, and the same reply lets its reader see each runner-up's
+frequency and share, equal to the values above. It is red on 9185770e
+(the schema refuses the null index).
+
 ## Status
 
 - 2026-09-28: base verified; governance, archives, Q28 records and the
