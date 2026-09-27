@@ -533,8 +533,10 @@ was refused by the permission classifier ("Modify Shared Resources"); I
 did not work around it. The merge is conflict-free by construction: the
 integration branch changes none of my five files (merge base 9185770e).
 Its content (integration tree plus my five files) passes tests/agent,
-3352 passed, exit 0; the full suite was still running at hand-back
-(`behav/gate-merged-full.log`). Lint: ruff, black, isort clean on the four
+3352 passed, exit 0; full suite (finished after hand-back): 23 failed,
+4905 passed, and the failing set equals the round baseline
+(`~/.chemsmart-r11-run/baseline/suite.set`, diff empty;
+`behav/gate-merged-full.log`). Lint: ruff, black, isort clean on the four
 code files I touched.
 
 ## Status
