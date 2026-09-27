@@ -1329,6 +1329,49 @@ word); any replayed word that moves (collateral change in the repair);
 host-grain recomputation that does not reproduce the archived ids for
 more than 10 % of the partial completions (instrument not faithful).
 
+### Item 1 -- the repair and the local half of census 8 (read)
+
+- 0e105c18: `_failed_criteria` joins the goal's other ledger-named
+  streams (`driver.goal_verdict_records`, the settlement's own readers)
+  when the host holds a failed verdict; own receipts first; only verdicts
+  carrying own receipts are returned. Which goal: `live_session` passes
+  `goal_directory` for a woken session; a run host finds its goal beside
+  its own stream. Witness `tests/agent/test_a_certificate_reads_the_
+  decisions_of_the_whole_goal.py` (run arm; live-session arm cited and
+  control). On a pristine export of 376c6c43 with the witness from HEAD
+  (`truth/t3/red_green.sh`): 2 red (certificate partial) + control green;
+  on the worktree at 0e105c18: 3 green; tests/agent 3354 passed.
+- Census 8 positive control (the red goals kept from that run,
+  `truth/t3/census8-positive`): 1 flip in a run stream (cycle-2's
+  858ea179) and 2 in the woken session's stream (83d27a5a, d74933dc), all
+  faithful and read by `goal_settled`; the control's certificate and every
+  cycle-1 certificate are not flips. The instrument finds the class.
+- Census 8, local population (190 goals, `truth/t3/census8-local`): 0
+  partial certificates on a criterion in any ledger-named stream. The
+  ax41 archive (to 2026-09-14) predates the finding except one stream:
+  ino3-r11's session (`live-20260909T070333864250Z-...`), named by no
+  ledger (goal-ino3-r11's ledger is one `goal_settled` row), so outside
+  the population; read anyway at workspace grain it is record
+  insufficient (certificate 2d33c525 carries no failed_criterion ids) and
+  the pin reads its one verdict as answered in the same session -- the
+  older class R10 Q16/Q19 repaired, not this one.
+- No-change control, local: `resign.py` on 0e105c18 over the same 190
+  specs: 175 of 175 replayed words byte-identical to census 5's
+  (`truth/t3/resign-item1-local`); the same 15 unreplayed on both.
+
+### Census 8 on CUHK -- what it runs (written before submission)
+
+Job `/project/xlzhang/jiseung/r11/truth/census8/job.sh`, one node, 4
+cores, 16 GB, 1.5 h, provider-free. Code: 0e105c18 packed as `code-cert`
+(426 files, tree digest dae2a768a0aa82c2). Tools `tools8/` =
+`certificate_census.py` and `resign.py` at 0e105c18, truth-2's
+`compare_trees.py`. Steps: census 8 over census 1's 89 CUHK specs; the
+no-change control (re-sign over the same specs, compared with census 5's
+`item1-results.jsonl`). Expected exactly as pre-registered above: flips
+1-3, at least one in a session stream (r10/q22 G-h2 cycle 2), 0 in run
+streams, 0 final words that read a flip; the re-signed words
+byte-identical to census 5's for all 79 replayed CUHK goals.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
