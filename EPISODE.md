@@ -428,6 +428,113 @@ to the other locant's IUPAC name ("your file ...c5, i.e. the standard
   R10 trees resolve the fenced configuration directory with the real
   HOME.
 
+## Position memo -- end of Phase I (2026-09-28 ~06:05 KST; arm M running)
+
+**The question as I now understand it.** C4 bundles three loci --
+model, message, act/moment -- and R10 could not separate them: one
+model, and message levers tested only where that model already did the
+right thing. Phase I holds the host and the context fixed at two archived
+decision points and changes only the model, then (arm M) only a
+message's placement. The question becomes: at a matched decision point,
+how much of what the Agent notices, hypothesises and does next is fixed
+by the model (weights plus the serving configuration its archive ran
+with), and how much moves with what the host shows or offers?
+
+**Evidence, with denominators and pointers.**
+- Baseline (9f6a5023; rows in the scratchpad `behav/baseline/`,
+  instrument 5e7212fb + 2e5c9334, classifier 49eeaf8d, analysis
+  `.agents/research/loop/r11_behav/analyse_baseline.py`): 72 samples,
+  0 INFRA, requested = observed model on every real turn. D1 (R10 Q26's
+  refused triplet compile): ROUTE-first deepseek 12/12 and 11/12, qwen
+  5/12 and 10/12 (control, repaired). D2 (po3-r19's first moment, goal
+  cycle 1): LOOK 12/12 vs 5/12, HYP 0/12 vs 11/12, DECLARE 11/12 vs 12/12,
+  NOTICE hand-read 0/12 vs 0/12 (blind codes).
+- Visibility (497db173): the diagnostic sentence and the role field were
+  in view when every baseline declaration was composed (11/11, 12/12).
+- Exploratory lead (1719d626, post hoc, unblinded): declared
+  expectations oppose the chemist's stated prior in qwen 6/12, deepseek
+  0/12; deepseek cites the requester's prior as its basis.
+- Archive, observational (not matched): on the identical po3 task both
+  models stated the mislabelled files in cycle 1 on the 2026-09 trees
+  (deepseek 2/3, qwen 4/4); diagnostics after the role existed: qwen 32/36
+  declaring sessions, deepseek 7/21 (ax41 campaign). R10 Q6: 0/8 reading
+  turns acted on the contradictory authority sentence.
+- Host facts: notices now record the calls in view (d4e63923); 12 of 16
+  always-rendered rules that name acts name at least one deferred act
+  (reachable by exact name); D2 sessions spent about 10
+  search_capabilities calls in four turns.
+
+**What this says about C4 -- transition: NARROWED, with a replacement
+proposed.**
+- "Beyond one model" does not hold as stated: at both points, with host
+  and context identical, the model is a first-order locus -- D1 control
+  12/12 vs 5/12 (p 0.0046), D2 LOOK 12/12 vs 5/12 (p 0.0046), D2 HYP
+  0/12 vs 11/12 (p 9.6e-6).
+- "Not the messages": for deepseek the R10 null replicates at D1, at
+  ceiling. For qwen the program's sentence moved the first move +5 (p
+  0.089, directional by the registered rule); post hoc, the eventual route
+  within three turns was 10/12 vs 11/12 -- the sentence mostly saved a
+  round trip. The message null is deepseek's at its ceilings; for qwen it
+  is open at this power.
+- Noticing a false premise at a goal's first moment is at the floor for
+  both models on the R11 tree within four turns, although both noticed on
+  older trees. I checked and falsified my own explanation (the context
+  lost the file names: it did not). The difference is not yet attributed.
+- Proposed replacement C4': "At matched decision points, what the Agent
+  reads, hypothesises and first does after a refusal depends first on the
+  model; a host sentence did not change where either model ended up,
+  and moved at most qwen's first move." Arm M decides whether a message
+  shown first moves deepseek's hypothesis declaration off its floor.
+- Caveat stated with every number: "model" here is weights plus the
+  archived serving configuration (deepseek xhigh; qwen max, thinking on,
+  output cap 65,536).
+
+**Arm M (pre-registered 0daf40f4; issued ef730721).** The sentence
+`declare.diagnostic_has_standing` placed at `stem` instead of the deferred
+tool's description; D2; N 12 per model; primary HYP. Rule: deepseek arm
+minus control (0/12) >= 5 with Fisher p <= 0.05 -> a message moves
+deepseek off its floor and C4's "not the messages" is contradicted for
+this model; <= 2 -> the message null holds off-ceiling; between ->
+directional. qwen's control (11/12) is a registered ceiling. Because the
+sentence was already readable at composition, arm M tests the same
+sentence shown earlier and more prominently. Samples expected in: deepseek
+about 07:00 KST, qwen about 08:30 KST (runners under two leases since
+05:50; logs `behav/arm-m/runner-*.log`).
+
+**The program I propose next.**
+1. Read arm M by its rule; close C4's message clause for deepseek either
+   way.
+2. The dissent lead needs a registered test, not more reading: fresh
+   samples on D2 plus one held-out task whose requester states a prior --
+   that task should come from the independent task writer (fifth slot)
+   before anything it tests changes.
+3. One serving-configuration control before the model-locus claim is
+   published: qwen at deepseek's settings (reasoning effort xhigh, thinking
+   unset) on D2, N 12 -- if its HYP falls to deepseek's, the locus is the
+   configuration, not the weights.
+4. No implementation is warranted for the reading turn's contradiction
+   (0/8 acted on it; a text fix is hygiene, best after Q29), nor for the
+   deferred acts named by rules (every sample reached them). The notice
+   record (d4e63923) is ready to merge.
+5. D3 (Q32's scan route on CUHK) is not needed for C4 now.
+
+**What would change my mind.** Arm M moving deepseek (then messages
+matter off-ceiling for it); a second window of the same cells reversing
+a model difference (serving drift, not a disposition); qwen at deepseek's
+settings losing its hypothesis rate (configuration, not model); a
+registered dissent test showing deepseek opposing a requester's prior as
+often as qwen.
+
+**Gates and blockers.** tests/agent on a pristine export of 0daf40f4:
+3341 passed, exit 0. Merging r11-integration (376c6c43) into this branch
+was refused by the permission classifier ("Modify Shared Resources"); I
+did not work around it. The merge is conflict-free by construction: the
+integration branch changes none of my five files (merge base 9185770e).
+Its content (integration tree plus my five files) passes tests/agent,
+3352 passed, exit 0; the full suite was still running at hand-back
+(`behav/gate-merged-full.log`). Lint: ruff, black, isort clean on the four
+code files I touched.
+
 ## Status
 
 - 2026-09-28: kernel, CONDUCT, RSL and lessons, charter topics
