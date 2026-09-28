@@ -1860,13 +1860,27 @@ instruments, are independent of it.
 - Report rows (DP6): as census 7 counted, 1,394 rows (host 1,276 =
   91.5 %, physical 76, count 26, condition 8, unread 8; pure 12 = 0.9 %;
   physical literals 113 foreign, 4 carried). Once per distinct report:
-  953 rows in 219 distinct reports (host 853 = 89.5 %, physical 71 =
-  7.5 %, count 13, condition 8, unread 8; pure 12 = 1.3 %; physical
-  literals 102 foreign, 28 of them exact 2x or 3x multiples of a host
-  number, and 2 carried).
+  953 rows (host 853 = 89.5 %, physical 71 = 7.5 %, count 13, condition
+  8, unread 8; pure 12 = 1.3 %; physical literals 102 foreign, 28 of them
+  exact 2x or 3x multiples of a host number, and 2 carried). Report
+  counts: 248 report files carry rows (187 local, 61 CUHK), 219 of them
+  distinct -- 29 copies, all local, holding 441 rows (host 423, count 13,
+  physical 5; physical literals 11 foreign, 2 carried). Census 7's "430
+  reports" (296 + 134) counts every report file found, including 182 with
+  no claims row (296 - 187, 134 - 61); 430 -> 219 is not 211 copies.
 - Dissent markers (C3, from the reader's goals): identical to the pin's
-  except q7's two falsified expectations, now named by the word (Phase
-  I's tally, 14 of 39 falsified expectations named, reads 16 of 39).
+  except q7's two falsified expectations, now named by the word. Phase
+  I's tally (14 of 39 falsified expectations named) plus that difference
+  gives 16 of 39 -- arithmetic on the earlier count and the q7 diff, not
+  a re-run of the dissent tally.
+- For the master, not measured here: the copied directories carry run
+  streams too. The ax41 mirror holds each of the original goal's two run
+  streams (`goals/*/runs/cycle-{1,2}/events.jsonl` of novel3-goal-ino3
+  and its renamings) 22 times, byte for byte -- 1 copy beside a goal
+  ledger, 21 without one (checked per copy). A census that walks run streams in the mirror
+  without deduplicating by content (or by goal digest where a goal
+  record exists) counts them up to 22 times; the Evidence lens's
+  `evidence_census.py` walks streams and is the one to check.
 
 ## Jobs issued
 
