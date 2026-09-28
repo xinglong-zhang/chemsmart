@@ -643,6 +643,49 @@ task writer.
   decides only when the words state none; words that contradict each
   other = NONE. The literal arithmetic reading is reported beside it.
 
+## Arm M -- READ (key opened after b0ae4c6b; realised N: deepseek 12, qwen 11)
+
+Analysis `read_arm.py` over matched_outcomes 49eeaf8d; the verdicts as
+committed by digest.
+
+| outcome | deepseek control | deepseek arm M | qwen control | qwen arm M |
+|---|---|---|---|---|
+| HYP (primary) | 0/12 | 3/12 (p 0.22) | 11/12 | 7/11 (p 0.16) |
+| LOOK | 12/12 | 10/12 (p 0.48) | 5/12 | 5/11 |
+| DECLARE | 11/12 | 11/12 | 12/12 | 11/11 |
+| NOTICE (mechanical) | 1/12 | 1/12 | 0/12 | 1/11 |
+
+- **Registered rule for arm M.** deepseek HYP arm minus control = +3,
+  Fisher p 0.22. The rule's middle band (above 2, below 5) is
+  DIRECTIONAL: the message moved deepseek's falsifiable-diagnostic rate
+  off its floor in 3 of 12, which is not significant at N 12. Neither
+  "moves deepseek" nor the null is earned. qwen's control (11/12) was a
+  registered ceiling and says nothing. Descriptively, qwen fell to 7/11:
+  the stem sentence did not raise it. No displacement of LOOK or DECLARE
+  beyond sampling (LOOK deepseek 10/12, p 0.48).
+- **R-DISSENT (registered replication).** Primary (D-A1, words-first):
+  qwen OPPOSE 5/11, deepseek 1/12, Fisher p 0.069. That meets both count
+  bounds but not p <= 0.05, so the result is DIRECTIONAL -- not
+  replicated at the registered level. Secondary (literal arithmetic):
+  qwen 6/11, deepseek 2/12, p 0.089, also DIRECTIONAL. The rule's check
+  on the baseline: primary qwen 5/12 and deepseek 0/12, against my
+  exploratory tally of 6/12 and 0/12 (one qwen sample is internally
+  inconsistent, so NONE). deepseek's declarations cite the requester's
+  prior as their basis in both conditions; under arm M it agrees in
+  10/12.
+- **Unregistered noticing observation.** One arm M qwen sample (D14 ->
+  qwen 4) wrote into a typed declaration that the workspace file
+  "triazole-ester-at-c4.xyz" is IUPAC methyl
+  1-benzyl-4-(trifluoromethyl)-...-5-carboxylate, i.e. it mapped the
+  mislabel correctly, with no comment. This is observed, not graded as
+  NOTICE.
+- **What this does to C4.** The message clause for deepseek stays open:
+  directional +3/12 at p 0.22. At N 12 the lead's direction for dissent
+  holds twice (baseline 5/12 vs 0/12, arm M 5/11 vs 1/12). The registered
+  test fell short at p 0.069, so model-dependent dissent remains a
+  directional lead, not a result. For a successor: the pooled 10/23 vs
+  1/24 is descriptive only; a held-out task is the test.
+
 ## Status
 
 - 2026-09-28: kernel, CONDUCT, RSL and lessons, charter topics
