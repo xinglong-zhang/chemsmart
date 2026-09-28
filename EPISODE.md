@@ -697,6 +697,16 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   reports (1,394 rows, 953 in distinct reports). Merged r11-integration
   629b5113 (ce663519, clean; no product byte). Items 1 and 2 wait for the
   master.
+- truth-4 hand-back after item 0, 2026-09-28 about 11:05 KST. Gates on a
+  pristine `git archive` export of ce663519 (PYTHONPATH = the export,
+  HOME fenced; `truth/t4/gates.sh`): tests/agent 3381 passed, 20 skipped,
+  2 xfailed, exit 0; full suite 23 failed, 4934 passed, 25 skipped, 3
+  xfailed, the failing set identical to `~/.chemsmart-r11-run/baseline/
+  suite.set`; ruff, black --check and isort --check clean on
+  `compare_words.py` and `literal_unique.py`; `graph.py check` 579 nodes,
+  572 edges; `rsl.py check` 0 failures (the kernel-budget prompt predates
+  this session). Commits after ce663519 change EPISODE.md only, so the
+  gated export stands for HEAD. Not started: items 1 and 2.
 
 ## The master's adjudication of Repair A (copied from the succession brief)
 
