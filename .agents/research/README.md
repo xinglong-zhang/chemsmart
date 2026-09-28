@@ -25,6 +25,7 @@ under `chemsmart/` imports it.
 | `loop/replay_composition.py` | whether an archived cycle's plan, producer rules and operations re-admit at a given tree |
 | `loop/compare_words.py` | two re-signings of one population compared goal by goal: the word, the qualified rows it wrote, the executor's analysis word |
 | `loop/literal_unique.py` | the literal census counted once per distinct report, since archived workspace copies carry the same rendered report more than once |
+| `loop/evidence_names.sh` | per goal ledger, each session stream named only as analysis evidence and whether a session row names it too (no python; runs where python may not) |
 | `loop/matched_turns.py` | an archived goal prefix replayed through the tree `PYTHONPATH` names, then real provider turns, recording the model, the calls in view and the prefix's faithfulness |
 | `loop/matched_outcomes.py` | matched-turn outcomes classified from the host's own records by rules fixed before the first sample |
 | `loop/r11_behav/` | R11's two-model baseline and arm runners, analyses and blind classifiers, byte for byte as run |
