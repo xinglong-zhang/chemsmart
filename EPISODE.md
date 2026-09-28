@@ -1569,6 +1569,175 @@ Pristine red checks (`truth/t3/red_all.sh`, witnesses from HEAD, HOME
 fenced): on 376c6c43 and on 4486f247 alike, 8 red (item 1: 2, item 2: 2,
 item 4: 1, item 0: 3) and 5 controls green.
 
+## Item 0 (truth-4) -- the final-pin census, census 9: pre-registration (written before anything runs)
+
+Purpose (owner, 2026-09-28): the paper freezes on Story D at a pin whose
+product code is exactly `6fe89afd`'s; C1's and C2's rows (the paper's H4,
+A5, A1) are to be stated at that pin, not at each measurement's own tree.
+Nothing is repaired in this item.
+
+Tree. This worktree: `chemsmart/`, `pyproject.toml`, `tests/` and the
+committed instruments equal `6fe89afd`'s (`git diff 6fe89afd HEAD --
+chemsmart pyproject.toml .agents/research tests` was empty before the two
+instruments below were added; they add files and change none). Packed for
+CUHK from 9d724bd1 as `code-freeze`: 426 files, tree digest
+1274cbf687173b87 (the job re-computes it with `verify_code.py` and prints
+the `chemsmart` it imported). Locally: PYTHONPATH = this worktree, HOME =
+`truth/t4/home`.
+
+Instruments, committed (sha256 prefix, last commit): `resign.py` e2fa9fab
+(104632c3), `word_reader.py` dda08677 (ea728d6c), `certificate_census.py`
+73ed9a29 (81cb7730), `receipt_gate_replay.py` 550e1975 with
+`receipt_refusals.py` a4875465 (f9161c63), `resign_stationarity.py`
+f2540631 (ea728d6c), `literal_claims.py` 1f3709f8 (9dc94695). New here:
+`compare_words.py` (truth-2's `compare_trees.py` word buckets, unchanged,
+plus the W3 qualified rows and the W4 executor word, worktree prefixes
+normalised; checked on recorded outputs: census 5 against census 8's local
+words and the pin's against census 8's give 175 identical, 15 unreplayed,
+as recorded) and `literal_unique.py` (item 6 below).
+
+Population. Local: the lens's 190 specs (`truth/local-specs.txt`: ax41
+183, ax41r 4, public 3, the public lines re-pointed to this worktree's
+`experiments-public/`, which 6fe89afd did not change: `truth/t4/
+local-specs-t4.txt`); the root-discovering instruments get `public=<this
+worktree>/experiments-public ax41=<mirror>/2026-09-14/campaign
+ax41r=<mirror>/2026-09-14/research` in that order (the order earlier local
+runs used, so the two public cases are read from the repository's copies).
+CUHK: census 1's 89 specs and the 37 roots of censuses 2-8 (r8 x4, r9 x5,
+r10 x28), read in place in one slot job (`census9/job.sh`).
+
+What runs, each with its no-change control (its last measurement), and
+what is expected -- taken from censuses 5-8:
+
+1. `resign.py` (W1 settlement and W2 held words, W3 qualified rows, W4
+   executor word), read by `compare_words.py`.
+   - Against census 8's control words (0e105c18: local `t3/resign-item1-
+     local`, CUHK `census8/cert-results.jsonl`): 175 of 175 local and 79 of
+     79 CUHK identical in word, qualified rows and executor word; the same
+     15 and 10 goals unreplayed. Grounds: after 0e105c18 no commit touches
+     `driver.py`, `goal.py`, `analysis_completion.py`, `analysis_claims.py`
+     or `terminal_states.py`; the product changes since (E2's site flip and
+     Ms-aware spin reading, the spin-square target, the coverage cell, the
+     gate's route strings, behaviour's in-view records, docstrings) act on
+     ORCA outputs that print a FlipSpin/BrokenSym Ms (none in the archive:
+     ino2's `FlipSpin 1,2` never ran, c4581164), on capability receipts, on
+     refusal routes or on session notices -- nothing a settle replay
+     re-derives.
+   - Against the pin's words (census 1: local `replays/local-pin`, CUHK
+     `census1/pin-results.jsonl`): exactly one word moves -- CUHK r10/q7
+     g2-scan-modred, `achieved` -> `achieved_with_observations` (bucket a),
+     its first reason gaining "; criteria and predictions the session
+     itself stated that did not hold: falsified_expectation:cis-barrier,
+     falsified_expectation:oo160-torsion", its other reasons unchanged
+     (planning path: no qualified row or executor word on either side).
+     Local: 0 of 175 move. No other word, qualified row or executor word
+     moves.
+2. `word_reader.py` over (a) the freeze's words, (b) the pin's words
+   (CUHK only), (c) the archived words.
+   - (a) CUHK: summary, flags and goals byte-identical to census 5's
+     `reader-item1`: 18 flags -- W1 achieved_over_undelivered 1 (r10/q1
+     gdev1, the archival category certificate), W8 standing_is_its_
+     declarations 6 (g2 x4, pair1-a, g2-scan-modred: in-session standing
+     over an undeclared operand, archival), W11 free_energy_on_a_passing_
+     result 11 (g1 x10, g1-hooh: archival); 0 achieved words hiding what
+     the run found, 0 unnamed falsified expectations, 0 qualified rows under
+     a false word; words achieved 24, achieved_with_observations 22,
+     exhausted 3, reading_opened 2, recovery_opened 7, returned_to_human
+     10, unreachable_from_evidence 11. Local: summary byte-identical to
+     `reader/local-pin3` (the pin's words through this reader lineage; no
+     local word moves), flags and goals identical after normalising the
+     worktree prefix: 14 flags -- goal-h4 x2 (W1; a sign declared on a
+     zero, defensible, F3 of Phase I), goal-ino3-r17 x1 (W1: three
+     falsified expectations its `unreachable_from_evidence` does not name,
+     class A's second instance, outside the settlement's streams since the
+     completion is in an analysis-evidence session), po3-triazole-regio x3
+     and po3-r19 x8 (W11, archival).
+   - (b) CUHK: byte-identical to census 3's `reader-pin` (the reader
+     changed after census 3 by lint only, ea728d6c). (b) against (a): the
+     only difference is q7 -- W1 achieved_hides_what_the_run_found flag
+     1 -> 0 and reasons_name_each_falsified_expectation flag 1 -> ok, words
+     achieved 25 -> 24 and achieved_with_observations 21 -> 22, q7's two
+     falsified-expectation markers unnamed -> named.
+   - (c) CUHK: byte-identical to census 3's `reader-archived`. Local: no
+     reference at this reader version; reported as read.
+3. `certificate_census.py` (W5 at goal grain). CUHK `certificates.jsonl`
+   and `summary.json` byte-identical to census 8's: 7 partial certificates
+   on a criterion, 6 faithful, 1 record insufficient (r10/q16 l1-o2r); run
+   streams 2 faithful, 0 flips; session streams 4 faithful, 2 flips, both
+   r10/q22 gh2 (2f191295, a57fabdc); 0 final words standing on a flip.
+   Local `summary.json` byte-identical to census 8's (190 goals, 0 partial
+   certificates on a criterion). Grounds: `goal.failed_criteria` and the
+   driver's `_goal_streams`, `_verdict_records`, `_merge_verdict_records`
+   are unchanged after 0e105c18.
+4. `receipt_gate_replay.py` (W17, the decision gate's diagnosis).
+   CUHK `gate_replay.json` byte-identical to census 6's: 47 re-read -- 1
+   accepted (gh2 6135c9ad), 2 minted by an earlier planning session and
+   refused, 9 run-stream verifications refused, 8 run-stream anomalies
+   refused naming `anomaly:<digest>`, 27 minted nowhere the goal recorded
+   ("no digest this host minted"). Local byte-identical to census 6's
+   (normalised): 24 -- 4 same-session (not re-read), 5 run-stream (all
+   refused; 4 anomaly diagnoses name the route), 15 minted nowhere.
+   Grounds: `_recorded_run_receipt`, the recorded-stream patterns and
+   `_digest_names` answer as at f9161c63; 8067763e made `_digest_names`
+   read the one receipt table, whose rendering ("an extraction,
+   thermochemistry, expression, validation or claim receipt") is
+   character-identical to the literal it replaced; the route strings it
+   rewrote are not what the replay records.
+5. `resign_stationarity.py` (W10, W11). CUHK `stationarity.json`
+   byte-identical to census 2's (the pin): 100 words -- 15
+   characterisations certified; 85 free energies, 83 on a stationary point
+   (3 delivered) and 2 on a held surface. Local byte-identical to
+   `stationarity/local` (the pin): 386 words -- characterisations 11
+   certified, 3 refused (po3-r19 ts-esterc4, po3-triazole-regio ts-c5b,
+   g5-phosphine's planar Hessian), 2 unread; free energies 195 on a
+   stationary point (43 delivered through a claim), 5 refused (po3-r19
+   ts-esterc4 x4, po3-triazole-regio ts-c4), 170 unread (103 digests name
+   no verified result, 67 files absent). Corrected premise, from that file
+   while pre-registering: Phase I's "195 re-read (190 still on a
+   stationary point ...)" is 200 re-read, 195 still on a stationary point.
+   Grounds: the characterisation, `structure_stationarity` and
+   `free_energy_surface` are unchanged in effect since the pin (4bcc2e3d
+   names the three held-coordinate selectors in one table).
+6. `literal_claims.py` (the report rows; imports nothing from
+   `chemsmart`). CUHK `literal_claims.json` byte-identical to census 7b's:
+   134 report files, 244 rows (host 217, physical 23, count 4; 0 pure).
+   Local byte-identical to census 7b's after normalising the worktree
+   prefix: 187 report files, 1,150 rows (host 1,059, physical 53, count 22,
+   condition 8, unread 8; pure 12).
+   Found while pre-registering, from census 7b's local file (read before
+   this census; LOUD): the literal census counts one rendered report more
+   than once. 29 of the 187 local report files are byte-identical copies of
+   another -- one novel-round-3 goal's two reports (their text names
+   novel-round-3's workspace and their completion receipts) copied into 12
+   later workspaces under three goal ids with no goal record beside them,
+   and the mirror's research copies of the two public cases -- 441 rows.
+   The other instruments deduplicate goals by `goal_sha256`; these copies
+   carry no goal record, so content is their only shared identity.
+   `literal_unique.py` counts once per distinct report file (sha256).
+   Local, per distinct report (computed while pre-registering, so a
+   statement of the reading, not a prediction): 158 reports, 709 rows --
+   host 636, physical 48, count 9, condition 8, unread 8; pure 12;
+   physical literals 59 foreign (1 a 2x multiple of a host number) and 2
+   carried. CUHK: not known before the job (r10/q32 holds ten replay copies
+   of one goal). Consequence for the rows census 7 reported (1,394 rows,
+   host 91.5 %, pure 12 = 0.9 %): they include copies; the per-distinct-
+   report figures are what a row should state. `literal_claims.py` is left
+   unchanged, so its byte identity stays the no-change control.
+
+Findings rule. Any word, qualified row, executor word, reader flag,
+certificate, gate diagnosis, stationarity word or report row that moves
+beyond the one expected (q7) is a finding: stated, read against its
+records, and not repaired in this item. A difference owed to the harness
+(a path, an order) is reported as the harness's, never counted as the
+host's.
+
+Falsifiers. F9a: any settlement word other than q7's moves against the
+pin, or any word moves against census 8's control. F9b: q7 does not move,
+or moves to anything but `achieved_with_observations` naming exactly the
+two expectations. F9c: a reader, certificate, gate or stationarity output
+differs from its reference beyond q7's expected reader difference. F9d:
+`literal_claims.py`'s output differs from census 7b's.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
