@@ -168,6 +168,16 @@ def _calc_closure(analysis: dict, calc_ids: set[str]) -> dict[str, set[str]]:
             return set()
         node = by_id[node_id]
         found: set[str] = set()
+        if node.get("artifact_id"):
+            # A root that reads a host-registered result of an earlier
+            # workflow, not a calculation of this plan: a leaf of its own.
+            found.add("reg:" + str(node["artifact_id"]))
+        for item in node.get("inputs") or []:
+            if (
+                isinstance(item, dict)
+                and item.get("source_kind") == "registered_result"
+            ):
+                found.add("reg:" + str(item.get("artifact_id", "")))
         refs = list(node.get("dependencies") or [])
         refs += [
             item.get("producer_node_id", "")
@@ -190,6 +200,7 @@ def _stream_index(agent_dir: Path) -> dict:
     workflow_state: dict[str, str] = {}
     handoffs: dict[str, list] = defaultdict(list)
     settled: dict[str, Counter] = defaultdict(Counter)
+    reached: dict[str, dict] = {}
     for folder, dirs, files in os.walk(agent_dir, followlinks=False):
         dirs[:] = [d for d in dirs if d not in {"scratch", "__pycache__"}]
         if "events.jsonl" not in files:
@@ -209,6 +220,7 @@ def _stream_index(agent_dir: Path) -> dict:
                     "workflow_node_state_changed" not in line
                     and "handed_off" not in line
                     and "workflow_analysis_node_settled" not in line
+                    and "reached_geometry_bound" not in line
                 ):
                     continue
                 try:
@@ -243,6 +255,19 @@ def _stream_index(agent_dir: Path) -> dict:
                     settled[payload.get("toolchain_plan_sha256", "")][
                         payload.get("state", "")
                     ] += 1
+                elif kind == "reached_geometry_bound":
+                    # bind_reached_geometry: a completed result's structure
+                    # lifted into a new geometry artifact a later workflow
+                    # starts from. The bundle's node review names only the
+                    # artifact digest; this record names where it came from.
+                    record = payload.get("record") or {}
+                    digest = record.get("reached_artifact_sha256", "")
+                    if digest:
+                        reached[digest] = {
+                            "program": record.get("program", ""),
+                            "node": record.get("recorded_node_id", ""),
+                            "state": record.get("recorded_terminal_state", ""),
+                        }
         for approval in stream_approvals:
             handoffs[approval].extend(pending_handoffs)
     return {
@@ -250,6 +275,7 @@ def _stream_index(agent_dir: Path) -> dict:
         "workflow_state": workflow_state,
         "handoffs": handoffs,
         "settled": settled,
+        "reached": reached,
     }
 
 
@@ -322,6 +348,19 @@ def census_row(
         job, task_words = _argv_job(
             review.get("real_execution_argv"), node.get("program", "")
         )
+        lineage = _lineage(identity)
+        lifted = index["reached"].get(
+            coordinate.get("geometry_artifact_sha256", "")
+        )
+        if lifted:
+            lineage.append(
+                {
+                    "kind": "reached_geometry",
+                    "operation": "",
+                    "program": lifted["program"],
+                    "names_result": True,
+                }
+            )
         nodes.append(
             {
                 "id": node_id,
@@ -338,7 +377,7 @@ def census_row(
                 "identity_status": identity.get(
                     "identity_evidence_status", ""
                 ),
-                "lineage": _lineage(identity),
+                "lineage": lineage,
                 "argv_job": job,
                 "argv_task_words": task_words,
             }
@@ -394,6 +433,20 @@ def census_row(
     predicates: Counter = Counter()
     kinds: Counter = Counter()
     expressions = []
+    registered_reads = sorted(
+        {
+            str(item["artifact_id"])
+            for item in analysis
+            if item.get("artifact_id")
+        }
+        | {
+            str(entry.get("artifact_id", ""))
+            for item in analysis
+            for entry in item.get("inputs") or []
+            if isinstance(entry, dict)
+            and entry.get("source_kind") == "registered_result"
+        }
+    )
     for item in analysis:
         kind = item.get("analysis_kind") or item.get("kind") or ""
         kinds[kind] += 1
@@ -409,7 +462,8 @@ def census_row(
             expressions.append(
                 {
                     "node": item.get("node_id", ""),
-                    "calc_nodes": reached,
+                    "calc_nodes": [n for n in reached if n in by_id],
+                    "registered": [n for n in reached if n.startswith("reg:")],
                     "programs": sorted(
                         {by_id[n]["program"] for n in reached if n in by_id}
                     ),
@@ -458,6 +512,10 @@ def census_row(
         classes.append("C")
     if any(len(e["calc_nodes"]) >= 2 for e in expressions):
         classes.append("A")
+    if any(e["registered"] for e in expressions):
+        # An expression over results of an earlier workflow: a cross-cycle
+        # analysis composition (analysis-only revisions, reused results).
+        classes.append("A-reg")
     shape_edges = sorted(
         {
             f"{e['src_program']}:{e['src_stage']}->{e['tgt_program']}:{e['tgt_stage']}[{e['rule'] or 'NO-RULE'}]"
@@ -500,6 +558,7 @@ def census_row(
         "edges": edges,
         "lifts": lifts,
         "analysis": {
+            "registered_reads": registered_reads,
             "kinds": dict(kinds),
             "ops": dict(ops),
             "constants": constants,
@@ -553,9 +612,13 @@ VALIDATED = {"validated"}
 
 
 def _executed(row: dict) -> bool:
+    """A calculation validated, or an analysis-only cycle's chain ran."""
+
     states = row["exec"]["node_states"]
-    return bool(states) and any(
-        state in VALIDATED for state in states.values()
+    if states and any(state in VALIDATED for state in states.values()):
+        return True
+    return not row["nodes"] and bool(
+        row["exec"]["analysis_settled"].get("executed")
     )
 
 
@@ -662,6 +725,22 @@ def report(paths: list[str]) -> None:
                     f"  {row['stratum']:10s} {'EXEC' if _executed(row) else 'plan'} "
                     f"{expression['task_ops']} n={len(expression['calc_nodes'])} {expression['programs']} {row['bundle']}"
                 )
+    print(
+        "\nregistered-result reads (an earlier workflow's result read by "
+        "this cycle's analysis; by the result's program prefix):"
+    )
+    reads = Counter(
+        artifact.split("-result-")[0] if "-result-" in artifact else "?"
+        for row in rows
+        for artifact in row["analysis"].get("registered_reads", [])
+    )
+    print(
+        "  ",
+        dict(reads) or "none",
+        "in",
+        sum(1 for row in rows if row["analysis"].get("registered_reads")),
+        "cycles",
+    )
     print(
         "\nconstants selected:",
         dict(Counter(c for row in rows for c in row["analysis"]["constants"])),
