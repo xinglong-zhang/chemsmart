@@ -718,6 +718,25 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   scheduler-dispatched runs), item 3 (the ino3-r17 class-A residual:
   live or archival only?). Witness first, each pre-registered; post-freeze
   work -- an archived word that moves is LOUD (a re-freeze question).
+- truth-4, 2026-09-28 about 11:20 KST: the master reordered by the
+  owner's ruling -- item 3 first and alone, repaired and re-frozen even if
+  archival; items 1 and 2 after the new pin.
+- truth-4 hand-back after item 3, 2026-09-28 about 12:05 KST. Repair
+  5a5a80b0 (`_goal_streams` reads analysis-evidence rows) with its witness;
+  census 10 read on both halves, exactly as pre-registered (one archived
+  word moves: ax41 goal-ino3-r17, first word unchanged). Merged
+  r11-integration 0d825133 (8aa5539d, clean; no chemsmart/ or tests/ byte
+  since e6768407; README index lines kept from both sides). Gates on a
+  pristine `git archive` export of 8aa5539d (PYTHONPATH = the export, HOME
+  fenced): tests/agent 3383 passed, 20 skipped, 2 xfailed, exit 0 (3381 +
+  the 2 witness cases); full suite 23 failed, 4936 passed, 25 skipped, 3
+  xfailed, the failing set identical to `~/.chemsmart-r11-run/baseline/
+  suite.set`; ruff, black --check and isort --check clean on driver.py and
+  the witness (`bash -n` on evidence_names.sh); `graph.py check` 579 nodes,
+  572 edges; `rsl.py check` 0 failures (the kernel-budget prompt predates
+  this session). A first gate run on 03ac6343 was stopped when integration
+  moved. Commits after 8aa5539d change EPISODE.md only. Not started:
+  items 1 and 2.
 
 ## The master's adjudication of Repair A (copied from the succession brief)
 
