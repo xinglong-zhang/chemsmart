@@ -2076,6 +2076,28 @@ half: `census10r/job.sh` (census10/ holds the records check), code
 the census-9 tools unchanged (`tools9/`); local half:
 `truth/t4/local_census10.sh`, against `truth/t4/local9/`.
 
+### Census 10, local half -- read (2026-09-28 11:39 KST; `truth/t4/local10`)
+
+`chemsmart` from this worktree at 5a5a80b0's product code; every step
+exited 0.
+- Words: 174 of 175 identical to census 9's; one b_content, ax41
+  goal-ino3-r17, `unreachable_from_evidence` -> `unreachable_from_
+  evidence`, 7 reasons -> 7: reason 2 (index 1) is the old text followed
+  by exactly "; criteria and predictions the session itself stated that
+  did not hold: falsified_expectation:e-plus-zero-potential-vs-fc-mecn,
+  falsified_expectation:quartet-minus-doublet-cation-gap, falsified_
+  expectation:spin-population-s2-cation"; the other six identical.
+  Qualified rows and executor words 175 of 175 identical; the same 15
+  unreplayed. The other 17 at-risk goals did not move.
+- Reader: the only differences from census 9's are ino3-r17's -- W1
+  reasons_name_each_falsified_expectation ok 75 / flag 2 -> ok 76 / flag
+  1 (goal-h4's sign on a zero remains), its flag gone, its three
+  falsified-expectation markers named.
+- Certificates, gate replay, stationarity, report rows: byte-identical to
+  census 9's.
+Against the falsifiers: F10a, F10b, F10c not met locally. Its first word
+does not change.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
