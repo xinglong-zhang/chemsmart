@@ -170,6 +170,40 @@ artifact the level needs).
   geometry-origin operations (derive / compose / append) plus general
   analysis.
 
+## Replay sample, fixed before any replay ran
+
+Computed by `composition_census.py --sample` over the de-duplicated census
+(local pass + CUHK Slurm 2157197): 90 distinct keys among 316 executed
+distinct cycles, 13 named-route cycles, cap 40 (named first, then
+cross-program keys, then by cycle count). R4 (compile+preview through the
+live CLI) is run only if budget remains after R1-R3 on all 40; if it is
+not run, the replay verdict is stated for R1-R3 only.
+
+```
+ax41:qualification/interop-fukui-path/workspace2  replay-875de3e8de824e8b  named
+ax41:qualification/pka-agent-path/workspace  replay-40849b5c766d48a3  named
+ax41:qualification/pka-agent-path/workspace  replay-4af34edeb0d14510  named
+ax41:qualification/pka-agent-path/workspace  replay-af0b0423658c4978  named
+ax41:standing-round/workspaces/e6-pcet-1  goal-goal-e6-pcet-1-cycle-1  named
+cuhk:pyscf-irc-20260920/goals/g2-hono  cycle-1, cycle-2  named
+cuhk:r10/q11/goals/g1  cycle-1, cycle-2, cycle-3  named
+cuhk:r10/q11/goals/g2  cycle-1  named
+cuhk:xtb-ir-acetamide-pyscf-stability-r10  cycle-1, cycle-3  named
+ax41:general-round h1-a0-r1 c1 (analysis x28), c4-r3 c1 (shape x13), h2 c1 (analysis x4)
+cuhk:r10/q12 g2-nh3 c1 (analysis x2), r10/q15 g1 c2 (analysis x2)
+ax41:pyscf-round-2 E4-formic-acid c1, pyscf-round g4-methanol c1, standing-round e6-pcet-2 c1 (shape x1)
+cuhk:r10/q2 g1-hono c2, r10/q3 g2 c3, r10/q4 g1 c1, r8/integration smoke c1 + c2 (shape x1)
+ax41:general-round c1-r1 c1 (analysis x122), pyscf-round-2 E2-acetone c1 (analysis x33)
+ax41:general-round c5-r1 c1 (shape x14), s6 c1 (shape x10), c7-r1 c1 (analysis x9)
+ax41:novel-round-3 po2-fluoro-sulfone-gauche c2 (shape x9); cuhk:r10/q28 g2 c2 (analysis x8)
+ax41:pyscf-round g1-methylamine c1 (shape x6); general-round s4 c1, w1 c1 (analysis x5)
+ax41:novel-round-3 ino2-dinickel-exchange c3 (shape x4); cuhk:r10/q28 g2 c1 (shape x4)
+ax41:general-round h1b c1 (shape x3); novel-round-7 ino3-r14b c1 (shape x3)
+```
+
 ## Status
 
 - Phase I, step 1 (pre-registration) committed before any census row.
+- Census run: local (ax41 + public) and CUHK (Slurm 2157183, 2157188,
+  2157197; read-only slot jobs). The master's duplicate warning is applied:
+  rows are counted once per bundle content and goals once per goal digest.

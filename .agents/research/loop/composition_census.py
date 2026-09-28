@@ -837,9 +837,104 @@ def report(paths: list[str]) -> None:
             )
 
 
+#: The routes c5's EPISODE.md names for the replay whatever the shape rule
+#: selects (matched against root + bundle path).
+NAMED_ROUTES = (
+    "pyscf-irc-20260920/goals/g2-hono",
+    "xtb-ir-acetamide-pyscf-stability-r10",
+    "r10/q11/goals/g1",
+    "r10/q11/goals/g2",
+    "standing-round/workspaces/e6-pcet-1/",
+    "qualification/interop-fukui-path/",
+    "qualification/pka-agent-path/",
+)
+SAMPLE_CAP = 40
+
+
+def sample(paths: list[str]) -> None:
+    """The pre-registered replay sample, one absolute bundle path per line.
+
+    Executed cycles only: the first (by sorted root + bundle path) of every
+    distinct route shape in M, X, L; the first of every distinct (program
+    set, task-named operation set) in C, A, A-reg; the named routes first;
+    above the cap, cross-program shapes before the rest, then by how many
+    cycles share the shape.
+    """
+
+    rows = []
+    for path in paths:
+        for line in Path(path).read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                rows.append(json.loads(line))
+    rows = _distinct([row for row in rows if "error" not in row])
+    executed = sorted(
+        (row for row in rows if _executed(row)),
+        key=lambda r: (r["root"], r["bundle"]),
+    )
+    representatives: dict[tuple, dict] = {}
+    counts: Counter = Counter()
+    for row in executed:
+        keys = []
+        if any(c in {"M", "X", "L-intra", "L-cross"} for c in row["classes"]):
+            keys.append(("shape", row["shape"]))
+        if any(c in {"C", "A", "A-reg"} for c in row["classes"]):
+            task_ops = tuple(
+                sorted(set(row["analysis"]["ops"]) & TASK_NAMED_OPERATIONS)
+            )
+            keys.append(("analysis", tuple(row["programs"]), task_ops))
+        for key in keys:
+            counts[key] += 1
+            representatives.setdefault(key, row)
+
+    def full(row: dict) -> str:
+        return str(Path(row["root"]) / row["bundle"])
+
+    named = [
+        row
+        for row in executed
+        if any(marker in full(row) for marker in NAMED_ROUTES)
+        and (
+            any(c != "S" and c != "P" for c in row["classes"])
+            or "qualification" in full(row)
+        )
+    ]
+
+    def crossing(key: tuple, row: dict) -> bool:
+        return (
+            "X" in row["classes"]
+            or "L-cross" in row["classes"]
+            or (key[0] == "analysis" and len(key[1]) >= 2)
+        )
+
+    ranked = sorted(
+        representatives.items(),
+        key=lambda kv: (not crossing(*kv), -counts[kv[0]], full(kv[1])),
+    )
+    chosen: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for row in named:
+        if full(row) not in seen and len(chosen) < SAMPLE_CAP:
+            seen.add(full(row))
+            chosen.append((full(row), "named"))
+    for key, row in ranked:
+        if full(row) not in seen and len(chosen) < SAMPLE_CAP:
+            seen.add(full(row))
+            chosen.append((full(row), f"{key[0]} x{counts[key]}"))
+    print(
+        f"# {len(representatives)} distinct keys among {len(executed)} "
+        f"executed distinct cycles; {len(named)} named-route cycles; "
+        f"cap {SAMPLE_CAP}"
+    )
+    for path, why in chosen:
+        print(f"{path}\t{why}")
+
+
 def main(argv: list[str]) -> int:
     if len(argv) >= 2 and argv[0] == "--report":
         report(argv[1:])
+        return 0
+    if len(argv) >= 2 and argv[0] == "--sample":
+        sample(argv[1:])
         return 0
     if len(argv) < 2:
         print(__doc__)
