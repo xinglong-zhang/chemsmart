@@ -2098,6 +2098,34 @@ exited 0.
 Against the falsifiers: F10a, F10b, F10c not met locally. Its first word
 does not change.
 
+### Census 10, CUHK half -- read (job 2157246, prereg f0937d8e6e4e; COMPLETED, elapsed 1 min 13 s by sacct, exit 0, chpc-cn071, 4 cores)
+
+The job printed the remote tree digest 9ae08228e7006de9 (equal to the
+local pack of 5a5a80b0), 0 AppleDouble files, `chemsmart` from
+`code-repair3`, and the census-9 tool digests. Every step exited 0. Words:
+79 of 79 identical to census 9's in word, qualified rows and executor word
+(10 unreplayed). Reader (summary, flags, goals), certificates, gate replay,
+stationarity and report rows: byte-identical to census 9's.
+
+### Item 3 -- reading (census 10, both halves)
+
+Exactly as pre-registered. On the repaired tree (e6768407's product code +
+5a5a80b0) one archived word of 254 moves against census 9 (the freeze):
+ax41 goal-ino3-r17, whose first word stays `unreachable_from_evidence` and
+whose second reason now names falsified_expectation:e-plus-zero-potential-
+vs-fc-mecn, falsified_expectation:quartet-minus-doublet-cation-gap and
+falsified_expectation:spin-population-s2-cation -- the expectations its
+cycle-3 session completion (38fb1b17) scored diverged against delivered
+claims. Nothing else moves, locally or on CUHK, in any instrument; the
+reader's one change is ino3-r17's flag cleared and its markers named. At
+the new pin the reader flags no achieved, awo or unreachable word for an
+unnamed falsified expectation except goal-h4's sign declared on a zero
+(defensible, F3 of Phase I). Both statements the master asked for hold:
+the current code cannot produce the class-A word for a live goal (the
+analysis-evidence-only shape arises today only on the typed-error path,
+whose word reads no stream), and the host computes the archived word from
+the records (the evidence row names the stream).
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
@@ -2144,4 +2172,10 @@ does not change.
   compared with its last measurement. Submitted 2026-09-28 about 10:50
   KST; COMPLETED 09:50:47-09:56:46 +08:00 (5 min 59 s), exit 0, one node,
   4 cores (about 0.4 core-hours).
+- CUHK 2157218 (r11-truth-a), item 3's records check (census10/),
+  prereg f4065edc5792: `evidence_names.sh` over the 37 roots, no python.
+  COMPLETED in 4 s, exit 0, 1 core.
+- CUHK 2157246 (r11-truth-a), census 10 (census10r/), prereg
+  f0937d8e6e4e: census 9's instruments on code-repair3 (5a5a80b0, digest
+  9ae08228e7006de9). COMPLETED in 1 min 13 s, exit 0, one node, 4 cores.
 - No provider arm, no live goal.
