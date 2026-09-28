@@ -1738,6 +1738,46 @@ two expectations. F9c: a reader, certificate, gate or stationarity output
 differs from its reference beyond q7's expected reader difference. F9d:
 `literal_claims.py`'s output differs from census 7b's.
 
+### Census 9, local half -- read (2026-09-28 10:48-10:49 KST; `truth/t4/local9`, `truth/t4/local_census9.out`)
+
+Committed tree 274a2f00 (`chemsmart/` = 6fe89afd's); `chemsmart` imported
+from this worktree; HOME fenced. Every instrument exited 0.
+1. Words: against census 8's control and against the pin alike, 175 of
+   175 identical in word, qualified rows and executor word; the same 15
+   unreplayed. As pre-registered (no local word moves).
+2. Reader over the freeze's words: summary, flags and goals identical to
+   `reader/local-pin3` (normalised); the 14 pre-registered flags. Over the
+   archived words (no reference at this reader version, reported as read;
+   190 goals): W1 achieved over an undelivered id 13, over an uncertified
+   delivery 1, plain achieved hiding what the run found 2, reasons not
+   naming a falsified expectation 3; W3 qualified rows under a false word
+   13; W11 11; every other check 0 flags. Against the census-1 reader's
+   archived reading the only differences are the reader's own refinements
+   after census 1 (a new W1 check; W6's rows written before the host
+   converted units, ino2's 4, now read as untestable bands).
+3. Certificates: summary and (empty) certificates identical to census 8's.
+4. Gate replay: 24 refusals re-read, the pre-registered split (4
+   same-session, 1 + 4 run-stream refused with 4 anomaly routes named, 15
+   minted nowhere). The file DIFFERED from census 6's in two fields only:
+   goal-po3-r19's two refusals (minted nowhere; a binding digest and a plan
+   digest) carry the label `public` here and `ax41r` there -- this run kept
+   the repository's copy of that public case, census 6 kept the mirror's
+   research copy (it passed the roots in another order). Post hoc control
+   (`truth/t4/gate_order_control.sh`, labelled so): the same replay with
+   the research root first is byte-identical to census 6's file. The
+   difference is the harness's root order, not the host's.
+5. Stationarity: identical to the pin's file: characterisations 11
+   certified, 3 refused, 2 unread; free energies 195 stationary (43
+   delivered), 5 refused, 170 unread.
+6. Report rows: `literal_claims.json` identical to census 7b's
+   (normalised). Once per distinct report: 187 files, 158 distinct, 1,150
+   rows of which 709 in distinct reports (441 dropped as copies): host
+   636, physical 48, count 9, condition 8, unread 8; pure 12; physical
+   literals 59 foreign (1 a 2x multiple) and 2 carried -- the reading
+   stated at pre-registration.
+Against the falsifiers: F9a, F9c (beyond the harness's label), F9d not
+met locally; F9b is CUHK's. Local half: as pre-registered.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
@@ -1777,4 +1817,10 @@ differs from its reference beyond q7's expected reader difference. F9d:
   It read 5 ledgers (g1-hooh, bt2, rt1, rt2, r7m-h3); nothing was
   written but the script and its argument file under
   `r11/truth/prereg-b/`.
+- CUHK 2157179 (r11-truth-a), census 9 (truth-4, item 0, the final-pin
+  census), prereg af1ab5048e5a: every committed census instrument on
+  code-freeze (9d724bd1 = 6fe89afd's chemsmart/, 426 files, digest
+  1274cbf687173b87) over census 1's 89 CUHK specs and the 37 roots, each
+  compared with its last measurement. Submitted 2026-09-28 about 10:53
+  KST.
 - No provider arm, no live goal.
