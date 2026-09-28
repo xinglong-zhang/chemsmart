@@ -1903,6 +1903,65 @@ instruments, are independent of it.
   record exists) counts them up to 22 times; the Evidence lens's
   `evidence_census.py` walks streams and is the one to check.
 
+## Item 3 (truth-4) -- the ino3-r17 class-A residual: live, or archival only? Pre-registration (before any probe or records check)
+
+The residual: ax41 goal-ino3-r17 settles `unreachable_from_evidence`
+(cycle 6) naming none of the three expectations its cycle-3 session
+completion scored diverged; `_goal_streams` reads `session_stream_recorded`
+and `run_recorded` rows, and the ledger names the cycle-3 session only as
+`analysis_evidence_recorded` (and in a `wake_composed` row).
+
+Code reading at e6768407:
+- `_record_analysis_evidence` names `self.events_path`, the cycle's session
+  stream, and is called in two places. In `_plan`, for a session that
+  returned: `events_path = _session_events_path(session)` and, right
+  after, `_record_session_stream(session)`, both from `_session_run_id`
+  (`run_id` or `session_id`). A live result (`LiveAgentSessionResultV1`)
+  always carries `session_id`, and its stream is `.chemsmart-agent/runs/
+  <session_id>/events.jsonl`, so the two rows name one stream. They can
+  differ only for a result with no id, or a named stream that is absent
+  (then the newest-first fallback) -- neither a live session's shape.
+- `_project_before_settling`, for a session that raised, can name a stream
+  only as analysis evidence (the fallback picks it); its one caller,
+  `_typed_error`, then settles `returned_to_human` from the error alone,
+  reading no stream, so no word there can carry or drop an expectation.
+- ino3-r17 ran 2026-09-10/11; `session_stream_recorded` was introduced on
+  2026-09-17 (f70d2e3b) and written for live sessions only after
+  `_session_run_id` read `session_id` (2026-09-19/20, the pak campaign).
+Hypothesis: archival only -- the shape needs a ledger that names a
+returning session's stream by no session row, which the current code does
+not write.
+
+Probe (scratch, never committed: `tests/agent/test_zz_truth4_scratch_
+probe.py`, deleted after the run), through `run_goal_loop` on this tree
+with the shared harness: cycle 1's session declares a 2-8 kcal/mol band and
+a count, claims the barrier at 11.2 kcal/mol, passes a completion that
+scores it diverged, and stops (`complete`) with the count undelivered; the
+one re-wake opens cycle 2, whose session delivers the count without
+re-claiming the barrier and settles on the planning path.
+- Arm "named" (results carry `session_id`, as a live result does):
+  expected `achieved_with_observations` naming `falsified_expectation:
+  barrier-forward`.
+- Arm "unnamed" (results carry no id: the pre-09-17 ledger shape):
+  expected the word does not name it -- the ino3-r17 mechanism reproduced.
+- Not evidence: a harness failure before settlement, or the re-wake not
+  opening (then the probe's shape is wrong, reported as such).
+
+Records check (records only; local with plain tools, CUHK read in place on
+the login node): for every goal ledger of census 9's population, each
+`analysis_evidence_recorded` stream and whether a `session_stream_recorded`
+row of the same ledger names it; tallied by whether the ledger holds any
+session row. Expected: every local (ax41) ledger with analysis evidence
+holds no session row (all predate 2026-09-17); in CUHK ledgers that hold
+session rows, every analysis-evidence stream is named by one, and any
+exception is read against its ledger (a typed-error settlement, or a
+finding that falsifies the hypothesis).
+
+Consequence, fixed now: archival only -> recorded here, no code (the
+master's instruction), and no census re-sign is needed (nothing changes).
+Live -> a witness through the goal loop, red then green, a repair at the
+owning function, and a census of the words it moves (LOUD).
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
