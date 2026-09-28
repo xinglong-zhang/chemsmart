@@ -219,25 +219,28 @@ occur where both programs have the stage.
 
 Census (`composition_census.py`; local pass + CUHK Slurm 2157197): 463
 bundle paths, **458 distinct approved cycles** (ax41 304, public 5, CUHK
-R8 21, R9 20, R10 87 from the 63 goal dirs `r10_jobs.tsv` names, pre-R8
-21), **316 executed** (>= 1 node validated in a host stream), 240 goals.
+R8 21, R9 20, R10 87 from the 63 goal dirs `r10_jobs.tsv` names -- not the
+89 readable R10 ledgers ARCHIVES.md counts -- pre-R8 21), **315 executed**
+(>= 1 node validated in a host stream keyed by approval id and plan
+digest; Slurm 2157240 is the final CUHK pass), 240 goals.
 
-- **Multi-stage**: 150 executed cycles carry an in-approval data edge or a
-  lift from an earlier result (M 77, X 28, L-intra 49, L-cross 7, overlap
-  allowed); 18 of them have a node of >= 20 heavy atoms, all within one
+- **Multi-stage**: 149 executed cycles carry an in-approval data edge or a
+  lift from an earlier result (M 76, X 28, L-intra 49, L-cross 7, overlap
+  allowed); 17 of them have a node of >= 20 heavy atoms, all within one
   program (Gaussian ts -> irc on C17H10N2O2; PySCF opt -> td on DANS; ORCA
   modred -> ts on BINOL; xTB on C16H17N3O4S; ORCA ts -> sp on 20-heavy
   saddles). P1 (brief prior) is **refuted for multi-stage routes**.
-- **Cross-program**: 34 executed cycles (X or L-cross) in 4 strata (ax41,
-  pre-R8, R8, R10). Ordered pairs: orca -> pyscf (37 edges, 10 lifts),
-  xtb -> orca (19 edges), pyscf -> orca (7 edges, 2 lifts), xtb -> pyscf
-  (4 edges, 1 lift), gaussian -> pyscf (2 edges, 2 lifts), orca ->
-  gaussian (2 edges). Both directions for orca <-> pyscf. Two executed
-  cycles hold three programs (ax41 `c4-r3`, `interop-fukui-path`: xTB ->
-  ORCA and PySCF). Size: 33 of 34 have <= 9 heavy atoms (median 3); one has
-  20 (R10 Q4 g1 cycle 1: ORCA ts -> PySCF irc -> ORCA opt; the goal settled
-  `unreachable_from_evidence`). P1 **holds for cross-program routes but
-  one**.
+- **Cross-program, counted at the crossing**: 76 cross-program edges were
+  admitted, 49 realised (consumer validated inside the approval), plus 15
+  realised cross-program lifts. Realised ordered pairs, 5: orca -> pyscf
+  (29 edges, 10 lifts), xtb -> orca (16), xtb -> pyscf (3, 1 lift), pyscf
+  -> orca (1, 2 lifts), gaussian -> pyscf (2 lifts); orca -> gaussian was
+  admitted twice and never realised. Both directions for orca <-> pyscf.
+  Two executed cycles hold three programs (ax41 `c4-r3`,
+  `interop-fukui-path`: xTB -> ORCA and PySCF). **Every realised crossing
+  has <= 9 heavy atoms** (29 of 64 at 3); the one 20-heavy-atom crossing
+  (R10 Q4 g1 cycle 1, ORCA ts -> PySCF irc) was admitted and its IRC
+  consumers stayed pending. P1 **holds for realised crossings**.
 - **What crosses**: every cross-program in-approval edge is
   `validated_optimized_geometry` (a structure). Hessians cross only ORCA ->
   ORCA (`validated_final_orca_ts_hessian`, 14 edges) and scan minima only
@@ -295,7 +298,9 @@ Audit (`task_code_audit.py` at the pin):
 
 Replay at the pin (`replay_composition.py`; 40 pre-registered cycles, 23
 local + 17 CUHK Slurm 2157214; pin package digest 5a645356... on both
-hosts):
+hosts). **By the pre-registered definition (R1-R3 pass and R4 compiles and
+previews) no sampled cycle replays at the pin: R1 refused 38, R4 unrun on
+all 40.** What does re-admit is the composition layer:
 
 - **R2 composition, 40/40**: every approved plan parses and reproduces its
   archived `plan_sha256` (40/40); producer rules recomputed at the pin equal
@@ -323,17 +328,21 @@ hosts):
 
 ### What it says about C5
 
-**Narrowed** (with one widening). Supported: general typed steps compose
-into executed multi-stage routes (150 cycles, 18 at >= 20 heavy atoms) and
-cross-program routes (34 cycles, 6 ordered program pairs, 3 programs in one
-approval twice); every edge rides one of three general producer rules;
-every analysis step is in the general vocabulary; no Agent route reaches
-task code; each task-named operation is a general conversion. Narrowed to:
-*a crossing between programs carries a structure, not a Hessian or a scan
-point, and is realised small (33/34 <= 9 heavy atoms); on the scheduler
-target composition is realised across approvals by lifts rather than inside
-one; and at the pin the composition layer replays while the archived
-approved bundles do not load, because the analysis-chain contract moved.*
+**Supported at a narrower reach** (with one widening). The pre-registered
+support conditions hold at the composition level and the pre-registered
+narrowing conditions also hold, so these are one transition, not a
+contradiction. Supported: general typed steps compose into executed
+multi-stage routes (149 cycles, 17 at >= 20 heavy atoms) and realised
+cross-program crossings (49 edges + 15 lifts, 5 ordered program pairs, 3
+programs in one approval twice); every edge rides one of three general
+producer rules; every analysis step is in the general vocabulary; no Agent
+route reaches task code; each task-named operation is a general
+conversion. Narrowed to: *a crossing between programs carries a
+structure, not a Hessian or a scan point, and every realised crossing is
+small (<= 9 heavy atoms); on the scheduler target composition is realised
+across approvals by lifts rather than inside one; and at the pin the
+composition layer re-admits 40/40 while the archived approved bundles do
+not load (38/40, analysis-chain drift) and compile+preview is unmeasured.*
 Widened: routes compose across workflows through registered results (75
 executed) and through geometry-origin operations (derive, append, compose)
 into thermodynamic cycles. Product-wide, "without task-specific code" is
@@ -362,7 +371,16 @@ heavy atoms that validated, would widen the narrowed claim.
 
 ## Status
 
-- Phase I, step 1 (pre-registration) committed before any census row.
-- Census run: local (ax41 + public) and CUHK (Slurm 2157183, 2157188,
-  2157197; read-only slot jobs). The master's duplicate warning is applied:
-  rows are counted once per bundle content and goals once per goal digest.
+- Phase I complete; position memo written; handing back for the exchange.
+- Jobs (all read-only slot jobs, one node, seconds to 2m42): census Slurm
+  2157183, 2157188, 2157197, 2157240; replay Slurm 2157214. Zero provider
+  arms, zero engine jobs, zero Agent sessions.
+- The master's duplicate directive is applied: rows once per bundle
+  content, goals once per goal digest, execution states keyed by approval
+  id and plan digest.
+- Gates on a pristine export of 5c657cf0 (after merging r11-integration
+  e6768407; later commits touch only `.agents/research/loop/` and this
+  file): tests/agent 3381 passed, 20 skipped, 2 xfailed (exit 0); full
+  suite 23 failed, equal to the round baseline set; ruff, black, isort
+  clean on the three instruments; export deleted.
+- Open: R4 (compile + preview) on the 40-cycle sample.
