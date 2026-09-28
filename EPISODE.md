@@ -1962,6 +1962,13 @@ master's instruction), and no census re-sign is needed (nothing changes).
 Live -> a witness through the goal loop, red then green, a repair at the
 owning function, and a census of the words it moves (LOUD).
 
+Departure, before the CUHK half ran: the login node killed `find` over the
+37 roots (its resource cap) and the guard runs no script there, so the
+CUHK records check runs as a slot job (`census10/job.sh`, 1 core), with
+the instrument committed as `.agents/research/loop/evidence_names.sh`
+(sha256 fe7e9e0b, the uploaded bytes). Probe and local half already ran
+(read below the CUHK job).
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
