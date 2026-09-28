@@ -687,6 +687,16 @@ certificate (out of scope). LOUD for the owner: q7's word changes.
   resumes this lens. The master reports CUHK unreachable ("only accessible
   from the CUHK campus network"): the local half runs now, the CUHK half
   when the gate reopens.
+- truth-4, 2026-09-28 about 11:05 KST: item 0 done. Pre-registered at
+  274a2f00 (with `compare_words.py`, `literal_unique.py`); local half read
+  at d091987d; CUHK half job 2157179 read. Exactly as pre-registered:
+  against the pin one archived word of 254 moves (r10/q7 g2-scan-modred);
+  against each last measurement nothing moves (the local gate replay's
+  two root labels are the harness's order, shown by a post hoc control).
+  LOUD, found while pre-registering: census 7's report rows count copied
+  reports (1,394 rows, 953 in distinct reports). Merged r11-integration
+  629b5113 (ce663519, clean; no product byte). Items 1 and 2 wait for the
+  master.
 
 ## The master's adjudication of Repair A (copied from the succession brief)
 
@@ -1778,6 +1788,86 @@ from this worktree; HOME fenced. Every instrument exited 0.
 Against the falsifiers: F9a, F9c (beyond the harness's label), F9d not
 met locally; F9b is CUHK's. Local half: as pre-registered.
 
+### Census 9, CUHK half -- read (job 2157179, prereg af1ab5048e5a; COMPLETED 09:50:47-09:56:46 +08:00, 5 min 59 s, exit 0, chpc-cn071, 4 cores)
+
+The job printed the remote tree digest 1274cbf687173b87 (equal to the
+local pack), 0 AppleDouble files, `chemsmart` from `code-freeze`, and the
+nine tool sha256s committed at 274a2f00; every step exited 0.
+1. Words: against census 8, 79 of 79 identical in word, qualified rows and
+   executor word, 10 unreplayed. Against the pin: 78 identical and one
+   a_state, r10/q7 g2-scan-modred, `achieved` -> `achieved_with_
+   observations`, first reason "the host completion gate certified the
+   delivery; criteria and predictions the session itself stated that did
+   not hold: falsified_expectation:cis-barrier, falsified_expectation:
+   oo160-torsion", the other reasons unchanged; qualified rows and
+   executor words 79 of 79 identical.
+2. Reader: over the freeze's words, byte-identical to census 5's; over
+   the pin's words, to census 3's; over the archived words, to census 3's
+   (9 of 9 files). Pin against freeze through one reader: exactly q7 --
+   W1 achieved_hides_what_the_run_found 1 -> 0, reasons_name_each_
+   falsified_expectation 1 -> ok, words achieved 25 -> 24 and
+   achieved_with_observations 21 -> 22, q7's two falsified-expectation
+   markers named; its W8 standing flag stays, now under the new word.
+3. Certificates: `certificates.jsonl` and `summary.json` byte-identical to
+   census 8's.
+4. Gate replay: byte-identical to census 6's (47 re-read, the
+   pre-registered split).
+5. Stationarity: byte-identical to census 2's (15 certified; 83 free
+   energies on a stationary point, 3 delivered; 2 on a held surface).
+6. Report rows: `literal_claims.json` byte-identical to census 7b's; once
+   per distinct report, 61 files with rows, 61 distinct -- no copies on
+   CUHK (r10/q32's replay copies carry no report).
+Reading: exactly as pre-registered. F9a, F9b, F9c, F9d not met. Between
+the pin 9185770e and the freeze's product code 6fe89afd (= 629b5113's,
+checked: `git diff 6fe89afd 629b5113 -- chemsmart pyproject.toml` is
+empty; arm M added two `r11_behav/` files), exactly one archived word
+moves: r10/q7 g2-scan-modred. No finding in the host.
+
+## Item 0 -- the rows at the freeze pin (census 9, both halves)
+
+Population: 279 goals (local 190, CUHK 89), 254 re-signed (175 + 79; 25
+unreplayed: 15 + 10, the same on every tree since census 1). All numbers
+below were produced by the freeze's product code or, for records-only
+instruments, are independent of it.
+- W1/W2 words (254): achieved 76, achieved_with_observations 42,
+  exhausted 3, reading_opened 2, recovery_opened 52, returned_to_human
+  63, unreachable_from_evidence 16. Identical to the last measurement for
+  254 of 254; against the pin 9185770e, 1 of 254 moves (r10/q7). W3
+  qualified rows and W4 executor words: 254 of 254 identical both ways.
+- Reader over the freeze's words (254; flags are candidates read against
+  their records): W1 achieved over an uncertified delivery 0 of 118, over
+  a later verified refusal 0 of 118, over an undelivered id 1 (r10/q1
+  gdev1, archival category certificate); plain achieved hiding what the
+  run found 1 (goal-h4, a sign on a zero, defensible); reasons not naming
+  a falsified expectation 2 (goal-h4, the same rows; goal-ino3-r17,
+  class A outside the settlement's streams); W3 0 of 38; W5 0 of 438; W6
+  0 of 1,061; W7 0 of 41 (16 insufficient); W8 relations 0 of 354,
+  standing 6 of 121 (archival); W9 0 of 43 (2 insufficient); W10 0 of 34;
+  W11 22 flags (11 + 11, archival free energies from results their
+  verification did not pass).
+- W5 certificates at goal grain: CUHK 7 partial on a criterion (6
+  faithful, 1 record insufficient), 2 flips (both r10/q22 gh2 sessions),
+  0 in run streams, 0 final words standing on a flip; local 0.
+- W17 the decision gate re-read (71 refusals, 24 local + 47 CUHK): 1
+  accepted on re-reading (gh2's validation receipt); 4 minted earlier in
+  the same session, not re-read (the session's own registry accepts
+  those kinds at the freeze, by code reading); 24 refused naming the
+  receipt's kind and the stream that recorded it (12 naming
+  `anomaly:<digest>`); 42 minted nowhere the goal recorded.
+- W10/W11 stationarity re-signed: characterisations 31 -- 26 certified, 3
+  refused, 2 unread; free energies 455 -- 278 on a stationary point (46
+  delivered through a claim), 2 on a held surface, 5 refused, 170 unread.
+- Report rows (DP6): as census 7 counted, 1,394 rows (host 1,276 =
+  91.5 %, physical 76, count 26, condition 8, unread 8; pure 12 = 0.9 %;
+  physical literals 113 foreign, 4 carried). Once per distinct report:
+  953 rows in 219 distinct reports (host 853 = 89.5 %, physical 71 =
+  7.5 %, count 13, condition 8, unread 8; pure 12 = 1.3 %; physical
+  literals 102 foreign, 28 of them exact 2x or 3x multiples of a host
+  number, and 2 carried).
+- Dissent markers (C3, from the reader's goals): identical to the pin's
+  except q7's two falsified expectations, now named by the word (Phase
+  I's tally, 14 of 39 falsified expectations named, reads 16 of 39).
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
@@ -1821,6 +1911,7 @@ met locally; F9b is CUHK's. Local half: as pre-registered.
   census), prereg af1ab5048e5a: every committed census instrument on
   code-freeze (9d724bd1 = 6fe89afd's chemsmart/, 426 files, digest
   1274cbf687173b87) over census 1's 89 CUHK specs and the 37 roots, each
-  compared with its last measurement. Submitted 2026-09-28 about 10:53
-  KST.
+  compared with its last measurement. Submitted 2026-09-28 about 10:50
+  KST; COMPLETED 09:50:47-09:56:46 +08:00 (5 min 59 s), exit 0, one node,
+  4 cores (about 0.4 core-hours).
 - No provider arm, no live goal.
