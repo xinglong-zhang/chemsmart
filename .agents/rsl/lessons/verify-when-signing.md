@@ -22,7 +22,7 @@ falsifier: "retire when every host-signed word is recomputed at signing over eve
 home: prose
 supersedes: []
 earned: 2026-09-24
-last_verified: "2026-09-28 @ 90f8c99f"
+last_verified: "2026-09-28 @ 629b5113"
 ---
 A word the host signs -- a settlement, a verified refusal, a certification, a gate's diagnosis -- is computed from the evidence as it stands when the word is signed, over every record its question covers, and says what it read.
 A check made earlier (at planning, in another cycle) describes that moment only, and a signer that reads only what it holds (one stream of a goal, one host's decisions, runs but not sessions) describes only that; carrying either into the word is how a verified word goes false.
