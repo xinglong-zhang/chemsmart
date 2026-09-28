@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -56,13 +57,18 @@ def _short(exc: BaseException) -> str:
 
 
 def replay_one(path: Path) -> dict:
-    from chemsmart.agent import live_session
+    from chemsmart.agent import execution, live_session
     from chemsmart.agent.capabilities import load_program_capabilities
-    from chemsmart.agent.execution import (
-        admitted_producer_edge_rules,
-        producer_edge_selection_rule,
-    )
     from chemsmart.analysis.quantity_expressions import _OPERATIONS
+
+    # An older tree may predate the one-owner rule functions; R2 is then
+    # reported unavailable on that tree rather than guessed.
+    producer_edge_selection_rule = getattr(
+        execution, "producer_edge_selection_rule", None
+    )
+    admitted_producer_edge_rules = getattr(
+        execution, "admitted_producer_edge_rules", None
+    )
 
     row: dict = {"bundle": str(path)}
     try:
@@ -109,7 +115,11 @@ def replay_one(path: Path) -> dict:
                 edge.target_node_id,
                 edge.artifact_class,
             )
-            now = producer_edge_selection_rule(plan, edge)
+            now = (
+                producer_edge_selection_rule(plan, edge)
+                if producer_edge_selection_rule is not None
+                else "unavailable-on-tree"
+            )
             then = frozen_rules.get(key, "")
             edges.append(
                 {
@@ -125,7 +135,9 @@ def replay_one(path: Path) -> dict:
         row["R2_rules_equal"] = all(
             item["equal"] for item in edges if item["frozen"]
         )
-        if frozen_edges:
+        if admitted_producer_edge_rules is None:
+            row["R2_admitted"] = "unavailable-on-tree"
+        elif frozen_edges:
             try:
                 admitted_producer_edge_rules(
                     plan, tuple(frozen_edges), organ="c5 replay"
@@ -179,7 +191,20 @@ def main(argv=None) -> int:
     parser.add_argument("out", type=Path)
     parser.add_argument("--list", required=True, type=Path)
     parser.add_argument("--label", default="")
+    parser.add_argument(
+        "--home",
+        type=Path,
+        required=True,
+        help="fence HOME and the ChemSmart config directory here before "
+        "chemsmart is imported",
+    )
     args = parser.parse_args(argv)
+    home = args.home.resolve()
+    (home / ".chemsmart").mkdir(parents=True, exist_ok=True)
+    os.environ["HOME"] = str(home)
+    os.environ["CHEMSMART_CONFIG_DIR"] = str(home / ".chemsmart")
+    os.environ.pop("CHEMSMART_AGENT_SERVER", None)
+    os.environ.pop("CHEMSMART_AGENT_CONFIG", None)
     tree = _tree()
     print(json.dumps({"label": args.label, **tree}))
     paths = [
