@@ -1969,6 +1969,104 @@ the instrument committed as `.agents/research/loop/evidence_names.sh`
 (sha256 fe7e9e0b, the uploaded bytes). Probe and local half already ran
 (read below the CUHK job).
 
+### Item 3 -- read (probe, local records, CUHK 2157218)
+
+- Probe (e6768407, both arms settled after the one re-wake): "named" ->
+  `achieved_with_observations`, "the host completion gate certified the
+  delivery; criteria and predictions the session itself stated that did
+  not hold: falsified_expectation:barrier-forward"; "unnamed" -> plain
+  `achieved`, "delivered in an earlier cycle: barrier-forward (delivered
+  in cycle 1)" -- the mechanism, reproduced. Neither arm wrote an
+  analysis-evidence row (the stand-in records no decision): what decides
+  the word is whether a session row names the scoring stream.
+- Local records: 20 ledgers (18 goals; ino3-r12 and po3-r19 twice, as the
+  public and research copies) name a stream only as analysis evidence; all
+  began 2026-09-09..13 and hold no session row at all.
+- CUHK (job 2157218, prereg f4065edc5792, 4 s): 52 ledgers hold analysis
+  evidence; 51 name every such stream by a session row. One does not:
+  r10/q22 gh2c (2026-09-24). Its cycle-2 planning session raised ("a
+  required completion gate is red"); `_project_before_settling` named the
+  fallback stream as analysis evidence; `_typed_error_settlement` settled
+  `returned_to_human` from the error alone. The typed-error path
+  predicted by the code reading, on R10's tree -- and still in the code.
+- Which of the two holds -- both, in different senses:
+  (1) The current code cannot produce the class-A word for a live goal: a
+  returning live session always gets its session row, and the one live
+  path that names a stream only as analysis evidence (a session that
+  raised; gh2c) settles at once on a word that reads no stream. The
+  omission needs a ledger written before 2026-09-17/20 -- or such a
+  ledger woken, or re-signed, by the current code (a parked old goal; the
+  census).
+  (2) The host can compute the archived word from the records: the
+  `analysis_evidence_recorded` row names the session stream, relative to
+  `.chemsmart-agent`, exactly as the wake and the evidence gate resolve
+  it.
+
+### Item 3 -- the repair, its witness and census 10: pre-registration (owner's ruling: repair it and re-freeze; written before any code)
+
+Repair: `driver._goal_streams` -- "every stream the goal's own spine names"
+-- reads `analysis_evidence_recorded` rows as well as session and run
+rows, in ledger order (the first mention of a stream keeps its place). Its
+seven callers (the planning and run settlements with the carried
+expectations, the goal's verdict records a certificate reads, the wake's
+deliverables, the re-wake, the standing restoration) then read one set. On
+a ledger the current code writes for a returning session the set is
+unchanged (the evidence stream is the session row's stream), so live
+goals are unaffected; archival ledgers gain their named sessions.
+
+Witness `tests/agent/test_a_goal_word_reads_every_stream_its_ledger_
+names.py`, through `run_goal_loop` with the shared harness:
+- archived shape: cycle 1's session result carries no session id (as
+  every session of a goal written before 2026-09-17 was recorded); its
+  host declares a 2-8 kcal/mol band and a count, claims the barrier at
+  11.2 kcal/mol, records a decision, passes a completion that scores the
+  barrier diverged, and stops with the count undelivered; the witness
+  asserts the ledger names that stream only by `analysis_evidence_
+  recorded`. The one re-wake opens cycle 2, whose session delivers the
+  count and settles. Expected: `achieved_with_observations` naming
+  `falsified_expectation:barrier-forward`, the evidence citing cycle 1's
+  completion receipt. On e6768407: red (plain `achieved`).
+- live shape (control): the same with both results carrying their
+  session ids -- green on both trees.
+
+Census 10, on the repaired tree (e6768407's product code + this repair =
+the new pin's), census 9's full instrument set over the same population,
+local and CUHK, each compared with census 9's outputs:
+- Words: exactly one of 254 moves -- ax41 goal-ino3-r17, bucket b, its
+  first word unchanged (`unreachable_from_evidence`: its branch is decided
+  by the verified refusal, before any observation is read). Its second
+  reason gains, after the anomaly list, "; criteria and predictions the
+  session itself stated that did not hold: falsified_expectation:
+  e-plus-zero-potential-vs-fc-mecn, falsified_expectation:quartet-minus-
+  doublet-cation-gap, falsified_expectation:spin-population-s2-cation"
+  (cycle 3's completion 38fb1b17 scored them diverged against delivered
+  claims: -0.494 V against -0.3..0.9, 103.2 kJ/mol against 5..90, 0.002
+  against 0.05..0.45; cycle 6's settling completions scored them
+  not_comparable with no claim, so none is scored here; cycle 3's stream
+  holds no validation, so no criterion line appears); no other reason
+  changes; qualified rows and executor word unchanged.
+- The other 17 goals whose ledgers name a stream only as analysis
+  evidence (E3-hcn-hnc, E4-formic-acid, g2-phosphine, g3-allyl, g3b-allyl,
+  g3c-allyl, g5-phosphine-as-given, ino3-r12, ino3-r13a, ino3-r13b,
+  ino3-r14a, ino3-r14b, ino3-r15, po3-r19, sm1-formaldehyde, sm2-hcn-hnc,
+  sm3-water): unchanged. Every other goal: unchanged by construction (its
+  stream set does not change). CUHK: 79 of 79 identical (gh2c is a typed
+  error the census does not replay).
+- Reader over the new words: local flags as census 9's less ino3-r17's W1
+  `reasons_name_each_falsified_expectation` (13 of 14; summary ok 76 /
+  flag 1), and ino3-r17's three falsified-expectation markers named;
+  CUHK byte-identical to census 9's.
+- Certificates (`goal_verdict_records` reads `_goal_streams`): local and
+  CUHK identical to census 9's (the newly read ax41 sessions predate
+  certificate findings on criteria).
+- Gate replay, stationarity, report rows: byte-identical to census 9's
+  (their instruments do not read `_goal_streams`).
+Falsifiers (each a finding, read against its records, stated LOUD, not
+repaired here without the master): F10a ino3-r17 does not move, or its
+first word changes, or its reasons change beyond the one clause; F10b
+any other word, qualified row or executor word moves; F10c any other
+output differs from census 9's beyond ino3-r17's reader flag and markers.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
