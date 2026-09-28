@@ -20,6 +20,9 @@ under `chemsmart/` imports it.
 | `loop/receipt_gate_replay.py` | every refusal the decision gate made, re-read through the imported tree's own gate functions |
 | `loop/literal_claims.py` | every row a host-rendered analysis report shows, classed by whether it stands on a model-authored literal, and of what dimension |
 | `loop/certificate_census.py` | every archived completion certificate that named claims on a failed criterion, re-read against the goal's other streams |
+| `loop/composition_census.py` | every approved cycle's stages, programs and producer edges, deduplicated by bundle content, goal and plan digest; admitted vs realised edges and cross-approval lifts |
+| `loop/task_code_audit.py` | whether a task-named operation, CLI or job type is a general conversion or task code, and whether the Agent can reach it |
+| `loop/replay_composition.py` | whether an archived cycle's plan, producer rules and operations re-admit at a given tree |
 | `loop/compare_words.py` | two re-signings of one population compared goal by goal: the word, the qualified rows it wrote, the executor's analysis word |
 | `loop/literal_unique.py` | the literal census counted once per distinct report, since archived workspace copies carry the same rendered report more than once |
 | `loop/matched_turns.py` | an archived goal prefix replayed through the tree `PYTHONPATH` names, then real provider turns, recording the model, the calls in view and the prefix's faithfulness |
