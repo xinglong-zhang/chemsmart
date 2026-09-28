@@ -2145,6 +2145,28 @@ analysis-evidence-only shape arises today only on the typed-error path,
 whose word reads no stream), and the host computes the archived word from
 the records (the evidence row names the stream).
 
+The new pin's code is census 10's: `git diff 5a5a80b0 HEAD -- chemsmart
+pyproject.toml` is empty at 91cd6d79, and `pack_code.sh` on HEAD prints
+tree digest 9ae08228e7006de9, code-repair3's.
+
+Every reader flag left on a re-signed word at the new pin (254 goals), and
+its class:
+- On settlement words (W1), two: ax41 goal-h4 (a sign declared on a zero
+  count; the expectation, a minimum, was met -- defensible, the reader's
+  F3); CUHK r10/q1 gdev1 (the word trusts an archived completion
+  certificate minted before a category had to be answered by a word the
+  host read; at the pin such a finding is refused where it is written, so
+  production cannot make this record -- a carried certificate, not a
+  recomputed one).
+- On session-signed words carried from minting, archival: W8 standing 6
+  (CUHK: g2 x4, pair1-a, g2-scan-modred -- "on the requested answer" over
+  an undeclared operand); W11 22 (local po3-triazole-regio x3, po3-r19 x8;
+  CUHK g1 x10, g1-hooh -- free energies from results their verification
+  did not pass; the pin's stationarity rule refuses them, census 9 item 5).
+No settlement word is flagged for an unnamed falsified expectation,
+an undelivered or uncertified delivery, or a later verified refusal;
+0 qualified rows under a false word.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
