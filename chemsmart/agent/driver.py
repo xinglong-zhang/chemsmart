@@ -3561,7 +3561,17 @@ def _merge_verdict_records(*parts: _VerdictRecords) -> _VerdictRecords:
 def _goal_streams(
     ledger: GoalLedger, workspace: Path | None, goal_id: str
 ) -> tuple[Path, ...]:
-    """Every stream the goal's own spine names: planning sessions and runs."""
+    """Every stream the goal's own spine names: planning sessions and runs.
+
+    A spine names a session's stream by its session row, and by the
+    analysis evidence a cycle recorded when it read results and decided
+    (``.chemsmart-agent``-relative, as the wake resolves it). Every goal
+    written before the session row existed (2026-09-17) names its sessions
+    only the second way, and so does a session that raised. Read by the
+    first way alone, ax41 goal-ino3-r17's word left out three expectations
+    its cycle-3 session had scored diverged, for numbers it still delivered
+    (R11 truth-4). The first mention of a stream keeps its place.
+    """
 
     if workspace is None:
         return ()
@@ -3577,6 +3587,12 @@ def _goal_streams(
             run = str(payload.get("run") or "")
             if run:
                 streams.append(agent / Path(*run.split("/")) / "events.jsonl")
+        elif entry["kind"] == "analysis_evidence_recorded":
+            evidence = str(payload.get("evidence") or "")
+            if evidence:
+                streams.append(
+                    agent / Path(*evidence.split("/")) / "events.jsonl"
+                )
     return tuple(dict.fromkeys(path for path in streams if path.is_file()))
 
 
