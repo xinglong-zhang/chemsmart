@@ -624,6 +624,25 @@ task writer.
 - DIRECTIONAL: the lead stays exploratory, with its counts.
 - NOT REPLICATED: the lead falls under this condition.
 
+## Arm M -- loss, and the blind verdicts (before the key is opened)
+
+- Loss first: d2-armM-qwen sample 11 started 08:52 KST, and its stream
+  had no event after about 09:00, when this Mac's network changed. The
+  provider request in flight died without a deadline firing. The master
+  reported it; I stopped the sample (pid 20515) and its runner. It has no
+  row, so it is INFRA under the registered rule (a transport failure that
+  ends a sample): reported, never counted, not re-rolled. Realised N:
+  deepseek 12, qwen 11; no other INFRA.
+- R-DISSENT packet: 47 D2 codes (24 baseline + 23 arm M), sha256 prefix
+  e44d7bd52d80267a. Verdicts written blind: `dissent-verdicts.txt`, sha256
+  prefix 5b473e1ddad74ad6.
+- Amendment D-A1 (blind, recorded in the verdict file): five declarations
+  state a direction that their own subtraction contradicts. Primary
+  reading = the direction the declaration's words state (the meaning's
+  gloss with the sign, and the basis's conclusion); the arithmetic
+  decides only when the words state none; words that contradict each
+  other = NONE. The literal arithmetic reading is reported beside it.
+
 ## Status
 
 - 2026-09-28: kernel, CONDUCT, RSL and lessons, charter topics
