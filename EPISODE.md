@@ -2067,6 +2067,15 @@ first word changes, or its reasons change beyond the one clause; F10b
 any other word, qualified row or executor word moves; F10c any other
 output differs from census 9's beyond ino3-r17's reader flag and markers.
 
+Repair and witness done (before census 10 runs): 5a5a80b0. Pristine
+exports (`truth/t4/red3.sh`): e6768407 with the witness -- archived
+FAILED (plain `achieved`), live PASSED; 5a5a80b0 -- both PASSED.
+Neighbouring goal-loop and settlement tests: 58 passed. Census 10's CUHK
+half: `census10r/job.sh` (census10/ holds the records check), code
+`code-repair3` packed from 5a5a80b0, 426 files, digest 9ae08228e7006de9,
+the census-9 tools unchanged (`tools9/`); local half:
+`truth/t4/local_census10.sh`, against `truth/t4/local9/`.
+
 ## Jobs issued
 
 - CUHK 2157057 (r11-truth-a), census 1, prereg 0d247fdcda09: pin
