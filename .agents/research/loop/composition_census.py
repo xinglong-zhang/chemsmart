@@ -236,8 +236,12 @@ def _stream_index(agent_dir: Path) -> dict:
                     if not approval:
                         continue
                     stream_approvals.add(approval)
+                    # Keyed by the plan digest too: a copied stream whose
+                    # approval id recurs (goal-g1-cycle-1 in many goals)
+                    # cannot lend its states to another goal's bundle.
+                    key = f"{approval}|{record.get('plan_sha256', '')}"
                     for node in record.get("nodes") or []:
-                        states[approval][node.get("node_id", "")] = node.get(
+                        states[key][node.get("node_id", "")] = node.get(
                             "state", ""
                         )
                     workflow_state[approval] = payload.get(
@@ -541,7 +545,9 @@ def census_row(
         "nodes:"
         + ",".join(sorted({f"{n['program']}:{n['stage']}" for n in nodes}))
     )
-    states = index["states"].get(approval, {})
+    states = index["states"].get(
+        f"{approval}|{plan.get('plan_sha256', '')}", {}
+    )
     settled = index["settled"].get(toolchain.get("plan_sha256", ""), Counter())
     goal_id, cycle = "", None
     if approval.startswith("goal-") and "-cycle-" in approval:
