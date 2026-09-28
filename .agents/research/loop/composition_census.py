@@ -30,6 +30,7 @@ reaching both); A an expression reaching >= 2 calculations.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -287,6 +288,7 @@ def _ledgers(agent_dir: Path) -> dict[str, dict]:
     for ledger in sorted(base.glob("*/ledger.jsonl")):
         cycles: dict[int, str] = {}
         settlement = ""
+        goal_sha256 = ""
         try:
             lines = ledger.read_text(encoding="utf-8").splitlines()
         except OSError:
@@ -306,9 +308,12 @@ def _ledgers(agent_dir: Path) -> dict[str, dict]:
                     pass
             elif row.get("kind") == "goal_settled":
                 settlement = payload.get("state", "")
+            elif row.get("kind") == "goal_created":
+                goal_sha256 = payload.get("goal_sha256", "")
         goals[ledger.parent.name] = {
             "cycles": cycles,
             "settlement": settlement,
+            "goal_sha256": goal_sha256,
         }
     return goals
 
@@ -319,6 +324,10 @@ def census_row(
     document = _load(path)
     if not isinstance(document, dict):
         return {"stratum": stratum, "bundle": str(path), "error": "unreadable"}
+    # Content identity: the ax41 mirror holds byte-identical copies of
+    # earlier goals' workspaces (R11 master, truth-4), so a route is counted
+    # once per distinct bundle content, never once per path.
+    content_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
     bundle = document.get("workflow_execution_approval_bundle", document)
     resolution = bundle.get("resolution") or {}
     frozen = bundle.get("frozen_workflow_approval") or {}
@@ -548,6 +557,8 @@ def census_row(
         "bundle": os.path.relpath(path, root),
         "root": str(root),
         "approval_id": approval,
+        "bundle_file_sha256": content_sha256,
+        "goal_sha256": goal.get("goal_sha256", ""),
         "actor": resolution.get("actor", ""),
         "decision": resolution.get("decision", ""),
         "goal": goal_id,
@@ -622,6 +633,37 @@ def _executed(row: dict) -> bool:
     )
 
 
+def _distinct(rows: list[dict]) -> list[dict]:
+    """One row per distinct bundle content.
+
+    Among byte-identical copies the kept row is the one whose own agent
+    directory recorded its execution (a stream naming the approval), then
+    the one beside a goal record, then the first given.
+    """
+
+    best: dict[str, dict] = {}
+    order: list[str] = []
+    for row in rows:
+        key = row.get("bundle_file_sha256") or row["root"] + row["bundle"]
+        rank = (
+            bool(row["exec"]["stream_found"]),
+            bool(row["ledger"].get("settlement")),
+        )
+        if key not in best:
+            order.append(key)
+            best[key] = row
+        elif rank > (
+            bool(best[key]["exec"]["stream_found"]),
+            bool(best[key]["ledger"].get("settlement")),
+        ):
+            best[key] = row
+    return [best[key] for key in order]
+
+
+def _goal_key(row: dict) -> tuple:
+    return (row.get("goal_sha256") or row["root"], row["goal"])
+
+
 def report(paths: list[str]) -> None:
     rows = []
     for path in paths:
@@ -629,8 +671,13 @@ def report(paths: list[str]) -> None:
             if line.strip():
                 rows.append(json.loads(line))
     rows = [row for row in rows if "error" not in row]
+    raw = len(rows)
+    rows = _distinct(rows)
     strata = sorted({row["stratum"] for row in rows})
-    print(f"approved cycles: {len(rows)} in strata {strata}")
+    print(
+        f"approved cycles: {raw} bundle paths, {len(rows)} distinct by "
+        f"bundle content, in strata {strata}"
+    )
     for stratum in strata + ["ALL"]:
         chosen = [
             r for r in rows if stratum == "ALL" or r["stratum"] == stratum
@@ -638,7 +685,7 @@ def report(paths: list[str]) -> None:
         executed = [r for r in chosen if _executed(r)]
         classes = Counter(c for r in chosen for c in r["classes"])
         classes_exec = Counter(c for r in executed for c in r["classes"])
-        goals = {(r["root"], r["goal"]) for r in chosen if r["goal"]}
+        goals = {_goal_key(r) for r in chosen if r["goal"]}
         print(
             f"\n[{stratum}] cycles {len(chosen)} (executed: >=1 node validated in a host stream: {len(executed)}); goals {len(goals)}"
         )
