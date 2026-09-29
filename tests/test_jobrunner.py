@@ -1,10 +1,12 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.run import run
 from chemsmart.cli.sub import sub
+from chemsmart.jobs.crest.runner import CRESTJobRunner, FakeCRESTJobRunner
 from chemsmart.jobs.gaussian.runner import (
     FakeGaussianJobRunner,
     GaussianJobRunner,
@@ -13,6 +15,7 @@ from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner, ORCAJobRunner
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.thermochemistry.runner import ThermochemistryJobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
 from chemsmart.settings.server import Server
 
@@ -58,6 +61,107 @@ class DummyGaussianJob:
     @property
     def errfile(self):
         return str(Path(self.folder) / f"{self.label}.err")
+
+
+class TestProgramAwareNames:
+    @pytest.mark.parametrize(
+        "program,label,expected",
+        [
+            ("ORCA", "molecule_opt", "orca_molecule_opt"),
+            ("Gaussian", "molecule_opt", "gaussian_molecule_opt"),
+            (None, "molecule_opt", "molecule_opt"),
+            ("ORCA", None, None),
+        ],
+    )
+    def test_execution_name(self, program, label, expected):
+        """Derive a program prefix without mutating the calculation label.
+
+        Missing program or label values retain the original label.
+        """
+        job = Job(molecule=None, label=label, jobrunner=None)
+        job.PROGRAM = program
+
+        assert job.execution_name == expected
+        assert job.label == label
+
+    @pytest.mark.parametrize(
+        "runner_cls,program,input_attribute,expected_filename",
+        [
+            (
+                GaussianJobRunner,
+                "Gaussian",
+                "job_inputfile",
+                "molecule_opt.com",
+            ),
+            (
+                FakeGaussianJobRunner,
+                "Gaussian",
+                "job_inputfile",
+                "molecule_opt_fake.com",
+            ),
+            (ORCAJobRunner, "ORCA", "job_inputfile", "molecule_opt.inp"),
+            (
+                FakeORCAJobRunner,
+                "ORCA",
+                "job_inputfile",
+                "molecule_opt_fake.inp",
+            ),
+            (XTBJobRunner, "xtb", "job_inputfile", "molecule_opt.inp"),
+            (
+                FakeXTBJobRunner,
+                "xtb",
+                "job_inputfile",
+                "molecule_opt_fake.inp",
+            ),
+            (CRESTJobRunner, "crest", "job_xyzfile", "molecule_opt.xyz"),
+            (
+                FakeCRESTJobRunner,
+                "crest",
+                "job_xyzfile",
+                "molecule_opt_fake.xyz",
+            ),
+            (
+                ThermochemistryJobRunner,
+                "Thermochemistry",
+                "job_inputfile",
+                "molecule_opt.log",
+            ),
+        ],
+        ids=lambda value: value.__name__ if isinstance(value, type) else None,
+    )
+    def test_scratch_directory_uses_execution_name(
+        self,
+        runner_cls,
+        program,
+        input_attribute,
+        expected_filename,
+        pbs_server,
+        tmp_path,
+    ):
+        """Prefix scratch directories while preserving calculation filenames.
+
+        Only configure paths; no external program is executed. Fake runners
+        keep their existing ``_fake`` label suffix inside the prefixed directory.
+        """
+        runner = runner_cls(
+            server=pbs_server, scratch=True, scratch_dir=str(tmp_path)
+        )
+        job = Job(molecule=None, label="molecule_opt", jobrunner=runner)
+        job.PROGRAM = program
+        job.inputfile = str(tmp_path / "molecule_opt.log")
+        job.outputfile = str(tmp_path / "molecule_opt.out")
+        job.errfile = str(tmp_path / "molecule_opt.err")
+
+        runner._set_up_variables_in_scratch(job)
+
+        expected_dir = tmp_path / f"{program.lower()}_molecule_opt"
+        assert expected_dir.is_dir()
+        assert Path(runner.running_directory) == expected_dir
+        assert (
+            Path(getattr(runner, input_attribute))
+            == expected_dir / expected_filename
+        )
+        assert job.label == Path(expected_filename).stem
 
 
 class TestJobRunnerSelection:
