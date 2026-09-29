@@ -957,6 +957,12 @@ class Molecule:
             self.positions[idx1 - 1] - self.positions[idx2 - 1]
         )
 
+    @property
+    def distances_matrix(self):
+        """Return current N-by-N Cartesian distances in angstroms."""
+        self._validate_matrix_positions()
+        return cdist(self.positions, self.positions)
+
     def _validate_geometry_indices(self, *indices):
         """Validate public, 1-based atom indices used by geometry methods."""
         for idx in indices:
@@ -979,6 +985,11 @@ class Molecule:
             self.positions[idx2 - 1],
             self.positions[idx3 - 1],
         )
+
+    @property
+    def angles_matrix(self):
+        """Return connected angle rows [i, j, k, angle_degrees]."""
+        return self.geometry_table(self._connected_geometry_indices(3))
 
     def get_angle_from_positions(self, position1, position2, position3):
         """
@@ -1008,6 +1019,12 @@ class Molecule:
             self.positions[idx3 - 1],
             self.positions[idx4 - 1],
         )
+
+    @property
+    def dihedrals_matrix(self):
+        """Return connected torsion rows [i, j, k, l, dihedral_degrees].
+        """
+        return self.geometry_table(self._connected_geometry_indices(4))
 
     def get_dihedral_from_positions(
         self, position1, position2, position3, position4
@@ -1045,6 +1062,67 @@ class Molecule:
         x = np.dot(projected1, projected3)
         y = np.dot(np.cross(central_bond_unit, projected1), projected3)
         return np.degrees(np.arctan2(y, x))
+
+    def _validate_matrix_positions(self):
+        """Validate coordinates before computing geometry matrix properties."""
+        positions = np.asarray(self.positions)
+        if (
+            positions.shape != (self.num_atoms, 3)
+            or not np.isfinite(positions).all()
+        ):
+            raise ValueError("Geometry matrices need finite N-by-3 coordinates.")
+
+    def _connected_geometry_indices(self, order):
+        """Enumerate distinct connected triples/quartets in this geometry."""
+        from itertools import combinations
+
+        self._validate_matrix_positions()
+        if order not in (3, 4):
+            raise ValueError("Connected geometry order must be 3 or 4.")
+        graph = self.to_graph()
+        indices = set()
+        if order == 3:
+            for center in sorted(graph):
+                for first, last in combinations(sorted(graph[center]), 2):
+                    indices.add((first + 1, center + 1, last + 1))
+        else:
+            for second, third in graph.edges:
+                for first in graph[second]:
+                    for last in graph[third]:
+                        path = (first, second, third, last)
+                        if len(set(path)) == 4:
+                            labelled = tuple(int(i + 1) for i in path)
+                            indices.add(min(labelled, labelled[::-1]))
+        return np.asarray(sorted(indices), dtype=int).reshape(-1, order)
+
+    def geometry_table(self, atom_indices):
+        """Evaluate explicit angle/torsion combinations, regardless of bonds."""
+        self._validate_matrix_positions()
+        indices = np.asarray(atom_indices)
+        if indices.ndim != 2 or indices.shape[1] not in (3, 4):
+            raise ValueError("Provide an M-by-3 or M-by-4 atom-index array.")
+        if not np.issubdtype(indices.dtype, np.integer):
+            raise TypeError("Geometry atom indices must be integers.")
+        order = indices.shape[1]
+        table = np.empty((len(indices), order + 1), dtype=float)
+        table[:, :order] = indices
+        positions = np.asarray(self.positions, dtype=float)
+        method = (
+            self.get_angle_from_positions
+            if order == 3
+            else self.get_dihedral_from_positions
+        )
+        for row, atoms in enumerate(indices):
+            self._validate_geometry_indices(*atoms)
+            if len(set(atoms)) != order:
+                raise ValueError("Each geometry row needs distinct atoms.")
+            try:
+                table[row, order] = method(*positions[atoms - 1])
+            except ValueError:
+                # Coordinates and indices have been validated above. The
+                # original angle/torsion methods reject degenerate vectors.
+                table[row, order] = np.nan
+        return table
 
     def copy(self):
         """
