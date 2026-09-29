@@ -575,7 +575,8 @@ class Server(RegistryMixin):
 
         if job.execution_name in running_job_names:
             logger.info(
-                f"Warning: submitting job with duplicate name: {job.execution_name}"
+                "Warning: submitting job with duplicate name: "
+                f"{job.execution_name}"
             )
             sys.exit(f"Duplicate job NOT submitted: {job.execution_name}")
 
