@@ -122,12 +122,15 @@ conda activate ~/anaconda3/envs/chemsmart
             NUM_GPUS=0,
             EXTRA_SCHEDULER_DIRECTIVES="#SBATCH --reservation=xlzhang_1\n",
         )
-        job = type("DummyJob", (), {"label": "job1"})()
+        job = type(
+            "DummyJob", (), {"label": "job1", "execution_name": "orca_job1"}
+        )()
         submitter = SLURMSubmitter(job=job, server=server)
 
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#SBATCH --reservation=xlzhang_1\n" in buffer.getvalue()
+        assert "#SBATCH --job-name=orca_job1\n" in buffer.getvalue()
 
     def test_pbs_submitter_writes_extra_scheduler_directives(self):
         server = Server(
@@ -138,12 +141,15 @@ conda activate ~/anaconda3/envs/chemsmart
             NUM_GPUS=0,
             EXTRA_SCHEDULER_DIRECTIVES="#PBS -m abe\n",
         )
-        job = type("DummyJob", (), {"label": "job1"})()
+        job = type(
+            "DummyJob", (), {"label": "job1", "execution_name": "orca_job1"}
+        )()
         submitter = PBSSubmitter(job=job, server=server)
 
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#PBS -m abe\n" in buffer.getvalue()
+        assert "#PBS -N orca_job1\n" in buffer.getvalue()
 
 
 class TestMissingProgramSectionFallback:

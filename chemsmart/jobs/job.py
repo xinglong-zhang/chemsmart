@@ -46,6 +46,13 @@ class Job(RegistryMixin):
         self.kwargs = kwargs
 
     @property
+    def execution_name(self):
+        """Program-prefixed name for scheduling, scripts, and scratch."""
+        if self.label is None or self.PROGRAM is None:
+            return self.label
+        return f"{self.PROGRAM.lower()}_{self.label}"
+
+    @property
     def folder(self):
         return self._folder
 

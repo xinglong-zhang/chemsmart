@@ -10,6 +10,7 @@ from chemsmart.jobs.gaussian.runner import (
     GaussianJobRunner,
 )
 from chemsmart.jobs.iterate.runner import IterateJobRunner
+from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner, ORCAJobRunner
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
@@ -17,6 +18,9 @@ from chemsmart.settings.server import Server
 
 
 class DummyORCAJob:
+    PROGRAM = "ORCA"
+    execution_name = Job.execution_name
+
     def __init__(self, folder, label):
         self.folder = str(folder)
         self.label = label
@@ -135,6 +139,7 @@ class TestJobRunnerSelection:
 
         runner._set_up_variables_in_scratch(job)
 
+        assert Path(runner.running_directory) == tmp_path / "orca_orca_opt"
         assert job.label == "orca_opt_fake"
         assert Path(runner.job_inputfile).name == "orca_opt_fake.inp"
         assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
