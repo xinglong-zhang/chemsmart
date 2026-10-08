@@ -1,0 +1,17 @@
+# ORCA project settings for TD tests where td: does not override the
+# freq default. Combined with the default_config from ORCAJobSettings
+# (freq=True), this exercises the "inherited defaults" clearing path.
+gas:
+  functional: m062x
+  basis: def2-svp
+solv:
+  functional: m062x
+  basis: def2-tzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: cyclohexane
+td:
+  functional: cam-b3lyp
+  basis: def2-svp
+  solvent_model: smd
+  solvent_id: water

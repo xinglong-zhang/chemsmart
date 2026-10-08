@@ -112,9 +112,9 @@ class GaussianJobRunner(JobRunner):
             return os.path.join(
                 self.scratch_dir,
                 os.path.basename(scratch_parent),
-                job.label,
+                job.execution_name,
             )
-        return os.path.join(self.scratch_dir, job.label)
+        return os.path.join(self.scratch_dir, job.execution_name)
 
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs

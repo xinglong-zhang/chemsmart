@@ -157,8 +157,8 @@ class TestCRESTSubmission:
             catch_exceptions=False,
         )
         assert result.exit_code == 0, result.output
-        run_script = tmp_path / "chemsmart_run_1-mer_conformers.py"
-        submit_script = tmp_path / "chemsmart_sub_1-mer_conformers.sh"
+        run_script = tmp_path / "chemsmart_run_crest_1-mer_conformers.py"
+        submit_script = tmp_path / "chemsmart_sub_crest_1-mer_conformers.sh"
         assert run_script.exists()
         assert submit_script.exists()
         assert "'--test'" not in run_script.read_text()

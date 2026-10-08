@@ -1,6 +1,9 @@
 import os
 from io import StringIO
 
+import pytest
+
+from chemsmart.jobs.job import Job
 from chemsmart.settings.executable import (
     CRESTExecutable,
     GaussianExecutable,
@@ -12,6 +15,51 @@ from chemsmart.settings.submitters import PBSSubmitter, SLURMSubmitter
 
 
 class TestServer:
+    @pytest.mark.parametrize(
+        "program,label,queued_names,duplicate",
+        [
+            ("ORCA", "molecule_opt", ["orca_molecule_opt"], True),
+            ("Gaussian", "molecule_opt", ["gaussian_molecule_opt"], True),
+            ("ORCA", "molecule_opt", ["gaussian_molecule_opt"], False),
+            ("ORCA", "molecule_opt", [], False),
+            ("ORCA", None, [], False),
+        ],
+        ids=[
+            "orca-duplicate",
+            "gaussian-duplicate",
+            "other-program",
+            "empty-queue",
+            "no-label",
+        ],
+    )
+    def test_check_running_jobs(
+        self, mocker, program, label, queued_names, duplicate
+    ):
+        """Reject queued names only when both program and label match.
+
+        Mock the queue lookup so no scheduler is needed, and verify unlabeled
+        jobs skip the lookup entirely.
+        """
+        helper_cls = mocker.patch("chemsmart.utils.cluster.ClusterHelper")
+        query = helper_cls.return_value.get_running_jobs
+        query.return_value = (list(range(len(queued_names))), queued_names)
+        job = Job(molecule=None, label=label, jobrunner=None)
+        job.PROGRAM = program
+
+        if duplicate:
+            with pytest.raises(
+                SystemExit, match="Duplicate job NOT submitted"
+            ):
+                Server._check_running_jobs(job)
+        else:
+            Server._check_running_jobs(job)
+
+        if label is None:
+            helper_cls.assert_not_called()
+        else:
+            query.assert_called_once_with()
+        assert job.label == label
+
     def test_server_yaml(self, server_yaml_file):
         assert os.path.exists(server_yaml_file)
         assert os.path.isfile(server_yaml_file)
@@ -122,12 +170,15 @@ conda activate ~/anaconda3/envs/chemsmart
             NUM_GPUS=0,
             EXTRA_SCHEDULER_DIRECTIVES="#SBATCH --reservation=xlzhang_1\n",
         )
-        job = type("DummyJob", (), {"label": "job1"})()
+        job = type(
+            "DummyJob", (), {"label": "job1", "execution_name": "orca_job1"}
+        )()
         submitter = SLURMSubmitter(job=job, server=server)
 
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#SBATCH --reservation=xlzhang_1\n" in buffer.getvalue()
+        assert "#SBATCH --job-name=orca_job1\n" in buffer.getvalue()
 
     def test_pbs_submitter_writes_extra_scheduler_directives(self):
         server = Server(
@@ -138,12 +189,15 @@ conda activate ~/anaconda3/envs/chemsmart
             NUM_GPUS=0,
             EXTRA_SCHEDULER_DIRECTIVES="#PBS -m abe\n",
         )
-        job = type("DummyJob", (), {"label": "job1"})()
+        job = type(
+            "DummyJob", (), {"label": "job1", "execution_name": "orca_job1"}
+        )()
         submitter = PBSSubmitter(job=job, server=server)
 
         buffer = StringIO()
         submitter._write_scheduler_options(buffer)
         assert "#PBS -m abe\n" in buffer.getvalue()
+        assert "#PBS -N orca_job1\n" in buffer.getvalue()
 
 
 class TestMissingProgramSectionFallback:

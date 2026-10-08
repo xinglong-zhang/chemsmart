@@ -42,6 +42,34 @@ pt = PeriodicTable()
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_MO_COLOR_POSITIVE = "blue"
+_DEFAULT_MO_COLOR_NEGATIVE = "red"
+
+
+def _resolve_mo_phase_colors(job):
+    positive = job.color_positive or _DEFAULT_MO_COLOR_POSITIVE
+    negative = job.color_negative or _DEFAULT_MO_COLOR_NEGATIVE
+    if job.swap:
+        positive, negative = negative, positive
+    return positive, negative
+
+
+def _format_mo_surface_color_commands(positive_color, negative_color):
+    lines = []
+    for object_name, color, pymol_color_name in (
+        ("pos_iso", positive_color, "mo_pos_phase"),
+        ("neg_iso", negative_color, "mo_neg_phase"),
+    ):
+        color = color.strip()
+        if color.startswith("["):
+            lines.append(f"set_color {pymol_color_name}, {color}")
+            lines.append(
+                f"set surface_color, {pymol_color_name}, {object_name}"
+            )
+        else:
+            lines.append(f"set surface_color, {color}, {object_name}")
+    return "\n".join(lines) + "\n"
+
 
 _SCIENTIFIC_STYLE_TEMPLATE = "zhang_group_scientific_styles.py"
 
@@ -1565,6 +1593,7 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
         pml_file = os.path.join(job.folder, f"{job.mo_basename}.pml")
         if os.path.exists(pml_file):
             logger.warning(f"PML file {pml_file} already exists! Overwriting.")
+        positive_color, negative_color = _resolve_mo_phase_colors(job)
         with open(pml_file, "w") as f:
             f.write(f"load {job.mo_basename}.cube\n")
             f.write(
@@ -1575,8 +1604,12 @@ class PyMOLMOJobRunner(PyMOLVisualizationJobRunner):
             )
             f.write("print(pos_iso)\n")
             f.write("print(neg_iso)\n")
-            f.write("set surface_color, blue, pos_iso\n")
-            f.write("set surface_color, red, neg_iso\n")
+            f.write(
+                _format_mo_surface_color_commands(
+                    positive_color,
+                    negative_color,
+                )
+            )
             f.write(f"set transparency, {job.transparency_value}\n")
             f.write(f"set surface_quality, {job.surface_quality}\n")
             f.write(f"set antialias, {job.antialias_value}\n")

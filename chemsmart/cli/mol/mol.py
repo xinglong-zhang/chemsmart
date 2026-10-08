@@ -262,6 +262,29 @@ def click_pymol_mo_options(f):
         help="Plot the lowest unoccupied molecular orbital (LUMO). "
         "Defaults to False.",
     )
+    @click.option(
+        "-sw",
+        "--swap",
+        is_flag=True,
+        default=False,
+        help="Swap positive and negative orbital phase colors.",
+    )
+    @click.option(
+        "-cp",
+        "--color-positive",
+        type=str,
+        default=None,
+        help="Color for the positive orbital phase isosurface, "
+        "e.g. -cp '[0,1,0]' or -cp blue.",
+    )
+    @click.option(
+        "-cn",
+        "--color-negative",
+        type=str,
+        default=None,
+        help="Color for the negative orbital phase isosurface, "
+        "e.g. -cn '[1,0,0]' or -cn red.",
+    )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
         return f(*args, **kwargs)
