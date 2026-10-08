@@ -74,3 +74,61 @@ def click_mecp_restart_option(function):
         show_default=True,
         help="Resume an interrupted MECP optimization from its saved state.",
     )(function)
+
+
+def click_mecp_frequency_options(function):
+    """Apply the common post-MECP Hessian-analysis options."""
+    options = (
+        click.option(
+            "--mecp-numfreq/--no-mecp-numfreq",
+            default=False,
+            show_default=True,
+            help=(
+                "After convergence, verify the seam minimum and write "
+                "mass-weighted projected MECP frequencies and normal modes "
+                "to <label>_mecp_freq.log."
+            ),
+        ),
+        click.option(
+            "--hess-step-size",
+            type=float,
+            default=None,
+            help=(
+                "Finite-difference step size (Bohr) for MECP Hessian "
+                "analysis (default: 1e-3)."
+            ),
+        ),
+        click.option(
+            "--follow-seam-imaginary-mode/--no-follow-seam-imaginary-mode",
+            default=False,
+            show_default=True,
+            help=(
+                "If the projected MECP Hessian has a significant imaginary "
+                "mode, displace in both directions, reoptimize both MECPs, "
+                "and retain the lower seam minimum. Implies --mecp-numfreq."
+            ),
+        ),
+        click.option(
+            "--seam-mode-displacement",
+            type=click.FloatRange(min=0.0, min_open=True),
+            default=0.05,
+            show_default=True,
+            help=(
+                "Cartesian norm (Angstrom) of each +/- projected-mode "
+                "displacement used by --follow-seam-imaginary-mode."
+            ),
+        ),
+        click.option(
+            "--seam-mode-max-steps",
+            type=click.IntRange(min=1),
+            default=30,
+            show_default=True,
+            help=(
+                "Maximum constrained mode-following steps in each +/- "
+                "direction."
+            ),
+        ),
+    )
+    for option in reversed(options):
+        function = option(function)
+    return function

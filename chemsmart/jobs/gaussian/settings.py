@@ -2184,8 +2184,11 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         stable="opt",  # stability analysis for link mode
         guess="mix",  # initial guess for link mode (e.g. "mix" to break α/β symmetry)
         # seam-minimum verification via effective Hessian analysis
-        verify_seam_minimum=False,
+        mecp_numfreq=False,
         hess_step_size=1.0e-3,  # Bohr; finite-difference displacement for numerical Hessian
+        follow_seam_imaginary_mode=False,
+        seam_mode_displacement=0.05,
+        seam_mode_max_steps=30,
         restart=True,
         **kwargs,
     ):
@@ -2257,8 +2260,11 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.use_link = use_link
         self.stable = stable
         self.guess = guess
-        self.verify_seam_minimum = verify_seam_minimum
+        self.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
         self.hess_step_size = hess_step_size
+        self.follow_seam_imaginary_mode = follow_seam_imaginary_mode
+        self.seam_mode_displacement = seam_mode_displacement
+        self.seam_mode_max_steps = seam_mode_max_steps
         self.restart = restart
 
         positive_values = {
@@ -2276,10 +2282,10 @@ class GaussianMECPJobSettings(GaussianJobSettings):
             "harvey_max_component_step": harvey_max_component_step,
             "harvey_max_condition": harvey_max_condition,
             "hess_step_size": hess_step_size,
+            "seam_mode_displacement": seam_mode_displacement,
+            "seam_mode_max_steps": seam_mode_max_steps,
         }
-        invalid = [
-            name for name, value in positive_values.items() if value <= 0
-        ]
+        invalid = [name for name, value in positive_values.items() if value <= 0]
         if invalid:
             raise ValueError(
                 "MECP settings must be positive: " + ", ".join(invalid)

@@ -51,6 +51,7 @@ class ThermochemistryJobSettings:
         outputfile=None,
         overwrite=False,
         check_imaginary_frequencies=True,
+        electronic_degeneracy=None,
         write_header=True,
     ):
         """
@@ -85,6 +86,7 @@ class ThermochemistryJobSettings:
         self.outputfile = outputfile
         self.overwrite = overwrite
         self.check_imaginary_frequencies = check_imaginary_frequencies
+        self.electronic_degeneracy = electronic_degeneracy
         self.write_header = write_header
 
     def copy(self):
@@ -107,6 +109,7 @@ class ThermochemistryJobSettings:
             outputfile=self.outputfile,
             overwrite=self.overwrite,
             check_imaginary_frequencies=self.check_imaginary_frequencies,
+            electronic_degeneracy=self.electronic_degeneracy,
             write_header=self.write_header,
         )
 

@@ -8,6 +8,7 @@ Minimum Energy Cross Point calculations using Gaussian.
 import logging
 import os
 import re
+from functools import partial
 from typing import Type
 
 import numpy as np
@@ -15,6 +16,14 @@ from ase import units
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
 from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
+from chemsmart.utils.constants import (
+    MECP_FREQUENCY_HEADER,
+    MECP_FREQUENCY_TERMINATION_MARKER,
+    amu_to_kg,
+    bohr_to_meter,
+    hartree_to_joules,
+)
+from chemsmart.utils.utils import remove_word_from_parenthesized_option
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +68,11 @@ _MECP_ONLY_KEYS = frozenset(
         "harvey_max_condition",
         "use_link",
         "convergence_preset",
-        "verify_seam_minimum",
+        "mecp_numfreq",
         "hess_step_size",
+        "follow_seam_imaginary_mode",
+        "seam_mode_displacement",
+        "seam_mode_max_steps",
         "restart",
     }
 )
@@ -90,6 +102,31 @@ class GaussianMECPJob(GaussianJob):
 
     TYPE = "g16mecp"
 
+    @staticmethod
+    def _route_without_guess_read(route):
+        """Remove ``read`` from a Gaussian guess option for the first step."""
+        route = re.sub(
+            r"\b(guess)\s*=\s*\(([^)]*)\)",
+            partial(remove_word_from_parenthesized_option, word="read"),
+            route,
+            flags=re.IGNORECASE,
+        )
+        route = re.sub(r"\bguess\s*=\s*read\b", "", route, flags=re.IGNORECASE)
+        return " ".join(route.split())
+
+    @staticmethod
+    def _with_required_nosymm(route):
+        """Ensure Gaussian forces remain in the MECP Cartesian frame."""
+        route = route or ""
+        if re.search(r"\bnosymm(?:etry)?\b", route, flags=re.IGNORECASE):
+            return route
+        if re.search(r"\bsymm(?:etry)?\b", route, flags=re.IGNORECASE):
+            raise ValueError(
+                "MECP requires nosymm so Cartesian forces remain aligned with "
+                "the optimization coordinates; remove the explicit symmetry option."
+            )
+        return f"{route} nosymm".strip()
+
     def __init__(
         self,
         molecule,
@@ -108,51 +145,33 @@ class GaussianMECPJob(GaussianJob):
         )
         self._last_spin_squared = {"A": None, "B": None}
 
-    @staticmethod
-    def _route_without_guess_read(route):
-        """Remove ``read`` from a Gaussian guess option for the first step."""
-
-        def strip_parenthesized_read(match):
-            options = [
-                option.strip()
-                for option in match.group(1).split(",")
-                if option.strip().lower() != "read"
-            ]
-            return f"guess=({','.join(options)})" if options else ""
-
-        route = re.sub(
-            r"\bguess\s*=\s*\(([^)]*)\)",
-            strip_parenthesized_read,
-            route,
-            flags=re.IGNORECASE,
-        )
-        route = re.sub(r"\bguess\s*=\s*read\b", "", route, flags=re.IGNORECASE)
-        return " ".join(route.split())
-
-    @staticmethod
-    def _with_required_nosymm(route):
-        """Ensure Gaussian forces remain in the MECP Cartesian frame."""
-        route = route or ""
-        if re.search(r"\bnosymm\b", route, flags=re.IGNORECASE):
-            return route
-        if re.search(r"\bsymm(?:etry)?\b", route, flags=re.IGNORECASE):
-            raise ValueError(
-                "MECP requires nosymm so Cartesian forces remain aligned with "
-                "the optimization coordinates; remove the explicit symmetry option."
-            )
-        return f"{route} nosymm".strip()
-
     @classmethod
     def settings_class(cls) -> Type[GaussianMECPJobSettings]:
         return GaussianMECPJobSettings
 
     @property
     def report_file(self):
-        return os.path.join(self.folder, f"{self.label}_report.log")
+        return os.path.join(
+            self.optimization_folder, f"{self.label}_report.log"
+        )
+
+    @property
+    def optimization_folder(self):
+        return os.path.join(self.folder, f"{self.label}_optimization")
+
+    @property
+    def numfreq_folder(self):
+        return os.path.join(self.folder, f"{self.label}_numfreq")
+
+    @property
+    def final_report_file(self):
+        return os.path.join(self.folder, f"{self.label}_final_report.log")
 
     @property
     def trajectory_file(self):
-        return os.path.join(self.folder, f"{self.label}_traj.xyz")
+        return os.path.join(
+            self.optimization_folder, f"{self.label}_traj.xyz"
+        )
 
     @property
     def state_file(self):
@@ -242,7 +261,21 @@ class GaussianMECPJob(GaussianJob):
         if not os.path.isfile(self.report_file):
             return False
         with open(self.report_file, encoding="utf-8") as f:
-            return any(line.startswith("Converged at step") for line in f)
+            converged = any(line.startswith("Converged at step") for line in f)
+        if not converged:
+            return False
+        if self.settings.mecp_numfreq:
+            if not os.path.isfile(
+                os.path.join(
+                    self.numfreq_folder, f"{self.label}_seam_check.log"
+                )
+            ):
+                return False
+        if self.settings.mecp_numfreq:
+            return os.path.isfile(
+                os.path.join(self.folder, f"{self.label}_mecp_freq.log")
+            )
+        return True
 
     def _state_settings(self, charge, multiplicity, title, state="A"):
         """
@@ -338,8 +371,11 @@ class GaussianMECPJob(GaussianJob):
             title=f"{title} step {step_idx}",
             state=state,
         )
-        job_tag = f"{checkpoint_tag}_" if checkpoint_tag else ""
-        state_label = f"{self.label}_{job_tag}step{step_idx}_{state}"
+        if isinstance(step_idx, str):
+            state_label = f"{self.label}_{step_idx}_{state}"
+        else:
+            job_tag = f"{checkpoint_tag}_" if checkpoint_tag else ""
+            state_label = f"{self.label}_{job_tag}step{step_idx}_{state}"
 
         checkpoint_key = (checkpoint_tag, state)
         oldchkfile = self._state_checkpoint_files.get(checkpoint_key)
@@ -356,7 +392,11 @@ class GaussianMECPJob(GaussianJob):
             "label": state_label,
             "jobrunner": self.jobrunner,
             "skip_completed": False,
-            "scratch_parent_folder": f"{self.label}_steps",
+            "scratch_parent_folder": (
+                f"{self.label}_numfreq"
+                if checkpoint_tag == "check"
+                else f"{self.label}_optimization"
+            ),
             "checkpoint_filename": (
                 f"{self.label}_{checkpoint_part}{state}.chk"
             ),
@@ -368,7 +408,13 @@ class GaussianMECPJob(GaussianJob):
             job = GaussianLinkJob(**job_kwargs)
         else:
             job = GaussianGeneralJob(**job_kwargs)
-        job.set_folder(self.steps_folder)
+        job_folder = (
+            self.numfreq_folder
+            if checkpoint_tag == "check"
+            else self.steps_folder
+        )
+        os.makedirs(job_folder, exist_ok=True)
+        job.set_folder(job_folder)
         job.oldchkfile = oldchkfile
         job.run()
         output = job._output()
@@ -387,6 +433,8 @@ class GaussianMECPJob(GaussianJob):
                 f"coordinate shape {np.array(mol.positions).shape}."
             )
         gradient = -forces
+        if not hasattr(self, "_last_spin_squared"):
+            self._last_spin_squared = {"A": None, "B": None}
         self._last_spin_squared[state] = output.spin_squared_after_annihilation
         if os.path.isfile(job.chkfile):
             self._state_checkpoint_files[checkpoint_key] = job.chkfile
@@ -769,7 +817,7 @@ class GaussianMECPJob(GaussianJob):
         inv_hessian = None
         prev_eff_grad = None
         prev_positions_bfgs = None
-        self.steps_folder = os.path.join(self.folder, f"{self.label}_steps")
+        self.steps_folder = self.optimization_folder
         os.makedirs(self.steps_folder, exist_ok=True)
         self._state_checkpoint_files = {}
         self._last_spin_squared = {"A": None, "B": None}
@@ -894,6 +942,14 @@ class GaussianMECPJob(GaussianJob):
                     eff_grad=projected_grad,
                     displacement=displacement,
                 ):
+                    self._final_optimization_steps = step_idx
+                    self._final_convergence_metrics = {
+                        "energy_diff": energy_diff,
+                        "pgrad_max": float(np.max(np.abs(projected_grad))),
+                        "pgrad_rms": self._rms(projected_grad),
+                        "disp_max": float(np.max(np.abs(displacement))),
+                        "disp_rms": self._rms(displacement),
+                    }
                     report.write(
                         f"Optimization converged at step {step_idx}.\n"
                     )
@@ -948,13 +1004,145 @@ class GaussianMECPJob(GaussianJob):
 
         self.molecule.positions = positions_bohr * units.Bohr
 
-        if self.settings.verify_seam_minimum:
-            self._run_seam_minimum_check(positions_bohr)
+        seam_result = None
+        if self.settings.mecp_numfreq:
+            try:
+                seam_result = self._run_seam_minimum_check(positions_bohr)
+            except Exception as error:
+                with open(self.report_file, "a", encoding="utf-8") as report:
+                    report.write(
+                        f"Initial MECP optimization converged at step "
+                        f"{converged_step}.\n"
+                        f"Final status: FAILED SEAM VERIFICATION "
+                        f"({type(error).__name__}: {error})\n"
+                    )
+                raise
 
         with open(self.report_file, "a", encoding="utf-8") as report:
+            report.write(
+                f"Initial MECP optimization converged at step "
+                f"{converged_step}.\n"
+            )
+            if seam_result is not None:
+                initial = self._initial_seam_result
+                report.write(
+                    "Initial seam status: "
+                    f"{'MINIMUM' if initial['is_minimum'] else 'SADDLE'}; "
+                    f"significant imaginary modes={initial['n_negative']}\n"
+                )
+                if not initial["is_minimum"] and "frequencies" in initial:
+                    report.write(
+                        "Initial lowest projected frequency="
+                        f"{np.min(initial['frequencies']):+.6f} cm^-1\n"
+                    )
+                if not initial["is_minimum"]:
+                    report.write(
+                        "Seam following: completed; selected branch="
+                        f"{self._selected_seam_follow_branch}\n"
+                        "Seam-following macro steps="
+                        f"{self._selected_seam_follow_macro_steps}\n"
+                    )
+                report.write(
+                    f"Final MECP energy={seam_result['mecp_energy']:+.12f} "
+                    "Hartree\n"
+                    f"Final energy gap={seam_result['energy_diff']:+.6e} "
+                    "Hartree\n"
+                    "Final significant imaginary modes="
+                    f"{seam_result['n_negative']}\n"
+                    "Final status: VERIFIED MECP MINIMUM\n"
+                )
+                if self.settings.mecp_numfreq:
+                    report.write(
+                        f"Final geometry and frequencies: "
+                        f"{self.label}_mecp_freq.log\n"
+                    )
             report.write(f"Converged at step {converged_step}.\n")
+        if not getattr(self, "_is_seam_follow_branch", False):
+            self._write_final_report(
+                initial_steps=converged_step,
+                initial_energy_a=ea,
+                initial_energy_b=eb,
+                seam_result=seam_result,
+            )
         if os.path.isfile(self.state_file):
             os.remove(self.state_file)
+
+    def _write_final_report(
+        self, initial_steps, initial_energy_a, initial_energy_b, seam_result
+    ):
+        """Summarize only the selected final structure and its convergence."""
+        result = seam_result or {}
+        metrics = result.get(
+            "convergence_metrics", self._final_convergence_metrics
+        )
+        energy_a = result.get("energy_a", initial_energy_a)
+        energy_b = result.get("energy_b", initial_energy_b)
+        positions = np.asarray(
+            result.get("positions_angstrom", self.molecule.positions),
+            dtype=float,
+        )
+        thresholds = result.get("convergence_thresholds") or {
+            "energy_diff": self.settings.energy_diff_tol,
+            "pgrad_max": self.settings.force_max_tol,
+            "pgrad_rms": self.settings.force_rms_tol,
+            "disp_max": self.settings.disp_max_tol,
+            "disp_rms": self.settings.disp_rms_tol,
+        }
+        with open(self.final_report_file, "w", encoding="utf-8") as report:
+            report.write("CHEMSMART final MECP result\n")
+            report.write(f"label={self.label}\n")
+            report.write(f"initial_optimization_steps={initial_steps}\n")
+            macro_steps = getattr(
+                self, "_selected_seam_follow_macro_steps", 0
+            )
+            report.write(f"seam_follow_macro_steps={macro_steps}\n")
+            if macro_steps:
+                report.write(
+                    "seam_follow_selected_branch="
+                    f"{self._selected_seam_follow_branch}\n"
+                )
+                report.write(
+                    "final_branch_optimization_steps="
+                    f"{result.get('optimization_steps', 'NA')}\n"
+                )
+            report.write(f"energy_A={energy_a:+.12f} Hartree\n")
+            report.write(f"energy_B={energy_b:+.12f} Hartree\n")
+            report.write(
+                f"mecp_energy={0.5 * (energy_a + energy_b):+.12f} "
+                "Hartree\n"
+            )
+            report.write("\nFinal convergence criteria:\n")
+            for name, threshold in thresholds.items():
+                value = metrics[name]
+                if name == "energy_diff":
+                    value = abs(value)
+                unit = "Hartree" if name == "energy_diff" else (
+                    "Hartree/Bohr" if name.startswith("pgrad") else "Bohr"
+                )
+                report.write(
+                    f"{name}: value={value:.6e} "
+                    f"threshold={threshold:.6e} {unit} "
+                    f"status={'PASS' if value <= threshold else 'FAIL'}\n"
+                )
+            if seam_result is not None:
+                report.write(
+                    "\nseam_minimum="
+                    f"{'PASS' if result.get('is_minimum', True) else 'FAIL'}\n"
+                    f"significant_imaginary_modes={result['n_negative']}\n"
+                    f"frequency_file={self.label}_mecp_freq.log\n"
+                )
+            else:
+                report.write("\nseam_minimum=NOT_CHECKED\n")
+            report.write("\nFinal geometry (Angstrom):\n")
+            for symbol, position in zip(self.molecule.symbols, positions):
+                report.write(
+                    f"{symbol:>3s} {position[0]:+16.8f} "
+                    f"{position[1]:+16.8f} {position[2]:+16.8f}\n"
+                )
+            if "frequencies" in result:
+                report.write("\nProjected MECP frequencies (cm^-1):\n")
+                for index, frequency in enumerate(result["frequencies"], 1):
+                    report.write(f"mode {index:4d}: {frequency:+14.6f}\n")
 
     # ------------------------------------------------------------------
     # Seam-minimum verification via effective Hessian analysis
@@ -1038,6 +1226,90 @@ class GaussianMECPJob(GaussianJob):
         seam_basis = q_full[:, projected_basis.shape[1] :]
         return seam_basis.T @ hessian @ seam_basis
 
+    @staticmethod
+    def _frequency_from_mass_weighted_eigenvalue(eigenvalue):
+        """Convert Hartree/(Bohr² amu) to a signed wavenumber in cm⁻¹."""
+        angular_frequency = np.sqrt(
+            abs(eigenvalue)
+            * hartree_to_joules
+            / (bohr_to_meter**2 * amu_to_kg)
+        )
+        wavenumber = angular_frequency / (2.0 * np.pi * units._c * 100.0)
+        return float(np.copysign(wavenumber, eigenvalue))
+
+    def _projected_frequencies_and_modes(
+        self, hessian, positions_bohr, diff_grad
+    ):
+        """Return mass-weighted MECP frequencies and Cartesian normal modes.
+
+        Translation, rotation, and the gradient-difference direction are
+        removed in mass-weighted coordinates. Frequencies are returned as
+        signed wavenumbers in cm⁻¹; a negative value denotes an imaginary
+        mode on the crossing seam.
+        """
+        positions = np.asarray(positions_bohr, dtype=float)
+        masses = np.asarray(self.molecule.most_abundant_masses, dtype=float)
+        sqrt_masses = np.sqrt(masses)
+        mass_vector = np.repeat(masses, 3)
+        sqrt_mass_vector = np.sqrt(mass_vector)
+
+        mass_weighted_hessian = hessian / np.sqrt(
+            np.outer(mass_vector, mass_vector)
+        )
+
+        center_of_mass = np.average(positions, axis=0, weights=masses)
+        centered = positions - center_of_mass
+        raw_projection_vectors = []
+
+        for axis_index in range(3):
+            translation = np.zeros_like(positions)
+            translation[:, axis_index] = sqrt_masses
+            raw_projection_vectors.append(translation.ravel())
+
+        for axis in np.eye(3):
+            rotation = np.cross(centered, axis) * sqrt_masses[:, None]
+            raw_projection_vectors.append(rotation.ravel())
+
+        mass_weighted_diff_grad = (
+            np.asarray(diff_grad, dtype=float).ravel() / sqrt_mass_vector
+        )
+        raw_projection_vectors.append(mass_weighted_diff_grad)
+
+        projection_vectors = []
+        for vector in raw_projection_vectors:
+            vector = np.asarray(vector, dtype=float)
+            for basis_vector in projection_vectors:
+                vector -= np.dot(vector, basis_vector) * basis_vector
+            norm = np.linalg.norm(vector)
+            if norm > 1.0e-10:
+                projection_vectors.append(vector / norm)
+
+        if projection_vectors:
+            projected_basis = np.column_stack(projection_vectors)
+            full_basis, _ = np.linalg.qr(projected_basis, mode="complete")
+            seam_basis = full_basis[:, projected_basis.shape[1] :]
+        else:
+            seam_basis = np.eye(hessian.shape[0])
+
+        reduced_hessian = (
+            seam_basis.T @ mass_weighted_hessian @ seam_basis
+        )
+        eigenvalues, reduced_modes = np.linalg.eigh(reduced_hessian)
+        mass_weighted_modes = seam_basis @ reduced_modes
+        cartesian_modes = mass_weighted_modes / sqrt_mass_vector[:, None]
+        mode_norms = np.linalg.norm(cartesian_modes, axis=0)
+        cartesian_modes /= mode_norms
+
+        frequencies = np.array(
+            [
+                self._frequency_from_mass_weighted_eigenvalue(value)
+                for value in eigenvalues
+            ]
+        )
+        return frequencies, cartesian_modes.T, eigenvalues, len(
+            projection_vectors
+        )
+
     @classmethod
     def _lagrangian_hessian(cls, hessian_a, hessian_b, grad_a, grad_b):
         """Return the constrained MECP Lagrangian Hessian and multiplier."""
@@ -1052,7 +1324,9 @@ class GaussianMECPJob(GaussianJob):
         hessian = (1.0 - multiplier) * hessian_a + multiplier * hessian_b
         return hessian, multiplier
 
-    def _compute_numerical_hessian(self, positions_bohr, h, step_prefix):
+    def _compute_numerical_hessian(
+        self, positions_bohr, h, step_prefix, macro_step=None
+    ):
         """
         Compute both state Hessians numerically via central finite differences
         of the Cartesian forces.
@@ -1099,8 +1373,13 @@ class GaussianMECPJob(GaussianJob):
             pos_minus = pos.copy()
             pos_minus[atom_idx, coord_idx] -= h
 
-            step_p = step_prefix + 2 * j
-            step_m = step_prefix + 2 * j + 1
+            if macro_step is None:
+                step_p = step_prefix + 2 * j
+                step_m = step_prefix + 2 * j + 1
+            else:
+                coord = f"macro{macro_step:02d}_check_coord{j + 1:02d}"
+                step_p = f"{coord}_plus"
+                step_m = f"{coord}_minus"
 
             _, g_A_plus = self._run_state(
                 pos_plus, step_p, "A", checkpoint_tag="check"
@@ -1122,7 +1401,13 @@ class GaussianMECPJob(GaussianJob):
         H_B = (H_B + H_B.T) / 2
         return H_A, H_B
 
-    def verify_seam_minimum(self, h=None, step_prefix=1):
+    def verify_seam_minimum(
+        self,
+        h=None,
+        step_prefix=1,
+        write_frequencies=False,
+        macro_step=None,
+    ):
         """
         Verify that the current MECP geometry is a **minimum on the crossing
         seam**, not merely a crossing point.
@@ -1146,8 +1431,7 @@ class GaussianMECPJob(GaussianJob):
             This analysis requires **4 × 3N** additional Gaussian sub-jobs
             (see :meth:`_compute_numerical_hessian`).  Call it only on the
             converged geometry.  Trigger automatically via the
-            ``--verify-seam-minimum`` CLI flag or by setting
-            ``settings.verify_seam_minimum = True``.
+            ``--mecp-numfreq`` CLI flag.
 
         Args:
             h (float, optional): Finite-difference step size in Bohr.
@@ -1155,6 +1439,8 @@ class GaussianMECPJob(GaussianJob):
             step_prefix (int, optional): Starting check-specific sub-job step
                 index (default: 1). The ``check`` name component prevents
                 clashes with normal MECP steps.
+            write_frequencies (bool, optional): Write mass-weighted projected
+                frequencies and normal modes in addition to the seam check.
 
         Returns:
             dict: Keys ``"eigenvalues"`` (1-D array, non-projected modes),
@@ -1173,11 +1459,16 @@ class GaussianMECPJob(GaussianJob):
         logger.info(
             f"verify_seam_minimum: computing gradient difference at {self.label}"
         )
+        reference_step = (
+            step_prefix
+            if macro_step is None
+            else f"macro{macro_step:02d}_check_reference"
+        )
         ea, grad_a = self._run_state(
-            positions_bohr, step_prefix, "A", checkpoint_tag="check"
+            positions_bohr, reference_step, "A", checkpoint_tag="check"
         )
         eb, grad_b = self._run_state(
-            positions_bohr, step_prefix, "B", checkpoint_tag="check"
+            positions_bohr, reference_step, "B", checkpoint_tag="check"
         )
         diff_grad = grad_a - grad_b
 
@@ -1186,29 +1477,61 @@ class GaussianMECPJob(GaussianJob):
             f"(h={h} Bohr, {4 * 3 * len(self.molecule.symbols)} sub-jobs)"
         )
         H_A, H_B = self._compute_numerical_hessian(
-            positions_bohr, h=h, step_prefix=step_prefix + 1
+            positions_bohr,
+            h=h,
+            step_prefix=step_prefix + 1,
+            macro_step=macro_step,
         )
 
-        proj_vecs = self._build_projection_vectors(positions_bohr, diff_grad)
         H_lagrangian, lagrange_multiplier = self._lagrangian_hessian(
             H_A, H_B, grad_a, grad_b
         )
+        proj_vecs = self._build_projection_vectors(positions_bohr, diff_grad)
         H_seam = self._reduced_hessian(H_lagrangian, proj_vecs)
 
         non_zero_evals = np.sort(np.linalg.eigvalsh(H_seam))
         n_proj = len(proj_vecs)
-        n_negative = int(np.sum(non_zero_evals < -1.0e-6))
+        # Use the same mass-weighted curvature tolerance for both CLI modes.
+        # Raw Cartesian and mass-weighted eigenvalues have different units.
+        frequencies, modes, frequency_eigenvalues, frequency_n_proj = (
+            self._projected_frequencies_and_modes(
+                H_lagrangian, positions_bohr, diff_grad
+            )
+        )
+        n_negative = int(np.sum(frequency_eigenvalues < -1.0e-6))
 
         result = {
             "eigenvalues": non_zero_evals,
             "n_negative": n_negative,
             "is_minimum": n_negative == 0,
+            "energy_a": ea,
+            "energy_b": eb,
+            "mecp_energy": 0.5 * (ea + eb),
             "energy_diff": ea - eb,
             "n_projected": n_proj,
             "lagrange_multiplier": lagrange_multiplier,
+            "positions_angstrom": positions_bohr * units.Bohr,
+            "atomic_masses": np.asarray(
+                self.molecule.most_abundant_masses, dtype=float
+            ),
+            "multiplicity_a": self.settings.multiplicity_a,
+            "multiplicity_b": self.settings.multiplicity_b,
+            # Molecular point-group detection is not currently available on
+            # Molecule. Use the conservative C1 symmetry number by default.
+            "rotational_symmetry_number": 1,
         }
 
+        if write_frequencies:
+            result.update(
+                frequency_eigenvalues=frequency_eigenvalues,
+                frequencies=frequencies,
+                modes=modes,
+                n_projected=frequency_n_proj,
+            )
+
         self._write_seam_check_log(result, h, step_prefix)
+        if write_frequencies:
+            self._write_mecp_frequency_log(result, h)
         self._remove_checkpoint_set("check")
         return result
 
@@ -1223,9 +1546,13 @@ class GaussianMECPJob(GaussianJob):
                 os.remove(checkpoint_file)
 
     def _run_seam_minimum_check(self, positions_bohr):
-        """Called at the end of ``_run()`` when ``verify_seam_minimum`` is set."""
+        """Run the requested post-convergence MECP Hessian analysis."""
         logger.info(f"Starting seam-minimum verification for {self.label}")
-        result = self.verify_seam_minimum()
+        result = self.verify_seam_minimum(
+            write_frequencies=self.settings.mecp_numfreq
+        )
+        self._initial_seam_result = result
+        self._last_seam_result = result
         status = (
             "MINIMUM"
             if result["is_minimum"]
@@ -1236,15 +1563,395 @@ class GaussianMECPJob(GaussianJob):
             f"(n_negative={result['n_negative']})"
         )
         if not result["is_minimum"]:
+            if getattr(self.settings, "follow_seam_imaginary_mode", False):
+                result = self._follow_seam_imaginary_mode(result)
+                self._last_seam_result = result
+                return result
             raise RuntimeError(
                 f"Converged crossing is not a minimum on the seam "
                 f"({result['n_negative']} negative eigenvalue(s))."
             )
+        return result
+
+    def _write_mode_displacement_xyz(self, path, positions, comment):
+        """Write a projected-mode displacement as an XYZ structure."""
+        with open(path, "w", encoding="utf-8") as output:
+            output.write(f"{len(self.molecule.symbols)}\n{comment}\n")
+            for symbol, position in zip(self.molecule.symbols, positions):
+                output.write(
+                    f"{symbol:<3s} {position[0]:+16.10f} "
+                    f"{position[1]:+16.10f} {position[2]:+16.10f}\n"
+                )
+
+    @staticmethod
+    def _constrained_seam_displacement(
+        energy_diff,
+        progress_error,
+        grad_a,
+        grad_b,
+        progress_mode,
+        step_size,
+    ):
+        """Return a step tangent to the crossing seam and progress plane.
+
+        The two linearized constraints are ``E_A - E_B = 0`` and
+        ``mode . (x - x_plane) = 0``.  A minimum-norm correction restores
+        both constraints, while the state-A gradient is projected into their
+        common null space before taking the downhill step.
+        """
+        diff_grad = np.asarray(grad_a, dtype=float).ravel() - np.asarray(
+            grad_b, dtype=float
+        ).ravel()
+        mode = np.asarray(progress_mode, dtype=float).ravel()
+        mode_norm = float(np.linalg.norm(mode))
+        if mode_norm <= np.finfo(float).tiny:
+            raise RuntimeError("Seam-following mode has zero norm.")
+        mode /= mode_norm
+
+        constraints = np.vstack((diff_grad, mode))
+        gram = constraints @ constraints.T
+        if np.linalg.cond(gram) > 1.0e12:
+            raise RuntimeError(
+                "Energy-gap and mode-following constraints are linearly "
+                "dependent."
+            )
+
+        correction_rhs = np.array([-energy_diff, -progress_error])
+        correction = constraints.T @ np.linalg.solve(gram, correction_rhs)
+        gradient = np.asarray(grad_a, dtype=float).ravel()
+        gradient_multipliers = np.linalg.solve(gram, constraints @ gradient)
+        tangent_gradient = gradient - constraints.T @ gradient_multipliers
+        displacement = correction - step_size * tangent_gradient
+        return (
+            displacement.reshape(np.asarray(grad_a).shape),
+            tangent_gradient.reshape(np.asarray(grad_a).shape),
+            correction.reshape(np.asarray(grad_a).shape),
+        )
+
+    def _optimize_on_seam_progress_plane(
+        self,
+        positions_bohr,
+        plane_point_bohr,
+        progress_mode,
+        trace,
+        macro_step,
+    ):
+        """Optimize all seam coordinates except one fixed progress mode."""
+        positions = np.asarray(positions_bohr, dtype=float).copy()
+        plane_point = np.asarray(plane_point_bohr, dtype=float)
+        mode = np.asarray(progress_mode, dtype=float).ravel()
+        mode /= np.linalg.norm(mode)
+        displacement = np.zeros_like(positions)
+        current_step_size = self.settings.step_size
+
+        self.steps_folder = self.optimization_folder
+        os.makedirs(self.steps_folder, exist_ok=True)
+        self._state_checkpoint_files = {}
+        self._last_spin_squared = {"A": None, "B": None}
+
+        for inner_step in range(1, self.settings.max_steps + 1):
+            step_index = f"macro{macro_step:02d}_inner{inner_step:03d}"
+            trace.write(
+                f"macro_step={macro_step} inner_step={inner_step} "
+                "status=RUNNING_STATE_A\n"
+            )
+            trace.flush()
+            ea, grad_a = self._run_state(positions, step_index, "A")
+            trace.write(
+                f"macro_step={macro_step} inner_step={inner_step} "
+                "status=RUNNING_STATE_B\n"
+            )
+            trace.flush()
+            eb, grad_b = self._run_state(positions, step_index, "B")
+            progress_error = float(
+                np.dot((positions - plane_point).ravel(), mode)
+            )
+            displacement, tangent_gradient, _correction = (
+                self._constrained_seam_displacement(
+                    energy_diff=ea - eb,
+                    progress_error=progress_error,
+                    grad_a=grad_a,
+                    grad_b=grad_b,
+                    progress_mode=mode,
+                    step_size=current_step_size,
+                )
+            )
+            displacement = self._apply_trust_radius(displacement)
+            trace.write(
+                f"macro_step={macro_step} inner_step={inner_step} "
+                f"E_A={ea:.10f} E_B={eb:.10f} dE={ea-eb:+.6e} "
+                f"progress_error={progress_error:+.6e} "
+                f"tangent_grad_max={np.max(np.abs(tangent_gradient)):.3e} "
+                f"displacement_max={np.max(np.abs(displacement)):.3e}\n"
+            )
+
+            constraints_converged = (
+                abs(ea - eb) <= self.settings.energy_diff_tol
+                and abs(progress_error) <= self.settings.disp_max_tol
+            )
+            if constraints_converged and self._is_converged(
+                energy_diff=ea - eb,
+                eff_grad=tangent_gradient,
+                displacement=displacement,
+            ):
+                self.molecule.positions = positions * units.Bohr
+                return positions
+
+            positions = positions + displacement
+
+        raise RuntimeError(
+            "Constrained seam optimization did not converge within "
+            f"{self.settings.max_steps} steps."
+        )
+
+    @staticmethod
+    def _overlap_tracked_negative_mode(result, previous_mode):
+        """Select and orient the negative mode overlapping the prior mode."""
+        modes = np.asarray(result["modes"], dtype=float)
+        eigenvalues = np.asarray(result["frequency_eigenvalues"], dtype=float)
+        negative = np.flatnonzero(eigenvalues < -1.0e-6)
+        if not len(negative):
+            return None, None, None
+
+        previous = np.asarray(previous_mode, dtype=float).ravel()
+        previous /= np.linalg.norm(previous)
+        overlaps = np.array(
+            [np.dot(modes[index].ravel(), previous) for index in negative]
+        )
+        selected = int(negative[np.argmax(np.abs(overlaps))])
+        signed_overlap = float(overlaps[np.argmax(np.abs(overlaps))])
+        mode = modes[selected].ravel()
+        if signed_overlap < 0.0:
+            mode = -mode
+            signed_overlap = -signed_overlap
+        mode /= np.linalg.norm(mode)
+        return selected, mode, signed_overlap
+
+    @staticmethod
+    def _displace_along_mode(positions, mode, distance):
+        """Displace an ``(N, 3)`` geometry along a flattened normal mode."""
+        positions = np.asarray(positions, dtype=float)
+        mode = np.asarray(mode, dtype=float)
+        if mode.size != positions.size:
+            raise ValueError(
+                "Normal-mode size does not match the Cartesian geometry."
+            )
+        return positions + distance * mode.reshape(positions.shape)
+
+    def _follow_seam_imaginary_mode(self, result):
+        """Follow a negative seam mode with a constrained progress plane."""
+        frequencies = np.asarray(result.get("frequencies", []), dtype=float)
+        modes = np.asarray(result.get("modes", []), dtype=float)
+        if not len(frequencies) or modes.shape[0] != len(frequencies):
+            raise RuntimeError(
+                "Seam-mode following requires projected frequency modes."
+            )
+
+        mode_index = int(np.argmin(frequencies))
+        if frequencies[mode_index] >= 0.0:
+            return result
+
+        base_positions = np.asarray(result["positions_angstrom"], dtype=float)
+        mode = modes[mode_index].reshape(base_positions.shape)
+        candidates = []
+        displacement_norm = self.settings.seam_mode_displacement
+        displacement_bohr = displacement_norm / units.Bohr
+        follow_folder = os.path.join(
+            self.folder, f"{self.label}_seam_follow"
+        )
+        os.makedirs(follow_folder, exist_ok=True)
+
+        summary_file = os.path.join(
+            follow_folder, f"{self.label}_seam_follow.log"
+        )
+        with open(summary_file, "w", encoding="utf-8") as summary:
+            summary.write("CHEMSMART constrained MECP seam-mode following\n")
+            summary.write(
+                f"source_frequency={frequencies[mode_index]:+.6f} cm^-1\n"
+                f"progress_step={displacement_norm:.6f} Angstrom\n"
+            )
+
+        for suffix, sign in (("plus", 1.0), ("minus", -1.0)):
+            tracked_mode = sign * mode.ravel()
+            current_bohr = base_positions / units.Bohr
+            branch_label = f"{self.label}_seam_follow_{suffix}"
+            xyz_file = os.path.join(follow_folder, f"{branch_label}.xyz")
+            molecule = self.molecule.copy()
+            molecule.positions = base_positions
+            settings = self.settings.copy()
+            settings.follow_seam_imaginary_mode = False
+            settings.mecp_numfreq = True
+            settings.restart = False
+            # A loose optimization can declare convergence before the
+            # displaced structure has escaped the seam saddle. Preserve
+            # stricter custom values, otherwise require the tight preset.
+            tight = settings.CONVERGENCE_PRESETS["tight"]
+            for name in (
+                "energy_diff_tol",
+                "force_max_tol",
+                "force_rms_tol",
+                "disp_max_tol",
+                "disp_rms_tol",
+                "trust_radius",
+            ):
+                setattr(
+                    settings,
+                    name,
+                    min(getattr(settings, name), tight[name]),
+                )
+            settings.convergence_preset = "tight"
+
+            branch = self.__class__(
+                molecule=molecule,
+                settings=settings,
+                label=branch_label,
+                jobrunner=self.jobrunner,
+                skip_completed=False,
+            )
+            branch._is_seam_follow_branch = True
+            branch.set_folder(follow_folder)
+            trace_file = os.path.join(
+                follow_folder, f"{branch_label}_mode_follow.log"
+            )
+            try:
+                with open(trace_file, "w", encoding="utf-8") as trace:
+                    trace.write(
+                        "CHEMSMART constrained MECP seam-mode branch\n"
+                        f"branch={suffix}\n"
+                    )
+                    for macro_step in range(
+                        1, self.settings.seam_mode_max_steps + 1
+                    ):
+                        plane_point = self._displace_along_mode(
+                            current_bohr,
+                            tracked_mode,
+                            displacement_bohr,
+                        )
+                        trace.write(
+                            f"macro_step={macro_step} "
+                            "status=CONSTRAINED_OPTIMIZATION\n"
+                        )
+                        trace.flush()
+                        self._write_mode_displacement_xyz(
+                            xyz_file,
+                            plane_point * units.Bohr,
+                            (
+                                f"{self.label}: constrained {suffix} "
+                                f"macro step {macro_step}"
+                            ),
+                        )
+                        current_bohr = branch._optimize_on_seam_progress_plane(
+                            positions_bohr=plane_point,
+                            plane_point_bohr=plane_point,
+                            progress_mode=tracked_mode,
+                            trace=trace,
+                            macro_step=macro_step,
+                        )
+                        branch.molecule.positions = current_bohr * units.Bohr
+                        trace.write(
+                            f"macro_step={macro_step} "
+                            "status=COMPUTING_PROJECTED_HESSIAN\n"
+                        )
+                        trace.flush()
+                        step_result = branch.verify_seam_minimum(
+                            write_frequencies=True,
+                            macro_step=macro_step,
+                        )
+                        selected, next_mode, overlap = (
+                            self._overlap_tracked_negative_mode(
+                                step_result, tracked_mode
+                            )
+                        )
+                        trace.write(
+                            f"macro_step={macro_step} "
+                            f"mecp_energy={step_result['mecp_energy']:+.12f} "
+                            f"n_negative={step_result['n_negative']}"
+                        )
+                        if next_mode is None:
+                            trace.write(" status=NEGATIVE_MODE_CROSSED\n")
+                            break
+                        trace.write(
+                            f" tracked_mode={selected + 1} "
+                            f"frequency={step_result['frequencies'][selected]:+.6f} "
+                            f"overlap={overlap:.6f}\n"
+                        )
+                        tracked_mode = next_mode
+                    else:
+                        raise RuntimeError(
+                            "Negative seam mode remains after "
+                            f"{self.settings.seam_mode_max_steps} constrained "
+                            "following steps."
+                        )
+
+                # Release the progress coordinate only after the constrained
+                # Hessian no longer contains a significant negative mode.
+                branch.molecule.positions = current_bohr * units.Bohr
+                branch.run()
+            except RuntimeError as error:
+                logger.warning(
+                    "Seam-mode %s branch did not yield a minimum: %s",
+                    suffix,
+                    error,
+                )
+            branch_result = getattr(branch, "_last_seam_result", None)
+            if branch_result is not None and branch_result["is_minimum"]:
+                branch_result["convergence_metrics"] = (
+                    branch._final_convergence_metrics
+                )
+                branch_result["convergence_thresholds"] = {
+                    "energy_diff": branch.settings.energy_diff_tol,
+                    "pgrad_max": branch.settings.force_max_tol,
+                    "pgrad_rms": branch.settings.force_rms_tol,
+                    "disp_max": branch.settings.disp_max_tol,
+                    "disp_rms": branch.settings.disp_rms_tol,
+                }
+                branch_result["optimization_steps"] = (
+                    branch._final_optimization_steps
+                )
+                candidates.append(
+                    (
+                        branch_result["mecp_energy"],
+                        branch_result,
+                        suffix,
+                        macro_step,
+                    )
+                )
+
+        if not candidates:
+            raise RuntimeError(
+                "Neither projected-mode displacement converged to a seam "
+                "minimum. The +/- XYZ structures and branch reports were "
+                "kept for inspection."
+            )
+
+        _, selected, selected_suffix, selected_macro_steps = min(
+            candidates, key=lambda item: item[0]
+        )
+        self._selected_seam_follow_branch = selected_suffix
+        self._selected_seam_follow_macro_steps = selected_macro_steps
+        self.molecule.positions = np.asarray(
+            selected["positions_angstrom"], dtype=float
+        )
+        self._write_seam_check_log(selected, self.settings.hess_step_size, 1)
+        self._write_mecp_frequency_log(selected, self.settings.hess_step_size)
+        with open(summary_file, "a", encoding="utf-8") as output:
+            output.write(f"selected_branch={selected_suffix}\n")
+            output.write(f"selected_macro_steps={selected_macro_steps}\n")
+            output.write(
+                f"selected_mecp_energy={selected['mecp_energy']:+.12f} "
+                "Hartree\nstatus=MECP MINIMUM\n"
+            )
+        logger.info(
+            "Seam-mode following selected the %s verified MECP minimum.",
+            selected_suffix,
+        )
+        return selected
 
     def _write_seam_check_log(self, result, h, step_prefix):
         """Write the seam-minimum verification results to a log file."""
+        os.makedirs(self.numfreq_folder, exist_ok=True)
         seam_check_file = os.path.join(
-            self.folder, f"{self.label}_seam_check.log"
+            self.numfreq_folder, f"{self.label}_seam_check.log"
         )
         with open(seam_check_file, "w", encoding="utf-8") as f:
             f.write("CHEMSMART MECP seam-minimum verification\n")
@@ -1260,11 +1967,90 @@ class GaussianMECPJob(GaussianJob):
             n_neg = result["n_negative"]
             is_min = result["is_minimum"]
             f.write(
-                f"n_negative_eigenvalues={n_neg}  "
+                f"n_significant_negative_mass_weighted_eigenvalues={n_neg}  "
                 f"{'MECP MINIMUM' if is_min else 'SADDLE POINT ON SEAM'}\n"
             )
+            f.write("Minimum test tolerance: -1e-6 Hartree/(Bohr^2 amu).\n")
             f.write("\nEigenvalues of H_eff (Hartree/Bohr^2):\n")
             for i, ev in enumerate(result["eigenvalues"]):
-                flag = "  ** NEGATIVE **" if ev < -1.0e-6 else ""
+                flag = "  ** NEGATIVE **" if ev < 0.0 else ""
                 f.write(f"  mode {i + 1:4d}: {ev:+.6e}{flag}\n")
         logger.info(f"Seam-minimum check results written to {seam_check_file}")
+
+    def _write_mecp_frequency_log(self, result, h):
+        """Write projected MECP frequencies and Cartesian normal modes."""
+        frequency_file = os.path.join(
+            self.folder, f"{self.label}_mecp_freq.log"
+        )
+        symbols = list(self.molecule.symbols)
+        positions = np.asarray(result["positions_angstrom"], dtype=float)
+        masses = np.asarray(result["atomic_masses"], dtype=float)
+
+        with open(frequency_file, "w", encoding="utf-8") as output:
+            output.write(f"{MECP_FREQUENCY_HEADER}\n")
+            output.write(f"label={self.label}\n")
+            output.write(f"hess_step={h:.6e} Bohr\n")
+            output.write(f"energy_A={result['energy_a']:+.12f} Hartree\n")
+            output.write(f"energy_B={result['energy_b']:+.12f} Hartree\n")
+            output.write(
+                f"mecp_energy={result['mecp_energy']:+.12f} Hartree\n"
+            )
+            output.write(
+                f"energy_difference={result['energy_diff']:+.6e} Hartree\n"
+            )
+            output.write(
+                f"lagrange_multiplier="
+                f"{result['lagrange_multiplier']:+.8e}\n"
+            )
+            output.write(f"n_atoms={len(symbols)}\n")
+            output.write(f"n_projected={result['n_projected']}\n")
+            output.write(f"n_modes={len(result['frequencies'])}\n")
+            output.write(
+                f"n_imaginary={int(np.sum(result['frequencies'] < 0.0))}\n"
+                f"n_significant_imaginary={result['n_negative']}\n\n"
+            )
+            output.write(
+                f"multiplicity_A={result['multiplicity_a']}\n"
+                f"multiplicity_B={result['multiplicity_b']}\n"
+                "rotational_symmetry_number="
+                f"{result['rotational_symmetry_number']}\n\n"
+            )
+
+            output.write("Geometry (Angstrom) and masses (amu):\n")
+            for symbol, position, mass in zip(symbols, positions, masses):
+                output.write(
+                    f"{symbol:>3s} {position[0]:+16.8f} "
+                    f"{position[1]:+16.8f} {position[2]:+16.8f} "
+                    f"{mass:12.8f}\n"
+                )
+
+            output.write("\nProjected MECP frequencies (cm^-1):\n")
+            for index, frequency in enumerate(result["frequencies"], 1):
+                output.write(f"mode {index:4d}: {frequency:+14.6f}\n")
+
+            output.write(
+                "\nCartesian normal modes "
+                "(mass-unweighted, unit-normalized):\n"
+            )
+            for mode_index, mode in enumerate(result["modes"], 1):
+                frequency = result["frequencies"][mode_index - 1]
+                output.write(
+                    f"mode {mode_index:4d} "
+                    f"frequency={frequency:+.6f} cm^-1\n"
+                )
+                mode_vectors = np.asarray(mode).reshape(len(symbols), 3)
+                for atom_index, (symbol, vector) in enumerate(
+                    zip(symbols, mode_vectors), 1
+                ):
+                    output.write(
+                        f"{atom_index:5d} {symbol:>3s} "
+                        f"{vector[0]:+14.8f} {vector[1]:+14.8f} "
+                        f"{vector[2]:+14.8f}\n"
+                    )
+                output.write("\n")
+
+            output.write(f"{MECP_FREQUENCY_TERMINATION_MARKER}\n")
+
+        logger.info(
+            f"MECP projected frequencies written to {frequency_file}"
+        )

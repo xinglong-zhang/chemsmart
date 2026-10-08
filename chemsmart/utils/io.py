@@ -73,6 +73,20 @@ ALL_SUFFIXES = tuple(
 PROGRAMS_WITH_FOLDER_DETECTION = {"xtb", "crest"}
 
 
+def file_content_begins_with(filepath, prefix):
+    """Return whether a text file begins with *prefix*.
+
+    Files are read as UTF-8 with undecodable bytes replaced.  An unreadable
+    file is treated as a non-match so callers can use this helper for format
+    detection without handling filesystem errors separately.
+    """
+    try:
+        with open(filepath, encoding="utf-8", errors="replace") as stream:
+            return stream.read(len(prefix)) == prefix
+    except OSError:
+        return False
+
+
 def get_program_output_extensions(program, default=(".log", ".out")):
     """Return preferred output-file extensions for a detected program."""
     return tuple(PROGRAM_INFO.get(program, {}).get("suffixes", default))

@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
     Thermochemistry,
+    thermochemistry_from_file,
 )
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
@@ -26,6 +27,16 @@ from chemsmart.utils.constants import (
 
 
 class TestThermochemistry:
+    def test_factory_preserves_gaussian_analysis(self, gaussian_singlet_opt_outfile):
+        analysis = thermochemistry_from_file(
+            gaussian_singlet_opt_outfile, temperature=298.15
+        )
+        original = Thermochemistry(
+            gaussian_singlet_opt_outfile, temperature=298.15
+        )
+        assert type(analysis) is Thermochemistry
+        assert analysis.vibrational_frequencies == original.vibrational_frequencies
+
     def test_thermochemistry_from_gaussian_output(
         self, gaussian_singlet_opt_outfile
     ):
@@ -4403,12 +4414,20 @@ class TestThermochemistryCLI:
         assert settings is not None
         assert settings.check_imaginary_frequencies is False
 
-    def test_xtb_output_file_is_accepted(
-        self, run_thermochemistry_and_capture_settings
+    def test_mecp_projected_frequency_file_is_accepted(
+        self,
+        tmp_path,
+        run_thermochemistry_and_capture_settings,
     ):
+        frequency_file = tmp_path / "crossing_mecp_freq.log"
+        frequency_file.write_text(
+            "CHEMSMART MECP projected frequency analysis\n",
+            encoding="utf-8",
+        )
+
         result, settings = run_thermochemistry_and_capture_settings(
-            filename="water_opt/water_opt.out",
-            detected_program="xtb",
+            filename=str(frequency_file),
+            detected_program=None,
         )
 
         assert result.exit_code == 0, result.output
