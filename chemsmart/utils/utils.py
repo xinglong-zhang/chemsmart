@@ -26,6 +26,22 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def remove_word_from_parenthesized_option(match, word):
+    """Remove *word* from a matched comma-separated option list.
+
+    The regular-expression match must capture the option name in group 1 and
+    the parenthesized contents in group 2.  The option is removed entirely
+    when no values remain.
+    """
+    option_name = match.group(1)
+    options = [
+        option.strip()
+        for option in match.group(2).split(",")
+        if option.strip().lower() != word.lower()
+    ]
+    return f"{option_name}=({','.join(options)})" if options else ""
+
+
 class OrderedSet:
     """
     Set-like container that maintains insertion order.
