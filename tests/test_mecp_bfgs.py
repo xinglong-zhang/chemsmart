@@ -414,7 +414,9 @@ def test_mecp_output_paths_follow_functional_layout(tmp_path):
     job.folder = str(tmp_path)
     job.label = "crossing"
 
-    assert Path(job.final_report_file) == tmp_path / "crossing_final_report.log"
+    assert (
+        Path(job.final_report_file) == tmp_path / "crossing_final_report.log"
+    )
     assert Path(job.report_file) == (
         tmp_path / "crossing_optimization" / "crossing_report.log"
     )
@@ -827,7 +829,9 @@ def test_constrained_seam_step_restores_both_linear_constraints():
     diff_grad = (grad_a - grad_b).ravel()
     np.testing.assert_allclose(np.dot(diff_grad, correction.ravel()), -0.2)
     np.testing.assert_allclose(np.dot(mode, correction.ravel()), -0.3)
-    np.testing.assert_allclose(np.dot(diff_grad, tangent_gradient.ravel()), 0.0)
+    np.testing.assert_allclose(
+        np.dot(diff_grad, tangent_gradient.ravel()), 0.0
+    )
     np.testing.assert_allclose(np.dot(mode, tangent_gradient.ravel()), 0.0)
     np.testing.assert_allclose(displacement, [[-0.2, -0.3, -0.3]])
 
@@ -1011,7 +1015,9 @@ def test_step_and_seam_logs_include_diagnostics(tmp_path):
         1.0e-3,
         20,
     )
-    contents = (Path(job.numfreq_folder) / "crossing_seam_check.log").read_text()
+    contents = (
+        Path(job.numfreq_folder) / "crossing_seam_check.log"
+    ).read_text()
     assert "SADDLE POINT ON SEAM" in contents
     assert "** NEGATIVE **" in contents
 
@@ -1061,7 +1067,9 @@ def test_mecp_driver_writes_final_marker_on_convergence(tmp_path):
     assert report.endswith("Converged at step 1.\n")
     assert Path(job.trajectory_file).is_file()
     assert Path(job.final_report_file).is_file()
-    assert "seam_minimum=NOT_CHECKED" in Path(job.final_report_file).read_text()
+    assert (
+        "seam_minimum=NOT_CHECKED" in Path(job.final_report_file).read_text()
+    )
     assert not Path(job.numfreq_folder).exists()
 
 
@@ -1320,9 +1328,11 @@ def test_mecp_driver_raises_when_max_steps_are_exhausted(tmp_path):
     job = _driver_job(tmp_path, max_steps=1)
     job._run_state = lambda positions, step, state: (
         1.0 if state == "A" else 0.0,
-        np.array([[1.0, 0.0, 0.0]])
-        if state == "A"
-        else np.array([[-1.0, 0.0, 0.0]]),
+        (
+            np.array([[1.0, 0.0, 0.0]])
+            if state == "A"
+            else np.array([[-1.0, 0.0, 0.0]])
+        ),
     )
 
     with pytest.raises(

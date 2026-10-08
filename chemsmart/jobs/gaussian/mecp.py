@@ -169,9 +169,7 @@ class GaussianMECPJob(GaussianJob):
 
     @property
     def trajectory_file(self):
-        return os.path.join(
-            self.optimization_folder, f"{self.label}_traj.xyz"
-        )
+        return os.path.join(self.optimization_folder, f"{self.label}_traj.xyz")
 
     @property
     def state_file(self):
@@ -1092,9 +1090,7 @@ class GaussianMECPJob(GaussianJob):
             report.write("CHEMSMART final MECP result\n")
             report.write(f"label={self.label}\n")
             report.write(f"initial_optimization_steps={initial_steps}\n")
-            macro_steps = getattr(
-                self, "_selected_seam_follow_macro_steps", 0
-            )
+            macro_steps = getattr(self, "_selected_seam_follow_macro_steps", 0)
             report.write(f"seam_follow_macro_steps={macro_steps}\n")
             if macro_steps:
                 report.write(
@@ -1108,16 +1104,19 @@ class GaussianMECPJob(GaussianJob):
             report.write(f"energy_A={energy_a:+.12f} Hartree\n")
             report.write(f"energy_B={energy_b:+.12f} Hartree\n")
             report.write(
-                f"mecp_energy={0.5 * (energy_a + energy_b):+.12f} "
-                "Hartree\n"
+                f"mecp_energy={0.5 * (energy_a + energy_b):+.12f} " "Hartree\n"
             )
             report.write("\nFinal convergence criteria:\n")
             for name, threshold in thresholds.items():
                 value = metrics[name]
                 if name == "energy_diff":
                     value = abs(value)
-                unit = "Hartree" if name == "energy_diff" else (
-                    "Hartree/Bohr" if name.startswith("pgrad") else "Bohr"
+                unit = (
+                    "Hartree"
+                    if name == "energy_diff"
+                    else (
+                        "Hartree/Bohr" if name.startswith("pgrad") else "Bohr"
+                    )
                 )
                 report.write(
                     f"{name}: value={value:.6e} "
@@ -1291,9 +1290,7 @@ class GaussianMECPJob(GaussianJob):
         else:
             seam_basis = np.eye(hessian.shape[0])
 
-        reduced_hessian = (
-            seam_basis.T @ mass_weighted_hessian @ seam_basis
-        )
+        reduced_hessian = seam_basis.T @ mass_weighted_hessian @ seam_basis
         eigenvalues, reduced_modes = np.linalg.eigh(reduced_hessian)
         mass_weighted_modes = seam_basis @ reduced_modes
         cartesian_modes = mass_weighted_modes / sqrt_mass_vector[:, None]
@@ -1306,8 +1303,11 @@ class GaussianMECPJob(GaussianJob):
                 for value in eigenvalues
             ]
         )
-        return frequencies, cartesian_modes.T, eigenvalues, len(
-            projection_vectors
+        return (
+            frequencies,
+            cartesian_modes.T,
+            eigenvalues,
+            len(projection_vectors),
         )
 
     @classmethod
@@ -1599,9 +1599,10 @@ class GaussianMECPJob(GaussianJob):
         both constraints, while the state-A gradient is projected into their
         common null space before taking the downhill step.
         """
-        diff_grad = np.asarray(grad_a, dtype=float).ravel() - np.asarray(
-            grad_b, dtype=float
-        ).ravel()
+        diff_grad = (
+            np.asarray(grad_a, dtype=float).ravel()
+            - np.asarray(grad_b, dtype=float).ravel()
+        )
         mode = np.asarray(progress_mode, dtype=float).ravel()
         mode_norm = float(np.linalg.norm(mode))
         if mode_norm <= np.finfo(float).tiny:
@@ -1756,9 +1757,7 @@ class GaussianMECPJob(GaussianJob):
         candidates = []
         displacement_norm = self.settings.seam_mode_displacement
         displacement_bohr = displacement_norm / units.Bohr
-        follow_folder = os.path.join(
-            self.folder, f"{self.label}_seam_follow"
-        )
+        follow_folder = os.path.join(self.folder, f"{self.label}_seam_follow")
         os.makedirs(follow_folder, exist_ok=True)
 
         summary_file = os.path.join(
@@ -2051,6 +2050,4 @@ class GaussianMECPJob(GaussianJob):
 
             output.write(f"{MECP_FREQUENCY_TERMINATION_MARKER}\n")
 
-        logger.info(
-            f"MECP projected frequencies written to {frequency_file}"
-        )
+        logger.info(f"MECP projected frequencies written to {frequency_file}")

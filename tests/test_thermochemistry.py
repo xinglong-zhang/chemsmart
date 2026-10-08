@@ -27,7 +27,9 @@ from chemsmart.utils.constants import (
 
 
 class TestThermochemistry:
-    def test_factory_preserves_gaussian_analysis(self, gaussian_singlet_opt_outfile):
+    def test_factory_preserves_gaussian_analysis(
+        self, gaussian_singlet_opt_outfile
+    ):
         analysis = thermochemistry_from_file(
             gaussian_singlet_opt_outfile, temperature=298.15
         )
@@ -35,7 +37,10 @@ class TestThermochemistry:
             gaussian_singlet_opt_outfile, temperature=298.15
         )
         assert type(analysis) is Thermochemistry
-        assert analysis.vibrational_frequencies == original.vibrational_frequencies
+        assert (
+            analysis.vibrational_frequencies
+            == original.vibrational_frequencies
+        )
 
     def test_thermochemistry_from_gaussian_output(
         self, gaussian_singlet_opt_outfile

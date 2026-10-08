@@ -2285,7 +2285,9 @@ class GaussianMECPJobSettings(GaussianJobSettings):
             "seam_mode_displacement": seam_mode_displacement,
             "seam_mode_max_steps": seam_mode_max_steps,
         }
-        invalid = [name for name, value in positive_values.items() if value <= 0]
+        invalid = [
+            name for name, value in positive_values.items() if value <= 0
+        ]
         if invalid:
             raise ValueError(
                 "MECP settings must be positive: " + ", ".join(invalid)

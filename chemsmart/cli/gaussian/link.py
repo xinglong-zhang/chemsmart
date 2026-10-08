@@ -450,9 +450,7 @@ def _link_mecp(
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
     mecp_settings.restart = restart
-    mecp_settings.mecp_numfreq = (
-        mecp_numfreq or follow_seam_imaginary_mode
-    )
+    mecp_settings.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
     mecp_settings.follow_seam_imaginary_mode = follow_seam_imaginary_mode
     mecp_settings.seam_mode_displacement = seam_mode_displacement
     if hess_step_size is not None:
