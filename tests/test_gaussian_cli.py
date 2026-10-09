@@ -18,6 +18,8 @@ can be inspected without running an actual calculation.
 """
 
 import os
+
+import pytest
 from unittest.mock import MagicMock, patch
 
 
@@ -1705,3 +1707,152 @@ class TestGaussianQMMMCLI:
         settings = mock_job.call_args.kwargs["settings"]
         assert settings.mm_atom_info_file is None
         assert settings.mm_parameters_file is None
+
+
+class TestGaussianLinkMecpLabels:
+    def test_default_label_has_one_link_suffix(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        args = [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "link",
+            "-j",
+            "mecp",
+        ]
+        with patch("chemsmart.jobs.gaussian.mecp.GaussianMECPJob") as job:
+            result = CliRunner().invoke(
+                gaussian,
+                args,
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        base = os.path.splitext(os.path.basename(single_molecule_xyz_file))[0]
+        assert job.call_args.kwargs["label"] == f"{base}_harvey_mecp_link"
+
+    def test_explicit_label_link_is_preserved(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        args = [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "-l",
+            "custom_link",
+            "link",
+            "-j",
+            "mecp",
+        ]
+        with patch("chemsmart.jobs.gaussian.mecp.GaussianMECPJob") as job:
+            result = CliRunner().invoke(
+                gaussian,
+                args,
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert job.call_args.kwargs["label"] == "custom_link_harvey_mecp_link"
+
+
+@pytest.mark.parametrize(
+    "jobtype, extra, suffix",
+    [
+        ("opt", [], "opt_link"),
+        ("sp", [], "sp_link"),
+        ("irc", [], "irc_link"),
+        ("irc", ["--direction", "forward"], "ircf_link"),
+        ("irc", ["--direction", "reverse", "--flat-irc"], "ircr_flat_link"),
+    ],
+)
+def test_regular_link_default_labels(
+    single_molecule_xyz_file,
+    gaussian_jobrunner_no_scratch,
+    make_cli_ctx_obj,
+    jobtype,
+    extra,
+    suffix,
+):
+    from click.testing import CliRunner
+    from chemsmart.cli.gaussian.gaussian import gaussian
+
+    args = [
+        "-p",
+        "gas_solv",
+        "-f",
+        single_molecule_xyz_file,
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "link",
+        "-j",
+        jobtype,
+    ] + extra
+    with patch("chemsmart.jobs.gaussian.link.GaussianLinkJob") as job:
+        result = CliRunner().invoke(
+            gaussian,
+            args,
+            obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            catch_exceptions=False,
+        )
+    assert result.exit_code == 0, result.output
+    base = os.path.splitext(os.path.basename(single_molecule_xyz_file))[0]
+    assert job.call_args.kwargs["label"] == f"{base}_{suffix}"
+
+
+def test_regular_link_preserves_explicit_label(
+    single_molecule_xyz_file,
+    gaussian_jobrunner_no_scratch,
+    make_cli_ctx_obj,
+):
+    from click.testing import CliRunner
+    from chemsmart.cli.gaussian.gaussian import gaussian
+
+    args = [
+        "-p",
+        "gas_solv",
+        "-f",
+        single_molecule_xyz_file,
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "-l",
+        "custom_link",
+        "link",
+        "-j",
+        "opt",
+    ]
+    with patch("chemsmart.jobs.gaussian.link.GaussianLinkJob") as job:
+        result = CliRunner().invoke(
+            gaussian,
+            args,
+            obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            catch_exceptions=False,
+        )
+    assert result.exit_code == 0, result.output
+    assert job.call_args.kwargs["label"] == "custom_link_opt_link"
