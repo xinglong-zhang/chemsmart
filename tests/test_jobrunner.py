@@ -151,6 +151,9 @@ class TestProgramAwareNames:
         job.inputfile = str(tmp_path / "molecule_opt.log")
         job.outputfile = str(tmp_path / "molecule_opt.out")
         job.errfile = str(tmp_path / "molecule_opt.err")
+        if program == "Gaussian":
+            job.chkfile = str(tmp_path / "molecule_opt.chk")
+            job.oldchkfile = None
 
         runner._set_up_variables_in_scratch(job)
 

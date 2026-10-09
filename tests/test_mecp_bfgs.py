@@ -23,6 +23,7 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianMECPJobSettings,
 )
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+from chemsmart.jobs.job import Job
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import remove_word_from_parenthesized_option
@@ -129,14 +130,14 @@ def test_seam_checkpoint_cleanup_preserves_final_mecp_checkpoints(
 def test_mecp_scratch_jobs_are_grouped_in_steps_folder():
     runner = object.__new__(GaussianJobRunner)
     runner._scratch_dir = "/scratch/project"
-    job = SimpleNamespace(
-        label="mecp_step2_A", scratch_parent_folder="mecp_steps"
-    )
+    job = Job(molecule=None, label="mecp_step2_A", jobrunner=runner)
+    job.PROGRAM = "gaussian"
+    job.scratch_parent_folder = "mecp_steps"
 
     scratch_directory = runner._scratch_job_directory(job)
 
     assert scratch_directory == os.path.join(
-        "/scratch/project", "mecp_steps", "mecp_step2_A"
+        "/scratch/project", "mecp_steps", "gaussian_mecp_step2_A"
     )
 
 

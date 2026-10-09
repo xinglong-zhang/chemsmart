@@ -107,7 +107,7 @@ class GaussianJobRunner(JobRunner):
             raise ValueError(
                 "A scratch directory is required for scratch jobs."
             )
-        scratch_parent = job.scratch_parent_folder
+        scratch_parent = getattr(job, "scratch_parent_folder", None)
         if scratch_parent:
             return os.path.join(
                 self.scratch_dir,
