@@ -20,11 +20,6 @@ from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
-from chemsmart.utils.repattern import (
-    gaussian_freq_keywords_pattern,
-    gaussian_opt_keywords_pattern,
-    multiple_spaces_pattern,
-)
 
 pt = PeriodicTable()
 
@@ -2379,36 +2374,67 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         self.stepsize = stepsize
         self.flat_irc = flat_irc
 
+    @staticmethod
+    def _without_route_options(route, names):
+        """Remove whole top-level options, including nested parenthesized values.
+
+        Match only route keywords, never words inside another option's value.
+        This also accepts whitespace around '=' and case variations.
+        """
+        tokens = []
+        start = 0
+        depth = 0
+        for index, char in enumerate(route):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            elif char.isspace() and depth == 0:
+                if start < index:
+                    tokens.append(route[start:index])
+                start = index + 1
+        if start < len(route):
+            tokens.append(route[start:])
+
+        kept = []
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            keyword = token.split("=", 1)[0].lower()
+            if keyword in names:
+                # Consume a value split off by whitespace around '='.
+                if "=" in token:
+                    if token.endswith("=") and index + 1 < len(tokens):
+                        index += 1
+                elif index + 1 < len(tokens) and tokens[index + 1].startswith(
+                    "="
+                ):
+                    index += 1
+                    if tokens[index] == "=" and index + 1 < len(tokens):
+                        index += 1
+            else:
+                kept.append(token)
+            index += 1
+        return " ".join(kept)
+
+    def _continuation_route(self, route):
+        """The writer supplies a title and charge line, requiring geom=check."""
+        route = self._without_route_options(
+            route, {"guess", "geom", "geometry", "stable", "stability"}
+        )
+        return f"{route} geom=check guess=read"
+
     @property
     def link_route_string(self):
-        """
-        Generate the route string for the link calculation step.
-
-        Creates the route string for the second step in a link job,
-        ensuring proper geometry and orbital guess specifications
-        for continuation from the previous step.
-
-        Returns:
-            str: Route string for the link calculation step.
-        """
+        """Generate the continuation route with one geometry and guess option."""
         if self.link_route is not None:
-            link_route_string = self.link_route
-            if self.functional not in self.link_route:
-                link_route_string += f" {self.functional}"
-            if self.basis not in self.link_route:
-                link_route_string += f" {self.basis}"
-            if "geom=check" not in self.link_route:
-                link_route_string += " geom=check"
-            if "guess=read" not in self.link_route:
-                link_route_string += " guess=read"
-            logger.debug(
-                f"Link route for settings {self}: {link_route_string}"
-            )
-            return link_route_string
-
-        link_route_string = self._get_link_route_string_from_jobtype()
-        logger.debug(f"Link route for settings {self}: {link_route_string}")
-        return link_route_string
+            route = self.link_route
+            if self.functional not in route:
+                route += f" {self.functional}"
+            if self.basis not in route:
+                route += f" {self.basis}"
+            return self._continuation_route(route)
+        return self._get_link_route_string_from_jobtype()
 
     def _get_route_string_from_jobtype(self):
         """
@@ -2422,33 +2448,22 @@ class GaussianLinkJobSettings(GaussianJobSettings):
             str: Route string for stability analysis step.
         """
         route_string = super()._get_route_string_from_jobtype()
-        # Remove opt keywords
-        route_string_final = re.sub(
-            gaussian_opt_keywords_pattern,
-            " ",
+        # The first section uses explicit coordinates and only performs the
+        # stability calculation. Link options override inherited project routes.
+        route_string_final = self._without_route_options(
             route_string,
-            flags=re.IGNORECASE,
+            {
+                "opt",
+                "freq",
+                "force",
+                "irc",
+                "guess",
+                "geom",
+                "geometry",
+                "stable",
+                "stability",
+            },
         )
-        # Remove freq keywords
-        route_string_final = re.sub(
-            gaussian_freq_keywords_pattern,
-            " ",
-            route_string_final,
-            flags=re.IGNORECASE,
-        )
-        # Remove force keyword: force calculations belong in the link (second)
-        # step where the stable wavefunction is read via guess=read, not in
-        # the initial stable=opt step.
-        route_string_final = re.sub(
-            r"\bforce\b\s*",
-            " ",
-            route_string_final,
-            flags=re.IGNORECASE,
-        )
-        # Clean up multiple spaces
-        route_string_final = re.sub(
-            multiple_spaces_pattern, " ", route_string_final
-        ).strip()
 
         if self.stable:
             logger.debug(f"Stable: {self.stable}")
@@ -2482,22 +2497,21 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         Returns:
             str: Route string for the optimization/IRC step.
         """
-        # Special handling for IRC jobs - use GaussianIRCJobSettings
+        # Remove inherited task keywords before generating the requested task;
+        # otherwise e.g. a project opt/freq route leaks into MECP force jobs.
+        settings = self.copy()
+        settings.additional_route_parameters = self._without_route_options(
+            self.additional_route_parameters or "",
+            {"opt", "freq", "force", "irc"},
+        )
         if self.jobtype in ["ircf", "ircr"]:
-            # Create a temporary GaussianIRCJobSettings
-            # instance with current settings
-            irc_settings = GaussianIRCJobSettings(**self.__dict__)
-            # Get the IRC route string from the specialized class
+            irc_settings = GaussianIRCJobSettings(**settings.__dict__)
             route_string = irc_settings._get_route_string_from_jobtype()
         else:
-            # For non-IRC jobs, use the existing logic
-            route_string = super()._get_route_string_from_jobtype()
-
-        if "geom=check" not in route_string:
-            route_string += " geom=check"
-        if "guess=read" not in route_string:
-            route_string += " guess=read"
-        return route_string
+            route_string = GaussianJobSettings._get_route_string_from_jobtype(
+                settings
+            )
+        return self._continuation_route(route_string)
 
 
 class GaussianTDDFTJobSettings(GaussianJobSettings):
