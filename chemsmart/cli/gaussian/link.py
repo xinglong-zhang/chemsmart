@@ -282,6 +282,7 @@ def link(
     if jobtype is None:
         label = label
     else:
+        label = ctx.obj.get("default_label_base") or label
         label += f"_{jobtype}"
         if jobtype.lower() == "irc":
             label = update_irc_label(
@@ -289,8 +290,7 @@ def link(
                 direction=link_settings.direction,
                 flat_irc=link_settings.flat_irc,
             )
-        else:
-            label += "_link"
+        label += "_link"
 
     logger.debug(f"Label for job: {label}")
 
@@ -463,7 +463,8 @@ def _link_mecp(
     molecule = ctx.obj["molecules"][-1]
     label = (
         add_mecp_method_suffix(
-            ctx.obj["label"], mecp_settings.step_size_method
+            ctx.obj.get("default_label_base") or ctx.obj["label"],
+            mecp_settings.step_size_method,
         )
         + "_link"
     )
