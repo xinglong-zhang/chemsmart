@@ -601,14 +601,6 @@ def _child_label(chain_label, index, step, ordinal, count, kind):
 
 
 def _first_set(*values):
-    """Return the first value that is not ``None``.
-
-    Args:
-        *values: Candidates in priority order.
-
-    Returns:
-        The first set value, or ``None`` when every candidate is ``None``.
-    """
     for value in values:
         if value is not None:
             return value
@@ -657,13 +649,22 @@ class ChainPipelineBuilder:
                 )
             )
 
+        # Grouper runs inside the chain. ``programs`` lists the external
+        # programs whose server environment the submission script loads.
+        external_programs = tuple(
+            dict.fromkeys(
+                step.program
+                for step in prepared
+                if step.program in PROGRAM_ADAPTERS
+            )
+        )
         return ChainJob(
             molecule=molecule,
             label=self.context.label,
             jobrunner=self.context.jobrunner,
             skip_completed=self.context.skip_completed,
             phases=self.phases,
-            programs=tuple(dict.fromkeys(step.program for step in prepared)),
+            programs=external_programs,
             **kwargs,
         )
 

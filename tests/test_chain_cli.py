@@ -173,7 +173,7 @@ orca: gas_solv
         )
         assert result.exit_code == 0, result.output
         job = result.return_value
-        assert job.programs == ("crest", "grouper", "xtb")
+        assert job.programs == ("crest", "xtb")
         assert [phase.name for phase in job.phases] == [
             "00_crest_conformers",
             "01_grouper_irmsd",
