@@ -35,9 +35,9 @@ Example (``~/.chemsmart/chain/combined.yaml``):
 Top-level keys ``crest``, ``xtb``, ``gaussian``, and ``orca`` are aliases to existing per-program project names. Any
 other top-level key is rejected. A legacy ``steps`` key is also rejected — specify the pipeline with ``-s/--steps``.
 
-Each pipeline step's program, and each workflow ``--program``, must have an alias in the file. The target per-program
-YAML must exist. ``chemsmart sub gaussian -p test`` loads ``~/.chemsmart/gaussian/test.yaml`` only — it does not read
-chain YAML.
+Each ``crest``, ``xtb``, ``gaussian``, and ``orca`` step, and each workflow ``--program``, must have an alias in the
+file. A ``grouper`` step does not. The target per-program YAML must exist. ``chemsmart sub gaussian -p test`` loads
+``~/.chemsmart/gaussian/test.yaml`` only — it does not read chain YAML.
 
 Packaged templates are copied to ``~/.chemsmart/chain/`` by ``chemsmart config`` and ``chemsmart update projects``. See
 :doc:`configuration-project-settings`.
@@ -47,7 +47,7 @@ Packaged templates are copied to ``~/.chemsmart/chain/`` by ``chemsmart config``
 ********************
 
 Repeat ``-s`` on the chain command for each phase. A step is ``PROGRAM:JOB`` or a quoted ``PROGRAM: [OPTIONS] JOB``
-string that matches the program CLI after the program name:
+string. Options before the job name are that program's options. Options after the job name are that command's options:
 
 .. code:: bash
 
@@ -55,51 +55,53 @@ string that matches the program CLI after the program name:
      -s "gaussian: -o maxstep=8,maxsize=12 opt" \
      -s gaussian:sp
 
-   chemsmart sub chain -p combined -f mol.xyz -s gaussian:opt custom
+   chemsmart sub chain -p combined -f mol.xyz -c 0 -m 1 \
+     -s "crest:conformers -nc 10" -s gaussian:opt
 
-The following ``(program, job)`` pairs are supported:
+   chemsmart sub chain -p combined -f mol.xyz -c 0 -m 1 \
+     -s crest:conformers \
+     -s "gaussian: -l structure_from_lowest -c 0 -m 1 crest -j opt -nc 10" \
+     -s gaussian:sp
 
-.. list-table::
-   :header-rows: 1
-   :widths: 20 20 60
+   chemsmart sub chain -p combined -f ligand.xyz \
+     -s crest:conformers \
+     -s "grouper: -T 0.3 -N 10 irmsd --inversion on" \
+     -s gaussian:opt
 
-   -  -  Program
-      -  Job
-      -  Description
+A step for ``crest``, ``xtb``, ``gaussian``, or ``orca`` is any subcommand of that program except ``pka``, ``fukui``,
+``redox``, and ``reaction``. Those four stay on :ref:`chain-workflow-subcommands`. A ``grouper`` step is a grouper
+strategy, such as ``irmsd``. Grouper has no alias in the chain YAML. ``gaussian:crest`` and ``grouper`` must immediately
+follow ``crest:conformers``.
 
-   -  -  ``crest``
-      -  ``conformers``
-      -  CREST conformer search; best conformer is passed to the next step
+``-nc N`` after ``crest:conformers`` selects the lowest N conformers for the next step and is not passed to CREST. ``N``
+is an integer of at least 1. Omitting ``-nc`` selects the lowest conformer. There is no chain-level ``-N``.
 
-   -  -  ``xtb``
-      -  ``opt``
-      -  xTB geometry optimization (with frequency by default)
+**Geometry handoff.** Each phase reads the previous completed child. If a phase is incomplete, the chain stops so HPC
+resubmission with ``--skip-completed`` can continue later.
 
-   -  -  ``xtb``
-      -  ``sp``
-      -  xTB single-point energy
+-  An optimization, transition-state, or single-point step passes its optimized structure, or the output molecule when
+   the job did not optimize.
 
-   -  -  ``xtb``
-      -  ``hess``
-      -  xTB Hessian / frequency calculation
+-  ``crest:conformers`` passes the lowest N frames of ``crest_conformers.xyz``. Frames are ordered by energy when every
+   frame has an energy; otherwise the file order is kept. CREST writes that file lowest-energy first. Fewer frames than
+   ``N`` uses every available frame. A missing file leaves the next phase empty until the CREST step finishes.
 
-   -  -  ``gaussian``
-      -  ``opt``, ``ts``, ``sp``
-      -  Gaussian optimization, transition state, or single point
+-  ``gaussian:crest`` and ``grouper`` read that same selection. When ``-nc`` is omitted they read every frame of
+   ``crest_conformers.xyz``. When ``-nc N`` is set they read ``crest_lowest_N.xyz`` written beside it. ``-nc`` on
+   ``gaussian:crest`` is that command's own option and chooses how many of its input structures to optimize.
 
-   -  -  ``orca``
-      -  ``opt``, ``ts``, ``sp``
-      -  ORCA optimization, transition state, or single point
+-  The step after Gaussian crest receives that job's lowest-energy optimized conformer.
 
-**pKa**, **Fukui**, **redox**, and **reaction** are **not** ``-s/--steps`` jobs. ``chain -s gaussian:pka`` is rejected.
-Run them as :ref:`chain-workflow-subcommands`, or on the program CLI with that program's own project YAML.
+-  The step after grouper receives one representative, the first member of each group. Fewer than two CREST structures
+   skips grouping and passes the available structure on.
 
-Geometry handoff: optimization, TS, and SP use the previous job's optimized structure; CREST passes the best conformer
-(``crest_best.xyz``). If a phase is incomplete, the chain stops so HPC resubmission with ``--skip-completed`` can
-continue later.
-
-Child labels follow ``{chain_label}_{index:02d}_{program}_{job}``. Charge and multiplicity from ``-c`` / ``-m`` are
-merged into each child. Do not combine ``-s/--steps`` with ``pka``, ``fukui``, ``redox``, or ``reaction``.
+Child labels start from ``{chain_label}_{index:02d}_{program}_{job}``. More than one group representative appends
+``_g1``, ``_g2``, and so on. More than one other structure appends ``_c1``, ``_c2``, and so on. A single structure has
+no suffix. The program command may extend the label it is given. Gaussian crest keeps the labels that command already
+uses (``{label}_{jobtype}_c1``, …). Charge and multiplicity from chain ``-c`` / ``-m`` are passed to each program
+command when the step does not set them. Grouper does not take those flags: on the grouper command ``-c`` is
+concentration and ``-m`` is the matrix file format. Do not combine ``-s/--steps`` with ``pka``, ``fukui``, ``redox``, or
+``reaction``.
 
 The whole pipeline is **one** ``ChainJob`` submission. ``chemsmart sub`` writes one scheduler script for all phases.
 ``--fake`` uses the chain fake runner for the parent; each child gets the matching program fake runner when its type
