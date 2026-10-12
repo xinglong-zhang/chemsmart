@@ -1,3 +1,4 @@
+import os
 from types import SimpleNamespace
 
 import numpy as np
@@ -5,21 +6,25 @@ import pytest
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.chain_steps import (
-    _CHAIN_PROGRAMS,
     CHAIN_NESTED_ONLY_JOBS,
-    CHAIN_STEP_SPECS,
+    CHAIN_PROGRAM_SETTINGS,
     ChainStep,
+    _pipeline_job_names,
+    _program_commands,
     build_chain_job,
-    get_chain_step_spec,
     molecule_from_completed_job,
     parse_chain_step,
+    validate_chain_step,
 )
 from chemsmart.jobs.crest.conformers import CRESTConformerSearchJob
 from chemsmart.jobs.crest.job import CRESTJob
 from chemsmart.jobs.crest.settings import CRESTJobSettings
+from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.gaussian.ts import GaussianTSJob
+from chemsmart.jobs.grouper.job import GrouperJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
@@ -129,6 +134,7 @@ _EXPECTED_SPECS = {
         "opt": GaussianOptJob,
         "ts": GaussianTSJob,
         "sp": GaussianSinglePointJob,
+        "crest": GaussianCrestJob,
     },
     "orca": {
         "opt": ORCAOptJob,
@@ -157,9 +163,50 @@ class TestParseChainStep:
             extra_option_tokens=("-o", "maxstep=8,maxsize=12"),
         )
 
-    def test_options_after_job_error(self):
-        with pytest.raises(ValueError, match="before the job name"):
-            parse_chain_step("gaussian:opt -o maxstep=8")
+    def test_subcommand_options_stay_after_the_job(self):
+        step = parse_chain_step("gaussian:opt -f 1-3")
+        assert step == ChainStep(
+            program="gaussian",
+            job="opt",
+            suffix_option_tokens=("-f", "1-3"),
+        )
+
+    def test_crest_num_conformers_after_job(self):
+        step = parse_chain_step("crest:conformers -nc 10")
+        assert step == ChainStep(
+            program="crest", job="conformers", num_conformers=10
+        )
+
+    def test_crest_num_conformers_rejects_bad_values(self):
+        with pytest.raises(ValueError, match="integer >= 1"):
+            parse_chain_step("crest:conformers -nc 0")
+        with pytest.raises(ValueError, match="use -nc N"):
+            parse_chain_step("crest:conformers -nc")
+
+    def test_gaussian_crest_keeps_options_after_job(self):
+        step = parse_chain_step(
+            "gaussian: -l structure_from_lowest -c 0 -m 1 crest -j opt -nc 10"
+        )
+        assert step == ChainStep(
+            program="gaussian",
+            job="crest",
+            extra_option_tokens=(
+                "-l",
+                "structure_from_lowest",
+                "-c",
+                "0",
+                "-m",
+                "1",
+            ),
+            suffix_option_tokens=("-j", "opt", "-nc", "10"),
+        )
+
+    def test_grouper_keeps_strategy_options(self):
+        step = parse_chain_step("grouper: -T 0.3 -N 10 irmsd --inversion on")
+        assert step.program == "grouper"
+        assert step.job == "irmsd"
+        assert step.extra_option_tokens == ("-T", "0.3", "-N", "10")
+        assert step.suffix_option_tokens == ("--inversion", "on")
 
     def test_missing_colon_errors(self):
         with pytest.raises(ValueError, match="expected PROGRAM:JOB"):
@@ -172,28 +219,37 @@ class TestParseChainStep:
 
 class TestChainStepRegistry:
     def test_chain_program_registry_matches_project_settings(self):
-        assert tuple(_CHAIN_PROGRAMS) == ChainProjectSettings.PROGRAMS
+        assert tuple(CHAIN_PROGRAM_SETTINGS) == ChainProjectSettings.PROGRAMS
+        assert tuple(_program_commands()) == tuple(CHAIN_PROGRAM_SETTINGS)
 
-    def test_supported_pairs_map_to_job_classes(self):
-        assert CHAIN_STEP_SPECS == _EXPECTED_SPECS
+    def test_pipeline_jobs_are_program_commands(self):
         for program, jobs in _EXPECTED_SPECS.items():
-            for job, job_class in jobs.items():
-                spec = get_chain_step_spec(program, job)
-                assert spec.job_class is job_class
+            names = _pipeline_job_names(program)
+            assert set(jobs).issubset(names)
+            assert CHAIN_NESTED_ONLY_JOBS.isdisjoint(names)
+        assert "irc" in _pipeline_job_names("gaussian")
+        validate_chain_step("gaussian", "irc")
+
+    def test_grouper_strategy_comes_from_the_grouper_command(self):
+        validate_chain_step("grouper", "irmsd")
+        with pytest.raises(ValueError, match="job 'nope'"):
+            validate_chain_step("grouper", "nope")
 
     def test_nested_only_jobs_are_explicit_workflow_names(self):
         assert CHAIN_NESTED_ONLY_JOBS == frozenset(
             {"pka", "fukui", "redox", "reaction"}
         )
-        for jobs in CHAIN_STEP_SPECS.values():
-            assert CHAIN_NESTED_ONLY_JOBS.isdisjoint(jobs)
+        for program in CHAIN_PROGRAM_SETTINGS:
+            assert CHAIN_NESTED_ONLY_JOBS.isdisjoint(
+                _pipeline_job_names(program)
+            )
 
     def test_nested_only_pka_errors(self):
         with pytest.raises(
             ValueError,
             match="do not support gaussian 'pka'",
         ):
-            get_chain_step_spec("gaussian", "pka")
+            validate_chain_step("gaussian", "pka")
         assert "pka" in CHAIN_NESTED_ONLY_JOBS
         assert "redox" in CHAIN_NESTED_ONLY_JOBS
 
@@ -202,39 +258,34 @@ class TestChainStepRegistry:
             ValueError,
             match="do not support gaussian 'redox'",
         ):
-            get_chain_step_spec("gaussian", "redox")
+            validate_chain_step("gaussian", "redox")
 
     def test_removed_yaml_job_errors_as_nested(self):
         with pytest.raises(
             ValueError,
             match="do not support gaussian 'fukui'",
         ):
-            get_chain_step_spec("gaussian", "fukui")
+            validate_chain_step("gaussian", "fukui")
 
-    def test_non_workflow_cli_job_is_unsupported_not_nested(self):
+    def test_nested_qmmm_is_not_a_gaussian_step(self):
         with pytest.raises(
             ValueError,
             match="Unsupported chain step job 'qmmm' for program 'gaussian'",
         ):
-            get_chain_step_spec("gaussian", "qmmm")
-        with pytest.raises(
-            ValueError,
-            match="Unsupported chain step job 'irc' for program 'gaussian'",
-        ):
-            get_chain_step_spec("gaussian", "irc")
+            validate_chain_step("gaussian", "qmmm")
 
     def test_unknown_job_lists_supported_jobs(self):
         with pytest.raises(
             ValueError,
             match="Unsupported chain step job 'foo' for program 'gaussian'",
         ):
-            get_chain_step_spec("gaussian", "foo")
+            validate_chain_step("gaussian", "foo")
 
     def test_unsupported_program_errors(self):
         with pytest.raises(
             ValueError, match="Unsupported chain step program 'foo'"
         ):
-            get_chain_step_spec("foo", "opt")
+            validate_chain_step("foo", "opt")
 
 
 class TestMoleculeFromCompletedJob:
@@ -308,6 +359,8 @@ class TestBuildChainJob:
         ]
         mol = _h2()
         for program, job, job_class in cases:
+            if program == "gaussian" and job == "crest":
+                continue
             settings = _chain_settings(**{program: aliases[program]})
             chain = build_chain_job(
                 settings,
@@ -324,9 +377,26 @@ class TestBuildChainJob:
             assert len(children) == 1
             child = children[0]
             assert isinstance(child, job_class)
-            assert child.label == f"mol_00_{program}_{job}"
+            assert child.label.startswith("mol_00_")
             assert child.settings.charge == 0
             assert child.settings.multiplicity == 1
+
+    def test_any_program_command_can_be_a_step(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(ChainStep(program="gaussian", job="irc"),),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        child = chain.phases[0].resolve_jobs()[0]
+        assert isinstance(child, GaussianIRCJob)
+        assert child.label == "mol_00_gaussian_irc"
+        assert child.settings.charge == 0
 
     def test_duplicate_steps_get_unique_labels(
         self, isolated_config_dir, temporary_working_dir
@@ -414,9 +484,418 @@ class TestBuildChainJob:
             settings, steps=steps, molecule=_h2(), label="mol"
         )
         best = _h2(z=0.85)
+        best.energy = -2.0
         dummy = DummyCRESTJob(_h2(), best, complete=True)
+        best.write_xyz(dummy.conformers_file, mode="w")
         chain.phases[0]._resolved_jobs = [dummy]
         children = chain.phases[1].resolve_jobs()
         assert len(children) == 1
         assert isinstance(children[0], XTBOptJob)
         assert np.allclose(children[0].molecule.positions, best.positions)
+
+
+def _write_xyz(path, molecules):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as handle:
+        for molecule in molecules:
+            handle.write(f"{molecule.num_atoms}\ncomment\n")
+            for symbol, position in zip(
+                molecule.chemical_symbols, molecule.positions
+            ):
+                handle.write(
+                    f"{symbol} {position[0]} {position[1]} {position[2]}\n"
+                )
+
+
+def _crest_with_conformers(molecules, charge=0, multiplicity=1):
+    source = _h2(charge=charge, multiplicity=multiplicity)
+    job = DummyCRESTJob(source, molecules[0], complete=True)
+    _write_xyz(job.conformers_file, molecules)
+    return job
+
+
+class StubGaussianCrest(GaussianCrestJob):
+    def __init__(self, molecules):
+        self._outs = list(molecules)
+
+    def is_complete(self):
+        return True
+
+    @property
+    def num_confs_to_opt(self):
+        return len(self._outs)
+
+    @property
+    def all_conformers_jobs(self):
+        return [
+            DummyHandoffJob(f"c{index}", molecule, complete=True)
+            for index, molecule in enumerate(self._outs, start=1)
+        ]
+
+
+class TestCrestEnsembleHandoff:
+    def test_gaussian_crest_reads_conformers_file(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        crest_step = ChainStep(program="crest", job="conformers")
+        gaussian_step = parse_chain_step(
+            "gaussian: -l structure_from_lowest -c 0 -m 1 crest -j opt -nc 10"
+        )
+        chain = build_chain_job(
+            settings,
+            steps=(crest_step, gaussian_step),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        frames = [_h2(z=0.70), _h2(z=0.90)]
+        chain.phases[0]._resolved_jobs = [_crest_with_conformers(frames)]
+        children = chain.phases[1].resolve_jobs()
+        assert len(children) == 1
+        job = children[0]
+        assert isinstance(job, GaussianCrestJob)
+        assert job.label == "structure_from_lowest_opt"
+        assert job.num_confs_to_opt == 10
+        assert len(job.all_conformers) == 2
+
+    def test_omitted_num_confs_uses_every_frame(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="crest", job="conformers"),
+                parse_chain_step("gaussian: crest -j opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        frames = [_h2(z=0.70), _h2(z=0.90)]
+        chain.phases[0]._resolved_jobs = [_crest_with_conformers(frames)]
+        job = chain.phases[1].resolve_jobs()[0]
+        assert job.num_confs_to_opt == 2
+        assert job.label == "mol_opt"
+
+    def test_grouping_and_num_confs_are_rejected(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="crest", job="conformers"),
+                parse_chain_step("gaussian: crest -j opt -nc 2 -g rmsd"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        chain.phases[0]._resolved_jobs = [
+            _crest_with_conformers([_h2(z=0.70), _h2(z=0.90)])
+        ]
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            chain.phases[1].resolve_jobs()
+
+    def test_gaussian_crest_must_follow_crest_conformers(
+        self, isolated_config_dir
+    ):
+        settings = _chain_settings(gaussian="gas_solv")
+        with pytest.raises(ValueError, match="must follow crest:conformers"):
+            build_chain_job(
+                settings,
+                steps=(ChainStep(program="gaussian", job="crest"),),
+                molecule=_h2(),
+                label="mol",
+            )
+
+    def test_next_step_uses_lowest_energy_conformer(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="crest", job="conformers"),
+                ChainStep(program="gaussian", job="crest"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        higher = _h2(z=0.80)
+        higher.energy = -1.0
+        lowest = _h2(z=1.10)
+        lowest.energy = -2.5
+        chain.phases[1]._resolved_jobs = [StubGaussianCrest([higher, lowest])]
+        children = chain.phases[2].resolve_jobs()
+        assert len(children) == 1
+        assert children[0].label == "mol_02_gaussian_opt"
+        assert np.allclose(children[0].molecule.positions, lowest.positions)
+
+    def test_next_step_waits_without_conformer_energies(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="crest", job="conformers"),
+                ChainStep(program="gaussian", job="crest"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        chain.phases[1]._resolved_jobs = [StubGaussianCrest([_h2(z=0.80)])]
+        assert chain.phases[2].resolve_jobs() == []
+
+    def test_grouper_skips_a_single_conformer(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", xtb="test")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="crest", job="conformers"),
+                ChainStep(program="grouper", job="formula"),
+                ChainStep(program="xtb", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+        )
+        frame = _h2(z=0.82)
+        chain.phases[0]._resolved_jobs = [
+            _crest_with_conformers([frame], charge=3, multiplicity=2)
+        ]
+        grouped = chain.phases[1].resolve_jobs()
+        assert len(grouped) == 1
+        assert grouped[0].is_complete()
+        children = chain.phases[2].resolve_jobs()
+        assert len(children) == 1
+        assert children[0].label == "mol_02_xtb_opt"
+        assert children[0].molecule.charge == 3
+        assert children[0].molecule.multiplicity == 2
+        assert np.allclose(children[0].molecule.positions, frame.positions)
+
+    def test_grouper_representatives_are_one_job_each(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="crest", job="conformers"),
+                ChainStep(program="grouper", job="irmsd"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        first = _h2(z=0.70, charge=1, multiplicity=2)
+        second = _h2(z=1.20, charge=1, multiplicity=2)
+        grouper = GrouperJob(
+            molecules=[first, second],
+            grouping_strategy="irmsd",
+            label="grouped",
+        )
+        _write_xyz(
+            os.path.join(grouper.output_dir, "grouped_group_1.xyz"),
+            [first, second],
+        )
+        _write_xyz(
+            os.path.join(grouper.output_dir, "grouped_group_2.xyz"),
+            [second],
+        )
+        assert grouper.is_complete()
+        chain.phases[1]._resolved_jobs = [grouper]
+        children = chain.phases[2].resolve_jobs()
+        assert [child.label for child in children] == [
+            "mol_02_gaussian_opt_g1",
+            "mol_02_gaussian_opt_g2",
+        ]
+        assert np.allclose(children[0].molecule.positions, first.positions)
+        assert np.allclose(children[1].molecule.positions, second.positions)
+        assert children[0].molecule.charge == 1
+        assert children[1].molecule.multiplicity == 2
+
+    def test_grouper_does_not_require_a_chain_alias(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", xtb="test")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="crest", job="conformers"),
+                parse_chain_step("grouper: formula"),
+                ChainStep(program="xtb", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+        )
+        frames = [_h2(z=0.70), _h2(z=0.90)]
+        chain.phases[0]._resolved_jobs = [_crest_with_conformers(frames)]
+        children = chain.phases[1].resolve_jobs()
+        assert len(children) == 1
+        assert isinstance(children[0], GrouperJob)
+        assert children[0].grouping_strategy == "formula"
+        assert len(children[0].molecules) == 2
+
+
+class TestCrestNumConformers:
+    def test_omitted_and_one_select_the_lowest_conformer(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        higher = _h2(z=0.70)
+        higher.energy = -1.0
+        lowest = _h2(z=1.20)
+        lowest.energy = -3.0
+        for step_token in ("crest:conformers", "crest:conformers -nc 1"):
+            settings = _chain_settings(crest="test", gaussian="gas_solv")
+            chain = build_chain_job(
+                settings,
+                steps=(
+                    parse_chain_step(step_token),
+                    ChainStep(program="gaussian", job="opt"),
+                ),
+                molecule=_h2(),
+                label="mol",
+                charge=0,
+                multiplicity=1,
+            )
+            frames = [higher, lowest]
+            crest = _crest_with_conformers(frames)
+            for index, molecule in enumerate(frames):
+                molecule.write_xyz(
+                    crest.conformers_file, mode="w" if index == 0 else "a"
+                )
+            chain.phases[0]._resolved_jobs = [crest]
+            children = chain.phases[1].resolve_jobs()
+            assert len(children) == 1
+            assert children[0].label == "mol_01_gaussian_opt"
+            assert np.allclose(
+                children[0].molecule.positions, lowest.positions
+            )
+
+    def test_selects_lowest_conformers(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                parse_chain_step("crest:conformers -nc 2"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        higher = _h2(z=0.70, charge=1, multiplicity=2)
+        higher.energy = -1.0
+        lowest = _h2(z=1.20, charge=1, multiplicity=2)
+        lowest.energy = -3.0
+        middle = _h2(z=0.90, charge=1, multiplicity=2)
+        middle.energy = -2.0
+        frames = [higher, lowest, middle]
+        crest = _crest_with_conformers(frames, charge=1, multiplicity=2)
+        for index, molecule in enumerate(frames):
+            molecule.write_xyz(
+                crest.conformers_file, mode="w" if index == 0 else "a"
+            )
+        chain.phases[0]._resolved_jobs = [crest]
+        children = chain.phases[1].resolve_jobs()
+        assert [child.label for child in children] == [
+            "mol_01_gaussian_opt_c1",
+            "mol_01_gaussian_opt_c2",
+        ]
+        assert np.allclose(children[0].molecule.positions, lowest.positions)
+        assert np.allclose(children[1].molecule.positions, middle.positions)
+        assert children[0].molecule.charge == 1
+        assert children[1].molecule.multiplicity == 2
+
+    def test_uses_available_conformers_when_fewer_than_requested(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", xtb="test")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                parse_chain_step("crest:conformers -nc 10"),
+                ChainStep(program="xtb", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+        )
+        frames = [_h2(z=0.70), _h2(z=0.90)]
+        chain.phases[0]._resolved_jobs = [_crest_with_conformers(frames)]
+        children = chain.phases[1].resolve_jobs()
+        assert len(children) == 2
+        assert children[0].label == "mol_01_xtb_opt_c1"
+
+    def test_waits_until_conformers_file_exists(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                parse_chain_step("crest:conformers -nc 2"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        chain.phases[0]._resolved_jobs = [
+            DummyCRESTJob(_h2(), _h2(z=0.80), complete=True)
+        ]
+        assert chain.phases[1].resolve_jobs() == []
+
+    def test_gaussian_crest_reads_selected_conformers(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                parse_chain_step("crest:conformers -nc 2"),
+                parse_chain_step("gaussian: crest -j opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        higher = _h2(z=0.70)
+        higher.energy = -1.0
+        lowest = _h2(z=1.20)
+        lowest.energy = -3.0
+        middle = _h2(z=0.90)
+        middle.energy = -2.0
+        frames = [higher, lowest, middle]
+        crest = _crest_with_conformers(frames)
+        for index, molecule in enumerate(frames):
+            molecule.write_xyz(
+                crest.conformers_file, mode="w" if index == 0 else "a"
+            )
+        chain.phases[0]._resolved_jobs = [crest]
+        job = chain.phases[1].resolve_jobs()[0]
+        assert isinstance(job, GaussianCrestJob)
+        assert job.num_confs_to_opt == 2
+        assert len(job.all_conformers) == 2
+        assert np.allclose(job.all_conformers[0].positions, lowest.positions)
+        assert np.allclose(job.all_conformers[1].positions, middle.positions)
