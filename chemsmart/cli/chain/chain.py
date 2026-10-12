@@ -6,7 +6,6 @@ import os
 
 import click
 
-from chemsmart.cli.chain.step_options import apply_step_option_tokens
 from chemsmart.cli.chain.workflows import (
     CHAIN_WORKFLOW_COMMANDS,
     register_chain_workflows,
@@ -102,9 +101,11 @@ def _parse_cli_steps(steps, chain_settings):
     for token in steps:
         try:
             step = parse_chain_step(token)
-            step = apply_step_option_tokens(step)
         except ValueError as exc:
             raise click.UsageError(str(exc)) from exc
+        if step.program == "grouper":
+            parsed.append(step)
+            continue
         if step.program not in ChainProjectSettings.PROGRAMS:
             allowed = ", ".join(ChainProjectSettings.PROGRAMS)
             raise click.UsageError(

@@ -141,6 +141,42 @@ orca: gas_solv
         assert isinstance(children[0], CRESTConformerSearchJob)
         assert children[0].label == "crest_best_00_crest_conformers"
 
+    def test_grouper_step_does_not_need_a_chain_alias(
+        self, isolated_config_dir, single_molecule_xyz_file
+    ):
+        _write_chain_yaml(
+            isolated_config_dir,
+            "combined",
+            "crest: test\nxtb: test\n",
+        )
+        result = _invoke_chain(
+            [
+                "-p",
+                "combined",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-s",
+                "crest:conformers",
+                "-s",
+                "grouper: -T 0.3 -N 10 irmsd --inversion on",
+                "-s",
+                "xtb:opt",
+            ],
+            standalone_mode=False,
+        )
+        assert result.exit_code == 0, result.output
+        job = result.return_value
+        assert job.programs == ("crest", "grouper", "xtb")
+        assert [phase.name for phase in job.phases] == [
+            "00_crest_conformers",
+            "01_grouper_irmsd",
+            "02_xtb_opt",
+        ]
+
     def test_sub_test_writes_chain_pipeline_script(
         self,
         isolated_config_dir,
