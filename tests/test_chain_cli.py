@@ -91,7 +91,10 @@ class TestChainHelp:
 
 class TestChainPipeline:
     def test_pipeline_builds_chain_job(
-        self, isolated_config_dir, single_molecule_xyz_file
+        self,
+        isolated_config_dir,
+        single_molecule_xyz_file,
+        temporary_working_dir,
     ):
         _write_chain_yaml(
             isolated_config_dir,
@@ -335,7 +338,10 @@ orca: gas_solv
 
 class TestChainPipelineExtras:
     def test_pipeline_quoted_step_applies_opt_options(
-        self, isolated_config_dir, single_molecule_xyz_file
+        self,
+        isolated_config_dir,
+        single_molecule_xyz_file,
+        temporary_working_dir,
     ):
         _write_chain_yaml(
             isolated_config_dir,
