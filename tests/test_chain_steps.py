@@ -8,9 +8,9 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.chain_steps import (
     CHAIN_NESTED_ONLY_JOBS,
     CHAIN_PROGRAM_SETTINGS,
+    PROGRAM_ADAPTERS,
     ChainStep,
-    _pipeline_job_names,
-    _program_commands,
+    ChainStepParser,
     build_chain_job,
     molecule_from_completed_job,
     parse_chain_step,
@@ -22,6 +22,7 @@ from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.gaussian.ts import GaussianTSJob
 from chemsmart.jobs.grouper.job import GrouperJob
@@ -60,6 +61,14 @@ def _h2(z=0.74, charge=0, multiplicity=1):
 
 def _chain_settings(**aliases):
     return ChainProjectSettings(aliases=aliases, project_name="combined")
+
+
+def _pipeline_job_names(program):
+    return ChainStepParser().pipeline_job_names(program)
+
+
+def _program_commands():
+    return PROGRAM_ADAPTERS
 
 
 class DummyHandoffJob(Job):
@@ -899,3 +908,102 @@ class TestCrestNumConformers:
         assert len(job.all_conformers) == 2
         assert np.allclose(job.all_conformers[0].positions, lowest.positions)
         assert np.allclose(job.all_conformers[1].positions, middle.positions)
+
+
+class TestIRCHandoff:
+    @staticmethod
+    def _irc_with_endpoints(monkeypatch, endpoints):
+        job = GaussianIRCJob(
+            molecule=_h2(),
+            settings=GaussianIRCJobSettings(),
+            label="mol_00_gaussian_irc",
+        )
+        monkeypatch.setattr(job, "endpoint_jobs", lambda: list(endpoints))
+        return job
+
+    def test_endpoint_jobs_are_the_directional_logs(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = GaussianIRCJob(
+            molecule=_h2(),
+            settings=GaussianIRCJobSettings(),
+            label="mol_02_gaussian_irc",
+        )
+        logs = [
+            os.path.basename(item.outputfile) for item in job.endpoint_jobs()
+        ]
+        assert logs == [
+            "mol_02_gaussian_ircf.log",
+            "mol_02_gaussian_ircr.log",
+        ]
+
+        forward = GaussianIRCJob(
+            molecule=_h2(),
+            settings=GaussianIRCJobSettings(direction="forward"),
+            label="mol_02_gaussian_irc",
+        )
+        assert len(forward.endpoint_jobs()) == 1
+        assert forward.endpoint_jobs()[0].outputfile.endswith(
+            "mol_02_gaussian_irc.log"
+        )
+
+    def test_both_endpoints_become_following_jobs(
+        self, isolated_config_dir, temporary_working_dir, monkeypatch
+    ):
+        settings = _chain_settings(gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="gaussian", job="irc"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        forward = _h2(z=0.90)
+        reverse = _h2(z=1.20)
+        chain.phases[0]._resolved_jobs = [
+            self._irc_with_endpoints(
+                monkeypatch,
+                [
+                    DummyHandoffJob("ircf", forward, complete=True),
+                    DummyHandoffJob("ircr", reverse, complete=True),
+                ],
+            )
+        ]
+        children = chain.phases[1].resolve_jobs()
+        assert [child.label for child in children] == [
+            "mol_01_gaussian_opt_c1",
+            "mol_01_gaussian_opt_c2",
+        ]
+        assert np.allclose(children[0].molecule.positions, forward.positions)
+        assert np.allclose(children[1].molecule.positions, reverse.positions)
+
+    def test_missing_endpoint_geometry_waits(
+        self, isolated_config_dir, temporary_working_dir, monkeypatch
+    ):
+        settings = _chain_settings(gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="gaussian", job="irc"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        chain.phases[0]._resolved_jobs = [
+            self._irc_with_endpoints(
+                monkeypatch,
+                [
+                    DummyHandoffJob("ircf", _h2(z=0.90), complete=True),
+                    DummySPJob("ircr", _h2(), None, complete=True),
+                ],
+            )
+        ]
+        assert chain.phases[1].resolve_jobs() == []

@@ -10,6 +10,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.chain import ChainJob, JobPhase
 from chemsmart.jobs.crest.job import CRESTJob
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
+from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.grouper.job import GrouperJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
@@ -329,7 +330,9 @@ class ChainHandoffResolver:
         other multi-structure handoffs. A completed Gaussian crest job
         contributes only its lowest-energy optimized conformer. A
         completed CREST job contributes its lowest ``num_conformers``
-        frames, or the lowest frame when that value is omitted.
+        frames, or the lowest frame when that value is omitted. A
+        completed Gaussian IRC job contributes its directional endpoint
+        jobs, one per log.
         """
         if index == 0:
             return HandoffResult(molecules=(initial_molecule,))
@@ -359,7 +362,7 @@ class ChainHandoffResolver:
                     molecules=tuple(selected), label_kind=kind
                 )
         molecules = []
-        for job in jobs:
+        for job in self._expand_handoff_jobs(jobs):
             molecule = self.molecule_from_job(job)
             if molecule is None:
                 return None
@@ -385,6 +388,16 @@ class ChainHandoffResolver:
         for index, molecule in enumerate(selected):
             molecule.write_xyz(path, mode="w" if index == 0 else "a")
         return path
+
+    def _expand_handoff_jobs(self, jobs):
+        """Replace a Gaussian IRC job with its directional log jobs."""
+        expanded = []
+        for job in jobs:
+            if isinstance(job, GaussianIRCJob):
+                expanded.extend(job.endpoint_jobs())
+            else:
+                expanded.append(job)
+        return expanded
 
     def _completed_previous_jobs(self, index, phases):
         if index == 0:
@@ -913,6 +926,8 @@ def build_chain_job(
     selection from the preceding CREST step, or every frame of
     ``crest_conformers.xyz`` when ``-nc`` is omitted. The step after
     Gaussian crest receives that job's lowest-energy optimized conformer.
+    The step after Gaussian IRC receives one structure from each
+    directional log.
     Charge and multiplicity from ``charge`` / ``multiplicity`` (and
     otherwise from ``molecule``) are passed to each program command. Each
     program step is that program's own subcommand. The chain supplies the
