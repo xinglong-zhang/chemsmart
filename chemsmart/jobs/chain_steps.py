@@ -330,7 +330,8 @@ class ChainHandoffResolver:
         other multi-structure handoffs. A completed Gaussian crest job
         contributes only its lowest-energy optimized conformer. A
         completed CREST job contributes its lowest ``num_conformers``
-        frames, or the lowest frame when that value is omitted. A
+        frames of ``crest_conformers.xyz`` when that count is at least 1,
+        and ``crest_best.xyz`` when ``-nc`` is omitted. A
         completed Gaussian IRC job contributes its directional endpoint
         jobs, one per log.
         """
@@ -352,9 +353,12 @@ class ChainHandoffResolver:
             if ensemble is not None:
                 return HandoffResult(molecules=tuple(ensemble))
             if isinstance(jobs[0], CRESTJob):
-                selected = self._selected_crest_conformers(
-                    jobs[0], num_conformers
-                )
+                if num_conformers is not None and num_conformers >= 1:
+                    selected = self._selected_crest_conformers(
+                        jobs[0], num_conformers
+                    )
+                else:
+                    selected = self._best_conformer(jobs[0])
                 if selected is None:
                     return None
                 kind = "c" if len(selected) > 1 else None
@@ -373,13 +377,26 @@ class ChainHandoffResolver:
     def conformers_file(self, crest_job, num_conformers):
         """CREST xyz path for a following gaussian-crest or grouper step.
 
-        With ``-nc N``, write the selected conformers to a new file.
-        Without it, return ``crest_conformers.xyz``.
+        ``-nc N`` with ``N >= 1`` selects frames from
+        ``crest_conformers.xyz``. Omitting ``-nc`` returns
+        ``crest_best.xyz``.
         """
-        if crest_job is None or not os.path.isfile(crest_job.conformers_file):
+        if crest_job is None:
             return None
-        if num_conformers is None:
-            return crest_job.conformers_file
+        if num_conformers is None or num_conformers < 1:
+            if not os.path.isfile(crest_job.best_file):
+                logger.info(
+                    "CREST best conformer file is not available yet; "
+                    "waiting before the next step."
+                )
+                return None
+            return crest_job.best_file
+        if not os.path.isfile(crest_job.conformers_file):
+            logger.info(
+                "CREST conformers file is not available yet; "
+                "waiting before selecting conformers."
+            )
+            return None
         selected = self._selected_crest_conformers(crest_job, num_conformers)
         if not selected:
             return None
@@ -431,14 +448,35 @@ class ChainHandoffResolver:
             return []
         return [min(molecules, key=lambda molecule: molecule.energy)]
 
+    def _best_conformer(self, job):
+        """Single structure from ``crest_best.xyz``.
+
+        Returns ``None`` when that file is not available yet.
+        """
+        if not os.path.isfile(job.best_file):
+            logger.info(
+                "CREST best conformer file is not available yet; "
+                "waiting before the next step."
+            )
+            return None
+        frames = (
+            Molecule.from_filepath(
+                filepath=job.best_file, index=":", return_list=True
+            )
+            or []
+        )
+        if not frames:
+            return None
+        return [_with_source_charge(frames[0], job.molecule)]
+
     def _selected_crest_conformers(self, job, num_conformers):
         """Lowest CREST conformers to pass to the next step.
 
-        ``num_conformers`` defaults to 1. The result is that many
-        lowest-energy frames of ``crest_conformers.xyz``. Returns ``None``
-        when that file is not available yet.
+        ``num_conformers`` is an integer of at least 1. The result is
+        that many lowest-energy frames of ``crest_conformers.xyz``.
+        Returns ``None`` when that file is not available yet.
         """
-        count = 1 if num_conformers is None else num_conformers
+        count = num_conformers
         if not os.path.isfile(job.conformers_file):
             logger.info(
                 "CREST conformers file is not available yet; "
@@ -469,9 +507,7 @@ class ChainHandoffResolver:
 
     def crest_source(self, jobs):
         for job in jobs:
-            if isinstance(job, CRESTJob) and os.path.isfile(
-                job.conformers_file
-            ):
+            if isinstance(job, CRESTJob):
                 return job
         return None
 
@@ -856,9 +892,9 @@ def parse_chain_step(token):
     ``gaussian:opt`` and ``gaussian: -o maxstep=8,maxsize=12 opt``.
     Options before the job name are program options. Options after it
     are that command's options. ``crest:conformers`` accepts ``-nc N``
-    after the job name; that selects the lowest N conformers for the
-    next step and is not passed to CREST. Omitting it selects the
-    lowest conformer.
+    after the job name; that selects the lowest N conformers from
+    ``crest_conformers.xyz`` for the next step and is not passed to
+    CREST. Omitting it passes ``crest_best.xyz``.
 
     Args:
         token (str): One ``-s/--steps`` value.
@@ -921,10 +957,9 @@ def build_chain_job(
 
     Each step becomes a ``JobPhase`` whose factory reads geometry from the
     previous completed child. ``crest:conformers -nc N`` passes the lowest
-    N conformers to the next step. Omitting ``-nc`` passes the lowest
-    conformer. ``gaussian:crest`` and ``grouper`` read that same
-    selection from the preceding CREST step, or every frame of
-    ``crest_conformers.xyz`` when ``-nc`` is omitted. The step after
+    N conformers from ``crest_conformers.xyz`` to the next step. Omitting
+    ``-nc`` passes ``crest_best.xyz``. ``gaussian:crest`` and ``grouper``
+    read that same selection. The step after
     Gaussian crest receives that job's lowest-energy optimized conformer.
     The step after Gaussian IRC receives one structure from each
     directional log.

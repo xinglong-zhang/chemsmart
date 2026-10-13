@@ -59,13 +59,13 @@ string. Options before the job name are that program's options. Options after th
      -s "crest:conformers -nc 10" -s gaussian:opt
 
    chemsmart sub chain -p combined -f mol.xyz -c 0 -m 1 \
-     -s crest:conformers \
+     -s "crest:conformers -nc 10" \
      -s "gaussian: -l structure_from_lowest -c 0 -m 1 crest -j opt -nc 10" \
      -s gaussian:sp
 
    chemsmart sub chain -p combined -f ligand.xyz \
-     -s crest:conformers \
-     -s "grouper: -T 0.3 -N 10 irmsd --inversion on" \
+     -s "crest:conformers -nc 10" \
+     -s "grouper: -T 0.3 irmsd --inversion on" \
      -s gaussian:opt
 
 A step for ``crest``, ``xtb``, ``gaussian``, or ``orca`` is any subcommand of that program except ``pka``, ``fukui``,
@@ -73,8 +73,9 @@ A step for ``crest``, ``xtb``, ``gaussian``, or ``orca`` is any subcommand of th
 strategy, such as ``irmsd``. Grouper has no alias in the chain YAML. ``gaussian:crest`` and ``grouper`` must immediately
 follow ``crest:conformers``.
 
-``-nc N`` after ``crest:conformers`` selects the lowest N conformers for the next step and is not passed to CREST. ``N``
-is an integer of at least 1. Omitting ``-nc`` selects the lowest conformer. There is no chain-level ``-N``.
+``-nc N`` after ``crest:conformers`` selects the lowest N conformers from ``crest_conformers.xyz`` for the next step and
+is not passed to CREST. ``N`` is an integer of at least 1. Omitting ``-nc`` passes ``crest_best.xyz``. There is no
+chain-level ``-N``.
 
 **Geometry handoff.** Each phase reads the previous completed child. If a phase is incomplete, the chain stops so HPC
 resubmission with ``--skip-completed`` can continue later.
@@ -82,13 +83,14 @@ resubmission with ``--skip-completed`` can continue later.
 -  An optimization, transition-state, or single-point step passes its optimized structure, or the output molecule when
    the job did not optimize.
 
--  ``crest:conformers`` passes the lowest N frames of ``crest_conformers.xyz``. Frames are ordered by energy when every
-   frame has an energy; otherwise the file order is kept. CREST writes that file lowest-energy first. Fewer frames than
-   ``N`` uses every available frame. A missing file leaves the next phase empty until the CREST step finishes.
+-  ``crest:conformers -nc N`` passes the lowest N frames of ``crest_conformers.xyz``. Frames are ordered by energy when
+   every frame has an energy; otherwise the file order is kept. CREST writes that file lowest-energy first. Fewer frames
+   than ``N`` uses every available frame. Omitting ``-nc`` passes the structure in ``crest_best.xyz``. A missing file
+   leaves the next phase empty until the CREST step finishes.
 
--  ``gaussian:crest`` and ``grouper`` read that same selection. When ``-nc`` is omitted they read every frame of
-   ``crest_conformers.xyz``. When ``-nc N`` is set they read ``crest_lowest_N.xyz`` written beside it. ``-nc`` on
-   ``gaussian:crest`` is that command's own option and chooses how many of its input structures to optimize.
+-  ``gaussian:crest`` and ``grouper`` read that same selection. ``-nc N`` on the CREST step gives them
+   ``crest_lowest_N.xyz`` written beside ``crest_conformers.xyz``. Omitting ``-nc`` gives them ``crest_best.xyz``.
+   ``-nc`` on ``gaussian:crest`` is that command's own option and chooses how many of its input structures to optimize.
 
 -  The step after Gaussian crest receives that job's lowest-energy optimized conformer.
 

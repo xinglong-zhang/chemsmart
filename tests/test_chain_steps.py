@@ -495,7 +495,7 @@ class TestBuildChainJob:
         best = _h2(z=0.85)
         best.energy = -2.0
         dummy = DummyCRESTJob(_h2(), best, complete=True)
-        best.write_xyz(dummy.conformers_file, mode="w")
+        best.write_xyz(dummy.best_file, mode="w")
         chain.phases[0]._resolved_jobs = [dummy]
         children = chain.phases[1].resolve_jobs()
         assert len(children) == 1
@@ -547,7 +547,7 @@ class TestCrestEnsembleHandoff:
         self, isolated_config_dir, temporary_working_dir
     ):
         settings = _chain_settings(crest="test", gaussian="gas_solv")
-        crest_step = ChainStep(program="crest", job="conformers")
+        crest_step = parse_chain_step("crest:conformers -nc 2")
         gaussian_step = parse_chain_step(
             "gaussian: -l structure_from_lowest -c 0 -m 1 crest -j opt -nc 10"
         )
@@ -569,7 +569,7 @@ class TestCrestEnsembleHandoff:
         assert job.num_confs_to_opt == 10
         assert len(job.all_conformers) == 2
 
-    def test_omitted_num_confs_uses_every_frame(
+    def test_omitted_num_confs_uses_best_conformer(
         self, isolated_config_dir, temporary_working_dir
     ):
         settings = _chain_settings(crest="test", gaussian="gas_solv")
@@ -584,11 +584,14 @@ class TestCrestEnsembleHandoff:
             charge=0,
             multiplicity=1,
         )
-        frames = [_h2(z=0.70), _h2(z=0.90)]
-        chain.phases[0]._resolved_jobs = [_crest_with_conformers(frames)]
+        best = _h2(z=0.82)
+        crest = _crest_with_conformers([_h2(z=0.70), _h2(z=0.90)])
+        best.write_xyz(crest.best_file, mode="w")
+        chain.phases[0]._resolved_jobs = [crest]
         job = chain.phases[1].resolve_jobs()[0]
-        assert job.num_confs_to_opt == 2
+        assert job.num_confs_to_opt == 1
         assert job.label == "mol_opt"
+        assert np.allclose(job.all_conformers[0].positions, best.positions)
 
     def test_grouping_and_num_confs_are_rejected(
         self, isolated_config_dir, temporary_working_dir
@@ -605,9 +608,9 @@ class TestCrestEnsembleHandoff:
             charge=0,
             multiplicity=1,
         )
-        chain.phases[0]._resolved_jobs = [
-            _crest_with_conformers([_h2(z=0.70), _h2(z=0.90)])
-        ]
+        crest = _crest_with_conformers([_h2(z=0.70), _h2(z=0.90)])
+        _h2(z=0.70).write_xyz(crest.best_file, mode="w")
+        chain.phases[0]._resolved_jobs = [crest]
         with pytest.raises(ValueError, match="mutually exclusive"):
             chain.phases[1].resolve_jobs()
 
@@ -682,10 +685,10 @@ class TestCrestEnsembleHandoff:
             molecule=_h2(),
             label="mol",
         )
-        frame = _h2(z=0.82)
-        chain.phases[0]._resolved_jobs = [
-            _crest_with_conformers([frame], charge=3, multiplicity=2)
-        ]
+        frame = _h2(z=0.82, charge=3, multiplicity=2)
+        crest = _crest_with_conformers([frame], charge=3, multiplicity=2)
+        frame.write_xyz(crest.best_file, mode="w")
+        chain.phases[0]._resolved_jobs = [crest]
         grouped = chain.phases[1].resolve_jobs()
         assert len(grouped) == 1
         assert grouped[0].is_complete()
@@ -746,7 +749,7 @@ class TestCrestEnsembleHandoff:
         chain = build_chain_job(
             settings,
             steps=(
-                ChainStep(program="crest", job="conformers"),
+                parse_chain_step("crest:conformers -nc 2"),
                 parse_chain_step("grouper: formula"),
                 ChainStep(program="xtb", job="opt"),
             ),
@@ -763,39 +766,64 @@ class TestCrestEnsembleHandoff:
 
 
 class TestCrestNumConformers:
-    def test_omitted_and_one_select_the_lowest_conformer(
+    def test_omitted_num_confs_uses_best_file(
         self, isolated_config_dir, temporary_working_dir
     ):
         higher = _h2(z=0.70)
         higher.energy = -1.0
         lowest = _h2(z=1.20)
         lowest.energy = -3.0
-        for step_token in ("crest:conformers", "crest:conformers -nc 1"):
-            settings = _chain_settings(crest="test", gaussian="gas_solv")
-            chain = build_chain_job(
-                settings,
-                steps=(
-                    parse_chain_step(step_token),
-                    ChainStep(program="gaussian", job="opt"),
-                ),
-                molecule=_h2(),
-                label="mol",
-                charge=0,
-                multiplicity=1,
+        best = _h2(z=0.95)
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                parse_chain_step("crest:conformers"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        crest = _crest_with_conformers([higher, lowest])
+        best.write_xyz(crest.best_file, mode="w")
+        chain.phases[0]._resolved_jobs = [crest]
+        children = chain.phases[1].resolve_jobs()
+        assert len(children) == 1
+        assert children[0].label == "mol_01_gaussian_opt"
+        assert np.allclose(children[0].molecule.positions, best.positions)
+
+    def test_one_selects_the_lowest_conformer(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        higher = _h2(z=0.70)
+        higher.energy = -1.0
+        lowest = _h2(z=1.20)
+        lowest.energy = -3.0
+        settings = _chain_settings(crest="test", gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                parse_chain_step("crest:conformers -nc 1"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        frames = [higher, lowest]
+        crest = _crest_with_conformers(frames)
+        for index, molecule in enumerate(frames):
+            molecule.write_xyz(
+                crest.conformers_file, mode="w" if index == 0 else "a"
             )
-            frames = [higher, lowest]
-            crest = _crest_with_conformers(frames)
-            for index, molecule in enumerate(frames):
-                molecule.write_xyz(
-                    crest.conformers_file, mode="w" if index == 0 else "a"
-                )
-            chain.phases[0]._resolved_jobs = [crest]
-            children = chain.phases[1].resolve_jobs()
-            assert len(children) == 1
-            assert children[0].label == "mol_01_gaussian_opt"
-            assert np.allclose(
-                children[0].molecule.positions, lowest.positions
-            )
+        chain.phases[0]._resolved_jobs = [crest]
+        children = chain.phases[1].resolve_jobs()
+        assert len(children) == 1
+        assert children[0].label == "mol_01_gaussian_opt"
+        assert np.allclose(children[0].molecule.positions, lowest.positions)
 
     def test_selects_lowest_conformers(
         self, isolated_config_dir, temporary_working_dir

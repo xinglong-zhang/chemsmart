@@ -60,12 +60,13 @@ Project and File Options
 
       -  One pipeline step as ``PROGRAM:JOB`` or quoted ``PROGRAM: [OPTIONS] JOB`` (e.g. ``gaussian:opt`` or
          ``"gaussian: -o maxstep=8,maxsize=12 opt"``). Options before the job name are program options; options after it
-         belong to that command. ``crest:conformers -nc N`` selects the lowest N conformers for the next step and is not
-         passed to CREST; omitting ``-nc`` selects the lowest conformer. A step may be any subcommand of ``crest``,
-         ``xtb``, ``gaussian``, or ``orca`` except ``pka``, ``fukui``, ``redox``, and ``reaction``. ``grouper`` is a
-         grouper strategy. ``gaussian:crest`` and ``grouper`` must follow ``crest:conformers``. Required for the CLI
-         pipeline; repeat for each phase. Not the same as ``run``/``sub`` ``-s/--server``. Cannot be combined with
-         ``pka``, ``fukui``, ``redox``, or ``reaction``.
+         belong to that command. ``crest:conformers -nc N`` selects the lowest N conformers from
+         ``crest_conformers.xyz`` for the next step and is not passed to CREST; omitting ``-nc`` passes
+         ``crest_best.xyz``. A step may be any subcommand of ``crest``, ``xtb``, ``gaussian``, or ``orca`` except
+         ``pka``, ``fukui``, ``redox``, and ``reaction``. ``grouper`` is a grouper strategy. ``gaussian:crest`` and
+         ``grouper`` must follow ``crest:conformers``. Required for the CLI pipeline; repeat for each phase. Not the
+         same as ``run``/``sub`` ``-s/--server``. Cannot be combined with ``pka``, ``fukui``, ``redox``, or
+         ``reaction``.
 
    -  -  ``-l, --label``
       -  string
@@ -148,8 +149,8 @@ Pipeline (optional ``custom``):
    chemsmart sub chain -p combined -f ligand.xyz -c 0 -m 1 \
      -s "crest:conformers -nc 10" -s gaussian:opt
    chemsmart sub chain -p combined -f ligand.xyz \
-     -s crest:conformers \
-     -s "grouper: -T 0.3 -N 10 irmsd" \
+     -s "crest:conformers -nc 10" \
+     -s "grouper: -T 0.3 irmsd" \
      -s xtb:opt
 
 Workflow submit:
