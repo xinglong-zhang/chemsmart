@@ -100,6 +100,7 @@ def click_mecp_frequency_options(function):
         ),
         click.option(
             "--follow-seam-imaginary-mode/--no-follow-seam-imaginary-mode",
+            "--followseam",
             default=False,
             show_default=True,
             help=(
@@ -110,6 +111,7 @@ def click_mecp_frequency_options(function):
         ),
         click.option(
             "--seam-mode-displacement",
+            "--displacement",
             type=click.FloatRange(min=0.0, min_open=True),
             default=0.05,
             show_default=True,
@@ -120,6 +122,7 @@ def click_mecp_frequency_options(function):
         ),
         click.option(
             "--seam-mode-max-steps",
+            "--max-follow-steps",
             type=click.IntRange(min=1),
             default=30,
             show_default=True,

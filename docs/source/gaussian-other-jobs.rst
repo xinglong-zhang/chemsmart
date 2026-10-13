@@ -21,6 +21,27 @@ required.
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] mecp [SUBCMD_OPTIONS]
 
+Gaussian MECP uses the following task syntax (after the Gaussian input options):
+
+.. code:: bash
+
+   mecp -m1 3 -m2 1                    # Optimize only (default)
+   mecp -m1 3 -m2 1 numfreq            # Optimize, then verify projected frequencies
+   mecp -m1 3 -m2 1 numfreq --only     # Analyze the supplied stationary crossing
+   mecp -m1 3 -m2 1 followseam         # Optimize, verify, and follow imaginary seam modes
+
+``followseam`` implies ``numfreq``. Its optional controls are ``--displacement`` (default 0.05 Angstrom) and
+``--max-follow-steps`` (default 30). The original ``--mecp-numfreq``, ``--follow-seam-imaginary-mode``,
+``--seam-mode-displacement``, and ``--seam-mode-max-steps`` options remain supported; ``--followseam`` is also available
+as a flag.
+
+``numfreq --only`` skips optimization and restart, leaving the supplied geometry unchanged. Both state energies and the
+projected gradient must satisfy the configured convergence thresholds before numerical Hessians are computed. Otherwise,
+use ``numfreq`` to optimize first. The frequency file contains mass-weighted, two-state projected MECP frequencies, not
+ordinary single-state frequencies. A stationary seam saddle is reported with its imaginary frequencies without following
+the mode. Completion is recorded separately in ``<label>_final_report.log``; no optimization directory is created.
+``--only`` cannot be combined with ``followseam``.
+
 Algorithm
 =========
 
@@ -185,6 +206,11 @@ MECP Options
       -  Perform the seam-minimum verification and additionally write mass-weighted projected MECP frequencies and
          normal modes to ``<label>_mecp_freq.log``.
 
+   -  -  ``--only`` (with ``numfreq``)
+      -  bool
+      -  False
+      -  Skip optimization and analyze the supplied stationary crossing. Cannot be combined with ``followseam``.
+
    -  -  ``--hess-step-size``
       -  float
       -  1.0×10⁻³ Bohr
@@ -196,12 +222,12 @@ MECP Options
       -  If the projected Hessian contains a significant imaginary mode, follow it in both directions using constrained
          progress planes, then release and retain the lower verified seam minimum. Implies ``--mecp-numfreq``.
 
-   -  -  ``--seam-mode-displacement``
+   -  -  ``--displacement`` / ``--seam-mode-displacement``
       -  float
       -  0.05 Å
       -  Progress increment along the tracked projected mode at each constrained macro step.
 
-   -  -  ``--seam-mode-max-steps``
+   -  -  ``--max-follow-steps`` / ``--seam-mode-max-steps``
       -  int
       -  30
       -  Maximum constrained mode-following macro steps in each positive/negative direction.
