@@ -61,9 +61,19 @@ def _add_subcommand_info_to_ctx(ctx):
 
     # Order of ctx.params may not be the same as order of ctx.command.params!
     nargs = {param.name: param.nargs for param in ctx.command.params}
-    is_multiple = {param.name: param.multiple for param in ctx.command.params}
+    is_multiple = {
+        param.name: getattr(param, "multiple", False)
+        for param in ctx.command.params
+    }
     types = {param.name: param.type for param in ctx.command.params}
-    is_flag = {param.name: param.is_flag for param in ctx.command.params}
+    is_flag = {
+        param.name: getattr(param, "is_flag", False)
+        for param in ctx.command.params
+    }
+    is_argument = {
+        param.name: isinstance(param, click.Argument)
+        for param in ctx.command.params
+    }
     secondary_opts = {
         param.name: param.secondary_opts for param in ctx.command.params
     }
@@ -76,6 +86,7 @@ def _add_subcommand_info_to_ctx(ctx):
         subcommand["kwargs"][param]["is_multiple"] = is_multiple[param]
         subcommand["kwargs"][param]["type"] = types[param]
         subcommand["kwargs"][param]["is_flag"] = is_flag[param]
+        subcommand["kwargs"][param]["is_argument"] = is_argument[param]
         subcommand["kwargs"][param]["secondary_opts"] = secondary_opts[param]
 
     parent = ctx.parent.info_name if ctx.parent is not None else None
@@ -284,6 +295,11 @@ class CtxObjArguments:
             arg_secondary_opts = subdict["secondary_opts"]
 
             if v is None or (isinstance(v, tuple) and len(v) == 0):
+                continue
+
+            if subdict.get("is_argument", False):
+                values = v if isinstance(v, (list, tuple)) else [v]
+                command_line_string += [self._value(value) for value in values]
                 continue
 
             keyword = self.argument_keyword(

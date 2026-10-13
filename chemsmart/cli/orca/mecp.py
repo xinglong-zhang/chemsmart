@@ -45,14 +45,18 @@ logger = logging.getLogger(__name__)
     required=True,
     help="PES2 spin multiplicity; written to %mecp Mult (required).",
 )
+@click.argument(
+    "mode_argument",
+    type=click.Choice(["opt", "numfreq"], case_sensitive=False),
+    required=False,
+)
 @click.option(
     "--mode",
     type=click.Choice(["opt", "numfreq"], case_sensitive=False),
-    default="opt",
-    show_default=True,
+    default=None,
     help=(
         "Optimisation mode. 'opt' (default) runs straight SurfCrossOpt; "
-        "'numfreq' adds SurfCrossOpt NumFreq for a numerical-frequency "
+        "'numfreq' adds SurfCrossNumFreq for a numerical-frequency "
         "verification step after convergence."
     ),
 )
@@ -65,6 +69,8 @@ logger = logging.getLogger(__name__)
 )
 @click.option(
     "--broken-sym",
+    "--brokensym",
+    "-bs",
     default=None,
     help=(
         "PES2 broken-symmetry pair NA,NB: unpaired electrons on two "
@@ -114,6 +120,7 @@ def mecp(
     solventfilename,
     multiplicity1,
     multiplicity2,
+    mode_argument,
     mode,
     maxiter,
     broken_sym,
@@ -139,7 +146,20 @@ def mecp(
     computational method are inherited from the project configuration and
     can be overridden via the standard ``-c`` / ``-m`` / ``--method`` /
     ``--basis`` flags of the parent ``orca`` command.
+
+    Optional MODE_ARGUMENT is opt (default) or numfreq. The latter adds
+    the crossing-seam numerical-frequency verification after optimization.
     """
+    if (
+        mode_argument is not None
+        and mode is not None
+        and mode_argument != mode
+    ):
+        raise click.UsageError(
+            "Positional mode and --mode must agree when both are supplied."
+        )
+    mode = mode_argument or mode or "opt"
+
     from chemsmart.jobs.orca.settings import ORCAMECPJobSettings
 
     # get jobrunner from context

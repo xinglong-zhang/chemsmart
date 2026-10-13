@@ -755,10 +755,10 @@ def test_cli_numbered_state_options(
             "-c",
             "1",
             "mecp",
-                "-m1",
-                "6",
-                "-m2",
-                "4",
+            "-m1",
+            "6",
+            "-m2",
+            "4",
         ],
         ctx_obj={"jobrunner": orca_jobrunner_no_scratch},
     )
@@ -766,3 +766,74 @@ def test_cli_numbered_state_options(
     assert settings.multiplicity == 6
     assert settings.multiplicity1 == 6
     assert settings.multiplicity2 == 4
+
+
+@pytest.mark.parametrize(
+    "mode_args, expected",
+    [
+        ([], "opt"),
+        (["opt"], "opt"),
+        (["numfreq"], "numfreq"),
+        (["--mode", "numfreq"], "numfreq"),
+        (["NUMFREQ", "--mode", "numfreq"], "numfreq"),
+    ],
+)
+def test_mecp_positional_mode(
+    mode_args,
+    expected,
+    single_molecule_xyz_file,
+    run_orca_and_capture_settings,
+    orca_jobrunner_no_scratch,
+):
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        [
+            "-p",
+            "test",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "1",
+            "mecp",
+            "-m1",
+            "3",
+            "-m2",
+            "1",
+            "-bs",
+            "1,1",
+        ]
+        + mode_args,
+        ctx_obj={"jobrunner": orca_jobrunner_no_scratch},
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.mode == expected
+    assert settings.broken_sym == [1, 1]
+    assert ("SurfCrossNumFreq" in settings.route_string) == (
+        expected == "numfreq"
+    )
+
+
+@pytest.mark.parametrize("args", [["numfrq"], ["opt", "--mode", "numfreq"]])
+def test_mecp_invalid_mode(args):
+    from chemsmart.cli.orca.mecp import mecp
+
+    result = CliRunner().invoke(mecp, ["-m1", "3", "-m2", "1"] + args)
+    assert result.exit_code == 2
+
+
+def test_mecp_positional_mode_command_reconstruction():
+    from chemsmart.cli.orca.mecp import mecp
+    from chemsmart.utils.cli import (
+        CtxObjArguments,
+        _add_subcommand_info_to_ctx,
+    )
+
+    with mecp.make_context("mecp", ["-m1", "3", "-m2", "1", "numfreq"]) as ctx:
+        _add_subcommand_info_to_ctx(ctx)
+        arguments = CtxObjArguments(
+            ctx.obj["subcommand"]
+        ).reconstruct_command_line()
+    assert "numfreq" in arguments
+    assert "--mode-argument" not in arguments
+    with mecp.make_context("mecp", arguments[1:]) as ctx:
+        assert ctx.params["mode_argument"] == "numfreq"
