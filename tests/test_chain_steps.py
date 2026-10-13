@@ -1,4 +1,5 @@
 import os
+import shutil
 from types import SimpleNamespace
 
 import numpy as np
@@ -22,6 +23,7 @@ from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
 from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.gaussian.ts import GaussianTSJob
@@ -1035,3 +1037,89 @@ class TestIRCHandoff:
             )
         ]
         assert chain.phases[1].resolve_jobs() == []
+
+
+class TestOutputFileHandoff:
+    def test_gaussian_log_keeps_vibrational_modes(
+        self,
+        isolated_config_dir,
+        temporary_working_dir,
+        gaussian_outputs_test_directory,
+    ):
+        log = os.path.join(gaussian_outputs_test_directory, "KOH.log")
+        chain = build_chain_job(
+            _chain_settings(gaussian="gas_solv"),
+            steps=(
+                ChainStep(program="gaussian", job="ts"),
+                ChainStep(program="gaussian", job="qrc"),
+            ),
+            molecule=Molecule.from_filepath(log),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        ts_job = chain.phases[0].resolve_jobs()[0]
+        shutil.copy(log, ts_job.outputfile)
+        qrc_job = chain.phases[1].resolve_jobs()[0]
+        assert isinstance(qrc_job, GaussianQRCJob)
+        assert len(qrc_job.molecule.vibrational_modes) == 3
+        assert not os.path.exists("mol_01_gaussian_qrc.xyz")
+
+    def test_orca_output_feeds_gaussian(
+        self,
+        isolated_config_dir,
+        temporary_working_dir,
+        orca_outputs_directory,
+    ):
+        out = os.path.join(orca_outputs_directory, "phenol_pka_B_sp.out")
+        expected = Molecule.from_filepath(out)
+        chain = build_chain_job(
+            _chain_settings(orca="gas_solv", gaussian="gas_solv"),
+            steps=(
+                ChainStep(program="orca", job="sp"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=expected,
+            label="mol",
+            charge=-1,
+            multiplicity=1,
+        )
+        orca_job = chain.phases[0].resolve_jobs()[0]
+        shutil.copy(out, orca_job.outputfile)
+        child = chain.phases[1].resolve_jobs()[0]
+        assert isinstance(child, GaussianOptJob)
+        assert child.settings.charge == -1
+        assert np.allclose(child.molecule.positions, expected.positions)
+        assert not os.path.exists("mol_01_gaussian_opt.xyz")
+
+    def test_xtb_output_feeds_orca(
+        self, isolated_config_dir, temporary_working_dir, xtb_water_outfolder
+    ):
+        chain = build_chain_job(
+            _chain_settings(xtb="test", orca="gas_solv"),
+            steps=(
+                ChainStep(program="xtb", job="opt"),
+                ChainStep(program="orca", job="sp"),
+            ),
+            molecule=Molecule.from_filepath(
+                os.path.join(xtb_water_outfolder, "water.xyz")
+            ),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        xtb_job = chain.phases[0].resolve_jobs()[0]
+        shutil.copytree(
+            xtb_water_outfolder, xtb_job.folder, dirs_exist_ok=True
+        )
+        os.rename(
+            os.path.join(xtb_job.folder, "water_ohess.out"), xtb_job.outputfile
+        )
+        expected = xtb_job.optimized_structure()
+        child = chain.phases[1].resolve_jobs()[0]
+        assert isinstance(child, ORCASinglePointJob)
+        assert np.allclose(
+            child.molecule.positions, expected.positions, atol=1e-4
+        )
+        assert child.molecule.energy == expected.energy
+        assert not os.path.exists("mol_01_orca_sp.xyz")

@@ -11,9 +11,12 @@ from chemsmart.jobs.chain import ChainJob, JobPhase
 from chemsmart.jobs.crest.job import CRESTJob
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
+from chemsmart.jobs.gaussian.job import GaussianJob
 from chemsmart.jobs.grouper.job import GrouperJob
 from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.xtb.job import XTBJob
 from chemsmart.settings.chain import ChainProjectSettings
 from chemsmart.settings.crest import CRESTProjectSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -279,10 +282,15 @@ class ChainStepParser:
 
 @dataclass(frozen=True)
 class HandoffResult:
-    """Structures for the next phase, and the fan-out label kind."""
+    """Structures for the next phase, and the fan-out label kind.
+
+    ``sources`` holds one ``(output_file, index)`` pair per molecule, or
+    ``None`` where the molecule is written to an xyz file instead.
+    """
 
     molecules: tuple[Molecule, ...]
     label_kind: str | None = None
+    sources: tuple[tuple[str, str] | None, ...] = ()
 
 
 class _ChainGroupPassthrough(Job):
@@ -333,7 +341,8 @@ class ChainHandoffResolver:
         frames of ``crest_conformers.xyz`` when that count is at least 1,
         and ``crest_best.xyz`` when ``-nc`` is omitted. A
         completed Gaussian IRC job contributes its directional endpoint
-        jobs, one per log.
+        jobs, one per log. Gaussian, ORCA, and xTB jobs also pass their
+        output file, so the next step reads the last structure from it.
         """
         if index == 0:
             return HandoffResult(molecules=(initial_molecule,))
@@ -349,10 +358,10 @@ class ChainHandoffResolver:
                     if group
                 )
                 return HandoffResult(molecules=representatives, label_kind="g")
-            ensemble = self._gaussian_crest_molecules(jobs[0])
-            if ensemble is not None:
-                return HandoffResult(molecules=tuple(ensemble))
-            if isinstance(jobs[0], CRESTJob):
+            lowest = self._lowest_gaussian_crest_job(jobs[0])
+            if lowest is not None:
+                jobs = lowest
+            elif isinstance(jobs[0], CRESTJob):
                 if num_conformers is not None and num_conformers >= 1:
                     selected = self._selected_crest_conformers(
                         jobs[0], num_conformers
@@ -366,20 +375,29 @@ class ChainHandoffResolver:
                     molecules=tuple(selected), label_kind=kind
                 )
         molecules = []
+        sources = []
         for job in self._expand_handoff_jobs(jobs):
             molecule = self.molecule_from_job(job)
             if molecule is None:
                 return None
             molecules.append(molecule)
+            sources.append(
+                (job.outputfile, "-1")
+                if isinstance(job, (GaussianJob, ORCAJob, XTBJob))
+                else None
+            )
         kind = "c" if len(molecules) > 1 else None
-        return HandoffResult(molecules=tuple(molecules), label_kind=kind)
+        return HandoffResult(
+            molecules=tuple(molecules),
+            label_kind=kind,
+            sources=tuple(sources),
+        )
 
     def conformers_file(self, crest_job, num_conformers):
         """CREST xyz path for a following gaussian-crest or grouper step.
 
-        ``-nc N`` with ``N >= 1`` selects frames from
-        ``crest_conformers.xyz``. Omitting ``-nc`` returns
-        ``crest_best.xyz``.
+        With ``-nc N``, write the selected conformers to a new file.
+        Without it, return ``crest_conformers.xyz``.
         """
         if crest_job is None:
             return None
@@ -424,8 +442,8 @@ class ChainHandoffResolver:
             return None
         return jobs
 
-    def _gaussian_crest_molecules(self, job):
-        """Lowest-energy optimized conformer from a finished Gaussian crest job.
+    def _lowest_gaussian_crest_job(self, job):
+        """Lowest-energy conformer job of a finished Gaussian crest job.
 
         Returns ``None`` when ``job`` is not a Gaussian crest job, ``[]``
         when a selected conformer geometry or its energy is not available
@@ -434,7 +452,7 @@ class ChainHandoffResolver:
         if not isinstance(job, GaussianCrestJob):
             return None
         children = job.all_conformers_jobs[: job.num_confs_to_opt]
-        molecules = []
+        energies = []
         for child in children:
             molecule = self.molecule_from_job(child)
             if molecule is None or molecule.energy is None:
@@ -443,10 +461,10 @@ class ChainHandoffResolver:
                     "yet; waiting before the next step."
                 )
                 return []
-            molecules.append(molecule)
-        if not molecules:
+            energies.append((molecule.energy, child))
+        if not energies:
             return []
-        return [min(molecules, key=lambda molecule: molecule.energy)]
+        return [min(energies, key=lambda pair: pair[0])[1]]
 
     def _best_conformer(self, job):
         """Single structure from ``crest_best.xyz``.
@@ -590,6 +608,7 @@ def _invoke_cli_command(command, argv, jobrunner):
 def _program_argv(
     step,
     filename,
+    structure_index,
     project_name,
     child_label,
     charge,
@@ -597,6 +616,8 @@ def _program_argv(
     skip_completed,
 ):
     argv = ["-p", project_name, "-f", filename]
+    if structure_index is not None:
+        argv.extend(["-i", structure_index])
     before = step.extra_option_tokens
     after = step.suffix_option_tokens
     if charge is not None and not _argv_has_option(before, "-c", "--charge"):
@@ -769,28 +790,41 @@ class ChainPipelineBuilder:
         )
         if handoff is None or not handoff.molecules:
             return []
-        return self._program_jobs(
-            step, handoff.molecules, index, handoff.label_kind
-        )
+        return self._program_jobs(step, handoff, index)
 
-    def _program_jobs(self, step, molecules, index, kind):
+    def _program_jobs(self, step, handoff, index):
         """Build one program command per structure.
 
-        The chain writes the structure and supplies project, charge, and
-        multiplicity. The program command builds the job.
+        The chain passes the previous job's output file, or writes the
+        structure to an xyz file when there is none, and supplies project,
+        charge, and multiplicity. The program command builds the job.
         """
         command = PROGRAM_ADAPTERS[step.program].command_loader()
+        molecules = handoff.molecules
         count = len(molecules)
+        sources = handoff.sources or (None,) * count
         jobs = []
-        for ordinal, molecule in enumerate(molecules, start=1):
+        for ordinal, (molecule, source) in enumerate(
+            zip(molecules, sources), start=1
+        ):
             child_label = _child_label(
-                self.context.label, index, step, ordinal, count, kind
+                self.context.label,
+                index,
+                step,
+                ordinal,
+                count,
+                handoff.label_kind,
             )
-            filename = os.path.abspath(f"{child_label}.xyz")
-            molecule.write_xyz(filename, mode="w")
+            if source is None:
+                filename = os.path.abspath(f"{child_label}.xyz")
+                molecule.write_xyz(filename, mode="w")
+                structure_index = None
+            else:
+                filename, structure_index = source
             argv = _program_argv(
                 step,
                 filename,
+                structure_index,
                 self._project_names[step.program],
                 child_label,
                 self._charge,
@@ -859,6 +893,7 @@ class ChainPipelineBuilder:
         argv = _program_argv(
             step,
             conformers_file,
+            None,
             self._project_names[step.program],
             self.context.label,
             self._charge,

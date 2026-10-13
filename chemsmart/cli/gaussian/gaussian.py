@@ -585,24 +585,27 @@ def gaussian(
     elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
         # filename supplied - we would want to use the settings from here
         #  and do not use any defaults!
-        if filename.endswith(".out") and (
-            get_program_type_from_file(filename) == "xtb"
-        ):
-            # xTB output is only a geometry source; its route/method do not
-            # map onto Gaussian settings. Start from defaults (like .xyz) but
-            # inherit charge/multiplicity from the xTB calculation so the new
+        output_program = (
+            get_program_type_from_file(filename)
+            if filename.endswith(".out")
+            else None
+        )
+        if output_program in ("xtb", "orca"):
+            # xTB/ORCA output is only a geometry source; its route/method do
+            # not map onto Gaussian settings. Start from defaults (like .xyz)
+            # but inherit charge/multiplicity from the calculation so the new
             # Gaussian job is fully specified. CLI -c/-m still override below.
             logger.info(
-                f"Detected xTB output {filename}; using default Gaussian "
-                f"settings with geometry and charge/multiplicity from the "
-                f"xTB calculation."
+                f"Detected {output_program} output {filename}; using default "
+                f"Gaussian settings with geometry and charge/multiplicity "
+                f"from the {output_program} calculation."
             )
             job_settings = GaussianJobSettings.default()
-            xtb_molecule = Molecule.from_filepath(filename)
-            if xtb_molecule.charge is not None:
-                job_settings.charge = xtb_molecule.charge
-            if xtb_molecule.multiplicity is not None:
-                job_settings.multiplicity = xtb_molecule.multiplicity
+            source_molecule = Molecule.from_filepath(filename)
+            if source_molecule.charge is not None:
+                job_settings.charge = source_molecule.charge
+            if source_molecule.multiplicity is not None:
+                job_settings.multiplicity = source_molecule.multiplicity
         else:
             job_settings = GaussianJobSettings.from_filepath(filename)
     elif filename.endswith(".db"):

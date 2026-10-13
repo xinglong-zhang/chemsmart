@@ -83,6 +83,10 @@ resubmission with ``--skip-completed`` can continue later.
 -  An optimization, transition-state, or single-point step passes its optimized structure, or the output molecule when
    the job did not optimize.
 
+-  A Gaussian, ORCA, or xTB step passes its own output file (``.log`` or ``.out``) as ``-f`` with ``-i -1``, so the next
+   step reads the last structure together with its vibrational modes, e.g. ``gaussian:ts`` followed by ``gaussian:qrc``.
+   The first step, CREST frames, and grouper representatives are written to ``.xyz`` files.
+
 -  ``crest:conformers -nc N`` passes the lowest N frames of ``crest_conformers.xyz``. Frames are ordered by energy when
    every frame has an energy; otherwise the file order is kept. CREST writes that file lowest-energy first. Fewer frames
    than ``N`` uses every available frame. Omitting ``-nc`` passes the structure in ``crest_best.xyz``. A missing file
