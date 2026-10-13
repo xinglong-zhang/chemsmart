@@ -18,7 +18,42 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("mecp", cls=MyCommand)
+class MECPCommand(MyCommand):
+    """Accept workflow tokens while recording ordinary options for submission."""
+
+    def parse_args(self, ctx, args):
+        ctx.allow_extra_args = True
+        remaining = super().parse_args(ctx, args)
+        if len(remaining) > 1 or any(
+            token.lower() not in {"numfreq", "followseam"}
+            for token in remaining
+        ):
+            raise click.UsageError(
+                "Choose one MECP task: numfreq or followseam.", ctx
+            )
+        if remaining:
+            task = remaining[0].lower()
+            ctx.params["mecp_numfreq"] = True
+            if task == "followseam":
+                ctx.params["follow_seam_imaginary_mode"] = True
+        if ctx.params["only"] and (
+            not ctx.params["mecp_numfreq"]
+            or ctx.params["follow_seam_imaginary_mode"]
+        ):
+            raise click.UsageError(
+                "--only requires numfreq and cannot be combined with followseam.",
+                ctx,
+            )
+        ctx.args = []
+        return []
+
+
+@gaussian.command("mecp", cls=MECPCommand)
+@click.option(
+    "--only",
+    is_flag=True,
+    help="With numfreq, analyze the input structure without optimization.",
+)
 @click_job_options
 @click_mecp_state_options
 @click.option(
@@ -158,11 +193,14 @@ def mecp(
     seam_mode_displacement,
     seam_mode_max_steps,
     restart,
+    only,
     skip_completed,
     **kwargs,
 ):
     """
-    CLI subcommand for running Gaussian Minimum Energy Cross Point (MECP) jobs.
+    Run Gaussian MECP optimization, optionally followed by numfreq or followseam.
+
+    Use numfreq --only to analyze an existing crossing without optimization.
     """
 
     # get jobrunner for running Gaussian MECP jobs
@@ -268,6 +306,7 @@ def mecp(
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
     mecp_settings.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
+    mecp_settings.mecp_numfreq_only = only
     mecp_settings.follow_seam_imaginary_mode = follow_seam_imaginary_mode
     mecp_settings.seam_mode_displacement = seam_mode_displacement
     mecp_settings.seam_mode_max_steps = seam_mode_max_steps

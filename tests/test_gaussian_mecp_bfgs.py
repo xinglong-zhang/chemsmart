@@ -4,6 +4,7 @@ from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 
+import click
 import numpy as np
 import pytest
 
@@ -13,6 +14,7 @@ from chemsmart.analysis.thermochemistry import (
     Thermochemistry,
     thermochemistry_from_file,
 )
+from chemsmart.cli.gaussian.mecp import mecp
 from chemsmart.cli.gaussian.mecp_options import add_mecp_method_suffix
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
@@ -25,6 +27,7 @@ from chemsmart.jobs.gaussian.settings import (
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
+from chemsmart.utils.cli import CtxObjArguments, _add_subcommand_info_to_ctx
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import remove_word_from_parenthesized_option
 
@@ -1361,3 +1364,153 @@ def test_mecp_driver_raises_when_max_steps_are_exhausted(tmp_path):
         job._run()
 
     assert Path(job.state_file).is_file()
+
+
+@pytest.mark.parametrize(
+    "task,freq,only,follow",
+    [
+        ([], False, False, False),
+        (["numfreq"], True, False, False),
+        (["numfreq", "--only"], True, True, False),
+        (["followseam"], True, False, True),
+        (["--followseam"], False, False, True),
+        (["--mecp-numfreq", "--only"], True, True, False),
+    ],
+)
+def test_workflow_submission_round_trip(task, freq, only, follow):
+    args = ["-m1", "3", "-m2", "1", *task]
+    ctx = mecp.make_context("mecp", args, obj={})
+    assert ctx.params["mecp_numfreq"] == freq
+    assert ctx.params["only"] == only
+    assert ctx.params["follow_seam_imaginary_mode"] == follow
+    _add_subcommand_info_to_ctx(ctx)
+    rebuilt = CtxObjArguments(ctx.obj["subcommand"]).reconstruct_command_line()
+    restored = mecp.make_context("mecp", rebuilt[1:])
+    assert restored.params == ctx.params
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--only"],
+        ["followseam", "--only"],
+        ["numfreq", "followseam"],
+        ["typo"],
+        ["--unknown"],
+    ],
+)
+def test_invalid_workflow_is_rejected(args):
+    with pytest.raises(click.UsageError):
+        mecp.make_context("mecp", args)
+
+
+@pytest.mark.parametrize(
+    "task,only,follow",
+    [
+        ([], False, False),
+        (["numfreq"], False, False),
+        (["numfreq", "--only"], True, False),
+        (
+            [
+                "followseam",
+                "--displacement",
+                "0.08",
+                "--max-follow-steps",
+                "5",
+            ],
+            False,
+            True,
+        ),
+    ],
+)
+def test_cli_builds_workflow_settings(
+    task,
+    only,
+    follow,
+    single_molecule_xyz_file,
+    gaussian_jobrunner_no_scratch,
+    make_cli_ctx_obj,
+    run_gaussian_and_capture_settings,
+):
+    result, settings = run_gaussian_and_capture_settings(
+        "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "mecp",
+            "-m1",
+            "3",
+            "-m2",
+            "1",
+            *task,
+        ],
+        make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.mecp_numfreq_only == only
+    assert settings.follow_seam_imaginary_mode == follow
+    assert settings.mecp_numfreq == bool(task)
+    assert settings.multiplicity_a == 3
+    assert settings.multiplicity_b == 1
+    if follow:
+        assert settings.seam_mode_displacement == 0.08
+        assert settings.seam_mode_max_steps == 5
+
+
+def test_numfreq_only_skips_optimizer_and_restart(tmp_path):
+    job = object.__new__(GaussianMECPJob)
+    job.folder = str(tmp_path)
+    job.label = "existing"
+    job.settings = GaussianMECPJobSettings(mecp_numfreq_only=True)
+    job.molecule = SimpleNamespace(positions=np.zeros((1, 3)))
+    initial = job.molecule.positions.copy()
+    result = dict(
+        energy_a=0.0,
+        energy_b=0.0,
+        energy_diff=0.0,
+        is_minimum=False,
+        n_negative=1,
+    )
+
+    def verify(**kwargs):
+        assert kwargs == {"write_frequencies": True}
+        Path(job.numfreq_folder).mkdir()
+        Path(job.numfreq_folder, "existing_seam_check.log").write_text(
+            "saddle"
+        )
+        Path(job.folder, "existing_mecp_freq.log").write_text("frequency")
+        return result
+
+    job.verify_seam_minimum = verify
+    assert job._run() == result
+    np.testing.assert_array_equal(job.molecule.positions, initial)
+    assert not Path(job.optimization_folder).exists()
+    assert job._job_is_complete()
+    Path(job.folder, "existing_mecp_freq.log").unlink()
+    assert not job._job_is_complete()
+
+
+@pytest.mark.parametrize("gap,tangent", [(0.01, 0.0), (0.0, 0.01)])
+def test_only_rejects_nonstationary_input_before_hessian(gap, tangent):
+    job = object.__new__(GaussianMECPJob)
+    job.label = "invalid"
+    job.settings = GaussianMECPJobSettings(mecp_numfreq_only=True)
+    job.molecule = SimpleNamespace(positions=np.zeros((1, 3)))
+    job._run_state = lambda positions, step, state, **kwargs: (
+        (gap, np.array([[1.0, tangent, 0.0]]))
+        if state == "A"
+        else (0.0, np.array([[-1.0, tangent, 0.0]]))
+    )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Hessian must not run on invalid input")
+
+    job._compute_numerical_hessian = forbidden
+    with pytest.raises(RuntimeError, match="stationary crossing"):
+        job.verify_seam_minimum(write_frequencies=True)

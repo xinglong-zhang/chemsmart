@@ -69,6 +69,7 @@ _MECP_ONLY_KEYS = frozenset(
         "use_link",
         "convergence_preset",
         "mecp_numfreq",
+        "mecp_numfreq_only",
         "hess_step_size",
         "follow_seam_imaginary_mode",
         "seam_mode_displacement",
@@ -256,6 +257,20 @@ class GaussianMECPJob(GaussianJob):
 
     def _job_is_complete(self):
         """Check MECP completion by looking for a 'Converged' marker in the report file."""
+        if getattr(self.settings, "mecp_numfreq_only", False):
+            if not os.path.isfile(self.final_report_file):
+                return False
+            with open(self.final_report_file, encoding="utf-8") as report:
+                complete = "NUMFREQ ONLY COMPLETED" in report.read()
+            return complete and all(
+                os.path.isfile(path)
+                for path in (
+                    os.path.join(self.folder, f"{self.label}_mecp_freq.log"),
+                    os.path.join(
+                        self.numfreq_folder, f"{self.label}_seam_check.log"
+                    ),
+                )
+            )
         if not os.path.isfile(self.report_file):
             return False
         with open(self.report_file, encoding="utf-8") as f:
@@ -798,6 +813,8 @@ class GaussianMECPJob(GaussianJob):
         )
 
     def _run(self, **kwargs):
+        if getattr(self.settings, "mecp_numfreq_only", False):
+            return self._run_numfreq_only()
         positions_bohr = (
             np.array(self.molecule.positions, dtype=float) / units.Bohr
         )
@@ -1064,6 +1081,32 @@ class GaussianMECPJob(GaussianJob):
             )
         if os.path.isfile(self.state_file):
             os.remove(self.state_file)
+
+    def _run_numfreq_only(self):
+        """Analyze the supplied stationary crossing without changing geometry."""
+        os.makedirs(self.folder, exist_ok=True)
+        # Invalidate a previous completion marker before starting a fresh run.
+        with open(self.final_report_file, "w", encoding="utf-8") as report:
+            report.write("CHEMSMART MECP numfreq only: RUNNING\n")
+        result = self.verify_seam_minimum(write_frequencies=True)
+        self._last_seam_result = result
+        with open(self.final_report_file, "w", encoding="utf-8") as report:
+            report.write("CHEMSMART MECP numfreq only\n")
+            report.write("optimization=SKIPPED\n")
+            report.write(f"energy_A={result['energy_a']:+.12f} Hartree\n")
+            report.write(f"energy_B={result['energy_b']:+.12f} Hartree\n")
+            report.write(
+                f"energy_difference={result['energy_diff']:+.6e} Hartree\n"
+            )
+            report.write(
+                f"seam_minimum={'PASS' if result['is_minimum'] else 'FAIL'}\n"
+            )
+            report.write(
+                f"significant_imaginary_modes={result['n_negative']}\n"
+            )
+            report.write(f"frequency_file={self.label}_mecp_freq.log\n")
+            report.write("NUMFREQ ONLY COMPLETED\n")
+        return result
 
     def _write_final_report(
         self, initial_steps, initial_energy_a, initial_energy_b, seam_result
@@ -1471,6 +1514,21 @@ class GaussianMECPJob(GaussianJob):
             positions_bohr, reference_step, "B", checkpoint_tag="check"
         )
         diff_grad = grad_a - grad_b
+
+        if getattr(self.settings, "mecp_numfreq_only", False):
+            _, projected_grad, _ = self._mecp_displacement(
+                ea - eb, grad_a, grad_b, self.settings.step_size
+            )
+            if (
+                abs(ea - eb) > self.settings.energy_diff_tol
+                or np.max(np.abs(projected_grad)) > self.settings.force_max_tol
+                or self._rms(projected_grad) > self.settings.force_rms_tol
+            ):
+                raise RuntimeError(
+                    "numfreq --only requires a stationary crossing: input energy "
+                    "gap or projected gradient exceeds the convergence thresholds. "
+                    "Run mecp numfreq to optimize first."
+                )
 
         logger.info(
             f"verify_seam_minimum: computing numerical Hessian for {self.label} "
