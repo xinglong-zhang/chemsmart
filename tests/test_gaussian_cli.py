@@ -18,9 +18,9 @@ can be inspected without running an actual calculation.
 """
 
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import MagicMock, patch
 
 
 class TestGaussianCLIPubChemOptCommand:
@@ -1717,6 +1717,7 @@ class TestGaussianLinkMecpLabels:
         make_cli_ctx_obj,
     ):
         from click.testing import CliRunner
+
         from chemsmart.cli.gaussian.gaussian import gaussian
 
         args = [
@@ -1750,6 +1751,7 @@ class TestGaussianLinkMecpLabels:
         make_cli_ctx_obj,
     ):
         from click.testing import CliRunner
+
         from chemsmart.cli.gaussian.gaussian import gaussian
 
         args = [
@@ -1797,6 +1799,7 @@ def test_regular_link_default_labels(
     suffix,
 ):
     from click.testing import CliRunner
+
     from chemsmart.cli.gaussian.gaussian import gaussian
 
     args = [
@@ -1830,6 +1833,7 @@ def test_regular_link_preserves_explicit_label(
     make_cli_ctx_obj,
 ):
     from click.testing import CliRunner
+
     from chemsmart.cli.gaussian.gaussian import gaussian
 
     args = [

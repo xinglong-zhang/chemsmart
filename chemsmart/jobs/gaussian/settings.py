@@ -14,7 +14,6 @@ import copy
 import inspect
 import logging
 import os
-import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
