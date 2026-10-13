@@ -213,7 +213,7 @@ class GaussianJobRunner(JobRunner):
         Args:
             job: Job object to configure scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -447,7 +447,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         Args:
             job: Job object to configure fake scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)

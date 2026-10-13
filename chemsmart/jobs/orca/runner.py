@@ -175,7 +175,7 @@ class ORCAJobRunner(JobRunner):
         Args:
             job: The job object to configure for scratch execution
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -500,7 +500,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
 
     def _set_up_variables_in_scratch(self, job):
         """Set fake ORCA file paths for scratch execution."""
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
