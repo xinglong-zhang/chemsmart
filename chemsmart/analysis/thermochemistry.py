@@ -466,7 +466,13 @@ class Thermochemistry:
 
         # Quasi-linear correction: Gaussian gives 3N-6 frequencies for
         # non-linear molecules; pad to 3N-5 for linear treatment.
-        if self.rotational_mode == "physical" and self.is_linear_rotor:
+        # MECP modes already exclude the crossing-normal direction; their
+        # reduced count must not be interpreted as a missing bending mode.
+        if (
+            self.jobtype != "mecp"
+            and self.rotational_mode == "physical"
+            and self.is_linear_rotor
+        ):
             expected = 3 * self.molecule.num_atoms - 5
             if frequencies and len(frequencies) == expected - 1:
                 lowest = min(f for f in frequencies if f > 0)

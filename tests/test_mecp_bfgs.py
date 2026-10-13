@@ -239,6 +239,25 @@ def test_mass_weighted_frequency_preserves_imaginary_mode_sign():
     assert negative == pytest.approx(-positive)
 
 
+@pytest.mark.parametrize("jobtype", ["mecp", "opt"])
+def test_linear_thermochemistry_preserves_mecp_mode_count(jobtype):
+    analysis = object.__new__(Thermochemistry)
+    analysis.file_object = SimpleNamespace(
+        jobtype=jobtype,
+        freq=True,
+        vibrational_frequencies=[100.0, 200.0, 300.0],
+    )
+    analysis.molecule = SimpleNamespace(num_atoms=3)
+    analysis.rotational_mode = "physical"
+    analysis.effective_rotational_constants_in_Hz = np.array([1.0e10])
+    analysis.check_imaginary_frequencies = True
+
+    expected = [100.0, 200.0, 300.0]
+    if jobtype == "opt":
+        expected.append(100.0)
+    assert analysis.cleaned_frequencies == expected
+
+
 def test_mecp_frequency_log_is_accepted_by_thermochemistry(tmp_path):
     job = object.__new__(GaussianMECPJob)
     job.folder = str(tmp_path)
