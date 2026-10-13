@@ -282,11 +282,7 @@ class ChainStepParser:
 
 @dataclass(frozen=True)
 class HandoffResult:
-    """Structures for the next phase, and the fan-out label kind.
-
-    ``sources`` holds one ``(output_file, index)`` pair per molecule, or
-    ``None`` where the molecule is written to an xyz file instead.
-    """
+    """Structures for the next phase, and the fan-out label kind."""
 
     molecules: tuple[Molecule, ...]
     label_kind: str | None = None
@@ -650,13 +646,19 @@ def _grouper_argv(step, conformers_file, label):
     return argv
 
 
-def _jobs_from_cli_result(result, molecule):
+def _jobs_from_cli_result(result):
+    """Keep the charge the command set.
+
+    An xyz input has no charge, so copy it from the job settings onto
+    the molecule. A log or out already carries a charge; leave that
+    molecule alone.
+    """
     jobs = result if isinstance(result, list) else [result]
     for job in jobs:
-        if molecule.charge is not None:
-            job.molecule.charge = molecule.charge
-        if molecule.multiplicity is not None:
-            job.molecule.multiplicity = molecule.multiplicity
+        if job.molecule.charge is None:
+            job.molecule.charge = job.settings.charge
+        if job.molecule.multiplicity is None:
+            job.molecule.multiplicity = job.settings.multiplicity
     return jobs
 
 
@@ -796,8 +798,9 @@ class ChainPipelineBuilder:
         """Build one program command per structure.
 
         The chain passes the previous job's output file, or writes the
-        structure to an xyz file when there is none, and supplies project,
-        charge, and multiplicity. The program command builds the job.
+        structure to an xyz file when there is none. The first step gets
+        the chain charge and multiplicity. A later log or out supplies
+        its own. An xyz supplies the charge carried on its molecule.
         """
         command = PROGRAM_ADAPTERS[step.program].command_loader()
         molecules = handoff.molecules
@@ -821,18 +824,24 @@ class ChainPipelineBuilder:
                 structure_index = None
             else:
                 filename, structure_index = source
+            if index == 0:
+                charge, multiplicity = self._charge, self._multiplicity
+            elif source is None:
+                charge, multiplicity = molecule.charge, molecule.multiplicity
+            else:
+                charge, multiplicity = None, None
             argv = _program_argv(
                 step,
                 filename,
                 structure_index,
                 self._project_names[step.program],
                 child_label,
-                self._charge,
-                self._multiplicity,
+                charge,
+                multiplicity,
                 self.context.skip_completed,
             )
             result = _invoke_cli_command(command, argv, self.context.jobrunner)
-            jobs.extend(_jobs_from_cli_result(result, molecule))
+            jobs.extend(_jobs_from_cli_result(result))
         return jobs
 
     def _grouper_jobs(self, step, crest_job, index, num_conformers):
@@ -896,12 +905,14 @@ class ChainPipelineBuilder:
             None,
             self._project_names[step.program],
             self.context.label,
-            self._charge,
-            self._multiplicity,
+            crest_job.molecule.charge,
+            crest_job.molecule.multiplicity,
             self.context.skip_completed,
         )
         command = PROGRAM_ADAPTERS["gaussian"].command_loader()
-        return [_invoke_cli_command(command, argv, self.context.jobrunner)]
+        return _jobs_from_cli_result(
+            _invoke_cli_command(command, argv, self.context.jobrunner)
+        )
 
     @staticmethod
     def _needs_conformers_file(step):
@@ -998,10 +1009,12 @@ def build_chain_job(
     Gaussian crest receives that job's lowest-energy optimized conformer.
     The step after Gaussian IRC receives one structure from each
     directional log.
-    Charge and multiplicity from ``charge`` / ``multiplicity`` (and
-    otherwise from ``molecule``) are passed to each program command. Each
-    program step is that program's own subcommand. The chain supplies the
-    geometry.
+    ``charge`` and ``multiplicity`` (otherwise taken from ``molecule``)
+    are passed only to the first program command. A later Gaussian, ORCA,
+    or xTB step reads them from the previous output file. A later step
+    fed by an xyz file gets the charge carried on that structure. A
+    step's own ``-c`` / ``-m`` wins for that step. Each program step is
+    that program's own subcommand. The chain supplies the geometry.
 
     Args:
         chain_settings: Loaded chain project settings with program aliases.

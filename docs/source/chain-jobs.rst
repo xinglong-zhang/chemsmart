@@ -83,9 +83,9 @@ resubmission with ``--skip-completed`` can continue later.
 -  An optimization, transition-state, or single-point step passes its optimized structure, or the output molecule when
    the job did not optimize.
 
--  A Gaussian, ORCA, or xTB step passes its own output file (``.log`` or ``.out``) as ``-f`` with ``-i -1``, so the next
-   step reads the last structure together with its vibrational modes, e.g. ``gaussian:ts`` followed by ``gaussian:qrc``.
-   The first step, CREST frames, and grouper representatives are written to ``.xyz`` files.
+-  A Gaussian, ORCA, or xTB step passes its own output file (``.log`` or ``.out``) as ``-f`` with ``-i -1``, for example
+   ``gaussian:ts`` followed by ``gaussian:qrc``. The first step, CREST frames, and grouper representatives are written
+   to ``.xyz`` files.
 
 -  ``crest:conformers -nc N`` passes the lowest N frames of ``crest_conformers.xyz``. Frames are ordered by energy when
    every frame has an energy; otherwise the file order is kept. CREST writes that file lowest-energy first. Fewer frames
@@ -108,10 +108,12 @@ resubmission with ``--skip-completed`` can continue later.
 Child labels start from ``{chain_label}_{index:02d}_{program}_{job}``. More than one group representative appends
 ``_g1``, ``_g2``, and so on. More than one other structure appends ``_c1``, ``_c2``, and so on. A single structure has
 no suffix. The program command may extend the label it is given. Gaussian crest keeps the labels that command already
-uses (``{label}_{jobtype}_c1``, …). Charge and multiplicity from chain ``-c`` / ``-m`` are passed to each program
-command when the step does not set them. Grouper does not take those flags: on the grouper command ``-c`` is
-concentration and ``-m`` is the matrix file format. Do not combine ``-s/--steps`` with ``pka``, ``fukui``, ``redox``, or
-``reaction``.
+uses (``{label}_{jobtype}_c1``, …). Chain ``-c`` / ``-m`` go to the first program step. A later Gaussian, ORCA, or xTB
+step reads charge and multiplicity from the previous output file. A step fed by an xyz file, including CREST frames and
+grouper representatives, gets the charge carried with that structure. A step's own ``-c`` / ``-m`` wins for that step
+and is written into its output, so the following step sees it. Grouper does not take those flags: on the grouper command
+``-c`` is concentration and ``-m`` is the matrix file format. Do not combine ``-s/--steps`` with ``pka``, ``fukui``,
+``redox``, or ``reaction``.
 
 The whole pipeline is **one** ``ChainJob`` submission. ``chemsmart sub`` writes one scheduler script for all phases.
 ``--fake`` uses the chain fake runner for the parent; each child gets the matching program fake runner when its type

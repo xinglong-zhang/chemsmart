@@ -1122,4 +1122,57 @@ class TestOutputFileHandoff:
             child.molecule.positions, expected.positions, atol=1e-4
         )
         assert child.molecule.energy == expected.energy
+
+    def test_later_step_reads_charge_from_the_log(
+        self,
+        isolated_config_dir,
+        temporary_working_dir,
+        gaussian_outputs_test_directory,
+    ):
+        log = os.path.join(
+            gaussian_outputs_test_directory, "collidine-H_opt.log"
+        )
+        chain = build_chain_job(
+            _chain_settings(gaussian="gas_solv"),
+            steps=(
+                ChainStep(program="gaussian", job="opt"),
+                ChainStep(program="gaussian", job="sp"),
+            ),
+            molecule=Molecule.from_filepath(log),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        opt_job = chain.phases[0].resolve_jobs()[0]
+        assert opt_job.settings.charge == 0
+        shutil.copy(log, opt_job.outputfile)
+        sp_job = chain.phases[1].resolve_jobs()[0]
+        assert sp_job.settings.charge == 1
+        assert sp_job.settings.multiplicity == 1
+
+    def test_step_charge_overrides_the_handed_off_log(
+        self,
+        isolated_config_dir,
+        temporary_working_dir,
+        gaussian_outputs_test_directory,
+    ):
+        log = os.path.join(
+            gaussian_outputs_test_directory, "collidine-H_opt.log"
+        )
+        chain = build_chain_job(
+            _chain_settings(gaussian="gas_solv"),
+            steps=(
+                ChainStep(program="gaussian", job="opt"),
+                parse_chain_step("gaussian: -c 3 -m 2 sp"),
+            ),
+            molecule=Molecule.from_filepath(log),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        opt_job = chain.phases[0].resolve_jobs()[0]
+        shutil.copy(log, opt_job.outputfile)
+        sp_job = chain.phases[1].resolve_jobs()[0]
+        assert sp_job.settings.charge == 3
+        assert sp_job.settings.multiplicity == 2
         assert not os.path.exists("mol_01_orca_sp.xyz")

@@ -82,11 +82,13 @@ Project and File Options
 
    -  -  ``-c, --charge``
       -  int
-      -  Molecular charge (pipeline and workflow submit; merged into each child job)
+      -  Molecular charge. The pipeline passes it to the first step; later steps read it from the previous output.
+         Workflow submit merges it into the workflow job.
 
    -  -  ``-m, --multiplicity``
       -  int
-      -  Spin multiplicity (pipeline and workflow submit; merged into each child job)
+      -  Spin multiplicity. The pipeline passes it to the first step; later steps read it from the previous output.
+         Workflow submit merges it into the workflow job.
 
 Workflow Submit Options
 =======================
