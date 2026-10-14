@@ -50,6 +50,16 @@ __all__ = [
 # Workflow jobs that are not ``-s`` pipeline steps.
 CHAIN_NESTED_ONLY_JOBS = frozenset({"pka", "fukui", "redox", "reaction"})
 
+# Subcommands that need a prepared file or a trajectory, not one structure.
+_CHAIN_STEPS_WITHOUT_STRUCTURE = frozenset(
+    {
+        ("gaussian", "com"),
+        ("gaussian", "traj"),
+        ("gaussian", "dias"),
+        ("orca", "inp"),
+    }
+)
+
 
 @dataclass(frozen=True)
 class ChainStep:
@@ -199,6 +209,11 @@ class ChainStepParser:
                 f"Chain pipeline steps do not support {program} {job!r}; "
                 f"run it as chemsmart sub {program} -p <project> {job} ..."
             )
+        if (program, job) in _CHAIN_STEPS_WITHOUT_STRUCTURE:
+            raise ValueError(
+                f"Chain pipeline steps do not support {program} {job!r}; "
+                "the chain hands off one structure."
+            )
         names = self.pipeline_job_names(program)
         if job in names:
             return
@@ -231,7 +246,10 @@ class ChainStepParser:
             return frozenset()
         names = adapter.command_loader().commands
         return frozenset(
-            name for name in names if name not in CHAIN_NESTED_ONLY_JOBS
+            name
+            for name in names
+            if name not in CHAIN_NESTED_ONLY_JOBS
+            and (program, name) not in _CHAIN_STEPS_WITHOUT_STRUCTURE
         )
 
     def _grouper_command_names(self):
@@ -340,9 +358,7 @@ class ChainHandoffResolver:
         frames of ``crest_conformers.xyz`` when that count is at least 1,
         and ``crest_best.xyz`` when ``-nc`` is omitted. A
         completed Gaussian IRC job contributes its directional endpoint
-        jobs, one per log. Gaussian and ORCA QRC, and a Gaussian link IRC,
-        do the same with their forward and reverse jobs. Gaussian, ORCA,
-        and xTB jobs also pass their
+        jobs, one per log. Gaussian, ORCA, and xTB jobs also pass their
         output file, so the next step reads the last structure from it.
         """
         if index == 0:
@@ -434,6 +450,7 @@ class ChainHandoffResolver:
             elif isinstance(job, (GaussianQRCJob, ORCAQRCJob)):
                 expanded.extend(job.both_qrc_jobs)
             elif isinstance(job, GaussianLinkJob):
+                # handle the case where the job is a Gaussian link IRC job
                 endpoints = job._get_irc_jobs()
                 expanded.extend(endpoints if endpoints else [job])
             else:
@@ -972,7 +989,8 @@ def validate_chain_step(program, job):
         job (str): Job name (e.g. ``opt``, ``sp``, ``irc``). A grouper
             job is a strategy registered on the grouper command. A
             program job is a subcommand of that program, other than
-            pKa, Fukui, redox, and reaction.
+            pKa, Fukui, redox, reaction, ``gaussian:com``,
+            ``gaussian:traj``, ``gaussian:dias``, and ``orca:inp``.
 
     Raises:
         ValueError: If the pair is not a pipeline step. Workflow jobs
@@ -1016,8 +1034,7 @@ def build_chain_job(
     read that same selection. The step after
     Gaussian crest receives that job's lowest-energy optimized conformer.
     The step after Gaussian IRC receives one structure from each
-    directional log. Gaussian and ORCA QRC, and a Gaussian link IRC,
-    do the same.
+    directional log.
     ``charge`` and ``multiplicity`` (otherwise taken from ``molecule``)
     are passed only to the first program command. A later Gaussian, ORCA,
     or xTB step reads them from the previous output file.

@@ -63,10 +63,10 @@ Project and File Options
          belong to that command. ``crest:conformers -nc N`` selects the lowest N conformers from
          ``crest_conformers.xyz`` for the next step and is not passed to CREST; omitting ``-nc`` passes
          ``crest_best.xyz``. A step may be any subcommand of ``crest``, ``xtb``, ``gaussian``, or ``orca`` except
-         ``pka``, ``fukui``, ``redox``, and ``reaction``. ``grouper`` is a grouper strategy. ``gaussian:crest`` and
-         ``grouper`` must follow ``crest:conformers``. Required for the CLI pipeline; repeat for each phase. Not the
-         same as ``run``/``sub`` ``-s/--server``. Cannot be combined with ``pka``, ``fukui``, ``redox``, or
-         ``reaction``.
+         ``pka``, ``fukui``, ``redox``, ``reaction``, ``gaussian:com``, ``gaussian:traj``, ``gaussian:dias``, and
+         ``orca:inp``. ``grouper`` is a grouper strategy. ``gaussian:crest`` and ``grouper`` must follow
+         ``crest:conformers``. Required for the CLI pipeline; repeat for each phase. Not the same as ``run``/``sub``
+         ``-s/--server``. Cannot be combined with ``pka``, ``fukui``, ``redox``, or ``reaction``.
 
    -  -  ``-l, --label``
       -  string

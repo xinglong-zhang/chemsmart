@@ -69,9 +69,10 @@ string. Options before the job name are that program's options. Options after th
      -s gaussian:opt
 
 A step for ``crest``, ``xtb``, ``gaussian``, or ``orca`` is any subcommand of that program except ``pka``, ``fukui``,
-``redox``, and ``reaction``. Those four stay on :ref:`chain-workflow-subcommands`. A ``grouper`` step is a grouper
-strategy, such as ``irmsd``. Grouper has no alias in the chain YAML. ``gaussian:crest`` and ``grouper`` must immediately
-follow ``crest:conformers``.
+``redox``, and ``reaction``. Those four stay on :ref:`chain-workflow-subcommands`. ``gaussian:com``, ``gaussian:traj``,
+``gaussian:dias``, and ``orca:inp`` are also excluded: the chain hands off one structure, and those commands need an
+existing input file or a trajectory. A ``grouper`` step is a grouper strategy, such as ``irmsd``. Grouper has no alias
+in the chain YAML. ``gaussian:crest`` and ``grouper`` must immediately follow ``crest:conformers``.
 
 ``-nc N`` after ``crest:conformers`` selects the lowest N conformers from ``crest_conformers.xyz`` for the next step and
 is not passed to CREST. ``N`` is an integer of at least 1. Omitting ``-nc`` passes ``crest_best.xyz``. There is no

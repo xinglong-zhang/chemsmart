@@ -247,6 +247,21 @@ class TestChainStepRegistry:
             assert CHAIN_NESTED_ONLY_JOBS.isdisjoint(names)
         assert "irc" in _pipeline_job_names("gaussian")
         validate_chain_step("gaussian", "irc")
+        assert "com" not in _pipeline_job_names("gaussian")
+        assert "inp" not in _pipeline_job_names("orca")
+
+    def test_file_and_trajectory_commands_are_rejected(self):
+        for program, job in (
+            ("gaussian", "com"),
+            ("gaussian", "traj"),
+            ("gaussian", "dias"),
+            ("orca", "inp"),
+        ):
+            with pytest.raises(
+                ValueError,
+                match=f"do not support {program} '{job}'",
+            ):
+                validate_chain_step(program, job)
 
     def test_grouper_strategy_comes_from_the_grouper_command(self):
         validate_chain_step("grouper", "irmsd")
