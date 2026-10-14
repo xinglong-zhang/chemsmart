@@ -695,6 +695,24 @@ class Gaussian16Output(GaussianFileMixin):
             if point_groups and len(point_groups) > n:
                 point_groups = point_groups[:n]
 
+        # A Link job can contain a trailing geometry without a corresponding
+        # energy or force block (for example, a later frequency-only step).
+        # The leading carry-over frame has already been removed by
+        # ``drop_first``, so missing Link metadata belongs at the tail.
+        def pad_short_link_metadata():
+            nonlocal energies, forces
+            n = len(orientations)
+            for name, values in (("energies", energies), ("forces", forces)):
+                if values is not None and len(values) < n:
+                    logger.warning(
+                        "Gaussian Link job has %d structures but %d %s; "
+                        "padding missing trailing values with None.",
+                        n,
+                        len(values),
+                        name,
+                    )
+                    values.extend([None] * (n - len(values)))
+
         # 2) Handle link jobs
         if self.is_link:
             if self.normal_termination:
@@ -740,6 +758,8 @@ class Gaussian16Output(GaussianFileMixin):
             clean_duplicate_structure(orientations)
             # After dedup, ensure auxiliaries aren't longer than orientations
             align_lengths_to_orientations()
+            if self.is_link:
+                pad_short_link_metadata()
 
         # 4) Compute safe min length for logging and
         # for abnormal (non-link or link>1-after-drop)

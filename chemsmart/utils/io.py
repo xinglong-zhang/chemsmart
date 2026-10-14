@@ -141,7 +141,8 @@ def create_molecule_list(
     )
     logger.debug(f"Number of forces: {len(forces) if forces else 'N/A'}")
     logger.debug(
-        f"Forces shape: {np.array(forces).shape if forces else 'N/A'}"
+        f"Forces shape: "
+        f"{np.array(forces, dtype=object).shape if forces else 'N/A'}"
     )
 
     return [
