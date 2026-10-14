@@ -284,8 +284,10 @@ class ChainStepParser:
     def _split_crest_num_conformers(self, tokens, token):
         """Pull ``-nc N`` out of a ``crest:conformers`` step.
 
-        ``N`` selects conformers for the next step and is not passed to
-        CREST. Other tokens are left for the CREST command.
+        ``N`` chooses the CREST step's handoff file and is not passed to
+        CREST. ``1`` selects ``crest_best.xyz``. Any other count, and an
+        omitted ``-nc``, select ``crest_conformers.xyz``. Other tokens are
+        left for the CREST command.
         """
         names = {"-nc", "--num-confs-to-run"}
         kept = []
@@ -378,9 +380,8 @@ class ChainHandoffResolver:
         structures selected by ``-i``, and ``c`` for other multi-structure
         handoffs. A completed Gaussian crest job
         contributes only its lowest-energy optimized conformer. A
-        completed CREST job contributes its lowest ``num_conformers``
-        frames of ``crest_conformers.xyz`` when that count is at least 1,
-        and ``crest_best.xyz`` when ``-nc`` is omitted. A
+        completed CREST job hands off ``crest_best.xyz`` when ``-nc`` is
+        1, and ``crest_conformers.xyz`` otherwise. A
         completed Gaussian IRC job contributes its directional endpoint
         jobs, one per log. Gaussian, ORCA, and xTB jobs also pass their
         output file, so the next step reads the last structure from it.
@@ -408,17 +409,44 @@ class ChainHandoffResolver:
             if lowest is not None:
                 jobs = lowest
             elif isinstance(jobs[0], CRESTJob):
-                if num_conformers is not None and num_conformers >= 1:
-                    selected = self._selected_crest_conformers(
-                        jobs[0], num_conformers
+                crest_job = jobs[0]
+                if num_conformers == 1:
+                    selected = self._best_conformer(crest_job)
+                    if selected is None:
+                        return None
+                    return HandoffResult(
+                        molecules=tuple(selected),
+                        sources=((crest_job.best_file, None),),
                     )
-                else:
-                    selected = self._best_conformer(jobs[0])
-                if selected is None:
+                if not os.path.isfile(crest_job.conformers_file):
+                    logger.info(
+                        "CREST conformers file is not available yet; "
+                        "waiting before the next step."
+                    )
                     return None
-                kind = "c" if len(selected) > 1 else None
+                frames = (
+                    Molecule.from_filepath(
+                        filepath=crest_job.conformers_file,
+                        index=":",
+                        return_list=True,
+                    )
+                    or []
+                )
+                molecules = [
+                    _with_source_charge(molecule, crest_job.molecule)
+                    for molecule in frames
+                ]
+                if not molecules:
+                    return None
+                sources = tuple(
+                    (crest_job.conformers_file, str(frame_index))
+                    for frame_index in range(1, len(molecules) + 1)
+                )
+                kind = "c" if len(molecules) > 1 else None
                 return HandoffResult(
-                    molecules=tuple(selected), label_kind=kind
+                    molecules=tuple(molecules),
+                    label_kind=kind,
+                    sources=sources,
                 )
         molecules = []
         sources = []
@@ -454,37 +482,6 @@ class ChainHandoffResolver:
             label_kind=kind,
             sources=tuple(sources),
         )
-
-    def conformers_file(self, crest_job, num_conformers):
-        """CREST xyz path for a following gaussian-crest or grouper step.
-
-        With ``-nc N``, write the selected conformers to a new file.
-        Without it, return ``crest_conformers.xyz``.
-        """
-        if crest_job is None:
-            return None
-        if num_conformers is None or num_conformers < 1:
-            if not os.path.isfile(crest_job.best_file):
-                logger.info(
-                    "CREST best conformer file is not available yet; "
-                    "waiting before the next step."
-                )
-                return None
-            return crest_job.best_file
-        if not os.path.isfile(crest_job.conformers_file):
-            logger.info(
-                "CREST conformers file is not available yet; "
-                "waiting before selecting conformers."
-            )
-            return None
-        selected = self._selected_crest_conformers(crest_job, num_conformers)
-        if not selected:
-            return None
-        folder = os.path.dirname(crest_job.conformers_file)
-        path = os.path.join(folder, f"crest_lowest_{len(selected)}.xyz")
-        for index, molecule in enumerate(selected):
-            molecule.write_xyz(path, mode="w" if index == 0 else "a")
-        return path
 
     def _expand_handoff_jobs(self, jobs):
         """Replace a two-direction job with the jobs that write its logs."""
@@ -554,48 +551,6 @@ class ChainHandoffResolver:
         if not frames:
             return None
         return [_with_source_charge(frames[0], job.molecule)]
-
-    def _selected_crest_conformers(self, job, num_conformers):
-        """Lowest CREST conformers to pass to the next step.
-
-        ``num_conformers`` is an integer of at least 1. The result is
-        that many lowest-energy frames of ``crest_conformers.xyz``.
-        Returns ``None`` when that file is not available yet.
-        """
-        count = num_conformers
-        if not os.path.isfile(job.conformers_file):
-            logger.info(
-                "CREST conformers file is not available yet; "
-                "waiting before selecting conformers."
-            )
-            return None
-        frames = (
-            Molecule.from_filepath(
-                filepath=job.conformers_file, index=":", return_list=True
-            )
-            or []
-        )
-        molecules = [
-            _with_source_charge(molecule, job.molecule) for molecule in frames
-        ]
-        if not molecules:
-            return None
-        if all(molecule.energy is not None for molecule in molecules):
-            molecules = sorted(molecules, key=lambda molecule: molecule.energy)
-        if len(molecules) < count:
-            logger.info(
-                "CREST produced %s conformer(s); requested %s. "
-                "Using the available conformers.",
-                len(molecules),
-                count,
-            )
-        return molecules[:count]
-
-    def crest_source(self, jobs):
-        for job in jobs:
-            if isinstance(job, CRESTJob):
-                return job
-        return None
 
     def _groups_from_job(self, job):
         if isinstance(job, _ChainGroupPassthrough):
@@ -863,25 +818,24 @@ class ChainPipelineBuilder:
         num_conformers = (
             None if previous_step is None else previous_step.num_conformers
         )
-        if self._needs_conformers_file(step):
-            previous_jobs = self.handoff._completed_previous_jobs(
-                index, self.phases
-            )
-            if previous_jobs is None:
-                return []
-            crest_job = self.handoff.crest_source(previous_jobs)
-            if step.program == "grouper":
-                return self._grouper_jobs(
-                    step, crest_job, index, num_conformers
-                )
-            return self._gaussian_crest_jobs(step, crest_job, num_conformers)
-
         initial = self.context.molecules
         handoff = self.handoff.resolve(
             index, self.phases, initial, num_conformers
         )
         if handoff is None or not handoff.molecules:
             return []
+        if self._needs_conformers_file(step):
+            source = handoff.sources[0] if handoff.sources else None
+            if source is None:
+                return []
+            filename = source[0]
+            if step.program == "grouper":
+                return self._grouper_jobs(
+                    step, filename, handoff.molecules, index
+                )
+            return self._gaussian_crest_jobs(
+                step, filename, handoff.molecules[0]
+            )
         return self._program_jobs(step, handoff, index)
 
     def _program_jobs(self, step, handoff, index):
@@ -945,7 +899,7 @@ class ChainPipelineBuilder:
                 multiplicity = _first_set(
                     self.context.multiplicity, molecule.multiplicity
                 )
-            elif source is None:
+            elif filename.endswith(".xyz"):
                 charge, multiplicity = molecule.charge, molecule.multiplicity
             else:
                 charge, multiplicity = None, None
@@ -969,26 +923,7 @@ class ChainPipelineBuilder:
             jobs.extend(children)
         return jobs
 
-    def _grouper_jobs(self, step, crest_job, index, num_conformers):
-        conformers_file = self.handoff.conformers_file(
-            crest_job, num_conformers
-        )
-        if conformers_file is None:
-            logger.info(
-                "CREST conformers file is not available yet; "
-                "waiting before grouper."
-            )
-            return []
-        frames = (
-            Molecule.from_filepath(
-                filepath=conformers_file, index=":", return_list=True
-            )
-            or []
-        )
-        molecules = [
-            _with_source_charge(molecule, crest_job.molecule)
-            for molecule in frames
-        ]
+    def _grouper_jobs(self, step, conformers_file, molecules, index):
         if len(molecules) < 2:
             logger.info(
                 "Fewer than 2 CREST conformers; skipping grouper and "
@@ -1014,24 +949,15 @@ class ChainPipelineBuilder:
         job.skip_completed = self.context.skip_completed
         return [job]
 
-    def _gaussian_crest_jobs(self, step, crest_job, num_conformers):
-        conformers_file = self.handoff.conformers_file(
-            crest_job, num_conformers
-        )
-        if conformers_file is None:
-            logger.info(
-                "CREST conformers file is not available yet; "
-                "waiting before gaussian crest."
-            )
-            return []
+    def _gaussian_crest_jobs(self, step, conformers_file, molecule):
         argv = _program_argv(
             step,
             conformers_file,
             None,
             self._project_names[step.program],
             self.context.label,
-            crest_job.molecule.charge,
-            crest_job.molecule.multiplicity,
+            molecule.charge,
+            molecule.multiplicity,
             self.context.skip_completed,
         )
         command = PROGRAM_ADAPTERS["gaussian"].command_loader()
@@ -1062,10 +988,9 @@ def parse_chain_step(token):
     Accepts ``PROGRAM:JOB`` or ``PROGRAM: [OPTIONS] JOB``, e.g.
     ``gaussian:opt`` and ``gaussian: -o maxstep=8,maxsize=12 opt``.
     Options before the job name are program options. Options after it
-    are that command's options. ``crest:conformers`` accepts ``-nc N``
-    after the job name; that selects the lowest N conformers from
-    ``crest_conformers.xyz`` for the next step and is not passed to
-    CREST. Omitting it passes ``crest_best.xyz``.
+    are that command's options. ``crest:conformers -nc 1`` hands off
+    ``crest_best.xyz``. Omitting ``-nc``, or any other ``-nc N``, hands
+    off ``crest_conformers.xyz``. ``-nc`` is not passed to CREST.
 
     Args:
         token (str): One ``-s/--steps`` value.
@@ -1128,17 +1053,16 @@ def build_chain_job(
     """Build a ``ChainJob`` from explicit pipeline steps.
 
     Each step becomes a ``JobPhase`` whose factory reads geometry from the
-    previous completed child. ``crest:conformers -nc N`` passes the lowest
-    N conformers from ``crest_conformers.xyz`` to the next step. Omitting
-    ``-nc`` passes ``crest_best.xyz``. ``gaussian:crest`` and ``grouper``
-    read that same selection. The step after
-    Gaussian crest receives that job's lowest-energy optimized conformer.
-    The step after Gaussian IRC receives one structure from each
-    directional log.
+    previous completed child. ``crest:conformers -nc 1`` passes
+    ``crest_best.xyz``. Omitting ``-nc``, or any other ``-nc N``, passes
+    ``crest_conformers.xyz``. ``gaussian:crest`` and ``grouper`` read that
+    same file. The step after Gaussian crest receives that job's
+    lowest-energy optimized conformer. The step after Gaussian IRC
+    receives one structure from each directional log.
     ``charge`` and ``multiplicity`` (otherwise taken from each starting
     structure) are passed only to the first program command. One starting
     structure is stored on the chain job. More than one starting structure
-    leaves the chain job without a structure; each child stores its own
+    generates one chain job per structure; each child stores its own
     and is labeled with that structure's 1-based
     ``structure_index_in_file`` (``_idxN``). Later steps keep the index.
     A later Gaussian, ORCA, or xTB step reads charge and multiplicity from

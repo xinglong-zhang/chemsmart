@@ -531,7 +531,7 @@ class TestBuildChainJob:
         best = _h2(z=0.85)
         best.energy = -2.0
         dummy = DummyCRESTJob(_h2(), best, complete=True)
-        best.write_xyz(dummy.best_file, mode="w")
+        best.write_xyz(dummy.conformers_file, mode="w")
         chain.phases[0]._resolved_jobs = [dummy]
         children = chain.phases[1].resolve_jobs()
         assert len(children) == 1
@@ -605,7 +605,7 @@ class TestCrestEnsembleHandoff:
         assert job.num_confs_to_opt == 10
         assert len(job.all_conformers) == 2
 
-    def test_omitted_num_confs_uses_best_conformer(
+    def test_omitted_num_confs_uses_the_conformers_file(
         self, isolated_config_dir, temporary_working_dir
     ):
         settings = _chain_settings(crest="test", gaussian="gas_solv")
@@ -620,14 +620,13 @@ class TestCrestEnsembleHandoff:
             charge=0,
             multiplicity=1,
         )
-        best = _h2(z=0.82)
-        crest = _crest_with_conformers([_h2(z=0.70), _h2(z=0.90)])
-        best.write_xyz(crest.best_file, mode="w")
+        first = _h2(z=0.70)
+        crest = _crest_with_conformers([first, _h2(z=0.90)])
         chain.phases[0]._resolved_jobs = [crest]
         job = chain.phases[1].resolve_jobs()[0]
-        assert job.num_confs_to_opt == 1
+        assert job.num_confs_to_opt == 2
         assert job.label == "mol_opt"
-        assert np.allclose(job.all_conformers[0].positions, best.positions)
+        assert np.allclose(job.all_conformers[0].positions, first.positions)
 
     def test_grouping_and_num_confs_are_rejected(
         self, isolated_config_dir, temporary_working_dir
@@ -802,14 +801,13 @@ class TestCrestEnsembleHandoff:
 
 
 class TestCrestNumConformers:
-    def test_omitted_num_confs_uses_best_file(
+    def test_omitted_num_confs_uses_conformers_file(
         self, isolated_config_dir, temporary_working_dir
     ):
         higher = _h2(z=0.70)
         higher.energy = -1.0
         lowest = _h2(z=1.20)
         lowest.energy = -3.0
-        best = _h2(z=0.95)
         settings = _chain_settings(crest="test", gaussian="gas_solv")
         chain = build_chain_job(
             settings,
@@ -823,20 +821,19 @@ class TestCrestNumConformers:
             multiplicity=1,
         )
         crest = _crest_with_conformers([higher, lowest])
-        best.write_xyz(crest.best_file, mode="w")
         chain.phases[0]._resolved_jobs = [crest]
         children = chain.phases[1].resolve_jobs()
-        assert len(children) == 1
-        assert children[0].label == "mol_01_gaussian_opt"
-        assert np.allclose(children[0].molecule.positions, best.positions)
+        assert [child.label for child in children] == [
+            "mol_01_gaussian_opt_c1",
+            "mol_01_gaussian_opt_c2",
+        ]
+        assert np.allclose(children[0].molecule.positions, higher.positions)
+        assert np.allclose(children[1].molecule.positions, lowest.positions)
 
-    def test_one_selects_the_lowest_conformer(
+    def test_one_uses_best_file(
         self, isolated_config_dir, temporary_working_dir
     ):
-        higher = _h2(z=0.70)
-        higher.energy = -1.0
-        lowest = _h2(z=1.20)
-        lowest.energy = -3.0
+        best = _h2(z=0.95)
         settings = _chain_settings(crest="test", gaussian="gas_solv")
         chain = build_chain_job(
             settings,
@@ -849,19 +846,15 @@ class TestCrestNumConformers:
             charge=0,
             multiplicity=1,
         )
-        frames = [higher, lowest]
-        crest = _crest_with_conformers(frames)
-        for index, molecule in enumerate(frames):
-            molecule.write_xyz(
-                crest.conformers_file, mode="w" if index == 0 else "a"
-            )
+        crest = _crest_with_conformers([_h2(z=0.70), _h2(z=1.20)])
+        best.write_xyz(crest.best_file, mode="w")
         chain.phases[0]._resolved_jobs = [crest]
         children = chain.phases[1].resolve_jobs()
         assert len(children) == 1
         assert children[0].label == "mol_01_gaussian_opt"
-        assert np.allclose(children[0].molecule.positions, lowest.positions)
+        assert np.allclose(children[0].molecule.positions, best.positions)
 
-    def test_selects_lowest_conformers(
+    def test_other_counts_use_the_conformers_file(
         self, isolated_config_dir, temporary_working_dir
     ):
         settings = _chain_settings(crest="test", gaussian="gas_solv")
@@ -893,9 +886,11 @@ class TestCrestNumConformers:
         assert [child.label for child in children] == [
             "mol_01_gaussian_opt_c1",
             "mol_01_gaussian_opt_c2",
+            "mol_01_gaussian_opt_c3",
         ]
-        assert np.allclose(children[0].molecule.positions, lowest.positions)
-        assert np.allclose(children[1].molecule.positions, middle.positions)
+        assert np.allclose(children[0].molecule.positions, higher.positions)
+        assert np.allclose(children[1].molecule.positions, lowest.positions)
+        assert np.allclose(children[2].molecule.positions, middle.positions)
         assert children[0].molecule.charge == 1
         assert children[1].molecule.multiplicity == 2
 
@@ -968,10 +963,11 @@ class TestCrestNumConformers:
         chain.phases[0]._resolved_jobs = [crest]
         job = chain.phases[1].resolve_jobs()[0]
         assert isinstance(job, GaussianCrestJob)
-        assert job.num_confs_to_opt == 2
-        assert len(job.all_conformers) == 2
-        assert np.allclose(job.all_conformers[0].positions, lowest.positions)
-        assert np.allclose(job.all_conformers[1].positions, middle.positions)
+        assert job.num_confs_to_opt == 3
+        assert len(job.all_conformers) == 3
+        assert np.allclose(job.all_conformers[0].positions, higher.positions)
+        assert np.allclose(job.all_conformers[1].positions, lowest.positions)
+        assert np.allclose(job.all_conformers[2].positions, middle.positions)
 
 
 class TestIRCHandoff:

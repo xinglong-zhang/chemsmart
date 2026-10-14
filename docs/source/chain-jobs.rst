@@ -74,8 +74,8 @@ A step for ``crest``, ``xtb``, ``gaussian``, or ``orca`` is any subcommand of th
 existing input file or a trajectory. A ``grouper`` step is a grouper strategy, such as ``irmsd``. Grouper has no alias
 in the chain YAML. ``gaussian:crest`` and ``grouper`` must immediately follow ``crest:conformers``.
 
-``-nc N`` after ``crest:conformers`` selects the lowest N conformers from ``crest_conformers.xyz`` for the next step and
-is not passed to CREST. ``N`` is an integer of at least 1. Omitting ``-nc`` passes ``crest_best.xyz``. There is no
+``-nc`` after ``crest:conformers`` chooses that step's handoff file and is not passed to CREST. ``-nc 1`` hands off
+``crest_best.xyz``. Omitting ``-nc``, or any other ``-nc N``, hands off ``crest_conformers.xyz``. There is no
 chain-level ``-N``.
 
 **Geometry handoff.** Each phase reads the previous completed child. If a phase is incomplete, the chain stops so HPC
@@ -85,17 +85,15 @@ resubmission with ``--skip-completed`` can continue later.
    the job did not optimize.
 
 -  A Gaussian, ORCA, or xTB step passes its own output file (``.log`` or ``.out``) as ``-f`` with ``-i -1``, for example
-   ``gaussian:ts`` followed by ``gaussian:qrc``. The first step, CREST frames, and grouper representatives are written
-   to ``.xyz`` files.
+   ``gaussian:ts`` followed by ``gaussian:qrc``. The first step and grouper representatives are written to ``.xyz``
+   files. CREST hands off ``crest_best.xyz`` or ``crest_conformers.xyz``.
 
--  ``crest:conformers -nc N`` passes the lowest N frames of ``crest_conformers.xyz``. Frames are ordered by energy when
-   every frame has an energy; otherwise the file order is kept. CREST writes that file lowest-energy first. Fewer frames
-   than ``N`` uses every available frame. Omitting ``-nc`` passes the structure in ``crest_best.xyz``. A missing file
+-  ``crest:conformers -nc 1`` passes ``crest_best.xyz``. Omitting ``-nc``, or any other ``-nc N``, passes
+   ``crest_conformers.xyz``. A following one-structure step builds one child per frame in that file. A missing file
    leaves the next phase empty until the CREST step finishes.
 
--  ``gaussian:crest`` and ``grouper`` read that same selection. ``-nc N`` on the CREST step gives them
-   ``crest_lowest_N.xyz`` written beside ``crest_conformers.xyz``. Omitting ``-nc`` gives them ``crest_best.xyz``.
-   ``-nc`` on ``gaussian:crest`` is that command's own option and chooses how many of its input structures to optimize.
+-  ``gaussian:crest`` and ``grouper`` read that same file. ``-nc`` on ``gaussian:crest`` is that command's own option
+   and chooses how many of its input structures to optimize.
 
 -  The step after Gaussian crest receives that job's lowest-energy optimized conformer.
 
