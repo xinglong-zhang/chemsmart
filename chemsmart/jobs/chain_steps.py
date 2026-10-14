@@ -12,9 +12,12 @@ from chemsmart.jobs.crest.job import CRESTJob
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
 from chemsmart.jobs.gaussian.job import GaussianJob
+from chemsmart.jobs.gaussian.link import GaussianLinkJob
+from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
 from chemsmart.jobs.grouper.job import GrouperJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.job import ORCAJob
+from chemsmart.jobs.orca.qrc import ORCAQRCJob
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.xtb.job import XTBJob
 from chemsmart.settings.chain import ChainProjectSettings
@@ -337,7 +340,9 @@ class ChainHandoffResolver:
         frames of ``crest_conformers.xyz`` when that count is at least 1,
         and ``crest_best.xyz`` when ``-nc`` is omitted. A
         completed Gaussian IRC job contributes its directional endpoint
-        jobs, one per log. Gaussian, ORCA, and xTB jobs also pass their
+        jobs, one per log. Gaussian and ORCA QRC, and a Gaussian link IRC,
+        do the same with their forward and reverse jobs. Gaussian, ORCA,
+        and xTB jobs also pass their
         output file, so the next step reads the last structure from it.
         """
         if index == 0:
@@ -421,11 +426,16 @@ class ChainHandoffResolver:
         return path
 
     def _expand_handoff_jobs(self, jobs):
-        """Replace a Gaussian IRC job with its directional log jobs."""
+        """Replace a two-direction job with the jobs that write its logs."""
         expanded = []
         for job in jobs:
             if isinstance(job, GaussianIRCJob):
                 expanded.extend(job.endpoint_jobs())
+            elif isinstance(job, (GaussianQRCJob, ORCAQRCJob)):
+                expanded.extend(job.both_qrc_jobs)
+            elif isinstance(job, GaussianLinkJob):
+                endpoints = job._get_irc_jobs()
+                expanded.extend(endpoints if endpoints else [job])
             else:
                 expanded.append(job)
         return expanded
@@ -649,9 +659,7 @@ def _grouper_argv(step, conformers_file, label):
 def _jobs_from_cli_result(result):
     """Keep the charge the command set.
 
-    An xyz input has no charge, so copy it from the job settings onto
-    the molecule. A log or out already carries a charge; leave that
-    molecule alone.
+    Charge and multiplicity are carried on from the previous step.
     """
     jobs = result if isinstance(result, list) else [result]
     for job in jobs:
@@ -1008,13 +1016,11 @@ def build_chain_job(
     read that same selection. The step after
     Gaussian crest receives that job's lowest-energy optimized conformer.
     The step after Gaussian IRC receives one structure from each
-    directional log.
+    directional log. Gaussian and ORCA QRC, and a Gaussian link IRC,
+    do the same.
     ``charge`` and ``multiplicity`` (otherwise taken from ``molecule``)
     are passed only to the first program command. A later Gaussian, ORCA,
-    or xTB step reads them from the previous output file. A later step
-    fed by an xyz file gets the charge carried on that structure. A
-    step's own ``-c`` / ``-m`` wins for that step. Each program step is
-    that program's own subcommand. The chain supplies the geometry.
+    or xTB step reads them from the previous output file.
 
     Args:
         chain_settings: Loaded chain project settings with program aliases.

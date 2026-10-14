@@ -100,7 +100,8 @@ resubmission with ``--skip-completed`` can continue later.
 
 -  The step after ``gaussian:irc`` receives the final structure of each directional log. Both directions hand those two
    endpoint jobs to the next step as a list, so that step builds one child per log. A forward-only or reverse-only IRC
-   hands off that one log.
+   hands off that one log. ``gaussian:qrc``, ``orca:qrc``, and a Gaussian link IRC do the same with their forward and
+   reverse jobs.
 
 -  The step after grouper receives one representative, the first member of each group. Fewer than two CREST structures
    skips grouping and passes the available structure on.

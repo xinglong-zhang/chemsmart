@@ -22,14 +22,21 @@ from chemsmart.jobs.crest.job import CRESTJob
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
 from chemsmart.jobs.gaussian.irc import GaussianIRCJob
+from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
-from chemsmart.jobs.gaussian.settings import GaussianIRCJobSettings
+from chemsmart.jobs.gaussian.settings import (
+    GaussianIRCJobSettings,
+    GaussianJobSettings,
+    GaussianLinkJobSettings,
+)
 from chemsmart.jobs.gaussian.singlepoint import GaussianSinglePointJob
 from chemsmart.jobs.gaussian.ts import GaussianTSJob
 from chemsmart.jobs.grouper.job import GrouperJob
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.opt import ORCAOptJob
+from chemsmart.jobs.orca.qrc import ORCAQRCJob
+from chemsmart.jobs.orca.settings import ORCAJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 from chemsmart.jobs.orca.ts import ORCATSJob
 from chemsmart.jobs.xtb.hess import XTBHessJob
@@ -1037,6 +1044,130 @@ class TestIRCHandoff:
             )
         ]
         assert chain.phases[1].resolve_jobs() == []
+
+
+class TestCompositeHandoff:
+    def _chain(self, **aliases):
+        return build_chain_job(
+            _chain_settings(**aliases),
+            steps=(
+                ChainStep(program="gaussian", job="opt"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+
+    def test_qrc_directions_become_following_jobs(
+        self,
+        isolated_config_dir,
+        temporary_working_dir,
+        gaussian_outputs_test_directory,
+        monkeypatch,
+    ):
+        chain = self._chain(gaussian="gas_solv")
+        molecule = Molecule.from_filepath(
+            os.path.join(gaussian_outputs_test_directory, "KOH.log")
+        )
+        forward = _h2(z=0.90)
+        reverse = _h2(z=1.20)
+        qrc = GaussianQRCJob(
+            molecule=molecule,
+            settings=GaussianJobSettings.default(),
+            label="mol_00_gaussian_qrc",
+        )
+        monkeypatch.setattr(
+            qrc,
+            "_prepare_both_qrc_jobs",
+            lambda: [
+                DummyHandoffJob("qrcf", forward, complete=True),
+                DummyHandoffJob("qrcr", reverse, complete=True),
+            ],
+        )
+        chain.phases[0]._resolved_jobs = [qrc]
+        children = chain.phases[1].resolve_jobs()
+        assert [child.label for child in children] == [
+            "mol_01_gaussian_opt_c1",
+            "mol_01_gaussian_opt_c2",
+        ]
+        assert np.allclose(children[0].molecule.positions, forward.positions)
+        assert np.allclose(children[1].molecule.positions, reverse.positions)
+
+    def test_orca_qrc_directions_become_following_jobs(
+        self,
+        isolated_config_dir,
+        temporary_working_dir,
+        gaussian_outputs_test_directory,
+        monkeypatch,
+    ):
+        chain = build_chain_job(
+            _chain_settings(orca="gas_solv"),
+            steps=(
+                ChainStep(program="orca", job="qrc"),
+                ChainStep(program="orca", job="opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        molecule = Molecule.from_filepath(
+            os.path.join(gaussian_outputs_test_directory, "KOH.log")
+        )
+        forward = _h2(z=0.80)
+        reverse = _h2(z=1.10)
+        qrc = ORCAQRCJob(
+            molecule=molecule,
+            settings=ORCAJobSettings.default(),
+            label="mol_00_orca_qrc",
+        )
+        monkeypatch.setattr(
+            qrc,
+            "_prepare_both_qrc_jobs",
+            lambda: [
+                DummyHandoffJob("qrcf", forward, complete=True),
+                DummyHandoffJob("qrcr", reverse, complete=True),
+            ],
+        )
+        chain.phases[0]._resolved_jobs = [qrc]
+        children = chain.phases[1].resolve_jobs()
+        assert [child.label for child in children] == [
+            "mol_01_orca_opt_c1",
+            "mol_01_orca_opt_c2",
+        ]
+        assert np.allclose(children[0].molecule.positions, forward.positions)
+        assert np.allclose(children[1].molecule.positions, reverse.positions)
+
+    def test_link_irc_directions_become_following_jobs(
+        self, isolated_config_dir, temporary_working_dir, monkeypatch
+    ):
+        chain = self._chain(gaussian="gas_solv")
+        forward = _h2(z=0.70)
+        reverse = _h2(z=1.30)
+        link = GaussianLinkJob(
+            molecule=_h2(),
+            settings=GaussianLinkJobSettings(jobtype="irc"),
+            label="mol_00_gaussian_link",
+        )
+        monkeypatch.setattr(link, "is_complete", lambda: True)
+        monkeypatch.setattr(
+            link,
+            "_get_irc_jobs",
+            lambda: [
+                DummyHandoffJob("ircf", forward, complete=True),
+                DummyHandoffJob("ircr", reverse, complete=True),
+            ],
+        )
+        chain.phases[0]._resolved_jobs = [link]
+        children = chain.phases[1].resolve_jobs()
+        assert [child.label for child in children] == [
+            "mol_01_gaussian_opt_c1",
+            "mol_01_gaussian_opt_c2",
+        ]
+        assert np.allclose(children[0].molecule.positions, forward.positions)
+        assert np.allclose(children[1].molecule.positions, reverse.positions)
 
 
 class TestOutputFileHandoff:
