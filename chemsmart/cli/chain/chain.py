@@ -85,15 +85,24 @@ def _molecule_from_filename(filename, index):
     )
     if molecules is None:
         raise click.UsageError(f"Could not obtain molecule from {filename}.")
-    if index is not None:
-        molecules, _ = return_objects_and_indices_from_string_index(
-            list_of_objects=molecules, index=index
-        )
     if not isinstance(molecules, list):
         molecules = [molecules]
-    if not molecules:
+    if index is None:
+        selected = [molecules[-1]]
+    else:
+        selected, indices = return_objects_and_indices_from_string_index(
+            list_of_objects=molecules, index=index
+        )
+        if not isinstance(selected, list):
+            selected = [selected]
+        if not isinstance(indices, list):
+            indices = [indices]
+    if not selected:
         raise click.UsageError(f"No molecule selected from {filename}.")
-    return molecules[-1]
+    if len(selected) > 1:
+        for molecule, structure_index in zip(selected, indices):
+            molecule.structure_index_in_file = structure_index
+    return selected
 
 
 def _parse_cli_steps(steps, chain_settings):
@@ -164,7 +173,7 @@ def build_chain_pipeline_from_ctx(ctx):
             "Chain pipeline requires a structure file (-f/--filename)."
         )
     parsed_steps = _parse_cli_steps(steps, chain_settings)
-    molecule = _molecule_from_filename(filename, defaults["index"])
+    molecules = _molecule_from_filename(filename, defaults["index"])
     job_label = _chain_label(
         filename, defaults["label"], defaults["append_label"]
     )
@@ -177,7 +186,7 @@ def build_chain_pipeline_from_ctx(ctx):
         return build_chain_job(
             chain_settings,
             steps=parsed_steps,
-            molecule=molecule,
+            molecules=molecules,
             label=job_label,
             charge=defaults["charge"],
             multiplicity=defaults["multiplicity"],

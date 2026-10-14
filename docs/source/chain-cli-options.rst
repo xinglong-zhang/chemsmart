@@ -78,17 +78,24 @@ Project and File Options
 
    -  -  ``-i, --index``
       -  string
-      -  Structure index (1-based; default: last structure)
+      -  Structure index (1-based; default: last structure). More than one selected structure starts one pipeline child
+         per structure, labeled ``_idxN``.
 
    -  -  ``-c, --charge``
+
       -  int
-      -  Molecular charge. The pipeline passes it to the first step; later steps read it from the previous output.
-         Workflow submit merges it into the workflow job.
+
+      -  Molecular charge. The pipeline passes it to every child of the first step; later steps read it from the
+         previous output. When omitted, each starting structure uses its own charge. Workflow submit merges it into the
+         workflow job.
 
    -  -  ``-m, --multiplicity``
+
       -  int
-      -  Spin multiplicity. The pipeline passes it to the first step; later steps read it from the previous output.
-         Workflow submit merges it into the workflow job.
+
+      -  Spin multiplicity. The pipeline passes it to every child of the first step; later steps read it from the
+         previous output. When omitted, each starting structure uses its own multiplicity. Workflow submit merges it
+         into the workflow job.
 
 Workflow Submit Options
 =======================

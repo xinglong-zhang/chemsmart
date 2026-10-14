@@ -372,6 +372,136 @@ class TestChainPipelineExtras:
             == "maxstep=8,maxsize=12"
         )
 
+    def test_index_starts_one_child_per_selected_structure(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        library = temporary_working_dir / "library.xyz"
+        library.write_text(
+            "2\n"
+            "a\n"
+            "H 0.0 0.0 0.0\n"
+            "H 0.0 0.0 0.70\n"
+            "2\n"
+            "b\n"
+            "H 0.0 0.0 0.0\n"
+            "H 0.0 0.0 1.10\n"
+        )
+        _write_chain_yaml(
+            isolated_config_dir,
+            "combined",
+            "gaussian: gas_solv\n",
+        )
+        result = _invoke_chain(
+            [
+                "-p",
+                "combined",
+                "-f",
+                str(library),
+                "-i",
+                "1-2",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-s",
+                "gaussian:opt",
+            ],
+            standalone_mode=False,
+        )
+        assert result.exit_code == 0, result.output
+        job = result.return_value
+        assert job.molecule is None
+        children = job.phases[0].resolve_jobs()
+        assert [child.label for child in children] == [
+            "library_00_gaussian_opt_idx1",
+            "library_00_gaussian_opt_idx2",
+        ]
+        assert [child.settings.charge for child in children] == [0, 0]
+        assert children[0].molecule.positions[1][2] == pytest.approx(0.70)
+        assert children[1].molecule.positions[1][2] == pytest.approx(1.10)
+
+    def test_omitted_index_uses_the_last_structure(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        library = temporary_working_dir / "library.xyz"
+        library.write_text(
+            "2\n"
+            "a\n"
+            "H 0.0 0.0 0.0\n"
+            "H 0.0 0.0 0.70\n"
+            "2\n"
+            "b\n"
+            "H 0.0 0.0 0.0\n"
+            "H 0.0 0.0 1.10\n"
+        )
+        _write_chain_yaml(
+            isolated_config_dir,
+            "combined",
+            "gaussian: gas_solv\n",
+        )
+        result = _invoke_chain(
+            [
+                "-p",
+                "combined",
+                "-f",
+                str(library),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-s",
+                "gaussian:opt",
+            ],
+            standalone_mode=False,
+        )
+        assert result.exit_code == 0, result.output
+        children = result.return_value.phases[0].resolve_jobs()
+        assert len(children) == 1
+        assert children[0].label == "library_00_gaussian_opt"
+        assert children[0].molecule.positions[1][2] == pytest.approx(1.10)
+
+    def test_single_index_uses_that_structure(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        library = temporary_working_dir / "library.xyz"
+        library.write_text(
+            "2\n"
+            "a\n"
+            "H 0.0 0.0 0.0\n"
+            "H 0.0 0.0 0.70\n"
+            "2\n"
+            "b\n"
+            "H 0.0 0.0 0.0\n"
+            "H 0.0 0.0 1.10\n"
+        )
+        _write_chain_yaml(
+            isolated_config_dir,
+            "combined",
+            "gaussian: gas_solv\n",
+        )
+        result = _invoke_chain(
+            [
+                "-p",
+                "combined",
+                "-f",
+                str(library),
+                "-i",
+                "1",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-s",
+                "gaussian:opt",
+            ],
+            standalone_mode=False,
+        )
+        assert result.exit_code == 0, result.output
+        children = result.return_value.phases[0].resolve_jobs()
+        assert len(children) == 1
+        assert children[0].label == "library_00_gaussian_opt"
+        assert children[0].molecule.positions[1][2] == pytest.approx(0.70)
+
     def test_custom_subcommand_builds_pipeline(
         self, isolated_config_dir, single_molecule_xyz_file
     ):

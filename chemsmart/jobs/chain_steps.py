@@ -92,7 +92,7 @@ class ChainBuildContext:
     """Inputs shared by every phase of one chain build."""
 
     chain_settings: ChainProjectSettings
-    molecule: Molecule
+    molecules: tuple[Molecule, ...]
     label: str
     charge: int | None = None
     multiplicity: int | None = None
@@ -374,8 +374,9 @@ class ChainHandoffResolver:
         """Structures for one step.
 
         Returns ``None`` when the previous phase is not ready.
-        ``label_kind`` is ``g`` for group representatives and ``c`` for
-        other multi-structure handoffs. A completed Gaussian crest job
+        ``label_kind`` is ``g`` for group representatives, ``idx`` for
+        structures selected by ``-i``, and ``c`` for other multi-structure
+        handoffs. A completed Gaussian crest job
         contributes only its lowest-energy optimized conformer. A
         completed CREST job contributes its lowest ``num_conformers``
         frames of ``crest_conformers.xyz`` when that count is at least 1,
@@ -385,7 +386,12 @@ class ChainHandoffResolver:
         output file, so the next step reads the last structure from it.
         """
         if index == 0:
-            return HandoffResult(molecules=(initial_molecule,))
+            if isinstance(initial_molecule, Molecule):
+                molecules = (initial_molecule,)
+            else:
+                molecules = tuple(initial_molecule)
+            kind = "idx" if len(molecules) > 1 else None
+            return HandoffResult(molecules=molecules, label_kind=kind)
         jobs = self._completed_previous_jobs(index, phases)
         if jobs is None:
             return None
@@ -416,17 +422,33 @@ class ChainHandoffResolver:
                 )
         molecules = []
         sources = []
+        file_indices = []
         for job in self._expand_handoff_jobs(jobs):
             molecule = self.molecule_from_job(job)
             if molecule is None:
                 return None
             molecules.append(molecule)
+            file_indices.append(
+                job.molecule.structure_index_in_file
+                if job.molecule is not None
+                else None
+            )
             sources.append(
                 (job.outputfile, "-1")
                 if isinstance(job, (GaussianJob, ORCAJob, XTBJob))
                 else None
             )
-        kind = "c" if len(molecules) > 1 else None
+        use_file_index = (
+            len(molecules) > 1
+            and None not in file_indices
+            and len(set(file_indices)) == len(file_indices)
+        )
+        if use_file_index:
+            for molecule, file_index in zip(molecules, file_indices):
+                molecule.structure_index_in_file = file_index
+            kind = "idx"
+        else:
+            kind = "c" if len(molecules) > 1 else None
         return HandoffResult(
             molecules=tuple(molecules),
             label_kind=kind,
@@ -755,16 +777,16 @@ class ChainPipelineBuilder:
     def build(self, steps: Sequence[ChainStep], **kwargs) -> ChainJob:
         if not steps:
             raise ValueError("Chain pipeline requires at least one step.")
-        if self.context.molecule is None:
+        if not self.context.molecules:
             raise ValueError("Chain pipeline requires a molecule.")
 
         prepared, project_names = self._validate_pipeline(steps)
         self._prepared = prepared
         self._project_names = project_names
-        molecule = self.context.molecule
-        self._charge = _first_set(self.context.charge, molecule.charge)
-        self._multiplicity = _first_set(
-            self.context.multiplicity, molecule.multiplicity
+        parent = (
+            self.context.molecules[-1]
+            if len(self.context.molecules) == 1
+            else None
         )
         self.phases = []
 
@@ -798,7 +820,7 @@ class ChainPipelineBuilder:
             )
         )
         return ChainJob(
-            molecule=molecule,
+            molecule=parent,
             label=self.context.label,
             jobrunner=self.context.jobrunner,
             skip_completed=self.context.skip_completed,
@@ -854,8 +876,9 @@ class ChainPipelineBuilder:
                 )
             return self._gaussian_crest_jobs(step, crest_job, num_conformers)
 
+        initial = self.context.molecules
         handoff = self.handoff.resolve(
-            index, self.phases, self.context.molecule, num_conformers
+            index, self.phases, initial, num_conformers
         )
         if handoff is None or not handoff.molecules:
             return []
@@ -866,8 +889,9 @@ class ChainPipelineBuilder:
 
         The chain passes the previous job's output file, or writes the
         structure to an xyz file when there is none. The first step gets
-        the chain charge and multiplicity. A later log or out supplies
-        its own. An xyz supplies the charge carried on its molecule.
+        the chain charge and multiplicity, or each structure's own when
+        the chain omits them. A later log or out supplies its own. An xyz
+        supplies the charge carried on its molecule.
         """
         command = PROGRAM_ADAPTERS[step.program].command_loader()
         molecules = handoff.molecules
@@ -877,11 +901,17 @@ class ChainPipelineBuilder:
         for ordinal, (molecule, source) in enumerate(
             zip(molecules, sources), start=1
         ):
+            label_ordinal = ordinal
+            if (
+                handoff.label_kind == "idx"
+                and molecule.structure_index_in_file is not None
+            ):
+                label_ordinal = molecule.structure_index_in_file
             child_label = _child_label(
                 self.context.label,
                 index,
                 step,
-                ordinal,
+                label_ordinal,
                 count,
                 handoff.label_kind,
             )
@@ -907,11 +937,14 @@ class ChainPipelineBuilder:
                     step,
                     extra_option_tokens=_with_fanout_label(
                         step.extra_option_tokens,
-                        f"_{handoff.label_kind}{ordinal}",
+                        f"_{handoff.label_kind}{label_ordinal}",
                     ),
                 )
             if index == 0:
-                charge, multiplicity = self._charge, self._multiplicity
+                charge = _first_set(self.context.charge, molecule.charge)
+                multiplicity = _first_set(
+                    self.context.multiplicity, molecule.multiplicity
+                )
             elif source is None:
                 charge, multiplicity = molecule.charge, molecule.multiplicity
             else:
@@ -927,7 +960,13 @@ class ChainPipelineBuilder:
                 self.context.skip_completed,
             )
             result = _invoke_cli_command(command, argv, self.context.jobrunner)
-            jobs.extend(_jobs_from_cli_result(result))
+            children = _jobs_from_cli_result(result)
+            if handoff.label_kind == "idx":
+                for child in children:
+                    child.molecule.structure_index_in_file = (
+                        molecule.structure_index_in_file
+                    )
+            jobs.extend(children)
         return jobs
 
     def _grouper_jobs(self, step, crest_job, index, num_conformers):
@@ -1078,7 +1117,7 @@ def molecule_from_completed_job(job, fallback=None):
 def build_chain_job(
     chain_settings,
     steps,
-    molecule,
+    molecules,
     label,
     charge=None,
     multiplicity=None,
@@ -1096,14 +1135,24 @@ def build_chain_job(
     Gaussian crest receives that job's lowest-energy optimized conformer.
     The step after Gaussian IRC receives one structure from each
     directional log.
-    ``charge`` and ``multiplicity`` (otherwise taken from ``molecule``)
-    are passed only to the first program command. A later Gaussian, ORCA,
-    or xTB step reads them from the previous output file.
+    ``charge`` and ``multiplicity`` (otherwise taken from each starting
+    structure) are passed only to the first program command. One starting
+    structure is stored on the chain job. More than one starting structure
+    leaves the chain job without a structure; each child stores its own
+    and is labeled with that structure's 1-based
+    ``structure_index_in_file`` (``_idxN``). Later steps keep the index.
+    A later Gaussian, ORCA, or xTB step reads charge and multiplicity from
+    the previous output file.
 
     Args:
         chain_settings: Loaded chain project settings with program aliases.
         steps: Sequence of :class:`ChainStep` values.
-        molecule: Input structure for the first step.
+        molecules: Starting structures. A single :class:`Molecule` is one
+            structure. With one structure, the chain job stores
+            ``molecules[-1]``. With more than one, the chain job stores
+            none; each child stores its own. Each structure selected by
+            ``-i`` needs ``structure_index_in_file`` set to its 1-based
+            index in the file.
         label (str): Chain label; children are
             ``{label}_{index:02d}_{program}_{job}``.
         charge (int, optional): Chain-level charge override.
@@ -1115,14 +1164,20 @@ def build_chain_job(
         ChainJob: Phased pipeline ready for ``run`` / ``sub``.
 
     Raises:
-        ValueError: If there are no steps, ``molecule`` is missing, a
+        ValueError: If there are no steps, ``molecules`` is missing, a
             step's ``(program, job)`` pair is not a pipeline step, or
             ``gaussian:crest`` / ``grouper`` does not follow
             ``crest:conformers``.
     """
+    if isinstance(molecules, Molecule):
+        molecules = (molecules,)
+    else:
+        molecules = () if molecules is None else tuple(molecules)
+    if not molecules:
+        raise ValueError("Chain pipeline requires a molecule.")
     context = ChainBuildContext(
         chain_settings=chain_settings,
-        molecule=molecule,
+        molecules=molecules,
         label=label,
         charge=charge,
         multiplicity=multiplicity,

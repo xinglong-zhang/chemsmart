@@ -373,7 +373,7 @@ class TestBuildChainJob:
     def test_empty_steps_error(self):
         settings = _chain_settings(gaussian="gas_solv")
         with pytest.raises(ValueError, match="requires at least one step"):
-            build_chain_job(settings, steps=(), molecule=_h2(), label="mol")
+            build_chain_job(settings, steps=(), molecules=_h2(), label="mol")
 
     def test_nested_only_pka_step_errors(self, isolated_config_dir):
         settings = _chain_settings(gaussian="gas_solv")
@@ -384,7 +384,7 @@ class TestBuildChainJob:
             build_chain_job(
                 settings,
                 steps=(ChainStep(program="gaussian", job="pka"),),
-                molecule=_h2(),
+                molecules=_h2(),
                 label="mol",
             )
 
@@ -410,7 +410,7 @@ class TestBuildChainJob:
             chain = build_chain_job(
                 settings,
                 steps=(ChainStep(program=program, job=job),),
-                molecule=mol,
+                molecules=mol,
                 label="mol",
             )
             assert chain.label == "mol"
@@ -433,7 +433,7 @@ class TestBuildChainJob:
         chain = build_chain_job(
             settings,
             steps=(ChainStep(program="gaussian", job="irc"),),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -452,7 +452,7 @@ class TestBuildChainJob:
             ChainStep(program="gaussian", job="opt"),
         )
         chain = build_chain_job(
-            settings, steps=steps, molecule=_h2(), label="mol"
+            settings, steps=steps, molecules=_h2(), label="mol"
         )
         assert len(chain.phases) == 2
         assert chain.programs == ("gaussian",)
@@ -472,7 +472,7 @@ class TestBuildChainJob:
         chain = build_chain_job(
             settings,
             steps=(ChainStep(program="gaussian", job="opt"),),
-            molecule=_h2(charge=0, multiplicity=1),
+            molecules=_h2(charge=0, multiplicity=1),
             label="mol",
             charge=1,
             multiplicity=2,
@@ -490,7 +490,7 @@ class TestBuildChainJob:
             ChainStep(program="gaussian", job="opt"),
         )
         chain = build_chain_job(
-            settings, steps=steps, molecule=_h2(), label="mol"
+            settings, steps=steps, molecules=_h2(), label="mol"
         )
         first = DummyHandoffJob("xtb", _h2(z=0.90), complete=False)
         chain.phases[0]._resolved_jobs = [first]
@@ -505,7 +505,7 @@ class TestBuildChainJob:
             ChainStep(program="gaussian", job="opt"),
         )
         chain = build_chain_job(
-            settings, steps=steps, molecule=_h2(), label="mol"
+            settings, steps=steps, molecules=_h2(), label="mol"
         )
         handed_off = _h2(z=0.91)
         dummy = DummyHandoffJob("xtb", handed_off, complete=True)
@@ -526,7 +526,7 @@ class TestBuildChainJob:
             ChainStep(program="xtb", job="opt"),
         )
         chain = build_chain_job(
-            settings, steps=steps, molecule=_h2(), label="mol"
+            settings, steps=steps, molecules=_h2(), label="mol"
         )
         best = _h2(z=0.85)
         best.energy = -2.0
@@ -590,7 +590,7 @@ class TestCrestEnsembleHandoff:
         chain = build_chain_job(
             settings,
             steps=(crest_step, gaussian_step),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -615,7 +615,7 @@ class TestCrestEnsembleHandoff:
                 ChainStep(program="crest", job="conformers"),
                 parse_chain_step("gaussian: crest -j opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -639,7 +639,7 @@ class TestCrestEnsembleHandoff:
                 ChainStep(program="crest", job="conformers"),
                 parse_chain_step("gaussian: crest -j opt -nc 2 -g rmsd"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -658,7 +658,7 @@ class TestCrestEnsembleHandoff:
             build_chain_job(
                 settings,
                 steps=(ChainStep(program="gaussian", job="crest"),),
-                molecule=_h2(),
+                molecules=_h2(),
                 label="mol",
             )
 
@@ -673,7 +673,7 @@ class TestCrestEnsembleHandoff:
                 ChainStep(program="gaussian", job="crest"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -699,7 +699,7 @@ class TestCrestEnsembleHandoff:
                 ChainStep(program="gaussian", job="crest"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -718,7 +718,7 @@ class TestCrestEnsembleHandoff:
                 ChainStep(program="grouper", job="formula"),
                 ChainStep(program="xtb", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
         )
         frame = _h2(z=0.82, charge=3, multiplicity=2)
@@ -746,7 +746,7 @@ class TestCrestEnsembleHandoff:
                 ChainStep(program="grouper", job="irmsd"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -789,7 +789,7 @@ class TestCrestEnsembleHandoff:
                 parse_chain_step("grouper: formula"),
                 ChainStep(program="xtb", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
         )
         frames = [_h2(z=0.70), _h2(z=0.90)]
@@ -817,7 +817,7 @@ class TestCrestNumConformers:
                 parse_chain_step("crest:conformers"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -844,7 +844,7 @@ class TestCrestNumConformers:
                 parse_chain_step("crest:conformers -nc 1"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -871,7 +871,7 @@ class TestCrestNumConformers:
                 parse_chain_step("crest:conformers -nc 2"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -909,7 +909,7 @@ class TestCrestNumConformers:
                 parse_chain_step("crest:conformers -nc 10"),
                 ChainStep(program="xtb", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
         )
         frames = [_h2(z=0.70), _h2(z=0.90)]
@@ -928,7 +928,7 @@ class TestCrestNumConformers:
                 parse_chain_step("crest:conformers -nc 2"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -948,7 +948,7 @@ class TestCrestNumConformers:
                 parse_chain_step("crest:conformers -nc 2"),
                 parse_chain_step("gaussian: crest -j opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1022,7 +1022,7 @@ class TestIRCHandoff:
                 ChainStep(program="gaussian", job="irc"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1056,7 +1056,7 @@ class TestIRCHandoff:
                 ChainStep(program="gaussian", job="irc"),
                 parse_chain_step("gaussian: -l chosen opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1086,7 +1086,7 @@ class TestIRCHandoff:
                 ChainStep(program="gaussian", job="irc"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1111,7 +1111,7 @@ class TestCompositeHandoff:
                 ChainStep(program="gaussian", job="opt"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1165,7 +1165,7 @@ class TestCompositeHandoff:
                 ChainStep(program="orca", job="qrc"),
                 ChainStep(program="orca", job="opt"),
             ),
-            molecule=_h2(),
+            molecules=_h2(),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1241,7 +1241,7 @@ class TestOutputFileHandoff:
                 ChainStep(program="gaussian", job="ts"),
                 ChainStep(program="gaussian", job="qrc"),
             ),
-            molecule=Molecule.from_filepath(log),
+            molecules=Molecule.from_filepath(log),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1267,7 +1267,7 @@ class TestOutputFileHandoff:
                 ChainStep(program="orca", job="sp"),
                 ChainStep(program="gaussian", job="opt"),
             ),
-            molecule=expected,
+            molecules=expected,
             label="mol",
             charge=-1,
             multiplicity=1,
@@ -1289,7 +1289,7 @@ class TestOutputFileHandoff:
                 ChainStep(program="xtb", job="opt"),
                 ChainStep(program="orca", job="sp"),
             ),
-            molecule=Molecule.from_filepath(
+            molecules=Molecule.from_filepath(
                 os.path.join(xtb_water_outfolder, "water.xyz")
             ),
             label="mol",
@@ -1326,7 +1326,7 @@ class TestOutputFileHandoff:
                 ChainStep(program="gaussian", job="opt"),
                 ChainStep(program="gaussian", job="sp"),
             ),
-            molecule=Molecule.from_filepath(log),
+            molecules=Molecule.from_filepath(log),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1353,7 +1353,7 @@ class TestOutputFileHandoff:
                 ChainStep(program="gaussian", job="opt"),
                 parse_chain_step("gaussian: -c 3 -m 2 sp"),
             ),
-            molecule=Molecule.from_filepath(log),
+            molecules=Molecule.from_filepath(log),
             label="mol",
             charge=0,
             multiplicity=1,
@@ -1364,3 +1364,58 @@ class TestOutputFileHandoff:
         assert sp_job.settings.charge == 3
         assert sp_job.settings.multiplicity == 2
         assert not os.path.exists("mol_01_orca_sp.xyz")
+
+
+class TestMultiStructureStart:
+    def test_selected_structures_keep_file_index_and_own_charge(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        first = _h2(z=0.70, charge=0, multiplicity=1)
+        second = _h2(z=0.90, charge=1, multiplicity=3)
+        first.structure_index_in_file = 2
+        second.structure_index_in_file = 5
+        chain = build_chain_job(
+            _chain_settings(gaussian="gas_solv"),
+            steps=(
+                ChainStep(program="gaussian", job="opt"),
+                ChainStep(program="gaussian", job="opt"),
+            ),
+            molecules=(first, second),
+            label="mol",
+        )
+        assert chain.molecule is None
+        children = chain.phases[0].resolve_jobs()
+        assert [child.label for child in children] == [
+            "mol_00_gaussian_opt_idx2",
+            "mol_00_gaussian_opt_idx5",
+        ]
+        assert [child.settings.charge for child in children] == [0, 1]
+        assert [child.settings.multiplicity for child in children] == [1, 3]
+        chain.phases[0]._resolved_jobs = [
+            DummyHandoffJob(child.label, child.molecule, complete=True)
+            for child in children
+        ]
+        following = chain.phases[1].resolve_jobs()
+        assert [child.label for child in following] == [
+            "mol_01_gaussian_opt_idx2",
+            "mol_01_gaussian_opt_idx5",
+        ]
+
+    def test_chain_charge_applies_to_every_starting_structure(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        first = _h2(z=0.70, charge=0, multiplicity=1)
+        second = _h2(z=0.90, charge=1, multiplicity=3)
+        first.structure_index_in_file = 2
+        second.structure_index_in_file = 5
+        chain = build_chain_job(
+            _chain_settings(gaussian="gas_solv"),
+            steps=(ChainStep(program="gaussian", job="opt"),),
+            molecules=(first, second),
+            label="mol",
+            charge=-1,
+            multiplicity=2,
+        )
+        children = chain.phases[0].resolve_jobs()
+        assert [child.settings.charge for child in children] == [-1, -1]
+        assert [child.settings.multiplicity for child in children] == [2, 2]
