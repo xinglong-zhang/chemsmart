@@ -109,9 +109,12 @@ resubmission with ``--skip-completed`` can continue later.
 
 Child labels start from ``{chain_label}_{index:02d}_{program}_{job}``. More than one group representative appends
 ``_g1``, ``_g2``, and so on. More than one other structure appends ``_c1``, ``_c2``, and so on. A single structure has
-no suffix. The program command may extend the label it is given. Gaussian crest keeps the labels that command already
-uses (``{label}_{jobtype}_c1``, …). Chain ``-c`` / ``-m`` go to the first program step. A later Gaussian, ORCA, or xTB
-step reads charge and multiplicity from the previous output file. A step fed by an xyz file, including CREST frames and
+no suffix. A step's own ``-l`` is kept for one structure; with more than one, the same ``_gN`` or ``_cN`` suffix is
+appended to that label. A step cannot set ``-f``, ``-p``, or ``-i`` before the job name, because the chain supplies the
+file, project, and structure index. An option after the job name, such as ``gaussian:opt -f 1-3``, still belongs to that
+command. The program command may extend the label it is given. Gaussian crest keeps the labels that command already uses
+(``{label}_{jobtype}_c1``, …). Chain ``-c`` / ``-m`` go to the first program step. A later Gaussian, ORCA, or xTB step
+reads charge and multiplicity from the previous output file. A step fed by an xyz file, including CREST frames and
 grouper representatives, gets the charge carried with that structure. A step's own ``-c`` / ``-m`` wins for that step
 and is written into its output, so the following step sees it. Grouper does not take those flags: on the grouper command
 ``-c`` is concentration and ``-m`` is the matrix file format. Do not combine ``-s/--steps`` with ``pka``, ``fukui``,

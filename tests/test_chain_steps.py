@@ -188,6 +188,18 @@ class TestParseChainStep:
             job="opt",
             suffix_option_tokens=("-f", "1-3"),
         )
+        ChainStepParser().validate(step)
+
+    def test_chain_owned_options_are_rejected(self):
+        parser = ChainStepParser()
+        for token in (
+            "gaussian: -f other.xyz opt",
+            "gaussian: -p other opt",
+            "gaussian: -i 1 opt",
+            "gaussian: --index=2 opt",
+        ):
+            with pytest.raises(ValueError, match="cannot set"):
+                parser.validate(parse_chain_step(token))
 
     def test_crest_num_conformers_after_job(self):
         step = parse_chain_step("crest:conformers -nc 10")
@@ -1033,6 +1045,36 @@ class TestIRCHandoff:
         ]
         assert np.allclose(children[0].molecule.positions, forward.positions)
         assert np.allclose(children[1].molecule.positions, reverse.positions)
+
+    def test_step_label_keeps_a_suffix_for_each_endpoint(
+        self, isolated_config_dir, temporary_working_dir, monkeypatch
+    ):
+        settings = _chain_settings(gaussian="gas_solv")
+        chain = build_chain_job(
+            settings,
+            steps=(
+                ChainStep(program="gaussian", job="irc"),
+                parse_chain_step("gaussian: -l chosen opt"),
+            ),
+            molecule=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        chain.phases[0]._resolved_jobs = [
+            self._irc_with_endpoints(
+                monkeypatch,
+                [
+                    DummyHandoffJob("ircf", _h2(z=0.90), complete=True),
+                    DummyHandoffJob("ircr", _h2(z=1.20), complete=True),
+                ],
+            )
+        ]
+        children = chain.phases[1].resolve_jobs()
+        assert [child.label for child in children] == [
+            "chosen_c1",
+            "chosen_c2",
+        ]
 
     def test_missing_endpoint_geometry_waits(
         self, isolated_config_dir, temporary_working_dir, monkeypatch

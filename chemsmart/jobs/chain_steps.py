@@ -3,7 +3,7 @@
 import logging
 import os
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Sequence
 
 from chemsmart.io.molecules.structure import Molecule
@@ -49,6 +49,21 @@ __all__ = [
 
 # Workflow jobs that are not ``-s`` pipeline steps.
 CHAIN_NESTED_ONLY_JOBS = frozenset({"pka", "fukui", "redox", "reaction"})
+
+# Program options the chain sets itself. A later ``-f`` is that command's
+# own option, such as frozen atoms on ``gaussian opt``.
+_CHAIN_OWNED_OPTIONS = frozenset(
+    {
+        "-f",
+        "--filename",
+        "-p",
+        "--project",
+        "-i",
+        "--index",
+        "--si",
+        "--structure-index",
+    }
+)
 
 # Subcommands that need a prepared file or a trajectory, not one structure.
 _CHAIN_STEPS_WITHOUT_STRUCTURE = frozenset(
@@ -202,6 +217,14 @@ class ChainStepParser:
     def validate(self, step: ChainStep) -> None:
         program = step.program
         job = step.job
+        for token in step.extra_option_tokens:
+            name = token.split("=", 1)[0]
+            if name in _CHAIN_OWNED_OPTIONS:
+                raise ValueError(
+                    f"Chain step {program}:{job} cannot set {name}; "
+                    "the chain supplies the file, project, and "
+                    "structure index."
+                )
         if program == "grouper" and job in self._grouper_command_names():
             return
         if program in PROGRAM_ADAPTERS and job in CHAIN_NESTED_ONLY_JOBS:
@@ -613,6 +636,25 @@ def _argv_has_option(tokens, *names):
     return any(token in names for token in tokens)
 
 
+def _with_fanout_label(tokens, suffix):
+    """Append ``suffix`` to a step's ``-l``/``--label`` value."""
+    updated = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in ("-l", "--label") and index + 1 < len(tokens):
+            updated.extend((token, f"{tokens[index + 1]}{suffix}"))
+            index += 2
+            continue
+        if token.startswith("--label="):
+            updated.append(f"{token}{suffix}")
+            index += 1
+            continue
+        updated.append(token)
+        index += 1
+    return tuple(updated)
+
+
 def _invoke_cli_command(command, argv, jobrunner):
     import click
 
@@ -849,6 +891,25 @@ class ChainPipelineBuilder:
                 structure_index = None
             else:
                 filename, structure_index = source
+            argv_step = step
+            if (
+                count > 1
+                and handoff.label_kind
+                and (
+                    _argv_has_option(step.extra_option_tokens, "-l", "--label")
+                    or any(
+                        token.startswith("--label=")
+                        for token in step.extra_option_tokens
+                    )
+                )
+            ):
+                argv_step = replace(
+                    step,
+                    extra_option_tokens=_with_fanout_label(
+                        step.extra_option_tokens,
+                        f"_{handoff.label_kind}{ordinal}",
+                    ),
+                )
             if index == 0:
                 charge, multiplicity = self._charge, self._multiplicity
             elif source is None:
@@ -856,7 +917,7 @@ class ChainPipelineBuilder:
             else:
                 charge, multiplicity = None, None
             argv = _program_argv(
-                step,
+                argv_step,
                 filename,
                 structure_index,
                 self._project_names[step.program],
