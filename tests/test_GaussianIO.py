@@ -780,6 +780,26 @@ class TestGaussian16Input:
 
 
 class TestGaussian16Output:
+    def test_wrapped_stable_route_is_detected_as_link(self, tmp_path):
+        logfile = tmp_path / "wrapped_link.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "----------------------------------",
+                    "# um062x def2svp scf=(xqc,maxcycle=512,novar",
+                    "acc),nosymm stable=opt guess=mix",
+                    "----------------------------------",
+                    "# opt=(ts,calcfc,noeigentest) freq um062x def2svp",
+                    "----------------------------------",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert output.is_link
+        assert "stable=opt" not in output.route_string
+        assert output.jobtype == "ts"
+
     def test_normal_termination_with_forces_and_frequencies(
         self, td_outputfile
     ):

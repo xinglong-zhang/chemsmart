@@ -917,28 +917,19 @@ class Gaussian16Output(GaussianFileMixin):
     def _get_route(self):
         lines = self.contents
         for i, line in enumerate(lines):
-            if line.startswith("#") and "stable=opt" in line:
+            if not line.startswith("#"):
                 continue
-            elif line.startswith("#"):
-                if lines[i + 1].startswith("------"):
-                    # route string in a single line
-                    route = line.lower()
-                elif not lines[i + 1].startswith("------") and lines[
-                    i + 2
-                ].startswith("------"):
-                    # route string spans two lines
-                    route = line.lower()
-                    route += lines[i + 1].strip().lower()
-                elif not lines[i + 1].startswith("------") and not lines[
-                    i + 2
-                ].startswith("------"):
-                    # route string spans three lines
-                    route = line.lower()
-                    route += lines[i + 1].lower()
-                    route += lines[i + 2].lower()
-                else:
-                    route = None
-                return route
+
+            route_lines = [line]
+            for continuation in lines[i + 1 :]:
+                if not continuation or continuation.startswith("------"):
+                    break
+                route_lines.append(continuation)
+
+            route = "".join(route_lines).lower()
+            if "stable=opt" in route:
+                continue
+            return route
         return None
 
     def _get_modredundant_group(self):
