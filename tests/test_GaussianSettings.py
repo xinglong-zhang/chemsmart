@@ -957,6 +957,29 @@ class TestGaussianJobFromComFile:
 
 
 class TestGaussianJobFromLogFile:
+    def test_reads_custom_solvent_from_logfile_as_settings_text(
+        self, gaussian_smd_generic_outfile
+    ):
+        """Parsed output parameters can be reused or safely overridden."""
+        settings = GaussianJobSettings.from_logfile(
+            gaussian_smd_generic_outfile
+        )
+
+        assert isinstance(settings.custom_solvent, str)
+        assert (
+            "SolventName=1,1,1,3,3,3-HEXAFLUOROPROPAN-2-OL"
+            in settings.custom_solvent
+        )
+        assert "Eps=16.7" in settings.custom_solvent
+        assert "ElectronegativeHalogenicity=0.6" in settings.custom_solvent
+
+        replacement = "SolventName=replacement\nEps=2.5\n"
+        project_settings = GaussianJobSettings.default()
+        project_settings.custom_solvent = replacement
+        merged = project_settings.merge(settings)
+
+        assert merged.custom_solvent == replacement
+
     def test_accumulates_settings(self, tmpdir, gaussian_ts_genecp_outfile):
         settings = GaussianJobSettings.from_logfile(gaussian_ts_genecp_outfile)
         assert settings.functional == "mn15"

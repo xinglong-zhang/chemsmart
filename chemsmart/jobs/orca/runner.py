@@ -64,6 +64,7 @@ class ORCAJobRunner(JobRunner):
         "orcascan",
         "orcats",
         "orcasp",
+        "orcatd",
         "orcairc",
         "orcaqmmm",
         "orcaneb",
@@ -177,7 +178,7 @@ class ORCAJobRunner(JobRunner):
         Args:
             job: The job object to configure for scratch execution
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -459,6 +460,7 @@ class ORCAJobRunner(JobRunner):
                         logger.error(
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
+                        raise
 
 
 class FakeORCAJobRunner(ORCAJobRunner):
@@ -501,7 +503,7 @@ class FakeORCAJobRunner(ORCAJobRunner):
 
     def _set_up_variables_in_scratch(self, job):
         """Set fake ORCA file paths for scratch execution."""
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)

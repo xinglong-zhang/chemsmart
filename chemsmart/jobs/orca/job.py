@@ -553,7 +553,7 @@ class ORCAInpJob(ORCAJob):
         ):
             # Running job in scratch directory
             job_scratch_dir = os.path.join(
-                self.jobrunner.scratch_dir, self.label
+                self.jobrunner.scratch_dir, self.execution_name
             )
 
             # Create scratch directory if needed

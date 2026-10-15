@@ -1058,11 +1058,9 @@ default only. Example: with ``NCIPLOT.SCRATCH: False`` in YAML, an omitted CLI f
 Resolution table (CLI path)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   :header-rows:
-      1
-
-   :widths:
-      20 25 20 35
+.. list-table::
+   :header-rows: 1
+   :widths: 20 25 20 35
 
    -  -  CLI
       -  YAML ``SCRATCH``
@@ -1099,9 +1097,8 @@ Resolution table (CLI path)
       -  ``True``
       -  scratch directory if path exists; else job folder (warning)
 
-When scratch mode resolves to ``True`` but no scratch path can be found, CHEMSMART logs a warning, sets
-``scratch=False``, and runs in the job folder. When a path is found but the directory does not exist, job setup raises
-``FileNotFoundError``.
+When scratch mode resolves to ``True`` but no usable scratch path is found (no path configured, or a path that is not an
+existing directory), CHEMSMART logs a warning, sets ``scratch=False``, and runs in the job folder.
 
 Scratch directory path
 ----------------------
@@ -1113,9 +1110,9 @@ When scratch mode is ``True``, the scratch directory path is resolved in this or
 #. ``SERVER.SCRATCH_DIR``
 #. User settings ``SCRATCH`` (from CHEMSMART user configuration)
 
-If scratch mode is enabled but no scratch path can be resolved, CHEMSMART disables scratch with a warning and runs in
-the job folder. If a path is resolved but that directory does not exist, job setup raises ``FileNotFoundError``.
-Configure a real scratch path (or pass ``--no-scratch``) before relying on scratch execution.
+If scratch mode is enabled but no scratch path can be resolved, or the resolved path is missing or not a directory,
+CHEMSMART disables scratch with a warning and runs in the job folder. Create the scratch directory when you need scratch
+execution, or pass ``--no-scratch`` to run in the job folder without that warning.
 
 ``chemsmart sub`` reconstructs CLI arguments for the worker ``chemsmart run`` script. When ``--scratch`` /
 ``--no-scratch`` are omitted at submit time, those flags are also omitted in the reconstructed command so the worker

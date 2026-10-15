@@ -21,6 +21,7 @@ from .qrc import qrc
 from .redox import redox
 from .scan import scan
 from .singlepoint import sp
+from .tddft import td
 from .ts import ts
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "redox",
     "scan",
     "sp",
+    "td",
     "ts",
     "neb",
 ]

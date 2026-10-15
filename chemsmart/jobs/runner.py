@@ -290,8 +290,8 @@ class JobRunner(RegistryMixin):
         3. ``server.scratch_dir`` (``SERVER.SCRATCH_DIR``)
         4. User settings ``SCRATCH``
 
-        If no path can be resolved, scratch mode is disabled with a warning.
-        If a path is resolved but does not exist, raises ``FileNotFoundError``.
+        If no path can be resolved, or the resolved path is missing or not a
+        directory, scratch mode is disabled with a warning.
         """
         if self._scratch_dir is not None:
             return self._scratch_dir  # Use explicitly set directory
@@ -321,12 +321,14 @@ class JobRunner(RegistryMixin):
             )
             self.scratch = False
         else:
-            # check that the scratch folder exists
             scratch_dir = os.path.expanduser(scratch_dir)
-            if not os.path.exists(scratch_dir):
-                raise FileNotFoundError(
-                    f"Specified scratch dir does not exist: {scratch_dir}"
+            if not os.path.isdir(scratch_dir):
+                logger.warning(
+                    f"Scratch dir {scratch_dir!r} is missing or not a "
+                    f"directory for {self}. Not using scratch."
                 )
+                self.scratch = False
+                scratch_dir = None
         return scratch_dir
 
     def __repr__(self):
