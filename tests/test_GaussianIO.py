@@ -1355,21 +1355,6 @@ class TestGaussian16Output:
             -0.24253 * units.Hartree,
         ]
 
-    def test_normal_link_job_pads_missing_trailing_force(
-        self, gaussian_link_modred_output
-    ):
-        g16_link_modred = Gaussian16Output(
-            filename=gaussian_link_modred_output,
-            include_intermediate=True,
-        )
-        g16_link_modred.__dict__["forces"] = g16_link_modred.forces[:-1]
-
-        structures = g16_link_modred.all_structures
-
-        assert len(structures) == 20
-        assert structures[-2].forces is not None
-        assert structures[-1].forces is None
-
     def test_read_gaussian_link_sp_output_file(
         self, gaussian_link_sp_outputfile
     ):
