@@ -1,7 +1,41 @@
 from pathlib import Path
 
+import pytest
+
 from chemsmart.jobs.crest.conformers import CRESTConformerSearchJob
 from chemsmart.jobs.crest.settings import CRESTJobSettings
+
+
+class TestCRESTJobConstructionValidation:
+    def test_rejects_non_crest_job_settings(self, water_molecule):
+        with pytest.raises(ValueError, match="Settings must be instance"):
+            CRESTConformerSearchJob(
+                molecule=water_molecule,
+                settings="not-a-settings-object",
+                label="water_conformers",
+            )
+
+    def test_rejects_non_molecule(self):
+        settings = CRESTJobSettings(
+            charge=0, multiplicity=1, jobtype="conformers"
+        )
+        with pytest.raises(ValueError, match="Molecule must be instance"):
+            CRESTConformerSearchJob(
+                molecule="not-a-molecule",
+                settings=settings,
+                label="water_conformers",
+            )
+
+    def test_label_defaults_to_empirical_chemical_formula(
+        self, water_molecule
+    ):
+        settings = CRESTJobSettings(
+            charge=0, multiplicity=1, jobtype="conformers"
+        )
+        job = CRESTConformerSearchJob(
+            molecule=water_molecule, settings=settings, label=None
+        )
+        assert job.label == water_molecule.get_chemical_formula(empirical=True)
 
 
 class TestCRESTJobs:
