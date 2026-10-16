@@ -702,10 +702,7 @@ class TestGaussian16Input:
         assert g16_genecp.genecp_section.light_elements == ["H", "C", "O"]
         assert g16_genecp.genecp_section.heavy_elements == ["Pd"]
         assert g16_genecp.genecp_section.light_elements_basis == "def2svp"
-        assert (
-            g16_genecp.genecp_section.heavy_elements_basis_functions
-            == "def2-tzvppd"
-        )
+        assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
         assert g16_genecp.molecule.frozen_atoms is None
 
     def test_read_gaussian_link_opt_input(self, gaussian_link_opt_input):
