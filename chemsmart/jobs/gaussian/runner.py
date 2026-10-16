@@ -83,13 +83,14 @@ class GaussianJobRunner(JobRunner):
         "g16ts",
         "g16uvvis",
         "g16wbi",
+        "g16fukui",
         "g16",
         "g16com",
         "g16link",
         "g16qmmm",
         "g16pka",
-        "g16pka_analyze",
-        "g16pka_thermo",
+        "g16reaction",
+        "g16redox",
     ]
 
     PROGRAM = "gaussian"

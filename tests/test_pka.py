@@ -113,7 +113,7 @@ def _install_fake_thermochemistry(monkeypatch, constructed=None):
             super().__init__(filename, **kwargs)
 
     monkeypatch.setattr(
-        "chemsmart.cli.pka.Thermochemistry",
+        "chemsmart.analysis.thermochemistry.Thermochemistry",
         _TrackingFakeThermochemistry,
     )
     return constructed
@@ -408,14 +408,14 @@ class TestPKa:
                 pass
 
         monkeypatch.setattr(
-            "chemsmart.cli.pka.Thermochemistry",
+            "chemsmart.analysis.thermochemistry.Thermochemistry",
             _MissingScfThermochemistry,
         )
 
-        from chemsmart.cli.pka import pka_solvent_scf_energy
+        from chemsmart.analysis.thermochemistry import solvent_scf_energy
 
         with pytest.raises(ValueError, match="Could not extract SCF energy"):
-            pka_solvent_scf_energy(str(tmp_path / "missing.out"))
+            solvent_scf_energy(str(tmp_path / "missing.out"))
 
     def test_pka_thermochemistry_missing_qh_gibbs(self, tmp_path, monkeypatch):
         class _MissingQhThermochemistry:
@@ -426,17 +426,23 @@ class TestPKa:
                 pass
 
         monkeypatch.setattr(
-            "chemsmart.cli.pka.Thermochemistry",
+            "chemsmart.analysis.thermochemistry.Thermochemistry",
             _MissingQhThermochemistry,
         )
 
-        from chemsmart.cli.pka import pka_gas_phase_data
+        from chemsmart.analysis.thermochemistry import gas_phase_data
 
         with pytest.raises(
             ValueError,
             match="Could not extract quasi-harmonic Gibbs free energy",
         ):
-            pka_gas_phase_data(str(tmp_path / "gas.out"))
+            gas_phase_data(str(tmp_path / "gas.out"))
+
+    def test_cli_reexports_compute_helpers(self):
+        from chemsmart.analysis.pka import compute_pka as analysis_compute_pka
+        from chemsmart.cli.pka import compute_pka as cli_compute_pka
+
+        assert cli_compute_pka is analysis_compute_pka
 
     def test_run_pka_unparseable_output_raises(self, tmp_path):
         """analyze no longer pre-detects program type; parsing fails on bad files."""
@@ -765,9 +771,9 @@ class TestPKa:
 
         assert result.exit_code == 0, result.output
         assert len(captured["submissions"]) == 2
-        # In "sub ... pka batch", jobs are not executed; only submission scripts are
-        # generated, so reference molecules are not built at this stage.
-        assert reference_pair_call_count["count"] == 0
+        # Only the first batch row keeps the shared reference; construction
+        # loads that pair once via the mixin cache.
+        assert reference_pair_call_count["count"] == 1
 
     def test_sub_orca_pka_batch_first_exchange_rest_direct(
         self, tmp_path, monkeypatch, captured
@@ -947,6 +953,9 @@ class TestPKa:
 
     def test_run_pka_help_keeps_output_analysis_commands(self):
         runner = CliRunner()
+        result = runner.invoke(run, ["--help"])
+        assert result.exit_code == 0, result.output
+        assert "\n  pka" in result.output
         result = runner.invoke(
             run, ["--no-scratch", "--fake", "pka", "--help"]
         )
@@ -1610,6 +1619,7 @@ class TestPKa:
     ):
         """ORCA pKa should prepare HA/A opt and SP jobs with Gaussian-style labels."""
         from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.jobs.orca.job import ORCAJob
         from chemsmart.jobs.orca.opt import ORCAOptJob
         from chemsmart.jobs.orca.pka import ORCApKaJob
         from chemsmart.jobs.orca.settings import ORCApKaJobSettings
@@ -1637,58 +1647,34 @@ class TestPKa:
         )
 
         assert len(job.opt_jobs) == 2
+        assert isinstance(job, ORCAJob)
+        assert [phase.name for phase in job.phases] == [
+            "Opt",
+            "Ref Opt",
+            "SP",
+            "Ref SP",
+        ]
+        for name in ("Opt", "Ref Opt", "SP", "Ref SP"):
+            phase = job.phase_by_name(name)
+            assert phase.stop_on_incomplete is True
+            assert phase.require_complete is True
         assert isinstance(job.protonated_job, ORCAOptJob)
         assert isinstance(job.conjugate_base_job, ORCAOptJob)
         assert job.protonated_job.label == "1a_pka_HA_opt"
         assert job.conjugate_base_job.label == "1a_pka_A_opt"
         assert job.conjugate_base_job.settings.charge == -1
 
-        assert len(job.sp_jobs) == 2
+        sp_jobs = job._sp_jobs_for_phase()
+        assert len(sp_jobs) == 2
         assert isinstance(job.protonated_sp_job, ORCASinglePointJob)
         assert isinstance(job.conjugate_base_sp_job, ORCASinglePointJob)
         assert job.protonated_sp_job.label == "1a_pka_HA_sp"
         assert job.conjugate_base_sp_job.label == "1a_pka_A_sp"
 
-    def test_orca_pka_subjob_is_complete_uses_parent_folder(
-        self, single_molecule_xyz_file, orca_jobrunner_no_scratch, tmp_path
-    ):
-        """Sub-jobs should detect completed outputs in the parent pKa folder."""
-        from chemsmart.io.molecules.structure import Molecule
-        from chemsmart.jobs.orca.pka import ORCApKaJob
-        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
-
-        mol = Molecule.from_filepath(single_molecule_xyz_file)
-        mol.charge = 0
-        mol.multiplicity = 1
-        proton_index = next(
-            i + 1 for i, symbol in enumerate(mol.symbols) if symbol == "H"
-        )
-        settings = ORCApKaJobSettings(
-            proton_index=proton_index,
-            scheme="direct",
-            functional="B3LYP",
-            basis="def2-SVP",
-        )
-        job = ORCApKaJob(
-            molecule=mol,
-            settings=settings,
-            label="5a_pka",
-            jobrunner=orca_jobrunner_no_scratch,
-        )
-        job.folder = str(tmp_path)
-
-        for name in ("5a_pka_HA_opt", "5a_pka_A_opt"):
-            (tmp_path / f"{name}.out").write_text(
-                "****ORCA TERMINATED NORMALLY****\n"
-            )
-
-        assert all(j.is_complete() for j in job.opt_jobs)
-
     def test_orca_pka_run_sp_jobs_after_completed_opt(
         self,
         single_molecule_xyz_file,
         orca_jobrunner_no_scratch,
-        tmp_path,
         monkeypatch,
         captured,
     ):
@@ -1714,67 +1700,27 @@ class TestPKa:
             label="5a_pka",
             jobrunner=orca_jobrunner_no_scratch,
         )
-        job.folder = str(tmp_path)
-
-        for name in ("5a_pka_HA_opt", "5a_pka_A_opt"):
-            (tmp_path / f"{name}.out").write_text(
-                "****ORCA TERMINATED NORMALLY****\n"
-            )
+        for child in job.opt_jobs:
+            monkeypatch.setattr(child, "is_complete", lambda: True)
 
         captured["sp_labels"] = []
 
-        def _fake_run_phase_jobs(*, jobs=None, jobs_factory=None, **kwargs):
+        def _fake_run_phase_jobs(
+            *, jobs=None, jobs_factory=None, phase_label=None, **kwargs
+        ):
             phase_jobs = jobs_factory() if jobs_factory is not None else jobs
+            if phase_label != "SP":
+                return
             for child_job in phase_jobs:
                 captured["sp_labels"].append(child_job.label)
 
         monkeypatch.setattr(
-            "chemsmart.jobs.orca.pka.run_phase_jobs",
+            "chemsmart.jobs.chain.run_phase_jobs",
             _fake_run_phase_jobs,
-        )
-        monkeypatch.setattr(job, "_run_opt_jobs", lambda: None)
-        monkeypatch.setattr(
-            job, "_subjob_output", lambda *args, **kwargs: None
         )
 
         job._run()
-        assert all(j.is_complete() for j in job.opt_jobs)
         assert captured["sp_labels"] == ["5a_pka_HA_sp", "5a_pka_A_sp"]
-
-    def test_orca_pka_subjob_is_complete_recognizes_legacy_output(
-        self, single_molecule_xyz_file, orca_jobrunner_no_scratch, tmp_path
-    ):
-        """Pre-rename ORCA pKa outputs should still count as complete."""
-        from chemsmart.io.molecules.structure import Molecule
-        from chemsmart.jobs.orca.pka import ORCApKaJob
-        from chemsmart.jobs.orca.settings import ORCApKaJobSettings
-
-        mol = Molecule.from_filepath(single_molecule_xyz_file)
-        mol.charge = 0
-        mol.multiplicity = 1
-        proton_index = next(
-            i + 1 for i, symbol in enumerate(mol.symbols) if symbol == "H"
-        )
-        settings = ORCApKaJobSettings(
-            proton_index=proton_index,
-            scheme="direct",
-            functional="B3LYP",
-            basis="def2-SVP",
-        )
-        job = ORCApKaJob(
-            molecule=mol,
-            settings=settings,
-            label="1a_pka",
-            jobrunner=orca_jobrunner_no_scratch,
-        )
-        job.folder = str(tmp_path)
-
-        legacy_out = tmp_path / "1a_pka.out"
-        legacy_out.write_text("****ORCA TERMINATED NORMALLY****\n")
-
-        assert job._subjob_is_complete(
-            job.protonated_job, legacy_label="1a_pka"
-        )
 
     def test_orca_pka_run_executes_ha_and_a_opt_jobs(
         self,
@@ -1810,16 +1756,17 @@ class TestPKa:
 
         captured["labels"] = []
 
-        def _fake_run_phase_jobs(*, jobs, **kwargs):
-            for child_job in jobs:
+        def _fake_run_phase_jobs(*, jobs=None, jobs_factory=None, **kwargs):
+            phase_jobs = jobs_factory() if jobs_factory is not None else jobs
+            for child_job in phase_jobs:
                 captured["labels"].append(child_job.label)
 
         monkeypatch.setattr(
-            "chemsmart.jobs.orca.pka.run_phase_jobs",
+            "chemsmart.jobs.chain.run_phase_jobs",
             _fake_run_phase_jobs,
         )
 
-        job._run_opt_jobs()
+        job.run_phase("Opt")
         assert captured["labels"] == ["1a_pka_HA_opt", "1a_pka_A_opt"]
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])

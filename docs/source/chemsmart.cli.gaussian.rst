@@ -168,6 +168,33 @@
    :undoc-members:
    :show-inheritance:
 
+*************************************
+ chemsmart.cli.gaussian.fukui module
+*************************************
+
+.. automodule:: chemsmart.cli.gaussian.fukui
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+***********************************
+ chemsmart.cli.gaussian.pka module
+***********************************
+
+.. automodule:: chemsmart.cli.gaussian.pka
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+*************************************
+ chemsmart.cli.gaussian.redox module
+*************************************
+
+.. automodule:: chemsmart.cli.gaussian.redox
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 *****************
  Module contents
 *****************

@@ -5,6 +5,7 @@ from typing import Optional
 
 from chemsmart.settings.executable import (
     CRESTExecutable,
+    Executable,
     GaussianExecutable,
     NCIPLOTExecutable,
     ORCAExecutable,
@@ -17,6 +18,89 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+_PROGRAM_EXECUTABLE_CLASSES = {
+    "gaussian": GaussianExecutable,
+    "orca": ORCAExecutable,
+    "xtb": XTBExecutable,
+    "crest": CRESTExecutable,
+    "nciplot": NCIPLOTExecutable,
+}
+
+
+def _unique_config_blocks(blocks):
+    unique = []
+    seen = set()
+    for block in blocks:
+        if not block:
+            continue
+        key = block.strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(block)
+    return unique
+
+
+def _join_unique_blocks(blocks):
+    unique = _unique_config_blocks(blocks)
+    if not unique:
+        return None
+    return "".join(unique)
+
+
+def _merge_module_blocks(blocks):
+    unique = _unique_config_blocks(blocks)
+    if not unique:
+        return None
+    wrote_purge = False
+    parts = []
+    for block in unique:
+        lines = []
+        for line in block.splitlines(keepends=True):
+            if line.strip() == "module purge":
+                if wrote_purge:
+                    continue
+                wrote_purge = True
+            lines.append(line)
+        parts.append("".join(lines))
+    return "".join(parts)
+
+
+def executable_for_programs(servername, programs):
+    """Load and merge server YAML blocks for the given program names.
+
+    Duplicate conda/module/script/envar text is written once. A second
+    ``module purge`` from a later program is dropped so mixed Gaussian/ORCA
+    chains keep both module sets.
+    """
+    unique_programs = tuple(
+        dict.fromkeys(program.lower() for program in programs if program)
+    )
+    if not unique_programs:
+        return Executable()
+    executables = []
+    for program in unique_programs:
+        executable_class = _PROGRAM_EXECUTABLE_CLASSES.get(program)
+        if executable_class is None:
+            raise ValueError(f"Program {program} not supported.")
+        executables.append(executable_class.from_servername(servername))
+    if len(executables) == 1:
+        return executables[0]
+    return Executable(
+        conda_env=_join_unique_blocks(
+            executable.conda_env for executable in executables
+        ),
+        modules=_merge_module_blocks(
+            executable.modules for executable in executables
+        ),
+        scripts=_join_unique_blocks(
+            executable.scripts for executable in executables
+        ),
+        envars=_join_unique_blocks(
+            executable.envars for executable in executables
+        ),
+    )
 
 
 class RunScript:
@@ -248,6 +332,9 @@ class Submitter(RegistryMixin):
         """
         Get the executable configuration for the job's program.
 
+        ``ChainJob`` (``PROGRAM == "chain"``) merges server YAML blocks for
+        every unique name in ``job.programs``.
+
         Returns:
             Executable: Instance of the appropriate executable handler
             (GaussianExecutable, ORCAExecutable, XTBExecutable, or
@@ -255,24 +342,21 @@ class Submitter(RegistryMixin):
             based on `job.PROGRAM`.
 
         Raises:
-            ValueError: If the job's program is not supported.
+            ValueError: If the job's program is not set or not supported.
         """
-        if self.job.PROGRAM.lower() == "gaussian":
-            executable = GaussianExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "orca":
-            executable = ORCAExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "xtb":
-            executable = XTBExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "crest":
-            executable = CRESTExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "nciplot":
-            executable = NCIPLOTExecutable.from_servername(self.server.name)
-
-        else:
-            # Need to add programs here to be
-            # supported for other types of programs
+        program = self.job.PROGRAM
+        if program is None:
+            raise ValueError(
+                f"Cannot write a submission script for job "
+                f"{self.job.label!r}: PROGRAM is not set."
+            )
+        program = program.lower()
+        if program == "chain":
+            return executable_for_programs(self.server.name, self.job.programs)
+        executable_class = _PROGRAM_EXECUTABLE_CLASSES.get(program)
+        if executable_class is None:
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        return executable
+        return executable_class.from_servername(self.server.name)
 
     def write(self, cli_args):
         """

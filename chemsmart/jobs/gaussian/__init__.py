@@ -4,8 +4,9 @@ Gaussian computational chemistry job classes and utilities.
 This module provides a comprehensive collection of Gaussian job types
 for various computational chemistry calculations including optimization,
 frequency analysis, single point calculations, IRC, NCI analysis,
-and more. All job classes inherit from the base GaussianJob class
-and provide specialized functionality for different calculation types.
+and more. Most job classes inherit from the base GaussianJob class.
+Multi-step workflows such as pKa, Fukui, and redox use ``ChainMixin`` with
+``GaussianJob``.
 
 The module also includes job runners and utilities for managing
 Gaussian calculations in computational workflows.
@@ -14,6 +15,7 @@ Gaussian calculations in computational workflows.
 from .crest import GaussianCrestJob
 from .custom import GaussianCustomJob
 from .dias import GaussianDIASJob
+from .fukui import GaussianFukuiJob
 from .irc import GaussianIRCJob
 from .job import GaussianComJob, GaussianGeneralJob, GaussianJob
 from .link import GaussianLinkJob
@@ -22,6 +24,7 @@ from .nci import GaussianNCIJob
 from .opt import GaussianOptJob
 from .qmmm import GaussianQMMMJob
 from .qrc import GaussianQRCJob
+from .redox import GaussianRedoxJob
 from .resp import GaussianRESPJob
 from .runner import GaussianJobRunner
 from .scan import GaussianScanJob
@@ -39,6 +42,7 @@ __all__ = [
     "GaussianCrestJob",
     "GaussianCustomJob",
     "GaussianDIASJob",
+    "GaussianFukuiJob",
     "GaussianIRCJob",
     "GaussianComJob",
     "GaussianGeneralJob",
@@ -48,6 +52,7 @@ __all__ = [
     "GaussianNCIJob",
     "GaussianOptJob",
     "GaussianQRCJob",
+    "GaussianRedoxJob",
     "GaussianRESPJob",
     "GaussianJobRunner",
     "GaussianTrajJob",

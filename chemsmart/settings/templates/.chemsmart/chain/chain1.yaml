@@ -1,0 +1,6 @@
+# Chain project aliases point at per-program YAML stems:
+# crest: test  ->  ~/.chemsmart/crest/test.yaml
+crest: test
+xtb: test
+gaussian: test
+orca: test
