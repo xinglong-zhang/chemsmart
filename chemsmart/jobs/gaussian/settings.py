@@ -42,7 +42,7 @@ class GaussianJobSettings(MolecularJobSettings):
     `solvent_id`, `additional_solvent_options`,
     `additional_opt_options_in_route`,
     `append_additional_info`, `gen_genecp_file`, `heavy_elements`,
-    `heavy_elements_basis_functions`, `light_elements_basis`, `custom_solvent`, `forces`,
+    `heavy_elements_basis`, `light_elements_basis`, `custom_solvent`, `forces`,
     and `input_string`.
 
     Attributes:
@@ -825,7 +825,7 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"Light elements basis: {self.light_elements_basis}\n"
             )
             # Method 1 for getting genecp
-            # Need to supply self.heavy_elements, self.heavy_elements_basis_functions
+            # Need to supply self.heavy_elements, self.heavy_elements_basis
             # and self.light_elements_basis
             heavy_elements_in_structure = self.prune_heavy_elements(molecule)
 

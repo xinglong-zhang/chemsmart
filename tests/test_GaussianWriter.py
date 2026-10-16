@@ -1225,7 +1225,7 @@ class TestGaussianInputWriter:
 
         # update settings for heavy elements
         ts_settings.heavy_elements = ["Pd"]
-        ts_settings.heavy_elements_basis_functions = "def2-TZVPPD"
+        ts_settings.heavy_elements_basis = "def2-TZVPPD"
         ts_settings.light_elements_basis = "def2-SVP"
 
         molecule = Molecule.from_filepath(gaussian_ts_genecp_outfile)
@@ -1286,8 +1286,8 @@ class TestGaussianInputWriter:
         ]
         # more than all elements in the system but will be filtered
         # to only those in the system for input preparation
-        modred_settings.heavy_elements_basis_functions = "def2-TZVPPD"
-        modred_settings.light_elements_basis = None  # light element basis not specified as all use custom basis from heavy_elements_basis_functions
+        modred_settings.heavy_elements_basis = "def2-TZVPPD"
+        modred_settings.light_elements_basis = None  # light element basis not specified as all use custom basis from heavy_elements_basis
 
         molecule = Molecule.from_filepath(modred_genecp_inputfile)
         job = GaussianModredJob(

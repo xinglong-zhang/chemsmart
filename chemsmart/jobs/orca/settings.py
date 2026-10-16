@@ -922,7 +922,7 @@ class ORCApKaJobSettings(ORCAJobSettings):
             additional_route_parameters=opt_settings.additional_route_parameters,
             gen_genecp_file=opt_settings.gen_genecp_file,
             heavy_elements=opt_settings.heavy_elements,
-            heavy_elements_basis=opt_settings.heavy_elements_basis_functions,
+            heavy_elements_basis=opt_settings.heavy_elements_basis,
             light_elements_basis=opt_settings.light_elements_basis,
         )
 

@@ -1843,7 +1843,7 @@ class TestGaussian16Output:
         assert g16.light_elements_basis == "6-31g(d)"
         # Heavy elements has explicit orbital basis
         assert g16.heavy_elements == ["Cl", "Br"]
-        heavy_basis = g16.heavy_elements_basis_functions
+        heavy_basis = g16.heavy_elements_basis
 
         cl_shells = heavy_basis["Cl"]
         assert [shell["shell"] for shell in cl_shells] == [
@@ -1916,7 +1916,7 @@ class TestGaussian16Output:
         # Heavy element (Ag) has explicit orbital basis
         assert g16.heavy_elements == ["Ag"]
 
-        ag_shells = g16.heavy_elements_basis_functions["Ag"]
+        ag_shells = g16.heavy_elements_basis["Ag"]
         assert [s["shell"] for s in ag_shells] == [
             "S",
             "S",
