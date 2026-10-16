@@ -352,7 +352,10 @@ def crest(
             "Only give CREST input filename or name to be appended, but not both!"
         )
     if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
         if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"

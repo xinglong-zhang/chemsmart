@@ -1,7 +1,11 @@
 """Tests for general utility functions and classes."""
 
 import os
+import subprocess
 import tempfile
+import time
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -10,12 +14,17 @@ from chemsmart.utils.utils import (
     OrderedSet,
     check_charge_and_multiplicity,
     content_blocks_by_paragraph,
+    convert_list_to_gaussian_frozen_list,
+    convert_list_to_orca_frozen_list,
     convert_modred_list_to_string,
     convert_string_index_from_1_based_to_0_based,
     extract_number,
+    file_cache,
+    get_key_by_value_and_number,
     get_list_from_string_range,
     get_prepend_string_for_modred,
     get_prepend_string_list_from_modred_free_format,
+    get_value_by_number,
     is_float,
     iterative_compare,
     kabsch_align,
@@ -29,6 +38,159 @@ from chemsmart.utils.utils import (
     update_dict_with_existing_keys,
     write_list_of_lists_as_a_string_with_empty_line_between_lists,
 )
+
+
+class TestFileCache:
+    """file_cache had no existing coverage anywhere."""
+
+    def test_no_file_arguments_bypasses_caching(self):
+        calls = []
+
+        @file_cache()
+        def add(a, b):
+            calls.append((a, b))
+            return a + b
+
+        assert add(1, 2) == 3
+        assert add(1, 2) == 3
+        # every call actually invokes the function since there are no
+        # file-path arguments to key the cache on
+        assert len(calls) == 2
+
+    def test_caches_result_for_unchanged_file(self, tmp_path):
+        calls = []
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+
+        @file_cache()
+        def read_it(filepath):
+            calls.append(filepath)
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path)) == "hello"
+        assert read_it(str(path)) == "hello"
+        assert len(calls) == 1
+
+    def test_copy_result_true_prevents_cache_pollution(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+
+        @file_cache(copy_result=True)
+        def get_list(filepath):
+            return [1, 2, 3]
+
+        first = get_list(str(path))
+        first.append(999)
+        second = get_list(str(path))
+        assert second == [1, 2, 3]
+
+    def test_copy_result_false_leaks_mutations_into_cache(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+
+        @file_cache(copy_result=False)
+        def get_list(filepath):
+            return [1, 2, 3]
+
+        first = get_list(str(path))
+        first.append(999)
+        second = get_list(str(path))
+        assert second == [1, 2, 3, 999]
+
+    def test_unwraps_staticmethod(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+        calls = []
+
+        class Foo:
+            @file_cache()
+            @staticmethod
+            def bar(filepath):
+                calls.append(filepath)
+                return "result"
+
+        assert Foo.bar(str(path)) == "result"
+        assert Foo.bar(str(path)) == "result"
+        assert len(calls) == 1
+
+    def test_rejects_classmethod(self):
+        with pytest.raises(
+            ValueError, match="Unable to use this with classmethod"
+        ):
+
+            class Baz:
+                @file_cache()
+                @classmethod
+                def qux(cls, x):
+                    return x
+
+    def test_recently_modified_integer_mtime_uses_content_hash(self, tmp_path):
+        """When a file's mtime is a whole number of seconds and was
+        modified recently, the cache key falls back to a content hash
+        instead of the raw mtime (guards against low-resolution
+        filesystem timestamps within the same second)."""
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+        # force an integer mtime so the hash-based branch is taken
+        now_int = int(time.time())
+        os.utime(str(path), (now_int, now_int))
+        calls = []
+
+        @file_cache()
+        def read_it(filepath):
+            calls.append(filepath)
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path)) == "hello"
+        assert read_it(str(path)) == "hello"
+        assert len(calls) == 1
+
+        # changing the content (same integer mtime) invalidates the cache
+        os.utime(str(path), (now_int, now_int))
+        path.write_text("changed")
+        os.utime(str(path), (now_int, now_int))
+        assert read_it(str(path)) == "changed"
+        assert len(calls) == 2
+
+    def test_non_file_string_argument_is_ignored_for_cache_key(self, tmp_path):
+        """A plain string argument that is not an existing file path
+        (e.g. a mode flag) must be skipped when collecting
+        cache-key filenames, not treated as a file."""
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+        calls = []
+
+        @file_cache()
+        def read_it(filepath, mode):
+            calls.append((filepath, mode))
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path), "text") == "hello"
+        assert read_it(str(path), "text") == "hello"
+        assert len(calls) == 1
+
+
+class TestConvertListToFrozenList:
+    def test_gaussian_frozen_list_is_1_indexed(self):
+        molecule = SimpleNamespace(chemical_symbols=["C", "H", "H", "H"])
+        assert convert_list_to_gaussian_frozen_list([1, 3], molecule) == [
+            -1,
+            0,
+            -1,
+            0,
+        ]
+
+    def test_orca_frozen_list_is_0_indexed(self):
+        molecule = SimpleNamespace(chemical_symbols=["C", "H", "H", "H"])
+        assert convert_list_to_orca_frozen_list([0, 2], molecule) == [
+            -1,
+            0,
+            -1,
+            0,
+        ]
 
 
 class TestOrderedSet:
@@ -346,6 +508,26 @@ class TestConvertStringIndex:
         with pytest.raises(ValueError):
             convert_string_index_from_1_based_to_0_based("0")
 
+    def test_actual_int_positive_converted(self):
+        """Passing a real int (not a numeric string) takes the direct
+        int branch rather than the string parser."""
+        assert convert_string_index_from_1_based_to_0_based(5) == 4
+
+    def test_actual_int_negative_returned_as_is(self):
+        assert convert_string_index_from_1_based_to_0_based(-2) == -2
+
+    def test_actual_int_zero_raises_error(self):
+        with pytest.raises(ValueError, match="out of range"):
+            convert_string_index_from_1_based_to_0_based(0)
+
+    def test_slice_passed_through_unchanged(self):
+        s = slice(1, 5, 2)
+        assert convert_string_index_from_1_based_to_0_based(s) is s
+
+    def test_invalid_type_raises_value_error(self):
+        with pytest.raises(ValueError, match="Invalid index type"):
+            convert_string_index_from_1_based_to_0_based(1.5)
+
 
 class TestReturnObjectsFromStringIndex:
     """Tests for the return_objects_from_string_index function."""
@@ -367,6 +549,13 @@ class TestReturnObjectsFromStringIndex:
         objects = ["a", "b", "c", "d"]
         result = return_objects_from_string_index(objects, "1:3")
         assert result == ["a", "b"]
+
+    def test_list_index(self):
+        """A comma-separated index string resolves to a list of
+        indices, selecting multiple objects at once."""
+        objects = ["a", "b", "c", "d"]
+        result = return_objects_from_string_index(objects, "1,3")
+        assert result == ["a", "c"]
 
 
 class TestGetPrependStringForModred:
@@ -437,6 +626,64 @@ class TestGetPrependStringListFromModredFreeFormat:
         """Test invalid input raises error."""
         with pytest.raises(ValueError):
             get_prepend_string_list_from_modred_free_format("not a list")
+
+    def test_list_of_lists_orca_program_0_indexed(self):
+        result = get_prepend_string_list_from_modred_free_format(
+            [[1, 2], [3, 4]], program="orca"
+        )
+        assert result == ["B 0 1", "B 2 3"]
+
+    def test_list_of_lists_invalid_program_raises_value_error(self):
+        with pytest.raises(ValueError, match="Program type should be"):
+            get_prepend_string_list_from_modred_free_format(
+                [[1, 2]], program="invalid"
+            )
+
+    def test_single_list_invalid_program_crashes_with_unboundlocalerror(self):
+        """Documents BUGS_FOUND.md #49: unlike the list-of-lists branch,
+        the single-list branch has no final else-raise for an
+        unrecognized program, so it crashes with UnboundLocalError
+        instead of a clear ValueError."""
+        with pytest.raises(UnboundLocalError):
+            get_prepend_string_list_from_modred_free_format(
+                [1, 2], program="invalid"
+            )
+
+    def test_neither_list_of_lists_nor_int_list_returns_empty(self):
+        """Neither the list-of-lists nor single-int-list branch
+        matches (e.g. a list of strings), so nothing is appended."""
+        assert (
+            get_prepend_string_list_from_modred_free_format(["a", "b"]) == []
+        )
+
+
+class TestGetValueByNumber:
+    def test_returns_value_for_matching_key_number(self):
+        data = {"atom1": "C", "atom2": "H", "atom10": "O"}
+        assert get_value_by_number(2, data) == "H"
+        assert get_value_by_number(10, data) == "O"
+
+    def test_returns_none_when_no_key_matches(self):
+        data = {"atom1": "C", "atom2": "H"}
+        assert get_value_by_number(99, data) is None
+
+
+class TestGetKeyByValueAndNumber:
+    def test_returns_key_matching_both_value_and_number(self):
+        data = {"charge1": 0, "charge2": 1, "charge3": 0}
+        assert get_key_by_value_and_number(1, 2, data) == "charge2"
+
+    def test_returns_none_when_value_does_not_match(self):
+        data = {"charge1": 0, "charge2": 1}
+        assert get_key_by_value_and_number(99, 2, data) is None
+
+    def test_returns_none_when_number_does_not_match(self):
+        data = {"charge1": 0, "charge2": 1}
+        assert get_key_by_value_and_number(1, 99, data) is None
+
+    def test_skips_keys_with_no_trailing_number(self):
+        data = {"nonumberkey": 0, "charge2": 1}
+        assert get_key_by_value_and_number(1, 2, data) == "charge2"
 
 
 class TestTwoFilesHaveSimilarContents:
@@ -571,6 +818,12 @@ class TestIterativeCompare:
         result = iterative_compare([])
         assert result == []
 
+    def test_non_list_truthy_input_returns_none(self):
+        """A truthy but non-list input (e.g. a tuple) skips the
+        isinstance(list) guard entirely, implicitly returning None."""
+        assert iterative_compare((1, 2, 3)) is None
+        assert iterative_compare("abc") is None
+
 
 class TestKabschAlign:
     """Tests for the kabsch_align function."""
@@ -605,6 +858,17 @@ class TestKabschAlign:
         with pytest.raises(AssertionError):
             kabsch_align(P, Q)
 
+    def test_reflected_structure_corrects_to_proper_rotation(self):
+        """When P and Q are mirror images of each other, the raw SVD
+        solution is an improper rotation (det < 0); the function must
+        flip the last row of Vt to recover a proper (det == 1)
+        rotation matrix."""
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+        Q = P.copy()
+        Q[:, 2] *= -1
+        _, _, R, _, _ = kabsch_align(P, Q)
+        assert np.isclose(np.linalg.det(R), 1.0)
+
 
 class TestKabschAlign2:
     """Tests for the kabsch_align2 function."""
@@ -615,6 +879,46 @@ class TestKabschAlign2:
         Q = P.copy()
         aligned_P, Q_out, R, t, rmsd = kabsch_align2(P, Q)
         assert np.isclose(rmsd, 0, atol=1e-10)
+
+    def test_reflected_structure_corrects_to_proper_rotation(self):
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+        Q = P.copy()
+        Q[:, 2] *= -1
+        _, _, R, _, _ = kabsch_align2(P, Q)
+        assert np.isclose(np.linalg.det(R), 1.0)
+
+
+class TestSearchFile:
+    """search_file had no test coverage at all."""
+
+    def test_finds_existing_file(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import search_file
+
+        monkeypatch.chdir(tmp_path)
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        (subdir / "myfile.txt").write_text("hello")
+
+        path, directory = search_file("myfile.txt")
+        assert path == "./subdir/myfile.txt"
+        assert directory == "./subdir"
+
+    def test_returns_none_none_when_not_found(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import search_file
+
+        monkeypatch.chdir(tmp_path)
+        assert search_file("nonexistent.txt") == (None, None)
+
+    def test_returns_none_none_on_called_process_error(self, monkeypatch):
+        import subprocess
+
+        from chemsmart.utils.utils import search_file
+
+        def _raise(*args, **kwargs):
+            raise subprocess.CalledProcessError(1, "find")
+
+        monkeypatch.setattr("chemsmart.utils.utils.subprocess.run", _raise)
+        assert search_file("anything.txt") == (None, None)
 
 
 class TestExtractNumber:
@@ -632,3 +936,216 @@ class TestExtractNumber:
     def test_no_number_returns_inf(self):
         """Test no number returns infinity."""
         assert extract_number("abc") == float("inf")
+
+
+def _make_executable(path):
+    path.write_text("#!/bin/sh\n")
+    os.chmod(str(path), 0o755)
+
+
+class TestFindIrmsdCommand:
+    """find_irmsd_command had no direct unit coverage of its own --
+    only used as a skip-condition/mocked target elsewhere. Covers its
+    IRMSD_PATH / IRMSD_CONDA_ENV / PATH-fallback priority chain."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_irmsd_env(self, monkeypatch):
+        for key in (
+            "IRMSD_PATH",
+            "IRMSD_CONDA_ENV",
+            "CONDA_PREFIX",
+            "CONDA_PREFIX_1",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+    def test_irmsd_path_env_var_takes_priority(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        exe = tmp_path / "irmsd"
+        _make_executable(exe)
+        monkeypatch.setenv("IRMSD_PATH", str(exe))
+
+        assert find_irmsd_command() == str(exe)
+
+    def test_irmsd_path_invalid_falls_through(self, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_PATH", "/no/such/irmsd")
+        with patch("shutil.which", return_value=None):
+            assert find_irmsd_command() is None
+
+    def test_conda_env_found_via_conda_prefix_with_envs_segment(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        envs_dir = tmp_path / "envs"
+        exe = envs_dir / "myenv" / "bin" / "irmsd"
+        exe.parent.mkdir(parents=True)
+        _make_executable(exe)
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        # CONDA_PREFIX pointing at a sibling env under the same envs/ dir
+        monkeypatch.setenv("CONDA_PREFIX", str(envs_dir / "base_env"))
+
+        assert find_irmsd_command() == str(exe)
+
+    def test_conda_env_found_via_conda_prefix_without_envs_segment(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        conda_base = tmp_path / "myconda"
+        conda_base.mkdir()
+        exe = tmp_path / "envs" / "myenv" / "bin" / "irmsd"
+        exe.parent.mkdir(parents=True)
+        _make_executable(exe)
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        monkeypatch.setenv("CONDA_PREFIX", str(conda_base))
+
+        assert find_irmsd_command() == str(exe)
+
+    def test_conda_run_fallback_succeeds(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        exe = tmp_path / "irmsd"
+        _make_executable(exe)
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "somenv")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = str(exe) + "\n"
+            assert find_irmsd_command() == str(exe)
+
+    def test_conda_run_timeout_falls_through_to_path(self, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "somenv")
+        with patch(
+            "chemsmart.utils.utils.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
+        ):
+            with patch("shutil.which", return_value="/usr/bin/irmsd"):
+                assert find_irmsd_command() == "/usr/bin/irmsd"
+
+    def test_falls_back_to_path_when_no_env_vars_set(self):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        with patch("shutil.which", return_value="/usr/bin/irmsd"):
+            assert find_irmsd_command() == "/usr/bin/irmsd"
+
+    def test_returns_none_when_nothing_found(self):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        with patch("shutil.which", return_value=None):
+            assert find_irmsd_command() is None
+
+    def test_conda_prefix_path_missing_falls_through_to_common_locations(
+        self, monkeypatch
+    ):
+        """CONDA_PREFIX resolves to a real directory, but the irmsd
+        executable is not actually there -- falls through to the
+        hardcoded common conda locations list, which is then also
+        exhausted without a match."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        monkeypatch.setenv("CONDA_PREFIX", "/some/envs/base_env")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stdout = ""
+            with patch("shutil.which", return_value=None):
+                assert find_irmsd_command() is None
+
+    def test_conda_run_succeeds_but_path_not_executable_falls_through(
+        self, monkeypatch
+    ):
+        """conda run reports success and prints a path, but that path
+        does not actually exist/is not executable -- falls through to
+        the PATH fallback instead of returning it."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "somenv")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "/no/such/irmsd\n"
+            with patch("shutil.which", return_value=None):
+                assert find_irmsd_command() is None
+
+    def test_found_via_common_conda_locations_list(self, monkeypatch):
+        """No CONDA_PREFIX set, but the irmsd executable happens to
+        exist under one of the hardcoded common conda install
+        locations."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        target = os.path.join(
+            os.path.expanduser("~/anaconda3"), "envs", "myenv", "bin", "irmsd"
+        )
+
+        def fake_isfile(path):
+            return path == target
+
+        def fake_access(path, mode):
+            return path == target
+
+        with patch("os.path.isfile", side_effect=fake_isfile):
+            with patch("os.access", side_effect=fake_access):
+                assert find_irmsd_command() == target
+
+
+class TestSplineData:
+    def test_interpolates_and_sorts_by_x(self):
+        from chemsmart.utils.utils import spline_data
+
+        # deliberately out of order to exercise the sort-by-x-value step
+        x = [3, 0, 1, 4, 2]
+        y = [9, 0, 1, 16, 4]
+        new_x, new_y = spline_data(x, y, new_length=5)
+        assert len(new_x) == 5
+        assert new_x[0] == 0
+        assert new_x[-1] == 4
+        # y = x^2, so the spline should closely reproduce known points
+        assert new_y[0] == pytest.approx(0, abs=1e-6)
+        assert new_y[-1] == pytest.approx(16, abs=1e-6)
+
+
+class TestToGraphWrapper:
+    def test_delegates_to_molecule_to_graph(self):
+        from unittest.mock import MagicMock
+
+        from chemsmart.utils.utils import to_graph_wrapper
+
+        mol = MagicMock()
+        mol.to_graph.return_value = "graph-result"
+        result = to_graph_wrapper(mol, bond_cutoff_buffer=0.1, adjust_H=False)
+        assert result == "graph-result"
+        mol.to_graph.assert_called_once_with(
+            bond_cutoff_buffer=0.1, adjust_H=False
+        )
+
+
+class TestSafeMinLengths:
+    def test_returns_minimum_length_ignoring_none(self):
+        from chemsmart.utils.utils import safe_min_lengths
+
+        assert safe_min_lengths([1, 2, 3], [1, 2], None) == 2
+
+    def test_returns_zero_when_all_none(self):
+        from chemsmart.utils.utils import safe_min_lengths
+
+        assert safe_min_lengths(None, None) == 0
+
+
+class TestConvertStringToSlices:
+    def test_mixed_ranges_and_single_indices(self):
+        from chemsmart.utils.utils import convert_string_to_slices
+
+        result = convert_string_to_slices("[1-3, 6-9, 7, 8, 10]")
+        assert result == ["0:3", "5:9", 6, 7, 9]
+
+    def test_single_index_only(self):
+        from chemsmart.utils.utils import convert_string_to_slices
+
+        assert convert_string_to_slices("5") == [4]

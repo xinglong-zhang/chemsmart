@@ -457,7 +457,6 @@ class ORCAJobRunner(JobRunner):
                         logger.error(
                             f"Failed to copy file {file} to {job.folder}: {e}"
                         )
-                        raise
 
 
 class FakeORCAJobRunner(ORCAJobRunner):

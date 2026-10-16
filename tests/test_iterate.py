@@ -243,6 +243,151 @@ def test_iterate_template_generation(tmpdir, iterate_template_file):
     assert len(parsed["substituents"]) == 1
 
 
+def test_generate_template_adds_toml_suffix_when_missing(tmpdir):
+    from chemsmart.utils.iterate import generate_template
+
+    output_path = str(tmpdir / "no_suffix")
+    result = generate_template(output_path)
+    assert result == output_path + ".toml"
+    assert os.path.exists(result)
+
+
+def test_generate_template_raises_when_exists_without_overwrite(tmpdir):
+    from chemsmart.utils.iterate import generate_template
+
+    output_path = str(tmpdir / "existing.toml")
+    generate_template(output_path)
+    with pytest.raises(FileExistsError, match="already exists"):
+        generate_template(output_path, overwrite=False)
+
+    # overwrite=True should succeed without raising
+    generate_template(output_path, overwrite=True)
+
+
+class TestParseIndexStringDirect:
+    """Direct coverage for chemsmart.utils.iterate._parse_index_string
+    branches the full-CLI TOML-based tests don't reach (e.g. an
+    unquoted TOML integer takes the bare-int branch directly, rather
+    than the quoted-string branch the existing test cases use)."""
+
+    def test_bare_int_zero_or_negative_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import _parse_index_string
+
+        with pytest.raises(click.BadParameter, match="must be positive"):
+            _parse_index_string(0, "skeleton", 0, "link_index")
+
+    def test_bare_positive_int_wrapped_in_list(self):
+        from chemsmart.utils.iterate import _parse_index_string
+
+        assert _parse_index_string(5, "skeleton", 0, "link_index") == [5]
+
+    def test_unsupported_type_raises_bad_parameter(self):
+        """A value that's neither None/int/str/list-of-int (e.g. a
+        float) falls through to the final catch-all BadParameter."""
+        import click
+
+        from chemsmart.utils.iterate import _parse_index_string
+
+        with pytest.raises(click.BadParameter, match="invalid type"):
+            _parse_index_string(3.14, "skeleton", 0, "link_index")
+
+    def test_malformed_range_string_wrapped_as_bad_parameter(self):
+        import click
+
+        from chemsmart.utils.iterate import _parse_index_string
+
+        with pytest.raises(click.BadParameter, match="Invalid format"):
+            _parse_index_string("abc-def", "skeleton", 0, "link_index")
+
+
+class TestValidateConfigDirect:
+    """Direct coverage for validate_config's dict-shape branches that
+    are awkward or impossible to express as literal TOML content."""
+
+    def test_unknown_top_level_key_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import validate_config
+
+        with pytest.raises(click.BadParameter, match="Unknown top-level"):
+            validate_config({"bogus_key": []}, "f.toml")
+
+    def test_none_skeletons_normalizes_to_empty_list(self):
+        from chemsmart.utils.iterate import validate_config
+
+        result = validate_config({"skeletons": None}, "f.toml")
+        assert result["skeletons"] == []
+
+    def test_non_list_skeletons_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import validate_config
+
+        with pytest.raises(click.BadParameter, match="'skeletons' must"):
+            validate_config({"skeletons": "not-a-list"}, "f.toml")
+
+    def test_none_substituents_normalizes_to_empty_list(self):
+        from chemsmart.utils.iterate import validate_config
+
+        result = validate_config({"substituents": None}, "f.toml")
+        assert result["substituents"] == []
+
+    def test_non_list_substituents_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import validate_config
+
+        with pytest.raises(click.BadParameter, match="'substituents' must"):
+            validate_config({"substituents": "not-a-list"}, "f.toml")
+
+
+class TestValidateEntryDirect:
+    """Direct coverage for _validate_skeleton_entry/
+    _validate_substituent_entry's None/non-dict entry branches."""
+
+    def test_none_skeleton_entry_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import _validate_skeleton_entry
+
+        with pytest.raises(click.BadParameter, match="empty/null"):
+            _validate_skeleton_entry(None, 0, "f.toml")
+
+    def test_non_dict_skeleton_entry_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import _validate_skeleton_entry
+
+        with pytest.raises(click.BadParameter, match="must be a dictionary"):
+            _validate_skeleton_entry(["a"], 0, "f.toml")
+
+    def test_none_substituent_entry_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import _validate_substituent_entry
+
+        with pytest.raises(click.BadParameter, match="empty/null"):
+            _validate_substituent_entry(None, 0, "f.toml")
+
+    def test_non_dict_substituent_entry_raises(self):
+        import click
+
+        from chemsmart.utils.iterate import _validate_substituent_entry
+
+        with pytest.raises(click.BadParameter, match="must be a dictionary"):
+            _validate_substituent_entry(["a"], 0, "f.toml")
+
+    def test_falsy_label_skips_syntax_check(self):
+        """A None or empty-string label short-circuits before the
+        regex check -- neither should raise."""
+        from chemsmart.utils.iterate import _rule_label_syntax
+
+        _rule_label_syntax({"label": None}, 0, "Skeleton", "f.toml")
+        _rule_label_syntax({"label": ""}, 0, "Skeleton", "f.toml")
+
+
 def test_iterate_validation_fails_on_invalid_link_index(
     iterate_invalid_skeleton_link_index_config_file,
 ):

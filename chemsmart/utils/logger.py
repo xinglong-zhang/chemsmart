@@ -134,6 +134,7 @@ def create_logger(
     level = logging.DEBUG if debug else logging.INFO
     logger.setLevel(level)
     logger.handlers = []
+    logger.filters = []
     formatter = logging.Formatter(
         "{asctime} - {levelname:6s} - [{name}] {message}",
         style="{",

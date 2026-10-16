@@ -1406,6 +1406,85 @@ class TestORCAInputWriter:
         copied = os.path.join(out_dir, "custom.cosmorsxyz")
         assert os.path.isfile(copied)
 
+    def test_solventfilename_derived_cosmorsxyz_missing_skips_copy(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """solventfilename points to a non-.cosmorsxyz file, but the
+        model isn't cosmors, so _write_solvent_block never creates the
+        derived .cosmorsxyz file -- the copy step must silently skip
+        it instead of erroring."""
+        import os
+
+        sf_path = os.path.join(str(tmpdir), "water.xyz")
+        open(sf_path, "w").close()
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cpcm"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_sf_missing_derived",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        out_dir = str(tmpdir.join("out5"))
+        orca_writer.write(target_directory=out_dir)
+
+        assert os.path.isfile(
+            os.path.join(out_dir, "orca_sf_missing_derived.inp")
+        )
+        assert not os.path.isfile(os.path.join(out_dir, "water.cosmorsxyz"))
+
+    def test_solventfilename_same_source_and_dest_skips_copy(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_yaml_settings_orca_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Writing directly into the same directory that already holds
+        the .cosmorsxyz file must not try to copy it onto itself."""
+        import os
+
+        sf_path = os.path.join(str(tmpdir), "same_dir.cosmorsxyz")
+        open(sf_path, "w").close()
+
+        project_settings = ORCAProjectSettings.from_project(
+            orca_yaml_settings_orca_project_name
+        )
+        settings = project_settings.sp_settings()
+        settings.charge = 0
+        settings.multiplicity = 1
+        settings.solvent_model = "cosmors"
+        settings.solventfilename = sf_path
+
+        job = ORCASinglePointJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label="orca_sf_same_dir",
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        orca_writer = ORCAInputWriter(job=job)
+        # Write into the same directory that already contains sf_path.
+        orca_writer.write(target_directory=str(tmpdir))
+
+        assert os.path.isfile(
+            os.path.join(str(tmpdir), "orca_sf_same_dir.inp")
+        )
+        # Still exactly one copy of the file -- no self-copy occurred.
+        assert os.path.isfile(sf_path)
+
     def test_solventfilename_not_written_for_non_cosmors_model(
         self,
         tmpdir,
