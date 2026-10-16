@@ -589,7 +589,9 @@ class GaussianFileMixin(FileMixin):
 
             route_lines = [line]
             for continuation in lines[i + 1 :]:
-                if not continuation or continuation.startswith("------"):
+                if not continuation or continuation.startswith(
+                    ("------", "#")
+                ):
                     break
                 route_lines.append(continuation)
 

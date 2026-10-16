@@ -916,24 +916,27 @@ class Gaussian16Output(GaussianFileMixin):
 
     def _get_route(self):
         lines = self.contents
+        stable_route = None
         for i, line in enumerate(lines):
             if not line.startswith("#"):
                 continue
 
             route_lines = [line]
             for continuation in lines[i + 1 :]:
-                if not continuation or continuation.startswith("------"):
+                if not continuation or continuation.startswith(
+                    ("------", "#")
+                ):
                     break
                 route_lines.append(continuation)
 
             route = "".join(route_lines).lower()
-            # ``stable=opt`` is the preliminary Link stage. ``route_string``
-            # represents the subsequent calculation used to derive jobtype
-            # and other calculation settings.
             if "stable=opt" in route:
+                # Prefer a subsequent calculation route for Link jobs, but
+                # retain the stable route when no subsequent route exists.
+                stable_route = route
                 continue
             return route
-        return None
+        return stable_route
 
     def _get_modredundant_group(self):
         if "modred" in self.route_string:
