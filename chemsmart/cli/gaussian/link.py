@@ -173,9 +173,11 @@ def link(
     step_size_max,
     restart,
     mecp_numfreq,
+    hessian_method,
     hess_step_size,
     follow_seam_imaginary_mode,
     seam_mode_displacement,
+    seam_mode_max_steps,
     **kwargs,
 ):
     """CLI subcommand for running Gaussian link jobs."""
@@ -209,9 +211,11 @@ def link(
             step_size_max=step_size_max,
             restart=restart,
             mecp_numfreq=mecp_numfreq,
+            hessian_method=hessian_method,
             hess_step_size=hess_step_size,
             follow_seam_imaginary_mode=follow_seam_imaginary_mode,
             seam_mode_displacement=seam_mode_displacement,
+            seam_mode_max_steps=seam_mode_max_steps,
             **kwargs,
         )
 
@@ -282,6 +286,7 @@ def link(
     if jobtype is None:
         label = label
     else:
+        label = ctx.obj.get("default_label_base") or label
         label += f"_{jobtype}"
         if jobtype.lower() == "irc":
             label = update_irc_label(
@@ -289,8 +294,7 @@ def link(
                 direction=link_settings.direction,
                 flat_irc=link_settings.flat_irc,
             )
-        else:
-            label += "_link"
+        label += "_link"
 
     logger.debug(f"Label for job: {label}")
 
@@ -340,9 +344,11 @@ def _link_mecp(
     step_size_max,
     restart,
     mecp_numfreq,
+    hessian_method,
     hess_step_size,
     follow_seam_imaginary_mode,
     seam_mode_displacement,
+    seam_mode_max_steps,
     **kwargs,
 ):
     """
@@ -450,9 +456,11 @@ def _link_mecp(
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
     mecp_settings.restart = restart
+    mecp_settings.hessian_method = hessian_method
     mecp_settings.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
     mecp_settings.follow_seam_imaginary_mode = follow_seam_imaginary_mode
     mecp_settings.seam_mode_displacement = seam_mode_displacement
+    mecp_settings.seam_mode_max_steps = seam_mode_max_steps
     if hess_step_size is not None:
         mecp_settings.hess_step_size = hess_step_size
 
@@ -463,7 +471,8 @@ def _link_mecp(
     molecule = ctx.obj["molecules"][-1]
     label = (
         add_mecp_method_suffix(
-            ctx.obj["label"], mecp_settings.step_size_method
+            ctx.obj.get("default_label_base") or ctx.obj["label"],
+            mecp_settings.step_size_method,
         )
         + "_link"
     )

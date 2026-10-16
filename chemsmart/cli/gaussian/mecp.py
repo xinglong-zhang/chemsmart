@@ -11,6 +11,7 @@ from chemsmart.cli.gaussian.mecp_options import (
     click_mecp_step_size_method_option,
 )
 from chemsmart.cli.job import click_job_options
+from chemsmart.cli.mecp import click_mecp_only_option
 from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
@@ -18,7 +19,49 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("mecp", cls=MyCommand)
+class MECPCommand(MyCommand):
+    """Accept workflow tokens while recording ordinary options for submission."""
+
+    def parse_args(self, ctx, args):
+        ctx.allow_extra_args = True
+        remaining = super().parse_args(ctx, args)
+        if len(remaining) > 1 or any(
+            token.lower() not in {"numfreq", "anafreq", "followseam"}
+            for token in remaining
+        ):
+            raise click.UsageError(
+                "Choose one MECP task: numfreq, anafreq or followseam.", ctx
+            )
+        if remaining:
+            task = remaining[0].lower()
+            ctx.params["mecp_numfreq"] = True
+            if task in {"numfreq", "anafreq"}:
+                method = "analytic" if task == "anafreq" else "numerical"
+                source = ctx.get_parameter_source("hessian_method")
+                if (
+                    source == click.core.ParameterSource.COMMANDLINE
+                    and ctx.params["hessian_method"] != method
+                ):
+                    raise click.UsageError(
+                        "Frequency task conflicts with --hessian-method.", ctx
+                    )
+                ctx.params["hessian_method"] = method
+            if task == "followseam":
+                ctx.params["follow_seam_imaginary_mode"] = True
+        if ctx.params["only"] and (
+            not ctx.params["mecp_numfreq"]
+            or ctx.params["follow_seam_imaginary_mode"]
+        ):
+            raise click.UsageError(
+                "--only requires numfreq or anafreq and cannot be combined with followseam.",
+                ctx,
+            )
+        ctx.args = []
+        return []
+
+
+@gaussian.command("mecp", cls=MECPCommand)
+@click_mecp_only_option
 @click_job_options
 @click_mecp_state_options
 @click.option(
@@ -37,7 +80,7 @@ logger = logging.getLogger(__name__)
     "--max-steps",
     type=int,
     default=None,
-    help="Maximum number of MECP optimization steps (steps are 1-indexed; labels use 6-digit zero-padding).",
+    help="Maximum number of MECP optimization steps (steps are 1-indexed without zero-padding).",
 )
 @click.option(
     "--step-size",
@@ -153,16 +196,20 @@ def mecp(
     step_size_min,
     step_size_max,
     mecp_numfreq,
+    hessian_method,
     hess_step_size,
     follow_seam_imaginary_mode,
     seam_mode_displacement,
     seam_mode_max_steps,
     restart,
+    only,
     skip_completed,
     **kwargs,
 ):
     """
-    CLI subcommand for running Gaussian Minimum Energy Cross Point (MECP) jobs.
+    Run Gaussian MECP optimization, optionally followed by numfreq, anafreq or followseam.
+
+    Use numfreq --only or anafreq --only to analyze an existing crossing without optimization.
     """
 
     # get jobrunner for running Gaussian MECP jobs
@@ -267,7 +314,9 @@ def mecp(
         mecp_settings.step_size_min = step_size_min
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
+    mecp_settings.hessian_method = hessian_method
     mecp_settings.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
+    mecp_settings.mecp_numfreq_only = only
     mecp_settings.follow_seam_imaginary_mode = follow_seam_imaginary_mode
     mecp_settings.seam_mode_displacement = seam_mode_displacement
     mecp_settings.seam_mode_max_steps = seam_mode_max_steps

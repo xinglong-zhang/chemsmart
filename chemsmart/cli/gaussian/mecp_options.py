@@ -1,43 +1,14 @@
-"""Shared Click options for MECP entry points."""
+"""Gaussian MECP options and compatibility exports for shared state options."""
 
 import click
 
-
-def click_mecp_state_options(function):
-    """Apply the common charge and multiplicity options for two MECP states."""
-    options = (
-        click.option(
-            "--multiplicity1",
-            "-m1",
-            type=int,
-            default=None,
-            help="Spin multiplicity for state 1.",
-        ),
-        click.option(
-            "--multiplicity2",
-            "-m2",
-            type=int,
-            default=None,
-            help="Spin multiplicity for state 2. Defaults to multiplicity1 + 2.",
-        ),
-        click.option(
-            "--charge1",
-            "-c1",
-            type=int,
-            default=None,
-            help="Charge for state 1.",
-        ),
-        click.option(
-            "--charge2",
-            "-c2",
-            type=int,
-            default=None,
-            help="Charge for state 2. Defaults to charge1.",
-        ),
-    )
-    for option in reversed(options):
-        function = option(function)
-    return function
+from chemsmart.cli.mecp import (
+    click_mecp_follow_controls,
+    click_mecp_hessian_options,
+)
+from chemsmart.cli.mecp import (
+    click_mecp_state_options as click_mecp_state_options,
+)
 
 
 def add_mecp_method_suffix(label, method):
@@ -78,6 +49,10 @@ def click_mecp_restart_option(function):
 
 def click_mecp_frequency_options(function):
     """Apply the common post-MECP Hessian-analysis options."""
+    function = click_mecp_hessian_options(
+        method_default="numerical", step_default=None
+    )(function)
+    function = click_mecp_follow_controls(function)
     options = (
         click.option(
             "--mecp-numfreq/--no-mecp-numfreq",
@@ -90,42 +65,14 @@ def click_mecp_frequency_options(function):
             ),
         ),
         click.option(
-            "--hess-step-size",
-            type=float,
-            default=None,
-            help=(
-                "Finite-difference step size (Bohr) for MECP Hessian "
-                "analysis (default: 1e-3)."
-            ),
-        ),
-        click.option(
             "--follow-seam-imaginary-mode/--no-follow-seam-imaginary-mode",
+            "--followseam",
             default=False,
             show_default=True,
             help=(
                 "If the projected MECP Hessian has a significant imaginary "
                 "mode, displace in both directions, reoptimize both MECPs, "
                 "and retain the lower seam minimum. Implies --mecp-numfreq."
-            ),
-        ),
-        click.option(
-            "--seam-mode-displacement",
-            type=click.FloatRange(min=0.0, min_open=True),
-            default=0.05,
-            show_default=True,
-            help=(
-                "Cartesian norm (Angstrom) of each +/- projected-mode "
-                "displacement used by --follow-seam-imaginary-mode."
-            ),
-        ),
-        click.option(
-            "--seam-mode-max-steps",
-            type=click.IntRange(min=1),
-            default=30,
-            show_default=True,
-            help=(
-                "Maximum constrained mode-following steps in each +/- "
-                "direction."
             ),
         ),
     )
