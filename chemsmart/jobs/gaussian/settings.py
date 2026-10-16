@@ -14,6 +14,7 @@ import copy
 import inspect
 import logging
 import os
+import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
@@ -2180,6 +2181,7 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         # seam-minimum verification via effective Hessian analysis
         mecp_numfreq=False,
         mecp_numfreq_only=False,
+        hessian_method="numerical",
         hess_step_size=1.0e-3,  # Bohr; finite-difference displacement for numerical Hessian
         follow_seam_imaginary_mode=False,
         seam_mode_displacement=0.05,
@@ -2261,6 +2263,9 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.mecp_numfreq = (
             mecp_numfreq or follow_seam_imaginary_mode or mecp_numfreq_only
         )
+        if hessian_method not in {"numerical", "analytic"}:
+            raise ValueError("hessian_method must be numerical or analytic")
+        self.hessian_method = hessian_method
         self.hess_step_size = hess_step_size
         self.follow_seam_imaginary_mode = follow_seam_imaginary_mode
         self.seam_mode_displacement = seam_mode_displacement
@@ -2405,7 +2410,7 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         index = 0
         while index < len(tokens):
             token = tokens[index]
-            keyword = token.split("=", 1)[0].lower()
+            keyword = re.split(r"[=(]", token, maxsplit=1)[0].lower()
             if keyword in names:
                 # Consume a value split off by whitespace around '='.
                 if "=" in token:
@@ -2417,6 +2422,10 @@ class GaussianLinkJobSettings(GaussianJobSettings):
                     index += 1
                     if tokens[index] == "=" and index + 1 < len(tokens):
                         index += 1
+                elif index + 1 < len(tokens) and tokens[index + 1].startswith(
+                    "("
+                ):
+                    index += 1
             else:
                 kept.append(token)
             index += 1

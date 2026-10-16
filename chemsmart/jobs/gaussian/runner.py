@@ -19,7 +19,8 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy
+from shutil import copy, which
+from tempfile import TemporaryDirectory
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -356,6 +357,51 @@ class GaussianJobRunner(JobRunner):
         exe = self.executable.get_executable()
         logger.info(f"Gaussian executable: {exe}")
         return exe
+
+    def format_hessian_checkpoint(self, job):
+        """Convert and validate a fresh Hessian checkpoint beside its log."""
+        from chemsmart.io.gaussian.hessian import read_fchk_hessian
+
+        if not os.path.isfile(job.chkfile):
+            raise RuntimeError(f"Missing analytic checkpoint: {job.chkfile}")
+        env = self._update_os_environ(job)
+        executable = self._get_executable()
+        resolved = which(executable, path=env.get("PATH")) or executable
+        formchk = os.path.join(
+            os.path.dirname(os.path.abspath(resolved)), "formchk"
+        )
+        if not os.access(formchk, os.X_OK):
+            formchk = which("formchk", path=env.get("PATH"))
+        if not formchk:
+            raise RuntimeError(
+                "Gaussian formchk was not found; cannot read analytic Hessian."
+            )
+        destination = os.path.join(job.folder, f"{job.label}.fchk")
+        # A failed conversion must never reuse an older formatted checkpoint.
+        with TemporaryDirectory(
+            prefix="formchk-", dir=job.folder
+        ) as temporary:
+            output = os.path.join(temporary, "hessian.fchk")
+            try:
+                subprocess.run(
+                    [
+                        formchk,
+                        os.path.abspath(job.chkfile),
+                        os.path.abspath(output),
+                    ],
+                    cwd=job.folder,
+                    env=env,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except (OSError, subprocess.CalledProcessError) as error:
+                raise RuntimeError(
+                    f"formchk failed for {job.label}: {error}"
+                ) from error
+            hessian = read_fchk_hessian(output, len(job.molecule.symbols))
+            os.replace(output, destination)
+        return hessian
 
     def _postrun(self, job):
         """

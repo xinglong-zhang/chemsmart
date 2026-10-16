@@ -9,13 +9,19 @@ import logging
 import os
 import re
 from functools import partial
+from shutil import copyfile
+from tempfile import TemporaryDirectory
 from typing import Type
 
 import numpy as np
 from ase import units
 
 from chemsmart.jobs.gaussian.job import GaussianGeneralJob, GaussianJob
-from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
+from chemsmart.jobs.gaussian.settings import (
+    GaussianJobSettings,
+    GaussianLinkJobSettings,
+    GaussianMECPJobSettings,
+)
 from chemsmart.utils.constants import (
     MECP_FREQUENCY_HEADER,
     MECP_FREQUENCY_TERMINATION_MARKER,
@@ -71,6 +77,7 @@ _MECP_ONLY_KEYS = frozenset(
         "mecp_numfreq",
         "mecp_numfreq_only",
         "hess_step_size",
+        "hessian_method",
         "follow_seam_imaginary_mode",
         "seam_mode_displacement",
         "seam_mode_max_steps",
@@ -144,6 +151,11 @@ class GaussianMECPJob(GaussianJob):
             jobrunner=jobrunner,
             **kwargs,
         )
+        self._reset_execution_state()
+
+    def _reset_execution_state(self):
+        """Initialize shared state for optimization and frequency workflows."""
+        self._state_checkpoint_files = {}
         self._last_spin_squared = {"A": None, "B": None}
 
     @classmethod
@@ -162,11 +174,51 @@ class GaussianMECPJob(GaussianJob):
 
     @property
     def numfreq_folder(self):
-        return os.path.join(self.folder, f"{self.label}_numfreq")
+        kind = (
+            "anafreq"
+            if getattr(
+                getattr(self, "settings", None), "hessian_method", "numerical"
+            )
+            == "analytic"
+            else "numfreq"
+        )
+        return os.path.join(self.folder, f"{self.label}_{kind}")
 
     @property
     def final_report_file(self):
         return os.path.join(self.folder, f"{self.label}_final_report.log")
+
+    @property
+    def final_gaussian_logs(self):
+        """Convenient single-state outputs at the selected final geometry."""
+        label = (
+            self.label
+            if self.label.lower().endswith("_mecp")
+            else f"{self.label}_mecp"
+        )
+        return {
+            "A": os.path.join(self.folder, f"{label}.log"),
+            "B": os.path.join(self.folder, f"{label}_B.log"),
+        }
+
+    def _export_final_gaussian_logs(self, sources):
+        """Copy the selected geometry's original logs without rewriting them."""
+        for state in ("A", "B"):
+            if not os.path.isfile(sources[state]):
+                raise RuntimeError(
+                    f"Missing final state {state} Gaussian output: {sources[state]}"
+                )
+        with TemporaryDirectory(
+            prefix="mecp-export-", dir=self.folder
+        ) as temporary:
+            for state in ("A", "B"):
+                copyfile(
+                    sources[state], os.path.join(temporary, f"{state}.log")
+                )
+            for state, destination in self.final_gaussian_logs.items():
+                os.replace(
+                    os.path.join(temporary, f"{state}.log"), destination
+                )
 
     @property
     def trajectory_file(self):
@@ -257,6 +309,26 @@ class GaussianMECPJob(GaussianJob):
 
     def _job_is_complete(self):
         """Check MECP completion by looking for a 'Converged' marker in the report file."""
+        if self.settings.mecp_numfreq:
+            frequency_file = os.path.join(
+                self.folder, f"{self.label}_mecp_freq.log"
+            )
+            if os.path.isfile(frequency_file):
+                with open(frequency_file, encoding="utf-8") as stream:
+                    method_lines = [
+                        line.strip()
+                        for line in stream
+                        if line.startswith("hessian_method=")
+                    ]
+                saved_method = (
+                    method_lines[-1].split("=", 1)[1]
+                    if method_lines
+                    else "numerical"
+                )
+                if saved_method != getattr(
+                    self.settings, "hessian_method", "numerical"
+                ):
+                    return False
         if getattr(self.settings, "mecp_numfreq_only", False):
             if not os.path.isfile(self.final_report_file):
                 return False
@@ -366,7 +438,14 @@ class GaussianMECPJob(GaussianJob):
         )
         return state_settings
 
-    def _run_state(self, positions_bohr, step_idx, state, checkpoint_tag=None):
+    def _run_state(
+        self,
+        positions_bohr,
+        step_idx,
+        state,
+        checkpoint_tag=None,
+        analytic=False,
+    ):
         if state == "A":
             charge = self.settings.charge_a
             multiplicity = self.settings.multiplicity_a
@@ -384,6 +463,46 @@ class GaussianMECPJob(GaussianJob):
             title=f"{title} step {step_idx}",
             state=state,
         )
+        if analytic:
+            if settings.input_string:
+                raise ValueError(
+                    "anafreq cannot use a literal input_string; use structured settings."
+                )
+            # The reference force job has already stabilized the wavefunction
+            # in link mode. Read that checkpoint in a fixed-geometry freq job.
+            settings = GaussianJobSettings(
+                **{
+                    k: v
+                    for k, v in settings.__dict__.items()
+                    if not k.startswith("_")
+                    and k not in _MECP_ONLY_KEYS
+                    and k not in {"link", "link_route"}
+                }
+            )
+            settings.jobtype = "sp"
+            settings.freq = False
+            settings.numfreq = False
+            settings.dieze_tag = "p"
+            settings.forces = False
+            settings.stable = None
+            if settings.route_to_be_written:
+                route = GaussianLinkJobSettings._without_route_options(
+                    settings.route_to_be_written,
+                    {"freq", "force", "opt", "irc", "stable"},
+                )
+                route = re.sub(r"^\s*#(?:[pnt])?\s*", "", route, flags=re.I)
+                settings.route_to_be_written = (
+                    "#p "
+                    + self._with_required_nosymm(route)
+                    + " freq=analytic"
+                )
+            settings.additional_route_parameters = (
+                GaussianLinkJobSettings._without_route_options(
+                    settings.additional_route_parameters or "",
+                    {"freq", "force", "opt", "irc", "stable"},
+                )
+                + " freq=analytic"
+            )
         if isinstance(step_idx, str):
             state_label = f"{self.label}_{step_idx}_{state}"
         else:
@@ -392,6 +511,25 @@ class GaussianMECPJob(GaussianJob):
 
         checkpoint_key = (checkpoint_tag, state)
         oldchkfile = self._state_checkpoint_files.get(checkpoint_key)
+        if analytic and (not oldchkfile or not os.path.isfile(oldchkfile)):
+            raise RuntimeError(
+                f"Analytic Hessian for state {state} requires the reference checkpoint. "
+                "Enable Gaussian checkpoint writing and rerun the reference calculation."
+            )
+        if analytic and oldchkfile:
+            settings.additional_route_parameters = (
+                GaussianLinkJobSettings._without_route_options(
+                    settings.additional_route_parameters or "", {"guess"}
+                )
+                + " guess=read"
+            )
+            if settings.route_to_be_written:
+                settings.route_to_be_written = (
+                    GaussianLinkJobSettings._without_route_options(
+                        settings.route_to_be_written, {"guess"}
+                    )
+                    + " guess=read"
+                )
         if not oldchkfile and not self.settings.use_link:
             route = settings.additional_route_parameters or ""
             settings.additional_route_parameters = (
@@ -406,7 +544,7 @@ class GaussianMECPJob(GaussianJob):
             "jobrunner": self.jobrunner,
             "skip_completed": False,
             "scratch_parent_folder": (
-                f"{self.label}_numfreq"
+                os.path.basename(self.numfreq_folder)
                 if checkpoint_tag == "check"
                 else f"{self.label}_optimization"
             ),
@@ -415,7 +553,7 @@ class GaussianMECPJob(GaussianJob):
             ),
         }
 
-        if self.settings.use_link:
+        if self.settings.use_link and not analytic:
             from chemsmart.jobs.gaussian.link import GaussianLinkJob
 
             job = GaussianLinkJob(**job_kwargs)
@@ -451,6 +589,12 @@ class GaussianMECPJob(GaussianJob):
         self._last_spin_squared[state] = output.spin_squared_after_annihilation
         if os.path.isfile(job.chkfile):
             self._state_checkpoint_files[checkpoint_key] = job.chkfile
+        if analytic:
+            if not hasattr(self, "_analytic_hessians"):
+                self._analytic_hessians = {}
+            self._analytic_hessians[state] = (
+                self.jobrunner.format_hessian_checkpoint(job)
+            )
         return energy, gradient
 
     def _write_trajectory_frame(self, positions_bohr, step_idx):
@@ -813,6 +957,7 @@ class GaussianMECPJob(GaussianJob):
         )
 
     def _run(self, **kwargs):
+        self._reset_execution_state()
         if getattr(self.settings, "mecp_numfreq_only", False):
             return self._run_numfreq_only()
         positions_bohr = (
@@ -834,9 +979,6 @@ class GaussianMECPJob(GaussianJob):
         prev_positions_bfgs = None
         self.steps_folder = self.optimization_folder
         os.makedirs(self.steps_folder, exist_ok=True)
-        self._state_checkpoint_files = {}
-        self._last_spin_squared = {"A": None, "B": None}
-
         start_step = 1
         restarting = self.settings.restart and os.path.isfile(self.state_file)
         if restarting:
@@ -1033,6 +1175,20 @@ class GaussianMECPJob(GaussianJob):
                     )
                 raise
 
+        if not getattr(self, "_is_seam_follow_branch", False):
+            sources = (
+                seam_result["gaussian_output_files"]
+                if seam_result is not None
+                else {
+                    state: os.path.join(
+                        self.optimization_folder,
+                        f"{self.label}_step{converged_step}_{state}.log",
+                    )
+                    for state in ("A", "B")
+                }
+            )
+            self._export_final_gaussian_logs(sources)
+
         with open(self.report_file, "a", encoding="utf-8") as report:
             report.write(
                 f"Initial MECP optimization converged at step "
@@ -1091,7 +1247,10 @@ class GaussianMECPJob(GaussianJob):
         result = self.verify_seam_minimum(write_frequencies=True)
         self._last_seam_result = result
         with open(self.final_report_file, "w", encoding="utf-8") as report:
-            report.write("CHEMSMART MECP numfreq only\n")
+            report.write("CHEMSMART MECP frequency-only analysis\n")
+            report.write(
+                f"hessian_method={getattr(self.settings, 'hessian_method', 'numerical')}\n"
+            )
             report.write("optimization=SKIPPED\n")
             report.write(f"energy_A={result['energy_a']:+.12f} Hartree\n")
             report.write(f"energy_B={result['energy_b']:+.12f} Hartree\n")
@@ -1131,7 +1290,14 @@ class GaussianMECPJob(GaussianJob):
         }
         with open(self.final_report_file, "w", encoding="utf-8") as report:
             report.write("CHEMSMART final MECP result\n")
+            report.write(
+                f"hessian_method={getattr(self.settings, 'hessian_method', 'numerical')}\n"
+            )
             report.write(f"label={self.label}\n")
+            for state, path in self.final_gaussian_logs.items():
+                report.write(
+                    f"gaussian_output_{state}={os.path.basename(path)}\n"
+                )
             report.write(f"initial_optimization_steps={initial_steps}\n")
             macro_steps = getattr(self, "_selected_seam_follow_macro_steps", 0)
             report.write(f"seam_follow_macro_steps={macro_steps}\n")
@@ -1394,7 +1560,8 @@ class GaussianMECPJob(GaussianJob):
         Args:
             positions_bohr (np.ndarray): Current geometry, shape (n_atoms, 3).
             h (float): Finite-difference step size in Bohr.
-            step_prefix (int): First check-specific sub-job step index.
+            step_prefix (int): Legacy argument retained for API compatibility.
+                File labels identify atoms, Cartesian axes, and displacement signs.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: Symmetrised ``(H_A, H_B)`` matrices,
@@ -1416,13 +1583,11 @@ class GaussianMECPJob(GaussianJob):
             pos_minus = pos.copy()
             pos_minus[atom_idx, coord_idx] -= h
 
-            if macro_step is None:
-                step_p = step_prefix + 2 * j
-                step_m = step_prefix + 2 * j + 1
-            else:
-                coord = f"macro{macro_step:02d}_check_coord{j + 1:02d}"
-                step_p = f"{coord}_plus"
-                step_m = f"{coord}_minus"
+            prefix = "" if macro_step is None else f"macro{macro_step:02d}_"
+            axis = "xyz"[coord_idx]
+            coord = f"{prefix}hessian_a{atom_idx + 1}_{axis}"
+            step_p = f"{coord}_plus"
+            step_m = f"{coord}_minus"
 
             _, g_A_plus = self._run_state(
                 pos_plus, step_p, "A", checkpoint_tag="check"
@@ -1443,6 +1608,33 @@ class GaussianMECPJob(GaussianJob):
         H_A = (H_A + H_A.T) / 2
         H_B = (H_B + H_B.T) / 2
         return H_A, H_B
+
+    def _compute_analytic_hessians(self, positions_bohr, macro_step=None):
+        """Obtain both state Hessians using their reference checkpoints."""
+        prefix = "" if macro_step is None else f"macro{macro_step:02d}_"
+        self._analytic_hessians = {}
+        for state in ("A", "B"):
+            self._run_state(
+                positions_bohr,
+                f"{prefix}hessian_analytic",
+                state,
+                checkpoint_tag="check",
+                analytic=True,
+            )
+        return self._analytic_hessians["A"], self._analytic_hessians["B"]
+
+    def _get_state_hessians(
+        self, positions_bohr, h, step_prefix, macro_step=None
+    ):
+        """Single Hessian-source dispatch for all seam verification calls."""
+        if getattr(self.settings, "hessian_method", "numerical") == "analytic":
+            return self._compute_analytic_hessians(positions_bohr, macro_step)
+        return self._compute_numerical_hessian(
+            positions_bohr,
+            h=h,
+            step_prefix=step_prefix,
+            macro_step=macro_step,
+        )
 
     def verify_seam_minimum(
         self,
@@ -1471,17 +1663,16 @@ class GaussianMECPJob(GaussianJob):
 
         .. note::
 
-            This analysis requires **4 × 3N** additional Gaussian sub-jobs
-            (see :meth:`_compute_numerical_hessian`).  Call it only on the
-            converged geometry.  Trigger automatically via the
-            ``--mecp-numfreq`` CLI flag.
+            Numerical analysis requires 12N displaced force jobs plus two
+            reference jobs. Analytic analysis uses two reference force jobs
+            and two fixed-geometry analytic Hessian jobs. Both routes share
+            the same constrained projection and mass weighting.
 
         Args:
             h (float, optional): Finite-difference step size in Bohr.
                 Defaults to ``settings.hess_step_size`` (1 × 10⁻³ Bohr).
-            step_prefix (int, optional): Starting check-specific sub-job step
-                index (default: 1). The ``check`` name component prevents
-                clashes with normal MECP steps.
+            step_prefix (int, optional): Legacy report metadata (default: 1).
+                Sub-job labels use atom and Cartesian-axis indices.
             write_frequencies (bool, optional): Write mass-weighted projected
                 frequencies and normal modes in addition to the seam check.
 
@@ -1503,9 +1694,9 @@ class GaussianMECPJob(GaussianJob):
             f"verify_seam_minimum: computing gradient difference at {self.label}"
         )
         reference_step = (
-            step_prefix
+            "hessian_reference"
             if macro_step is None
-            else f"macro{macro_step:02d}_check_reference"
+            else f"macro{macro_step:02d}_hessian_reference"
         )
         ea, grad_a = self._run_state(
             positions_bohr, reference_step, "A", checkpoint_tag="check"
@@ -1525,16 +1716,17 @@ class GaussianMECPJob(GaussianJob):
                 or self._rms(projected_grad) > self.settings.force_rms_tol
             ):
                 raise RuntimeError(
-                    "numfreq --only requires a stationary crossing: input energy "
+                    "Frequency-only analysis requires a stationary crossing: input energy "
                     "gap or projected gradient exceeds the convergence thresholds. "
                     "Run mecp numfreq to optimize first."
                 )
 
         logger.info(
-            f"verify_seam_minimum: computing numerical Hessian for {self.label} "
-            f"(h={h} Bohr, {4 * 3 * len(self.molecule.symbols)} sub-jobs)"
+            "verify_seam_minimum: computing %s Hessians for %s",
+            getattr(self.settings, "hessian_method", "numerical"),
+            self.label,
         )
-        H_A, H_B = self._compute_numerical_hessian(
+        H_A, H_B = self._get_state_hessians(
             positions_bohr,
             h=h,
             step_prefix=step_prefix + 1,
@@ -1559,6 +1751,13 @@ class GaussianMECPJob(GaussianJob):
         n_negative = int(np.sum(frequency_eigenvalues < -1.0e-6))
 
         result = {
+            "gaussian_output_files": {
+                state: os.path.join(
+                    self.numfreq_folder,
+                    f"{self.label}_{reference_step}_{state}.log",
+                )
+                for state in ("A", "B")
+            },
             "eigenvalues": non_zero_evals,
             "n_negative": n_negative,
             "is_minimum": n_negative == 0,
@@ -1709,7 +1908,7 @@ class GaussianMECPJob(GaussianJob):
         self._last_spin_squared = {"A": None, "B": None}
 
         for inner_step in range(1, self.settings.max_steps + 1):
-            step_index = f"macro{macro_step:02d}_inner{inner_step:03d}"
+            step_index = f"macro{macro_step:02d}_opt_step{inner_step:03d}"
             trace.write(
                 f"macro_step={macro_step} inner_step={inner_step} "
                 "status=RUNNING_STATE_A\n"
@@ -1868,7 +2067,7 @@ class GaussianMECPJob(GaussianJob):
             branch._is_seam_follow_branch = True
             branch.set_folder(follow_folder)
             trace_file = os.path.join(
-                follow_folder, f"{branch_label}_mode_follow.log"
+                follow_folder, f"{branch_label}_record.log"
             )
             try:
                 with open(trace_file, "w", encoding="utf-8") as trace:
@@ -2013,8 +2212,21 @@ class GaussianMECPJob(GaussianJob):
         with open(seam_check_file, "w", encoding="utf-8") as f:
             f.write("CHEMSMART MECP seam-minimum verification\n")
             f.write(
-                f"label={self.label} hess_step={h:.2e} Bohr "
-                f"check_step_start={step_prefix}\n"
+                f"hessian_method={getattr(getattr(self, 'settings', None), 'hessian_method', 'numerical')}\n"
+            )
+            f.write(
+                f"label={self.label} "
+                + (
+                    f"hess_step={h:.2e} Bohr "
+                    if getattr(
+                        getattr(self, "settings", None),
+                        "hessian_method",
+                        "numerical",
+                    )
+                    == "numerical"
+                    else ""
+                )
+                + f"check_step_start={step_prefix}\n"
             )
             f.write(
                 f"energy_diff={result['energy_diff']:+.6e} Hartree "
@@ -2046,7 +2258,18 @@ class GaussianMECPJob(GaussianJob):
         with open(frequency_file, "w", encoding="utf-8") as output:
             output.write(f"{MECP_FREQUENCY_HEADER}\n")
             output.write(f"label={self.label}\n")
-            output.write(f"hess_step={h:.6e} Bohr\n")
+            output.write(
+                f"hessian_method={getattr(getattr(self, 'settings', None), 'hessian_method', 'numerical')}\n"
+            )
+            if (
+                getattr(
+                    getattr(self, "settings", None),
+                    "hessian_method",
+                    "numerical",
+                )
+                == "numerical"
+            ):
+                output.write(f"hess_step={h:.6e} Bohr\n")
             output.write(f"energy_A={result['energy_a']:+.12f} Hartree\n")
             output.write(f"energy_B={result['energy_b']:+.12f} Hartree\n")
             output.write(

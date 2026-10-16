@@ -449,6 +449,16 @@ functions create their directories:
    initial optimization step count from the number of constrained seam-following macro steps and, when applicable, the
    final branch optimization step count. Intermediate structures and per-step diagnostics remain in the other reports.
 
+``<label>.log`` and ``<label>_B.log`` (when the label already ends in ``_mecp``)
+   After successful optimization and any requested seam verification/following, the main directory receives unchanged
+   copies of the selected final geometry's Gaussian outputs: state A in ``<label>.log`` and state B in
+   ``<label>_B.log``. Labels without an existing ``_mecp`` suffix receive that suffix first. Without frequencies, these
+   are the converged optimization step's outputs; with frequencies, they are the undisplaced reference jobs for the
+   final selected structure, including the winning followseam branch. They can be used as geometry inputs for subsequent
+   single-point or other jobs. Their energies belong to individual electronic states; the combined MECP result and
+   projected frequencies remain in the dedicated reports. No additional Gaussian calculation is run for this export.
+   Frequency-only analysis does not perform this export.
+
 ``<label>_traj.xyz``
    Located in ``<label>_optimization``. Multi-frame XYZ trajectory of the initial MECP optimization (coordinates in
    Ångström). Its A/B Gaussian sub-jobs are in the same directory.
@@ -515,6 +525,37 @@ Use ``--mecp-numfreq`` to check whether the MECP is a seam minimum and write pro
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
        --convergence tight --mecp-numfreq
 
+Use ``mecp anafreq`` to obtain the two state Hessians from fixed-geometry Gaussian analytic frequency calculations
+instead of Cartesian finite differences:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.xyz -c 0 -m 1 mecp anafreq
+   chemsmart sub gaussian -p project -f crossing.xyz -c 0 -m 1 mecp anafreq --only
+   chemsmart sub gaussian -p project -f structure.xyz -c 0 -m 1 mecp followseam --hessian-method analytic
+
+``numfreq`` selects numerical Hessians and ``anafreq`` selects analytic Hessians; conflicting explicit
+``--hessian-method`` selections are rejected. Without either task, ``--hessian-method`` selects the method for requested
+frequency checks, including every initial, macro-step and final followseam check. Numerical is the default.
+``--hess-step-size`` applies only to numerical Hessians.
+
+Analytic verification runs two reference force jobs followed by two Gaussian ``#p ... freq=analytic`` jobs, keeping the
+reference wavefunctions through their state-specific checkpoints. In broken-symmetry link mode the reference jobs
+perform stability analysis before the separate analytic frequency jobs. The raw Cartesian force constants are read from
+formatted checkpoints generated automatically with Gaussian's ``formchk`` utility; the same Lagrangian Hessian, seam
+projection and mass weighting are used for both methods. An unsupported analytic calculation or missing/incomplete
+Hessian fails rather than silently falling back to ChemSmart numerical differences.
+
+Analytic inputs and raw outputs are stored under ``<label>_anafreq/``, with names such as
+``<label>_hessian_analytic_A.com``, ``.log`` and ``.fchk``. Macro-step files include ``macro07_hessian_analytic_A``. The
+final ``<label>_mecp_freq.log`` retains its existing name and records ``hessian_method=analytic``. The verification
+report is also stored in the corresponding ``_anafreq`` directory. This analytic backend currently supports Gaussian;
+ORCA Hessian import is not implemented. ``formchk`` is located beside the configured Gaussian executable or on its
+configured PATH. Missing reference checkpoints or failed conversions stop the analysis. Formatted checkpoints are
+retained after successful verification; temporary binary verification checkpoints are cleaned up as before. All initial,
+macro-step and final checks use one Hessian-source dispatch followed by the shared seam projection and frequency
+analysis.
+
 To escape a stationary point that is a saddle on the crossing seam, add ``--follow-seam-imaginary-mode``. In each
 direction CHEMSMART fixes a progress plane normal to the tracked negative mode, restores :math:`E_A=E_B`, and optimizes
 every remaining seam coordinate. It then recomputes the effective Hessian, identifies the continuation of the mode by
@@ -540,12 +581,14 @@ branch results. The user can then adjust the progress increment or maximum numbe
 
 Each Hessian evaluation requires **4 × 3N** Gaussian sub-jobs (2 displaced geometries × 2 spin states × 3N Cartesian
 coordinates). During seam-mode following, labels identify the macro step, coordinate, displacement sign, and state, such
-as ``<label>_seam_follow_plus_macro07_check_coord18_plus_B.log``. Constrained optimization sub-jobs use names such as
-``<label>_seam_follow_plus_macro07_inner012_A.log``. Standalone seam checks retain the original ``check_stepN`` naming.
-For a 10-atom molecule this is 120 Gaussian calculations per macro step. Iterative following performs this analysis
-after every constrained macro step in both directions, plus the initial and final checks, so users should choose
-``--seam-mode-max-steps`` conservatively. The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with
-``--hess-step-size``.
+as ``<label>_seam_follow_plus_macro07_hessian_a6_z_plus_B.log``. Constrained optimization sub-jobs use names such as
+``<label>_seam_follow_plus_macro07_opt_step012_A.log``. Standalone numerical-frequency jobs use the same
+``hessian_aN_axis_plus/minus`` naming, where N is the 1-indexed atom number and axis is x, y, or z. Reference jobs use
+``hessian_reference_A/B`` (prefixed by the macro step during seam following). Branch progress logs end in
+``_seam_follow_plus_record.log`` or ``_seam_follow_minus_record.log``. For a 10-atom molecule this is 120 Gaussian
+calculations per macro step. Iterative following performs this analysis after every constrained macro step in both
+directions, plus the initial and final checks, so users should choose ``--seam-mode-max-steps`` conservatively. The
+finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with ``--hess-step-size``.
 
 Results are written to ``<label>_numfreq/<label>_seam_check.log``:
 
