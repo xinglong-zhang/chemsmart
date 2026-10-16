@@ -624,7 +624,7 @@ class Server(RegistryMixin):
             # Use shell=True if the command has shell operators
             p = subprocess.Popen(command, shell=True)
         else:
-            p = subprocess.Popen(shlex.split(command), cwd=job.folder)
+            p = subprocess.Popen(shlex.split(command))
         return p.wait()
 
     def submit_array_job(
@@ -688,7 +688,7 @@ class Server(RegistryMixin):
             # Use shell=True if the command has shell operators
             p = subprocess.Popen(command, shell=True)
         else:
-            p = subprocess.Popen(shlex.split(command), cwd=job.folder)
+            p = subprocess.Popen(shlex.split(command))
         return p.wait()
 
 
