@@ -927,6 +927,9 @@ class Gaussian16Output(GaussianFileMixin):
                 route_lines.append(continuation)
 
             route = "".join(route_lines).lower()
+            # ``stable=opt`` is the preliminary Link stage. ``route_string``
+            # represents the subsequent calculation used to derive jobtype
+            # and other calculation settings.
             if "stable=opt" in route:
                 continue
             return route

@@ -797,7 +797,10 @@ class TestGaussian16Output:
         output = Gaussian16Output(filename=str(logfile))
 
         assert output.is_link
-        assert "stable=opt" not in output.route_string
+        assert (
+            output.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq um062x def2svp"
+        )
         assert output.jobtype == "ts"
 
     def test_wrapped_regular_route_is_not_detected_as_link(self, tmp_path):
@@ -815,6 +818,41 @@ class TestGaussian16Output:
         output = Gaussian16Output(filename=str(logfile))
 
         assert not output.is_link
+        assert output.jobtype == "ts"
+
+    def test_only_wrapped_stable_route_has_no_main_route(self, tmp_path):
+        logfile = tmp_path / "stable_only.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "# um062x def2svp scf=(xqc,maxcycle=512,novar",
+                    "acc),nosymm stable=opt guess=mix",
+                    "",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert output.is_link
+        assert output.route_string is None
+
+    def test_wrapped_regular_route_can_end_at_eof(self, tmp_path):
+        logfile = tmp_path / "wrapped_regular_at_eof.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "# opt=(ts,calcfc,noeigentest) freq um062x def2svp",
+                    "scf=(xqc,maxcycle=512) nosymm int=ultrafine",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert not output.is_link
+        assert output.route_string == (
+            "# opt=(ts,calcfc,noeigentest) freq um062x def2svp"
+            "scf=(xqc,maxcycle=512) nosymm int=ultrafine"
+        )
         assert output.jobtype == "ts"
 
     def test_normal_termination_with_forces_and_frequencies(
