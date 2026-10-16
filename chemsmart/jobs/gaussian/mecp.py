@@ -1515,8 +1515,8 @@ class GaussianMECPJob(GaussianJob):
             len(projection_vectors),
         )
 
-    @classmethod
-    def _lagrangian_hessian(cls, hessian_a, hessian_b, grad_a, grad_b):
+    @staticmethod
+    def lagrangian_hessian(hessian_a, hessian_b, grad_a, grad_b):
         """Return the constrained MECP Lagrangian Hessian and multiplier."""
         diff_grad = np.asarray(grad_a).ravel() - np.asarray(grad_b).ravel()
         diff_norm_sq = float(np.dot(diff_grad, diff_grad))
@@ -1729,8 +1729,11 @@ class GaussianMECPJob(GaussianJob):
             macro_step=macro_step,
         )
 
-        H_lagrangian, lagrange_multiplier = self._lagrangian_hessian(
-            H_A, H_B, grad_a, grad_b
+        H_lagrangian, lagrange_multiplier = self.lagrangian_hessian(
+            H_A,
+            H_B,
+            grad_a,
+            grad_b,
         )
         proj_vecs = self._build_projection_vectors(positions_bohr, diff_grad)
         H_seam = self._reduced_hessian(H_lagrangian, proj_vecs)
