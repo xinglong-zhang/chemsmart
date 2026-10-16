@@ -285,11 +285,9 @@ class TestServerSubmit:
 
         mock_submit.assert_not_called()
 
-    def test_check_running_jobs_no_op_for_non_gaussian_job(self):
+    def test_check_running_jobs_no_op_for_unlabeled_job(self):
         job = MagicMock()
-        job.__class__.__name__ = "NotAGaussianJob"
-        # A plain MagicMock is not an instance of GaussianJob, so this
-        # should return without touching ClusterHelper at all.
+        job.label = None
         with patch("chemsmart.utils.cluster.ClusterHelper") as mock_helper_cls:
             Server._check_running_jobs(job)
         mock_helper_cls.assert_not_called()
@@ -299,11 +297,12 @@ class TestServerSubmit:
 
         job = MagicMock(spec=GaussianGeneralJob)
         job.label = "duplicate_job"
+        job.execution_name = "gaussian_duplicate_job"
 
         mock_cluster_helper = MagicMock()
-        mock_cluster_helper.get_gaussian_running_jobs.return_value = (
+        mock_cluster_helper.get_running_jobs.return_value = (
             ["123"],
-            ["duplicate_job"],
+            ["gaussian_duplicate_job"],
         )
         with patch(
             "chemsmart.utils.cluster.ClusterHelper",
@@ -449,16 +448,15 @@ class TestServerSubmitArrayJob:
 
 class TestCheckRunningJobsNoDuplicate:
     def test_check_running_jobs_returns_normally_when_not_duplicate(self):
-        """Covers the `if job.label in running_job_names:` False arm:
-        a Gaussian job whose label isn't in the cluster's running-job
-        list should return quietly instead of exiting."""
+        """A job absent from the scheduler queue can be submitted."""
         from chemsmart.jobs.gaussian.job import GaussianGeneralJob
 
         job = MagicMock(spec=GaussianGeneralJob)
         job.label = "not_running_job"
+        job.execution_name = "gaussian_not_running_job"
 
         mock_cluster_helper = MagicMock()
-        mock_cluster_helper.get_gaussian_running_jobs.return_value = (
+        mock_cluster_helper.get_running_jobs.return_value = (
             ["123"],
             ["some_other_job"],
         )

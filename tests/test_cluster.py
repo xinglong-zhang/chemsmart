@@ -47,7 +47,7 @@ class TestClusterHelperUsername:
 class TestClusterHelperSlurm:
     """Tests for SLURM-related job discovery."""
 
-    def test_get_gaussian_running_job_ids_on_slurm(self, mocker):
+    def test_get_running_job_ids_on_slurm(self, mocker):
         mocker.patch("os.getlogin", return_value="alice")
         squeue_output = (
             b"  JOBID PARTITION     NAME     USER\n"
@@ -62,10 +62,10 @@ class TestClusterHelperSlurm:
             ],
         )
         helper = ClusterHelper()
-        job_ids = helper._get_gaussian_running_job_ids_on_slurm()
+        job_ids = helper._get_running_job_ids_on_slurm()
         assert job_ids == [12345, 67890]
 
-    def test_get_gaussian_running_job_ids_on_slurm_no_matches(self, mocker):
+    def test_get_running_job_ids_on_slurm_no_matches(self, mocker):
         mocker.patch("os.getlogin", return_value="alice")
         mocker.patch(
             "chemsmart.utils.cluster.subprocess.Popen",
@@ -75,14 +75,20 @@ class TestClusterHelperSlurm:
             ],
         )
         helper = ClusterHelper()
-        assert helper._get_gaussian_running_job_ids_on_slurm() == []
+        assert helper._get_running_job_ids_on_slurm() == []
 
-    def test_get_gaussian_running_job_names_on_slurm(self, mocker):
+    @pytest.mark.parametrize(
+        "job_name",
+        ["gaussian_mymol", "orca_mymol", "chemsmart_sub_mymol.sh"],
+    )
+    def test_get_running_job_names_on_slurm(self, mocker, job_name):
         mocker.patch("os.getlogin", return_value="alice")
         squeue_output = b"  12345      main   job1   alice\n"
         sacct_output = (
             b"User       JobID       JobName\n"
-            b"alice      12345       chemsmart_sub_mymol.sh\n"
+            + f"alice      12345       {job_name}\n".encode()
+            + b"alice      99999       completed_job\n"
+            + b"bob        12345       another_users_job\n"
         )
 
         popen_returns = [
@@ -95,70 +101,94 @@ class TestClusterHelperSlurm:
             side_effect=popen_returns,
         )
         helper = ClusterHelper()
-        names = helper._get_gaussian_running_job_names_on_slurm()
-        assert names == ["mymol"]
+        names = helper._get_running_job_names_on_slurm()
+        assert names == [job_name]
 
-    def test_get_gaussian_running_jobs_slurm_success(self, mocker):
+    def test_get_running_jobs_slurm_success(self, mocker):
         mocker.patch("os.getlogin", return_value="alice")
         helper = ClusterHelper()
         mocker.patch.object(
             helper,
-            "_get_gaussian_running_job_ids_on_slurm",
+            "_get_running_job_ids_on_slurm",
             return_value=[1, 2],
         )
         mocker.patch.object(
             helper,
-            "_get_gaussian_running_job_names_on_slurm",
+            "_get_running_job_names_on_slurm",
             return_value=["a", "b"],
         )
-        ids, names = helper.get_gaussian_running_jobs()
+        ids, names = helper.get_running_jobs()
         assert ids == [1, 2]
         assert names == ["a", "b"]
 
-    def test_get_gaussian_running_jobs_falls_back_to_torque(self, mocker):
+    def test_get_running_jobs_falls_back_to_torque(self, mocker):
         mocker.patch("os.getlogin", return_value="alice")
         helper = ClusterHelper()
         mocker.patch.object(
             helper,
-            "_get_gaussian_running_job_ids_on_slurm",
+            "_get_running_job_ids_on_slurm",
             side_effect=RuntimeError("no slurm"),
         )
         mocker.patch.object(
             helper,
-            "_get_gaussian_running_jobs_on_torque",
+            "_get_running_jobs_on_torque",
             return_value=([3], ["c"]),
         )
-        ids, names = helper.get_gaussian_running_jobs()
+        ids, names = helper.get_running_jobs()
         assert ids == [3]
         assert names == ["c"]
 
-    def test_get_gaussian_running_jobs_no_scheduler_available(self, mocker):
+    def test_get_running_jobs_no_scheduler_available(self, mocker):
         mocker.patch("os.getlogin", return_value="alice")
         helper = ClusterHelper()
         mocker.patch.object(
             helper,
-            "_get_gaussian_running_job_ids_on_slurm",
+            "_get_running_job_ids_on_slurm",
             side_effect=RuntimeError("no slurm"),
         )
         mocker.patch.object(
             helper,
-            "_get_gaussian_running_jobs_on_torque",
+            "_get_running_jobs_on_torque",
             side_effect=FileNotFoundError(),
         )
-        ids, names = helper.get_gaussian_running_jobs()
+        ids, names = helper.get_running_jobs()
         assert ids == []
         assert names == []
+
+    def test_names_query_failure_discards_partial_slurm_result(self, mocker):
+        """Fallback IDs and names must come from the same scheduler."""
+        mocker.patch("os.getlogin", return_value="alice")
+        helper = ClusterHelper()
+        mocker.patch.object(
+            helper, "_get_running_job_ids_on_slurm", return_value=[1]
+        )
+        mocker.patch.object(
+            helper,
+            "_get_running_job_names_on_slurm",
+            side_effect=RuntimeError("accounting unavailable"),
+        )
+        torque = mocker.patch.object(
+            helper,
+            "_get_running_jobs_on_torque",
+            return_value=([2], ["orca_molecule"]),
+        )
+
+        assert helper.get_running_jobs() == ([2], ["orca_molecule"])
+        torque.assert_called_once_with()
 
 
 class TestClusterHelperTorque:
     """Tests for PBS/Torque job discovery."""
 
-    def test_get_gaussian_running_jobs_on_torque(self, mocker):
+    @pytest.mark.parametrize(
+        "job_name", ["gaussian_mymol", "orca_mymol", "custom_job.sh"]
+    )
+    def test_get_running_jobs_on_torque(self, mocker, job_name):
         mocker.patch("os.getlogin", return_value="alice")
         qstat_output = (
             b"Job Id: 555.server\n"
             b"    Job_Owner = alice@server\n"
-            b"    Job_Name = chemsmart_sub_mymol.sh\n"
+            + f"    Job_Name = {job_name}\n".encode()
         )
         mocker.patch(
             "chemsmart.utils.cluster.subprocess.Popen",
@@ -168,13 +198,11 @@ class TestClusterHelperTorque:
             ],
         )
         helper = ClusterHelper()
-        job_ids, job_names = helper._get_gaussian_running_jobs_on_torque()
+        job_ids, job_names = helper._get_running_jobs_on_torque()
         assert job_ids == [555]
-        assert job_names == ["mymol"]
+        assert job_names == [job_name]
 
-    def test_get_gaussian_running_jobs_on_torque_no_duplicate_ids(
-        self, mocker
-    ):
+    def test_get_running_jobs_on_torque_no_duplicate_ids(self, mocker):
         mocker.patch("os.getlogin", return_value="alice")
         qstat_output = (
             b"Job Id: 555.server\n"
@@ -189,7 +217,7 @@ class TestClusterHelperTorque:
             ],
         )
         helper = ClusterHelper()
-        job_ids, _ = helper._get_gaussian_running_jobs_on_torque()
+        job_ids, _ = helper._get_running_jobs_on_torque()
         assert job_ids == [555]
 
 

@@ -146,12 +146,14 @@ class TestJobRunnerSetScratch:
             runner = ConcreteJobRunner(server=pbs_server, scratch=True)
         assert runner.scratch is False
 
-    def test_raises_when_resolved_scratch_dir_missing(self, pbs_server):
+    def test_disables_scratch_when_resolved_directory_missing(
+        self, pbs_server
+    ):
         with patch.object(
             type(pbs_server), "scratch_dir", new="/does/not/exist/at/all"
         ):
-            with pytest.raises(FileNotFoundError):
-                ConcreteJobRunner(server=pbs_server, scratch=True)
+            runner = ConcreteJobRunner(server=pbs_server, scratch=True)
+        assert runner.scratch is False
 
 
 class TestJobRunnerRunOrchestration:

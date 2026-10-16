@@ -48,7 +48,9 @@ class TestThermochemistryJobRunnerSetup:
         )
         runner._prerun(thermo_job)
 
-        expected_dir = os.path.join(str(scratch_dir), thermo_job.label)
+        expected_dir = os.path.join(
+            str(scratch_dir), thermo_job.execution_name
+        )
         assert runner.running_directory == expected_dir
         assert os.path.isdir(expected_dir)
         assert runner.job_inputfile.startswith(expected_dir)

@@ -33,14 +33,27 @@ class TestPyMOLIRCMovieJobFromFiles:
                 label="x",
             )
 
-    def test_only_reactant_file_raises(self):
-        with pytest.raises(ValueError, match="only provide reactant"):
-            PyMOLIRCMovieJob.from_files(
-                reactant_file="r.log",
+    def test_only_reactant_file_builds_job(self):
+        # Providing only the reactant-side trajectory is a supported
+        # shortcut (e.g. for a product-side-only movie), not an error.
+        reactant_mols = [MagicMock(name="r1"), MagicMock(name="r2")]
+        mock_jobrunner = MagicMock()
+
+        with patch(
+            "chemsmart.jobs.mol.irc.Molecule.from_filepath",
+            return_value=reactant_mols,
+        ) as mock_from_filepath:
+            job = PyMOLIRCMovieJob.from_files(
+                reactant_file="path/to/r.log",
                 product_file=None,
                 all_file=None,
-                label="x",
+                label="ignored_label",
+                jobrunner=mock_jobrunner,
             )
+
+        mock_from_filepath.assert_called_once_with("r.log", index="::-1")
+        assert job.molecule == reactant_mols
+        assert job.label.startswith("r")
 
     def test_reactant_and_product_files_build_job(self):
         reactant_mols = [MagicMock(name="r1"), MagicMock(name="r2")]

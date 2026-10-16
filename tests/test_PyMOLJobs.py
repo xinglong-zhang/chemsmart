@@ -24,6 +24,7 @@ from chemsmart.jobs.mol.runner import (
     PyMOLSpinJobRunner,
     _format_mo_surface_color_commands,
     _resolve_mo_phase_colors,
+    is_pymol_derived_style,
     normalize_pymol_style,
 )
 from chemsmart.jobs.mol.spin import PyMOLSpinJob
@@ -1973,6 +1974,9 @@ class TestPyMOLMOJobRunnerHelpers:
             transparency_value=0.3,
             surface_quality=1,
             antialias_value=2,
+            color_positive=None,
+            color_negative=None,
+            swap=False,
         )
         pml_path = tmp_path / "mol_LUMO.pml"
         assert not pml_path.exists()
@@ -1992,6 +1996,9 @@ class TestPyMOLMOJobRunnerHelpers:
             transparency_value=0.3,
             surface_quality=1,
             antialias_value=2,
+            color_positive=None,
+            color_negative=None,
+            swap=False,
         )
         pml_path = tmp_path / "mol_HOMO.pml"
         pml_path.write_text("# existing\n")

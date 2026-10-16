@@ -78,7 +78,7 @@ class TestGrouperJobRunnerCreateGrouper:
                 "TanimotoSimilarityGrouper",
             ),
             (
-                "torsion",
+                "tfd",
                 "chemsmart.jobs.grouper.tfd",
                 "TorsionFingerprintGrouper",
             ),
@@ -179,20 +179,24 @@ class SimpleMolecule:
 
 
 class TestGrouperJobRunnerWriteOutputs:
-    def test_write_outputs_sorts_by_energy_and_writes_xyz(
+    def test_write_outputs_preserves_upstream_group_order_and_writes_xyz(
         self, pbs_server, grouper_job
     ):
+        # Group/representative ordering is finalized upstream by the
+        # grouper (see RMSDGrouper/EnergyGrouper's representative_strategy
+        # handling); _write_outputs just writes whatever order it is
+        # given, with the first entry treated as the representative.
         os.makedirs(grouper_job.output_dir)
         runner = GrouperJobRunner(server=pbs_server)
 
-        mol_high = SimpleMolecule(
-            energy=-1.0, symbols=["H"], positions=[(0.0, 0.0, 0.0)]
-        )
         mol_low = SimpleMolecule(
             energy=-2.0, symbols=["H"], positions=[(1.0, 1.0, 1.0)]
         )
-        groups = [[mol_high, mol_low]]
-        group_indices = [[0, 1]]
+        mol_high = SimpleMolecule(
+            energy=-1.0, symbols=["H"], positions=[(0.0, 0.0, 0.0)]
+        )
+        groups = [[mol_low, mol_high]]
+        group_indices = [[1, 0]]
 
         runner._write_outputs(grouper_job, groups, group_indices)
 
@@ -200,7 +204,7 @@ class TestGrouperJobRunnerWriteOutputs:
         assert os.path.exists(group_file)
         with open(group_file) as f:
             content = f.read()
-        # Lower-energy molecule (mol_low) should be written first.
+        # Written in the given (already-ordered) sequence: mol_low first.
         assert content.index("Original_Index: 2") < content.index(
             "Original_Index: 1"
         )

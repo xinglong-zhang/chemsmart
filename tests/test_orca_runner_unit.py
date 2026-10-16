@@ -63,7 +63,7 @@ class TestORCAJobRunnerSetup:
         )
         runner._assign_variables(orca_job)
 
-        expected_dir = os.path.join(str(scratch_dir), orca_job.label)
+        expected_dir = os.path.join(str(scratch_dir), orca_job.execution_name)
         assert runner.running_directory == expected_dir
         assert os.path.isdir(expected_dir)
         assert runner.job_inputfile.endswith("orcatest.inp")
@@ -205,7 +205,7 @@ class TestORCAJobRunnerCopyXyzFiles:
         self, pbs_server, orca_job, tmp_path
     ):
         scratch_dir = tmp_path / "scratch"
-        expected_dir = os.path.join(str(scratch_dir), orca_job.label)
+        expected_dir = os.path.join(str(scratch_dir), orca_job.execution_name)
         os.makedirs(expected_dir)
         runner = ORCAJobRunner(
             server=pbs_server, scratch=True, scratch_dir=str(scratch_dir)
@@ -523,7 +523,7 @@ class TestFakeORCAJobRunnerRun:
         from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 
         scratch_dir = tmp_path / "scratch"
-        expected_dir = os.path.join(str(scratch_dir), orca_job.label)
+        expected_dir = os.path.join(str(scratch_dir), orca_job.execution_name)
         os.makedirs(expected_dir)
         runner = FakeORCAJobRunner(
             server=pbs_server, scratch=True, scratch_dir=str(scratch_dir)

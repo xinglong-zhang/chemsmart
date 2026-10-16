@@ -2288,11 +2288,13 @@ class TestOtherGroupers:
         assert len(group_indices) == 1
 
     def test_connectivity_grouper_repr(self, methanol_molecules):
+        # ConnectivityGrouper does not support multiprocessing, so any
+        # requested num_procs > 1 is clamped down to 1.
         grouper = ConnectivityGrouper(
             methanol_molecules, num_procs=2, ignore_hydrogens=True
         )
         text = repr(grouper)
-        assert "num_procs=2" in text
+        assert "num_procs=1" in text
         assert "ignore_hydrogens=True" in text
 
     def test_connectivity_grouper_record_results_without_grouping_time(

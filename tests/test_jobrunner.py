@@ -47,6 +47,9 @@ class DummyORCAJob:
 
 
 class DummyGaussianJob:
+    PROGRAM = "Gaussian"
+    execution_name = Job.execution_name
+
     def __init__(self, folder, label):
         self.folder = str(folder)
         self.label = label
@@ -802,7 +805,9 @@ class TestGaussianJobRunnerDirectHelpers:
 
         import os
 
-        expected_dir = os.path.join(str(tmp_path / "scratch_root"), job.label)
+        expected_dir = os.path.join(
+            str(tmp_path / "scratch_root"), job.execution_name
+        )
         assert os.path.isdir(expected_dir)
         assert runner.running_directory == expected_dir
         assert runner.job_inputfile == os.path.abspath(
@@ -827,7 +832,7 @@ class TestGaussianJobRunnerDirectHelpers:
         job = DummyGaussianJob(
             folder=tmp_path / "jobfolder2", label="existing_job"
         )
-        os.makedirs(os.path.join(str(scratch_root), job.label))
+        os.makedirs(os.path.join(str(scratch_root), job.execution_name))
 
         runner = GaussianJobRunner(
             server=pbs_server,
@@ -837,7 +842,7 @@ class TestGaussianJobRunnerDirectHelpers:
         )
         runner._set_up_variables_in_scratch(job)
         assert runner.running_directory == os.path.join(
-            str(scratch_root), job.label
+            str(scratch_root), job.execution_name
         )
 
     def test_set_up_variables_in_job_directory(self, pbs_server, tmp_path):
@@ -1044,9 +1049,9 @@ class TestFakeGaussianJobRunnerDirectHelpers:
         job = DummyGaussianJob(
             folder=tmp_path / "jobfolder", label="fake_existing_job"
         )
-        os.makedirs(os.path.join(str(scratch_root), job.label))
+        os.makedirs(os.path.join(str(scratch_root), job.execution_name))
 
-        expected_dir = os.path.join(str(scratch_root), job.label)
+        expected_dir = os.path.join(str(scratch_root), job.execution_name)
         runner = FakeGaussianJobRunner(
             server=pbs_server,
             scratch=True,
@@ -1067,7 +1072,7 @@ class TestFakeGaussianJobRunnerDirectHelpers:
         job = DummyGaussianJob(
             folder=tmp_path / "jobfolder_fresh", label="fake_fresh_job"
         )
-        expected_dir = os.path.join(str(scratch_root), job.label)
+        expected_dir = os.path.join(str(scratch_root), job.execution_name)
 
         runner = FakeGaussianJobRunner(
             server=pbs_server,

@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from chemsmart.jobs.job import Job
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import (
     FUGAKUSubmitter,
@@ -31,6 +32,7 @@ def make_job(label="job1", program="Gaussian", complete=False, folder="."):
     job = MagicMock()
     job.label = label
     job.PROGRAM = program
+    job.execution_name = Job.execution_name.fget(job)
     job.folder = folder
     job.is_complete.return_value = complete
     return job
@@ -106,7 +108,7 @@ class TestSubmitterPaths:
     def test_submit_script_uses_label(self, pbs_test_server):
         job = make_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        assert submitter.submit_script == "chemsmart_sub_mylabel.sh"
+        assert submitter.submit_script == "chemsmart_sub_gaussian_mylabel.sh"
 
     def test_submit_script_default_without_label(self, pbs_test_server):
         job = make_job(label=None)
@@ -117,13 +119,14 @@ class TestSubmitterPaths:
         job = make_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert (
-            submitter.array_submit_script == "chemsmart_sub_array_mylabel.sh"
+            submitter.array_submit_script
+            == "chemsmart_sub_array_gaussian_mylabel.sh"
         )
 
     def test_run_script_uses_label(self, pbs_test_server):
         job = make_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        assert submitter.run_script == "chemsmart_run_mylabel.py"
+        assert submitter.run_script == "chemsmart_run_gaussian_mylabel.py"
 
 
 class TestSubmitterExecutableDispatch:
@@ -141,6 +144,26 @@ class TestSubmitterExecutableDispatch:
         submitter = PBSSubmitter(job=job, server=server)
         executable = submitter.executable
         assert executable is not None
+
+    @pytest.mark.parametrize(
+        "program,executable_class",
+        [
+            ("cReSt", "CRESTExecutable"),
+            ("NCIPLOT", "NCIPLOTExecutable"),
+        ],
+    )
+    def test_auxiliary_program_resolves_its_server_executable(
+        self, pbs_test_server, mocker, program, executable_class
+    ):
+        factory = mocker.patch(
+            f"chemsmart.settings.submitters.{executable_class}.from_servername"
+        )
+        submitter = PBSSubmitter(
+            job=make_job(program=program), server=pbs_test_server
+        )
+
+        assert submitter.executable is factory.return_value
+        factory.assert_called_once_with(pbs_test_server.name)
 
 
 class TestSubmitterWrite:
@@ -174,13 +197,13 @@ class TestSubmitterWrite:
         ):
             submitter._write_submitscript()
 
-        assert os.path.exists("chemsmart_sub_mylabel.sh")
-        with open("chemsmart_sub_mylabel.sh") as f:
+        assert os.path.exists("chemsmart_sub_gaussian_mylabel.sh")
+        with open("chemsmart_sub_gaussian_mylabel.sh") as f:
             content = f.read()
         assert content.startswith("#!/bin/bash")
         assert "#PBS -o mylabel.pbsout" in content
         assert "cd $PBS_O_WORKDIR" in content
-        assert "./chemsmart_run_mylabel.py &" in content
+        assert "./chemsmart_run_gaussian_mylabel.py &" in content
 
 
 class TestSubmitterArrayJob:
@@ -209,8 +232,10 @@ class TestSubmitterArrayJob:
         assert submitter.jobs == jobs
         mock_submit.assert_called_once()
         for i in range(3):
-            assert os.path.exists(f"chemsmart_run_array_{i}.py")
-            with open(f"chemsmart_run_array_{i}.py") as f:
+            assert os.path.exists(
+                f"chemsmart_run_array_gaussian_mylabel_{i}.py"
+            )
+            with open(f"chemsmart_run_array_gaussian_mylabel_{i}.py") as f:
                 assert "run(['gaussian', 'opt'])" in f.read()
 
     def test_write_array_job_per_job_cli_args(
@@ -225,9 +250,9 @@ class TestSubmitterArrayJob:
         with patch.object(submitter, "_write_array_submitscript"):
             submitter.write_array_job(jobs=jobs, cli_args=per_job_args)
 
-        with open("chemsmart_run_array_0.py") as f:
+        with open("chemsmart_run_array_gaussian_mylabel_0.py") as f:
             assert "run(['gaussian', 'opt', '0'])" in f.read()
-        with open("chemsmart_run_array_1.py") as f:
+        with open("chemsmart_run_array_gaussian_mylabel_1.py") as f:
             assert "run(['gaussian', 'opt', '1'])" in f.read()
 
     def test_write_array_job_command_format(self, pbs_test_server):
@@ -239,7 +264,9 @@ class TestSubmitterArrayJob:
         assert "SLURM_ARRAY_TASK_ID" in content
         assert "PBS_ARRAYID" in content
         assert "LSB_JOBINDEX" in content
-        assert "python chemsmart_run_array_${TASK_ID}.py" in content
+        assert (
+            "python chemsmart_run_array_gaussian_job1_${TASK_ID}.py" in content
+        )
 
 
 class TestSubmitterFromSchedulerType:
@@ -323,7 +350,7 @@ class TestSLURMSubmitter:
         with patch.object(user_settings, "data", {}):
             submitter._write_scheduler_options(buf)
         content = buf.getvalue()
-        assert "#SBATCH --job-name=mylabel" in content
+        assert "#SBATCH --job-name=gaussian_mylabel" in content
         assert "#SBATCH --partition=normal" in content
         assert "#SBATCH --time=24:00:00" in content
 
@@ -692,7 +719,7 @@ class TestSLFSubmitterExtraCoverage:
         with patch.object(user_settings, "data", {"PROJECT": "proj123"}):
             submitter._write_scheduler_options(buf)
         content = buf.getvalue()
-        assert "#BSUB -J mylabel" in content
+        assert "#BSUB -J gaussian_mylabel" in content
         assert "#BSUB -P proj123" in content
         assert "#BSUB -nnodes 1" in content
         assert "#BSUB -gpu num=2" in content
@@ -785,8 +812,8 @@ class TestWriteRunscriptDirect:
         job = make_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         submitter._write_runscript(["gaussian", "opt"])
-        assert os.path.exists("chemsmart_run_mylabel.py")
-        with open("chemsmart_run_mylabel.py") as f:
+        assert os.path.exists("chemsmart_run_gaussian_mylabel.py")
+        with open("chemsmart_run_gaussian_mylabel.py") as f:
             assert "run(['gaussian', 'opt'])" in f.read()
 
 
@@ -829,12 +856,12 @@ class TestWriteArrayJobFull:
                 jobs=jobs, num_nodes=1, cli_args=["gaussian", "opt"]
             )
 
-        assert os.path.exists("chemsmart_sub_array_mylabel.sh")
-        with open("chemsmart_sub_array_mylabel.sh") as f:
+        assert os.path.exists("chemsmart_sub_array_gaussian_mylabel.sh")
+        with open("chemsmart_sub_array_gaussian_mylabel.sh") as f:
             content = f.read()
         assert content.startswith("#!/bin/bash")
         assert "cd $PBS_O_WORKDIR" in content
-        assert "chemsmart_run_array_${TASK_ID}.py" in content
+        assert "chemsmart_run_array_gaussian_mylabel_${TASK_ID}.py" in content
 
     def test_array_cli_args_length_mismatch_falls_back_shared(
         self, pbs_test_server, tmp_path, monkeypatch
@@ -853,7 +880,7 @@ class TestWriteArrayJobFull:
             submitter.write_array_job(jobs=jobs, cli_args=mismatched_args)
 
         for i in range(3):
-            with open(f"chemsmart_run_array_{i}.py") as f:
+            with open(f"chemsmart_run_array_gaussian_mylabel_{i}.py") as f:
                 assert "run([['gaussian', 'opt'], ['gaussian', 'ts']])" in (
                     f.read()
                 )
@@ -873,7 +900,7 @@ class TestWriteArrayJobFull:
             submitter.write_array_job(jobs=jobs, cli_args=None)
 
         for i in range(2):
-            with open(f"chemsmart_run_array_{i}.py") as f:
+            with open(f"chemsmart_run_array_gaussian_mylabel_{i}.py") as f:
                 assert "run(None)" in f.read()
 
 

@@ -423,7 +423,9 @@ class TestXTBCLIGroupValidation:
         )
         assert result.exit_code == 0, result.output
         label = mock_job_cls.call_args[1]["label"]
-        assert label.endswith("_suffix")
+        # The "sp" subcommand further appends "_gas_phase" when no
+        # solvent model/id is given.
+        assert label.endswith("_suffix_gas_phase")
 
     def test_pubchem_only_without_label_falls_back_to_output(self):
         pubchem_molecule = MagicMock(name="pubchem_molecule")
@@ -455,7 +457,7 @@ class TestXTBCLIGroupValidation:
             )
         assert result.exit_code == 0, result.output
         label = mock_job_cls.call_args[1]["label"]
-        assert label == "output_sp"
+        assert label == "output_sp_gas_phase"
 
     def test_pubchem_only_with_append_label_falls_back_to_output(self):
         pubchem_molecule = MagicMock(name="pubchem_molecule")
@@ -489,7 +491,7 @@ class TestXTBCLIGroupValidation:
             )
         assert result.exit_code == 0, result.output
         label = mock_job_cls.call_args[1]["label"]
-        assert label == "output_suffix"
+        assert label == "output_suffix_gas_phase"
 
     def test_default_label_suffixed_with_invoked_subcommand(
         self, single_molecule_xyz_file
@@ -510,7 +512,9 @@ class TestXTBCLIGroupValidation:
         )
         assert result.exit_code == 0, result.output
         label = mock_job_cls.call_args[1]["label"]
-        assert label.endswith("_sp")
+        # The "sp" subcommand further appends "_gas_phase" when no
+        # solvent model/id is given.
+        assert label.endswith("_sp_gas_phase")
 
     def test_chemsmart_db_loads_molecule_by_record_index(
         self, database_chemsmart_file

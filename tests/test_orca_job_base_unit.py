@@ -393,7 +393,7 @@ class TestORCAInpJob:
         job._copy_input()
 
         assert os.path.exists(
-            os.path.join(scratch_dir, "mylabel", "mylabel.inp")
+            os.path.join(scratch_dir, job.execution_name, "mylabel.inp")
         )
 
 

@@ -17,6 +17,7 @@ from chemsmart.io.gaussian.folder import (
     GaussianOutputFolder,
 )
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.pdb import pdbfile as pdbfile_module
 from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.folder import XYZFolder
 

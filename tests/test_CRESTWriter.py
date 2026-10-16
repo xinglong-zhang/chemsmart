@@ -3,8 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import pytest
-
 from chemsmart.jobs.crest.conformers import CRESTConformerSearchJob
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.crest.writer import CRESTInputWriter

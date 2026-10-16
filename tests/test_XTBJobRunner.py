@@ -23,6 +23,10 @@ class DummyXTBJob:
         self.molecule = molecule if molecule is not None else MagicMock()
 
     @property
+    def execution_name(self):
+        return f"xtb_{self.label}"
+
+    @property
     def xyzfile(self):
         return str(Path(self.folder) / f"{self.label}.xyz")
 
@@ -215,7 +219,7 @@ class TestSetUpVariablesInScratch:
         job = DummyXTBJob(folder=tmp_path / "jobfolder", label="myjob")
         runner._set_up_variables_in_scratch(job)
 
-        expected_dir = os.path.join(str(scratch_root), job.label)
+        expected_dir = os.path.join(str(scratch_root), job.execution_name)
         assert runner.running_directory == expected_dir
         assert os.path.isdir(expected_dir)
         assert runner.job_xyzfile == os.path.abspath(
@@ -229,7 +233,8 @@ class TestSetUpVariablesInScratch:
     def test_reuses_existing_scratch_directory(self, pbs_server, tmp_path):
         scratch_root = tmp_path / "scratch_root2"
         job = DummyXTBJob(folder=tmp_path / "jobfolder2", label="existing")
-        os.makedirs(os.path.join(str(scratch_root), job.label))
+        expected_dir = os.path.join(str(scratch_root), job.execution_name)
+        os.makedirs(expected_dir)
 
         runner = XTBJobRunner(
             server=pbs_server,
@@ -238,9 +243,7 @@ class TestSetUpVariablesInScratch:
             fake=True,
         )
         runner._set_up_variables_in_scratch(job)
-        assert runner.running_directory == os.path.join(
-            str(scratch_root), job.label
-        )
+        assert runner.running_directory == expected_dir
 
 
 class TestSetUpVariablesInJobDirectory:
@@ -596,12 +599,14 @@ class TestFakeXTBJobRunner:
             fake=True,
         )
         job = DummyXTBJob(folder=tmp_path / "jobfolder", label="myjob")
+        # The scratch directory name is derived from the program-prefixed
+        # label as it was *before* the "_fake" suffix rename, since
+        # running_directory is computed first and the rename happens only
+        # afterward.
+        expected_dir = os.path.join(str(tmp_path), job.execution_name)
         runner._set_up_variables_in_scratch(job)
         assert job.label == "myjob_fake"
-        # The scratch directory name is derived from the label as it was
-        # *before* the "_fake" suffix rename, since running_directory is
-        # computed first and the rename happens only afterward.
-        assert runner.running_directory == os.path.join(str(tmp_path), "myjob")
+        assert runner.running_directory == expected_dir
         assert runner.job_outputfile == os.path.abspath(job.outputfile)
         assert runner.job_errfile == os.path.abspath(job.errfile)
 
@@ -615,12 +620,11 @@ class TestFakeXTBJobRunner:
             fake=True,
         )
         job = DummyXTBJob(folder=tmp_path / "jobfolder", label="existing")
-        os.makedirs(os.path.join(str(tmp_path), job.label))
+        expected_dir = os.path.join(str(tmp_path), job.execution_name)
+        os.makedirs(expected_dir)
 
         runner._set_up_variables_in_scratch(job)
-        assert runner.running_directory == os.path.join(
-            str(tmp_path), "existing"
-        )
+        assert runner.running_directory == expected_dir
 
     def test_set_up_variables_in_job_directory_appends_fake_suffix(
         self, pbs_server, tmp_path

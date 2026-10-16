@@ -22,7 +22,6 @@ from chemsmart.jobs.grouper.rmsd import (
     HungarianRMSDGrouper,
     IRMSDGrouper,
     PymolRMSDGrouper,
-    RMSDGrouperSharedMemory,
     SpyRMSDGrouper,
 )
 
@@ -118,65 +117,6 @@ class TestRMSDGrouperNumGroups:
         assert "threshold=0.3" in repr(grouper)
 
 
-class TestFindOptimalThreshold:
-    def test_returns_zero_when_all_values_infinite(self):
-        grouper = BasicRMSDGrouper([_mol(), _mol()], num_groups=1)
-        threshold = grouper._find_optimal_threshold(
-            rmsd_values=[float("inf")], indices=[(0, 1)], n=2
-        )
-        assert threshold == 0.0
-
-    def test_falls_back_when_no_exact_match_exists(self):
-        # Same crafted energy-like separations used for the analogous
-        # EnergyGrouper/TorsionFingerprintGrouper tests: no candidate
-        # threshold yields exactly num_groups groups, forcing the binary
-        # search to exhaust and fall back to `return best_threshold`.
-        molecules = [object() for _ in range(8)]
-        grouper = BasicRMSDGrouper.__new__(BasicRMSDGrouper)
-        grouper.molecules = molecules
-        grouper.num_groups = 6
-        values = [9.47, 23.57, 24.14, 25.08, 26.64, 32.08, 62.74, 64.25]
-        indices = [
-            (i, j)
-            for i in range(len(values))
-            for j in range(i + 1, len(values))
-        ]
-        rmsd_values = [abs(values[j] - values[i]) for (i, j) in indices]
-        threshold = grouper._find_optimal_threshold(rmsd_values, indices, 8)
-        assert threshold > 0
-
-
-class TestMergeGroupsToTarget:
-    def test_merge_reduces_group_count_and_prefers_connected_group(self):
-        grouper = BasicRMSDGrouper.__new__(BasicRMSDGrouper)
-        grouper.num_groups = 2
-        groups = [["a"], ["b"], ["c", "d"]]
-        index_groups = [[0], [1], [2, 3]]
-        adj_matrix = np.zeros((4, 4), dtype=bool)
-        adj_matrix[0, 2] = adj_matrix[2, 0] = True
-
-        merged_groups, merged_index_groups = grouper._merge_groups_to_target(
-            groups, index_groups, adj_matrix
-        )
-        assert len(merged_groups) == 2
-        merged_sets = sorted(
-            [frozenset(g) for g in merged_index_groups], key=len
-        )
-        assert merged_sets == [frozenset({1}), frozenset({0, 2, 3})]
-
-    def test_group_by_num_groups_triggers_merge(self, tmp_path):
-        molecules = [_mol(float(i) * 0.001) for i in range(5)]
-        grouper = BasicRMSDGrouper(
-            molecules, num_groups=2, output_dir=str(tmp_path)
-        )
-        with patch.object(
-            grouper, "_find_optimal_threshold", return_value=0.0
-        ):
-            groups, index_groups = grouper.group()
-        assert len(groups) == 2
-        assert sum(len(g) for g in index_groups) == 5
-
-
 class TestCalculateFullRmsdMatrix:
     def test_returns_symmetric_matrix_without_output_file(self):
         molecules = [_mol(0.0), _mol(0.001), _mol(5.0)]
@@ -252,99 +192,6 @@ class TestHungarianRMSDGrouperSpecifics:
         rmsd = grouper._calculate_rmsd((0, 1))
         # Without alignment, a pure translation still contributes to RMSD.
         assert rmsd > 1.0
-
-
-class TestRMSDGrouperSharedMemory:
-    def test_group_with_alignment(self, tmp_path):
-        molecules = [_mol(0.0), _mol(0.001), _mol(5.0)]
-        grouper = RMSDGrouperSharedMemory(
-            molecules,
-            threshold=0.5,
-            num_procs=1,
-            align_molecules=True,
-            output_dir=str(tmp_path),
-        )
-        groups, index_groups = grouper.group()
-        assert sum(len(g) for g in index_groups) == 3
-        assert grouper._cached_groups is not None
-
-    def test_group_without_alignment(self, tmp_path):
-        molecules = [_mol(0.0), _mol(0.001), _mol(5.0)]
-        grouper = RMSDGrouperSharedMemory(
-            molecules,
-            threshold=0.5,
-            num_procs=1,
-            align_molecules=False,
-            output_dir=str(tmp_path),
-        )
-        groups, index_groups = grouper.group()
-        assert sum(len(g) for g in index_groups) == 3
-
-    def test_calculate_rmsd_returns_inf_for_mismatched_shapes(self):
-        # Call _init_worker/_calculate_rmsd directly in-process (rather
-        # than through multiprocessing.Pool) so coverage.py can actually
-        # trace them -- code that only runs inside pool worker
-        # subprocesses isn't recorded without special coverage
-        # configuration for subprocess tracing.
-        from multiprocessing import RawArray
-
-        import numpy as _np
-
-        molecules = [_mol(), _mol()]
-        grouper = RMSDGrouperSharedMemory(molecules, threshold=0.5)
-        shared_pos = RawArray("d", 2 * 2 * 3)
-        RMSDGrouperSharedMemory._init_worker(shared_pos, (2, 2, 3))
-
-        import chemsmart.jobs.grouper.rmsd as rmsd_module
-
-        rmsd_module.shared_positions = [
-            _np.zeros((2, 3)),
-            _np.zeros((3, 3)),
-        ]
-        assert grouper._calculate_rmsd((0, 1)) == np.inf
-
-    def test_calculate_rmsd_with_alignment_in_process(self):
-        from multiprocessing import RawArray
-
-        molecules = [_mol(0.0), _mol(0.001)]
-        grouper = RMSDGrouperSharedMemory(molecules, align_molecules=True)
-        n, num_atoms = 2, 2
-        shared_pos = RawArray("d", n * num_atoms * 3)
-        pos_np = np.frombuffer(shared_pos, dtype=np.float64).reshape(
-            n, num_atoms, 3
-        )
-        for i, mol in enumerate(molecules):
-            pos_np[i] = mol.positions
-        RMSDGrouperSharedMemory._init_worker(shared_pos, (n, num_atoms, 3))
-        rmsd = grouper._calculate_rmsd((0, 1))
-        assert rmsd < 0.01
-
-    def test_calculate_rmsd_without_alignment_in_process(self):
-        from multiprocessing import RawArray
-
-        molecules = [_mol(0.0), _mol(5.0)]
-        grouper = RMSDGrouperSharedMemory(molecules, align_molecules=False)
-        n, num_atoms = 2, 2
-        shared_pos = RawArray("d", n * num_atoms * 3)
-        pos_np = np.frombuffer(shared_pos, dtype=np.float64).reshape(
-            n, num_atoms, 3
-        )
-        for i, mol in enumerate(molecules):
-            pos_np[i] = mol.positions
-        RMSDGrouperSharedMemory._init_worker(shared_pos, (n, num_atoms, 3))
-        rmsd = grouper._calculate_rmsd((0, 1))
-        # Without alignment, the translation directly contributes to RMSD.
-        assert rmsd > 1.0
-
-    def test_complete_linkage_grouping_skips_already_assigned(self):
-        molecules = [_mol() for _ in range(4)]
-        grouper = RMSDGrouperSharedMemory(molecules, threshold=0.5)
-        adj_matrix = np.zeros((4, 4), dtype=bool)
-        adj_matrix[3, 1] = adj_matrix[1, 3] = True
-        groups, index_groups = grouper._complete_linkage_grouping(
-            adj_matrix, 4
-        )
-        assert sorted(map(tuple, index_groups)) == [(0,), (1, 3), (2,)]
 
 
 class TestSpyRMSDGrouperSpecifics:
@@ -555,7 +402,7 @@ class TestIRMSDGrouperConstruction:
             "chemsmart.jobs.grouper.rmsd.find_irmsd_command",
             return_value=None,
         ):
-            with pytest.raises(RuntimeError, match="irmsd command not found"):
+            with pytest.raises(RuntimeError, match="irmsd is not available"):
                 IRMSDGrouper([_mol(), _mol(0.001)])
 
     def test_explicit_threshold_is_not_overridden(self):

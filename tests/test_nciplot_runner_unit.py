@@ -97,7 +97,7 @@ class TestNCIPLOTJobRunnerSetup:
         runner._assign_variables(nciplot_job_from_files)
 
         expected_dir = os.path.join(
-            str(scratch_dir), nciplot_job_from_files.label
+            str(scratch_dir), nciplot_job_from_files.execution_name
         )
         assert runner.running_directory == expected_dir
         assert os.path.isdir(expected_dir)
@@ -112,7 +112,7 @@ class TestNCIPLOTJobRunnerSetup:
         os.makedirs call should be skipped rather than raising."""
         scratch_dir = tmp_path / "scratch"
         expected_dir = os.path.join(
-            str(scratch_dir), nciplot_job_from_files.label
+            str(scratch_dir), nciplot_job_from_files.execution_name
         )
         os.makedirs(expected_dir)
 
