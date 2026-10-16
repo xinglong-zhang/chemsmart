@@ -210,6 +210,21 @@ def write_text_file():
 
 
 @pytest.fixture()
+def invoke_update_programs():
+    """Return a callable that invokes 'chemsmart update programs'."""
+    from chemsmart.cli.update import update
+
+    def _invoke(config_root):
+        return CliRunner().invoke(
+            update,
+            ["programs"],
+            env={"CHEMSMART_CONFIG_DIR": str(config_root)},
+        )
+
+    return _invoke
+
+
+@pytest.fixture()
 def invoke_update_projects():
     """Return a callable that invokes 'chemsmart update projects' via Click's CliRunner.
 
