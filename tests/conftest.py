@@ -53,6 +53,7 @@ MECP_DRIVER_SETTINGS = dict(
     disp_max_tol=1.0e-3,
     disp_rms_tol=1.0e-3,
 )
+
 thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
 )
