@@ -35,21 +35,6 @@ from chemsmart.utils.cli import CtxObjArguments, _add_subcommand_info_to_ctx
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import remove_word_from_parenthesized_option
 
-# Settings shared by the tests that drive the optimizer loop directly.
-DRIVER_SETTINGS = dict(
-    step_size=0.1,
-    trust_radius=0.3,
-    adaptive_step_size=False,
-    step_size_method="bb",
-    restart=False,
-    mecp_numfreq=False,
-    energy_diff_tol=1.0e-4,
-    force_max_tol=1.0e-3,
-    force_rms_tol=1.0e-3,
-    disp_max_tol=1.0e-3,
-    disp_rms_tol=1.0e-3,
-)
-
 
 def _zero_displacement(**kwargs):
     return np.zeros((1, 3)), np.zeros((1, 3)), np.zeros((1, 3))
@@ -63,65 +48,6 @@ def _hydrogens(count=1, symbols=None):
 
 
 class TestGaussianMECP:
-    @pytest.fixture()
-    def make_mecp_job(
-        self,
-        tmp_path,
-        gaussian_full_gen_outfile,
-        gaussian_jobrunner_no_scratch,
-    ):
-        """Build a real GaussianMECPJob rooted in ``tmp_path``.
-
-        The molecule defaults to the final geometry of the
-        bromochloromethane Gaussian output fixture; keyword arguments are
-        forwarded to :class:`GaussianMECPJobSettings`.
-        """
-
-        def _make(label="crossing", molecule=None, **settings_kwargs):
-            if molecule is None:
-                molecule = Molecule.from_filepath(gaussian_full_gen_outfile)
-            job = GaussianMECPJob(
-                molecule=molecule,
-                settings=GaussianMECPJobSettings(**settings_kwargs),
-                label=label,
-                jobrunner=gaussian_jobrunner_no_scratch,
-            )
-            job.set_folder(str(tmp_path))
-            return job
-
-        return _make
-
-    @pytest.fixture()
-    def mecp_job(self, make_mecp_job):
-        return make_mecp_job()
-
-    @pytest.fixture()
-    def make_driver_job(self, make_mecp_job):
-        """MECP job on a single H atom with fast optimizer settings."""
-
-        def _make(max_steps=2, **settings_kwargs):
-            settings = {**DRIVER_SETTINGS, **settings_kwargs}
-            job = make_mecp_job(
-                label="driver",
-                molecule=_hydrogens(),
-                max_steps=max_steps,
-                **settings,
-            )
-            job._export_final_gaussian_logs = lambda sources: None
-            return job
-
-        return _make
-
-    @pytest.fixture()
-    def adaptive_step_job(self, make_mecp_job):
-        return make_mecp_job(
-            step_size=0.1,
-            step_size_grow=1.2,
-            step_size_shrink=0.5,
-            step_size_min=1.0e-4,
-            step_size_max=1.0,
-        )
-
     def test_job_is_instantiated_from_gaussian_output(
         self, mecp_job, gaussian_full_gen_outfile, tmp_path
     ):
