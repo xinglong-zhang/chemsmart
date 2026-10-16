@@ -100,7 +100,7 @@ class GrouperJobRunner(JobRunner):
             "irmsd": IRMSDGrouper,
             "pymolrmsd": PymolRMSDGrouper,
             "tanimoto": TanimotoSimilarityGrouper,
-            "torsion": TorsionFingerprintGrouper,
+            "tfd": TorsionFingerprintGrouper,
             "isomorphism": RDKitIsomorphismGrouper,
             "formula": FormulaGrouper,
             "connectivity": ConnectivityGrouper,
@@ -125,6 +125,7 @@ class GrouperJobRunner(JobRunner):
             "conformer_ids": job.conformer_ids,  # Pass custom conformer IDs
             "skipped_ids": job.skipped_ids,  # Pass skipped IDs
             "matrix_format": job.matrix_format,  # Pass output format
+            "representative_strategy": job.representative_strategy,
             "energy_type": job.energy_type,
             "thermo_parameters": job.thermo_parameters,
         }
@@ -134,7 +135,7 @@ class GrouperJobRunner(JobRunner):
             kwargs["threshold"] = job.threshold
             kwargs["num_groups"] = job.num_groups
             kwargs["ignore_hydrogens"] = job.ignore_hydrogens
-        elif strategy == "torsion":
+        elif strategy == "tfd":
             kwargs["threshold"] = job.threshold
             kwargs["num_groups"] = job.num_groups
             kwargs["ignore_hydrogens"] = job.ignore_hydrogens
@@ -160,7 +161,7 @@ class GrouperJobRunner(JobRunner):
         """
         Write grouping results following the same logic as utils/grouper.py unique() method.
 
-        - Creates per-group xyz files with molecules sorted by energy
+        - Creates per-group xyz files with representative-defined ordering
         - Collects representative molecules for downstream job state/output use
         """
         unique_molecules = []
@@ -172,38 +173,15 @@ class GrouperJobRunner(JobRunner):
         file_prefix = f"{job.label}_group" if job.label else "group"
 
         for i, (group, indices) in enumerate(zip(groups, group_indices)):
-            # Create tuples of (molecule, original_index) for tracking
-            mol_index_pairs = list(zip(group, indices))
+            # Group ordering is finalized upstream; first entry is representative.
+            ordered_pairs = list(zip(group, indices))
 
-            # Filter molecules that have energy information and sort by energy
-            molecules_with_energy = [
-                (mol, idx)
-                for mol, idx in mol_index_pairs
-                if mol.energy is not None
-            ]
-            molecules_without_energy = [
-                (mol, idx)
-                for mol, idx in mol_index_pairs
-                if mol.energy is None
-            ]
-
-            # Sort molecules with energy by energy (ascending - lowest first)
-            if molecules_with_energy:
-                sorted_pairs = sorted(
-                    molecules_with_energy, key=lambda pair: pair[0].energy
-                )
-                # Add molecules without energy at the end
-                sorted_pairs.extend(molecules_without_energy)
-            else:
-                # If no molecules have energy, use original group order
-                sorted_pairs = mol_index_pairs
-
-            # Write group XYZ file with all molecules sorted by energy
+            # Write group XYZ file preserving representative-defined ordering
             group_filename = os.path.join(
                 job.output_dir, f"{file_prefix}_{i+1}.xyz"
             )
             with open(group_filename, "w") as f:
-                for j, (mol, original_idx) in enumerate(sorted_pairs):
+                for j, (mol, original_idx) in enumerate(ordered_pairs):
                     # Write the molecule coordinates
                     f.write(f"{mol.num_atoms}\n")
 
@@ -230,11 +208,11 @@ class GrouperJobRunner(JobRunner):
                         )
 
             logger.info(
-                f"Written group {i+1} with {len(sorted_pairs)} molecules to {group_filename}"
+                f"Written group {i+1} with {len(ordered_pairs)} molecules to {group_filename}"
             )
 
-            # Add the lowest energy molecule (first in sorted pairs) as representative
-            unique_molecules.append(sorted_pairs[0][0])
+            if ordered_pairs:
+                unique_molecules.append(ordered_pairs[0][0])
 
         logger.info(
             f"Generated {len(groups)} group XYZ files in {job.output_dir}"

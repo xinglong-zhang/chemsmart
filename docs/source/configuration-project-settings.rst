@@ -238,7 +238,7 @@ This configuration:
    -  MDCI (Modified Davidson Configuration Interaction) cutoff parameters
 
 This workflow is efficient for obtaining highly accurate energies on DFT-optimized geometries, commonly used for
-thermochemistry and reaction energetics. One can simply use Gaussian .log file as input for chemsmart to automatically
+thermochemistry and reaction energetics. One can simply use Gaussian .log file as input for CHEMSMART to automatically
 create ORCA single-point .inp file in a single command (see later examples).
 
 Key ORCA-Specific Parameters
@@ -394,7 +394,7 @@ This produces:
 
    **ORCA 6.1 duplicate-keyword guard:** When ``solvent_id`` is set, ``COSMORS(solvent_id)`` already encodes the solvent
    in the route line. Writing ``solvent "name"`` inside the ``%cosmors`` block too would cause ORCA to raise an ``INPUT
-   ERROR: DUPLICATED KEYWORD``. chemsmart automatically filters out any ``solvent "..."`` lines from the ``%cosmors``
+   ERROR: DUPLICATED KEYWORD``. CHEMSMART automatically filters out any ``solvent "..."`` lines from the ``%cosmors``
    block when ``solvent_id`` is set.
 
    ``solventfilename "..."`` is a **different** keyword (it points to a ``.cosmorsxyz`` file) and is **never** filtered.
@@ -419,7 +419,7 @@ listed.
           -sm cosmors -si mysolvent -sf /path/to/mysolvent.cosmorsxyz sp
 
    The file is copied to the running directory (scratch or job folder) and ``solventfilename "mysolvent"`` is injected
-   into the ``%cosmors`` block automatically. If scratch is enabled, chemsmart also detects ``solventfilename "..."``
+   into the ``%cosmors`` block automatically. If scratch is enabled, CHEMSMART also detects ``solventfilename "..."``
    entries in the written input and copies the corresponding ``.cosmorsxyz`` file to scratch so ORCA can locate it.
 
 **SMD with named solvent and extra parameters:**

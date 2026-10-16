@@ -51,6 +51,12 @@ def temporary_working_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture()
+def captured():
+    """Return an empty dictionary for capturing mock call arguments."""
+    return {}
+
+
 ############ Thermochemistry Mock Fixtures ##################
 @pytest.fixture()
 def make_thermochemistry_mock():
@@ -1793,6 +1799,31 @@ def orca_yaml_settings_custom_solv_cosmors_project_name(
     orca_yaml_settings_directory,
 ):
     return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
+
+
+@pytest.fixture
+def orca_td_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "orca_td")
+
+
+@pytest.fixture
+def orca_td_extras_project_name(orca_yaml_settings_directory):
+    """Project name whose ``td:`` block sets ``additional_route_parameters``."""
+    return os.path.join(orca_yaml_settings_directory, "orca_td_extras")
+
+
+@pytest.fixture
+def orca_td_numfreq_project_name(orca_yaml_settings_directory):
+    """Project name whose ``td:`` block requests ``NumFreq`` via YAML."""
+    return os.path.join(orca_yaml_settings_directory, "orca_td_numfreq")
+
+
+@pytest.fixture
+def orca_td_inherited_project_name(orca_yaml_settings_directory):
+    """Project name whose ``td:`` block omits ``freq``; combined with the
+    ``ORCAJobSettings`` defaults this yields ``freq=True`` inherited into the
+    TD settings, without any ``additional_route_parameters``."""
+    return os.path.join(orca_yaml_settings_directory, "orca_td_inherited")
 
 
 # master xTB test directory

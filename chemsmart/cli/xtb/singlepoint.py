@@ -24,7 +24,9 @@ def sp(ctx, skip_completed, **kwargs):
     logger.info(f"Final xTB sp settings: {sp_settings.__dict__}")
 
     from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
+    from chemsmart.utils.cli import create_sp_label
 
+    ctx.obj["label"] = create_sp_label(ctx.obj["label"], sp_settings)
     return build_jobs(
         ctx, XTBSinglePointJob, sp_settings, skip_completed, kwargs
     )

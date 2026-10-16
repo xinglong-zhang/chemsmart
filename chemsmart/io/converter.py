@@ -87,13 +87,11 @@ class FileConverter:
                 # get filetype/extension from filename
                 self.type = self.filename.split(".")[-1]
                 logger.info(f"Converting file: {self.filename}")
-                output_path = self.output_filepath
-                if output_path is None:
-                    filedir, fname = os.path.split(self.filename)
-                    basename = os.path.splitext(fname)[0]
-                    output_path = os.path.join(
-                        filedir, f"{basename}.{self.output_filetype}"
-                    )
+                output_path = self.resolve_output_path(
+                    self.filename,
+                    output=self.output_filepath,
+                    output_filetype=self.output_filetype,
+                )
                 self.convert_file(
                     self.filename,
                     output_path,
@@ -253,6 +251,39 @@ class FileConverter:
             f"Open Babel (overwrite={overwrite})"
         )
         xyz_mol.write("pdb", pdb_filename, overwrite=overwrite)
+
+    @staticmethod
+    def resolve_output_path(input_path, output=None, output_filetype="xyz"):
+        """Resolve a single-file output path from input and output options.
+
+        When *output* is ``None``, returns ``{input_dir}/{input_stem}.{output_filetype}``.
+        When *output* is extension-only (no directory separators and either
+        starts with ``.`` or contains no ``.``), returns
+        ``{input_dir}/{input_stem}.{ext}``.
+        Otherwise *output* is treated as a full output path.
+
+        Args:
+            input_path (str): Path to the input file.
+            output (str | None): Output path or extension shorthand.
+            output_filetype (str): Default output extension when *output* is
+                ``None``. Defaults to ``xyz``.
+
+        Returns:
+            str: Resolved output file path.
+        """
+        filedir, fname = os.path.split(input_path)
+        basename = os.path.splitext(fname)[0]
+
+        if output is None:
+            return os.path.join(filedir, f"{basename}.{output_filetype}")
+
+        if os.path.sep not in output and (
+            output.startswith(".") or "." not in output
+        ):
+            ext = output.lstrip(".")
+            return os.path.join(filedir, f"{basename}.{ext}")
+
+        return output
 
     @staticmethod
     def convert_file(

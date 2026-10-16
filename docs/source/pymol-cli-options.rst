@@ -61,15 +61,15 @@ This page documents the CLI options for molecular visualization and analysis usi
 
    -  -  ``--ri, --record-index``
       -  int
-      -  Select a record from a chemsmart database by its 1-based index
+      -  Select a record from a CHEMSMART database by its 1-based index
 
    -  -  ``--rid, --record-id``
       -  string
-      -  Select a record from a chemsmart database by its ID
+      -  Select a record from a CHEMSMART database by its ID
 
    -  -  ``--sid, --structure-id``
       -  string
-      -  Select a structure from a chemsmart database by its ID
+      -  Select a structure from a CHEMSMART database by its ID
 
    -  -  ``--mid, --molecule-id``
       -  string

@@ -33,9 +33,9 @@ wavefunction data.
 
 -  ``.xyz`` - Cartesian coordinates
 -  ``.log`` - Gaussian output files (coordinates only)
--  Any other geometry file format supported by chemsmart's file converter
+-  Any other geometry file format supported by CHEMSMART's file converter
 
-**Behavior:** When you provide these file types, chemsmart automatically:
+**Behavior:** When you provide these file types, CHEMSMART automatically:
 
 #. Appends ``_promolecular`` to the job label (unless already present)
 #. Converts non-XYZ files to XYZ format with ``_promolecular.xyz`` suffix
@@ -52,7 +52,7 @@ accurate calculations.
 -  ``.wfn`` - Gaussian wavefunction file
 -  ``.wfx`` - Extended wavefunction format
 
-**Behavior:** When you provide these file types, chemsmart:
+**Behavior:** When you provide these file types, CHEMSMART:
 
 #. Uses the original file label without modification
 #. Directly uses the wavefunction data for density calculations
@@ -60,7 +60,7 @@ accurate calculations.
 
 .. warning::
 
-   After the required files have been generated with NCIPLOT, they can be loaded using chemsmart's built-in :doc:`PyMOL
+   After the required files have been generated with NCIPLOT, they can be loaded using CHEMSMART's built-in :doc:`PyMOL
    visualization commands <pymol-interaction-analysis>`. However, the same molecular structure may yield different NCI
    plots depending on whether NCIPLOT uses **promolecular density** or **wavefunction density**.
 

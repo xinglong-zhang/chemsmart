@@ -45,20 +45,26 @@ IRC Options
 Basic Usage
 ===========
 
-Standard IRC visualization:
-
-.. code:: bash
-
-   chemsmart run mol -f irc_output.log irc
-
 With separate reactant/product files:
 
 .. code:: bash
 
-   chemsmart run mol -f ts_structure.xyz irc -r reactant.log
+   chemsmart run mol irc -r irc_reactant_side.log -p irc_product_side.log
 
 From complete trajectory:
 
 .. code:: bash
 
-   chemsmart run mol -f ts.xyz irc -a full_irc_trajectory.log
+   chemsmart run mol irc -a full_irc_trajectory.log
+
+For reactant side pathway movie:
+
+.. code:: bash
+
+   chemsmart run mol irc -r irc_reactant_side.log
+
+For product side pathway movie:
+
+.. code:: bash
+
+   chemsmart run mol irc -p irc_product_side.log

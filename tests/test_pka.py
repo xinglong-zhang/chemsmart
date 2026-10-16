@@ -137,7 +137,7 @@ def _write_test_backend_project(tmp_path, backend):
     return config_root
 
 
-def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
+def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend, captured):
     """Shared fixtures for sub ... pka batch submission tests."""
     acid1 = tmp_path / "acid1.xyz"
     acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
@@ -157,7 +157,7 @@ def _setup_sub_pka_batch_test(tmp_path, monkeypatch, backend):
     from chemsmart.settings.server import Server
 
     fake_server = Server(name="dummy")
-    captured = {"submissions": []}
+    captured["submissions"] = []
     fake_server.submit = lambda job, test=False, cli_args=None, **kw: captured[
         "submissions"
     ].append((job, test, cli_args))
@@ -1222,7 +1222,7 @@ class TestPKa:
         assert result.exit_code != 0
 
     def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, captured
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -1258,7 +1258,7 @@ class TestPKa:
         )
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        captured = {"submissions": []}
+        captured["submissions"] = []
 
         fake_server = Server(name="dummy")
         real_from_filepath = Molecule.from_filepath
@@ -1321,7 +1321,7 @@ class TestPKa:
         assert str(table) not in first_args
 
     def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, captured
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -1357,7 +1357,7 @@ class TestPKa:
         )
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        captured = {"submissions": []}
+        captured["submissions"] = []
 
         fake_server = Server(name="dummy")
         real_from_filepath = Molecule.from_filepath
@@ -1428,7 +1428,7 @@ class TestPKa:
         assert first_args.index("submit") < first_args.index("--proton-index")
 
     def test_sub_orca_pka_batch_shared_reference_loaded_once(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, captured
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -1467,7 +1467,7 @@ class TestPKa:
         )
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        captured = {"submissions": []}
+        captured["submissions"] = []
         reference_pair_call_count = {"count": 0}
 
         fake_server = Server(name="dummy")
@@ -1544,7 +1544,7 @@ class TestPKa:
         assert reference_pair_call_count["count"] == 0
 
     def test_sub_orca_pka_batch_first_exchange_rest_direct(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, captured
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -1582,7 +1582,7 @@ class TestPKa:
         )
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        captured = {"submissions": []}
+        captured["submissions"] = []
 
         fake_server = Server(name="dummy")
         real_from_filepath = Molecule.from_filepath
@@ -1845,12 +1845,12 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_auto_routes_to_batch(
-        self, tmp_path, monkeypatch, backend
+        self, tmp_path, monkeypatch, backend, captured
     ):
         """Table -f input should use batch workflow without requiring -pi."""
         _require_backend_pka_subcommand(sub, backend)
         table, captured = _setup_sub_pka_batch_test(
-            tmp_path, monkeypatch, backend
+            tmp_path, monkeypatch, backend, captured
         )
 
         runner = CliRunner()
@@ -1879,12 +1879,12 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_without_batch_subcommand(
-        self, tmp_path, monkeypatch, backend
+        self, tmp_path, monkeypatch, backend, captured
     ):
         """Omitting the batch subcommand still routes table input to batch."""
         _require_backend_pka_subcommand(sub, backend)
         table, captured = _setup_sub_pka_batch_test(
-            tmp_path, monkeypatch, backend
+            tmp_path, monkeypatch, backend, captured
         )
 
         runner = CliRunner()
@@ -1912,12 +1912,12 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_submit_subcommand_routes_to_batch(
-        self, tmp_path, monkeypatch, backend
+        self, tmp_path, monkeypatch, backend, captured
     ):
         """Explicit submit with table -f still uses row-wise batch processing."""
         _require_backend_pka_subcommand(sub, backend)
         table, captured = _setup_sub_pka_batch_test(
-            tmp_path, monkeypatch, backend
+            tmp_path, monkeypatch, backend, captured
         )
 
         runner = CliRunner()
@@ -1946,12 +1946,12 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_batch_reconstructed_run_args_accept_proton_index(
-        self, tmp_path, monkeypatch, backend
+        self, tmp_path, monkeypatch, backend, captured
     ):
         """Per-row chemsmart_run_*.py args must parse --proton-index under run."""
         _require_backend_pka_subcommand(sub, backend)
         table, captured = _setup_sub_pka_batch_test(
-            tmp_path, monkeypatch, backend
+            tmp_path, monkeypatch, backend, captured
         )
 
         runner = CliRunner()
@@ -1999,6 +1999,7 @@ class TestPKa:
         monkeypatch,
         backend,
         colored_proton_two_molecule_cdxml_file,
+        captured,
     ):
         """CDXML batch should create one job per coloured-proton fragment."""
         _require_backend_pka_subcommand(sub, backend)
@@ -2008,7 +2009,7 @@ class TestPKa:
         from chemsmart.settings.server import Server
 
         fake_server = Server(name="dummy")
-        captured = {"labels": []}
+        captured["labels"] = []
         fake_server.submit = (
             lambda job, test=False, cli_args=None, **kw: captured[
                 "labels"
@@ -2056,6 +2057,7 @@ class TestPKa:
         monkeypatch,
         backend,
         colored_proton_two_molecule_cdxml_file,
+        captured,
     ):
         """CDXML batch should infer charge/mult from parsed Molecule objects."""
         _require_backend_pka_subcommand(sub, backend)
@@ -2065,7 +2067,7 @@ class TestPKa:
         from chemsmart.settings.server import Server
 
         fake_server = Server(name="dummy")
-        captured = {"jobs": []}
+        captured["jobs"] = []
         fake_server.submit = (
             lambda job, test=False, cli_args=None, **kw: captured[
                 "jobs"
@@ -2123,6 +2125,7 @@ class TestPKa:
         monkeypatch,
         backend,
         colored_proton_two_molecule_cdxml_file,
+        captured,
     ):
         """Each CDXML fragment script must submit only that fragment, not re-batch all."""
         _require_backend_pka_subcommand(sub, backend)
@@ -2132,7 +2135,7 @@ class TestPKa:
         from chemsmart.settings.server import Server
 
         fake_server = Server(name="dummy")
-        captured = {"submissions": []}
+        captured["submissions"] = []
         fake_server.submit = (
             lambda job, test=False, cli_args=None, **kw: captured[
                 "submissions"
@@ -2211,6 +2214,7 @@ class TestPKa:
         monkeypatch,
         backend,
         colored_proton_two_molecule_cdxml_file,
+        captured,
     ):
         """CDXML batch must not fall back to a sibling CSV submission table."""
         _require_backend_pka_subcommand(sub, backend)
@@ -2228,7 +2232,7 @@ class TestPKa:
         from chemsmart.settings.server import Server
 
         fake_server = Server(name="dummy")
-        captured = {"labels": []}
+        captured["labels"] = []
         fake_server.submit = (
             lambda job, test=False, cli_args=None, **kw: captured[
                 "labels"
@@ -2419,7 +2423,12 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_cdxml_blank_proton_index_auto_detects(
-        self, tmp_path, monkeypatch, backend, colored_proton_cdxml_file
+        self,
+        tmp_path,
+        monkeypatch,
+        backend,
+        colored_proton_cdxml_file,
+        captured,
     ):
         """CDXML rows with blank proton_index auto-detect the coloured proton."""
         _require_backend_pka_subcommand(sub, backend)
@@ -2436,7 +2445,7 @@ class TestPKa:
         from chemsmart.settings.server import Server
 
         fake_server = Server(name="dummy")
-        captured = {"submissions": []}
+        captured["submissions"] = []
         fake_server.submit = (
             lambda job, test=False, cli_args=None, **kw: captured[
                 "submissions"
@@ -2474,7 +2483,12 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_sub_pka_csv_table_cdxml_explicit_proton_index_overrides(
-        self, tmp_path, monkeypatch, backend, colored_proton_cdxml_file
+        self,
+        tmp_path,
+        monkeypatch,
+        backend,
+        colored_proton_cdxml_file,
+        captured,
     ):
         """Explicit table proton_index overrides CDXML coloured-proton detection."""
         _require_backend_pka_subcommand(sub, backend)
@@ -2491,7 +2505,7 @@ class TestPKa:
         from chemsmart.settings.server import Server
 
         fake_server = Server(name="dummy")
-        captured = {"submissions": []}
+        captured["submissions"] = []
         fake_server.submit = (
             lambda job, test=False, cli_args=None, **kw: captured[
                 "submissions"
@@ -2664,6 +2678,7 @@ class TestPKa:
         orca_jobrunner_no_scratch,
         tmp_path,
         monkeypatch,
+        captured,
     ):
         from chemsmart.io.molecules.structure import Molecule
         from chemsmart.jobs.orca.pka import ORCApKaJob
@@ -2694,7 +2709,7 @@ class TestPKa:
                 "****ORCA TERMINATED NORMALLY****\n"
             )
 
-        captured = {"sp_labels": []}
+        captured["sp_labels"] = []
 
         def _fake_run_phase_jobs(*, jobs=None, jobs_factory=None, **kwargs):
             phase_jobs = jobs_factory() if jobs_factory is not None else jobs
@@ -2750,7 +2765,11 @@ class TestPKa:
         )
 
     def test_orca_pka_run_executes_ha_and_a_opt_jobs(
-        self, single_molecule_xyz_file, orca_jobrunner_no_scratch, monkeypatch
+        self,
+        single_molecule_xyz_file,
+        orca_jobrunner_no_scratch,
+        monkeypatch,
+        captured,
     ):
         """ORCA pKa opt phase should run both acid and conjugate-base jobs."""
         from chemsmart.io.molecules.structure import Molecule
@@ -2777,7 +2796,7 @@ class TestPKa:
             jobrunner=orca_jobrunner_no_scratch,
         )
 
-        captured = {"labels": []}
+        captured["labels"] = []
 
         def _fake_run_phase_jobs(*, jobs, **kwargs):
             for child_job in jobs:
@@ -2793,7 +2812,7 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_run_pka_batch_table_processing(
-        self, tmp_path, monkeypatch, backend
+        self, tmp_path, monkeypatch, backend, captured
     ):
         """pKa table batch returns multiple jobs; run executes each locally."""
         _require_backend_pka_subcommand(run, backend)
@@ -2801,7 +2820,7 @@ class TestPKa:
         config_root = _write_test_backend_project(tmp_path, backend)
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(config_root))
 
-        captured = {"runs": []}
+        captured["runs"] = []
 
         from chemsmart.jobs.job import Job
 
@@ -2838,7 +2857,7 @@ class TestPKa:
 
     @pytest.mark.parametrize("backend", ["gaussian", "orca"])
     def test_run_pka_batch_with_no_scratch(
-        self, tmp_path, monkeypatch, backend
+        self, tmp_path, monkeypatch, backend, captured
     ):
         """Explicit --no-scratch should not require a scratch directory."""
         _require_backend_pka_subcommand(run, backend)
@@ -2853,7 +2872,7 @@ class TestPKa:
             runner_module.user_settings, "scratch", str(missing_scratch)
         )
 
-        captured = {"runs": []}
+        captured["runs"] = []
 
         from chemsmart.jobs.job import Job
 

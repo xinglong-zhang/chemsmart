@@ -65,6 +65,7 @@ class XTBJobSettings:
         self.grad = grad
         self.solvent_model = solvent_model
         self.solvent_id = solvent_id
+        self.custom_solvent = None
         self.constraints = constraints
         self.force_constant = force_constant
         self.input_string = input_string

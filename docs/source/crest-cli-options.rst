@@ -54,20 +54,20 @@ Project and File Options
 
    -  -  ``--ri, --record-index``
       -  int
-      -  Select a record from a chemsmart database by its 1-based index
+      -  Select a record from a CHEMSMART database by its 1-based index
 
    -  -  ``--rid, --record-id``
       -  string
-      -  Select a record from a chemsmart database by its ID
+      -  Select a record from a CHEMSMART database by its ID
 
    -  -  ``--sid, --structure-id``
       -  string
-      -  Select a structure from a chemsmart database by its ID
+      -  Select a structure from a CHEMSMART database by its ID
 
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a chemsmart
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a CHEMSMART
       database ``.db`` file.
 
 Specifying Output Filenames
@@ -270,7 +270,7 @@ Examples:
 Database Input
 ==============
 
-CREST jobs can take geometries from a chemsmart ``.db`` file using the selectors:
+CREST jobs can take geometries from a CHEMSMART ``.db`` file using the selectors:
 
 .. code:: bash
 

@@ -154,6 +154,16 @@ computational chemistry software.
 
 .. toctree::
    :maxdepth: 2
+   :caption: The Molecule Object
+
+   api-molecule-overview
+   api-molecule-creating
+   api-molecule-manipulation
+   api-molecule-properties
+   api-molecule-geometry
+
+.. toctree::
+   :maxdepth: 2
    :caption: API Reference
 
    modules
