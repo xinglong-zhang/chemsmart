@@ -190,6 +190,29 @@ class TestCRESTCLILabelFallback:
         label = mock_job_cls.call_args[1]["label"]
         assert label == "output_suffix"
 
+    def test_append_label_suffixes_filename_derived_label(
+        self, single_molecule_xyz_file
+    ):
+        result, _, mock_job_cls = _invoke_crest_and_capture_settings(
+            "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-a",
+                "suffix",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "conformers",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label.endswith("_suffix")
+
 
 class TestCRESTJobClasses:
     def test_crest_job_types_are_distinct(self):

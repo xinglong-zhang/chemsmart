@@ -24,6 +24,13 @@ class TestXTBJobConstructionValidation:
                 label="water_opt",
             )
 
+    def test_label_defaults_to_empirical_chemical_formula(
+        self, water_molecule
+    ):
+        settings = XTBJobSettings(charge=0, multiplicity=1, jobtype="opt")
+        job = XTBOptJob(molecule=water_molecule, settings=settings, label=None)
+        assert job.label == water_molecule.get_chemical_formula(empirical=True)
+
 
 class TestXTBJobs:
     def test_opt_job_with_constraints(

@@ -26,6 +26,17 @@ class TestCRESTJobConstructionValidation:
                 label="water_conformers",
             )
 
+    def test_label_defaults_to_empirical_chemical_formula(
+        self, water_molecule
+    ):
+        settings = CRESTJobSettings(
+            charge=0, multiplicity=1, jobtype="conformers"
+        )
+        job = CRESTConformerSearchJob(
+            molecule=water_molecule, settings=settings, label=None
+        )
+        assert job.label == water_molecule.get_chemical_formula(empirical=True)
+
 
 class TestCRESTJobs:
     def test_conformers_job_with_constraints(
