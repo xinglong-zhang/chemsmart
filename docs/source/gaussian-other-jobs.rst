@@ -544,7 +544,7 @@ reference wavefunctions through their state-specific checkpoints. In broken-symm
 perform stability analysis before the separate analytic frequency jobs. The raw Cartesian force constants are read from
 formatted checkpoints generated automatically with Gaussian's ``formchk`` utility; the same Lagrangian Hessian, seam
 projection and mass weighting are used for both methods. An unsupported analytic calculation or missing/incomplete
-Hessian fails rather than silently falling back to ChemSmart numerical differences.
+Hessian fails rather than silently falling back to CHEMSMART numerical differences.
 
 Analytic inputs and raw outputs are stored under ``<label>_anafreq/``, with names such as
 ``<label>_hessian_analytic_A.com``, ``.log`` and ``.fchk``. Macro-step files include ``macro07_hessian_analytic_A``. The
