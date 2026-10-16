@@ -20,11 +20,6 @@ from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
-from chemsmart.utils.repattern import (
-    gaussian_freq_keywords_pattern,
-    gaussian_opt_keywords_pattern,
-    multiple_spaces_pattern,
-)
 
 pt = PeriodicTable()
 
@@ -2090,6 +2085,235 @@ class GaussianIRCJobSettings(GaussianJobSettings):
         return route_string
 
 
+class GaussianMECPJobSettings(GaussianJobSettings):
+    """Specialized settings for Gaussian MECP jobs.
+
+    Two built-in convergence presets are provided via ``convergence_preset``:
+
+    ``"standard"`` (default)
+        Suitable for most MECP searches.  Uses loose-to-medium tolerances
+        comparable to a Gaussian geometry optimisation at the ``Loose``
+        level:
+
+        ==================  ============  =====
+        Parameter           Value         Unit
+        ==================  ============  =====
+        energy_diff_tol     5.0 × 10⁻⁵   Hartree
+        force_max_tol       7.0 × 10⁻⁴   Hartree/Bohr
+        force_rms_tol       5.0 × 10⁻⁴   Hartree/Bohr
+        disp_max_tol        4.0 × 10⁻³   Bohr
+        disp_rms_tol        2.5 × 10⁻³   Bohr
+        trust_radius        0.3           Bohr
+        ==================  ============  =====
+
+    ``"tight"``
+        Publication-quality refinement.  Use for final geometry confirmation:
+
+        ==================  ============  =====
+        Parameter           Value         Unit
+        ==================  ============  =====
+        energy_diff_tol     1.0 × 10⁻⁵   Hartree
+        force_max_tol       3.0 × 10⁻⁴   Hartree/Bohr
+        force_rms_tol       1.0 × 10⁻⁴   Hartree/Bohr
+        disp_max_tol        2.0 × 10⁻³   Bohr
+        disp_rms_tol        1.0 × 10⁻³   Bohr
+        trust_radius        0.1           Bohr
+        ==================  ============  =====
+
+    Individual tolerance options (``energy_diff_tol`` etc.) always override
+    the preset values.
+    """
+
+    #: Predefined convergence thresholds.  Keys are preset names; values are
+    #: dicts mapping setting attribute names to their values.
+    CONVERGENCE_PRESETS = {
+        "standard": {
+            "energy_diff_tol": 5.0e-5,  # Hartree
+            "force_max_tol": 7.0e-4,  # Hartree/Bohr
+            "force_rms_tol": 5.0e-4,  # Hartree/Bohr
+            "disp_max_tol": 4.0e-3,  # Bohr
+            "disp_rms_tol": 2.5e-3,  # Bohr
+            "trust_radius": 0.3,  # Bohr
+        },
+        "tight": {
+            "energy_diff_tol": 1.0e-5,  # Hartree
+            "force_max_tol": 3.0e-4,  # Hartree/Bohr
+            "force_rms_tol": 1.0e-4,  # Hartree/Bohr
+            "disp_max_tol": 2.0e-3,  # Bohr
+            "disp_rms_tol": 1.0e-3,  # Bohr
+            "trust_radius": 0.1,  # Bohr
+        },
+    }
+
+    def __init__(
+        self,
+        multiplicity_a=1,
+        multiplicity_b=3,
+        charge_a=0,
+        charge_b=0,
+        title_a="First",
+        title_b="Second",
+        max_steps=500,
+        step_size=0.1,  # Bohr^2/Hartree
+        # Convergence preset: "standard" or "tight".  Individual tolerance
+        # kwargs below override the preset values when set explicitly.
+        convergence_preset="standard",
+        # Standard convergence defaults (overridden by preset if not supplied)
+        energy_diff_tol=None,  # Hartree   – None means "use preset"
+        force_max_tol=None,  # Hartree/Bohr
+        force_rms_tol=None,  # Hartree/Bohr
+        disp_max_tol=None,  # Bohr
+        disp_rms_tol=None,  # Bohr
+        trust_radius=None,  # Bohr
+        adaptive_step_size=True,
+        step_size_method="harvey",  # "harvey", "bb", or "grow_shrink"
+        step_size_grow=1.2,  # dimensionless multiplier; grow × shrink = 0.84 (mild damping per cycle)
+        step_size_shrink=0.7,  # dimensionless multiplier; stronger than 1/grow to damp oscillations
+        step_size_min=1.0e-4,  # Bohr^2/Hartree
+        step_size_max=1.0,  # Bohr^2/Hartree
+        harvey_initial_hessian=0.7,  # Angstrom^2/Hartree
+        harvey_max_component_step=0.1,  # Angstrom
+        harvey_max_condition=1.0e12,
+        # broken-symmetry link-job mode
+        use_link=False,
+        stable="opt",  # stability analysis for link mode
+        guess="mix",  # initial guess for link mode (e.g. "mix" to break α/β symmetry)
+        # seam-minimum verification via effective Hessian analysis
+        mecp_numfreq=False,
+        mecp_numfreq_only=False,
+        hessian_method="numerical",
+        hess_step_size=1.0e-3,  # Bohr; finite-difference displacement for numerical Hessian
+        follow_seam_imaginary_mode=False,
+        seam_mode_displacement=0.05,
+        seam_mode_max_steps=30,
+        restart=True,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.multiplicity_a = multiplicity_a
+        self.multiplicity_b = multiplicity_b
+        self.charge_a = charge_a
+        self.charge_b = charge_b
+        self.title_a = title_a
+        self.title_b = title_b
+        self.max_steps = max_steps
+        self.step_size = step_size
+
+        # Resolve convergence parameters: preset first, then explicit overrides.
+        if convergence_preset not in self.CONVERGENCE_PRESETS:
+            raise ValueError(
+                f"Unknown convergence_preset={convergence_preset!r}. "
+                f"Choose from: {list(self.CONVERGENCE_PRESETS)}"
+            )
+        self.convergence_preset = convergence_preset
+        preset = self.CONVERGENCE_PRESETS[convergence_preset]
+
+        self.energy_diff_tol = (
+            energy_diff_tol
+            if energy_diff_tol is not None
+            else preset["energy_diff_tol"]
+        )
+        self.force_max_tol = (
+            force_max_tol
+            if force_max_tol is not None
+            else preset["force_max_tol"]
+        )
+        self.force_rms_tol = (
+            force_rms_tol
+            if force_rms_tol is not None
+            else preset["force_rms_tol"]
+        )
+        self.disp_max_tol = (
+            disp_max_tol
+            if disp_max_tol is not None
+            else preset["disp_max_tol"]
+        )
+        self.disp_rms_tol = (
+            disp_rms_tol
+            if disp_rms_tol is not None
+            else preset["disp_rms_tol"]
+        )
+        self.trust_radius = (
+            trust_radius
+            if trust_radius is not None
+            else preset["trust_radius"]
+        )
+
+        self.adaptive_step_size = adaptive_step_size
+        valid_step_size_methods = {"harvey", "bb", "grow_shrink"}
+        if step_size_method not in valid_step_size_methods:
+            raise ValueError(
+                f"Unknown MECP step_size_method {step_size_method!r}; expected one of "
+                f"{sorted(valid_step_size_methods)}."
+            )
+        self.step_size_method = step_size_method
+        self.step_size_grow = step_size_grow
+        self.step_size_shrink = step_size_shrink
+        self.step_size_min = step_size_min
+        self.step_size_max = step_size_max
+        self.harvey_initial_hessian = harvey_initial_hessian
+        self.harvey_max_component_step = harvey_max_component_step
+        self.harvey_max_condition = harvey_max_condition
+        self.use_link = use_link
+        self.stable = stable
+        self.guess = guess
+        if mecp_numfreq_only and follow_seam_imaginary_mode:
+            raise ValueError("MECP numfreq-only cannot follow seam modes.")
+        self.mecp_numfreq_only = mecp_numfreq_only
+        self.mecp_numfreq = (
+            mecp_numfreq or follow_seam_imaginary_mode or mecp_numfreq_only
+        )
+        if hessian_method not in {"numerical", "analytic"}:
+            raise ValueError("hessian_method must be numerical or analytic")
+        self.hessian_method = hessian_method
+        self.hess_step_size = hess_step_size
+        self.follow_seam_imaginary_mode = follow_seam_imaginary_mode
+        self.seam_mode_displacement = seam_mode_displacement
+        self.seam_mode_max_steps = seam_mode_max_steps
+        self.restart = restart
+
+        positive_values = {
+            "max_steps": max_steps,
+            "step_size": step_size,
+            "energy_diff_tol": self.energy_diff_tol,
+            "force_max_tol": self.force_max_tol,
+            "force_rms_tol": self.force_rms_tol,
+            "disp_max_tol": self.disp_max_tol,
+            "disp_rms_tol": self.disp_rms_tol,
+            "trust_radius": self.trust_radius,
+            "step_size_min": step_size_min,
+            "step_size_max": step_size_max,
+            "harvey_initial_hessian": harvey_initial_hessian,
+            "harvey_max_component_step": harvey_max_component_step,
+            "harvey_max_condition": harvey_max_condition,
+            "hess_step_size": hess_step_size,
+            "seam_mode_displacement": seam_mode_displacement,
+            "seam_mode_max_steps": seam_mode_max_steps,
+        }
+        invalid = [
+            name for name, value in positive_values.items() if value <= 0
+        ]
+        if invalid:
+            raise ValueError(
+                "MECP settings must be positive: " + ", ".join(invalid)
+            )
+        if step_size_min > step_size_max:
+            raise ValueError("step_size_min cannot exceed step_size_max.")
+        if multiplicity_a < 1 or multiplicity_b < 1:
+            raise ValueError("MECP multiplicities must be positive integers.")
+        if charge_a == charge_b and multiplicity_a == multiplicity_b:
+            raise ValueError("MECP states A and B must not be identical.")
+
+    @classmethod
+    def from_settings(cls, settings):
+        """Create MECP settings from generic Gaussian settings."""
+        if settings is None:
+            return cls()
+        if isinstance(settings, cls):
+            return settings.copy()
+        return cls(**settings.__dict__.copy())
+
+
 class GaussianLinkJobSettings(GaussianJobSettings):
     """
     Specialized settings for Gaussian multi-step link calculations.
@@ -2160,67 +2384,100 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         self.stepsize = stepsize
         self.flat_irc = flat_irc
 
+    @staticmethod
+    def _without_route_options(route, names):
+        """Remove whole top-level options, including nested parenthesized values.
+
+        Match only route keywords, never words inside another option's value.
+        This also accepts whitespace around '=' and case variations.
+        """
+        tokens = []
+        start = 0
+        depth = 0
+        for index, char in enumerate(route):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            elif char.isspace() and depth == 0:
+                if start < index:
+                    tokens.append(route[start:index])
+                start = index + 1
+        if start < len(route):
+            tokens.append(route[start:])
+
+        kept = []
+        index = 0
+        while index < len(tokens):
+            token = tokens[index]
+            keyword = re.split(r"[=(]", token, maxsplit=1)[0].lower()
+            if keyword in names:
+                # Consume a value split off by whitespace around '='.
+                if "=" in token:
+                    if token.endswith("=") and index + 1 < len(tokens):
+                        index += 1
+                elif index + 1 < len(tokens) and tokens[index + 1].startswith(
+                    "="
+                ):
+                    index += 1
+                    if tokens[index] == "=" and index + 1 < len(tokens):
+                        index += 1
+                elif index + 1 < len(tokens) and tokens[index + 1].startswith(
+                    "("
+                ):
+                    index += 1
+            else:
+                kept.append(token)
+            index += 1
+        return " ".join(kept)
+
+    def _continuation_route(self, route):
+        """The writer supplies a title and charge line, requiring geom=check."""
+        route = self._without_route_options(
+            route, {"guess", "geom", "geometry", "stable", "stability"}
+        )
+        return f"{route} geom=check guess=read"
+
     @property
     def link_route_string(self):
-        """
-        Generate the route string for the link calculation step.
-
-        Creates the route string for the second step in a link job,
-        ensuring proper geometry and orbital guess specifications
-        for continuation from the previous step.
-
-        Returns:
-            str: Route string for the link calculation step.
-        """
+        """Generate the continuation route with one geometry and guess option."""
         if self.link_route is not None:
-            link_route_string = self.link_route
-            if self.functional not in self.link_route:
-                link_route_string += f" {self.functional}"
-            if self.basis not in self.link_route:
-                link_route_string += f" {self.basis}"
-            if "geom=check" not in self.link_route:
-                link_route_string += " geom=check"
-            if "guess=read" not in self.link_route:
-                link_route_string += " guess=read"
-            logger.debug(
-                f"Link route for settings {self}: {link_route_string}"
-            )
-            return link_route_string
-
-        link_route_string = self._get_link_route_string_from_jobtype()
-        logger.debug(f"Link route for settings {self}: {link_route_string}")
-        return link_route_string
+            route = self.link_route
+            if self.functional not in route:
+                route += f" {self.functional}"
+            if self.basis not in route:
+                route += f" {self.basis}"
+            return self._continuation_route(route)
+        return self._get_link_route_string_from_jobtype()
 
     def _get_route_string_from_jobtype(self):
         """
         Generate route string for the initial stability analysis step.
 
         Creates the first route string in a link job by removing
-        optimization and frequency keywords and adding stability
-        analysis and guess method specifications.
+        optimization, frequency, and force keywords, then adding
+        stability analysis and guess method specifications.
 
         Returns:
             str: Route string for stability analysis step.
         """
         route_string = super()._get_route_string_from_jobtype()
-        # Remove opt keywords
-        route_string_final = re.sub(
-            gaussian_opt_keywords_pattern,
-            " ",
+        # The first section uses explicit coordinates and only performs the
+        # stability calculation. Link options override inherited project routes.
+        route_string_final = self._without_route_options(
             route_string,
-            flags=re.IGNORECASE,
+            {
+                "opt",
+                "freq",
+                "force",
+                "irc",
+                "guess",
+                "geom",
+                "geometry",
+                "stable",
+                "stability",
+            },
         )
-        # Remove freq keywords
-        route_string_final = re.sub(
-            gaussian_freq_keywords_pattern,
-            " ",
-            route_string_final,
-            flags=re.IGNORECASE,
-        )
-        # Clean up multiple spaces
-        route_string_final = re.sub(
-            multiple_spaces_pattern, " ", route_string_final
-        ).strip()
 
         if self.stable:
             logger.debug(f"Stable: {self.stable}")
@@ -2254,22 +2511,21 @@ class GaussianLinkJobSettings(GaussianJobSettings):
         Returns:
             str: Route string for the optimization/IRC step.
         """
-        # Special handling for IRC jobs - use GaussianIRCJobSettings
+        # Remove inherited task keywords before generating the requested task;
+        # otherwise e.g. a project opt/freq route leaks into MECP force jobs.
+        settings = self.copy()
+        settings.additional_route_parameters = self._without_route_options(
+            self.additional_route_parameters or "",
+            {"opt", "freq", "force", "irc"},
+        )
         if self.jobtype in ["ircf", "ircr"]:
-            # Create a temporary GaussianIRCJobSettings
-            # instance with current settings
-            irc_settings = GaussianIRCJobSettings(**self.__dict__)
-            # Get the IRC route string from the specialized class
+            irc_settings = GaussianIRCJobSettings(**settings.__dict__)
             route_string = irc_settings._get_route_string_from_jobtype()
         else:
-            # For non-IRC jobs, use the existing logic
-            route_string = super()._get_route_string_from_jobtype()
-
-        if "geom=check" not in route_string:
-            route_string += " geom=check"
-        if "guess=read" not in route_string:
-            route_string += " guess=read"
-        return route_string
+            route_string = GaussianJobSettings._get_route_string_from_jobtype(
+                settings
+            )
+        return self._continuation_route(route_string)
 
 
 class GaussianTDDFTJobSettings(GaussianJobSettings):

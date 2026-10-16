@@ -1870,3 +1870,72 @@ class TestGaussianLinkJobSettingsGuess:
         route = self._route(" (mix,always) ")
         assert "guess=(mix,always)" in route
         assert "guess=((mix,always))" not in route
+
+
+class TestGaussianLinkRouteConflicts:
+    """Project route options must not override the two link sections."""
+
+    @pytest.mark.parametrize(
+        "inherited",
+        [
+            "guess=read stable=repeat geom=allcheck",
+            "Guess = (Read, Mix) Stable = Opt Geom = (AllCheck)",
+            "guess=(read,mix) stable=(opt) geom=check",
+        ],
+    )
+    def test_link_options_override_project(self, inherited):
+        settings = GaussianLinkJobSettings(
+            functional="um062x",
+            basis="def2svp",
+            charge=0,
+            multiplicity=1,
+            jobtype="sp",
+            forces=True,
+            guess="mix,always",
+            additional_route_parameters=inherited + " scf=(xqc,maxcycle=256)",
+        )
+        first = settings.route_string.lower()
+        second = settings.link_route_string.lower()
+        assert first.count("guess=") == 1
+        assert "guess=(mix,always)" in first
+        assert first.count("stable=") == 1
+        assert "stable=opt" in first
+        assert "geom" not in first
+        assert "force" not in first
+        assert second.count("guess=") == 1
+        assert second.count("geom=") == 1
+        assert "geom=check guess=read" in second
+        assert "stable" not in second
+        assert "force" in second
+        assert "scf=(xqc,maxcycle=256)" in first
+        assert "scf=(xqc,maxcycle=256)" in second
+        assert settings.additional_route_parameters.startswith(inherited)
+
+    def test_nested_task_values_are_removed_without_damaging_scf(self):
+        settings = GaussianLinkJobSettings(
+            functional="um062x",
+            basis="def2svp",
+            jobtype="sp",
+            forces=True,
+            additional_route_parameters=(
+                "opt=(calcfc,maxstep=5) freq=(readfc,selectnormalmodes=(1,2)) "
+                "irc=(forward) scf=(xqc,maxcycle=256) integral=ultrafine"
+            ),
+        )
+        for route in (settings.route_string, settings.link_route_string):
+            assert "opt=" not in route
+            assert "freq=" not in route
+            assert "irc=" not in route
+            assert "selectnormalmodes" not in route
+            assert "scf=(xqc,maxcycle=256)" in route
+            assert "integral=ultrafine" in route
+
+    def test_custom_continuation_is_normalized(self):
+        settings = GaussianLinkJobSettings(
+            functional="um062x",
+            basis="def2svp",
+            link_route="# um062x def2svp force Guess=(Mix) Geom=AllCheck Stable=Opt",
+        )
+        assert settings.link_route_string == (
+            "# um062x def2svp force geom=check guess=read"
+        )

@@ -30,6 +30,7 @@ from chemsmart.utils.repattern import (
     oniom_energy_pattern,
     oniom_gridpoint_pattern,
     scf_energy_pattern,
+    spin_squared_pattern,
 )
 from chemsmart.utils.utils import (
     get_range_from_list,
@@ -89,29 +90,29 @@ class Gaussian16Output(GaussianFileMixin):
             if not line:
                 continue
             if "Normal termination of Gaussian" in line:
-                logger.debug(f"File {self.filename} terminated normally.")
+                logger.debug(f"{self.filename} terminated normally.")
                 return True
             break
 
-        logger.debug(f"File {self.filename} has error termination.")
+        logger.debug(f"{self.filename} has error termination.")
         return False
 
     @property
     def heavy_elements(self):
-        """List of element symbols that use an explicitly defined basis set
-        in the gen/genecp section.
+        """List of element symbols that use an explicitly defined
+        basis set in the gen/genecp section.
         """
         return self._genecp_info["heavy_elements"]
 
     @property
     def heavy_elements_basis(self):
         """
-        Structured basis specification for heavy elements.
-        When the route string starts with #p, Gaussian prints the expanded
-        orbital exponents and coefficients for elements that use an explicitly
-        defined gen/genecp basis.  This property parses that information into
-        a dict keyed by element symbol, where each value is an ordered list of
-        shell dicts:
+        Structured basis functions specification for heavy elements.
+        When the route string starts with #p, Gaussian prints the orbital
+        exponents and coefficients for elements that use an explicitly
+        defined gen/genecp basis.
+        This property parses that information into a dict keyed by
+        element symbol, where each value is an ordered list of shell dicts:
             {
                 'Br': [
                     {'shell': 'S', 'primitives': [(exp, coef), ...]},
@@ -119,12 +120,13 @@ class Gaussian16Output(GaussianFileMixin):
                     {'shell': 'F', 'primitives': [(exp, coef)]},
                 ],
             }
+
         Returns None when the information is unavailable.
         """
         return self._genecp_info["heavy_elements_basis"]
 
     @property
-    def heavy_elements_ecp(self):
+    def heavy_elements_ecp_functions(self):
         """
         ECP (effective core potential) specification for heavy elements.
         Only available for genecp calculations with #p verbose output.
@@ -143,7 +145,7 @@ class Gaussian16Output(GaussianFileMixin):
             }
         Returns None when not a genecp calculation or information is unavailable.
         """
-        return self._genecp_info["heavy_elements_ecp"]
+        return self._genecp_info["heavy_elements_ecp_functions"]
 
     @property
     def light_elements(self):
@@ -168,13 +170,13 @@ class Gaussian16Output(GaussianFileMixin):
             "light_elements_basis": None,
             "heavy_elements": None,
             "heavy_elements_basis": None,
-            "heavy_elements_ecp": None,
+            "heavy_elements_ecp_functions": None,
         }
         if self.gen_genecp is None:
             return result
         try:
             atom_symbols = self.symbols
-        except Exception:
+        except AttributeError:
             return result
         if not atom_symbols:
             return result
@@ -252,7 +254,7 @@ class Gaussian16Output(GaussianFileMixin):
             result["heavy_elements_basis"] = heavy_basis_by_element
         ecp = self._parse_pseudopotential_section()
         if ecp:
-            result["heavy_elements_ecp"] = ecp
+            result["heavy_elements_ecp_functions"] = ecp
 
         return result
 
@@ -505,6 +507,31 @@ class Gaussian16Output(GaussianFileMixin):
                     spin = None
                 return spin
         return None
+
+    def _final_spin_squared_values(self):
+        """Return the final printed S**2 values before and after annihilation."""
+        values = None
+        pattern = re.compile(spin_squared_pattern)
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                values = tuple(
+                    float(value.replace("D", "E").replace("d", "e"))
+                    for value in match.groups()
+                )
+        return values
+
+    @property
+    def spin_squared_before_annihilation(self):
+        """Return the final pre-annihilation S**2 value, if printed."""
+        values = self._final_spin_squared_values()
+        return None if values is None else values[0]
+
+    @property
+    def spin_squared_after_annihilation(self):
+        """Return the final post-annihilation S**2 value, if printed."""
+        values = self._final_spin_squared_values()
+        return None if values is None else values[1]
 
     @cached_property
     def input_coordinates_block(self):

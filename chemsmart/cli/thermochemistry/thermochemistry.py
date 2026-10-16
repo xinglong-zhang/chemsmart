@@ -16,10 +16,18 @@ from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 from chemsmart.utils.cli import MyGroup
 from chemsmart.utils.io import (
     check_program_availability_in_chemsmart,
+    file_content_begins_with,
     get_program_type_from_file,
 )
 
 logger = logging.getLogger(__name__)
+
+_MECP_FREQUENCY_HEADER = "CHEMSMART MECP projected frequency analysis"
+
+
+def _is_mecp_projected_frequency_file(filename):
+    """Return whether *filename* is a CHEMSMART MECP frequency output."""
+    return file_content_begins_with(filename, _MECP_FREQUENCY_HEADER)
 
 
 def thermochemistry_cutoff_options(
@@ -121,6 +129,12 @@ def click_thermochemistry_options(f):
     f = thermochemistry_temp_pressure_conc_options(f)
     f = thermochemistry_cutoff_options(f)
     f = click.option(
+        "--electronic-degeneracy",
+        default=None,
+        type=click.IntRange(min=1),
+        help="Electronic statistical weight. For MECP inputs the default is 1.",
+    )(f)
+    f = click.option(
         "-a",
         "--alpha",
         default=4,
@@ -200,6 +214,7 @@ def thermochemistry(
     outputfile,
     overwrite,
     check_imaginary_frequencies,
+    electronic_degeneracy,
     skip_completed,
     **kwargs,
 ):
@@ -267,6 +282,7 @@ def thermochemistry(
         outputfile=outputfile,
         overwrite=overwrite,
         check_imaginary_frequencies=check_imaginary_frequencies,
+        electronic_degeneracy=electronic_degeneracy,
     )
 
     # Initialize list to store jobs
@@ -361,14 +377,17 @@ def thermochemistry(
 
     elif filenames:
         for file in filenames:
-            if get_program_type_from_file(file) not in {
+            supported_program = get_program_type_from_file(file) in {
                 "gaussian",
                 "orca",
-                "xtb",
-            }:
+            }
+            if (
+                not supported_program
+                and not _is_mecp_projected_frequency_file(file)
+            ):
                 raise ValueError(
                     f"Unsupported output file type for '{file}'. Use Gaussian, "
-                    f"ORCA, or xTB output files."
+                    "ORCA, or CHEMSMART MECP projected-frequency output files."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,
