@@ -218,10 +218,22 @@ class ORCAInputWriter(InputWriter):
         """
         logger.debug("Writing SCF block")
 
-        if self.settings.scf_convergence or self.settings.scf_maxiter:
+        if any(
+            (
+                self.settings.scf_convergence,
+                self.settings.scf_maxiter,
+                self.settings.scf_hftyp,
+                self.settings.scf_broken_sym,
+            )
+        ):
             f.write("%scf\n")
             self._write_scf_maxiter(f)
             self._write_scf_convergence(f)
+            if self.settings.scf_hftyp:
+                f.write(f"  HFTyp {self.settings.scf_hftyp}\n")
+            if self.settings.scf_broken_sym:
+                values = self._format_mecp_values(self.settings.scf_broken_sym)
+                f.write(f"  BrokenSym {values}\n")
             f.write("end\n")
 
     def _write_scf_maxiter(self, f):

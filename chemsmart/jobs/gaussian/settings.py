@@ -18,6 +18,7 @@ import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
+from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS, configure_convergence
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -2126,24 +2127,7 @@ class GaussianMECPJobSettings(GaussianJobSettings):
 
     #: Predefined convergence thresholds.  Keys are preset names; values are
     #: dicts mapping setting attribute names to their values.
-    CONVERGENCE_PRESETS = {
-        "standard": {
-            "energy_diff_tol": 5.0e-5,  # Hartree
-            "force_max_tol": 7.0e-4,  # Hartree/Bohr
-            "force_rms_tol": 5.0e-4,  # Hartree/Bohr
-            "disp_max_tol": 4.0e-3,  # Bohr
-            "disp_rms_tol": 2.5e-3,  # Bohr
-            "trust_radius": 0.3,  # Bohr
-        },
-        "tight": {
-            "energy_diff_tol": 1.0e-5,  # Hartree
-            "force_max_tol": 3.0e-4,  # Hartree/Bohr
-            "force_rms_tol": 1.0e-4,  # Hartree/Bohr
-            "disp_max_tol": 2.0e-3,  # Bohr
-            "disp_rms_tol": 1.0e-3,  # Bohr
-            "trust_radius": 0.1,  # Bohr
-        },
-    }
+    CONVERGENCE_PRESETS = MECP_CONVERGENCE_PRESETS
 
     def __init__(
         self,
@@ -2199,44 +2183,22 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.max_steps = max_steps
         self.step_size = step_size
 
-        # Resolve convergence parameters: preset first, then explicit overrides.
-        if convergence_preset not in self.CONVERGENCE_PRESETS:
-            raise ValueError(
-                f"Unknown convergence_preset={convergence_preset!r}. "
-                f"Choose from: {list(self.CONVERGENCE_PRESETS)}"
-            )
-        self.convergence_preset = convergence_preset
-        preset = self.CONVERGENCE_PRESETS[convergence_preset]
-
-        self.energy_diff_tol = (
-            energy_diff_tol
-            if energy_diff_tol is not None
-            else preset["energy_diff_tol"]
-        )
-        self.force_max_tol = (
-            force_max_tol
-            if force_max_tol is not None
-            else preset["force_max_tol"]
-        )
-        self.force_rms_tol = (
-            force_rms_tol
-            if force_rms_tol is not None
-            else preset["force_rms_tol"]
-        )
-        self.disp_max_tol = (
-            disp_max_tol
-            if disp_max_tol is not None
-            else preset["disp_max_tol"]
-        )
-        self.disp_rms_tol = (
-            disp_rms_tol
-            if disp_rms_tol is not None
-            else preset["disp_rms_tol"]
-        )
-        self.trust_radius = (
-            trust_radius
-            if trust_radius is not None
-            else preset["trust_radius"]
+        overrides = {
+            "energy_diff_tol": energy_diff_tol,
+            "force_max_tol": force_max_tol,
+            "force_rms_tol": force_rms_tol,
+            "disp_max_tol": disp_max_tol,
+            "disp_rms_tol": disp_rms_tol,
+            "trust_radius": trust_radius,
+        }
+        configure_convergence(
+            self,
+            convergence_preset,
+            {
+                name: value
+                for name, value in overrides.items()
+                if value is not None
+            },
         )
 
         self.adaptive_step_size = adaptive_step_size

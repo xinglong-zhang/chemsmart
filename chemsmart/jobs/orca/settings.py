@@ -14,6 +14,7 @@ import os
 import re
 
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
+from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS, configure_convergence
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
     deduplicate_string_keywords,
@@ -102,6 +103,8 @@ class ORCAJobSettings(MolecularJobSettings):
         scf_algorithm=None,
         scf_maxiter=None,
         scf_convergence=None,
+        scf_hftyp=None,
+        scf_broken_sym=None,
         charge=None,
         multiplicity=None,
         gbw=True,
@@ -211,6 +214,8 @@ class ORCAJobSettings(MolecularJobSettings):
         self.scf_algorithm = scf_algorithm
         self.scf_maxiter = scf_maxiter
         self.scf_convergence = scf_convergence
+        self.scf_hftyp = scf_hftyp
+        self.scf_broken_sym = scf_broken_sym
         self.gbw = gbw
         self.mdci_cutoff = mdci_cutoff
         self.mdci_density = mdci_density
@@ -2738,7 +2743,8 @@ class ORCAMECPJobSettings(ORCAJobSettings):
             has no ``MaxIter`` keyword).
     """
 
-    MODES = frozenset({"opt", "numfreq"})
+    MODES = frozenset({"opt", "numfreq", "anafreq", "followseam"})
+    CONVERGENCE_PRESETS = MECP_CONVERGENCE_PRESETS
 
     def __init__(
         self,
@@ -2753,6 +2759,14 @@ class ORCAMECPJobSettings(ORCAJobSettings):
         casscf_mult=None,
         casscf_nroots=None,
         casscf_bweight=None,
+        hessian_method=None,
+        mecp_numfreq_only=False,
+        seam_mode_displacement=0.05,
+        seam_mode_max_steps=30,
+        hess_step_size=1.0e-3,
+        convergence_preset="tight",
+        max_steps=200,
+        step_size=0.1,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -2773,9 +2787,76 @@ class ORCAMECPJobSettings(ORCAJobSettings):
         self.casscf_mult = casscf_mult
         self.casscf_nroots = casscf_nroots
         self.casscf_bweight = casscf_bweight
+        self.hessian_method = hessian_method or (
+            "analytic" if mode == "anafreq" else "numerical"
+        )
+        self.mecp_numfreq_only = mecp_numfreq_only
+        self.mecp_numfreq = (
+            mode in {"anafreq", "followseam"} or mecp_numfreq_only
+        )
+        self.follow_seam_imaginary_mode = mode == "followseam"
+        self.seam_mode_displacement = seam_mode_displacement
+        self.seam_mode_max_steps = seam_mode_max_steps
+        self.hess_step_size = hess_step_size
+        self.convergence_preset = convergence_preset
+        self.max_steps = max_steps
+        self.step_size = step_size
+        configure_convergence(self, convergence_preset, kwargs)
+
+    @property
+    def multiplicity_a(self):
+        return self.multiplicity1
+
+    @property
+    def multiplicity_b(self):
+        return self.multiplicity2
+
+    @property
+    def uses_seam_workflow(self):
+        return self.mode in {"anafreq", "followseam"} or self.mecp_numfreq_only
 
     def validate(self):
         """Validate the two surfaces required by native ORCA MECP."""
+        if self.mode not in self.MODES:
+            raise ValueError("Unknown ORCA MECP mode")
+        if self.hessian_method not in {"numerical", "analytic"}:
+            raise ValueError("Hessian method must be numerical or analytic")
+        if self.mode == "anafreq" and self.hessian_method != "analytic":
+            raise ValueError("anafreq requires analytic Hessians")
+        if self.mode == "numfreq" and self.hessian_method != "numerical":
+            raise ValueError("numfreq requires numerical Hessians")
+        if self.mecp_numfreq_only and self.mode not in {"anafreq", "numfreq"}:
+            raise ValueError("--only requires anafreq or numfreq")
+        if any(
+            getattr(self, name) <= 0
+            for name in (
+                "seam_mode_displacement",
+                "seam_mode_max_steps",
+                "hess_step_size",
+                "max_steps",
+                "step_size",
+                *self.CONVERGENCE_PRESETS["tight"],
+            )
+        ):
+            raise ValueError("MECP seam controls must be positive")
+        if self.uses_seam_workflow and (
+            self.moinp is not None
+            or any(
+                getattr(self, name) is not None
+                for name in (
+                    "casscf_nel",
+                    "casscf_norb",
+                    "casscf_mult",
+                    "casscf_nroots",
+                    "casscf_bweight",
+                )
+            )
+        ):
+            raise ValueError(
+                "ORCA anafreq/followseam supports ordinary and broken-symmetry spin states; "
+                "explicit PES2 orbital guesses and CASSCF require "
+                "state-specific adapters. Use native opt/numfreq for these states."
+            )
         if self.charge is None:
             raise ValueError("ORCA MECP requires a charge.")
         if self.multiplicity1 is None or self.multiplicity2 is None:
@@ -2860,6 +2941,11 @@ class ORCAMECPJobSettings(ORCAJobSettings):
                 count=1,
             )
         # Normalise whitespace
+        if self.uses_seam_workflow and not re.search(
+            r"\b(?:TightOpt|VeryTightOpt)\b", base, re.IGNORECASE
+        ):
+            base = re.sub(r"\bLooseOpt\b", "", base, flags=re.IGNORECASE)
+            base += " TightOpt"
         route_string = re.sub(r"\s+", " ", base).strip()
         return route_string
 

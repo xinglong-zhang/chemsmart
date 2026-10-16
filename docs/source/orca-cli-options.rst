@@ -700,6 +700,62 @@ inside the same single ``%tddft`` block.
    UHF/UKS, double-hybrids, or ECPs may need a manual ORCA input via ``orca inp``; CHEMSMART does not auto-inject
    ``ForceECP`` or reshape the reference multiplicity.
 
+MECP analysis and seam following
+================================
+
+Shared options, units and report fields are documented in :doc:`mecp-file-formats`.
+
+ORCA MECP calculations use the same charge and level of theory for both spin states. Specify their multiplicities with
+``-m1/--multiplicity1`` and ``-m2/--multiplicity2``. The default ``mecp opt`` performs native ``SurfCrossOpt``
+optimization; ``mecp numfreq`` retains ORCA's native ``SurfCrossNumFreq`` verification after optimization.
+
+Use ``anafreq`` for two fixed-geometry analytic state Hessians, or ``followseam`` to follow a negative projected seam
+mode in both directions:
+
+.. code:: bash
+
+   chemsmart sub orca -p project -f structure.xyz -c 0 mecp -m1 1 -m2 3 anafreq
+   chemsmart sub orca -p project -f crossing.xyz -c 0 mecp -m1 1 -m2 3 anafreq --only
+   chemsmart sub orca -p project -f structure.xyz -c 0 mecp -m1 1 -m2 3 followseam --hessian-method analytic
+
+Without ``--only``, initial optimization and final unconstrained branch relaxation use native ``SurfCrossOpt`` with
+``TightOpt``. The shared ChemSmart driver controls the intervening constrained macro steps and selects the lower
+verified seam minimum. Every initial, macro-step and final Hessian check uses the selected method. ``followseam``
+defaults to numerical Hessians; ``--hess-step-size`` (Bohr, default 0.001) controls the Cartesian central differences.
+``--seam-mode-displacement`` (Angstrom, default 0.05) and ``--seam-mode-max-steps`` (default 30) control following;
+``--max-steps`` (default 200) limits each inner constrained optimization. ``--maxiter`` controls native ORCA
+optimization iterations separately.
+
+``numfreq --only`` also uses the shared driver, computing numerical Hessians at the supplied geometry. Both
+frequency-only modes require a stationary crossing and do not optimize it. They record whether the supplied crossing is
+a minimum; optimization workflows fail if no verified minimum is obtained.
+
+Analytic checks run two reference ``EnGrad`` calculations followed by two ``AnFreq`` calculations reading the
+corresponding reference orbitals. Raw Cartesian Hessians are read from ORCA ``.hess`` files in Hartree/Bohr²; the
+effective Hessian, seam projection, mass weighting and following algorithms are shared with Gaussian. Missing or invalid
+files and unsupported analytic calculations fail explicitly without a numerical fallback.
+
+State calculations are stored in ``<label>_anafreq/`` or ``<label>_numfreq/``, constrained optimization jobs in
+``<label>_optimization/``, and branch records in ``<label>_seam_follow/``. The selected final geometry, projected
+frequencies and modes are written to ``<label>_mecp_freq.log``; the workflow status and selected branch are in
+``<label>_final_report.log``. ORCA's original output and native quality report describe the initial native optimization.
+Read the final workflow report when following changes the geometry. Raw ``.hess``, ``.engrad`` and ``.gbw`` files are
+retained for inspection.
+
+The shared ORCA workflow supports ordinary and broken-symmetry PES2 spin states with structured settings and
+unconstrained molecules. Supply ``--broken-sym NA,NB`` (or ``-bs NA,NB``) with ``--multiplicity2 abs(NA-NB)+1``. For
+example, ``-m1 3 -m2 1 -bs 1,1`` describes a triplet and a BS singlet. The first standalone B-state calculation starts
+with multiplicity ``NA+NB+1`` and ``%scf BrokenSym NA,NB``; ORCA constructs the BS wavefunction before evaluating its
+gradient. Subsequent B-state gradients and analytic Hessians use unrestricted SCF with the target low-spin multiplicity
+and read that state's own GBW file. A-state orbitals remain separate. The native optimization continues to use the
+existing ``%mecp brokenSym`` setting. This follows the `ORCA BS procedure
+<https://www.faccts.de/docs/orca/6.1/manual/contents/spectroscopyproperties/magnx.html>`_.
+
+Explicit PES2 orbital guesses, CASSCF and frozen-atom/modred constraints remain available through native ``opt/numfreq``
+but are rejected by the shared analysis/following workflow until their adapters are available. Analytic Hessians require
+support from the chosen ORCA method and solvent model; consult the `ORCA frequency documentation
+<https://www.faccts.de/docs/orca/6.1/manual/contents/structurereactivity/frequencies.html>`_.
+
 QM/MM
 =====
 

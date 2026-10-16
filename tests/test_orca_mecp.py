@@ -11,7 +11,11 @@ from click.testing import CliRunner
 
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.sub import sub
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.orca.hessian import read_hessian
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.jobs.mecp import MECPSeamMixin
+from chemsmart.jobs.orca.job import ORCAGeneralJob
 from chemsmart.jobs.orca.mecp import ORCAMECPJob
 from chemsmart.jobs.orca.settings import ORCAMECPJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
@@ -20,6 +24,306 @@ from chemsmart.settings.orca import ORCAProjectSettings
 MECP_CASES_FILE = Path(
     "tests/data/ORCATests/outputs/orca_mecp_cases.txt"
 ).resolve()
+
+
+def _write_test_hessian(path, matrix):
+    n = len(matrix)
+    lines = ["$orca_hessian_file", "$hessian", str(n)]
+    for first in range(0, n, 5):
+        columns = list(range(first, min(first + 5, n)))
+        lines.append(" ".join(map(str, columns)))
+        for row in range(n):
+            lines.append(
+                str(row)
+                + " "
+                + " ".join(f"{matrix[row, col]:.12E}" for col in columns)
+            )
+    lines.append("$end")
+    path.write_text("\n".join(lines))
+
+
+def test_orca_blocked_hessian_reader(tmp_path):
+    matrix = np.arange(81, dtype=float).reshape(9, 9)
+    matrix = matrix + matrix.T
+    path = tmp_path / "state.hess"
+    _write_test_hessian(path, matrix)
+    np.testing.assert_allclose(read_hessian(path, 3), matrix)
+    with pytest.raises(ValueError, match="dimension"):
+        read_hessian(path, 2)
+    text = path.read_text()
+    path.write_text(text.replace("$hessian", "$missing"))
+    with pytest.raises(ValueError, match="section"):
+        read_hessian(path, 3)
+    path.write_text(text[: text.index("5 6 7 8")])
+    with pytest.raises(ValueError, match="Incomplete"):
+        read_hessian(path, 3)
+
+
+@pytest.mark.parametrize("failure", ["nonfinite", "asymmetric", "duplicate"])
+def test_orca_rejects_invalid_hessian(tmp_path, failure):
+    matrix = np.eye(9)
+    if failure == "nonfinite":
+        matrix[0, 0] = np.nan
+    if failure == "asymmetric":
+        matrix[0, 1] = 1.0
+    path = tmp_path / "bad.hess"
+    _write_test_hessian(path, matrix)
+    if failure == "duplicate":
+        path.write_text(path.read_text().replace("5 6 7 8", "0 1 2 3"))
+    with pytest.raises(ValueError):
+        read_hessian(path, 3)
+
+
+@pytest.mark.parametrize("method", ["analytic", "numerical"])
+@pytest.mark.parametrize("broken_sym", [None, [1, 1]], ids=["ordinary", "bs"])
+def test_orca_frequency_only_runs_shared_analysis(
+    tmp_path, monkeypatch, method, broken_sym
+):
+    from ase import units
+
+    molecule = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float),
+    )
+    origin = molecule.positions / units.Bohr
+    normal = np.arange(1, 10, dtype=float).reshape(3, 3)
+    normal /= np.linalg.norm(normal)
+    calls = []
+
+    def run_state(child, **kwargs):
+        route = child.settings.route_string
+        calls.append(route)
+        assert "SurfCross" not in route and "Opt" not in route
+        prefix = Path(child.folder) / child.label
+        prefix.with_suffix(".out").write_text("ORCA TERMINATED NORMALLY\n")
+        prefix.with_suffix(".gbw").write_text("mock orbitals")
+        if "AnFreq" in route:
+            assert "MORead" in route and "%moinp" in route
+            if broken_sym and child.label.endswith("_B"):
+                assert child.settings.scf_hftyp == "UHF"
+                assert child.settings.scf_broken_sym is None
+                assert child.settings.multiplicity == 1
+                assert child.settings.moinp.endswith("hessian_reference_B.gbw")
+            _write_test_hessian(prefix.with_suffix(".hess"), np.eye(9))
+        else:
+            sign = 1 if child.label.endswith("_A") else -1
+            if broken_sym and child.label.endswith("_B"):
+                assert child.settings.scf_hftyp == "UHF"
+                initial = "hessian_reference_B" in child.label
+                assert child.settings.scf_broken_sym == (
+                    [1, 1] if initial else None
+                )
+                assert child.settings.multiplicity == (3 if initial else 1)
+            delta = child.molecule.positions / units.Bohr - origin
+            energy = sign * np.sum(normal * delta) + 0.5 * np.sum(delta**2)
+            gradient = sign * normal + delta
+            lines = [
+                "# Number of atoms",
+                "#",
+                "3",
+                "# The current total energy",
+                "#",
+                str(energy),
+                "# The current gradient",
+                "#",
+            ]
+            lines.extend(str(value) for value in gradient.ravel())
+            lines += ["# The atomic numbers and current coordinates", "#"]
+            for z, xyz in zip(
+                [8, 1, 1], child.molecule.positions / units.Bohr
+            ):
+                lines.append(f"{z} " + " ".join(map(str, xyz)))
+            prefix.with_suffix(".engrad").write_text("\n".join(lines))
+
+    monkeypatch.setattr(ORCAGeneralJob, "_run", run_state)
+    job = ORCAMECPJob(
+        molecule=molecule,
+        settings=mecp_settings(
+            charge=0,
+            multiplicity1=3 if broken_sym else 1,
+            multiplicity2=1 if broken_sym else 3,
+            broken_sym=broken_sym,
+            mode="anafreq" if method == "analytic" else "numfreq",
+            mecp_numfreq_only=True,
+        ),
+        label="water",
+        jobrunner=MagicMock(),
+    )
+    job.folder = str(tmp_path)
+    job.run()
+    assert job.is_complete()
+    assert job._last_seam_result["is_minimum"]
+    assert len(job._last_seam_result["frequencies"]) == 2
+    assert len(calls) == (4 if method == "analytic" else 38)
+    assert (
+        f"hessian_method={method}"
+        in (tmp_path / "water_mecp_freq.log").read_text()
+    )
+    np.testing.assert_allclose(job.molecule.positions, molecule.positions)
+    job.settings.hessian_method = (
+        "numerical" if method == "analytic" else "analytic"
+    )
+    assert not job.is_complete()
+
+
+@pytest.mark.parametrize("missing_reference", [False, True])
+def test_orca_analytic_failure_does_not_reuse_old_hessian(
+    tmp_path, monkeypatch, missing_reference
+):
+    job = ORCAMECPJob(
+        molecule=Molecule(
+            symbols=["H", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        ),
+        settings=mecp_settings(
+            charge=0, multiplicity1=1, multiplicity2=3, mode="anafreq"
+        ),
+        label="crossing",
+        jobrunner=MagicMock(),
+    )
+    job.folder = str(tmp_path)
+    folder = Path(job.numfreq_folder)
+    folder.mkdir()
+    reference = folder / "reference_A.gbw"
+    if not missing_reference:
+        reference.write_text("reference orbitals")
+    job._state_checkpoint_files[("check", "A")] = str(reference)
+    stale_hessian = folder / "crossing_hessian_analytic_A.hess"
+    _write_test_hessian(stale_hessian, np.eye(6))
+    calls = []
+
+    def incomplete_run(child, **kwargs):
+        calls.append(child.label)
+        Path(child.outputfile).write_text("ORCA TERMINATED NORMALLY\n")
+
+    monkeypatch.setattr(ORCAGeneralJob, "_run", incomplete_run)
+    with pytest.raises(
+        RuntimeError,
+        match="reference GBW" if missing_reference else "analytic Hessian",
+    ):
+        job._compute_analytic_hessians(np.asarray(job.molecule.positions))
+    assert len(calls) == (0 if missing_reference else 1)
+    assert "A" not in job._analytic_hessians
+    if not missing_reference:
+        assert not stale_hessian.exists()
+
+
+def test_both_backends_use_same_follow_algorithm():
+    from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
+
+    assert (
+        ORCAMECPJob._follow_seam_imaginary_mode
+        is MECPSeamMixin._follow_seam_imaginary_mode
+    )
+    assert (
+        GaussianMECPJob._follow_seam_imaginary_mode
+        is MECPSeamMixin._follow_seam_imaginary_mode
+    )
+    assert (
+        ORCAMECPJob._get_state_hessians is GaussianMECPJob._get_state_hessians
+    )
+
+
+@pytest.mark.parametrize("fail_plus", [False, True])
+@pytest.mark.parametrize("broken_sym", [None, [1, 1]], ids=["ordinary", "bs"])
+def test_orca_followseam_releases_and_selects_verified_branch(
+    tmp_path, monkeypatch, fail_plus, broken_sym
+):
+    from types import SimpleNamespace
+
+    from chemsmart.jobs.orca.job import ORCAJob
+
+    molecule = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        ),
+    )
+    normal = np.arange(1, 10, dtype=float).reshape(3, 3)
+    normal /= np.linalg.norm(normal)
+    native_calls = []
+    hessian_calls = []
+
+    def native_run(job, **kwargs):
+        assert job.settings.broken_sym == broken_sym
+        native_calls.append(job.label)
+        if fail_plus and job.label.endswith("plus"):
+            raise RuntimeError("Synthetic native optimization failure")
+
+    def state_run(
+        job,
+        positions_bohr,
+        step_idx,
+        state,
+        checkpoint_tag=None,
+        analytic=False,
+    ):
+        is_branch = "seam_follow" in job.label
+        if analytic:
+            hessian_calls.append((job.label, step_idx, state))
+            job._analytic_hessians[state] = np.eye(9) * (
+                1 if is_branch else -1
+            )
+            return None, None
+        energy = -2.0 if "minus" in job.label else -1.0
+        return energy, normal if state == "A" else -normal
+
+    monkeypatch.setattr(ORCAJob, "_run", native_run)
+    monkeypatch.setattr(ORCAMECPJob, "_run_state", state_run)
+    monkeypatch.setattr(
+        ORCAMECPJob,
+        "results",
+        property(
+            lambda job: SimpleNamespace(
+                normal_termination=True,
+                converged=True,
+                final_structure=job.molecule.copy(),
+                energy_gap_history=[0.0],
+            )
+        ),
+    )
+    job = ORCAMECPJob(
+        molecule=molecule,
+        settings=mecp_settings(
+            charge=0,
+            multiplicity1=3 if broken_sym else 1,
+            multiplicity2=1 if broken_sym else 3,
+            broken_sym=broken_sym,
+            mode="followseam",
+            hessian_method="analytic",
+            seam_mode_max_steps=2,
+        ),
+        label="crossing",
+        jobrunner=MagicMock(),
+    )
+    job.folder = str(tmp_path)
+    job.run()
+    assert job.is_complete()
+    assert job._selected_seam_follow_branch == "minus"
+    assert job._last_seam_result["is_minimum"]
+    assert job._last_seam_result["mecp_energy"] == -2.0
+    assert native_calls == [
+        "crossing",
+        "crossing_seam_follow_plus",
+        "crossing_seam_follow_minus",
+    ]
+    assert any("macro01" in step for _, step, _ in hessian_calls)
+    assert len(hessian_calls) == (8 if fail_plus else 10)
+    assert (tmp_path / "crossing_mecp_freq.log").is_file()
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"mode": "anafreq", "hessian_method": "numerical"},
+        {"mode": "followseam", "mecp_numfreq_only": True},
+        {"mode": "anafreq", "moinp": "pes2.gbw"},
+        {"mode": "followseam", "casscf_nel": 2, "casscf_norb": 2},
+    ],
+)
+def test_unsupported_seam_requests_fail_explicitly(options):
+    with pytest.raises(ValueError):
+        mecp_settings(**options).validate()
 
 
 @pytest.fixture
@@ -225,6 +529,88 @@ def test_twisted_ethylene_broken_symmetry_input(
     assert "* xyz 0 3" in input_text
 
 
+def test_bs_state_initialization_and_hessian_inputs(
+    tmp_path, orca_jobrunner_no_scratch
+):
+    molecule = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        ),
+    )
+    job = ORCAMECPJob(
+        molecule=molecule,
+        settings=mecp_settings(
+            charge=0,
+            multiplicity1=3,
+            multiplicity2=1,
+            broken_sym=[1, 1],
+            mode="anafreq",
+            scf_maxiter=350,
+            scf_convergence="tight",
+            additional_route_parameters="RKS",
+        ),
+        label="crossing",
+        jobrunner=orca_jobrunner_no_scratch,
+    )
+    job.folder = str(tmp_path)
+    settings_a = job._state_settings("A", "check", False)
+    assert settings_a.scf_broken_sym is None
+    assert settings_a.scf_hftyp is None
+    settings_b = job._state_settings("B", "check", False)
+    first = job._state_job(
+        np.zeros((3, 3)), "hessian_reference", "B", "check", settings_b
+    )
+    ORCAInputWriter(job=first).write(target_directory=first.folder)
+    text = Path(first.inputfile).read_text()
+    assert text.count("%scf") == 1
+    assert "HFTyp UHF" in text and "BrokenSym 1,1" in text
+    assert "maxiter 350" in text and "convergence tight" in text
+    assert "* xyz 0 3" in text
+    assert "%mecp" not in text and not re.search(r"\bRKS\b", text)
+
+    Path(first.gbwfile).write_text("converged BS reference orbitals")
+    job._state_checkpoint_files[("check", "B")] = first.gbwfile
+    settings_b = job._state_settings("B", "check", True)
+    second = job._state_job(
+        np.zeros((3, 3)), "hessian_analytic", "B", "check", settings_b
+    )
+    ORCAInputWriter(job=second).write(target_directory=second.folder)
+    text = Path(second.inputfile).read_text()
+    assert "AnFreq" in text and "MORead" in text
+    assert "* xyz 0 1" in text and "HFTyp UHF" in text
+    assert 'moinp "crossing_hessian_reference_B.gbw"' in text
+    assert "BrokenSym" not in text and "%mecp" not in text
+    assert job.settings.multiplicity == 3
+    assert job.settings.broken_sym == [1, 1]
+
+
+def test_bs_state_requires_its_generated_orbitals(tmp_path, monkeypatch):
+    job = ORCAMECPJob(
+        molecule=Molecule(symbols=["H", "H"], positions=np.zeros((2, 3))),
+        settings=mecp_settings(
+            charge=0,
+            multiplicity1=3,
+            multiplicity2=1,
+            broken_sym=[1, 1],
+            mode="anafreq",
+        ),
+        label="crossing",
+        jobrunner=MagicMock(),
+    )
+    job.folder = str(tmp_path)
+
+    def no_orbitals(child, **kwargs):
+        Path(child.outputfile).write_text("ORCA TERMINATED NORMALLY\n")
+
+    monkeypatch.setattr(ORCAGeneralJob, "_run", no_orbitals)
+    with pytest.raises(
+        RuntimeError, match="Missing broken-symmetry state B orbitals"
+    ):
+        job._run_state(np.zeros((2, 3)), "hessian_reference", "B", "check")
+    assert ("check", "B") not in job._state_checkpoint_files
+
+
 def test_orca_official_ch3o_ch2oh_numfreq_input(
     tmpdir, orca_jobrunner_no_scratch
 ):
@@ -292,6 +678,10 @@ def test_orca_mecp_quality_report(
     assert "energy_gap_accepted=True" in report
     assert "numfreq_completed=True" in report
     assert "is_minimum=True" in report
+    assert "label=ch3o_ch2oh_mecp" in report
+    assert "backend=orca" in report
+    assert "energy_A=" in report and "energy_B=" in report
+    assert "energy_difference=" in report and " Hartree" in report
 
 
 def test_orca_mecp_quality_report_warns_for_large_final_gap(
@@ -819,6 +1209,51 @@ def test_mecp_invalid_mode(args):
 
     result = CliRunner().invoke(mecp, ["-m1", "3", "-m2", "1"] + args)
     assert result.exit_code == 2
+
+
+@pytest.mark.parametrize(
+    "args,method,only",
+    [
+        (["anafreq"], "analytic", False),
+        (["anafreq", "--only"], "analytic", True),
+        (["numfreq", "--only"], "numerical", True),
+        (["followseam"], "numerical", False),
+        (["followseam", "--hessian-method", "analytic"], "analytic", False),
+    ],
+)
+def test_mecp_shared_workflow_cli(
+    args,
+    method,
+    only,
+    single_molecule_xyz_file,
+    run_orca_and_capture_settings,
+    orca_jobrunner_no_scratch,
+):
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        [
+            "-p",
+            "test",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "1",
+            "mecp",
+            "-m1",
+            "3",
+            "-m2",
+            "1",
+        ]
+        + args,
+        ctx_obj={"jobrunner": orca_jobrunner_no_scratch},
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.hessian_method == method
+    assert settings.mecp_numfreq_only == only
+    assert settings.uses_seam_workflow
+    if args[0] != "numfreq":
+        assert "SurfCrossNumFreq" not in settings.route_string
+    assert settings.follow_seam_imaginary_mode == (args[0] == "followseam")
 
 
 def test_mecp_positional_mode_command_reconstruction():

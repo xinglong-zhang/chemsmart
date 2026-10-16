@@ -1389,6 +1389,63 @@ def test_final_report_summarizes_selected_structure(tmp_path):
     assert "mode    1:    +100.000000" in report
 
 
+def test_gaussian_and_orca_share_final_report_format(tmp_path):
+    from chemsmart.io.mecp import read_report_fields
+    from chemsmart.jobs.orca.mecp import ORCAMECPJob
+    from chemsmart.jobs.orca.settings import ORCAMECPJobSettings
+
+    positions = np.array([[0.0, 0.0, 0.0], [0.7, 0.0, 0.0]])
+    result = {
+        "energy_a": -1.0,
+        "energy_b": -0.99998,
+        "energy_diff": -2.0e-5,
+        "is_minimum": True,
+        "n_negative": 0,
+        "positions_angstrom": positions,
+        "frequencies": np.array([1234.5]),
+        "convergence_metrics": {"energy_diff": -2.0e-5},
+        "convergence_thresholds": {"energy_diff": 5e-5, "pgrad_max": 7e-4},
+    }
+    reports = []
+    for backend, settings in (
+        (
+            GaussianMECPJob,
+            GaussianMECPJobSettings(
+                mecp_numfreq=True, hessian_method="analytic"
+            ),
+        ),
+        (
+            ORCAMECPJob,
+            ORCAMECPJobSettings(
+                charge=0, multiplicity1=1, multiplicity2=3, mode="anafreq"
+            ),
+        ),
+    ):
+        job = object.__new__(backend)
+        job.folder = str(tmp_path / backend.PROGRAM)
+        Path(job.folder).mkdir()
+        job.label = "crossing"
+        job.settings = settings
+        job.molecule = SimpleNamespace(symbols=["H", "H"], positions=positions)
+        job._write_final_report(5, -2.0, -2.0, result)
+        report = Path(job.final_report_file).read_text()
+        fields = read_report_fields(job.final_report_file)
+        assert fields["backend"] == backend.PROGRAM.lower()
+        assert fields["mode"] == "anafreq"
+        assert fields["hessian_method"] == "analytic"
+        assert fields["energy_A"] == "-1.000000000000 Hartree"
+        assert fields["energy_B"] == "-0.999980000000 Hartree"
+        assert fields["seam_minimum"] == "PASS"
+        assert fields["status"] == "COMPLETED"
+        # Missing native gradients are NA, never a fabricated zero/PASS.
+        assert (
+            "pgrad_max: value=NA threshold=7.000000e-04 Hartree/Bohr status=NA"
+            in report
+        )
+        reports.append(report[report.index("energy_A=") :])
+    assert reports[0] == reports[1]
+
+
 def test_mecp_report_records_failed_seam_verification(tmp_path):
     job = _driver_job(tmp_path)
     job.settings.mecp_numfreq = True
@@ -1535,7 +1592,7 @@ def test_numfreq_only_skips_optimizer_and_restart(tmp_path):
     job.folder = str(tmp_path)
     job.label = "existing"
     job.settings = GaussianMECPJobSettings(mecp_numfreq_only=True)
-    job.molecule = SimpleNamespace(positions=np.zeros((1, 3)))
+    job.molecule = SimpleNamespace(symbols=["H"], positions=np.zeros((1, 3)))
     initial = job.molecule.positions.copy()
     result = dict(
         energy_a=0.0,

@@ -5,18 +5,25 @@ This module contains the ORCAMECPJob class for running minimum energy
 crossing-point optimizations using ORCA's native SurfCrossOpt feature.
 """
 
+import copy
 import logging
 import os
+import re
 from typing import Type
 
-from chemsmart.jobs.orca.job import ORCAJob
-from chemsmart.jobs.orca.settings import ORCAMECPJobSettings
+import numpy as np
+from ase import units
+
+from chemsmart.io.mecp import read_report_fields, state_energy_lines
+from chemsmart.jobs.mecp import MECPSeamMixin
+from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
+from chemsmart.jobs.orca.settings import ORCAJobSettings, ORCAMECPJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
 logger = logging.getLogger(__name__)
 
 
-class ORCAMECPJob(ORCAJob):
+class ORCAMECPJob(MECPSeamMixin, ORCAJob):
     """
     ORCA Minimum Energy Cross Point (MECP) job.
 
@@ -36,6 +43,7 @@ class ORCAMECPJob(ORCAJob):
     """
 
     TYPE = "orcamecp"
+    STATE_OUTPUT_EXTENSION = ".out"
     DEFAULT_ENERGY_GAP_TOLERANCE = 1.0e-4
 
     @classmethod
@@ -68,6 +76,249 @@ class ORCAMECPJob(ORCAJob):
                 f"the supplied structure contains {len(self.molecule)}."
             )
         self._validate_broken_symmetry()
+        if settings.uses_seam_workflow:
+            if self.molecule.frozen_atoms is not None or settings.modred:
+                raise ValueError(
+                    "ORCA seam analysis currently requires an unconstrained molecule"
+                )
+            if settings.input_string:
+                raise ValueError(
+                    "ORCA seam analysis requires structured settings"
+                )
+            for route in (
+                settings.route_to_be_written,
+                settings.additional_route_parameters,
+            ):
+                if route and any(char in route for char in ("\n", "%", "*")):
+                    raise ValueError(
+                        "ORCA seam analysis requires simple route keywords, not embedded blocks"
+                    )
+        self._reset_execution_state()
+
+    @property
+    def seam_report_file(self):
+        return self.final_report_file
+
+    def _job_is_complete(self):
+        if not self.settings.uses_seam_workflow:
+            return super()._job_is_complete()
+        report = read_report_fields(self.final_report_file)
+        return (
+            report.get("mode") == self.settings.mode
+            and report.get("hessian_method") == self.hessian_method
+            and report.get("status") == "COMPLETED"
+            and os.path.isfile(self.frequency_file)
+        )
+
+    def _run(self, **kwargs):
+        if not self.settings.uses_seam_workflow:
+            return super()._run(**kwargs)
+        self._reset_execution_state()
+        # Remove an earlier success marker before starting a fresh workflow.
+        if os.path.isfile(self.seam_report_file):
+            os.remove(self.seam_report_file)
+        if self.settings.mecp_numfreq_only:
+            self._run_frequency_only()
+            return
+        self._run_native_optimization(**kwargs)
+        result = self._run_seam_minimum_check(
+            self.molecule.positions / units.Bohr
+        )
+        self._last_seam_result = result
+        self._final_convergence_metrics = {
+            "energy_diff": result["energy_diff"]
+        }
+        self._write_final_report(
+            self._final_optimization_steps,
+            result["energy_a"],
+            result["energy_b"],
+            result,
+            frequency_only=self.settings.mecp_numfreq_only,
+        )
+
+    def _run_native_optimization(self, **kwargs):
+        """Let ORCA optimize the crossing, then adopt its final geometry."""
+        super()._run(**kwargs)
+        native = self.results
+        if (
+            native is None
+            or not native.normal_termination
+            or not native.converged
+        ):
+            raise RuntimeError(
+                "ORCA native MECP optimization did not converge"
+            )
+        if native.final_structure is None:
+            raise RuntimeError("ORCA final MECP structure is missing")
+        self.molecule.positions = native.final_structure.positions.copy()
+        self._final_optimization_steps = len(native.energy_gap_history)
+
+    def _final_report_legacy_fields(self, result, frequency_only):
+        return {
+            "energy_gap": f"{result['energy_diff']:+.12e}",
+            "selected_branch": getattr(
+                self, "_selected_seam_follow_branch", "none"
+            ),
+        }
+
+    def verify_seam_minimum(self, *args, **kwargs):
+        # Native convergence alone is not sufficient for projected analysis.
+        # Macro steps intentionally keep a nonzero force along the progress mode.
+        kwargs.setdefault(
+            "require_stationary", kwargs.get("macro_step") is None
+        )
+        return super().verify_seam_minimum(*args, **kwargs)
+
+    def _remove_checkpoint_set(self, checkpoint_tag):
+        # Retain ORCA orbitals on disk for inspection and explicit reuse.
+        for state in ("A", "B"):
+            self._state_checkpoint_files.pop((checkpoint_tag, state), None)
+
+    def _state_settings(self, state, checkpoint_tag, analytic):
+        """Build a fixed-geometry state input and its orbital guess."""
+        settings = ORCAJobSettings()
+        for key in vars(settings):
+            if hasattr(self.settings, key):
+                setattr(
+                    settings, key, copy.deepcopy(getattr(self.settings, key))
+                )
+        settings.jobtype = "sp"
+        settings.freq = settings.numfreq = settings.forces = False
+        settings.multiplicity = getattr(
+            self.settings, f"multiplicity_{state.lower()}"
+        )
+        previous = self._state_checkpoint_files.get((checkpoint_tag, state))
+        if analytic and (not previous or not os.path.isfile(previous)):
+            raise RuntimeError(
+                "ORCA analytic Hessian requires its reference GBW"
+            )
+        broken_sym = self.settings.broken_sym if state == "B" else None
+        if broken_sym is not None:
+            settings.scf_hftyp = "UHF"
+            settings.scf_broken_sym = None
+            if not previous or not os.path.isfile(previous):
+                # ORCA's BrokenSym SCF starts from NA+NB unpaired electrons
+                # and finishes on the requested BS surface before EnGrad.
+                settings.multiplicity = sum(broken_sym) + 1
+                settings.scf_broken_sym = list(broken_sym)
+        # Remove native crossing/optimization tasks from the single-state job.
+        route = settings.route_string
+        route = re.sub(
+            r"\b(?:SurfCrossOpt|SurfCrossNumFreq|TightOpt|LooseOpt|VeryTightOpt|Opt|Freq|AnFreq|NumFreq|EnGrad|SP)\b",
+            "",
+            route,
+            flags=re.I,
+        )
+        route = " ".join(route.split()) + (
+            " AnFreq" if analytic else " EnGrad"
+        )
+        if broken_sym is not None:
+            # Explicitly keep an unrestricted BS singlet when reading orbitals.
+            route = re.sub(r"\b(?:RHF|RKS|ROHF|ROKS)\b", "", route, flags=re.I)
+        if previous and os.path.isfile(previous):
+            settings.moinp = previous
+            route += f' MORead\n%moinp "{os.path.basename(previous)}"'
+        settings.route_to_be_written = route
+        settings.additional_route_parameters = None
+        return settings
+
+    def _state_job(
+        self, positions_bohr, step_idx, state, checkpoint_tag, settings
+    ):
+        """Prepare a fresh state job using shared MECP naming conventions."""
+        molecule = self.molecule.copy()
+        molecule.positions = np.asarray(positions_bohr) * units.Bohr
+        folder = (
+            self.numfreq_folder
+            if checkpoint_tag == "check"
+            else self.optimization_folder
+        )
+        os.makedirs(folder, exist_ok=True)
+        label = self.mecp_files.state_label(step_idx, state, checkpoint_tag)
+        job = ORCAGeneralJob(
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            skip_completed=False,
+        )
+        job.set_folder(folder)
+        self._propagate_runner(self.jobrunner, job)
+        # Stale results must never substitute for a failed/incomplete new run.
+        for suffix in (".out", ".engrad", ".hess", ".gbw"):
+            path = os.path.join(folder, label + suffix)
+            if os.path.isfile(path):
+                os.remove(path)
+        return job
+
+    def _read_state_gradient(self, job):
+        """Validate ORCA's atomic units and atom ordering before using gradients."""
+        from chemsmart.io.orca.output import ORCAEngradFile
+
+        try:
+            gradient = ORCAEngradFile(
+                os.path.join(job.folder, job.label + ".engrad")
+            )
+        except (OSError, ValueError, IndexError, TypeError) as error:
+            raise RuntimeError(
+                f"Cannot read ORCA energy/gradient: {job.label}"
+            ) from error
+        if (
+            gradient.num_atoms != len(job.molecule.symbols)
+            or gradient.energy is None
+            or gradient.gradient is None
+            or not np.isfinite(gradient.energy)
+            or not np.isfinite(gradient.gradient).all()
+            or gradient.molecule is None
+            or list(gradient.molecule.symbols) != list(job.molecule.symbols)
+            or not np.allclose(
+                gradient.molecule.positions,
+                job.molecule.positions,
+                atol=1e-6,
+                rtol=0,
+            )
+        ):
+            raise RuntimeError(
+                f"Invalid ORCA energy/gradient or geometry: {job.label}"
+            )
+        return gradient.energy, gradient.gradient
+
+    def _run_state(
+        self,
+        positions_bohr,
+        step_idx,
+        state,
+        checkpoint_tag=None,
+        analytic=False,
+    ):
+        from chemsmart.io.orca.hessian import read_hessian
+
+        settings = self._state_settings(state, checkpoint_tag, analytic)
+        job = self._state_job(
+            positions_bohr, step_idx, state, checkpoint_tag, settings
+        )
+        job.run()
+        if not job.is_complete():
+            raise RuntimeError(
+                f"ORCA state {state} did not terminate normally: {job.label}"
+            )
+        if os.path.isfile(job.gbwfile):
+            self._state_checkpoint_files[(checkpoint_tag, state)] = job.gbwfile
+        elif state == "B" and self.settings.broken_sym is not None:
+            raise RuntimeError(
+                f"Missing broken-symmetry state B orbitals: {job.gbwfile}"
+            )
+        if not analytic:
+            return self._read_state_gradient(job)
+        try:
+            self._analytic_hessians[state] = read_hessian(
+                os.path.join(job.folder, job.label + ".hess"),
+                len(job.molecule.symbols),
+            )
+        except (OSError, ValueError) as error:
+            raise RuntimeError(
+                f"Cannot read ORCA analytic Hessian: {job.label}"
+            ) from error
+        return None, None
 
     def _validate_broken_symmetry(self):
         """Reject broken-symmetry requests incompatible with PES2.
@@ -174,7 +425,12 @@ class ORCAMECPJob(ORCAJob):
         lines = [
             "CHEMSMART ORCA MECP quality report",
             f"job={self.label}",
+            f"label={self.label}",
+            "backend=orca",
             f"status={status}",
+            *state_energy_lines(
+                result.state_1_energy, result.state_2_energy, result.energy_gap
+            ),
             "",
             "Completion checks",
             f"normal_termination={result.normal_termination}",

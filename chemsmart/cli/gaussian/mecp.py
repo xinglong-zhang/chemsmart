@@ -11,6 +11,7 @@ from chemsmart.cli.gaussian.mecp_options import (
     click_mecp_step_size_method_option,
 )
 from chemsmart.cli.job import click_job_options
+from chemsmart.cli.mecp import click_mecp_only_option
 from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import check_charge_and_multiplicity
@@ -60,11 +61,7 @@ class MECPCommand(MyCommand):
 
 
 @gaussian.command("mecp", cls=MECPCommand)
-@click.option(
-    "--only",
-    is_flag=True,
-    help="With numfreq or anafreq, analyze the input structure without optimization.",
-)
+@click_mecp_only_option
 @click_job_options
 @click_mecp_state_options
 @click.option(

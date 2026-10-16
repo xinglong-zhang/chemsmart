@@ -16,6 +16,12 @@ import logging
 import click
 
 from chemsmart.cli.job import click_job_options
+from chemsmart.cli.mecp import (
+    click_mecp_follow_controls,
+    click_mecp_hessian_options,
+    click_mecp_only_option,
+    click_mecp_state_options,
+)
 from chemsmart.cli.orca.orca import (
     click_orca_solvent_options,
     orca,
@@ -28,36 +34,33 @@ logger = logging.getLogger(__name__)
 
 @orca.command("mecp", cls=MyCommand)
 @click_job_options
+@click_mecp_state_options(required=True, include_charges=False)
+@click_mecp_hessian_options(
+    method_default=None,
+    step_default=1e-3,
+    step_type=click.FloatRange(min=0, min_open=True),
+)
+@click_mecp_follow_controls
+@click_mecp_only_option
 @click_orca_solvent_options
-@click.option(
-    "--multiplicity1",
-    "-m1",
-    type=click.IntRange(min=1),
-    default=None,
-    required=True,
-    help="PES1 spin multiplicity; written to the * xyz line (required).",
-)
-@click.option(
-    "--multiplicity2",
-    "-m2",
-    type=click.IntRange(min=1),
-    default=None,
-    required=True,
-    help="PES2 spin multiplicity; written to %mecp Mult (required).",
-)
 @click.argument(
     "mode_argument",
-    type=click.Choice(["opt", "numfreq"], case_sensitive=False),
+    type=click.Choice(
+        ["opt", "numfreq", "anafreq", "followseam"], case_sensitive=False
+    ),
     required=False,
 )
 @click.option(
     "--mode",
-    type=click.Choice(["opt", "numfreq"], case_sensitive=False),
+    type=click.Choice(
+        ["opt", "numfreq", "anafreq", "followseam"], case_sensitive=False
+    ),
     default=None,
     help=(
         "Optimisation mode. 'opt' (default) runs straight SurfCrossOpt; "
         "'numfreq' adds SurfCrossNumFreq for a numerical-frequency "
-        "verification step after convergence."
+        "verification step after convergence. 'anafreq' uses state analytic "
+        "Hessians; 'followseam' follows negative projected seam modes."
     ),
 )
 @click.option(
@@ -98,6 +101,12 @@ logger = logging.getLogger(__name__)
     help="Invert the frozen-atom selection.",
 )
 @click.option("--casscf-nel", type=int, default=None)
+@click.option(
+    "--max-steps",
+    type=click.IntRange(min=1),
+    default=200,
+    help="Maximum inner constrained-optimization steps per macro step.",
+)
 @click.option("--casscf-norb", type=int, default=None)
 @click.option(
     "--casscf-mult",
@@ -123,6 +132,12 @@ def mecp(
     mode_argument,
     mode,
     maxiter,
+    only,
+    hessian_method,
+    hess_step_size,
+    seam_mode_displacement,
+    seam_mode_max_steps,
+    max_steps,
     broken_sym,
     moinp,
     freeze_atoms,
@@ -147,8 +162,10 @@ def mecp(
     can be overridden via the standard ``-c`` / ``-m`` / ``--method`` /
     ``--basis`` flags of the parent ``orca`` command.
 
-    Optional MODE_ARGUMENT is opt (default) or numfreq. The latter adds
-    the crossing-seam numerical-frequency verification after optimization.
+    MODE_ARGUMENT selects opt (default), native numfreq, analytic anafreq,
+    or constrained followseam. With numfreq/anafreq, --only analyzes the
+    supplied stationary crossing without optimization. Followseam uses
+    --hessian-method to select numerical (default) or analytic Hessians.
     """
     if (
         mode_argument is not None
@@ -201,8 +218,18 @@ def mecp(
     mecp_settings.multiplicity2 = multiplicity2
     mecp_settings.multiplicity = multiplicity1
 
-    # SurfCrossOpt optimisation mode (opt or numfreq)
+    # Keep native opt/numfreq; dispatch anafreq/followseam to the shared driver.
     mecp_settings.mode = mode.lower()
+    mecp_settings.hessian_method = hessian_method or (
+        "analytic" if mode == "anafreq" else "numerical"
+    )
+    mecp_settings.mecp_numfreq_only = only
+    mecp_settings.mecp_numfreq = mode in {"anafreq", "followseam"} or only
+    mecp_settings.follow_seam_imaginary_mode = mode == "followseam"
+    mecp_settings.hess_step_size = hess_step_size
+    mecp_settings.seam_mode_displacement = seam_mode_displacement
+    mecp_settings.seam_mode_max_steps = seam_mode_max_steps
+    mecp_settings.max_steps = max_steps
 
     mecp_settings.maxiter = maxiter
     logger.debug(f"Set SurfCrossOpt MaxIter: {maxiter}")

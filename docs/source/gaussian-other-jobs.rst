@@ -448,6 +448,7 @@ functions create their directories:
    ``--mecp-numfreq`` it also lists the final projected frequencies and seam-minimum status. It distinguishes the
    initial optimization step count from the number of constrained seam-following macro steps and, when applicable, the
    final branch optimization step count. Intermediate structures and per-step diagnostics remain in the other reports.
+   This uses the same final-report schema as ORCA's ChemSmart seam workflows; see :doc:`mecp-file-formats`.
 
 ``<label>.log`` and ``<label>_B.log`` (when the label already ends in ``_mecp``)
    After successful optimization and any requested seam verification/following, the main directory receives unchanged
@@ -549,12 +550,12 @@ Hessian fails rather than silently falling back to ChemSmart numerical differenc
 Analytic inputs and raw outputs are stored under ``<label>_anafreq/``, with names such as
 ``<label>_hessian_analytic_A.com``, ``.log`` and ``.fchk``. Macro-step files include ``macro07_hessian_analytic_A``. The
 final ``<label>_mecp_freq.log`` retains its existing name and records ``hessian_method=analytic``. The verification
-report is also stored in the corresponding ``_anafreq`` directory. This analytic backend currently supports Gaussian;
-ORCA Hessian import is not implemented. ``formchk`` is located beside the configured Gaussian executable or on its
-configured PATH. Missing reference checkpoints or failed conversions stop the analysis. Formatted checkpoints are
-retained after successful verification; temporary binary verification checkpoints are cleaned up as before. All initial,
-macro-step and final checks use one Hessian-source dispatch followed by the shared seam projection and frequency
-analysis.
+report is also stored in the corresponding ``_anafreq`` directory. ORCA has a separate ``.hess`` adapter using the same
+seam analysis and following algorithms; see :doc:`orca-cli-options` for supported states. ``formchk`` is located beside
+the configured Gaussian executable or on its configured PATH. Missing reference checkpoints or failed conversions stop
+the analysis. Formatted checkpoints are retained after successful verification; temporary binary verification
+checkpoints are cleaned up as before. All initial, macro-step and final checks use one Hessian-source dispatch followed
+by the shared seam projection and frequency analysis.
 
 To escape a stationary point that is a saddle on the crossing seam, add ``--follow-seam-imaginary-mode``. In each
 direction CHEMSMART fixes a progress plane normal to the tracked negative mode, restores :math:`E_A=E_B`, and optimizes
