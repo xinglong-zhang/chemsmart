@@ -135,7 +135,6 @@ class ORCAJobRunner(JobRunner):
                 f"No server file {self.server} is found: {e}\n"
                 f"Available servers are: {ORCAExecutable.available_servers}"
             )
-            raise
 
     def _prerun(self, job):
         """
