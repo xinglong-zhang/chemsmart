@@ -102,6 +102,16 @@ logger = logging.getLogger(__name__)
 )
 @click.option("--casscf-nel", type=int, default=None)
 @click.option(
+    "--energy-diff-tol",
+    type=click.FloatRange(min=0, min_open=True),
+    default=None,
+    help=(
+        "Maximum absolute state energy gap (Hartree) for shared seam analysis. "
+        "Defaults to the convergence preset (tight: 1e-5); does not change "
+        "native SurfCrossOpt convergence."
+    ),
+)
+@click.option(
     "--max-steps",
     type=click.IntRange(min=1),
     default=200,
@@ -138,6 +148,7 @@ def mecp(
     seam_mode_displacement,
     seam_mode_max_steps,
     max_steps,
+    energy_diff_tol,
     broken_sym,
     moinp,
     freeze_atoms,
@@ -230,6 +241,8 @@ def mecp(
     mecp_settings.seam_mode_displacement = seam_mode_displacement
     mecp_settings.seam_mode_max_steps = seam_mode_max_steps
     mecp_settings.max_steps = max_steps
+    if energy_diff_tol is not None:
+        mecp_settings.energy_diff_tol = energy_diff_tol
 
     mecp_settings.maxiter = maxiter
     logger.debug(f"Set SurfCrossOpt MaxIter: {maxiter}")

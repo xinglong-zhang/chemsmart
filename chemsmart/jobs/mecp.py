@@ -634,15 +634,26 @@ class MECPSeamMixin:
             _, projected_grad, _ = self._mecp_displacement(
                 ea - eb, grad_a, grad_b, self.settings.step_size
             )
+            gap = abs(ea - eb)
+            grad_max = float(np.max(np.abs(projected_grad)))
+            grad_rms = self._rms(projected_grad)
             if (
-                abs(ea - eb) > self.settings.energy_diff_tol
-                or np.max(np.abs(projected_grad)) > self.settings.force_max_tol
-                or self._rms(projected_grad) > self.settings.force_rms_tol
+                gap > self.settings.energy_diff_tol
+                or grad_max > self.settings.force_max_tol
+                or grad_rms > self.settings.force_rms_tol
             ):
                 raise RuntimeError(
-                    "Frequency-only analysis requires a stationary crossing: input energy "
-                    "gap or projected gradient exceeds the convergence thresholds. "
-                    "Run mecp numfreq to optimize first."
+                    "Seam frequency analysis requires a stationary crossing: "
+                    f"|energy gap|={gap:.6e} Eh "
+                    f"(limit {self.settings.energy_diff_tol:.6e}); "
+                    f"projected gradient max={grad_max:.6e} Eh/Bohr "
+                    f"(limit {self.settings.force_max_tol:.6e}), "
+                    f"RMS={grad_rms:.6e} Eh/Bohr "
+                    f"(limit {self.settings.force_rms_tol:.6e}). "
+                    "Input energy gap or projected gradient exceeds the convergence "
+                    "thresholds; Hessians have not been computed. Optimize the "
+                    "crossing to these thresholds or explicitly choose tolerances "
+                    "consistent with the intended optimization accuracy."
                 )
 
         logger.info(

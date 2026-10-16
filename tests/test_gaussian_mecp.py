@@ -1636,8 +1636,11 @@ def test_only_rejects_nonstationary_input_before_hessian(gap, tangent):
         pytest.fail("Hessian must not run on invalid input")
 
     job._compute_numerical_hessian = forbidden
-    with pytest.raises(RuntimeError, match="stationary crossing"):
+    with pytest.raises(RuntimeError, match="stationary crossing") as exc:
         job.verify_seam_minimum(write_frequencies=True)
+    assert f"|energy gap|={abs(gap):.6e} Eh" in str(exc.value)
+    assert f"projected gradient max={tangent:.6e} Eh/Bohr" in str(exc.value)
+    assert "Hessians have not been computed" in str(exc.value)
 
 
 @pytest.mark.parametrize(

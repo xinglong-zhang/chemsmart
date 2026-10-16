@@ -76,8 +76,9 @@ def test_orca_rejects_invalid_hessian(tmp_path, failure):
 
 @pytest.mark.parametrize("method", ["analytic", "numerical"])
 @pytest.mark.parametrize("broken_sym", [None, [1, 1]], ids=["ordinary", "bs"])
+@pytest.mark.parametrize("energy_gap", [0.0, 2.1142623040759645e-5])
 def test_orca_frequency_only_runs_shared_analysis(
-    tmp_path, monkeypatch, method, broken_sym
+    tmp_path, monkeypatch, method, broken_sym, energy_gap
 ):
     from ase import units
 
@@ -116,6 +117,7 @@ def test_orca_frequency_only_runs_shared_analysis(
                 assert child.settings.multiplicity == (3 if initial else 1)
             delta = child.molecule.positions / units.Bohr - origin
             energy = sign * np.sum(normal * delta) + 0.5 * np.sum(delta**2)
+            energy += sign * energy_gap / 2
             gradient = sign * normal + delta
             lines = [
                 "# Number of atoms",
@@ -145,6 +147,7 @@ def test_orca_frequency_only_runs_shared_analysis(
             broken_sym=broken_sym,
             mode="anafreq" if method == "analytic" else "numfreq",
             mecp_numfreq_only=True,
+            energy_diff_tol=1e-4 if energy_gap else 1e-5,
         ),
         label="water",
         jobrunner=MagicMock(),
@@ -1216,6 +1219,7 @@ def test_mecp_invalid_mode(args):
     [
         (["anafreq"], "analytic", False),
         (["anafreq", "--only"], "analytic", True),
+        (["anafreq", "--only", "--energy-diff-tol", "1e-4"], "analytic", True),
         (["numfreq", "--only"], "numerical", True),
         (["followseam"], "numerical", False),
         (["followseam", "--hessian-method", "analytic"], "analytic", False),
@@ -1250,6 +1254,9 @@ def test_mecp_shared_workflow_cli(
     assert result.exit_code == 0, result.output
     assert settings.hessian_method == method
     assert settings.mecp_numfreq_only == only
+    assert settings.energy_diff_tol == (
+        1e-4 if "--energy-diff-tol" in args else 1e-5
+    )
     assert settings.uses_seam_workflow
     if args[0] != "numfreq":
         assert "SurfCrossNumFreq" not in settings.route_string

@@ -726,6 +726,13 @@ defaults to numerical Hessians; ``--hess-step-size`` (Bohr, default 0.001) contr
 ``--max-steps`` (default 200) limits each inner constrained optimization. ``--maxiter`` controls native ORCA
 optimization iterations separately.
 
+The shared seam analysis defaults to an absolute state energy gap of at most ``1e-5`` Hartree, which can be stricter
+than a native ORCA crossing optimization. If the input geometry was optimized with a different accepted gap, set it
+explicitly, for example ``anafreq --only --energy-diff-tol 1e-4``. This changes the shared analysis threshold, not
+native ``SurfCrossOpt`` convergence; projected gradient checks still apply. Reoptimize to tighter criteria when that
+accuracy is required. A failed stationarity check reports the measured energy gap and projected gradients with their
+limits before computing Hessians.
+
 ``numfreq --only`` also uses the shared driver, computing numerical Hessians at the supplied geometry. Both
 frequency-only modes require a stationary crossing and do not optimize it. They record whether the supplied crossing is
 a minimum; optimization workflows fail if no verified minimum is obtained.
