@@ -110,6 +110,26 @@ class GaussianMECPJob(GaussianJob):
 
     TYPE = "g16mecp"
 
+    def __init__(
+        self,
+        molecule,
+        settings,
+        label,
+        jobrunner=None,
+        is_seam_follow_branch=False,
+        **kwargs,
+    ):
+        settings = GaussianMECPJobSettings.from_settings(settings)
+        super().__init__(
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )
+        self.is_seam_follow_branch = is_seam_follow_branch
+        self._reset_execution_state()
+
     @staticmethod
     def _route_without_guess_read(route):
         """Remove ``read`` from a Gaussian guess option for the first step."""
@@ -135,24 +155,6 @@ class GaussianMECPJob(GaussianJob):
             )
         return f"{route} nosymm".strip()
 
-    def __init__(
-        self,
-        molecule,
-        settings,
-        label,
-        jobrunner=None,
-        **kwargs,
-    ):
-        settings = GaussianMECPJobSettings.from_settings(settings)
-        super().__init__(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
-            **kwargs,
-        )
-        self._reset_execution_state()
-
     def _reset_execution_state(self):
         """Initialize shared state for optimization and frequency workflows."""
         self._state_checkpoint_files = {}
@@ -173,16 +175,11 @@ class GaussianMECPJob(GaussianJob):
         return os.path.join(self.folder, f"{self.label}_optimization")
 
     @property
-    def numfreq_folder(self):
-        kind = (
-            "anafreq"
-            if getattr(
-                getattr(self, "settings", None), "hessian_method", "numerical"
-            )
-            == "analytic"
-            else "numfreq"
+    def frequency_type_folder(self):
+        return os.path.join(
+            self.folder,
+            f"{self.label}_{self.settings.hessian_method}_frequency",
         )
-        return os.path.join(self.folder, f"{self.label}_{kind}")
 
     @property
     def final_report_file(self):
@@ -325,11 +322,9 @@ class GaussianMECPJob(GaussianJob):
                     if method_lines
                     else "numerical"
                 )
-                if saved_method != getattr(
-                    self.settings, "hessian_method", "numerical"
-                ):
+                if saved_method != self.settings.hessian_method:
                     return False
-        if getattr(self.settings, "mecp_numfreq_only", False):
+        if self.settings.mecp_numfreq_only:
             if not os.path.isfile(self.final_report_file):
                 return False
             with open(self.final_report_file, encoding="utf-8") as report:
@@ -339,7 +334,8 @@ class GaussianMECPJob(GaussianJob):
                 for path in (
                     os.path.join(self.folder, f"{self.label}_mecp_freq.log"),
                     os.path.join(
-                        self.numfreq_folder, f"{self.label}_seam_check.log"
+                        self.frequency_type_folder,
+                        f"{self.label}_seam_check.log",
                     ),
                 )
             )
@@ -352,7 +348,7 @@ class GaussianMECPJob(GaussianJob):
         if self.settings.mecp_numfreq:
             if not os.path.isfile(
                 os.path.join(
-                    self.numfreq_folder, f"{self.label}_seam_check.log"
+                    self.frequency_type_folder, f"{self.label}_seam_check.log"
                 )
             ):
                 return False
@@ -544,7 +540,7 @@ class GaussianMECPJob(GaussianJob):
             "jobrunner": self.jobrunner,
             "skip_completed": False,
             "scratch_parent_folder": (
-                os.path.basename(self.numfreq_folder)
+                os.path.basename(self.frequency_type_folder)
                 if checkpoint_tag == "check"
                 else f"{self.label}_optimization"
             ),
@@ -560,7 +556,7 @@ class GaussianMECPJob(GaussianJob):
         else:
             job = GaussianGeneralJob(**job_kwargs)
         job_folder = (
-            self.numfreq_folder
+            self.frequency_type_folder
             if checkpoint_tag == "check"
             else self.steps_folder
         )
@@ -958,7 +954,7 @@ class GaussianMECPJob(GaussianJob):
 
     def _run(self, **kwargs):
         self._reset_execution_state()
-        if getattr(self.settings, "mecp_numfreq_only", False):
+        if self.settings.mecp_numfreq_only:
             return self._run_numfreq_only()
         positions_bohr = (
             np.array(self.molecule.positions, dtype=float) / units.Bohr
@@ -1175,7 +1171,7 @@ class GaussianMECPJob(GaussianJob):
                     )
                 raise
 
-        if not getattr(self, "_is_seam_follow_branch", False):
+        if not self.is_seam_follow_branch:
             sources = (
                 seam_result["gaussian_output_files"]
                 if seam_result is not None
@@ -1228,7 +1224,7 @@ class GaussianMECPJob(GaussianJob):
                         f"{self.label}_mecp_freq.log\n"
                     )
             report.write(f"Converged at step {converged_step}.\n")
-        if not getattr(self, "_is_seam_follow_branch", False):
+        if not self.is_seam_follow_branch:
             self._write_final_report(
                 initial_steps=converged_step,
                 initial_energy_a=ea,
@@ -1753,7 +1749,7 @@ class GaussianMECPJob(GaussianJob):
         result = {
             "gaussian_output_files": {
                 state: os.path.join(
-                    self.numfreq_folder,
+                    self.frequency_type_folder,
                     f"{self.label}_{reference_step}_{state}.log",
                 )
                 for state in ("A", "B")
@@ -2062,9 +2058,9 @@ class GaussianMECPJob(GaussianJob):
                 settings=settings,
                 label=branch_label,
                 jobrunner=self.jobrunner,
+                is_seam_follow_branch=True,
                 skip_completed=False,
             )
-            branch._is_seam_follow_branch = True
             branch.set_folder(follow_folder)
             trace_file = os.path.join(
                 follow_folder, f"{branch_label}_record.log"
@@ -2205,9 +2201,9 @@ class GaussianMECPJob(GaussianJob):
 
     def _write_seam_check_log(self, result, h, step_prefix):
         """Write the seam-minimum verification results to a log file."""
-        os.makedirs(self.numfreq_folder, exist_ok=True)
+        os.makedirs(self.frequency_type_folder, exist_ok=True)
         seam_check_file = os.path.join(
-            self.numfreq_folder, f"{self.label}_seam_check.log"
+            self.frequency_type_folder, f"{self.label}_seam_check.log"
         )
         with open(seam_check_file, "w", encoding="utf-8") as f:
             f.write("CHEMSMART MECP seam-minimum verification\n")

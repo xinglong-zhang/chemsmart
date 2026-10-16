@@ -478,6 +478,9 @@ def test_job_is_complete_requires_post_verification_marker(tmp_path):
 def test_mecp_output_paths_follow_functional_layout(tmp_path):
     job = object.__new__(GaussianMECPJob)
     job.folder = str(tmp_path)
+    print(job)
+    print(job.settings)
+    job.folder = str(tmp_path)
     job.label = "crossing"
 
     assert (
@@ -489,7 +492,7 @@ def test_mecp_output_paths_follow_functional_layout(tmp_path):
     assert Path(job.trajectory_file) == (
         tmp_path / "crossing_optimization" / "crossing_traj.xyz"
     )
-    assert Path(job.numfreq_folder) == tmp_path / "crossing_numfreq"
+    assert Path(job.frequency_type_folder) == tmp_path / "crossing_numfreq"
 
 
 def test_state_subjobs_are_routed_by_calculation_phase(tmp_path, monkeypatch):
@@ -559,12 +562,12 @@ def test_state_subjobs_are_routed_by_calculation_phase(tmp_path, monkeypatch):
         ),
         (
             "crossing_macro07_hessian_a1_x_plus_B",
-            Path(job.numfreq_folder),
+            Path(job.frequency_type_folder),
             "crossing_numfreq",
         ),
     ]
     assert Path(job.optimization_folder).is_dir()
-    assert Path(job.numfreq_folder).is_dir()
+    assert Path(job.frequency_type_folder).is_dir()
 
 
 def test_completed_mecp_requires_requested_frequency_outputs(tmp_path):
@@ -575,8 +578,8 @@ def test_completed_mecp_requires_requested_frequency_outputs(tmp_path):
     Path(job.optimization_folder).mkdir()
     Path(job.report_file).write_text("Converged at step 3.\n")
     assert not job._job_is_complete()
-    Path(job.numfreq_folder).mkdir()
-    (Path(job.numfreq_folder) / "crossing_seam_check.log").write_text(
+    Path(job.frequency_type_folder).mkdir()
+    (Path(job.frequency_type_folder) / "crossing_seam_check.log").write_text(
         "checked\n"
     )
     assert not job._job_is_complete()
@@ -1081,7 +1084,7 @@ def test_step_and_seam_logs_include_diagnostics(tmp_path):
         20,
     )
     contents = (
-        Path(job.numfreq_folder) / "crossing_seam_check.log"
+        Path(job.frequency_type_folder) / "crossing_seam_check.log"
     ).read_text()
     assert "SADDLE POINT ON SEAM" in contents
     assert "** NEGATIVE **" in contents
@@ -1142,7 +1145,7 @@ def test_mecp_driver_writes_final_marker_on_convergence(tmp_path):
     assert (
         "seam_minimum=NOT_CHECKED" in Path(job.final_report_file).read_text()
     )
-    assert not Path(job.numfreq_folder).exists()
+    assert not Path(job.frequency_type_folder).exists()
 
 
 @pytest.mark.parametrize("failed_branch", [None, "plus"])
@@ -1262,7 +1265,7 @@ def test_seam_follow_without_imaginary_mode_creates_no_directory(tmp_path):
 
 def test_intermediate_follow_branch_has_no_final_summary(tmp_path):
     job = _driver_job(tmp_path)
-    job._is_seam_follow_branch = True
+    job.is_seam_follow_branch = True
     job._mecp_displacement = lambda **kwargs: (
         np.zeros((1, 3)),
         np.zeros((1, 3)),
@@ -1547,8 +1550,8 @@ def test_numfreq_only_skips_optimizer_and_restart(tmp_path):
 
     def verify(**kwargs):
         assert kwargs == {"write_frequencies": True}
-        Path(job.numfreq_folder).mkdir()
-        Path(job.numfreq_folder, "existing_seam_check.log").write_text(
+        Path(job.frequency_type_folder).mkdir()
+        Path(job.frequency_type_folder, "existing_seam_check.log").write_text(
             "saddle"
         )
         Path(job.folder, "existing_mecp_freq.log").write_text("frequency")
@@ -1746,7 +1749,7 @@ def test_analytic_seam_verification_reuses_projection_without_displacements(
         (prefix + "hessian_analytic", "A", True),
         (prefix + "hessian_analytic", "B", True),
     ]
-    assert Path(job.numfreq_folder).name.endswith("_anafreq")
+    assert Path(job.frequency_type_folder).name.endswith("_anafreq")
     frequency_log = (tmp_path / "driver_mecp_freq.log").read_text()
     assert "hessian_method=analytic" in frequency_log
     assert "hess_step=" not in frequency_log
