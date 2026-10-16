@@ -90,29 +90,29 @@ class Gaussian16Output(GaussianFileMixin):
             if not line:
                 continue
             if "Normal termination of Gaussian" in line:
-                logger.debug(f"File {self.filename} terminated normally.")
+                logger.debug(f"{self.filename} terminated normally.")
                 return True
             break
 
-        logger.debug(f"File {self.filename} has error termination.")
+        logger.debug(f"{self.filename} has error termination.")
         return False
 
     @property
     def heavy_elements(self):
-        """List of element symbols that use an explicitly defined basis set
-        in the gen/genecp section.
+        """List of element symbols that use an explicitly defined
+        basis set in the gen/genecp section.
         """
         return self._genecp_info["heavy_elements"]
 
     @property
-    def heavy_elements_basis(self):
+    def heavy_elements_basis_functions(self):
         """
-        Structured basis specification for heavy elements.
-        When the route string starts with #p, Gaussian prints the expanded
-        orbital exponents and coefficients for elements that use an explicitly
-        defined gen/genecp basis.  This property parses that information into
-        a dict keyed by element symbol, where each value is an ordered list of
-        shell dicts:
+        Structured basis functions specification for heavy elements.
+        When the route string starts with #p, Gaussian prints the orbital
+        exponents and coefficients for elements that use an explicitly
+        defined gen/genecp basis.
+        This property parses that information into a dict keyed by
+        element symbol, where each value is an ordered list of shell dicts:
             {
                 'Br': [
                     {'shell': 'S', 'primitives': [(exp, coef), ...]},
@@ -120,12 +120,13 @@ class Gaussian16Output(GaussianFileMixin):
                     {'shell': 'F', 'primitives': [(exp, coef)]},
                 ],
             }
+
         Returns None when the information is unavailable.
         """
-        return self._genecp_info["heavy_elements_basis"]
+        return self._genecp_info["heavy_elements_basis_functions"]
 
     @property
-    def heavy_elements_ecp(self):
+    def heavy_elements_ecp_functions(self):
         """
         ECP (effective core potential) specification for heavy elements.
         Only available for genecp calculations with #p verbose output.
@@ -144,7 +145,7 @@ class Gaussian16Output(GaussianFileMixin):
             }
         Returns None when not a genecp calculation or information is unavailable.
         """
-        return self._genecp_info["heavy_elements_ecp"]
+        return self._genecp_info["heavy_elements_ecp_functions"]
 
     @property
     def light_elements(self):
@@ -168,14 +169,14 @@ class Gaussian16Output(GaussianFileMixin):
             "light_elements": None,
             "light_elements_basis": None,
             "heavy_elements": None,
-            "heavy_elements_basis": None,
-            "heavy_elements_ecp": None,
+            "heavy_elements_basis_functions": None,
+            "heavy_elements_ecp_functions": None,
         }
         if self.gen_genecp is None:
             return result
         try:
             atom_symbols = self.symbols
-        except Exception:
+        except AttributeError:
             return result
         if not atom_symbols:
             return result
@@ -250,10 +251,10 @@ class Gaussian16Output(GaussianFileMixin):
             result["heavy_elements"] = p.sorted_periodic_table_list(
                 list(heavy_basis_by_element.keys())
             )
-            result["heavy_elements_basis"] = heavy_basis_by_element
+            result["heavy_elements_basis_functions"] = heavy_basis_by_element
         ecp = self._parse_pseudopotential_section()
         if ecp:
-            result["heavy_elements_ecp"] = ecp
+            result["heavy_elements_ecp_functions"] = ecp
 
         return result
 

@@ -702,7 +702,10 @@ class TestGaussian16Input:
         assert g16_genecp.genecp_section.light_elements == ["H", "C", "O"]
         assert g16_genecp.genecp_section.heavy_elements == ["Pd"]
         assert g16_genecp.genecp_section.light_elements_basis == "def2svp"
-        assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
+        assert (
+            g16_genecp.genecp_section.heavy_elements_basis_functions
+            == "def2-tzvppd"
+        )
         assert g16_genecp.molecule.frozen_atoms is None
 
     def test_read_gaussian_link_opt_input(self, gaussian_link_opt_input):
@@ -1843,7 +1846,7 @@ class TestGaussian16Output:
         assert g16.light_elements_basis == "6-31g(d)"
         # Heavy elements has explicit orbital basis
         assert g16.heavy_elements == ["Cl", "Br"]
-        heavy_basis = g16.heavy_elements_basis
+        heavy_basis = g16.heavy_elements_basis_functions
 
         cl_shells = heavy_basis["Cl"]
         assert [shell["shell"] for shell in cl_shells] == [
@@ -1916,7 +1919,7 @@ class TestGaussian16Output:
         # Heavy element (Ag) has explicit orbital basis
         assert g16.heavy_elements == ["Ag"]
 
-        ag_shells = g16.heavy_elements_basis["Ag"]
+        ag_shells = g16.heavy_elements_basis_functions["Ag"]
         assert [s["shell"] for s in ag_shells] == [
             "S",
             "S",
@@ -1946,7 +1949,7 @@ class TestGaussian16Output:
         assert np.isclose(ag_last_exp, 1.3971100000e00)
         assert np.isclose(ag_last_coeff, 1.0000000000e00)
 
-        ecp = g16.heavy_elements_ecp
+        ecp = g16.heavy_elements_ecp_functions
         ag_ecp = ecp["Ag"]
         assert ag_ecp["n_valence_electrons"] == 19
         channel_names = [ch["name"] for ch in ag_ecp["channels"]]

@@ -62,7 +62,7 @@ optimizations, solution-phase single points, and TD-DFT calculations:
      functional: cam-b3lyp
      basis: genecp
      heavy_elements: ['I']
-     heavy_elements_basis: def2-SVPD
+     heavy_elements_basis_functions: def2-SVPD
      light_elements_basis: def2SVP
      freq: False
 
@@ -89,7 +89,7 @@ different elements, as seen in example project settings file in ``~/.chemsmart/g
      basis: genecp
      additional_route_parameters: empiricaldispersion=gd3bj
      heavy_elements: ['Pd', 'Ag', 'Br', 'Cu', 'Mn']
-     heavy_elements_basis: def2-TZVPPD
+     heavy_elements_basis_functions: def2-TZVPPD
      light_elements_basis: def2-SVP
    solv:
      functional: b3lyp
@@ -135,7 +135,7 @@ For non-standard solvents, you can define custom solvent parameters (``~/.chemsm
      functional: mn15
      basis: genecp
      heavy_elements: ['Rh','Ag','Br','Cu', 'Pd']
-     heavy_elements_basis: def2tzvpd
+     heavy_elements_basis_functions: def2tzvpd
      light_elements_basis: def2svp
    solv:
      functional: mn15

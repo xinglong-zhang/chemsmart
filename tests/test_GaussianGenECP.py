@@ -60,7 +60,10 @@ class TestGaussianGenGenECP:
         )
 
         assert genecp_section.heavy_elements == ["Pd"]
-        assert genecp_section.heavy_elements_basis == "def2-TZVPPD".lower()
+        assert (
+            genecp_section.heavy_elements_basis_functions
+            == "def2-TZVPPD".lower()
+        )
         assert genecp_section.light_elements == ["H", "C", "O"]
         assert (
             genecp_section.light_elements_basis == "def2svp"
@@ -92,9 +95,9 @@ class TestGaussianGenGenECP:
             heavy_elements_basis="def2SVPD",
         )
 
-        assert with_hyphen.heavy_elements_basis == "def2-svpd"
+        assert with_hyphen.heavy_elements_basis_functions == "def2-svpd"
         assert with_hyphen.light_elements_basis == "def2svp"
-        assert without_hyphen.heavy_elements_basis == "def2-svpd"
+        assert without_hyphen.heavy_elements_basis_functions == "def2-svpd"
         assert without_hyphen.light_elements_basis == "def2svp"
 
     def test_genecp_from_comfile(
@@ -104,7 +107,10 @@ class TestGaussianGenGenECP:
             gaussian_opt_genecp_inputfile
         )
         assert genecp_section.heavy_elements == ["Pd"]
-        assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()
+        assert (
+            genecp_section.heavy_elements_basis_functions
+            == "Def2-TZVPPD".lower()
+        )
         assert set(genecp_section.light_elements) == {"C", "H", "O"}
         assert genecp_section.light_elements_basis == "def2svp"
 
@@ -125,7 +131,10 @@ class TestGaussianGenGenECP:
     ):
         genecp_section = GenGenECPSection.from_comfile(modred_gen_inputfile)
         assert genecp_section.heavy_elements == ["Br"]
-        assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()
+        assert (
+            genecp_section.heavy_elements_basis_functions
+            == "Def2-TZVPPD".lower()
+        )
         assert set(genecp_section.light_elements) == {"C", "H", "O"}
         assert genecp_section.light_elements_basis == "def2svp"
 
@@ -144,7 +153,10 @@ class TestGaussianGenGenECP:
     def test_genecp_from_modred_genecp_comfile(self, modred_genecp_inputfile):
         genecp_section = GenGenECPSection.from_comfile(modred_genecp_inputfile)
         assert genecp_section.heavy_elements == ["Pd"]
-        assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()
+        assert (
+            genecp_section.heavy_elements_basis_functions
+            == "Def2-TZVPPD".lower()
+        )
         assert set(genecp_section.light_elements) == {"C", "H", "O"}
         assert genecp_section.light_elements_basis == "def2svp"
 
@@ -155,7 +167,10 @@ class TestGaussianGenGenECP:
             modred_genecp_custom_solvent_inputfile
         )
         assert genecp_section.heavy_elements == ["Pd"]
-        assert genecp_section.heavy_elements_basis == "Def2-TZVPPD".lower()
+        assert (
+            genecp_section.heavy_elements_basis_functions
+            == "Def2-TZVPPD".lower()
+        )
         assert set(genecp_section.light_elements) == {
             "C",
             "H",
