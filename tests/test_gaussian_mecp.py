@@ -1,3 +1,5 @@
+"""Tests for Gaussian MECP optimization, analysis, and output export."""
+
 import os
 import re
 from io import StringIO
@@ -17,6 +19,7 @@ from chemsmart.analysis.thermochemistry import (
 from chemsmart.cli.gaussian.mecp import mecp
 from chemsmart.cli.gaussian.mecp_options import add_mecp_method_suffix
 from chemsmart.io.gaussian.output import Gaussian16Output
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
 from chemsmart.jobs.gaussian.settings import (
@@ -30,6 +33,46 @@ from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.utils.cli import CtxObjArguments, _add_subcommand_info_to_ctx
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import remove_word_from_parenthesized_option
+
+
+@pytest.mark.parametrize(
+    "label,expected",
+    [
+        ("sample", "sample_mecp"),
+        ("sample_harvey_mecp", "sample_harvey_mecp"),
+    ],
+)
+def test_export_preserves_original_log_and_readable_geometry(
+    tmp_path, label, expected
+):
+    job = object.__new__(GaussianMECPJob)
+    job.folder = str(tmp_path)
+    job.label = label
+    source = (
+        Path(__file__).parent
+        / "data/GaussianTests/outputs/bromochloromethane_full_gen.log"
+    )
+    job._export_final_gaussian_logs({"A": str(source), "B": str(source)})
+    for name in (f"{expected}.log", f"{expected}_B.log"):
+        exported = tmp_path / name
+        assert exported.read_bytes() == source.read_bytes()
+        np.testing.assert_allclose(
+            Molecule.from_filepath(str(exported)).positions,
+            Molecule.from_filepath(str(source)).positions,
+        )
+
+
+def test_missing_state_does_not_publish_partial_export(tmp_path):
+    job = object.__new__(GaussianMECPJob)
+    job.folder = str(tmp_path)
+    job.label = "sample"
+    source = tmp_path / "source.log"
+    source.write_text("state A")
+    with pytest.raises(RuntimeError, match="Missing final state B"):
+        job._export_final_gaussian_logs(
+            {"A": str(source), "B": str(tmp_path / "missing.log")}
+        )
+    assert not Path(job.final_gaussian_logs["A"]).exists()
 
 
 def test_remove_arbitrary_word_from_parenthesized_option():
@@ -506,9 +549,7 @@ def test_state_subjobs_are_routed_by_calculation_phase(tmp_path, monkeypatch):
     )
 
     job._run_state(np.zeros((1, 3)), 1, "A")
-    job._run_state(
-        np.zeros((1, 3)), "macro07_check_coord01_plus", "B", "check"
-    )
+    job._run_state(np.zeros((1, 3)), "macro07_hessian_a1_x_plus", "B", "check")
 
     assert calls == [
         (
@@ -517,7 +558,7 @@ def test_state_subjobs_are_routed_by_calculation_phase(tmp_path, monkeypatch):
             "crossing_optimization",
         ),
         (
-            "crossing_macro07_check_coord01_plus_B",
+            "crossing_macro07_hessian_a1_x_plus_B",
             Path(job.numfreq_folder),
             "crossing_numfreq",
         ),
@@ -543,8 +584,9 @@ def test_completed_mecp_requires_requested_frequency_outputs(tmp_path):
     assert job._job_is_complete()
 
 
-def test_seam_check_uses_same_tolerance_with_and_without_frequencies():
+def test_seam_check_uses_same_tolerance_with_and_without_frequencies(tmp_path):
     job = object.__new__(GaussianMECPJob)
+    job._folder = str(tmp_path)
     job.label = "crossing"
     job.settings = GaussianMECPJobSettings()
     job.molecule = SimpleNamespace(
@@ -913,8 +955,8 @@ def test_numerical_hessian_uses_central_differences_and_symmetrizes():
     np.testing.assert_allclose(actual_a, hessian_a)
     np.testing.assert_allclose(actual_b, hessian_b)
     assert len(calls) == 12
-    assert calls[0] == (10, "A", "check")
-    assert calls[-1] == (15, "B", "check")
+    assert calls[0] == ("hessian_a1_x_plus", "A", "check")
+    assert calls[-1] == ("hessian_a1_z_minus", "B", "check")
 
 
 def test_follow_seam_hessian_uses_macro_coordinate_and_sign_labels():
@@ -931,9 +973,9 @@ def test_follow_seam_hessian_uses_macro_coordinate_and_sign_labels():
         np.zeros((1, 3)), h=1.0e-3, step_prefix=1, macro_step=7
     )
 
-    assert calls[0] == ("macro07_check_coord01_plus", "A", "check")
-    assert calls[3] == ("macro07_check_coord01_minus", "B", "check")
-    assert calls[-1] == ("macro07_check_coord03_minus", "B", "check")
+    assert calls[0] == ("macro07_hessian_a1_x_plus", "A", "check")
+    assert calls[3] == ("macro07_hessian_a1_x_minus", "B", "check")
+    assert calls[-1] == ("macro07_hessian_a1_z_minus", "B", "check")
 
 
 def test_follow_seam_inner_steps_use_macro_labels(tmp_path):
@@ -957,7 +999,7 @@ def test_follow_seam_inner_steps_use_macro_labels(tmp_path):
         macro_step=7,
     )
 
-    assert seen == [("macro07_inner001", "A"), ("macro07_inner001", "B")]
+    assert seen == [("macro07_opt_step001", "A"), ("macro07_opt_step001", "B")]
 
 
 def test_lagrangian_hessian_rejects_identical_gradients():
@@ -1049,6 +1091,7 @@ def _driver_job(tmp_path, max_steps=2):
     job = object.__new__(GaussianMECPJob)
     job.folder = str(tmp_path)
     job.label = "driver"
+    job._export_final_gaussian_logs = lambda sources: None
     job.molecule = SimpleNamespace(symbols=["H"], positions=np.zeros((1, 3)))
     job.settings = SimpleNamespace(
         step_size=0.1,
@@ -1069,10 +1112,14 @@ def _driver_job(tmp_path, max_steps=2):
 
 def test_mecp_driver_writes_final_marker_on_convergence(tmp_path):
     job = _driver_job(tmp_path)
+    del job._export_final_gaussian_logs
     states = []
 
     def run_state(positions, step, state):
         states.append((step, state))
+        Path(
+            job.optimization_folder, f"{job.label}_step{step}_{state}.log"
+        ).write_text(f"converged state {state}")
         return 0.0, np.zeros((1, 3))
 
     job._run_state = run_state
@@ -1084,6 +1131,8 @@ def test_mecp_driver_writes_final_marker_on_convergence(tmp_path):
     job._run()
 
     assert states == [(1, "A"), (1, "B")]
+    for state, path in job.final_gaussian_logs.items():
+        assert Path(path).read_text() == f"converged state {state}"
     assert job.molecule.positions == pytest.approx(np.zeros((1, 3)))
     report = Path(job.report_file).read_text()
     assert "Optimization converged at step 1." in report
@@ -1132,7 +1181,15 @@ def test_seam_follow_selects_lower_verified_branch(tmp_path, failed_branch):
             if failed_branch and self.label.endswith(failed_branch):
                 raise RuntimeError("Branch did not converge")
             energy = -2.0 if self.label.endswith("minus") else -1.0
+            outputs = {}
+            for state in ("A", "B"):
+                path = Path(self.folder) / f"{self.label}_{state}.log"
+                path.write_text(
+                    f"selected geometry {self.label} state {state}"
+                )
+                outputs[state] = str(path)
             self._last_seam_result = {
+                "gaussian_output_files": outputs,
                 "is_minimum": True,
                 "mecp_energy": energy,
                 "positions_angstrom": self.molecule.positions.copy(),
@@ -1161,6 +1218,12 @@ def test_seam_follow_selects_lower_verified_branch(tmp_path, failed_branch):
     }
 
     selected = job._follow_seam_imaginary_mode(initial)
+    job._export_final_gaussian_logs(selected["gaussian_output_files"])
+    for state, path in job.final_gaussian_logs.items():
+        assert (
+            Path(path).read_text()
+            == f"selected geometry crossing_seam_follow_minus state {state}"
+        )
 
     assert selected["mecp_energy"] == -2.0
     assert selected["optimization_steps"] == 3
@@ -1180,7 +1243,7 @@ def test_seam_follow_selects_lower_verified_branch(tmp_path, failed_branch):
     assert not (tmp_path / "crossing_seam_follow.log").exists()
     for suffix in ("plus", "minus"):
         assert (
-            follow_folder / f"crossing_seam_follow_{suffix}_mode_follow.log"
+            follow_folder / f"crossing_seam_follow_{suffix}_record.log"
         ).is_file()
 
 
@@ -1234,6 +1297,10 @@ def test_mecp_report_distinguishes_initial_saddle_and_final_minimum(tmp_path):
         "frequencies": np.array([-38.7, 250.0]),
     }
     final = {
+        "gaussian_output_files": {
+            "A": "selected_A.log",
+            "B": "selected_B.log",
+        },
         "energy_a": -505.732011947,
         "energy_b": -505.732002706,
         "mecp_energy": -505.7320073265,
@@ -1514,3 +1581,292 @@ def test_only_rejects_nonstationary_input_before_hessian(gap, tangent):
     job._compute_numerical_hessian = forbidden
     with pytest.raises(RuntimeError, match="stationary crossing"):
         job.verify_seam_minimum(write_frequencies=True)
+
+
+@pytest.mark.parametrize(
+    "task,method", [("anafreq", "analytic"), ("numfreq", "numerical")]
+)
+def test_frequency_method_submission_round_trip(task, method):
+    ctx = mecp.make_context("mecp", [task, "--only"], obj={})
+    assert ctx.params["hessian_method"] == method
+    _add_subcommand_info_to_ctx(ctx)
+    rebuilt = CtxObjArguments(ctx.obj["subcommand"]).reconstruct_command_line()
+    restored = mecp.make_context("mecp", rebuilt[1:])
+    assert restored.params == ctx.params
+
+
+def test_frequency_method_conflict():
+    with pytest.raises(click.UsageError, match="conflicts"):
+        mecp.make_context("mecp", ["anafreq", "--hessian-method", "numerical"])
+
+
+def test_read_real_gaussian_cartesian_hessian():
+    from chemsmart.io.gaussian.hessian import read_cartesian_hessian
+
+    path = (
+        Path(__file__).parent
+        / "data/GaussianTests/outputs/bromochloromethane_full_gen.log"
+    )
+    matrix = read_cartesian_hessian(path, 5)
+    assert matrix.shape == (15, 15)
+    assert matrix[0, 0] == pytest.approx(0.122156)
+    assert matrix[1, 0] == pytest.approx(-0.0602661)
+    np.testing.assert_array_equal(matrix, matrix.T)
+
+
+def test_hessian_reader_rejects_truncated_matrix(tmp_path):
+    from chemsmart.io.gaussian.hessian import read_cartesian_hessian
+
+    path = tmp_path / "truncated.log"
+    path.write_text(
+        "Force constants in Cartesian coordinates:\n 1 2 3\n 1 1.0D+00\n"
+    )
+    with pytest.raises(RuntimeError, match="incomplete"):
+        read_cartesian_hessian(path, 1)
+
+
+@pytest.mark.parametrize("use_link", [False, True])
+@pytest.mark.parametrize(
+    "custom_route", [None, "#n b3lyp/6-31g opt freq=numer"]
+)
+def test_analytic_hessian_subjob_route_and_reading(
+    tmp_path, monkeypatch, use_link, custom_route
+):
+    import chemsmart.jobs.gaussian.mecp as module
+
+    captured = []
+
+    class FakeSubjob:
+        def __init__(self, **kwargs):
+            self.settings = kwargs["settings"]
+            self.label = kwargs["label"]
+            self.chkfile = str(tmp_path / "missing.chk")
+            self.outputfile = str(tmp_path / "analytic.log")
+            captured.append(self)
+
+        def set_folder(self, folder):
+            self.folder = folder
+
+        def run(self):
+            Path(self.outputfile).write_text(
+                "Force constants in Cartesian coordinates:\n 1 2 3\n"
+                " 1 1.0D+00\n 2 0.0D+00 2.0D+00\n"
+                " 3 0.0D+00 0.0D+00 3.0D+00\n"
+            )
+
+        def _output(self):
+            return SimpleNamespace(
+                energies=[-1.0],
+                forces=[np.zeros((1, 3))],
+                spin_squared_after_annihilation=None,
+            )
+
+    monkeypatch.setattr(module, "GaussianGeneralJob", FakeSubjob)
+    job = _driver_job(tmp_path)
+    job.molecule.copy = lambda: SimpleNamespace(
+        symbols=["H"], positions=np.zeros((1, 3))
+    )
+    job.jobrunner = SimpleNamespace(
+        format_hessian_checkpoint=lambda subjob: np.diag([1.0, 2.0, 3.0])
+    )
+    job.settings = GaussianMECPJobSettings(
+        functional="b3lyp",
+        basis="6-31g",
+        charge_a=0,
+        charge_b=0,
+        multiplicity_a=1,
+        multiplicity_b=3,
+        use_link=use_link,
+        hessian_method="analytic",
+        route_to_be_written=custom_route,
+    )
+    reference = tmp_path / "reference.chk"
+    reference.write_bytes(b"reference wavefunction")
+    job._state_checkpoint_files = {("check", "A"): str(reference)}
+    job.steps_folder = job.optimization_folder
+    # _driver_job installs a fake state evaluator; exercise the real one.
+    GaussianMECPJob._run_state(
+        job,
+        np.zeros((1, 3)),
+        "hessian_analytic",
+        "A",
+        checkpoint_tag="check",
+        analytic=True,
+    )
+    route = captured[0].settings.route_string.lower()
+    assert "#p" in route and "freq=analytic" in route and "nosymm" in route
+    assert "opt" not in route and "freq=numer" not in route
+    assert "guess=read" in route
+    assert captured[0].oldchkfile == str(reference)
+    np.testing.assert_array_equal(
+        job._analytic_hessians["A"], np.diag([1.0, 2.0, 3.0])
+    )
+
+
+@pytest.mark.parametrize("macro_step", [None, 7])
+def test_analytic_seam_verification_reuses_projection_without_displacements(
+    tmp_path, monkeypatch, macro_step
+):
+    from chemsmart.io.molecules.structure import Molecule
+
+    job = _driver_job(tmp_path)
+    job.molecule = Molecule(
+        symbols=["H", "H", "O"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        ),
+    )
+    job.settings = GaussianMECPJobSettings(hessian_method="analytic")
+    job._state_checkpoint_files = {}
+    calls = []
+
+    def state(positions, step, state, checkpoint_tag=None, analytic=False):
+        calls.append((step, state, analytic))
+        if analytic:
+            job._analytic_hessians = getattr(job, "_analytic_hessians", {})
+            job._analytic_hessians[state] = np.eye(9)
+        gradient = np.arange(9, dtype=float).reshape(3, 3)
+        return -1.0, gradient if state == "A" else -gradient
+
+    job._run_state = state
+
+    def no_numerical(*args, **kwargs):
+        pytest.fail(
+            "Analytic verification must not run coordinate differences"
+        )
+
+    job._compute_numerical_hessian = no_numerical
+    result = job.verify_seam_minimum(
+        write_frequencies=True, macro_step=macro_step
+    )
+    assert result["is_minimum"]
+    assert len(calls) == 4
+    prefix = "" if macro_step is None else "macro07_"
+    assert calls[-2:] == [
+        (prefix + "hessian_analytic", "A", True),
+        (prefix + "hessian_analytic", "B", True),
+    ]
+    assert Path(job.numfreq_folder).name.endswith("_anafreq")
+    frequency_log = (tmp_path / "driver_mecp_freq.log").read_text()
+    assert "hessian_method=analytic" in frequency_log
+    assert "hess_step=" not in frequency_log
+
+
+def test_completion_rejects_frequency_from_other_hessian_method(tmp_path):
+    job = _driver_job(tmp_path)
+    job.settings.mecp_numfreq = True
+    job.settings.hessian_method = "analytic"
+    (tmp_path / "driver_mecp_freq.log").write_text(
+        "hessian_method=numerical\n"
+    )
+    assert not job._job_is_complete()
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        "guess(read)",
+        "guess (read)",
+        "Guess = (read,mix)",
+        "geom(allcheck)",
+        "geom (allcheck)",
+        "geom=(check,step=(1,2))",
+    ],
+)
+def test_route_normalization_removes_parenthesized_keywords(option):
+    route = f"scf=(xqc,maxcycle=100) {option} nosymm"
+    assert (
+        GaussianLinkJobSettings._without_route_options(
+            route, {"guess", "geom"}
+        )
+        == "scf=(xqc,maxcycle=100) nosymm"
+    )
+
+
+@pytest.mark.parametrize("entry", [["mecp"], ["link", "-j", "mecp"]])
+@pytest.mark.parametrize(
+    "option", ["--max-follow-steps", "--seam-mode-max-steps"]
+)
+def test_cli_applies_follow_step_limit(
+    entry,
+    option,
+    single_molecule_xyz_file,
+    gaussian_jobrunner_no_scratch,
+    make_cli_ctx_obj,
+    run_gaussian_and_capture_settings,
+):
+    result, settings = run_gaussian_and_capture_settings(
+        "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            *entry,
+            option,
+            "7",
+        ],
+        make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.seam_mode_max_steps == 7
+
+
+def test_fresh_numfreq_only_uses_real_state_evaluator(
+    tmp_path,
+    monkeypatch,
+    gaussian_jobrunner_no_scratch,
+):
+    import chemsmart.jobs.gaussian.mecp as module
+
+    calls = []
+
+    class Backend:
+        def __init__(self, **kwargs):
+            self.label = kwargs["label"]
+            self.molecule = kwargs["molecule"]
+            self.chkfile = str(tmp_path / (self.label + ".chk"))
+
+        def set_folder(self, folder):
+            pass
+
+        def run(self):
+            calls.append(self.label)
+            Path(self.chkfile).touch()
+
+        def _output(self):
+            return SimpleNamespace(
+                energies=[0.0],
+                forces=[
+                    np.array(
+                        [[1.0 if self.label.endswith("A") else -1.0, 0.0, 0.0]]
+                    )
+                ],
+                spin_squared_after_annihilation=None,
+            )
+
+    monkeypatch.setattr(module, "GaussianGeneralJob", Backend)
+    job = GaussianMECPJob(
+        molecule=Molecule(symbols=["H"], positions=[[0.0, 0.0, 0.0]]),
+        settings=GaussianMECPJobSettings(
+            functional="b3lyp",
+            basis="6-31g",
+            mecp_numfreq_only=True,
+            charge_a=0,
+            charge_b=0,
+            multiplicity_a=1,
+            multiplicity_b=3,
+        ),
+        label="fresh",
+        jobrunner=gaussian_jobrunner_no_scratch,
+    )
+    job.set_folder(str(tmp_path))
+    assert job._state_checkpoint_files == {}
+    result = job._run()
+    assert result["is_minimum"]
+    assert len(calls) > 2
+    assert Path(job.final_report_file).is_file()

@@ -80,6 +80,13 @@ def click_mecp_frequency_options(function):
     """Apply the common post-MECP Hessian-analysis options."""
     options = (
         click.option(
+            "--hessian-method",
+            type=click.Choice(["numerical", "analytic"], case_sensitive=False),
+            default="numerical",
+            show_default=True,
+            help="Source of both state Hessians, including every followseam check.",
+        ),
+        click.option(
             "--mecp-numfreq/--no-mecp-numfreq",
             default=False,
             show_default=True,

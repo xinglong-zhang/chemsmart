@@ -25,15 +25,26 @@ class MECPCommand(MyCommand):
         ctx.allow_extra_args = True
         remaining = super().parse_args(ctx, args)
         if len(remaining) > 1 or any(
-            token.lower() not in {"numfreq", "followseam"}
+            token.lower() not in {"numfreq", "anafreq", "followseam"}
             for token in remaining
         ):
             raise click.UsageError(
-                "Choose one MECP task: numfreq or followseam.", ctx
+                "Choose one MECP task: numfreq, anafreq or followseam.", ctx
             )
         if remaining:
             task = remaining[0].lower()
             ctx.params["mecp_numfreq"] = True
+            if task in {"numfreq", "anafreq"}:
+                method = "analytic" if task == "anafreq" else "numerical"
+                source = ctx.get_parameter_source("hessian_method")
+                if (
+                    source == click.core.ParameterSource.COMMANDLINE
+                    and ctx.params["hessian_method"] != method
+                ):
+                    raise click.UsageError(
+                        "Frequency task conflicts with --hessian-method.", ctx
+                    )
+                ctx.params["hessian_method"] = method
             if task == "followseam":
                 ctx.params["follow_seam_imaginary_mode"] = True
         if ctx.params["only"] and (
@@ -41,7 +52,7 @@ class MECPCommand(MyCommand):
             or ctx.params["follow_seam_imaginary_mode"]
         ):
             raise click.UsageError(
-                "--only requires numfreq and cannot be combined with followseam.",
+                "--only requires numfreq or anafreq and cannot be combined with followseam.",
                 ctx,
             )
         ctx.args = []
@@ -52,7 +63,7 @@ class MECPCommand(MyCommand):
 @click.option(
     "--only",
     is_flag=True,
-    help="With numfreq, analyze the input structure without optimization.",
+    help="With numfreq or anafreq, analyze the input structure without optimization.",
 )
 @click_job_options
 @click_mecp_state_options
@@ -72,7 +83,7 @@ class MECPCommand(MyCommand):
     "--max-steps",
     type=int,
     default=None,
-    help="Maximum number of MECP optimization steps (steps are 1-indexed; labels use 6-digit zero-padding).",
+    help="Maximum number of MECP optimization steps (steps are 1-indexed without zero-padding).",
 )
 @click.option(
     "--step-size",
@@ -188,6 +199,7 @@ def mecp(
     step_size_min,
     step_size_max,
     mecp_numfreq,
+    hessian_method,
     hess_step_size,
     follow_seam_imaginary_mode,
     seam_mode_displacement,
@@ -198,9 +210,9 @@ def mecp(
     **kwargs,
 ):
     """
-    Run Gaussian MECP optimization, optionally followed by numfreq or followseam.
+    Run Gaussian MECP optimization, optionally followed by numfreq, anafreq or followseam.
 
-    Use numfreq --only to analyze an existing crossing without optimization.
+    Use numfreq --only or anafreq --only to analyze an existing crossing without optimization.
     """
 
     # get jobrunner for running Gaussian MECP jobs
@@ -305,6 +317,7 @@ def mecp(
         mecp_settings.step_size_min = step_size_min
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
+    mecp_settings.hessian_method = hessian_method
     mecp_settings.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
     mecp_settings.mecp_numfreq_only = only
     mecp_settings.follow_seam_imaginary_mode = follow_seam_imaginary_mode
