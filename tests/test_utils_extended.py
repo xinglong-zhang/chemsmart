@@ -8,6 +8,7 @@ import pytest
 
 from chemsmart.utils.utils import (
     OrderedSet,
+    check_charge_and_multiplicity,
     content_blocks_by_paragraph,
     convert_modred_list_to_string,
     convert_string_index_from_1_based_to_0_based,
@@ -19,6 +20,7 @@ from chemsmart.utils.utils import (
     iterative_compare,
     kabsch_align,
     kabsch_align2,
+    parse_qmmm_scale_factors,
     return_objects_from_string_index,
     string2index_1based,
     strip_out_comments,
@@ -224,6 +226,76 @@ class TestGetListFromStringRange:
         """Test range with brackets."""
         result = get_list_from_string_range("[1-3,5]")
         assert result == [1, 2, 3, 5]
+
+    def test_colon_and_whitespace(self):
+        """Test documented colon-range and space-separated form."""
+        result = get_list_from_string_range("1:15 20")
+        assert result == list(range(1, 16)) + [20]
+
+    def test_unicode_en_dash(self):
+        """Test typographic en-dash ranges copied from documents."""
+        result = get_list_from_string_range("397–469")
+        assert result == list(range(397, 470))
+
+    def test_unicode_em_dash_and_spaced_hyphen(self):
+        """Em-dash and spaced hyphens normalize to hyphen ranges."""
+        assert get_list_from_string_range("1—3") == [1, 2, 3]
+        assert get_list_from_string_range("1 - 3") == [1, 2, 3]
+        assert get_list_from_string_range("1−3") == [1, 2, 3]
+
+    def test_empty_string_raises(self):
+        """Empty string should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="empty string"):
+            get_list_from_string_range("")
+
+    def test_invalid_token_raises(self):
+        """Non-numeric tokens should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="Invalid atom index token"):
+            get_list_from_string_range("1-3,abc")
+
+    @pytest.mark.parametrize("value", ["0", "-1", "3-1", "5:2"])
+    def test_invalid_atom_indices_raise(self, value):
+        """Zero, negative, and reversed ranges are rejected."""
+        with pytest.raises(ValueError, match="Invalid atom index token"):
+            get_list_from_string_range(value)
+
+    def test_none_raises(self):
+        """None input should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="None"):
+            get_list_from_string_range(None)
+
+    def test_non_string_raises(self):
+        """Non-string input should raise TypeError."""
+        with pytest.raises(TypeError, match="Expected a string"):
+            get_list_from_string_range(123)
+
+    def test_empty_tokens_and_empty_result(self):
+        """Blank tokens are skipped; all-blank token strings raise."""
+        assert get_list_from_string_range("1,,3") == [1, 3]
+        with pytest.raises(ValueError, match="Could not parse atom indices"):
+            get_list_from_string_range(",,")
+
+
+class TestParseQMMMScaleFactors:
+    def test_list_and_tuple_keys(self):
+        assert parse_qmmm_scale_factors("{[3, 4]: [0.709]}") == {
+            (3, 4): [0.709]
+        }
+        assert parse_qmmm_scale_factors("{(3, 4): [0.709, 0.709]}") == {
+            (3, 4): [0.709, 0.709]
+        }
+        existing = {(5, 6): [0.7]}
+        assert parse_qmmm_scale_factors(existing) is existing
+
+
+class TestCheckChargeAndMultiplicity:
+    def test_raises_when_missing(self):
+        class _Settings:
+            charge = None
+            multiplicity = 1
+
+        with pytest.raises(ValueError, match="Charge and multiplicity"):
+            check_charge_and_multiplicity(_Settings())
 
 
 class TestString2Index1Based:

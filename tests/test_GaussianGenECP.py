@@ -78,6 +78,25 @@ class TestGaussianGenGenECP:
             ignored_string="Version",
         )
 
+    def test_genecp_from_base_api_accepts_hyphenless_def2_heavy_basis(self):
+        with_hyphen = GenGenECPSection.from_bse_api(
+            light_elements=["C", "H", "O"],
+            light_elements_basis="def2-SVP",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="def2-SVPD",
+        )
+        without_hyphen = GenGenECPSection.from_bse_api(
+            light_elements=["C", "H", "O"],
+            light_elements_basis="def2-SVP",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="def2SVPD",
+        )
+
+        assert with_hyphen.heavy_elements_basis == "def2-svpd"
+        assert with_hyphen.light_elements_basis == "def2svp"
+        assert without_hyphen.heavy_elements_basis == "def2-svpd"
+        assert without_hyphen.light_elements_basis == "def2svp"
+
     def test_genecp_from_comfile(
         self, tmpdir, gaussian_opt_genecp_inputfile, genecp_txt_file_from_web
     ):

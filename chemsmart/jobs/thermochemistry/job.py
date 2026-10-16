@@ -10,11 +10,15 @@ import logging
 import os
 from typing import Type
 
-from chemsmart.analysis.thermochemistry import Thermochemistry
+from chemsmart.analysis.thermochemistry import (
+    MECPProjectedFrequencyOutput,
+    thermochemistry_from_file,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
+from chemsmart.utils.io import file_content_begins_with
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +29,12 @@ class ThermochemistryJob(Job):
 
     This class handles the calculation of thermodynamic properties such as
     enthalpy, entropy, and Gibbs free energy from frequency calculations
-    in Gaussian or ORCA output files.
+    in Gaussian, ORCA, or xTB output files.
 
     Attributes:
         PROGRAM (str): Program identifier ('Thermochemistry').
         TYPE (str): Job type identifier ('thermochemistry').
-        filename (str | None): Path to the QC output file (.log/.out).
+        filename (str): Path to the QC output file (.log/.out).
         molecule (Molecule | None): Molecular structure used for context.
         settings (ThermochemistryJobSettings): Thermochemistry configuration.
         label (str): Job identifier used for file naming.
@@ -68,6 +72,9 @@ class ThermochemistryJob(Job):
         super().__init__(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
+
+        if filename is None:
+            raise ValueError("'filename' must be provided.")
 
         # Validate file extension
         if not filename.endswith((".log", ".out")):
@@ -231,7 +238,13 @@ class ThermochemistryJob(Job):
         """
 
         logger.info(f"Reading molecule from file: {filename}")
-        molecule = Molecule.from_filepath(filename)
+        is_mecp_frequency_file = file_content_begins_with(
+            filename, MECPProjectedFrequencyOutput.HEADER
+        )
+        if is_mecp_frequency_file:
+            molecule = MECPProjectedFrequencyOutput(filename).molecule
+        else:
+            molecule = Molecule.from_filepath(filename)
 
         # Use default settings if not provided
         if settings is None:
@@ -279,17 +292,12 @@ class ThermochemistryJob(Job):
             ValueError: If no input file is provided
             Exception: If calculation fails during processing
         """
-        if not self.filename:
-            raise ValueError(
-                "No input file provided for thermochemistry calculation."
-            )
-
         # Set default output file if not specified
         if self.settings.outputfile is None:
             self.settings.outputfile = self.outputfile
 
         try:
-            thermochemistry = Thermochemistry(
+            thermochemistry = thermochemistry_from_file(
                 filename=self.filename,
                 temperature=self.settings.temperature,
                 concentration=self.settings.concentration,
@@ -305,6 +313,7 @@ class ThermochemistryJob(Job):
                 check_imaginary_frequencies=(
                     self.settings.check_imaginary_frequencies
                 ),
+                electronic_degeneracy=self.settings.electronic_degeneracy,
             )
             (
                 structure,

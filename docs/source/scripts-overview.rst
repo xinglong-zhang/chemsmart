@@ -2,7 +2,7 @@
  Auxiliary Scripts Overview
 ############################
 
-Chemsmart includes auxiliary Python scripts for data management and electronic structure analysis. These scripts are
+CHEMSMART includes auxiliary Python scripts for data management and electronic structure analysis. These scripts are
 standalone utilities that complement the main CLI.
 
 Available script categories:

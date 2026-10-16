@@ -17,6 +17,137 @@ the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
 can be inspected without running an actual calculation.
 """
 
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+class TestGaussianCLIPubChemOptCommand:
+    """CLI tests for PubChem / database label paths without an explicit ``-l``."""
+
+    def test_pubchem_only_opt_passes_molecule_to_job(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--pubchem <cid> opt`` loads a structure and passes it to the job."""
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[pubchem_molecule],
+        ) as mock_from_pubchem:
+            result, settings = run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-l",
+                    "ammonia",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_from_pubchem.assert_called_once_with(
+            identifier="222", return_list=True
+        )
+        assert settings is not None, "GaussianOptJob was never instantiated"
+
+    def test_pubchem_default_label_uses_output_prefix(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian as gaussian_cli
+
+        runner = CliRunner()
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch("chemsmart.jobs.gaussian.opt.GaussianOptJob") as mock,
+        ):
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock.call_args.kwargs["label"] == "output_opt"
+
+    def test_database_sid_preserved_in_default_label(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from os.path import basename, splitext
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian as gaussian_cli
+        from chemsmart.database.database import Database
+
+        db = Database(database_chemsmart_file)
+        structure_id = db.get_record(record_index=1)["molecules"][0][
+            "structure_id"
+        ]
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.opt.GaussianOptJob") as mock:
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    database_chemsmart_file,
+                    "--sid",
+                    structure_id,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        base = splitext(basename(database_chemsmart_file))[0]
+        assert (
+            mock.call_args.kwargs["label"] == f"{base}_SID-{structure_id}_opt"
+        )
+
 
 class TestGaussianSolventCLIOptCommand:
     """CLI solvent options propagated to the ``opt`` subcommand."""
@@ -858,7 +989,7 @@ class TestGaussianCLICrestCommand:
 
 
 class TestGaussianCLIQrcCommand:
-    """CLI tests for the ``qrc`` (Quadratic Reaction Coordinate) subcommand."""
+    """CLI tests for the ``qrc`` (Quick Reaction Coordinate) subcommand."""
 
     def test_basic_qrc_job_creation(
         self,
@@ -983,7 +1114,7 @@ class TestGaussianCLIMecpCommand:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
-        """Default ``multiplicity-b`` is inferred as ``multiplicity-a + 2``."""
+        """Default ``multiplicity2`` is inferred as ``multiplicity1 + 2``."""
         result, settings = run_gaussian_and_capture_settings(
             "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
             [
@@ -1026,13 +1157,13 @@ class TestGaussianCLIMecpCommand:
                 "-m",
                 "2",
                 "mecp",
-                "--multiplicity-a",
+                "-m1",
                 "2",
-                "--multiplicity-b",
+                "-m2",
                 "4",
-                "--charge-a",
+                "-c1",
                 "1",
-                "--charge-b",
+                "-c2",
                 "1",
                 "--max-steps",
                 "120",
@@ -1134,7 +1265,7 @@ class TestGaussianCLIMecpCommand:
 
         assert result.exit_code == 0, result.output
         assert settings.adaptive_step_size is True
-        assert settings.step_size_method == "bb"
+        assert settings.step_size_method == "harvey"
         assert settings.step_size_grow == 1.2
         assert settings.step_size_shrink == 0.7
         assert settings.step_size_min == 1e-4
@@ -1169,6 +1300,104 @@ class TestGaussianCLIMecpCommand:
         assert result.exit_code == 0, result.output
         assert settings.step_size_method == "grow_shrink"
 
+    def test_mecp_harvey_selects_inverse_bfgs_optimizer(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """The public ``harvey`` name selects the inverse-BFGS optimizer."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                str(single_molecule_xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "harvey",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.step_size_method == "harvey"
+
+    def test_mecp_harvey_bfgs_old_name_is_rejected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """The removed implementation name is no longer part of the CLI."""
+        result, _ = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                str(single_molecule_xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--step-size-method",
+                "harvey_bfgs",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code != 0
+        assert "Invalid value for '--step-size-method'" in result.output
+
+    def test_mecp_restart_and_frequency_options_are_forwarded(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "mecp",
+                "--no-restart",
+                "--mecp-numfreq",
+                "--hess-step-size",
+                "0.002",
+                "--follow-seam-imaginary-mode",
+                "--seam-mode-displacement",
+                "0.08",
+                "--seam-mode-max-steps",
+                "5",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.restart is False
+        assert settings.mecp_numfreq is True
+        assert settings.hess_step_size == 0.002
+        assert settings.follow_seam_imaginary_mode is True
+        assert settings.seam_mode_displacement == 0.08
+        assert settings.seam_mode_max_steps == 5
+
 
 class TestGaussianCLILinkMecpCommand:
     """CLI tests for ``link -j mecp`` (broken-symmetry MECP via link sub-jobs)."""
@@ -1195,9 +1424,9 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--multiplicity-a",
+                "-m1",
                 "1",
-                "--multiplicity-b",
+                "-m2",
                 "3",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
@@ -1215,7 +1444,7 @@ class TestGaussianCLILinkMecpCommand:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
-        """Without ``--multiplicity-b``, state B defaults to state A + 2."""
+        """Without ``--multiplicity2``, state 2 defaults to state 1 + 2."""
         result, settings = run_gaussian_and_capture_settings(
             "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
             [
@@ -1230,7 +1459,7 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--multiplicity-a",
+                "--multiplicity1",
                 "1",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
@@ -1262,7 +1491,7 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--multiplicity-a",
+                "--multiplicity1",
                 "1",
                 "--stable",
                 "qrhf",
@@ -1298,7 +1527,7 @@ class TestGaussianCLILinkMecpCommand:
                 "link",
                 "-j",
                 "mecp",
-                "--multiplicity-a",
+                "--multiplicity1",
                 "1",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
@@ -1306,3 +1535,328 @@ class TestGaussianCLILinkMecpCommand:
 
         assert result.exit_code == 0, result.output
         assert settings.functional.lower().startswith("u")
+
+
+class TestGaussianQMMMCLI:
+    """CLI tests for the nested ``opt qmmm`` (and related) subcommands."""
+
+    def test_opt_qmmm_propagates_cli_options_to_settings_and_molecule(
+        self,
+        single_molecule_xyz_file,
+        tmpdir,
+        gaussian_jobrunner_no_scratch,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        mm_info = os.path.join(tmpdir, "mm_atoms.dat")
+        with open(mm_info, "w") as handle:
+            handle.write("1 C 0.0\n")
+            handle.write("2 H 0.0\n")
+            handle.write("3 H 0.0\n")
+            handle.write("4 H 0.0\n")
+        params = os.path.join(tmpdir, "mm_params.dat")
+        with open(params, "w") as handle:
+            handle.write("NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n")
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "qmmm",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-l",
+                    "testjob",
+                    "opt",
+                    "-f",
+                    "5",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "6-31g*",
+                    "-hff",
+                    "UFF",
+                    "-mx",
+                    "hf",
+                    "-mb",
+                    "sto-3g",
+                    "-mff",
+                    "UFF",
+                    "-lx",
+                    "pm6",
+                    "-lb",
+                    "sto-3g",
+                    "-lff",
+                    "UFF",
+                    "-ct",
+                    "0",
+                    "-mt",
+                    "1",
+                    "-ci",
+                    "0",
+                    "-mi",
+                    "1",
+                    "-ch",
+                    "1",
+                    "-mh",
+                    "2",
+                    "-ha",
+                    "1-3",
+                    "-ma",
+                    "4",
+                    "-la",
+                    "5-6",
+                    "-ba",
+                    "[[3, 4]]",
+                    "-sf",
+                    "{[3, 4]: [0.709]}",
+                    "-mai",
+                    mm_info,
+                    "-mpf",
+                    params,
+                ],
+                obj={"jobrunner": gaussian_jobrunner_no_scratch},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job.call_args is not None
+        call_kwargs = mock_job.call_args.kwargs
+        settings = call_kwargs["settings"]
+        molecule = call_kwargs["molecule"]
+
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "6-31g*"
+        assert settings.high_level_force_field == "UFF"
+        assert settings.medium_level_functional == "hf"
+        assert settings.medium_level_basis == "sto-3g"
+        assert settings.medium_level_force_field == "UFF"
+        assert settings.low_level_functional == "pm6"
+        assert settings.low_level_basis == "sto-3g"
+        assert settings.low_level_force_field == "UFF"
+        assert settings.charge_total == 0
+        assert settings.mult_total == 1
+        assert settings.charge_intermediate == 0
+        assert settings.mult_intermediate == 1
+        assert settings.model_charge == 1
+        assert settings.model_multiplicity == 2
+        assert settings.mm_atom_info_file == mm_info
+        assert settings.mm_parameters_file == params
+        assert settings.parent_jobtype == "opt"
+        assert molecule.high_level_atoms == [1, 2, 3]
+        assert molecule.medium_level_atoms == [4]
+        assert molecule.low_level_atoms == [5, 6]
+        assert molecule.bonded_atoms == [[3, 4]]
+        assert molecule.scale_factors == {(3, 4): [0.709]}
+        assert molecule.frozen_atoms[4] == -1
+
+        assert call_kwargs["label"] == "testjob_qmmm"
+
+    def test_opt_qmmm_without_mm_sidecar_options(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Exercise False branches for -mai/-mpf CLI options."""
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "qmmm",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "sto-3g",
+                    "-ch",
+                    "0",
+                    "-mh",
+                    "1",
+                    "-ha",
+                    "1-3",
+                ],
+                obj={"jobrunner": gaussian_jobrunner_no_scratch},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        settings = mock_job.call_args.kwargs["settings"]
+        assert settings.mm_atom_info_file is None
+        assert settings.mm_parameters_file is None
+
+
+class TestGaussianLinkMecpLabels:
+    def test_default_label_has_one_link_suffix(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        args = [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "link",
+            "-j",
+            "mecp",
+        ]
+        with patch("chemsmart.jobs.gaussian.mecp.GaussianMECPJob") as job:
+            result = CliRunner().invoke(
+                gaussian,
+                args,
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        base = os.path.splitext(os.path.basename(single_molecule_xyz_file))[0]
+        assert job.call_args.kwargs["label"] == f"{base}_harvey_mecp_link"
+
+    def test_explicit_label_link_is_preserved(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        args = [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "-l",
+            "custom_link",
+            "link",
+            "-j",
+            "mecp",
+        ]
+        with patch("chemsmart.jobs.gaussian.mecp.GaussianMECPJob") as job:
+            result = CliRunner().invoke(
+                gaussian,
+                args,
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+        assert result.exit_code == 0, result.output
+        assert job.call_args.kwargs["label"] == "custom_link_harvey_mecp_link"
+
+
+@pytest.mark.parametrize(
+    "jobtype, extra, suffix",
+    [
+        ("opt", [], "opt_link"),
+        ("sp", [], "sp_link"),
+        ("irc", [], "irc_link"),
+        ("irc", ["--direction", "forward"], "ircf_link"),
+        ("irc", ["--direction", "reverse", "--flat-irc"], "ircr_flat_link"),
+    ],
+)
+def test_regular_link_default_labels(
+    single_molecule_xyz_file,
+    gaussian_jobrunner_no_scratch,
+    make_cli_ctx_obj,
+    jobtype,
+    extra,
+    suffix,
+):
+    from click.testing import CliRunner
+
+    from chemsmart.cli.gaussian.gaussian import gaussian
+
+    args = [
+        "-p",
+        "gas_solv",
+        "-f",
+        single_molecule_xyz_file,
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "link",
+        "-j",
+        jobtype,
+    ] + extra
+    with patch("chemsmart.jobs.gaussian.link.GaussianLinkJob") as job:
+        result = CliRunner().invoke(
+            gaussian,
+            args,
+            obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            catch_exceptions=False,
+        )
+    assert result.exit_code == 0, result.output
+    base = os.path.splitext(os.path.basename(single_molecule_xyz_file))[0]
+    assert job.call_args.kwargs["label"] == f"{base}_{suffix}"
+
+
+def test_regular_link_preserves_explicit_label(
+    single_molecule_xyz_file,
+    gaussian_jobrunner_no_scratch,
+    make_cli_ctx_obj,
+):
+    from click.testing import CliRunner
+
+    from chemsmart.cli.gaussian.gaussian import gaussian
+
+    args = [
+        "-p",
+        "gas_solv",
+        "-f",
+        single_molecule_xyz_file,
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "-l",
+        "custom_link",
+        "link",
+        "-j",
+        "opt",
+    ]
+    with patch("chemsmart.jobs.gaussian.link.GaussianLinkJob") as job:
+        result = CliRunner().invoke(
+            gaussian,
+            args,
+            obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            catch_exceptions=False,
+        )
+    assert result.exit_code == 0, result.output
+    assert job.call_args.kwargs["label"] == "custom_link_opt_link"

@@ -6,7 +6,7 @@ Configure user-specific settings in the ``~/.chemsmart`` directory.
 
 .. note::
 
-   You can modify files in ``~/.chemsmart`` freely without affecting or needing to understand the Chemsmart source code.
+   You can modify files in ``~/.chemsmart`` freely without affecting or needing to understand the CHEMSMART source code.
 
 ********************
  User Settings File

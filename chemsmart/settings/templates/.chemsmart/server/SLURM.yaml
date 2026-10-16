@@ -2,7 +2,7 @@ SERVER:
     SCHEDULER: SLURM
     QUEUE_NAME: normal
     NUM_HOURS: 24
-    MEM_GB: 400
+    MEM_GB: 375
     NUM_CORES: 64
     NUM_GPUS: 0
     NUM_THREADS: 64
@@ -11,6 +11,8 @@ SERVER:
     ##PROJECT: 13002374
     SCRATCH_DIR: null
     USE_HOSTS: true
+    EXTRA_SCHEDULER_DIRECTIVES: |
+      #SBATCH --reservation=xlzhang_1
     EXTRA_COMMANDS: |
         #extra commands to activate chemsmart environment in submission script
 GAUSSIAN:
@@ -44,6 +46,28 @@ ORCA:
         module load openmpi
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
+
+XTB:
+    EXEFOLDER: null  # use xtb from activated conda environment/PATH
+    LOCAL_RUN: True
+    SCRATCH: False  # run in job folder by default; set True for batch/scratch runs
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: null
+    SCRIPTS: null
+    ENVARS: null
+
+CREST:
+    EXEFOLDER: null  # use crest from activated conda environment/PATH
+    LOCAL_RUN: True
+    SCRATCH: False  # run in job folder by default; set True for batch/scratch runs
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: null
+    SCRIPTS: null
+    ENVARS: null
 
 NCIPLOT:
     EXEFOLDER: ~/bin/nciplot

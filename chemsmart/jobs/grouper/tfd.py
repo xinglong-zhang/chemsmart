@@ -13,12 +13,12 @@ from rdkit.Chem import TorsionFingerprints
 
 from chemsmart.io.molecules.structure import Molecule
 
-from .base import MoleculeGrouper
+from .base import MatrixGrouper
 
 logger = logging.getLogger(__name__)
 
 
-class TorsionFingerprintGrouper(MoleculeGrouper):
+class TorsionFingerprintGrouper(MatrixGrouper):
     """
     Groups conformers based on Torsion Fingerprint Deviation (TFD).
 
@@ -84,9 +84,14 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
             matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
+        if threshold is None and num_groups is None:
+            threshold = 0.1
+
         super().__init__(
             molecules,
-            num_procs,
+            threshold=threshold,
+            num_groups=num_groups,
+            num_procs=num_procs,
             label=label,
             conformer_ids=conformer_ids,
             matrix_format=matrix_format,
@@ -94,23 +99,11 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             **kwargs,
         )
 
-        # Validate that threshold and num_groups are mutually exclusive
-        if threshold is not None and num_groups is not None:
-            raise ValueError(
-                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
-            )
-
         # Validate max_dev parameter
         if max_dev not in ["equal", "spec"]:
             raise ValueError(
                 f"max_dev must be either 'equal' or 'spec', got '{max_dev}'"
             )
-
-        if threshold is None and num_groups is None:
-            threshold = 0.1
-        self.threshold = threshold
-        self.num_groups = num_groups
-        self._auto_threshold = None  # Will be set if num_groups is used
         self.use_weights = use_weights
         self.max_dev = max_dev
         self.symm_radius = symm_radius
@@ -237,6 +230,13 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             )
             return float("inf")
 
+    def calculate_tfd_pair(self, i: int, j: int) -> float:
+        """Public API: calculate TFD value for one conformer pair by index."""
+        i_idx, j_idx = self._validate_pair_indices(i, j)
+        if i_idx == j_idx:
+            return 0.0
+        return float(self._calculate_tfd((i_idx, j_idx)))
+
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
         Group conformers based on TFD similarity.
@@ -249,6 +249,7 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
         import time
 
         grouping_start_time = time.time()
+        self._auto_threshold = None
 
         n = len(self.molecules)
 
@@ -280,13 +281,13 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         # Calculate TFD values with real-time output
         tfd_values = []
+        next_progress = 10
         for idx, (i, j) in enumerate(indices):
             tfd = self._calculate_tfd((i, j))
             tfd_values.append(tfd)
-            if (idx + 1) % 10 == 0 or (idx + 1) == total_pairs:
-                logger.info(
-                    f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished"
-                )
+            next_progress = self._log_progress(
+                idx + 1, total_pairs, next_progress
+            )
 
         # Build full TFD matrix
         tfd_matrix = np.zeros((n, n))
@@ -295,15 +296,15 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         # Choose grouping strategy
         if self.num_groups is not None:
-            groups, index_groups = self._group_by_num_groups(
-                tfd_values, indices, n
-            )
+            groups, index_groups = self.group_by_num_groups(tfd_matrix)
         else:
-            groups, index_groups = self._group_by_threshold(
-                tfd_values, indices, n
-            )
+            groups, index_groups = self.group_by_threshold(tfd_matrix)
 
         grouping_time = time.time() - grouping_start_time
+
+        # Cache results
+        self._cached_groups = groups
+        self._cached_group_indices = index_groups
 
         # Save TFD matrix through unified record entrypoint
         self.record(
@@ -313,158 +314,10 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
             index_groups=index_groups,
         )
 
-        # Cache results
-        self._cached_groups = groups
-        self._cached_group_indices = index_groups
-
         logger.info(
             f"[{self.__class__.__name__}] Found {len(groups)} groups using TFD"
         )
 
-        return groups, index_groups
-
-    def _group_by_threshold(self, tfd_values, indices, n):
-        """Threshold-based grouping for TFD using complete linkage."""
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), tfd in zip(indices, tfd_values):
-            if tfd <= self.threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
-        return groups, index_groups
-
-    def _complete_linkage_grouping(self, adj_matrix, n):
-        """Perform complete linkage grouping."""
-        assigned = [False] * n
-        groups = []
-        index_groups = []
-
-        for i in range(n - 1, -1, -1):
-            if assigned[i]:
-                continue
-            current_group = [i]
-            assigned[i] = True
-
-            for j in range(i - 1, -1, -1):
-                if assigned[j]:
-                    continue
-                can_join = all(
-                    adj_matrix[j, member] for member in current_group
-                )
-                if can_join:
-                    current_group.append(j)
-                    assigned[j] = True
-
-            current_group.sort()
-            groups.append([self.molecules[idx] for idx in current_group])
-            index_groups.append(current_group)
-
-        groups.reverse()
-        index_groups.reverse()
-        return groups, index_groups
-
-    def _group_by_num_groups(self, tfd_values, indices, n):
-        """Automatic grouping to create specified number of groups."""
-        if self.num_groups >= n:
-            logger.info(
-                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
-            )
-            groups = [[mol] for mol in self.molecules]
-            index_groups = [[i] for i in range(n)]
-            return groups, index_groups
-
-        threshold = self._find_optimal_tfd_threshold(tfd_values, indices, n)
-        self._auto_threshold = threshold
-
-        logger.info(
-            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
-        )
-
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), tfd in zip(indices, tfd_values):
-            if tfd <= threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
-        actual_groups = len(groups)
-
-        logger.info(
-            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
-        )
-
-        if actual_groups > self.num_groups:
-            groups, index_groups = self._merge_groups_to_target(
-                groups, index_groups
-            )
-
-        return groups, index_groups
-
-    def _find_optimal_tfd_threshold(self, tfd_values, indices, n):
-        """Find threshold using binary search."""
-        sorted_tfd = sorted([tfd for tfd in tfd_values if not np.isinf(tfd)])
-
-        if not sorted_tfd:
-            return 0.0
-
-        low, high = 0, len(sorted_tfd) - 1
-        best_threshold = sorted_tfd[-1]
-
-        while low <= high:
-            mid = (low + high) // 2
-            threshold = sorted_tfd[mid]
-
-            adj_matrix = np.zeros((n, n), dtype=bool)
-            for (idx_i, idx_j), tfd in zip(indices, tfd_values):
-                if tfd <= threshold:
-                    adj_matrix[idx_i, idx_j] = adj_matrix[idx_j, idx_i] = True
-
-            num_groups_found = self._count_groups(adj_matrix, n)
-
-            if num_groups_found == self.num_groups:
-                return threshold
-            elif num_groups_found > self.num_groups:
-                low = mid + 1
-            else:
-                best_threshold = threshold
-                high = mid - 1
-
-        return best_threshold
-
-    def _count_groups(self, adj_matrix, n):
-        """Count number of groups using complete linkage.
-
-        Uses the same iteration order as _complete_linkage_grouping (last to first)
-        so threshold binary search reflects actual grouping behavior.
-        """
-        assigned = [False] * n
-        num_groups = 0
-        for i in range(n - 1, -1, -1):
-            if assigned[i]:
-                continue
-            current_group = [i]
-            assigned[i] = True
-            for j in range(i - 1, -1, -1):
-                if assigned[j]:
-                    continue
-                can_join = all(adj_matrix[j, m] for m in current_group)
-                if can_join:
-                    current_group.append(j)
-                    assigned[j] = True
-            num_groups += 1
-        return num_groups
-
-    def _merge_groups_to_target(self, groups, index_groups):
-        """Merge groups to reach target number."""
-        while len(groups) > self.num_groups:
-            min_idx = min(range(len(groups)), key=lambda i: len(groups[i]))
-            largest_idx = max(
-                range(len(groups)),
-                key=lambda i: len(groups[i]) if i != min_idx else -1,
-            )
-            groups[largest_idx].extend(groups[min_idx])
-            index_groups[largest_idx].extend(index_groups[min_idx])
-            groups.pop(min_idx)
-            index_groups.pop(min_idx)
         return groups, index_groups
 
     def _record_results(
@@ -489,6 +342,16 @@ class TorsionFingerprintGrouper(MoleculeGrouper):
 
         if self.num_groups is not None:
             header_info.append(("Requested Groups (-N)", self.num_groups))
+            header_info.append(
+                (
+                    "Actual Groups",
+                    (
+                        len(self._cached_group_indices)
+                        if self._cached_group_indices is not None
+                        else 0
+                    ),
+                )
+            )
             if self._auto_threshold is not None:
                 header_info.append(
                     (

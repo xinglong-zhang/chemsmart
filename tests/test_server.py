@@ -1,10 +1,65 @@
 import os
+from io import StringIO
 
-from chemsmart.settings.executable import GaussianExecutable, ORCAExecutable
+import pytest
+
+from chemsmart.jobs.job import Job
+from chemsmart.settings.executable import (
+    CRESTExecutable,
+    GaussianExecutable,
+    ORCAExecutable,
+    XTBExecutable,
+)
 from chemsmart.settings.server import Server
+from chemsmart.settings.submitters import PBSSubmitter, SLURMSubmitter
 
 
 class TestServer:
+    @pytest.mark.parametrize(
+        "program,label,queued_names,duplicate",
+        [
+            ("ORCA", "molecule_opt", ["orca_molecule_opt"], True),
+            ("Gaussian", "molecule_opt", ["gaussian_molecule_opt"], True),
+            ("ORCA", "molecule_opt", ["gaussian_molecule_opt"], False),
+            ("ORCA", "molecule_opt", [], False),
+            ("ORCA", None, [], False),
+        ],
+        ids=[
+            "orca-duplicate",
+            "gaussian-duplicate",
+            "other-program",
+            "empty-queue",
+            "no-label",
+        ],
+    )
+    def test_check_running_jobs(
+        self, mocker, program, label, queued_names, duplicate
+    ):
+        """Reject queued names only when both program and label match.
+
+        Mock the queue lookup so no scheduler is needed, and verify unlabeled
+        jobs skip the lookup entirely.
+        """
+        helper_cls = mocker.patch("chemsmart.utils.cluster.ClusterHelper")
+        query = helper_cls.return_value.get_running_jobs
+        query.return_value = (list(range(len(queued_names))), queued_names)
+        job = Job(molecule=None, label=label, jobrunner=None)
+        job.PROGRAM = program
+
+        if duplicate:
+            with pytest.raises(
+                SystemExit, match="Duplicate job NOT submitted"
+            ):
+                Server._check_running_jobs(job)
+        else:
+            Server._check_running_jobs(job)
+
+        if label is None:
+            helper_cls.assert_not_called()
+        else:
+            query.assert_called_once_with()
+        assert job.label == label
+
     def test_server_yaml(self, server_yaml_file):
         assert os.path.exists(server_yaml_file)
         assert os.path.isfile(server_yaml_file)
@@ -12,7 +67,7 @@ class TestServer:
         assert server.scheduler.lower() == "pbs"
         assert server.queue_name == "normal"
         assert server.num_hours == 24
-        assert server.mem_gb == 400
+        assert server.mem_gb == 375
         assert server.num_cores == 64
         assert server.num_gpus == 0
         assert server.num_threads == 64
@@ -26,6 +81,7 @@ export PATH=$HOME/bin/chemsmart/chemsmart/scripts:$PATH
 export PYTHONPATH=$HOME/bin/chemsmart:$PYTHONPATH
 """
         )
+        assert server.extra_scheduler_directives == "#PBS -m abe\n"
 
     def test_gaussian_executable(self, server_yaml_file):
         gaussian_executable = GaussianExecutable.from_servername(
@@ -76,3 +132,104 @@ export g16root=~/programs/g16
 export LD_LIBRARY_PATH=~/programs/openmpi-4.1.6/build/lib:$LD_LIBRARY_PATH
 """
         assert orca_executable.envars == orca_envars
+
+    def test_xtb_executable(self, server_yaml_file):
+        xtb_executable = XTBExecutable.from_servername(server_yaml_file)
+        assert xtb_executable.executable_folder is None
+        assert xtb_executable.get_executable() == "xtb"
+        assert xtb_executable.local_run is True
+
+        xtb_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/chemsmart
+"""
+        assert xtb_executable.conda_env == xtb_conda_env
+        assert xtb_executable.modules is None
+        assert xtb_executable.scripts is None
+        assert xtb_executable.envars is None
+
+    def test_crest_executable(self, server_yaml_file):
+        crest_executable = CRESTExecutable.from_servername(server_yaml_file)
+        assert crest_executable.executable_folder is None
+        assert crest_executable.get_executable() == "crest"
+        assert crest_executable.local_run is True
+
+        crest_conda_env = """source ~/anaconda3/etc/profile.d/conda.sh
+conda activate ~/anaconda3/envs/chemsmart
+"""
+        assert crest_executable.conda_env == crest_conda_env
+        assert crest_executable.modules is None
+        assert crest_executable.scripts is None
+        assert crest_executable.envars is None
+
+    def test_slurm_submitter_writes_extra_scheduler_directives(self):
+        server = Server(
+            "custom-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=24,
+            NUM_GPUS=0,
+            EXTRA_SCHEDULER_DIRECTIVES="#SBATCH --reservation=xlzhang_1\n",
+        )
+        job = type(
+            "DummyJob", (), {"label": "job1", "execution_name": "orca_job1"}
+        )()
+        submitter = SLURMSubmitter(job=job, server=server)
+
+        buffer = StringIO()
+        submitter._write_scheduler_options(buffer)
+        assert "#SBATCH --reservation=xlzhang_1\n" in buffer.getvalue()
+        assert "#SBATCH --job-name=orca_job1\n" in buffer.getvalue()
+
+    def test_pbs_submitter_writes_extra_scheduler_directives(self):
+        server = Server(
+            "custom-pbs",
+            SCHEDULER="PBS",
+            NUM_CORES=8,
+            MEM_GB=24,
+            NUM_GPUS=0,
+            EXTRA_SCHEDULER_DIRECTIVES="#PBS -m abe\n",
+        )
+        job = type(
+            "DummyJob", (), {"label": "job1", "execution_name": "orca_job1"}
+        )()
+        submitter = PBSSubmitter(job=job, server=server)
+
+        buffer = StringIO()
+        submitter._write_scheduler_options(buffer)
+        assert "#PBS -m abe\n" in buffer.getvalue()
+        assert "#PBS -N orca_job1\n" in buffer.getvalue()
+
+
+class TestMissingProgramSectionFallback:
+    """Tests that Executable.from_servername raises ValueError when the
+    program block (e.g. XTB, CREST) is absent from the server YAML, and
+    that programs which ARE present still parse correctly.
+
+    Covers users who installed CHEMSMART before xTB support was added."""
+
+    def test_xtb_missing_section_raises(self, legacy_server_yaml):
+        """XTBExecutable.from_servername raises ValueError when XTB block absent."""
+        import pytest
+
+        with pytest.raises(ValueError, match="XTB"):
+            XTBExecutable.from_servername(legacy_server_yaml)
+
+    def test_xtb_missing_section_error_message(self, legacy_server_yaml):
+        """The ValueError message mentions updating the server YAML."""
+        import pytest
+
+        with pytest.raises(ValueError, match="server YAML"):
+            XTBExecutable.from_servername(legacy_server_yaml)
+
+    def test_crest_missing_section_raises(self, legacy_server_yaml):
+        """CRESTExecutable.from_servername raises ValueError when CREST block absent."""
+        import pytest
+
+        with pytest.raises(ValueError, match="CREST"):
+            CRESTExecutable.from_servername(legacy_server_yaml)
+
+    def test_present_section_still_parsed_correctly(self, legacy_server_yaml):
+        """Programs that *are* present in the legacy YAML are still parsed."""
+        exe = GaussianExecutable.from_servername(legacy_server_yaml)
+        assert exe.executable_folder == os.path.expanduser("~/programs/g16")
+        assert exe.local_run is True

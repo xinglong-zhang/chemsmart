@@ -8,6 +8,13 @@ from chemsmart.cli.gaussian.gaussian import (
     click_gaussian_solvent_options,
     gaussian,
 )
+from chemsmart.cli.gaussian.mecp_options import (
+    add_mecp_method_suffix,
+    click_mecp_frequency_options,
+    click_mecp_restart_option,
+    click_mecp_state_options,
+    click_mecp_step_size_method_option,
+)
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import (
     MyCommand,
@@ -44,30 +51,7 @@ logger = logging.getLogger(__name__)
     "--route", type=str, default=None, help="Route for the link section."
 )
 # MECP-specific options (used when --jobtype mecp)
-@click.option(
-    "--multiplicity-a",
-    type=int,
-    default=None,
-    help="[MECP] Spin multiplicity for state A.",
-)
-@click.option(
-    "--multiplicity-b",
-    type=int,
-    default=None,
-    help="[MECP] Spin multiplicity for state B. Defaults to multiplicity-a + 2.",
-)
-@click.option(
-    "--charge-a",
-    type=int,
-    default=None,
-    help="[MECP] Charge for state A.",
-)
-@click.option(
-    "--charge-b",
-    type=int,
-    default=None,
-    help="[MECP] Charge for state B. Defaults to charge-a.",
-)
+@click_mecp_state_options
 @click.option(
     "--max-steps",
     type=int,
@@ -119,18 +103,9 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--adaptive-step-size/--no-adaptive-step-size",
     default=None,
-    help="[MECP] Enable adaptive step size scaling (default: enabled).",
+    help="[MECP] Enable adaptive scaling for bb/grow_shrink (default: enabled).",
 )
-@click.option(
-    "--step-size-method",
-    type=click.Choice(["bb", "grow_shrink"], case_sensitive=False),
-    default=None,
-    help=(
-        "[MECP] Step size adaptation algorithm when adaptive is enabled. "
-        "'bb' uses the Barzilai-Borwein secant rule (default). "
-        "'grow_shrink' uses a merit-based grow/shrink rule."
-    ),
-)
+@click_mecp_step_size_method_option
 @click.option(
     "--step-size-grow",
     type=float,
@@ -155,6 +130,8 @@ logger = logging.getLogger(__name__)
     default=None,
     help="[MECP] Maximum allowed adaptive step size in Bohr^2/Hartree (default: 1.0).",
 )
+@click_mecp_restart_option
+@click_mecp_frequency_options
 @click.pass_context
 def link(
     ctx,
@@ -178,10 +155,10 @@ def link(
     stepsize,
     direction,
     # MECP options
-    multiplicity_a,
-    multiplicity_b,
-    charge_a,
-    charge_b,
+    multiplicity1,
+    multiplicity2,
+    charge1,
+    charge2,
     max_steps,
     energy_diff_tol,
     force_max_tol,
@@ -194,6 +171,13 @@ def link(
     step_size_shrink,
     step_size_min,
     step_size_max,
+    restart,
+    mecp_numfreq,
+    hessian_method,
+    hess_step_size,
+    follow_seam_imaginary_mode,
+    seam_mode_displacement,
+    seam_mode_max_steps,
     **kwargs,
 ):
     """CLI subcommand for running Gaussian link jobs."""
@@ -208,10 +192,10 @@ def link(
             solvent_model=solvent_model,
             solvent_id=solvent_id,
             solvent_options=solvent_options,
-            multiplicity_a=multiplicity_a,
-            multiplicity_b=multiplicity_b,
-            charge_a=charge_a,
-            charge_b=charge_b,
+            multiplicity1=multiplicity1,
+            multiplicity2=multiplicity2,
+            charge1=charge1,
+            charge2=charge2,
             max_steps=max_steps,
             step_size=step_size,
             energy_diff_tol=energy_diff_tol,
@@ -225,6 +209,13 @@ def link(
             step_size_shrink=step_size_shrink,
             step_size_min=step_size_min,
             step_size_max=step_size_max,
+            restart=restart,
+            mecp_numfreq=mecp_numfreq,
+            hessian_method=hessian_method,
+            hess_step_size=hess_step_size,
+            follow_seam_imaginary_mode=follow_seam_imaginary_mode,
+            seam_mode_displacement=seam_mode_displacement,
+            seam_mode_max_steps=seam_mode_max_steps,
             **kwargs,
         )
 
@@ -295,6 +286,7 @@ def link(
     if jobtype is None:
         label = label
     else:
+        label = ctx.obj.get("default_label_base") or label
         label += f"_{jobtype}"
         if jobtype.lower() == "irc":
             label = update_irc_label(
@@ -302,8 +294,7 @@ def link(
                 direction=link_settings.direction,
                 flat_irc=link_settings.flat_irc,
             )
-        else:
-            label += "_link"
+        label += "_link"
 
     logger.debug(f"Label for job: {label}")
 
@@ -334,10 +325,10 @@ def _link_mecp(
     solvent_model,
     solvent_id,
     solvent_options,
-    multiplicity_a,
-    multiplicity_b,
-    charge_a,
-    charge_b,
+    multiplicity1,
+    multiplicity2,
+    charge1,
+    charge2,
     max_steps,
     step_size,
     energy_diff_tol,
@@ -351,6 +342,13 @@ def _link_mecp(
     step_size_shrink,
     step_size_min,
     step_size_max,
+    restart,
+    mecp_numfreq,
+    hessian_method,
+    hess_step_size,
+    follow_seam_imaginary_mode,
+    seam_mode_displacement,
+    seam_mode_max_steps,
     **kwargs,
 ):
     """
@@ -385,35 +383,35 @@ def _link_mecp(
     )
 
     # --- state A charge / multiplicity ---
-    if multiplicity_a is None:
+    if multiplicity1 is None:
         mecp_settings.multiplicity_a = mecp_project_settings.multiplicity
     else:
-        mecp_settings.multiplicity_a = multiplicity_a
+        mecp_settings.multiplicity_a = multiplicity1
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
-            "Use gaussian -m/--multiplicity or link -j mecp --multiplicity-a."
+            "Use gaussian -m/--multiplicity or link -j mecp --multiplicity1."
         )
 
-    if multiplicity_b is None:
+    if multiplicity2 is None:
         mecp_settings.multiplicity_b = mecp_settings.multiplicity_a + 2
     else:
-        mecp_settings.multiplicity_b = multiplicity_b
+        mecp_settings.multiplicity_b = multiplicity2
 
-    if charge_a is None:
+    if charge1 is None:
         mecp_settings.charge_a = mecp_settings.charge
     else:
-        mecp_settings.charge_a = charge_a
+        mecp_settings.charge_a = charge1
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
-            "Use gaussian -c/--charge or link -j mecp --charge-a."
+            "Use gaussian -c/--charge or link -j mecp --charge1."
         )
 
-    if charge_b is None:
+    if charge2 is None:
         mecp_settings.charge_b = mecp_settings.charge_a
     else:
-        mecp_settings.charge_b = charge_b
+        mecp_settings.charge_b = charge2
 
     # --- broken-symmetry (link) settings ---
     mecp_settings.use_link = True
@@ -457,13 +455,27 @@ def _link_mecp(
         mecp_settings.step_size_min = step_size_min
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
+    mecp_settings.restart = restart
+    mecp_settings.hessian_method = hessian_method
+    mecp_settings.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
+    mecp_settings.follow_seam_imaginary_mode = follow_seam_imaginary_mode
+    mecp_settings.seam_mode_displacement = seam_mode_displacement
+    mecp_settings.seam_mode_max_steps = seam_mode_max_steps
+    if hess_step_size is not None:
+        mecp_settings.hess_step_size = hess_step_size
 
     # automatically use unrestricted DFT for broken-symmetry calculations
     if not mecp_settings.functional.lower().startswith("u"):
         mecp_settings.functional = "u" + mecp_settings.functional
 
     molecule = ctx.obj["molecules"][-1]
-    label = ctx.obj["label"] + "_mecp_link"
+    label = (
+        add_mecp_method_suffix(
+            ctx.obj.get("default_label_base") or ctx.obj["label"],
+            mecp_settings.step_size_method,
+        )
+        + "_link"
+    )
 
     logger.info(
         f"Link MECP job settings from project: {mecp_settings.__dict__}"

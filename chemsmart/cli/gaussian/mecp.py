@@ -3,6 +3,13 @@ import logging
 import click
 
 from chemsmart.cli.gaussian.gaussian import gaussian
+from chemsmart.cli.gaussian.mecp_options import (
+    add_mecp_method_suffix,
+    click_mecp_frequency_options,
+    click_mecp_restart_option,
+    click_mecp_state_options,
+    click_mecp_step_size_method_option,
+)
 from chemsmart.cli.job import click_job_options
 from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 from chemsmart.utils.cli import MyCommand
@@ -11,32 +18,55 @@ from chemsmart.utils.utils import check_charge_and_multiplicity
 logger = logging.getLogger(__name__)
 
 
-@gaussian.command("mecp", cls=MyCommand)
+class MECPCommand(MyCommand):
+    """Accept workflow tokens while recording ordinary options for submission."""
+
+    def parse_args(self, ctx, args):
+        ctx.allow_extra_args = True
+        remaining = super().parse_args(ctx, args)
+        if len(remaining) > 1 or any(
+            token.lower() not in {"numfreq", "anafreq", "followseam"}
+            for token in remaining
+        ):
+            raise click.UsageError(
+                "Choose one MECP task: numfreq, anafreq or followseam.", ctx
+            )
+        if remaining:
+            task = remaining[0].lower()
+            ctx.params["mecp_numfreq"] = True
+            if task in {"numfreq", "anafreq"}:
+                method = "analytic" if task == "anafreq" else "numerical"
+                source = ctx.get_parameter_source("hessian_method")
+                if (
+                    source == click.core.ParameterSource.COMMANDLINE
+                    and ctx.params["hessian_method"] != method
+                ):
+                    raise click.UsageError(
+                        "Frequency task conflicts with --hessian-method.", ctx
+                    )
+                ctx.params["hessian_method"] = method
+            if task == "followseam":
+                ctx.params["follow_seam_imaginary_mode"] = True
+        if ctx.params["only"] and (
+            not ctx.params["mecp_numfreq"]
+            or ctx.params["follow_seam_imaginary_mode"]
+        ):
+            raise click.UsageError(
+                "--only requires numfreq or anafreq and cannot be combined with followseam.",
+                ctx,
+            )
+        ctx.args = []
+        return []
+
+
+@gaussian.command("mecp", cls=MECPCommand)
+@click.option(
+    "--only",
+    is_flag=True,
+    help="With numfreq or anafreq, analyze the input structure without optimization.",
+)
 @click_job_options
-@click.option(
-    "--multiplicity-a",
-    type=int,
-    default=None,
-    help="Spin multiplicity for state A.",
-)
-@click.option(
-    "--multiplicity-b",
-    type=int,
-    default=None,
-    help="Spin multiplicity for state B. Defaults to multiplicity-a + 2.",
-)
-@click.option(
-    "--charge-a",
-    type=int,
-    default=None,
-    help="Charge for state A.",
-)
-@click.option(
-    "--charge-b",
-    type=int,
-    default=None,
-    help="Charge for state B. Defaults to charge-a.",
-)
+@click_mecp_state_options
 @click.option(
     "--title-a",
     type=str,
@@ -53,7 +83,7 @@ logger = logging.getLogger(__name__)
     "--max-steps",
     type=int,
     default=None,
-    help="Maximum number of MECP optimization steps (steps are 1-indexed; labels use 6-digit zero-padding).",
+    help="Maximum number of MECP optimization steps (steps are 1-indexed without zero-padding).",
 )
 @click.option(
     "--step-size",
@@ -114,18 +144,9 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--adaptive-step-size/--no-adaptive-step-size",
     default=None,
-    help="Enable adaptive step size scaling (default: enabled).",
+    help="Enable adaptive scaling for bb/grow_shrink (default: enabled).",
 )
-@click.option(
-    "--step-size-method",
-    type=click.Choice(["bb", "grow_shrink"], case_sensitive=False),
-    default=None,
-    help=(
-        "Step size adaptation algorithm when adaptive is enabled. "
-        "'bb' uses the Barzilai-Borwein secant rule (default, faster). "
-        "'grow_shrink' uses a merit-based grow/shrink rule."
-    ),
-)
+@click_mecp_step_size_method_option
 @click.option(
     "--step-size-grow",
     type=float,
@@ -151,32 +172,15 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Maximum allowed adaptive step size in Bohr^2/Hartree (default: 1.0).",
 )
-@click.option(
-    "--verify-seam-minimum/--no-verify-seam-minimum",
-    default=False,
-    show_default=True,
-    help=(
-        "After convergence, verify the MECP is a true minimum on the crossing "
-        "seam via an effective Hessian analysis (projects out translations, "
-        "rotations, and the gradient-difference direction). Requires ~4×3N "
-        "additional Gaussian sub-jobs. Results are written to "
-        "<label>_seam_check.log."
-    ),
-)
-@click.option(
-    "--hess-step-size",
-    type=float,
-    default=None,
-    help="Finite-difference step size (Bohr) for the numerical Hessian used in "
-    "--verify-seam-minimum (default: 1e-3).",
-)
+@click_mecp_frequency_options
+@click_mecp_restart_option
 @click.pass_context
 def mecp(
     ctx,
-    multiplicity_a,
-    multiplicity_b,
-    charge_a,
-    charge_b,
+    multiplicity1,
+    multiplicity2,
+    charge1,
+    charge2,
     title_a,
     title_b,
     max_steps,
@@ -194,13 +198,21 @@ def mecp(
     step_size_shrink,
     step_size_min,
     step_size_max,
-    verify_seam_minimum,
+    mecp_numfreq,
+    hessian_method,
     hess_step_size,
+    follow_seam_imaginary_mode,
+    seam_mode_displacement,
+    seam_mode_max_steps,
+    restart,
+    only,
     skip_completed,
     **kwargs,
 ):
     """
-    CLI subcommand for running Gaussian Minimum Energy Cross Point (MECP) jobs.
+    Run Gaussian MECP optimization, optionally followed by numfreq, anafreq or followseam.
+
+    Use numfreq --only or anafreq --only to analyze an existing crossing without optimization.
     """
 
     # get jobrunner for running Gaussian MECP jobs
@@ -229,37 +241,37 @@ def mecp(
     )
 
     # update mecp_settings if any attribute is specified in cli options
-    if multiplicity_a is None:
+    if multiplicity1 is None:
         # if not given, then takes value from gaussian project settings or input file
         mecp_settings.multiplicity_a = mecp_project_settings.multiplicity
     else:
-        mecp_settings.multiplicity_a = multiplicity_a
+        mecp_settings.multiplicity_a = multiplicity1
     if mecp_settings.multiplicity_a is None:
         raise ValueError(
             "State A multiplicity is not set. "
-            "Use gaussian -m/--multiplicity or mecp --multiplicity-a."
+            "Use gaussian -m/--multiplicity or mecp --multiplicity1."
         )
 
-    if multiplicity_b is None:
+    if multiplicity2 is None:
         # if not given, then defaults to multiplicity_a + 2
         mecp_settings.multiplicity_b = mecp_settings.multiplicity_a + 2
     else:
-        mecp_settings.multiplicity_b = multiplicity_b
+        mecp_settings.multiplicity_b = multiplicity2
 
-    if charge_a is None:
+    if charge1 is None:
         mecp_settings.charge_a = mecp_settings.charge
     else:
-        mecp_settings.charge_a = charge_a
+        mecp_settings.charge_a = charge1
 
     if mecp_settings.charge_a is None:
         raise ValueError(
             "State A charge is not set. "
-            "Use gaussian -c/--charge or mecp --charge-a."
+            "Use gaussian -c/--charge or mecp --charge1."
         )
-    if charge_b is None:
+    if charge2 is None:
         mecp_settings.charge_b = mecp_settings.charge_a
     else:
-        mecp_settings.charge_b = charge_b
+        mecp_settings.charge_b = charge2
 
     if title_a is not None:
         mecp_settings.title_a = title_a
@@ -305,7 +317,13 @@ def mecp(
         mecp_settings.step_size_min = step_size_min
     if step_size_max is not None:
         mecp_settings.step_size_max = step_size_max
-    mecp_settings.verify_seam_minimum = verify_seam_minimum
+    mecp_settings.hessian_method = hessian_method
+    mecp_settings.mecp_numfreq = mecp_numfreq or follow_seam_imaginary_mode
+    mecp_settings.mecp_numfreq_only = only
+    mecp_settings.follow_seam_imaginary_mode = follow_seam_imaginary_mode
+    mecp_settings.seam_mode_displacement = seam_mode_displacement
+    mecp_settings.seam_mode_max_steps = seam_mode_max_steps
+    mecp_settings.restart = restart
     if hess_step_size is not None:
         mecp_settings.hess_step_size = hess_step_size
 
@@ -317,6 +335,7 @@ def mecp(
 
     # get label for the job
     label = ctx.obj["label"]
+    label = add_mecp_method_suffix(label, mecp_settings.step_size_method)
 
     logger.debug(f"Label for job: {label}")
 

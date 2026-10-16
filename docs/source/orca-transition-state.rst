@@ -289,8 +289,9 @@ Important Notes
 
 **Scratch Directory Execution**
 
--  When running with scratch enabled (default for most servers), all geometry files are automatically copied to the
-   scratch directory
+-  Scratch mode follows CLI ``--scratch`` / ``--no-scratch``, else program YAML ``SCRATCH``, else the ORCA runner class
+   default (``True``). See :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
+-  When scratch is enabled, all geometry files are automatically copied to the scratch directory
 -  This ensures ORCA can find all required files during execution
 -  After job completion, all output files are copied back to the job folder
 -  No manual file management is required

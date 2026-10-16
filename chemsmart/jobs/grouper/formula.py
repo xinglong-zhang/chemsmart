@@ -86,9 +86,11 @@ class FormulaGrouper(MoleculeGrouper):
             formula_groups[formula].append(mol)
             formula_indices[formula].append(i)
 
-        # Convert to lists
-        groups = list(formula_groups.values())
+        # Convert to lists and apply representative ordering.
         index_groups = list(formula_indices.values())
+        groups, index_groups = self._apply_lowest_representative_ordering(
+            index_groups
+        )
         formulas = list(formula_groups.keys())
 
         grouping_time = time.time() - grouping_start_time

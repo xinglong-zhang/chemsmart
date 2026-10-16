@@ -1,7 +1,8 @@
 """
-Tanimoto similarity-based molecular grouping.
+Fingerprint- and shape-similarity-based molecular grouping.
 
-Groups molecules by fingerprint similarity using Tanimoto coefficient.
+Binary/topological fingerprints use Tanimoto similarity, while USR/USRCAT
+3D descriptors use RDKit's native USR similarity score.
 """
 
 import logging
@@ -10,22 +11,23 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 from rdkit import Chem, DataStructs
-from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import rdDetermineBonds, rdMolDescriptors
 from rdkit.Chem.rdFingerprintGenerator import GetRDKitFPGenerator
 
 from chemsmart.io.molecules.structure import Molecule
 
-from .base import MoleculeGrouper
+from .base import MatrixGrouper
 
 logger = logging.getLogger(__name__)
 
 
-class TanimotoSimilarityGrouper(MoleculeGrouper):
+class TanimotoSimilarityGrouper(MatrixGrouper):
     """
-    Groups molecules based on fingerprint similarity using Tanimoto coefficient.
+    Groups molecules based on fingerprint or 3D-descriptor similarity using
+    hierarchical complete-linkage clustering.
 
-    This class supports different fingerprint types and uses connected components
-    clustering to group structurally similar molecules.
+    This class supports different fingerprint types and uses hierarchical
+    complete-linkage clustering to group structurally or shape-similar molecules.
 
     Supported fingerprint types:
     - "rdkit": RDKit topological fingerprint (default)
@@ -67,15 +69,22 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                 "torsion", "usr", "usrcat". Defaults to "rdkit".
             label (str): Label/name for output files. Defaults to None.
             ignore_hydrogens (bool): Whether to remove hydrogens before fingerprint
-                calculation. Defaults to False. Warning: For some
-                molecules, removing hydrogens may cause kekulization
-                issues. If errors occur, try setting this to False.
+                calculation. Defaults to False.
             conformer_ids (list[str]): Custom IDs for each molecule (e.g., ['c1', 'c2']).
             matrix_format (str): Output format ('xlsx', 'csv', 'txt'). Defaults to 'xlsx'.
         """
+        if threshold is None and num_groups is None:
+            threshold = 0.9
+        if threshold is not None and not (0.0 <= threshold <= 1.0):
+            raise ValueError(
+                "Tanimoto similarity threshold must be between 0.0 and 1.0."
+            )
+
         super().__init__(
             molecules,
-            num_procs,
+            threshold=threshold,
+            num_groups=num_groups,
+            num_procs=num_procs,
             label=label,
             conformer_ids=conformer_ids,
             matrix_format=matrix_format,
@@ -85,34 +94,77 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         self.ignore_hydrogens = ignore_hydrogens
 
-        # Validate that threshold and num_groups are mutually exclusive
-        if threshold is not None and num_groups is not None:
-            raise ValueError(
-                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
-            )
-
-        if threshold is None and num_groups is None:
-            threshold = 0.9
-        self.threshold = threshold
-        self.num_groups = num_groups
-        self._auto_threshold = None  # Will be set if num_groups is used
-
         self.fingerprint_type = fingerprint_type.lower()
 
         # Convert molecules to list for indexing
         self.molecules = list(molecules)
 
-        # Convert valid molecules to RDKit format
+        # 2D/topological fingerprints use RDKit-only bond perception, while
+        # USR/USRCAT preserve the previous conformer preparation pathway.
         self.rdkit_molecules = []
-        self.valid_molecules = []
-        for mol in self.molecules:
-            rdkit_mol = mol.to_rdkit()
+        self.rdkit_molecule_indices = []
+        tanimoto_skipped_indices = []
+        for original_idx, mol in enumerate(self.molecules):
+            rdkit_mol = self._molecule_to_rdkit(mol)
             if rdkit_mol is not None:
-                # Remove hydrogens if requested
+                self.rdkit_molecules.append(rdkit_mol)
+                self.rdkit_molecule_indices.append(original_idx)
+            else:
+                tanimoto_skipped_indices.append(original_idx)
+
+        self._tanimoto_skipped_indices = sorted(set(tanimoto_skipped_indices))
+        self._rdkit_molecule_by_original_index = {
+            original_idx: rdkit_mol
+            for rdkit_mol, original_idx in zip(
+                self.rdkit_molecules, self.rdkit_molecule_indices
+            )
+        }
+
+    def calculate_tanimoto_pair(self, i: int, j: int) -> float:
+        """Public API: calculate pairwise similarity between two molecules.
+
+        Returns NaN when either molecule cannot be prepared/fingerprinted for
+        the configured descriptor type.
+        """
+        i_idx, j_idx = self._validate_pair_indices(i, j)
+
+        rdkit_mol_i = self._rdkit_molecule_by_original_index.get(i_idx)
+        rdkit_mol_j = self._rdkit_molecule_by_original_index.get(j_idx)
+        if rdkit_mol_i is None or rdkit_mol_j is None:
+            logger.warning(
+                f"[{self.__class__.__name__}] Cannot compute similarity for pair "
+                f"({i_idx}, {j_idx}): one or both molecules failed RDKit preparation"
+            )
+            return float("nan")
+
+        fp_i = self._get_fingerprint(rdkit_mol_i)
+        fp_j = self._get_fingerprint(rdkit_mol_j)
+        if fp_i is None or fp_j is None:
+            logger.warning(
+                f"[{self.__class__.__name__}] Cannot compute similarity for pair "
+                f"({i_idx}, {j_idx}): fingerprint generation failed"
+            )
+            return float("nan")
+
+        if self.fingerprint_type in {"usr", "usrcat"}:
+            return float(rdMolDescriptors.GetUSRScore(fp_i, fp_j))
+
+        return float(DataStructs.FingerprintSimilarity(fp_i, fp_j))
+
+    def _molecule_to_rdkit(self, mol: Molecule) -> Optional[Chem.Mol]:
+        """Build an RDKit molecule using preparation appropriate to the descriptor."""
+        try:
+            if self.fingerprint_type in {"usr", "usrcat"}:
+                # Preserve the previous working preparation for 3D descriptors.
+                # USR/USRCAT operate on the RDKit molecule/conformer produced by
+                # CHEMSMART without re-perceiving bond orders from every XYZ conformer.
+                rdkit_mol = mol.to_rdkit()
+                if rdkit_mol is None:
+                    return None
+
                 if self.ignore_hydrogens:
                     try:
                         rdkit_mol = Chem.RemoveHs(rdkit_mol, sanitize=False)
-                        # Re-sanitize without kekulization to avoid aromatic ring issues
                         Chem.SanitizeMol(
                             rdkit_mol,
                             sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL
@@ -120,11 +172,62 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                         )
                     except Exception as e:
                         logger.warning(
-                            f"Failed to remove hydrogens for molecule: {e}. Using original."
+                            f"Failed to remove hydrogens for {self.fingerprint_type}: {e}. "
+                            "Using the original RDKit molecule."
                         )
                         rdkit_mol = mol.to_rdkit()
-                self.rdkit_molecules.append(rdkit_mol)
-                self.valid_molecules.append(mol)
+
+                return rdkit_mol
+
+            xyz_lines = [str(mol.num_atoms), ""]
+            xyz_lines.extend(
+                f"{symbol} {x:.10f} {y:.10f} {z:.10f}"
+                for symbol, (x, y, z) in zip(
+                    mol.chemical_symbols, mol.positions
+                )
+            )
+            xyz_block = "\n".join(xyz_lines) + "\n"
+
+            rdkit_mol = Chem.MolFromXYZBlock(xyz_block)
+            if rdkit_mol is None:
+                return None
+
+            charge = mol.charge
+            if charge is None:
+                charge = 0
+            charge = int(charge)
+
+            # 2D/topological fingerprints require a complete, sanitized
+            # chemical graph perceived by RDKit from the input geometry.
+            try:
+                rdDetermineBonds.DetermineBonds(
+                    rdkit_mol,
+                    charge=charge,
+                )
+            except Exception as first_error:
+                if not rdDetermineBonds.hueckelEnabled():
+                    raise first_error
+
+                rdkit_mol = Chem.MolFromXYZBlock(xyz_block)
+                if rdkit_mol is None:
+                    return None
+                rdDetermineBonds.DetermineBonds(
+                    rdkit_mol,
+                    useHueckel=True,
+                    charge=charge,
+                )
+
+            Chem.SanitizeMol(rdkit_mol)
+
+            if self.ignore_hydrogens:
+                rdkit_mol = Chem.RemoveHs(rdkit_mol, sanitize=False)
+
+            return rdkit_mol
+        except Exception as e:
+            logger.warning(
+                f"RDKit molecule preparation failed for {self.fingerprint_type}: {e}"
+            )
+            return None
 
     def _get_fingerprint(self, rdkit_mol: Chem.Mol) -> Optional[object]:
         """
@@ -157,12 +260,12 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
                     rdkit_mol
                 )
             elif self.fingerprint_type == "usr":
-                conf = rdkit_mol.GetConformer()
+                conf = rdkit_mol.GetConformer(0)
                 return np.array(
                     rdMolDescriptors.GetUSR(rdkit_mol, confId=conf.GetId())
                 )
             elif self.fingerprint_type == "usrcat":
-                conf = rdkit_mol.GetConformer()
+                conf = rdkit_mol.GetConformer(0)
                 return np.array(
                     rdMolDescriptors.GetUSRCAT(rdkit_mol, confId=conf.GetId())
                 )
@@ -177,11 +280,13 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
-        Groups molecules based on Tanimoto similarity clustering.
+        Group molecules based on fingerprint or 3D-descriptor similarity using
+        hierarchical complete-linkage clustering.
 
-        Computes fingerprints for all molecules, calculates pairwise
-        Tanimoto similarities, and groups molecules using connected
-        components clustering.
+        Binary/topological fingerprints are compared with Tanimoto similarity,
+        whereas USR/USRCAT descriptors are compared with RDKit's native USR
+        similarity score. Similarities are converted internally to distances
+        (1 - similarity) before hierarchical complete-linkage clustering.
 
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
@@ -192,6 +297,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         # Record start time for grouping process
         grouping_start_time = time.time()
+        self._auto_threshold = None
 
         n = len(self.molecules)
         logger.info(
@@ -209,53 +315,113 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
             i for i, fp in enumerate(fingerprints) if fp is not None
         ]
         valid_fps = [fingerprints[i] for i in valid_indices]
+        valid_original_indices = [
+            self.rdkit_molecule_indices[i] for i in valid_indices
+        ]
+
+        fingerprint_skipped_indices = [
+            self.rdkit_molecule_indices[i]
+            for i, fp in enumerate(fingerprints)
+            if fp is None
+        ]
+        self._matrix_skipped_indices = sorted(
+            set(self._tanimoto_skipped_indices)
+            | set(fingerprint_skipped_indices)
+        )
+        if self.conformer_ids is not None:
+            self._matrix_skipped_ids = [
+                self.conformer_ids[idx] for idx in self._matrix_skipped_indices
+            ]
+        else:
+            self._matrix_skipped_ids = [
+                str(idx + 1) for idx in self._matrix_skipped_indices
+            ]
+
         num_valid = len(valid_indices)
 
         if num_valid == 0:
-            return [], []  # No valid molecules
+            groups = []
+            index_groups = []
+            self._cached_groups = groups
+            self._cached_group_indices = index_groups
+
+            grouping_time = time.time() - grouping_start_time
+            self.record(
+                tanimoto_matrix=np.empty((0, 0), dtype=np.float32),
+                valid_indices=[],
+                grouping_time=grouping_time,
+                groups=groups,
+                index_groups=index_groups,
+            )
+            return groups, index_groups
 
         logger.info(
-            f"[{self.__class__.__name__}] Computing Tanimoto similarities for {num_valid} valid molecules"
+            f"[{self.__class__.__name__}] Computing pairwise similarities for {num_valid} valid molecules"
         )
 
         # Compute similarity matrix
         similarity_matrix = np.zeros((num_valid, num_valid), dtype=np.float32)
 
-        # Check if we are using numpy arrays (USR/USRCAT)
-        if valid_fps and isinstance(valid_fps[0], np.ndarray):
-            # Calculate Tanimoto for continuous variables (vectors)
-            fps_array = np.array(valid_fps)
-            dot_products = np.dot(fps_array, fps_array.T)
-            norms_sq = np.diag(dot_products)
-            denominator = norms_sq[:, None] + norms_sq[None, :] - dot_products
-            denominator[denominator == 0] = 1e-9
-            similarity_matrix = dot_products / denominator
-        else:
-            # Use RDKit DataStructs for BitVects
-            pairs = [
-                (i, j)
-                for i in range(num_valid)
-                for j in range(i + 1, num_valid)
-            ]
+        pairs = [
+            (i, j) for i in range(num_valid) for j in range(i + 1, num_valid)
+        ]
+        total_pairs = len(pairs)
+        similarities = []
+        next_progress = 10
 
+        if self.fingerprint_type in {"usr", "usrcat"}:
+            # USR/USRCAT are continuous 3D descriptors and should be compared
+            # with RDKit's native USR similarity score, not Tanimoto.
             with ThreadPool(self.num_procs) as pool:
-                similarities = pool.starmap(
-                    DataStructs.FingerprintSimilarity,
-                    [(valid_fps[i], valid_fps[j]) for i, j in pairs],
-                )
+                for idx, sim in enumerate(
+                    pool.imap(
+                        lambda p: rdMolDescriptors.GetUSRScore(
+                            valid_fps[p[0]], valid_fps[p[1]]
+                        ),
+                        pairs,
+                    )
+                ):
+                    similarities.append(sim)
+                    next_progress = self._log_progress(
+                        idx + 1, total_pairs, next_progress
+                    )
+        else:
+            # Binary/topological fingerprints use Tanimoto similarity.
+            with ThreadPool(self.num_procs) as pool:
+                for idx, sim in enumerate(
+                    pool.imap(
+                        lambda p: DataStructs.FingerprintSimilarity(
+                            valid_fps[p[0]], valid_fps[p[1]]
+                        ),
+                        pairs,
+                    )
+                ):
+                    similarities.append(sim)
+                    next_progress = self._log_progress(
+                        idx + 1, total_pairs, next_progress
+                    )
 
-            # Fill similarity matrix
-            for (i, j), sim in zip(pairs, similarities):
-                similarity_matrix[i, j] = similarity_matrix[j, i] = sim
+        # Fill similarity matrix
+        for (i, j), sim in zip(pairs, similarities):
+            similarity_matrix[i, j] = similarity_matrix[j, i] = sim
+
+        np.fill_diagonal(similarity_matrix, 1.0)
 
         # Choose grouping strategy based on parameters
+        full_similarity_matrix = np.full(
+            (n, n), np.nan, dtype=similarity_matrix.dtype
+        )
+        full_similarity_matrix[
+            np.ix_(valid_original_indices, valid_original_indices)
+        ] = similarity_matrix
+
         if self.num_groups is not None:
-            groups, index_groups = self._group_by_num_groups(
-                similarity_matrix, valid_indices
+            groups, index_groups = self.group_by_num_groups(
+                full_similarity_matrix
             )
         else:
-            groups, index_groups = self._group_by_threshold(
-                similarity_matrix, valid_indices
+            groups, index_groups = self.group_by_threshold(
+                full_similarity_matrix
             )
 
         # Calculate total grouping time
@@ -269,7 +435,7 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
         # Save full matrix through unified record entrypoint
         self.record(
             tanimoto_matrix=similarity_matrix,
-            valid_indices=valid_indices,
+            valid_indices=valid_original_indices,
             grouping_time=grouping_time,
             groups=groups,
             index_groups=index_groups,
@@ -277,170 +443,141 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         return groups, index_groups
 
-    def _group_by_threshold(self, similarity_matrix, valid_indices):
-        """Threshold-based grouping for Tanimoto similarity using complete linkage."""
-        adj_matrix = similarity_matrix >= self.threshold
-        n = len(valid_indices)
-        mol_groups, idx_groups = self._complete_linkage_grouping(
-            adj_matrix, n, valid_indices
-        )
-        return mol_groups, idx_groups
+    def _prepare_similarity_output_matrix(
+        self,
+        matrix: np.ndarray,
+    ) -> Tuple[np.ndarray, List[int], List[int], np.dtype]:
+        """Validate full recorded similarity matrix and convert to distance."""
+        similarity_matrix = np.asarray(matrix)
+        if similarity_matrix.ndim != 2:
+            raise ValueError(
+                "Tanimoto similarity matrix must be 2-dimensional."
+            )
+        if similarity_matrix.shape != (
+            len(self.molecules),
+            len(self.molecules),
+        ):
+            raise ValueError(
+                "Tanimoto similarity matrix dimensions must match the number "
+                "of molecules."
+            )
+        if not np.issubdtype(similarity_matrix.dtype, np.number):
+            raise ValueError("Tanimoto similarity matrix must be numeric.")
 
-    def _complete_linkage_grouping(self, adj_matrix, n, valid_indices):
-        """Perform complete linkage grouping for Tanimoto similarity."""
-        assigned = [False] * n
-        mol_groups = []
-        idx_groups = []
+        valid_mask = np.isfinite(np.diag(similarity_matrix))
+        valid_indices = np.flatnonzero(valid_mask).tolist()
+        skipped_indices = np.flatnonzero(~valid_mask).tolist()
 
-        for i in range(n - 1, -1, -1):
-            if assigned[i]:
-                continue
-            current_group = [i]
-            assigned[i] = True
-
-            for j in range(i - 1, -1, -1):
-                if assigned[j]:
-                    continue
-                can_join = all(
-                    adj_matrix[j, member] for member in current_group
+        for index in skipped_indices:
+            if not (
+                np.all(np.isnan(similarity_matrix[index, :]))
+                and np.all(np.isnan(similarity_matrix[:, index]))
+            ):
+                raise ValueError(
+                    "Skipped Tanimoto entries must be represented by complete "
+                    "NaN rows and columns."
                 )
-                if can_join:
-                    current_group.append(j)
-                    assigned[j] = True
 
-            current_group.sort()
-            mol_groups.append(
-                [self.valid_molecules[idx] for idx in current_group]
-            )
-            idx_groups.append([valid_indices[idx] for idx in current_group])
-
-        mol_groups.reverse()
-        idx_groups.reverse()
-        return mol_groups, idx_groups
-
-    def _group_by_num_groups(self, similarity_matrix, valid_indices):
-        """Automatic grouping to create specified number of groups."""
-        n = len(valid_indices)
-
-        if self.num_groups >= n:
-            logger.info(
-                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
-            )
-            groups = [[self.valid_molecules[i]] for i in range(n)]
-            index_groups = [[valid_indices[i]] for i in range(n)]
-            return groups, index_groups
-
-        # Extract similarity values for threshold finding
-        similarity_values = []
-        for i in range(n):
-            for j in range(i + 1, n):
-                similarity_values.append(similarity_matrix[i, j])
-
-        threshold = self._find_optimal_similarity_threshold(
-            similarity_values, similarity_matrix, n
-        )
-        self._auto_threshold = threshold
-
-        logger.info(
-            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
-        )
-
-        adj_matrix = similarity_matrix >= threshold
-        groups, index_groups = self._complete_linkage_grouping(
-            adj_matrix, n, valid_indices
-        )
-        actual_groups = len(groups)
-
-        logger.info(
-            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
-        )
-
-        if actual_groups > self.num_groups:
-            groups, index_groups = self._merge_groups_to_target(
-                groups, index_groups
+        if not valid_indices:
+            return (
+                np.zeros((0, 0), dtype=float),
+                [],
+                skipped_indices,
+                np.dtype(np.float64),
             )
 
-        return groups, index_groups
+        valid_similarity_matrix = similarity_matrix[
+            np.ix_(valid_indices, valid_indices)
+        ]
+        if not np.all(np.isfinite(valid_similarity_matrix)):
+            raise ValueError(
+                "Valid Tanimoto similarity entries must all be finite."
+            )
+        if not np.allclose(valid_similarity_matrix, valid_similarity_matrix.T):
+            raise ValueError("Tanimoto similarity matrix must be symmetric.")
+        if not np.allclose(np.diag(valid_similarity_matrix), 1.0):
+            raise ValueError(
+                "Tanimoto similarity matrix diagonal must be one."
+            )
+        if np.any(valid_similarity_matrix < 0.0) or np.any(
+            valid_similarity_matrix > 1.0
+        ):
+            raise ValueError(
+                "Tanimoto similarity values must be between 0.0 and 1.0."
+            )
 
-    def _find_optimal_similarity_threshold(
-        self, similarity_values, similarity_matrix, n
-    ):
-        """Find similarity threshold using binary search.
+        dtype = valid_similarity_matrix.dtype
+        one = dtype.type(1.0)
+        distance_matrix = one - valid_similarity_matrix
+        np.fill_diagonal(distance_matrix, dtype.type(0.0))
 
-        For Tanimoto similarity grouping (adj_matrix = similarity >= threshold):
-        - Higher threshold → more groups (harder to merge, fewer pairs qualify)
-        - Lower threshold → fewer groups (easier to merge, more pairs qualify)
+        return distance_matrix, valid_indices, skipped_indices, np.dtype(dtype)
 
-        sorted_similarities is ascending so that binary search can navigate:
-        moving right (higher index) = higher threshold = more groups.
+    def _normalize_output_matrix_for_threshold(
+        self,
+        matrix: np.ndarray,
+        threshold: Optional[float],
+    ) -> Tuple[np.ndarray, float, Optional[List[int]], List[int]]:
+        """Normalize a recorded Tanimoto similarity matrix for clustering.
+
+        The matrix must use the recorded full-size format: valid similarities
+        are finite with a diagonal of one, while skipped molecules are
+        represented by complete NaN rows and columns. ``threshold`` is a
+        similarity threshold in the inclusive range [0, 1].
         """
-        sorted_similarities = sorted(
-            [sim for sim in similarity_values if not np.isnan(sim)],
+        (
+            distance_matrix,
+            valid_indices,
+            skipped_indices,
+            distance_dtype,
+        ) = self._prepare_similarity_output_matrix(matrix)
+
+        effective_threshold = self._resolve_threshold(threshold)
+        if effective_threshold > 1.0:
+            raise ValueError(
+                "Tanimoto similarity threshold must be between 0.0 and 1.0."
+            )
+
+        one = distance_dtype.type(1.0)
+        distance_threshold = float(
+            one - distance_dtype.type(effective_threshold)
         )
 
-        if not sorted_similarities:
-            return 1.0
+        return (
+            distance_matrix,
+            distance_threshold,
+            valid_indices,
+            skipped_indices,
+        )
 
-        low, high = 0, len(sorted_similarities) - 1
-        # Default: lowest threshold → fewest groups (most permissive merging)
-        best_threshold = sorted_similarities[0]
+    def _normalize_output_matrix_for_num_groups(
+        self,
+        matrix: np.ndarray,
+        num_groups: Optional[int],
+    ) -> Tuple[np.ndarray, int, Optional[List[int]], List[int]]:
+        """Normalize a recorded Tanimoto similarity matrix for -N grouping."""
+        (
+            distance_matrix,
+            valid_indices,
+            skipped_indices,
+            distance_dtype,
+        ) = self._prepare_similarity_output_matrix(matrix)
+        self._num_groups_distance_dtype = distance_dtype
 
-        while low <= high:
-            mid = (low + high) // 2
-            threshold = sorted_similarities[mid]
-            num_groups_found = self._count_groups(
-                similarity_matrix, threshold, n
-            )
+        return (
+            distance_matrix,
+            self._resolve_num_groups(num_groups),
+            valid_indices,
+            skipped_indices,
+        )
 
-            if num_groups_found == self.num_groups:
-                return threshold
-            elif num_groups_found < self.num_groups:
-                # Too few groups: need higher threshold (move right)
-                best_threshold = threshold
-                low = mid + 1
-            else:
-                # Too many groups: need lower threshold (move left)
-                high = mid - 1
-
-        return best_threshold
-
-    def _count_groups(self, similarity_matrix, threshold, n):
-        """Count number of groups produced by complete linkage at the given threshold.
-
-        Uses the same iteration order as _complete_linkage_grouping (last to first)
-        to ensure the count matches the actual grouping result.
-        """
-        adj_matrix = similarity_matrix >= threshold
-        assigned = [False] * n
-        num_groups = 0
-        for i in range(n - 1, -1, -1):
-            if assigned[i]:
-                continue
-            current_group = [i]
-            assigned[i] = True
-            for j in range(i - 1, -1, -1):
-                if assigned[j]:
-                    continue
-                can_join = all(adj_matrix[j, m] for m in current_group)
-                if can_join:
-                    current_group.append(j)
-                    assigned[j] = True
-            num_groups += 1
-        return num_groups
-
-    def _merge_groups_to_target(self, groups, index_groups):
-        """Merge groups to reach target number."""
-        while len(groups) > self.num_groups:
-            min_idx = min(range(len(groups)), key=lambda i: len(groups[i]))
-            largest_idx = max(
-                range(len(groups)),
-                key=lambda i: len(groups[i]) if i != min_idx else -1,
-            )
-            groups[largest_idx].extend(groups[min_idx])
-            index_groups[largest_idx].extend(index_groups[min_idx])
-            groups.pop(min_idx)
-            index_groups.pop(min_idx)
-        return groups, index_groups
+    def _postprocess_auto_threshold_for_num_groups(self) -> None:
+        """Convert auto threshold from distance back to similarity."""
+        if self._auto_threshold is None:
+            return
+        dtype = getattr(self, "_num_groups_distance_dtype", np.float64)
+        one = dtype.type(1.0)
+        self._auto_threshold = float(one - dtype.type(self._auto_threshold))
 
     def _record_results(
         self,
@@ -474,6 +611,16 @@ class TanimotoSimilarityGrouper(MoleculeGrouper):
 
         if self.num_groups is not None:
             header_info.append(("Requested Groups (-N)", self.num_groups))
+            header_info.append(
+                (
+                    "Actual Groups",
+                    (
+                        len(self._cached_group_indices)
+                        if self._cached_group_indices is not None
+                        else 0
+                    ),
+                )
+            )
             if self._auto_threshold is not None:
                 header_info.append(
                     (

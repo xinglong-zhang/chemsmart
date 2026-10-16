@@ -2,14 +2,14 @@
  Command Line Interface Overview
 #################################
 
-Chemsmart provides a comprehensive command-line interface for quantum chemistry calculations and molecular analysis.
+CHEMSMART provides a comprehensive command-line interface for quantum chemistry calculations and molecular analysis.
 This guide covers the fundamental CLI structure, execution modes, and common options.
 
 *************************
  Basic Command Structure
 *************************
 
-Chemsmart offers two main execution modes:
+CHEMSMART offers two main execution modes:
 
 -  **Local execution**: Use ``chemsmart run`` to execute tasks on the current terminal.
 -  **HPC submission**: Use ``chemsmart sub`` to submit jobs to high-performance computing clusters.
@@ -76,12 +76,45 @@ Execution Control Options
       -  Enable simulation mode with fake job runners (default: disabled)
 
    -  -  ``--scratch/--no-scratch``
-      -  bool
-      -  Run in scratch space or working directory (default: scratch)
+      -  bool or None
+      -  Force scratch on (``--scratch``) or off (``--no-scratch``). Omit both (``None``) to use program YAML
+         ``SCRATCH`` when set, otherwise the job-runner class default (see :doc:`configuration-server-settings`)
 
 .. note::
 
    Use ``-R`` at the end of the command to rerun a completed job.
+
+.. note::
+
+   **CLI (``chemsmart run`` / ``chemsmart sub``)**
+
+   When both ``--scratch`` and ``--no-scratch`` are omitted, scratch mode is decided in ``JobRunner.from_job`` before
+   the typed runner is built:
+
+   #. Explicit ``--scratch`` or ``--no-scratch`` wins.
+   #. Else program ``SCRATCH`` in server YAML for executable-backed runners.
+   #. Else the job-runner class default (``True`` for Gaussian/ORCA/NCIPLOT; ``False`` for xTB, CREST, PyMOL,
+      thermochemistry, etc.).
+
+   **Programmatic API (direct constructor)**
+
+   If you construct a runner yourself with ``scratch=None``, server YAML is **not** read—you get the class ``SCRATCH``
+   default only. That can differ from the CLI path when YAML would override the class default.
+
+   Scratch **path** (when mode is on) is resolved separately from program ``ENVARS``, then ``SERVER.SCRATCH_DIR``, then
+   user settings. See :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
+
+.. note::
+
+   ``--fake`` automatically selects the program-matched fake runner based on the command group:
+
+   -  ``chemsmart run --fake gaussian ...`` / ``chemsmart sub --fake gaussian ...`` uses the Gaussian fake runner.
+   -  ``chemsmart run --fake orca ...`` / ``chemsmart sub --fake orca ...`` uses the ORCA fake runner.
+   -  ``chemsmart run --fake xtb ...`` / ``chemsmart sub --fake xtb ...`` uses the xTB fake runner.
+   -  ``chemsmart run --fake crest ...`` / ``chemsmart sub --fake crest ...`` uses the CREST fake runner.
+
+   In these fake modes, executable-path checks for the corresponding real program are not required and the corresponding
+   fake runner will be used without needing to specify its path.
 
 Debugging and Logging Options
 =============================
@@ -142,9 +175,12 @@ These options are only available with ``chemsmart sub``:
 
 -  ``gaussian``: Run or submit Gaussian jobs
 -  ``orca``: Run or submit ORCA jobs
+-  ``xtb``: Run or submit xTB jobs
+-  ``crest``: Run or submit CREST conformational search jobs
 -  ``mol``: Run PyMOL visualization and analysis jobs
 -  ``thermochemistry``: Run thermochemistry analysis jobs
 -  ``grouper``: Run structure grouping jobs
+-  ``convert``: Convert molecular structure files between formats
 
 ************
  Next Steps
@@ -154,11 +190,15 @@ For specific job types, see the detailed tutorials:
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`xtb-cli-options`
+-  :doc:`crest-cli-options`
 -  :doc:`pymol-cli-options`
 -  :doc:`thermochemistry-analysis`
 -  :doc:`grouper-cli-options`
+-  :doc:`convert-cli-options`
+-  :doc:`molecule-input-formats`
 
 .. note::
 
-   Chemsmart checks job name uniqueness. If a job with the same name is already running, submission will be blocked. Use
+   CHEMSMART checks job name uniqueness. If a job with the same name is already running, submission will be blocked. Use
    ``-a`` (append label) or ``-l`` (label) options to create unique job names.

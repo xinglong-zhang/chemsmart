@@ -1,16 +1,16 @@
 """
-User configuration management for ChemSmart computational chemistry software.
+User configuration management for CHEMSMART computational chemistry software.
 
 This module provides comprehensive user
 settings management including configuration
 file handling, directory structure management,
 and access to user-specific settings
 for computational chemistry software
-(Gaussian, ORCA) and server configurations.
+(Gaussian, ORCA, xTB, CREST) and server configurations.
 Manages the ~/.chemsmart user configuration directory and associated files.
 
 Classes:
-    ChemsmartUserSettings: Main class for user configuration management
+    CHEMSMARTUserSettings: Main class for user configuration management
 
 Dependencies:
     - chemsmart.io.yaml: YAML file handling utilities
@@ -21,9 +21,13 @@ Configuration Structure:
     ├── server/
     │   └── server.yaml
     ├── gaussian/
-    │   └── aussian_project_settings.yaml
-    └── orca/
-        └── orca_project_settings.yaml
+    │   └── gaussian_project_settings.yaml
+    ├── orca/
+    │   └── orca_project_settings.yaml
+    ├── xtb/
+    │   └── xtb_project_settings.yaml
+    └── crest/
+        └── crest_project_settings.yaml
 """
 
 import glob
@@ -36,9 +40,9 @@ from chemsmart.io.yaml import YAMLFile
 logger = logging.getLogger(__name__)
 
 
-class ChemsmartUserSettings:
+class CHEMSMARTUserSettings:
     """
-    User configuration settings manager for ChemSmart.
+    User configuration settings manager for CHEMSMART.
 
     Manages user-specific configuration files, directories, and settings for
     computational chemistry software. Provides access to configuration paths,
@@ -55,6 +59,14 @@ class ChemsmartUserSettings:
     USER_YAML_FILE = "usersettings.yaml"
     USER_CONFIG_DIR = os.path.expanduser("~/.chemsmart")
 
+    @classmethod
+    def resolve_config_dir(cls):
+        """Resolve user config directory with optional env override."""
+        configured_dir = os.environ.get(
+            "CHEMSMART_CONFIG_DIR", cls.USER_CONFIG_DIR
+        )
+        return os.path.expanduser(configured_dir)
+
     def __init__(self):
         """
         Initialize user settings manager.
@@ -62,8 +74,8 @@ class ChemsmartUserSettings:
         Loads user configuration from YAML file if it exists, otherwise
         initializes with empty configuration.
         """
-        self.yaml = os.path.join(self.USER_CONFIG_DIR, self.USER_YAML_FILE)
-        self.config_dir = self.USER_CONFIG_DIR
+        self.config_dir = self.resolve_config_dir()
+        self.yaml = os.path.join(self.config_dir, self.USER_YAML_FILE)
         try:
             self.data = YAMLFile(filename=self.yaml).yaml_contents_dict
         except FileNotFoundError:
@@ -161,6 +173,26 @@ class ChemsmartUserSettings:
         """
         return os.path.join(self.config_dir, "orca")
 
+    @property
+    def user_xtb_settings_dir(self):
+        """
+        Get the user xTB settings directory.
+
+        Returns:
+            str: Path to the directory containing xTB-specific settings.
+        """
+        return os.path.join(self.config_dir, "xtb")
+
+    @property
+    def user_crest_settings_dir(self):
+        """
+        Get the user CREST settings directory.
+
+        Returns:
+            str: Path to the directory containing CREST-specific settings.
+        """
+        return os.path.join(self.config_dir, "crest")
+
     @cached_property
     def server_yaml_files(self):
         """
@@ -192,6 +224,26 @@ class ChemsmartUserSettings:
             list: List of paths to ORCA project configuration YAML files.
         """
         return glob.glob(os.path.join(self.user_orca_settings_dir, "*.yaml"))
+
+    @cached_property
+    def xtb_project_yaml_files(self):
+        """
+        Get list of xTB project YAML configuration files.
+
+        Returns:
+            list: List of paths to xTB project configuration files.
+        """
+        return glob.glob(os.path.join(self.user_xtb_settings_dir, "*.yaml"))
+
+    @cached_property
+    def crest_project_yaml_files(self):
+        """
+        Get list of CREST project YAML configuration files.
+
+        Returns:
+            list: List of paths to CREST project configuration files.
+        """
+        return glob.glob(os.path.join(self.user_crest_settings_dir, "*.yaml"))
 
     @cached_property
     def scratch(self):
@@ -266,4 +318,32 @@ class ChemsmartUserSettings:
         return [
             os.path.basename(o).removesuffix(".yaml")
             for o in self.orca_project_yaml_files
+        ]
+
+    @cached_property
+    def all_available_xtb_projects(self):
+        """
+        Get list of all available xTB project configurations.
+
+        Returns:
+            list: List of xTB project names (without .yaml extension)
+                  available in the user xTB settings directory.
+        """
+        return [
+            os.path.basename(x).removesuffix(".yaml")
+            for x in self.xtb_project_yaml_files
+        ]
+
+    @cached_property
+    def all_available_crest_projects(self):
+        """
+        Get list of all available CREST project configurations.
+
+        Returns:
+            list: List of CREST project names (without .yaml extension)
+                  available in the user CREST settings directory.
+        """
+        return [
+            os.path.basename(c).removesuffix(".yaml")
+            for c in self.crest_project_yaml_files
         ]

@@ -19,7 +19,8 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy
+from shutil import copy, which
+from tempfile import TemporaryDirectory
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -88,6 +89,9 @@ class GaussianJobRunner(JobRunner):
         "g16link",
         "g16mecp",
         "g16qmmm",
+        "g16pka",
+        "g16pka_analyze",
+        "g16pka_thermo",
     ]
 
     PROGRAM = "gaussian"
@@ -97,6 +101,21 @@ class GaussianJobRunner(JobRunner):
     # Default to use scratch for Gaussian jobs - class attribute instead
     # of instance attribute so it needs not be set at
     # instance level - set during initialization (__init__).
+
+    def _scratch_job_directory(self, job):
+        """Return the scratch directory, optionally grouped by a job folder."""
+        if self.scratch_dir is None:
+            raise ValueError(
+                "A scratch directory is required for scratch jobs."
+            )
+        scratch_parent = getattr(job, "scratch_parent_folder", None)
+        if scratch_parent:
+            return os.path.join(
+                self.scratch_dir,
+                os.path.basename(scratch_parent),
+                job.execution_name,
+            )
+        return os.path.join(self.scratch_dir, job.execution_name)
 
     def __init__(
         self, server, scratch=None, fake=False, scratch_dir=None, **kwargs
@@ -110,13 +129,14 @@ class GaussianJobRunner(JobRunner):
 
         Args:
             server: Server configuration object for job execution.
-            scratch (bool, optional): Whether to use scratch directories.
-                Defaults to class SCRATCH setting.
+            scratch (bool or None, optional): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``True``). CLI jobs should
+                use ``JobRunner.from_job`` (YAML ``GAUSSIAN.SCRATCH`` may
+                apply there).
             fake (bool): Whether to run in fake/test mode.
             scratch_dir (str, optional): Custom scratch directory path.
             **kwargs: Additional arguments passed to parent JobRunner.
         """
-        # Use default SCRATCH if scratch is not explicitly set
         if scratch is None:
             scratch = self.SCRATCH
         super().__init__(
@@ -210,7 +230,7 @@ class GaussianJobRunner(JobRunner):
         Args:
             job: Job object to configure scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = self._scratch_job_directory(job)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
@@ -222,7 +242,7 @@ class GaussianJobRunner(JobRunner):
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_chkfile = job.label + ".chk"
+        job_chkfile = os.path.basename(job.chkfile)
         scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
         self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 
@@ -265,6 +285,14 @@ class GaussianJobRunner(JobRunner):
 
         input_writer = GaussianInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
+
+        oldchkfile = getattr(job, "oldchkfile", None)
+        if oldchkfile and self.scratch and self.running_directory:
+            oldchk_target = os.path.join(
+                self.running_directory, os.path.basename(oldchkfile)
+            )
+            if os.path.abspath(oldchkfile) != os.path.abspath(oldchk_target):
+                copy(oldchkfile, oldchk_target)
 
     def _get_command(self, job):
         """
@@ -330,6 +358,51 @@ class GaussianJobRunner(JobRunner):
         logger.info(f"Gaussian executable: {exe}")
         return exe
 
+    def format_hessian_checkpoint(self, job):
+        """Convert and validate a fresh Hessian checkpoint beside its log."""
+        from chemsmart.io.gaussian.hessian import read_fchk_hessian
+
+        if not os.path.isfile(job.chkfile):
+            raise RuntimeError(f"Missing analytic checkpoint: {job.chkfile}")
+        env = self._update_os_environ(job)
+        executable = self._get_executable()
+        resolved = which(executable, path=env.get("PATH")) or executable
+        formchk = os.path.join(
+            os.path.dirname(os.path.abspath(resolved)), "formchk"
+        )
+        if not os.access(formchk, os.X_OK):
+            formchk = which("formchk", path=env.get("PATH"))
+        if not formchk:
+            raise RuntimeError(
+                "Gaussian formchk was not found; cannot read analytic Hessian."
+            )
+        destination = os.path.join(job.folder, f"{job.label}.fchk")
+        # A failed conversion must never reuse an older formatted checkpoint.
+        with TemporaryDirectory(
+            prefix="formchk-", dir=job.folder
+        ) as temporary:
+            output = os.path.join(temporary, "hessian.fchk")
+            try:
+                subprocess.run(
+                    [
+                        formchk,
+                        os.path.abspath(job.chkfile),
+                        os.path.abspath(output),
+                    ],
+                    cwd=job.folder,
+                    env=env,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except (OSError, subprocess.CalledProcessError) as error:
+                raise RuntimeError(
+                    f"formchk failed for {job.label}: {error}"
+                ) from error
+            hessian = read_fchk_hessian(output, len(job.molecule.symbols))
+            os.replace(output, destination)
+        return hessian
+
     def _postrun(self, job):
         """
         Perform post-execution cleanup and file management.
@@ -356,6 +429,14 @@ class GaussianJobRunner(JobRunner):
                             f"File {file} cannot be copied to job folder "
                             f"{job.folder}: {e}"
                         )
+            if os.path.isfile(self.job_chkfile):
+                checkpoint_target = os.path.join(
+                    job.folder, os.path.basename(self.job_chkfile)
+                )
+                if os.path.abspath(self.job_chkfile) != os.path.abspath(
+                    checkpoint_target
+                ):
+                    copy(self.job_chkfile, checkpoint_target)
 
 
 class FakeGaussianJobRunner(GaussianJobRunner):
@@ -399,7 +480,8 @@ class FakeGaussianJobRunner(GaussianJobRunner):
 
         Args:
             server: Server configuration for the fake runner.
-            scratch: Whether to use scratch directories (default: None).
+            scratch (bool or None): ``True``/``False`` force on/off; ``None``
+                uses class ``SCRATCH`` (``True``). See ``JobRunner.from_job``.
             fake: Flag indicating this is a fake runner (default: True).
             scratch_dir: Path to scratch directory (default: None).
             **kwargs: Additional arguments passed to parent class.
@@ -443,22 +525,20 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         Args:
             job: Job object to configure fake scratch paths for.
         """
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = self._scratch_job_directory(job)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)
         self.running_directory = scratch_job_dir
         logger.debug(f"Running directory: {self.running_directory}")
 
-        # assign label with fake to differentiate from real job
-        job.label = f"{job.label}_fake"
-        logger.debug(f"Job label for fake job run: {job.label}")
+        self._append_suffix_to_job_label(job, "_fake")
 
         job_inputfile = job.label + ".com"
         scratch_job_inputfile = os.path.join(scratch_job_dir, job_inputfile)
         self.job_inputfile = os.path.abspath(scratch_job_inputfile)
 
-        job_chkfile = job.label + ".chk"
+        job_chkfile = os.path.basename(job.chkfile)
         scratch_job_chkfile = os.path.join(scratch_job_dir, job_chkfile)
         self.job_chkfile = os.path.abspath(scratch_job_chkfile)
 
@@ -478,8 +558,7 @@ class FakeGaussianJobRunner(GaussianJobRunner):
         """
         self.running_directory = job.folder
         logger.debug(f"Running directory: {self.running_directory}")
-        job.label = f"{job.label}_fake"
-        logger.debug(f"Job label for fake job run: {job.label}")
+        self._append_suffix_to_job_label(job, "_fake")
         self.job_inputfile = os.path.abspath(job.inputfile)
         self.job_chkfile = os.path.abspath(job.chkfile)
         self.job_errfile = os.path.abspath(job.errfile)
@@ -833,11 +912,26 @@ class FakeGaussian:
                 )
             g.write(" Mulliken charges:\n")
             g.write("               1\n")
+            total_charge = self.charge
+            running_charge = 0.0
             for i in range(self.num_atoms):
+                if i < self.num_atoms - 1:
+                    charge = round(
+                        random() * 0.2 - 0.1, 6
+                    )  # small random charge
+                    running_charge += charge
+                else:
+                    charge = round(
+                        total_charge - running_charge, 6
+                    )  # balance charge
                 g.write(
-                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {random():>12.6}\n"
+                    f"{i + 1:>7} {self.atomic_symbols[i]:>3} {charge:>12.6f}\n"
                 )  # not real values
-            g.write(" Elapsed time: xx\n")
+            g.write(f" Sum of Mulliken charges =  {total_charge:.5f}\n")
             g.write(
-                f" Normal termination of Gaussian 16 (fake executable) at {datetime.now()}."
+                " Elapsed time:      0 days  0 hours  0 minutes  0.0 seconds.\n"
+            )
+            g.write(
+                f" Normal termination of Gaussian 16 (fake executable) at "
+                f"{datetime.now().strftime('%a %b %d %H:%M:%S %Y')}."
             )

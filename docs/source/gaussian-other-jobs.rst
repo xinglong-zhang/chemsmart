@@ -13,13 +13,34 @@ A Minimum Energy Crossing Point (MECP) is a geometry where two potential energy 
 are degenerate. It is the spin-forbidden analogue of a transition state and is relevant to intersystem crossing,
 spin-state reactivity, and organometallic reaction mechanisms.
 
-ChemSmart provides a **self-contained MECP optimizer** that drives the search entirely in Python, calling Gaussian only
+CHEMSMART provides a **self-contained MECP optimizer** that drives the search entirely in Python, calling Gaussian only
 for single-point energies and Cartesian forces at each step. No external MECP code (e.g. MECP2, Harvey's code) is
 required.
 
 .. code:: bash
 
    chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] mecp [SUBCMD_OPTIONS]
+
+Gaussian MECP uses the following task syntax (after the Gaussian input options):
+
+.. code:: bash
+
+   mecp -m1 3 -m2 1                    # Optimize only (default)
+   mecp -m1 3 -m2 1 numfreq            # Optimize, then verify projected frequencies
+   mecp -m1 3 -m2 1 numfreq --only     # Analyze the supplied stationary crossing
+   mecp -m1 3 -m2 1 followseam         # Optimize, verify, and follow imaginary seam modes
+
+``followseam`` implies ``numfreq``. Its optional controls are ``--displacement`` (default 0.05 Angstrom) and
+``--max-follow-steps`` (default 30). The original ``--mecp-numfreq``, ``--follow-seam-imaginary-mode``,
+``--seam-mode-displacement``, and ``--seam-mode-max-steps`` options remain supported; ``--followseam`` is also available
+as a flag.
+
+``numfreq --only`` skips optimization and restart, leaving the supplied geometry unchanged. Both state energies and the
+projected gradient must satisfy the configured convergence thresholds before numerical Hessians are computed. Otherwise,
+use ``numfreq`` to optimize first. The frequency file contains mass-weighted, two-state projected MECP frequencies, not
+ordinary single-state frequencies. A stationary seam saddle is reported with its imaginary frequencies without following
+the mode. Completion is recorded separately in ``<label>_final_report.log``; no optimization directory is created.
+``--only`` cannot be combined with ``followseam``.
 
 Algorithm
 =========
@@ -66,24 +87,24 @@ MECP Options
       -  Default
       -  Description
 
-   -  -  ``--multiplicity-a``
+   -  -  ``--multiplicity1``
       -  int
       -  1 (singlet)
       -  Spin multiplicity of state A. Falls back to ``-m`` if not set.
 
-   -  -  ``--multiplicity-b``
+   -  -  ``--multiplicity2``
       -  int
-      -  multiplicity-a + 2
+      -  multiplicity1 + 2
       -  Spin multiplicity of state B.
 
-   -  -  ``--charge-a``
+   -  -  ``--charge1``
       -  int
       -  0
       -  Charge of state A. Falls back to ``-c`` if not set.
 
-   -  -  ``--charge-b``
+   -  -  ``--charge2``
       -  int
-      -  charge-a
+      -  charge1
       -  Charge of state B.
 
    -  -  ``--title-a``
@@ -109,9 +130,8 @@ MECP Options
    -  -  ``--convergence``
       -  string
       -  ``"standard"``
-      -  Convergence preset: ``"standard"`` (default, general-purpose) or ``"tight"``
-         (publication-quality). See the :ref:`convergence-presets` section below.
-         Individual tolerance options override the preset.
+      -  Convergence preset: ``"standard"`` (default, general-purpose) or ``"tight"`` (publication-quality). See the
+         :ref:`convergence-presets` section below. Individual tolerance options override the preset.
 
    -  -  ``--trust-radius``
       -  float
@@ -150,9 +170,9 @@ MECP Options
 
    -  -  ``--step-size-method``
       -  string
-      -  ``"bb"``
-      -  Step size adaptation algorithm: ``"bb"`` (Barzilai-Borwein, default) or ``"grow_shrink"`` (merit-based
-         grow/shrink).
+      -  ``"harvey"``
+      -  MECP optimizer: ``"harvey"`` (inverse-BFGS, default), ``"bb"`` (Barzilai-Borwein), or ``"grow_shrink"``
+         (merit-based grow/shrink).
 
    -  -  ``--step-size-grow``
       -  float
@@ -168,24 +188,49 @@ MECP Options
    -  -  ``--step-size-min``
       -  float
       -  1.0×10⁻⁴ Bohr²/Hartree
-      -  Floor for the adaptive step size (both methods).
+      -  Floor for the adaptive step size (``bb`` and ``grow_shrink``).
 
    -  -  ``--step-size-max``
       -  float
       -  1.0 Bohr²/Hartree
-      -  Ceiling for the adaptive step size (both methods).
+      -  Ceiling for the adaptive step size (``bb`` and ``grow_shrink``).
 
-   -  -  ``--verify-seam-minimum / --no-verify-seam-minimum``
+   -  -  ``--restart / --no-restart``
+      -  bool
+      -  True
+      -  Resume an interrupted MECP optimization from ``<label>_state.npz``.
+
+   -  -  ``--mecp-numfreq / --no-mecp-numfreq``
       -  bool
       -  False
-      -  After convergence, verify the MECP is a true minimum on the crossing seam via effective Hessian
-         analysis. Requires ~4×3N additional Gaussian sub-jobs.  Results are written to
-         ``<label>_seam_check.log``. See the :ref:`seam-minimum-verification` section below.
+      -  Perform the seam-minimum verification and additionally write mass-weighted projected MECP frequencies and
+         normal modes to ``<label>_mecp_freq.log``.
+
+   -  -  ``--only`` (with ``numfreq``)
+      -  bool
+      -  False
+      -  Skip optimization and analyze the supplied stationary crossing. Cannot be combined with ``followseam``.
 
    -  -  ``--hess-step-size``
       -  float
       -  1.0×10⁻³ Bohr
-      -  Finite-difference step size used by ``--verify-seam-minimum`` for the numerical Hessian.
+      -  Finite-difference step size used by ``--mecp-numfreq`` for the numerical Hessian.
+
+   -  -  ``--follow-seam-imaginary-mode / --no-follow-seam-imaginary-mode``
+      -  bool
+      -  False
+      -  If the projected Hessian contains a significant imaginary mode, follow it in both directions using constrained
+         progress planes, then release and retain the lower verified seam minimum. Implies ``--mecp-numfreq``.
+
+   -  -  ``--displacement`` / ``--seam-mode-displacement``
+      -  float
+      -  0.05 Å
+      -  Progress increment along the tracked projected mode at each constrained macro step.
+
+   -  -  ``--max-follow-steps`` / ``--seam-mode-max-steps``
+      -  int
+      -  30
+      -  Maximum constrained mode-following macro steps in each positive/negative direction.
 
 .. _convergence-presets:
 
@@ -278,8 +323,7 @@ Two built-in convergence presets are available via ``--convergence``:
          -  0.1
          -  Bohr/atom
 
-Individual options (``--energy-diff-tol``, ``--force-max-tol``, etc.) always override
-the preset values when provided.
+Individual options (``--energy-diff-tol``, ``--force-max-tol``, etc.) always override the preset values when provided.
 
 Convergence is declared when **all** five criteria are simultaneously satisfied.
 
@@ -287,12 +331,14 @@ Adaptive Step Size
 ==================
 
 When ``--adaptive-step-size`` is enabled (the default), the step size :math:`\alpha` is updated at the end of each
-iteration. Two algorithms are available via ``--step-size-method``.
+iteration. The available algorithms are selected via ``--step-size-method``. For the default ``harvey`` optimizer, the
+inverse Hessian controls the step; ``--adaptive-step-size`` and the scalar ``step-size-*`` controls apply only to ``bb``
+and ``grow_shrink``.
 
-Barzilai-Borwein (``"bb"``, default)
-------------------------------------
+Barzilai-Borwein (``"bb"``)
+---------------------------
 
-The BB2 step size is derived from the secant condition and provides near-quadratic convergence near the MECP:
+The BB step size is derived from the secant condition and accelerates convergence near the MECP:
 
 .. math::
 
@@ -301,9 +347,11 @@ The BB2 step size is derived from the secant condition and provides near-quadrat
 where :math:`\Delta\mathbf{r} = \mathbf{r}_n - \mathbf{r}_{n-1}` and :math:`\Delta\mathbf{g}_\perp =
 \mathbf{g}_{\perp,n} - \mathbf{g}_{\perp,n-1}`.
 
-The denominator is the inner product of the position change and the seam-tangent gradient change; it approximates the
-local curvature. If the curvature is non-positive (negative-curvature region or first step), the algorithm falls back to
-the initial ``step_size``. The result is clamped to ``[step_size_min, step_size_max]``.
+Before applying the secant formula, the position change is projected onto the current seam tangent so that it is paired
+consistently with the seam-tangent gradient change. Curvature is accepted only when its normalized magnitude is reliably
+positive. An unreliable pair damps the current step by ``step_size_shrink`` instead of resetting it. Even a valid BB
+estimate is limited to between 0.5 and 2 times the current step before the configured ``[step_size_min, step_size_max]``
+bounds are applied. These safeguards prevent small secant denominators from causing abrupt jumps to ``step_size_max``.
 
 Grow-Shrink (``"grow_shrink"``)
 -------------------------------
@@ -314,26 +362,65 @@ A dimensionless merit function tracks progress:
 
    M_n = \frac{|\Delta E_n|}{\epsilon_{\Delta E}} + \frac{\text{RMS}(\mathbf{g}_{\perp,n})}{\epsilon_{\text{rms}}}
 
--  If :math:`M_n < M_{n-1}` (progress): :math:`\alpha_{n+1} = \min(\alpha_n \times \texttt{step\_size\_grow},\,
-   \texttt{step\_size\_max})`
--  If :math:`M_n \geq M_{n-1}` (stall/overshoot): :math:`\alpha_{n+1} = \max(\alpha_n \times
-   \texttt{step\_size\_shrink},\, \texttt{step\_size\_min})`
+The update uses relative merit progress rather than reacting to every numerical change:
+
+-  Improvement greater than 10%: grow by ``step_size_grow``.
+-  Change between a 2% regression and a 10% improvement: keep the step.
+-  Regression greater than 2%: shrink by ``step_size_shrink``.
+
+The dead band prevents small SCF and gradient fluctuations from making the step size oscillate.
 
 The current step size is recorded on every line of ``<label>_report.log``.
+
+Harvey inverse-BFGS (``"harvey"``, default)
+-------------------------------------------
+
+This method follows the inverse-BFGS update used by easyMECP: it builds a full inverse Hessian from successive
+effective-gradient and Cartesian-displacement pairs, including negative-curvature updates, and limits the largest
+Cartesian component using Harvey's ``STPMX`` rule. Numerically singular updates are skipped. Ill-conditioned inverse
+Hessians and non-descent directions are reset to the configured diagonal initial inverse Hessian. The corresponding
+``bfgs_status=RESET_*`` reason is recorded in the report.
+
+Restarting interrupted calculations
+===================================
+
+MECP optimization state is written atomically after every completed step to ``<label>_state.npz``. It contains the next
+geometry, inverse Hessian, previous effective gradient, and adaptive-step history. Re-running the same job resumes from
+that state by default. The saved atom sequence and optimizer method must match the new invocation; otherwise CHEMSMART
+stops with an explicit error. Use ``--no-restart`` to deliberately start from the supplied input geometry. The state
+file is removed after successful convergence.
+
+MECP force calculations always include ``nosymm`` so that Gaussian Cartesian forces remain aligned with the optimizer
+coordinate frame. An explicit conflicting ``symmetry`` route option is rejected.
+
+Like easyMECP, CHEMSMART maintains one rolling checkpoint per state (``<label>_A.chk`` and ``<label>_B.chk``) instead of
+one checkpoint per iteration. It does not add ``guess=read`` automatically: checkpoint orbitals are read only when that
+option is explicitly present in the Gaussian route. If the first step requests ``guess=read`` but its checkpoint does
+not yet exist, ``read`` is removed for that first step and retained thereafter. Iteration ``.com`` and ``.log`` files
+and the two rolling checkpoints are kept in ``<label>_optimization``, along with the report and trajectory.
+
+When Gaussian scratch storage is enabled, initial MECP scratch jobs are grouped below ``<label>_optimization`` and
+frequency-analysis jobs below ``<label>_numfreq``, instead of being created directly in the scratch root.
+
+Seam-minimum verification uses a separate pair of temporary rolling checkpoints. They are deleted after a successful
+verification, so the final ``<label>_A.chk`` and ``<label>_B.chk`` continue to represent the converged MECP geometry.
+Temporary checkpoints are retained if verification fails.
 
 Output Files
 ============
 
-Three output files are produced alongside the Gaussian sub-job input/output files; the
-third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`` is requested:
+The main job directory contains the final report and, when requested, the thermochemistry-ready frequency file.
+Intermediate files are grouped by function: ``<label>_optimization`` for the initial MECP search, ``<label>_numfreq``
+for numerical Hessian analysis, and ``<label>_seam_follow`` for optional imaginary-mode following. Only requested
+functions create their directories:
 
 ``<label>_report.log``
-   Step-by-step optimization log. The file header records the run settings; each subsequent line reports one step, using
-   a **1-indexed** six-digit zero-padded step counter (``000001`` = first step):
+   Located in ``<label>_optimization``. Step-by-step optimization log. The file header records the run settings; each
+   subsequent line reports one step, using a **1-indexed** step counter (``1`` = first step):
 
    .. code::
 
-      step=NNNNNN E_A=<Hartree> E_B=<Hartree> dE=<±Hartree>
+      step=N E_A=<Hartree> E_B=<Hartree> dE=<±Hartree>
       pgrad_max=<H/Bohr> pgrad_rms=<H/Bohr>
       disp_max=<Bohr> disp_rms=<Bohr>
       seam_max=<Bohr> seam_rms=<Bohr>
@@ -342,87 +429,173 @@ third (``<label>_seam_check.log``) is written only when ``--verify-seam-minimum`
    where:
 
    -  ``dE`` = :math:`E_A - E_B` — energy difference (drives toward the seam).
-   -  ``pgrad_max`` / ``pgrad_rms`` — max and RMS of the seam-tangent gradient
-      :math:`\mathbf{g}_\perp` (projection of :math:`\nabla E_A` onto the seam; drives
-      geometry to the minimum on the seam).
-   -  ``disp_max`` / ``disp_rms`` — max and RMS of the total Cartesian displacement
-      :math:`\mathbf{d} = \mathbf{d}_\text{seam} + \mathbf{d}_\text{seam-min}` after trust-radius scaling.
-   -  ``seam_max`` / ``seam_rms`` — max and RMS of the seam-correction component
-      :math:`\mathbf{d}_\text{seam} = -(\Delta E / \|\mathbf{g}_\Delta\|^2)\,\mathbf{g}_\Delta` that
-      moves the geometry toward the crossing surface.
+   -  ``pgrad_max`` / ``pgrad_rms`` — max and RMS of the seam-tangent gradient :math:`\mathbf{g}_\perp` (projection of
+      :math:`\nabla E_A` onto the seam; drives geometry to the minimum on the seam).
+   -  ``disp_max`` / ``disp_rms`` — max and RMS of the total Cartesian displacement :math:`\mathbf{d} =
+      \mathbf{d}_\text{seam} + \mathbf{d}_\text{seam-min}` after trust-radius scaling.
+   -  ``seam_max`` / ``seam_rms`` — max and RMS of the seam-correction component :math:`\mathbf{d}_\text{seam} =
+      -(\Delta E / \|\mathbf{g}_\Delta\|^2)\,\mathbf{g}_\Delta` that moves the geometry toward the crossing surface.
 
-   The final line reads ``Converged at step NNNNNN.`` on successful convergence. The presence of this ``Converged``
-   marker is used by ``skip_completed`` to avoid re-running a finished job.
+   After optimization, the report distinguishes the initial crossing from the final verified MECP. If seam-mode
+   following was needed, it names the selected branch, reports its number of macro steps, and records the final energy,
+   energy gap, and number of significant imaginary modes. If seam verification fails, it records the error instead. Only
+   a successful job ends with ``Converged at step N.``; this marker is used by ``skip_completed`` to avoid re-running a
+   finished job.
+
+``<label>_final_report.log``
+   Concise report for the final selected structure. It contains both state energies, MECP energy, final values and
+   thresholds for the energy gap, projected gradients, and displacements, plus the final Cartesian geometry. With
+   ``--mecp-numfreq`` it also lists the final projected frequencies and seam-minimum status. It distinguishes the
+   initial optimization step count from the number of constrained seam-following macro steps and, when applicable, the
+   final branch optimization step count. Intermediate structures and per-step diagnostics remain in the other reports.
+
+``<label>.log`` and ``<label>_B.log`` (when the label already ends in ``_mecp``)
+   After successful optimization and any requested seam verification/following, the main directory receives unchanged
+   copies of the selected final geometry's Gaussian outputs: state A in ``<label>.log`` and state B in
+   ``<label>_B.log``. Labels without an existing ``_mecp`` suffix receive that suffix first. Without frequencies, these
+   are the converged optimization step's outputs; with frequencies, they are the undisplaced reference jobs for the
+   final selected structure, including the winning followseam branch. They can be used as geometry inputs for subsequent
+   single-point or other jobs. Their energies belong to individual electronic states; the combined MECP result and
+   projected frequencies remain in the dedicated reports. No additional Gaussian calculation is run for this export.
+   Frequency-only analysis does not perform this export.
 
 ``<label>_traj.xyz``
-   Multi-frame XYZ trajectory of the MECP geometry at every optimization step (coordinates in Ångström).
+   Located in ``<label>_optimization``. Multi-frame XYZ trajectory of the initial MECP optimization (coordinates in
+   Ångström). Its A/B Gaussian sub-jobs are in the same directory.
 
 ``<label>_seam_check.log``
-   Written only when ``--verify-seam-minimum`` is requested. Reports the eigenvalues of the effective projected
-   Hessian :math:`H_\text{eff}` (translations, rotations, and gradient-difference direction removed) and whether
-   the MECP is a true minimum on the seam. See the :ref:`seam-minimum-verification` section below.
+   Located in ``<label>_numfreq`` when ``--mecp-numfreq`` is requested, alongside the numerical-Hessian Gaussian
+   sub-jobs. Reports the eigenvalues of the effective projected Hessian :math:`H_\text{eff}` (translations, rotations,
+   and gradient-difference direction removed) and whether the MECP is a true minimum on the seam. See the
+   :ref:`seam-minimum-verification` section below.
+
+``<label>_mecp_freq.log``
+   Written only by ``--mecp-numfreq``. Contains the converged geometry, both state energies, MECP energy, atomic masses,
+   mass-weighted projected frequencies, and Cartesian normal modes. It can be passed directly to CHEMSMART
+   thermochemistry.
 
 .. _seam-minimum-verification:
 
 Seam Minimum Verification
-==========================
+=========================
 
-A converged MECP may be a crossing point anywhere on the crossing seam, not necessarily the **minimum energy**
-point on it.  To confirm that the MECP is a true minimum on the seam (analogous to verifying a transition state has
-exactly one imaginary frequency), ChemSmart implements an effective Hessian analysis.
+A converged MECP may be a crossing point anywhere on the crossing seam, not necessarily the **minimum energy** point on
+it. To confirm that the MECP is a true minimum on the seam (analogous to verifying a transition state has exactly one
+imaginary frequency), CHEMSMART implements an effective Hessian analysis.
 
 Theory
 ------
 
-At the MECP the crossing seam is a :math:`(3N-1)`-dimensional hypersurface.  Motions along the gradient-difference
-direction :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B` take the molecule off the seam.  The remaining
-:math:`3N-1` directions span the seam tangent space; after further removal of translations (3) and rotations (up to 3)
-there are :math:`3N - 7` (or :math:`3N - 6` for linear molecules) internal seam degrees of freedom.
+At the MECP the crossing seam is a :math:`(3N-1)`-dimensional hypersurface. Motions along the gradient-difference
+direction :math:`\mathbf{g}_\Delta = \nabla E_A - \nabla E_B` take the molecule off the seam. The remaining :math:`3N-1`
+directions span the seam tangent space; after further removal of translations (3) and rotations (up to 3) there are
+:math:`3N - 7` (or :math:`3N - 6` for linear molecules) internal seam degrees of freedom.
 
-ChemSmart constructs a projector that removes these constrained directions:
+CHEMSMART constructs a projector that removes these constrained directions:
 
 .. math::
 
    P = I - \sum_i |\mathbf{v}_i\rangle\langle\mathbf{v}_i|
 
 where :math:`\{\mathbf{v}_i\}` is an orthonormal set spanning translations, rotations, and
-:math:`\hat{\mathbf{g}}_\Delta`.  The **effective Hessian** is
+:math:`\hat{\mathbf{g}}_\Delta`. The **effective Lagrangian Hessian** is
 
 .. math::
 
-   H_\text{eff} = P\,\bar{H}\,P, \qquad \bar{H} = \tfrac{1}{2}(H_A + H_B)
+   H_\text{eff} = P\,[(1-\lambda)H_A + \lambda H_B]P
 
-where :math:`H_A` and :math:`H_B` are the numerical Hessians of the two states, averaged to give a balanced
-description.  If all non-zero eigenvalues of :math:`H_\text{eff}` are positive, the point is confirmed as a seam
-minimum; any negative eigenvalue indicates a lower-energy MECP elsewhere on the seam.
+where :math:`H_A` and :math:`H_B` are the numerical Hessians of the two states and :math:`\lambda` is the constrained
+MECP Lagrange multiplier. For frequencies, the Hessian and projection vectors are transformed to mass-weighted
+coordinates before diagonalisation. If all projected eigenvalues are positive, the point is confirmed as a seam minimum;
+any negative eigenvalue indicates a lower-energy MECP elsewhere on the seam.
 
 .. note::
 
    A **standard Gaussian frequency analysis** at the MECP geometry is **not sufficient** for this check: it does not
-   project out the gradient-difference direction, so it will always show one near-zero or spurious mode whose sign
-   is ambiguous.  The effective Hessian analysis described here is the correct diagnostic (cf. ORCA manual, §9.40).
+   project out the gradient-difference direction, so it will always show one near-zero or spurious mode whose sign is
+   ambiguous. The effective Hessian analysis described here is the correct diagnostic (cf. ORCA manual, §9.40).
 
 Usage
 -----
 
-Add ``--verify-seam-minimum`` to the MECP command after the optimization converges:
+Use ``--mecp-numfreq`` to check whether the MECP is a seam minimum and write projected frequencies and modes:
 
 .. code:: bash
 
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
-       --convergence tight --verify-seam-minimum
+       --convergence tight --mecp-numfreq
 
-The verification requires **4 × 3N** additional Gaussian sub-jobs (2 displaced geometries × 2 spin states
-× 3N Cartesian coordinates), each labelled ``<label>_step900000_A`` etc.  For a 10-atom molecule this is 120
-additional Gaussian calculations.  The finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with
-``--hess-step-size``.
+Use ``mecp anafreq`` to obtain the two state Hessians from fixed-geometry Gaussian analytic frequency calculations
+instead of Cartesian finite differences:
 
-Results are written to ``<label>_seam_check.log``:
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.xyz -c 0 -m 1 mecp anafreq
+   chemsmart sub gaussian -p project -f crossing.xyz -c 0 -m 1 mecp anafreq --only
+   chemsmart sub gaussian -p project -f structure.xyz -c 0 -m 1 mecp followseam --hessian-method analytic
+
+``numfreq`` selects numerical Hessians and ``anafreq`` selects analytic Hessians; conflicting explicit
+``--hessian-method`` selections are rejected. Without either task, ``--hessian-method`` selects the method for requested
+frequency checks, including every initial, macro-step and final followseam check. Numerical is the default.
+``--hess-step-size`` applies only to numerical Hessians.
+
+Analytic verification runs two reference force jobs followed by two Gaussian ``#p ... freq=analytic`` jobs, keeping the
+reference wavefunctions through their state-specific checkpoints. In broken-symmetry link mode the reference jobs
+perform stability analysis before the separate analytic frequency jobs. The raw Cartesian force constants are read from
+formatted checkpoints generated automatically with Gaussian's ``formchk`` utility; the same Lagrangian Hessian, seam
+projection and mass weighting are used for both methods. An unsupported analytic calculation or missing/incomplete
+Hessian fails rather than silently falling back to ChemSmart numerical differences.
+
+Analytic inputs and raw outputs are stored under ``<label>_anafreq/``, with names such as
+``<label>_hessian_analytic_A.com``, ``.log`` and ``.fchk``. Macro-step files include ``macro07_hessian_analytic_A``. The
+final ``<label>_mecp_freq.log`` retains its existing name and records ``hessian_method=analytic``. The verification
+report is also stored in the corresponding ``_anafreq`` directory. This analytic backend currently supports Gaussian;
+ORCA Hessian import is not implemented. ``formchk`` is located beside the configured Gaussian executable or on its
+configured PATH. Missing reference checkpoints or failed conversions stop the analysis. Formatted checkpoints are
+retained after successful verification; temporary binary verification checkpoints are cleaned up as before. All initial,
+macro-step and final checks use one Hessian-source dispatch followed by the shared seam projection and frequency
+analysis.
+
+To escape a stationary point that is a saddle on the crossing seam, add ``--follow-seam-imaginary-mode``. In each
+direction CHEMSMART fixes a progress plane normal to the tracked negative mode, restores :math:`E_A=E_B`, and optimizes
+every remaining seam coordinate. It then recomputes the effective Hessian, identifies the continuation of the mode by
+maximum absolute overlap, and advances the progress plane again. The progress constraint is released only after no
+significant negative projected mode remains; a final unconstrained MECP optimization and frequency check must still
+confirm the result:
+
+.. code:: bash
+
+   chemsmart sub gaussian -p project -f structure.xyz -c 0 -m 1 mecp \
+       --convergence tight --follow-seam-imaginary-mode \
+       --seam-mode-displacement 0.05 --seam-mode-max-steps 30
+
+All displaced structures, branch reports, trajectories, frequency logs, and Gaussian sub-jobs are collected under
+``<label>_seam_follow/``. Branch labels end in ``_seam_follow_plus`` and ``_seam_follow_minus``. The final
+projected-frequency log remains in the main calculation directory; the final seam check is in ``<label>_numfreq`` and
+the selection record ``<label>_seam_follow.log`` is in ``<label>_seam_follow``. This is constrained iterative seam-mode
+following; it does not invoke Gaussian IRC/QRC.
+
+Branch optimizations use at least the tight convergence thresholds. If neither direction loses its negative mode within
+``--seam-mode-max-steps``, or if the released optimization returns to a saddle, the calculation stops and retains both
+branch results. The user can then adjust the progress increment or maximum number of macro steps.
+
+Each Hessian evaluation requires **4 × 3N** Gaussian sub-jobs (2 displaced geometries × 2 spin states × 3N Cartesian
+coordinates). During seam-mode following, labels identify the macro step, coordinate, displacement sign, and state, such
+as ``<label>_seam_follow_plus_macro07_hessian_a6_z_plus_B.log``. Constrained optimization sub-jobs use names such as
+``<label>_seam_follow_plus_macro07_opt_step012_A.log``. Standalone numerical-frequency jobs use the same
+``hessian_aN_axis_plus/minus`` naming, where N is the 1-indexed atom number and axis is x, y, or z. Reference jobs use
+``hessian_reference_A/B`` (prefixed by the macro step during seam following). Branch progress logs end in
+``_seam_follow_plus_record.log`` or ``_seam_follow_minus_record.log``. For a 10-atom molecule this is 120 Gaussian
+calculations per macro step. Iterative following performs this analysis after every constrained macro step in both
+directions, plus the initial and final checks, so users should choose ``--seam-mode-max-steps`` conservatively. The
+finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with ``--hess-step-size``.
+
+Results are written to ``<label>_numfreq/<label>_seam_check.log``:
 
 .. code::
 
    CHEMSMART MECP seam-minimum verification
-   label=... hess_step=1.00e-03 Bohr step_prefix=900000
+   label=... hess_step=1.00e-03 Bohr check_step_start=1
    energy_diff=+1.234567e-06 Hartree n_projected=7
    n_negative_eigenvalues=0  MECP MINIMUM
 
@@ -430,6 +603,16 @@ Results are written to ``<label>_seam_check.log``:
      mode    1: +1.234567e-03
      mode    2: +2.345678e-03
      ...
+
+The corresponding ``3N-7`` projected frequencies and normal modes are written to ``<label>_mecp_freq.log``. For a linear
+molecule the number of modes is ``3N-6``. Thermochemistry can then be calculated with, for example:
+
+.. code:: bash
+
+   chemsmart run thermochemistry -f <label>_mecp_freq.log -T 298.15
+
+The MECP frequency file uses a conservative electronic degeneracy of 1 by default. If a different statistical weight is
+required by the chosen non-adiabatic rate theory, specify it with ``--electronic-degeneracy``.
 
 Basic Usage
 ===========
@@ -444,13 +627,13 @@ Set spin states explicitly (singlet ↔ triplet):
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity-a 1 --multiplicity-b 3
+   chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --multiplicity1 1 --multiplicity2 3
 
 Doublet/quartet MECP for an open-shell cation:
 
 .. code:: bash
 
-   chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity-a 2 --multiplicity-b 4
+   chemsmart sub gaussian -p project -f radical.log -c 1 -m 2 mecp --multiplicity1 2 --multiplicity2 4
 
 Use tight convergence (publication quality):
 
@@ -458,12 +641,12 @@ Use tight convergence (publication quality):
 
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp --convergence tight
 
-Use tight convergence and then verify the geometry is a true seam minimum:
+Use tight convergence and verify the geometry is a true seam minimum:
 
 .. code:: bash
 
    chemsmart sub gaussian -p project -f structure.log -c 0 -m 1 mecp \
-       --convergence tight --verify-seam-minimum
+       --convergence tight --mecp-numfreq
 
 Override individual thresholds (tight preset + custom energy threshold):
 
@@ -488,17 +671,17 @@ Use the grow/shrink adaptive method instead of the default Barzilai-Borwein:
 
 .. note::
 
-   Each MECP step generates two Gaussian sub-jobs named ``<label>_step<NNNNNN>_A`` and ``<label>_step<NNNNNN>_B``
-   (single-point energy + forces), where ``<NNNNNN>`` is the **1-indexed** six-digit zero-padded step number (e.g.
-   ``000001`` for the first step, ``000010`` for the tenth). Steps are numbered starting from 1 up to ``max_steps`` (up
-   to 999 999). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job itself honours
-   ``skip_completed`` via the ``Converged`` marker in the report file.
+   Each MECP step generates two Gaussian sub-jobs in ``<label>_optimization``, named ``<label>_step<N>_A`` and
+   ``<label>_step<N>_B`` (single-point energy + forces), where ``<N>`` is the **1-indexed** step number (for example,
+   ``step1`` and ``step10``). These sub-jobs are always re-run (``skip_completed=False``), while the outer MECP job
+   itself honours ``skip_completed`` via the ``Converged`` marker in the report file.
 
 ***********
  Link Jobs
 ***********
 
-Run multi-step Gaussian calculations with linked job steps.
+Run multi-step Gaussian calculations with linked job steps. Current Link job only supports openshell singlet broken
+symmetry guess as first job, followed by link job to run different job types (opt, modred, ts, scan, sp, etc).
 
 .. code:: bash
 
@@ -563,7 +746,6 @@ This creates a multi-step workflow:
    ...
    # opt freq um062x def2svp geom=check guess=read
    ...
-   #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
 
 To use multiple guess options, separate them with a comma:
 
@@ -579,13 +761,12 @@ This sets ``guess=(mix,always)`` in the route string:
    ...
    # opt freq um062x def2svp geom=check guess=read
    ...
-   #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk UM062X/def2SVP Freq
 
 ******************
  Custom User Jobs
 ******************
 
-Run custom calculations not built into Chemsmart.
+Run custom calculations not built into CHEMSMART.
 
 .. code:: bash
 

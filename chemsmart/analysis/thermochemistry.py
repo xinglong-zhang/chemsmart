@@ -9,13 +9,21 @@ from ase import units
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.constants import (
+    MECP_FREQUENCY_HEADER,
+    MECP_FREQUENCY_TERMINATION_MARKER,
     R,
     atm_to_pa,
     energy_conversion,
     hartree_to_joules,
 )
-from chemsmart.utils.io import get_program_type_from_file
+from chemsmart.utils.geometry import clean_rotational_constants_by_geometry
+from chemsmart.utils.io import (
+    file_content_begins_with,
+    get_program_type_from_file,
+)
+from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.references import (
     grimme_quasi_rrho_entropy_ref,
     head_gordon_damping_function_ref,
@@ -25,6 +33,114 @@ from chemsmart.utils.references import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class MECPProjectedFrequencyOutput(FileMixin):
+    """Read a CHEMSMART ``*_mecp_freq.log`` thermochemistry input."""
+
+    HEADER = MECP_FREQUENCY_HEADER
+    GEOMETRY_HEADER = "Geometry (Angstrom) and masses (amu):"
+    FREQUENCIES_HEADER = "Projected MECP frequencies (cm^-1):"
+    TERMINATION_MARKER = MECP_FREQUENCY_TERMINATION_MARKER
+    jobtype = "mecp"
+    multiplicity = 1
+
+    def __init__(self, filename):
+        self.filename = filename
+        if not self.contents or self.contents[0].strip() != self.HEADER:
+            raise ValueError(
+                f"Not a CHEMSMART MECP frequency file: {filename}"
+            )
+
+    @cached_property
+    def values(self):
+        """Return scalar metadata parsed from the output header."""
+        values = {}
+        for line in self.contents:
+            if "=" in line and not line.startswith("mode "):
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.split()[0]
+        return values
+
+    @cached_property
+    def geometry(self):
+        """Return the atomic symbols and Cartesian positions."""
+        symbols = []
+        positions = []
+        in_geometry = False
+        for line in self.contents:
+            if line == self.GEOMETRY_HEADER:
+                in_geometry = True
+                continue
+            if in_geometry and not line.strip():
+                break
+            if in_geometry:
+                fields = line.split()
+                symbols.append(fields[0])
+                positions.append([float(value) for value in fields[1:4]])
+        return symbols, np.asarray(positions, dtype=float)
+
+    @cached_property
+    def symbols(self):
+        return self.geometry[0]
+
+    @cached_property
+    def positions(self):
+        return self.geometry[1]
+
+    @cached_property
+    def vibrational_frequencies(self):
+        """Return the projected MECP frequencies in cm^-1."""
+        frequencies = []
+        in_frequencies = False
+        for line in self.contents:
+            if line == self.FREQUENCIES_HEADER:
+                in_frequencies = True
+                continue
+            if in_frequencies and not line.strip():
+                break
+            if in_frequencies:
+                frequencies.append(float(line.split(":", 1)[1]))
+        return frequencies
+
+    @property
+    def normal_termination(self):
+        """Whether the writer reached the explicit completion marker."""
+        return (
+            bool(self.contents)
+            and self.contents[-1] == self.TERMINATION_MARKER
+        )
+
+    @property
+    def freq(self):
+        """Whether the file contains a projected-frequency section."""
+        return self.FREQUENCIES_HEADER in self.contents
+
+    @cached_property
+    def energies(self):
+        return [float(self.values["mecp_energy"])]
+
+    @cached_property
+    def multiplicity_a(self):
+        return int(self.values["multiplicity_A"])
+
+    @cached_property
+    def multiplicity_b(self):
+        return int(self.values["multiplicity_B"])
+
+    @cached_property
+    def rotational_symmetry_number(self):
+        return int(self.values["rotational_symmetry_number"])
+
+    @cached_property
+    def molecule(self):
+        """Build the molecule used by the shared thermochemistry formulas."""
+        return Molecule(
+            symbols=self.symbols,
+            positions=self.positions,
+            multiplicity=self.multiplicity,
+            vibrational_frequencies=self.vibrational_frequencies,
+        )
 
 
 class Thermochemistry:
@@ -52,6 +168,11 @@ class Thermochemistry:
             results.
         check_imaginary_frequencies: bool. If True, checks for imaginary
             frequencies in the vibrational analysis.
+        rotational_mode: str. ``"physical"`` treats linear and quasi-linear
+            rotors physically from geometry-derived constants, while
+            ``"gaussian"`` preserves Gaussian-style constants when possible
+            and falls back to geometry-derived constants if Gaussian printed
+            overflow tokens.
     """
 
     def __init__(
@@ -67,12 +188,17 @@ class Thermochemistry:
         h_freq_cutoff=None,
         energy_units="hartree",
         check_imaginary_frequencies=True,
+        electronic_degeneracy=None,
+        rotational_mode="physical",
         **kwargs,
     ):
         self.filename = filename
-        self.molecule = Molecule.from_filepath(filename)
+        self.program = get_program_type_from_file(filename)
+        self.molecule = self._load_molecule(filename)
+        self.electronic_degeneracy = electronic_degeneracy
         self.energy_units = energy_units
         self.check_imaginary_frequencies = check_imaginary_frequencies
+        self.rotational_mode = rotational_mode
         # Keep original cm^-1 values for replacing imaginary frequencies
         self.s_freq_cutoff_cm = s_freq_cutoff
         self.h_freq_cutoff_cm = h_freq_cutoff
@@ -137,14 +263,23 @@ class Thermochemistry:
             else None
         )
 
+    def _load_molecule(self, filename):
+        """Load the molecular data used by the shared thermochemistry formulas."""
+        return self.file_object.molecule
+
     @cached_property
     def file_object(self):
         """Open the file and return the file object."""
-        program = get_program_type_from_file(self.filename)
+        program = self.program
         if program == "gaussian":
             output = Gaussian16Output(self.filename)
         elif program == "orca":
             output = ORCAOutput(self.filename)
+        elif program == "xtb":
+            # The main output identifies the xTB calculation directory;
+            # auxiliary files in that directory will provide additional data.
+            folder = os.path.dirname(os.path.abspath(self.filename))
+            output = XTBOutput(folder)
         else:
             # can be added in future to parse other file formats
             raise ValueError("Unsupported file format.")
@@ -181,17 +316,97 @@ class Thermochemistry:
     def average_rotational_constant(self):
         if self.molecule.is_monoatomic:
             return None
-        if self.molecule.is_linear:
-            return units._hplanck / (8 * np.pi**2 * self.I[-1])
-
-        assert len(self.I) == 3, (
-            "Number of moments of inertia should be 3 for nonlinear "
-            "molecules."
-        )
-        rotational_constants = [
-            units._hplanck / (8 * np.pi**2 * i) for i in self.I
-        ]
+        rotational_constants = self.effective_rotational_constants_in_Hz
+        if rotational_constants is None or len(rotational_constants) == 0:
+            return None
         return sum(rotational_constants) / len(rotational_constants)
+
+    @cached_property
+    def geometry_rotational_constants_in_Hz(self):
+        if self.molecule.is_monoatomic:
+            return None
+        rotational_constants = []
+        for moment in self.I:
+            if moment == 0.0:
+                rotational_constants.append(np.inf)
+            else:
+                rotational_constants.append(
+                    units._hplanck / (8 * np.pi**2 * moment)
+                )
+        return np.array(rotational_constants, dtype=float)
+
+    @cached_property
+    def gaussian_rotational_constants_in_Hz(self):
+        if not isinstance(self.file_object, Gaussian16Output):
+            return None
+        all_constants = self.file_object.all_rotational_constants(
+            mode="gaussian"
+        )
+        if not all_constants:
+            return None
+        return np.asarray(all_constants[-1], dtype=float)
+
+    @cached_property
+    def effective_rotational_constants_in_Hz(self):
+        if self.molecule.is_monoatomic:
+            return None
+        if self.rotational_mode == "physical":
+            return clean_rotational_constants_by_geometry(
+                self.geometry_rotational_constants_in_Hz,
+                mode="physical",
+            )
+        if self.rotational_mode == "gaussian":
+            if self.gaussian_rotational_constants_in_Hz is None:
+                logger.warning(
+                    "Gaussian rotational constants are unavailable; using "
+                    "geometry-derived rotational constants instead."
+                )
+                return np.asarray(
+                    self.geometry_rotational_constants_in_Hz, dtype=float
+                )
+            if np.isinf(self.gaussian_rotational_constants_in_Hz).any():
+                logger.warning(
+                    "Cannot recompute Gaussian-style nonlinear rotational "
+                    "thermochemistry from printed rotational constants "
+                    "because Gaussian overflowed one or more values as "
+                    "********."
+                )
+                logger.info(
+                    "Recomputing Gaussian-mode rotational constants from "
+                    "molecular geometry."
+                )
+                return np.asarray(
+                    self.geometry_rotational_constants_in_Hz, dtype=float
+                )
+            return np.asarray(
+                self.gaussian_rotational_constants_in_Hz, dtype=float
+            )
+        raise ValueError(
+            f"Unsupported rotational thermochemistry mode: "
+            f"{self.rotational_mode!r}."
+        )
+
+    @cached_property
+    def effective_rotational_temperatures(self):
+        rotational_constants = self.effective_rotational_constants_in_Hz
+        if rotational_constants is None:
+            return None
+        rotational_temperatures = []
+        for rotational_constant in rotational_constants:
+            if np.isinf(rotational_constant):
+                rotational_temperatures.append(np.inf)
+            else:
+                rotational_temperatures.append(
+                    units._hplanck * rotational_constant / units._k
+                )
+        return np.array(rotational_temperatures, dtype=float)
+
+    @property
+    def is_linear_rotor(self):
+        rotational_constants = self.effective_rotational_constants_in_Hz
+        return (
+            rotational_constants is not None and len(rotational_constants) == 1
+        )
 
     @property
     def rotational_symmetry_number(self):
@@ -225,6 +440,11 @@ class Thermochemistry:
 
         Frequencies returned by this property remain in cm^-1.
 
+        When rotational_mode="physical" and the molecule is treated as a linear
+        rotor but has fewer than 3N-5 vibrational frequencies (quasi-linear case),
+        the lowest positive frequency is duplicated to supply the missing
+        degenerate bending mode(s).
+
         If self.check_imaginary_frequencies is True:
             - TS jobs must have exactly one imaginary frequency.
             - Non-TS jobs must have no imaginary frequencies.
@@ -243,6 +463,25 @@ class Thermochemistry:
             return None
 
         frequencies = list(self.vibrational_frequencies)
+
+        # Quasi-linear correction: Gaussian gives 3N-6 frequencies for
+        # non-linear molecules; pad to 3N-5 for linear treatment.
+        # MECP modes already exclude the crossing-normal direction; their
+        # reduced count must not be interpreted as a missing bending mode.
+        if (
+            self.jobtype != "mecp"
+            and self.rotational_mode == "physical"
+            and self.is_linear_rotor
+        ):
+            expected = 3 * self.molecule.num_atoms - 5
+            if frequencies and len(frequencies) == expected - 1:
+                lowest = min(f for f in frequencies if f > 0)
+                frequencies.append(lowest)
+                logger.info(
+                    f"Quasi-linear molecule: padded one degenerate bending "
+                    f"mode at {lowest:.1f} cm^-1 for linear treatment."
+                )
+
         imaginary_indices = [
             i for i, freq in enumerate(frequencies) if freq < 0.0
         ]
@@ -321,6 +560,8 @@ class Thermochemistry:
     @property
     def multiplicity(self):
         """Obtain the multiplicity of the molecule."""
+        if self.electronic_degeneracy is not None:
+            return self.electronic_degeneracy
         return self.file_object.multiplicity
 
     @property
@@ -428,7 +669,8 @@ class Thermochemistry:
             Θ_r = h^2 / (8 * pi^2 * I * k_B)
             I = moment of inertia (kg m^2)
         """
-        theta_r = units._hplanck**2 / (8 * np.pi**2 * self.I[-1] * units._k)
+        theta_r = self.effective_rotational_temperatures[0]
+        logger.debug(f"Rotational temperature Θ_r = {theta_r:.4f} K")
         return (1 / self.rotational_symmetry_number) * (self.T / theta_r)
 
     def _calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule(
@@ -443,9 +685,7 @@ class Thermochemistry:
             σ_r = symmetry number for rotation
             Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
         """
-        theta_ri = [
-            units._hplanck**2 / (8 * np.pi**2 * i * units._k) for i in self.I
-        ]
+        theta_ri = self.effective_rotational_temperatures
         return (
             np.pi ** (1 / 2)
             / self.rotational_symmetry_number
@@ -462,11 +702,17 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 1
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
+            logger.debug(
+                "Calculate rotational partition function for linear molecule."
+            )
             return (
                 self._calculate_rotational_partition_function_for_linear_molecule()
             )
         else:
+            logger.debug(
+                "Calculate rotational partition function for non-linear molecule."
+            )
             return (
                 self._calculate_rotational_partition_function_for_nonlinear_polyatomic_molecule()
             )
@@ -482,9 +728,13 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
+            logger.debug("Calculate rotational entropy for linear molecule.")
             return R * (np.log(self.rotational_partition_function) + 1)
         else:
+            logger.debug(
+                "Calculate rotational entropy for non-linear molecule."
+            )
             return R * (np.log(self.rotational_partition_function) + 3 / 2)
 
     @property
@@ -497,7 +747,7 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
             return R * self.T
         else:
             return 3 / 2 * R * self.T
@@ -514,7 +764,7 @@ class Thermochemistry:
         """
         if self.molecule.is_monoatomic:
             return 0
-        elif self.molecule.is_linear:
+        elif self.is_linear_rotor:
             return R
         else:
             return 3 / 2 * R
@@ -1404,6 +1654,40 @@ class Thermochemistry:
             out.write(build_row())
 
         logger.info(f"Thermochemistry results saved to {outputfile}")
+
+
+class MECPThermochemistry(Thermochemistry):
+    """Thermochemistry from projected MECP modes using the shared formulas.
+
+    The MECP reader supplies the seam energy, geometry, projected frequencies,
+    and symmetry number. Its default electronic statistical weight is one;
+    callers may override it through ``electronic_degeneracy``.
+    """
+
+    @cached_property
+    def file_object(self):
+        """Read the dedicated CHEMSMART MECP frequency output."""
+        output = MECPProjectedFrequencyOutput(self.filename)
+        if not output.normal_termination:
+            raise ValueError(
+                f"File '{self.filename}' did not terminate normally. "
+                "Skipping thermochemistry calculation for this file."
+            )
+        if not output.freq:
+            raise ValueError(
+                f"File '{self.filename}' does not contain projected "
+                "MECP frequencies."
+            )
+        return output
+
+
+def thermochemistry_from_file(filename, **kwargs):
+    """Select the analysis class from file contents, independent of its name."""
+    is_mecp = file_content_begins_with(
+        filename, MECPProjectedFrequencyOutput.HEADER
+    )
+    analysis_class = MECPThermochemistry if is_mecp else Thermochemistry
+    return analysis_class(filename=filename, **kwargs)
 
 
 class BoltzmannAverageThermochemistry(Thermochemistry):

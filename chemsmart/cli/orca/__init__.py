@@ -16,9 +16,11 @@ from .opt import opt
 from .orca import orca
 
 # from .qmmm import qmmm
+from .pka import pka
 from .qrc import qrc
 from .scan import scan
 from .singlepoint import sp
+from .tddft import td
 from .ts import ts
 
 __all__ = [
@@ -28,9 +30,11 @@ __all__ = [
     "modred",
     "opt",
     "orca",
+    "pka",
     "qrc",
     "scan",
     "sp",
+    "td",
     "ts",
     "neb",
 ]

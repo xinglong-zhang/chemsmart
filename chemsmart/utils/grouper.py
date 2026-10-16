@@ -12,7 +12,7 @@ Available strategies:
 - irmsd: Invariant RMSD grouping (symmetry-aware)
 - pymolrmsd: PyMOL-based RMSD alignment
 - tanimoto: Fingerprint-based Tanimoto similarity
-- torsion: Torsion Fingerprint Deviation (TFD)
+- tfd: Torsion Fingerprint Deviation (TFD)
 - isomorphism: RDKit graph isomorphism
 - formula: Chemical formula grouping
 - connectivity: Molecular connectivity grouping
@@ -45,7 +45,7 @@ GROUPER_CLASSES = {
     "irmsd": IRMSDGrouper,
     "pymolrmsd": PymolRMSDGrouper,
     "tanimoto": TanimotoSimilarityGrouper,
-    "torsion": TorsionFingerprintGrouper,
+    "tfd": TorsionFingerprintGrouper,
     "isomorphism": RDKitIsomorphismGrouper,
     "formula": FormulaGrouper,
     "connectivity": ConnectivityGrouper,
@@ -60,7 +60,7 @@ THRESHOLD_SUPPORTED = {
     "irmsd",
     "pymolrmsd",
     "tanimoto",
-    "torsion",
+    "tfd",  # Torsion Fingerprint Deviation
     "energy",
 }
 
@@ -72,7 +72,7 @@ IGNORE_HYDROGENS_SUPPORTED = {
     "irmsd",
     "pymolrmsd",
     "connectivity",
-    "torsion",
+    "tfd",  # Torsion Fingerprint Deviation
     "tanimoto",
     "isomorphism",
 }
@@ -92,7 +92,7 @@ class StructureGrouperFactory:
     - "irmsd": IRMSDGrouper (symmetry-aware)
     - "pymolrmsd": PymolRMSDGrouper
     - "tanimoto": TanimotoSimilarityGrouper
-    - "torsion": TorsionFingerprintGrouper
+    - "tfd": TorsionFingerprintGrouper
     - "isomorphism": RDKitIsomorphismGrouper
     - "formula": FormulaGrouper
     - "connectivity": ConnectivityGrouper
@@ -107,6 +107,7 @@ class StructureGrouperFactory:
         threshold=None,
         num_groups=None,
         ignore_hydrogens=False,
+        representative_strategy="lowest",
         label=None,
         **kwargs,
     ):
@@ -161,7 +162,7 @@ class StructureGrouperFactory:
             "irmsd",
             "pymolrmsd",
             "tanimoto",
-            "torsion",
+            "tfd",  # Torsion Fingerprint Deviation
             "energy",
         }
         if num_groups is not None and strategy not in num_groups_supported:
@@ -202,27 +203,23 @@ class StructureGrouperFactory:
                 f"ignored for '{strategy}'."
             )
 
-        # use_weights is only for torsion
+        # use_weights is only for tfd
         use_weights = kwargs.get("use_weights")
         if (
             use_weights is not None
             and use_weights is False
-            and strategy != "torsion"
+            and strategy != "tfd"
         ):
             logger.warning(
-                f"Parameter 'use_weights={use_weights}' is only effective for 'torsion' strategy, "
+                f"Parameter 'use_weights={use_weights}' is only effective for 'tfd' strategy, "
                 f"ignored for '{strategy}'."
             )
 
-        # max_dev is only for torsion
+        # max_dev is only for tfd
         max_dev = kwargs.get("max_dev")
-        if (
-            max_dev is not None
-            and max_dev != "equal"
-            and strategy != "torsion"
-        ):
+        if max_dev is not None and max_dev != "equal" and strategy != "tfd":
             logger.warning(
-                f"Parameter 'max_dev={max_dev}' is only effective for 'torsion' strategy, "
+                f"Parameter 'max_dev={max_dev}' is only effective for 'tfd' strategy, "
                 f"ignored for '{strategy}'."
             )
 
@@ -232,7 +229,7 @@ class StructureGrouperFactory:
             filtered_kwargs.pop("inversion", None)
         if strategy != "tanimoto":
             filtered_kwargs.pop("fingerprint_type", None)
-        if strategy != "torsion":
+        if strategy != "tfd":
             filtered_kwargs.pop("use_weights", None)
             filtered_kwargs.pop("max_dev", None)
 
@@ -240,6 +237,7 @@ class StructureGrouperFactory:
         grouper_kwargs = {
             "molecules": structures,
             "num_procs": num_procs,
+            "representative_strategy": representative_strategy,
             "label": label,
         }
 

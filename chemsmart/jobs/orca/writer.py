@@ -15,6 +15,7 @@ from chemsmart.jobs.orca.settings import (
     ORCAMECPJobSettings,
     ORCANEBJobSettings,
     ORCAQMMMJobSettings,
+    ORCATDDFTJobSettings,
     ORCATSJobSettings,
 )
 from chemsmart.jobs.writer import InputWriter
@@ -129,6 +130,8 @@ class ORCAInputWriter(InputWriter):
         self._write_solvent_block(f)
         self._write_mdci_block(f)
         self._write_elprop_block(f)
+        self._write_tddft_block(f)
+        self._write_rel_block(f)
         self._write_qmmm_block(f)
         self._write_modred_block(f)
         self._write_hessian_block(f)
@@ -513,6 +516,86 @@ class ORCAInputWriter(InputWriter):
             else:
                 f.write("  Quadrupole False\n")
             f.write("end\n")
+
+    def _write_tddft_block(self, f):
+        """Write ``%tddft`` block for excited-state jobs.
+
+        Only fields explicitly set on :class:`ORCATDDFTJobSettings` are
+        written; ``None`` values are omitted so ORCA falls back to its own
+        defaults.  Booleans use lower-case ``true``/``false`` (accepted by
+        both ORCA 6.0 and 6.1).
+        """
+        if not isinstance(self.settings, ORCATDDFTJobSettings):
+            return
+
+        s = self.settings
+        lines = []
+
+        def _bool(value):
+            return "true" if value else "false"
+
+        if s.nroots is not None:
+            lines.append(f"  NRoots {s.nroots}")
+        if s.triplets is not None:
+            lines.append(f"  Triplets {_bool(s.triplets)}")
+        if s.tda is not None:
+            lines.append(f"  TDA {_bool(s.tda)}")
+        if s.dosoc is not None:
+            lines.append(f"  DoSOC {_bool(s.dosoc)}")
+        if s.printlevel is not None:
+            lines.append(f"  PrintLevel {s.printlevel}")
+        if s.cpcmeq is not None:
+            lines.append(f"  CPCMEQ {_bool(s.cpcmeq)}")
+        if s.donto is not None:
+            lines.append(f"  DoNTO {_bool(s.donto)}")
+        if s.ntostates is not None:
+            states = ",".join(str(int(v)) for v in s.ntostates)
+            # NTOStates is a value list, not a nested block — no trailing ``end``.
+            lines.append(f"  NTOStates {states}")
+        if s.ntothresh is not None:
+            lines.append(f"  NTOThresh {s.ntothresh}")
+        if s.td_maxiter is not None:
+            lines.append(f"  MaxIter {s.td_maxiter}")
+        if s.td_maxdim is not None:
+            lines.append(f"  MaxDim {s.td_maxdim}")
+        if s.td_etol is not None:
+            lines.append(f"  ETol {s.td_etol}")
+        if s.td_rtol is not None:
+            lines.append(f"  RTol {s.td_rtol}")
+        if s.tprint is not None:
+            lines.append(f"  TPrint {s.tprint}")
+        if s.iroot is not None:
+            lines.append(f"  IRoot {s.iroot}")
+        if s.iroot_mult is not None:
+            lines.append(f"  IRootMult {s.iroot_mult}")
+        if s.follow_iroot is not None:
+            lines.append(f"  FollowIRoot {_bool(s.follow_iroot)}")
+
+        if not lines:
+            return
+
+        logger.debug("Writing %tddft block")
+        f.write("%tddft\n")
+        for line in lines:
+            f.write(line + "\n")
+        f.write("end\n")
+
+    def _write_rel_block(self, f):
+        """Write minimal ``%rel`` block for spin-orbit coupling.
+
+        Only ``SOCType`` is emitted; when unset the block is skipped
+        entirely, even if ``DoSOC true`` is requested.
+        """
+        if not isinstance(self.settings, ORCATDDFTJobSettings):
+            return
+        soc_type = self.settings.soc_type
+        if soc_type is None:
+            return
+
+        logger.debug("Writing %rel block")
+        f.write("%rel\n")
+        f.write(f"  SOCType {soc_type}\n")
+        f.write("end\n")
 
     def _write_qmmm_block(self, f):
         """
@@ -1079,46 +1162,14 @@ class ORCAInputWriter(InputWriter):
         Raises:
             AssertionError: If charge or multiplicity is not specified
         """
-        charge = self.settings.charge
-        multiplicity = self.settings.multiplicity
-
-        # If missing, attempt to populate from common QMMM-related fields.
-        # Common names across settings: charge_qm,
-        # charge_intermediate, charge_total
-        # and mult_qm, mult_intermediate, mult_total.
-        if charge is None or multiplicity is None:
-            # order of preference: intermediate (QM2) -> qm -> total
-            candidate_charge_attrs = [
-                "charge_intermediate",
-                "charge_qm",
-                "charge_total",
-                "charge",
-            ]
-            candidate_mult_attrs = [
-                "mult_intermediate",
-                "mult_qm",
-                "mult_total",
-                "multiplicity",
-            ]
-
-            for attr in candidate_charge_attrs:
-                if charge is None:
-                    charge = getattr(self.settings, attr, None)
-            for attr in candidate_mult_attrs:
-                if multiplicity is None:
-                    multiplicity = getattr(self.settings, attr, None)
-
-            # if we found values, assign back to settings for downstream use
-            if charge is not None:
-                logger.debug(
-                    f"Populating settings.charge from QMMM fields: {charge}"
-                )
-                self.settings.charge = charge
-            if multiplicity is not None:
-                logger.debug(
-                    f"Populating settings.multiplicity from QMMM fields: {multiplicity}"
-                )
-                self.settings.multiplicity = multiplicity
+        # QMMM coordinate section uses the high-level (QM) region only.
+        # Intermediate/total charges belong in the %qmmm block.
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            charge = self.settings.charge_high
+            multiplicity = self.settings.mult_high
+        else:
+            charge = self.settings.charge
+            multiplicity = self.settings.multiplicity
 
         assert (
             charge is not None and multiplicity is not None

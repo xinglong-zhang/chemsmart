@@ -2,13 +2,13 @@
  Installation for Linux and macOS
 ##################################
 
-This guide covers installing Chemsmart on Linux and macOS systems.
+This guide covers installing CHEMSMART on Linux and macOS systems.
 
 ********************
  Create Environment
 ********************
 
-We recommend using conda to manage the packages required by Chemsmart. Either Anaconda3 or Miniconda3 may be installed.
+We recommend using conda to manage the packages required by CHEMSMART. Either Anaconda3 or Miniconda3 may be installed.
 See the `conda installation guide <https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html>`_ for
 more information.
 
@@ -25,7 +25,8 @@ more information.
       cd chemsmart
       make env
 
-   This creates a conda environment named ``chemsmart`` with all required Python packages.
+   This creates a conda environment named ``chemsmart`` with all required Python packages. The environment also installs
+   the ``xtb`` and ``crest`` command-line executables from conda-forge.
 
    If conda is not installed, you can use virtualenv instead:
 
@@ -68,7 +69,7 @@ more information.
       make install-dev
 
 *********************
- Configure Chemsmart
+ Configure CHEMSMART
 *********************
 
 Run the ``make configure`` command to set up the ``~/.chemsmart`` templates and register the ``chemsmart`` command in
@@ -81,6 +82,9 @@ your shell environment:
 What ``make configure`` does on Linux and macOS:
 
 #. **Copies templates** — copies the bundled ``.chemsmart`` configuration templates to ``~/.chemsmart``.
+
+#. **Updates project templates** — adds missing project directories and files from newer bundled templates without
+   overwriting existing or user-created files.
 
 #. **Updates your shell rc file** — appends ``export PATH=...`` and ``export PYTHONPATH=...`` lines to ``~/.bashrc``
    (bash) or ``~/.zshrc`` (zsh) so that the ``chemsmart`` command is available in new terminal sessions.
@@ -101,7 +105,7 @@ What ``make configure`` does on Linux and macOS:
 
 #. **Automatically sources your shell config** — after writing the ``export`` lines, ``make configure`` sources every
    shell rc file that exists (``~/.bashrc``, ``~/.zshrc``, ``~/.profile``) so that ``chemsmart`` is active for the rest
-   of the current make session, regardless of which file chemsmart wrote to.
+   of the current make session, regardless of which file CHEMSMART wrote to.
 
 .. note::
 
@@ -134,5 +138,5 @@ or
 
 .. note::
 
-   If ``~/.bashrc`` (or ``~/.zshrc``) already contains a chemsmart section (i.e. ``make configure`` has been run
+   If ``~/.bashrc`` (or ``~/.zshrc``) already contains a CHEMSMART section (i.e. ``make configure`` has been run
    before), it will *not* be modified again to avoid duplicate entries.

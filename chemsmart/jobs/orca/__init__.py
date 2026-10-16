@@ -15,6 +15,7 @@ from .qrc import ORCAQRCJob
 from .runner import ORCAJobRunner
 from .scan import ORCAScanJob
 from .singlepoint import ORCASinglePointJob
+from .tddft import ORCATDDFTJob
 from .ts import ORCATSJob
 
 # Get all available ORCA job subclasses
@@ -33,6 +34,7 @@ __all__ = [
     "ORCAQRCJob",
     "ORCAScanJob",
     "ORCASinglePointJob",
+    "ORCATDDFTJob",
     "ORCATSJob",
     "ORCAQMMMJob",
     "jobs",

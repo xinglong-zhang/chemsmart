@@ -54,6 +54,7 @@ class GrouperJob(Job):
         conformer_ids: Optional[List[str]] = None,
         skipped_ids: Optional[List[str]] = None,
         matrix_format: str = "xlsx",
+        representative_strategy: str = "lowest",
         energy_type: str = "E",
         thermo_parameters: Optional[str] = None,
         **kwargs,
@@ -101,6 +102,7 @@ class GrouperJob(Job):
         self.conformer_ids = conformer_ids
         self.skipped_ids = skipped_ids
         self.matrix_format = matrix_format
+        self.representative_strategy = representative_strategy
         self.energy_type = energy_type
         self.thermo_parameters = thermo_parameters
         self.grouper_kwargs = kwargs

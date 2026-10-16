@@ -8,14 +8,13 @@ This module contains all RMSD-based grouper implementations:
 - SpyRMSDGrouper: Using graph isomorphism for symmetry correction
 - IRMSDGrouper: Invariant RMSD with APSP algorithm
 - PymolRMSDGrouper: PyMOL-based alignment
-- RMSDGrouperSharedMemory: Shared memory optimization
 """
 
+import importlib
 import logging
 import multiprocessing
 import os
 from abc import abstractmethod
-from multiprocessing import RawArray
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
@@ -25,12 +24,12 @@ from scipy.spatial.distance import cdist
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.utils import find_irmsd_command, kabsch_align
 
-from .base import MoleculeGrouper
+from .base import MatrixGrouper
 
 logger = logging.getLogger(__name__)
 
 
-class RMSDGrouper(MoleculeGrouper):
+class RMSDGrouper(MatrixGrouper):
     """
     Abstract base class for RMSD-based molecular grouping.
 
@@ -52,6 +51,8 @@ class RMSDGrouper(MoleculeGrouper):
         ignore_hydrogens (bool): Whether to exclude hydrogen atoms from RMSD.
     """
 
+    supports_multiprocessing = True
+
     def __init__(
         self,
         molecules: Iterable[Molecule],
@@ -72,9 +73,14 @@ class RMSDGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             threshold (float): RMSD threshold for grouping. Defaults to 0.5.
-                Ignored if num_groups is specified.
-            num_groups (int): Number of groups to create. When specified,
-                automatically determines threshold to create this many groups.
+                Ignored if num_groups is specified. In threshold mode,
+                clusters are formed by hierarchical complete-linkage
+                clustering with linkage distance <= threshold.
+            num_groups (int): Requested number of groups. When specified,
+                complete-linkage merges are applied level by level. If the
+                next full complete-linkage distance level would reduce the
+                number of groups below the requested value, the previous
+                level is retained.
             num_procs (int): Number of processes for parallel computation.
             align_molecules (bool): Whether to align molecules using Kabsch
                 algorithm before RMSD calculation. Defaults to True.
@@ -86,32 +92,20 @@ class RMSDGrouper(MoleculeGrouper):
             energy_type (str): Energy type for output files. Defaults to 'E'.
 
         Note:
-            Uses complete linkage clustering: a structure joins a group only if
-            its RMSD to ALL existing members is below the threshold. This prevents
-            the chaining effect where dissimilar structures end up in the same
-            group through intermediate "bridge" structures.
+            Uses standard hierarchical agglomerative complete-linkage
+            clustering based on the full pairwise RMSD matrix.
         """
         super().__init__(
             molecules,
-            num_procs,
+            threshold=threshold,
+            num_groups=num_groups,
+            num_procs=num_procs,
             label=label,
             conformer_ids=conformer_ids,
             matrix_format=matrix_format,
             energy_type=energy_type,
             **kwargs,
         )
-
-        # Validate that threshold and num_groups are mutually exclusive
-        if threshold is not None and num_groups is not None:
-            raise ValueError(
-                "Cannot specify both threshold (-T) and num_groups (-N). Please use only one."
-            )
-
-        if threshold is None and num_groups is None:
-            threshold = 0.5
-        self.threshold = threshold  # RMSD threshold for grouping
-        self.num_groups = num_groups  # Number of groups to create
-        self._auto_threshold = None  # Will be set if num_groups is used
         self.align_molecules = align_molecules
         self.ignore_hydrogens = ignore_hydrogens
         # Cache sorted chemical symbols as sets for faster comparison
@@ -147,15 +141,95 @@ class RMSDGrouper(MoleculeGrouper):
         """Calculate RMSD between two molecules. Must be implemented by subclasses."""
         pass
 
+    def calculate_rmsd_pair(self, i: int, j: int) -> float:
+        """Public API: calculate RMSD for one molecule pair by index.
+
+        This wrapper keeps ``_calculate_rmsd`` as an internal subclass contract
+        while exposing a stable external method with shared validation and
+        consistent error messages.
+        """
+        i_idx, j_idx = self._validate_pair_indices(i, j)
+        if i_idx == j_idx:
+            logger.debug(
+                f"[{self.__class__.__name__}] RMSD requested for identical indices "
+                f"({i_idx}, {j_idx}); returning 0.0"
+            )
+            return 0.0
+
+        return float(self._calculate_rmsd((i_idx, j_idx)))
+
+    def _calculate_pair_payload(self, idx_pair: Tuple[int, int]):
+        """Worker payload for one pair; subclasses can return extra metadata."""
+        return self._calculate_rmsd(idx_pair)
+
+    def _calculate_pair_chunk(
+        self, pairs: List[Tuple[int, int]]
+    ) -> List[object]:
+        """Worker payload for a chunk of pairs, preserving per-pair payload types."""
+        return [self._calculate_pair_payload(pair) for pair in pairs]
+
+    def _consume_pair_payload(
+        self, idx_pair: Tuple[int, int], payload
+    ) -> float:
+        """Convert worker payload to RMSD and merge any parent-side metadata."""
+        return float(payload)
+
+    def _calculate_pairwise_rmsd_values(
+        self, indices: List[Tuple[int, int]]
+    ) -> List[float]:
+        """Run pairwise RMSD jobs (serial or multiprocessing) with shared progress logging."""
+        total_pairs = len(indices)
+        rmsd_values: List[float] = []
+        next_progress = 10
+
+        if self.num_procs > 1 and total_pairs > 0:
+            chunk_size = max(1, total_pairs // (self.num_procs * 8))
+            pair_chunks = [
+                indices[start : start + chunk_size]
+                for start in range(0, total_pairs, chunk_size)
+            ]
+
+            completed = 0
+            with multiprocessing.Pool(processes=self.num_procs) as pool:
+                for pair_chunk, payload_chunk in zip(
+                    pair_chunks,
+                    pool.imap(
+                        self._calculate_pair_chunk,
+                        pair_chunks,
+                        chunksize=1,
+                    ),
+                ):
+                    for pair, payload in zip(pair_chunk, payload_chunk):
+                        rmsd_values.append(
+                            self._consume_pair_payload(pair, payload)
+                        )
+
+                    completed += len(pair_chunk)
+                    next_progress = self._log_progress(
+                        completed, total_pairs, next_progress
+                    )
+        else:
+            for idx, pair in enumerate(indices):
+                payload = self._calculate_pair_payload(pair)
+                rmsd_values.append(self._consume_pair_payload(pair, payload))
+                next_progress = self._log_progress(
+                    idx + 1, total_pairs, next_progress
+                )
+
+        return rmsd_values
+
     def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
         """
-        Group molecules by geometric similarity using RMSD clustering.
+        Group molecules by geometric similarity using hierarchical
+        complete-linkage RMSD clustering.
 
         Computes pairwise RMSD values between all molecules and groups
-        those within the specified threshold using connected components
-        clustering, or automatically determines threshold to create
-        the specified number of groups. Automatically saves RMSD matrix
-        to group_result folder.
+        them either by a linkage-distance threshold or by a requested
+        number of groups. In num_groups mode, if the next full
+        complete-linkage distance level would reduce the number of groups
+        below the requested value, the previous level is retained.
+        Automatically saves the full RMSD matrix to the group_result
+        folder.
 
         Returns:
             Tuple[List[List[Molecule]], List[List[int]]]: Tuple containing:
@@ -166,6 +240,7 @@ class RMSDGrouper(MoleculeGrouper):
 
         # Record start time for grouping process
         grouping_start_time = time.time()
+        self._auto_threshold = None
 
         n = len(self.molecules)
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
@@ -175,15 +250,7 @@ class RMSDGrouper(MoleculeGrouper):
             f"[{self.__class__.__name__}] Starting calculation for {n} molecules ({total_pairs} pairs)"
         )
 
-        # For real-time output, calculate one by one instead of using multiprocessing
-        rmsd_values = []
-        for idx, (i, j) in enumerate(indices):
-            rmsd = self._calculate_rmsd((i, j))
-            rmsd_values.append(rmsd)
-            if (idx + 1) % 10 == 0 or (idx + 1) == total_pairs:
-                logger.info(
-                    f"The {idx+1}/{total_pairs} pair (conformer{i+1}, conformer{j+1}) calculation finished"
-                )
+        rmsd_values = self._calculate_pairwise_rmsd_values(indices)
 
         # Build full RMSD matrix for output
         rmsd_matrix = np.zeros((n, n))
@@ -192,13 +259,9 @@ class RMSDGrouper(MoleculeGrouper):
 
         # Choose grouping strategy based on parameters (do this first to set _auto_threshold)
         if self.num_groups is not None:
-            groups, index_groups = self._group_by_num_groups(
-                rmsd_matrix, rmsd_values, indices
-            )
+            groups, index_groups = self.group_by_num_groups(rmsd_matrix)
         else:
-            groups, index_groups = self._group_by_threshold(
-                rmsd_values, indices
-            )
+            groups, index_groups = self.group_by_threshold(rmsd_matrix)
 
         # Calculate total grouping time
         grouping_end_time = time.time()
@@ -210,234 +273,6 @@ class RMSDGrouper(MoleculeGrouper):
 
         # Save full matrix using unified record entrypoint
         self.record(rmsd_matrix=rmsd_matrix, grouping_time=grouping_time)
-
-        return groups, index_groups
-
-    def _group_by_threshold(self, rmsd_values, indices):
-        """
-        Threshold-based grouping using complete linkage.
-
-        A structure joins a group only if its RMSD to ALL existing members
-        is below the threshold. This prevents the chaining effect.
-        """
-        n = len(self.molecules)
-
-        # Build adjacency matrix for clustering
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        # Complete linkage grouping
-        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
-
-        return groups, index_groups
-
-    def _complete_linkage_grouping(self, adj_matrix, n):
-        """
-        Perform complete linkage grouping (from last to first).
-
-        A structure joins a group only if its RMSD to ALL existing members
-        of that group is below the threshold (i.e., all edges exist in adj_matrix).
-        This prevents the chaining effect where dissimilar structures end up
-        in the same group through intermediate "bridge" structures.
-
-        Iterates from last to first structure so that higher-energy structures
-        (typically at the end) are more likely to form singleton groups,
-        preserving lower-energy structures in larger groups.
-
-        Args:
-            adj_matrix: Boolean adjacency matrix where adj_matrix[i,j] = True
-                       if RMSD between i and j is below threshold
-            n: Number of molecules
-
-        Returns:
-            Tuple of (groups, index_groups)
-        """
-        assigned = [False] * n
-        groups = []
-        index_groups = []
-
-        # Iterate from last to first (higher energy structures first as seeds)
-        for i in range(n - 1, -1, -1):
-            if assigned[i]:
-                continue
-
-            # Start a new group with molecule i
-            current_group = [i]
-            assigned[i] = True
-
-            # Try to add unassigned molecules with lower indices (lower energy)
-            for j in range(i - 1, -1, -1):
-                if assigned[j]:
-                    continue
-
-                # Check if j is connected to ALL members in current_group
-                can_join = all(
-                    adj_matrix[j, member] for member in current_group
-                )
-
-                if can_join:
-                    current_group.append(j)
-                    assigned[j] = True
-
-            # Sort indices within group (lowest index = lowest energy first)
-            current_group.sort()
-            # Add the completed group
-            groups.append([self.molecules[idx] for idx in current_group])
-            index_groups.append(current_group)
-
-        # Reverse groups so that groups containing lower-energy structures come first
-        groups.reverse()
-        index_groups.reverse()
-
-        return groups, index_groups
-
-    def _group_by_num_groups(self, rmsd_matrix, rmsd_values, indices):
-        """Automatic grouping to create specified number of groups."""
-        n = len(self.molecules)
-
-        if self.num_groups >= n:
-            # If requesting more groups than molecules, each molecule is its own group
-            logger.info(
-                f"[{self.__class__.__name__}] Requested {self.num_groups} groups but only {n} molecules. Creating {n} groups."
-            )
-            groups = [[mol] for mol in self.molecules]
-            index_groups = [[i] for i in range(n)]
-            return groups, index_groups
-
-        # Find appropriate threshold to create desired number of groups
-        threshold = self._find_optimal_threshold(rmsd_values, indices, n)
-
-        # Store the auto-determined threshold for summary reporting
-        self._auto_threshold = threshold
-
-        logger.info(
-            f"[{self.__class__.__name__}] Auto-determined threshold: {threshold:.7f} to create {self.num_groups} groups"
-        )
-
-        # Build adjacency matrix with the determined threshold
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-
-        # Use complete linkage grouping
-        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
-        actual_groups = len(groups)
-
-        logger.info(
-            f"[{self.__class__.__name__}] Created {actual_groups} groups (requested: {self.num_groups})"
-        )
-
-        if actual_groups > self.num_groups:
-            # If we have too many groups, merge the smallest ones
-            groups, index_groups = self._merge_groups_to_target(
-                groups, index_groups, adj_matrix
-            )
-
-        return groups, index_groups
-
-    def _find_optimal_threshold(self, rmsd_values, indices, n):
-        """Find threshold that creates approximately the desired number of groups using binary search."""
-        # Sort RMSD values to try different thresholds
-        sorted_rmsd = sorted(
-            [rmsd for rmsd in rmsd_values if not np.isinf(rmsd)]
-        )
-
-        if not sorted_rmsd:
-            return 0.0
-
-        # Binary search for optimal threshold
-        low, high = 0, len(sorted_rmsd) - 1
-        best_threshold = sorted_rmsd[-1]
-
-        while low <= high:
-            mid = (low + high) // 2
-            threshold = sorted_rmsd[mid]
-
-            # Build adjacency matrix with this threshold
-            adj_matrix = np.zeros((n, n), dtype=bool)
-            for (idx_i, idx_j), rmsd in zip(indices, rmsd_values):
-                if rmsd < threshold:
-                    adj_matrix[idx_i, idx_j] = adj_matrix[idx_j, idx_i] = True
-
-            # Use complete linkage to count groups
-            groups, _ = self._complete_linkage_grouping(adj_matrix, n)
-            num_groups_found = len(groups)
-
-            if num_groups_found == self.num_groups:
-                # Found exact match
-                return threshold
-            elif num_groups_found > self.num_groups:
-                # Too many groups, need higher threshold (more permissive)
-                low = mid + 1
-            else:
-                # Too few groups, need lower threshold (more restrictive)
-                best_threshold = threshold
-                high = mid - 1
-
-        return best_threshold
-
-    def _merge_groups_to_target(self, groups, index_groups, adj_matrix):
-        """
-        Merge groups to reach target number when using complete linkage.
-
-        Merges smallest groups into the most compatible larger groups,
-        where compatibility is determined by the number of edges in adj_matrix.
-
-        Args:
-            groups: List of molecule groups
-            index_groups: List of index groups
-            adj_matrix: Boolean adjacency matrix
-
-        Returns:
-            Tuple of (merged_groups, merged_index_groups)
-        """
-        while len(groups) > self.num_groups:
-            # Find the smallest group
-            min_size = float("inf")
-            min_idx = 0
-            for i, g in enumerate(groups):
-                if len(g) < min_size:
-                    min_size = len(g)
-                    min_idx = i
-
-            # Find the best group to merge with (most connections)
-            best_merge_idx = -1
-            best_connection_count = -1
-
-            for i, target_indices in enumerate(index_groups):
-                if i == min_idx:
-                    continue
-
-                # Count connections between source group and target group
-                connection_count = 0
-                for src_idx in index_groups[min_idx]:
-                    for tgt_idx in target_indices:
-                        if adj_matrix[src_idx, tgt_idx]:
-                            connection_count += 1
-
-                if connection_count > best_connection_count:
-                    best_connection_count = connection_count
-                    best_merge_idx = i
-
-            # Merge the smallest group into the best target
-            if best_merge_idx >= 0:
-                groups[best_merge_idx].extend(groups[min_idx])
-                index_groups[best_merge_idx].extend(index_groups[min_idx])
-            else:
-                # No connections found, merge into the largest group
-                largest_idx = max(
-                    range(len(groups)),
-                    key=lambda i: len(groups[i]) if i != min_idx else -1,
-                )
-                groups[largest_idx].extend(groups[min_idx])
-                index_groups[largest_idx].extend(index_groups[min_idx])
-
-            # Remove the merged group
-            groups.pop(min_idx)
-            index_groups.pop(min_idx)
 
         return groups, index_groups
 
@@ -475,9 +310,7 @@ class RMSDGrouper(MoleculeGrouper):
         # Calculate upper triangular matrix (symmetric)
         indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
 
-        # Use multiprocessing for efficiency
-        with multiprocessing.Pool(self.num_procs) as pool:
-            rmsd_values = pool.map(self._calculate_rmsd, indices)
+        rmsd_values = self._calculate_pairwise_rmsd_values(indices)
 
         # Fill the matrix
         for (i, j), rmsd in zip(indices, rmsd_values):
@@ -516,6 +349,16 @@ class RMSDGrouper(MoleculeGrouper):
 
         if self.num_groups is not None:
             header_info.append(("Requested Groups (-N)", self.num_groups))
+            header_info.append(
+                (
+                    "Actual Groups",
+                    (
+                        len(self._cached_group_indices)
+                        if self._cached_group_indices is not None
+                        else 0
+                    ),
+                )
+            )
             if self._auto_threshold is not None:
                 header_info.append(
                     (
@@ -804,8 +647,10 @@ class SpyRMSDGrouper(RMSDGrouper):
             self._anum_list.append(anum)
             self._adj_list.append(adj)
 
-    def _calculate_rmsd(self, idx_pair):
-        """Calculate symmetry-corrected RMSD using spyrmsd package."""
+    def _calculate_rmsd_with_isomorphism(
+        self, idx_pair
+    ) -> Tuple[float, Optional[Tuple[List[int], List[int]]]]:
+        """Calculate symmetry-corrected RMSD and return best isomorphism."""
         from spyrmsd import rmsd as spyrmsd_rmsd
 
         i, j = idx_pair
@@ -819,12 +664,10 @@ class SpyRMSDGrouper(RMSDGrouper):
 
         # Check compatibility
         if len(coords_ref) != len(coords_other):
-            self.best_isomorphisms[(i, j)] = None
-            return np.inf
+            return np.inf, None
 
         if not np.array_equal(np.sort(anum_ref), np.sort(anum_other)):
-            self.best_isomorphisms[(i, j)] = None
-            return np.inf
+            return np.inf, None
 
         try:
             # Use spyrmsd.symmrmsd with single coordinate (not list)
@@ -844,19 +687,33 @@ class SpyRMSDGrouper(RMSDGrouper):
             # Result is (rmsd, isomorphism) when return_best_isomorphism=True
             if isinstance(result, tuple):
                 rmsd_value, best_iso = result
-                self.best_isomorphisms[(i, j)] = best_iso
             else:
                 rmsd_value = result
-                self.best_isomorphisms[(i, j)] = None
+                best_iso = None
 
-            return float(rmsd_value)
+            return float(rmsd_value), best_iso
 
         except Exception as e:
             logger.warning(
                 f"spyrmsd calculation failed for pair ({i}, {j}): {e}"
             )
-            self.best_isomorphisms[(i, j)] = None
-            return np.inf
+            return np.inf, None
+
+    def _calculate_rmsd(self, idx_pair):
+        """Calculate symmetry-corrected RMSD and store best isomorphism."""
+        rmsd_value, best_iso = self._calculate_rmsd_with_isomorphism(idx_pair)
+        self.best_isomorphisms[idx_pair] = best_iso
+        return rmsd_value
+
+    def _calculate_pair_payload(self, idx_pair):
+        """Return SpyRMSD payload used by multiprocessing workers."""
+        return self._calculate_rmsd_with_isomorphism(idx_pair)
+
+    def _consume_pair_payload(self, idx_pair, payload) -> float:
+        """Merge best isomorphism metadata in parent process and return RMSD."""
+        rmsd_value, best_iso = payload
+        self.best_isomorphisms[idx_pair] = best_iso
+        return float(rmsd_value)
 
     def get_best_isomorphism(
         self, mol_idx1: int, mol_idx2: int
@@ -875,10 +732,12 @@ class SpyRMSDGrouper(RMSDGrouper):
 
 class IRMSDGrouper(RMSDGrouper):
     """
-    Invariant RMSD (iRMSD) Grouper using external irmsd package.
+    Invariant RMSD (iRMSD) Grouper using the irmsd package.
 
-    This grouper computes the permutation-invariant RMSD between molecular
-    structures by calling the external 'irmsd' command-line tool via subprocess.
+    When the irmsd Python API is importable in the current environment, this
+    grouper calls its compiled backend directly and avoids per-pair subprocess
+    and temporary-file overhead. The existing external CLI implementation is
+    retained as a compatibility fallback.
 
     The iRMSD algorithm:
     - Assigns canonical atom identities independent of input atom order
@@ -954,21 +813,103 @@ class IRMSDGrouper(RMSDGrouper):
         self.inversion = (
             inversion.lower() if isinstance(inversion, str) else "auto"
         )
-        self._actual_inversion = None  # Will be set from first irmsd output
-        self._irmsd_cmd = find_irmsd_command()
-        if self._irmsd_cmd:
-            logger.info(f"Using irmsd command: {self._irmsd_cmd}")
-        else:
-            raise RuntimeError(
-                "irmsd command not found. IRMSDGrouper requires the irmsd package.\n\n"
-                "Quick setup (one-line command):\n"
-                "  conda create -n irmsd_env python=3.10 'numpy>=2.0' -y && "
-                "conda run -n irmsd_env pip install irmsd\n\n"
-                "Then set environment variable:\n"
-                "  export IRMSD_CONDA_ENV=irmsd_env\n\n"
-                "To make it permanent, add to ~/.zshrc or ~/.bashrc,\n"
-                "then run: source ~/.zshrc or source ~/.bashrc"
+        self._actual_inversion = None
+        self._use_direct_api = False
+        self._irmsd_cmd = None
+
+        # Prefer the in-process Python/Fortran API. This avoids launching one
+        # external process and writing one temporary XYZ file for every pair.
+        try:
+            irmsd_module = importlib.import_module("irmsd.api.irmsd_exposed")
+            if not callable(irmsd_module.get_irmsd):
+                raise AttributeError("irmsd API does not provide get_irmsd")
+            self._use_direct_api = True
+            logger.info("Using direct irmsd Python/Fortran API")
+        except (ImportError, OSError, AttributeError) as exc:
+            logger.info(
+                f"Direct irmsd Python API is unavailable ({exc}); "
+                "falling back to the external irmsd CLI"
             )
+            self._irmsd_cmd = find_irmsd_command()
+
+        if not self._use_direct_api and not self._irmsd_cmd:
+            raise RuntimeError(
+                "irmsd is not available through either the Python API or the "
+                "external command. IRMSDGrouper requires the irmsd package.\n\n"
+                "For the fastest implementation, install irmsd in the same "
+                "environment as CHEMSMART so that "
+                "irmsd.api.irmsd_exposed.get_irmsd can be imported.\n\n"
+                "Alternatively, configure the existing CLI fallback with:\n"
+                "  export IRMSD_CONDA_ENV=irmsd_env\n"
+                "or:\n"
+                "  export IRMSD_PATH=/path/to/irmsd"
+            )
+
+    @staticmethod
+    def _inversion_code(inversion: str) -> int:
+        """Map the public inversion mode to the irmsd low-level API code."""
+        return {"auto": 0, "on": 1, "off": 2}[inversion]
+
+    def _prepare_irmsd_arrays(
+        self, mol: Molecule
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Return atomic numbers and coordinates for direct iRMSD calls."""
+        from ase.data import atomic_numbers
+
+        symbols = list(mol.chemical_symbols)
+        positions = np.asarray(mol.positions, dtype=np.float64)
+
+        if self.ignore_hydrogens:
+            keep = [idx for idx, symbol in enumerate(symbols) if symbol != "H"]
+            symbols = [symbols[idx] for idx in keep]
+            positions = positions[keep]
+
+        numbers = np.asarray(
+            [atomic_numbers[symbol] for symbol in symbols], dtype=np.int32
+        )
+        return numbers, positions
+
+    def _calculate_rmsd_direct(self, mol_idx_pair: Tuple[int, int]) -> float:
+        """Calculate one iRMSD pair through the in-process compiled API."""
+        irmsd_module = importlib.import_module("irmsd.api.irmsd_exposed")
+        get_irmsd = irmsd_module.get_irmsd
+
+        i, j = mol_idx_pair
+        mol1, mol2 = self.molecules[i], self.molecules[j]
+
+        symbols1 = list(mol1.chemical_symbols)
+        symbols2 = list(mol2.chemical_symbols)
+        if self.ignore_hydrogens:
+            symbols1 = [symbol for symbol in symbols1 if symbol != "H"]
+            symbols2 = [symbol for symbol in symbols2 if symbol != "H"]
+
+        if sorted(symbols1) != sorted(symbols2):
+            logger.warning(f"Molecules {i} and {j} have different atom types")
+            return np.inf
+
+        try:
+            numbers1, positions1 = self._prepare_irmsd_arrays(mol1)
+            numbers2, positions2 = self._prepare_irmsd_arrays(mol2)
+            rmsd_value, _, _, _, _ = get_irmsd(
+                numbers1,
+                positions1,
+                numbers2,
+                positions2,
+                iinversion=self._inversion_code(self.inversion),
+            )
+
+            # The low-level API receives the requested inversion mode directly;
+            # unlike the CLI it does not return a separate text field to parse.
+            if self._actual_inversion is None:
+                self._actual_inversion = self.inversion
+
+            rmsd_value = float(rmsd_value)
+            return rmsd_value if np.isfinite(rmsd_value) else np.inf
+        except Exception as exc:
+            logger.warning(
+                f"irmsd API calculation failed for pair ({i}, {j}): {exc}"
+            )
+            return np.inf
 
     def _write_two_molecules_xyz(
         self, mol1: Molecule, mol2: Molecule, filepath: str
@@ -1016,7 +957,7 @@ class IRMSDGrouper(RMSDGrouper):
 
         return rmsd_value, actual_inversion
 
-    def _calculate_rmsd(self, mol_idx_pair: Tuple[int, int]) -> float:
+    def _calculate_rmsd_cli(self, mol_idx_pair: Tuple[int, int]) -> float:
         """Calculate iRMSD between two molecules using external irmsd tool."""
         import subprocess
         import tempfile
@@ -1073,7 +1014,7 @@ class IRMSDGrouper(RMSDGrouper):
             if actual_inversion:
                 self._actual_inversion = actual_inversion
 
-            return rmsd_value
+            return float(rmsd_value) if rmsd_value is not None else np.inf
 
         except subprocess.TimeoutExpired:
             logger.warning(f"irmsd timed out for pair ({i}, {j})")
@@ -1089,14 +1030,34 @@ class IRMSDGrouper(RMSDGrouper):
                 # Ignore cleanup errors
                 pass
 
+    def _calculate_rmsd(self, mol_idx_pair: Tuple[int, int]) -> float:
+        """Calculate iRMSD using the direct API when available, else the CLI."""
+        if self._use_direct_api:
+            return self._calculate_rmsd_direct(mol_idx_pair)
+        return self._calculate_rmsd_cli(mol_idx_pair)
+
+    def _calculate_pair_payload(self, idx_pair):
+        """Return iRMSD value together with resolved inversion metadata."""
+        rmsd_value = self._calculate_rmsd(idx_pair)
+        return rmsd_value, self._actual_inversion
+
+    def _consume_pair_payload(self, idx_pair, payload) -> float:
+        """Merge iRMSD inversion metadata in the parent process."""
+        rmsd_value, actual_inversion = payload
+        if self._actual_inversion is None and actual_inversion is not None:
+            self._actual_inversion = actual_inversion
+        return float(rmsd_value)
+
 
 class PymolRMSDGrouper(RMSDGrouper):
     """Group molecules using PyMOL's align command for RMSD calculation."""
 
+    supports_multiprocessing = False
+
     def __init__(
         self,
         molecules: Iterable[Molecule],
-        threshold: float = 0.5,
+        threshold=None,
         num_groups=None,
         num_procs: int = 1,
         ignore_hydrogens: bool = False,
@@ -1106,18 +1067,11 @@ class PymolRMSDGrouper(RMSDGrouper):
         energy_type: str = "E",
         **kwargs,
     ):
-        # PyMOL only supports single-threaded operation
-        if num_procs > 1:
-            raise ValueError(
-                f"PymolRMSDGrouper only supports single-threaded operation (num_procs=1), "
-                f"got num_procs={num_procs}. PyMOL cannot run in parallel."
-            )
-
         super().__init__(
             molecules=molecules,
             threshold=threshold,
             num_groups=num_groups,
-            num_procs=1,  # Always force to 1 for PyMOL
+            num_procs=num_procs,
             align_molecules=True,
             ignore_hydrogens=ignore_hydrogens,
             label=label,
@@ -1223,100 +1177,6 @@ class PymolRMSDGrouper(RMSDGrouper):
         )
 
 
-class RMSDGrouperSharedMemory(MoleculeGrouper):
-    """Group molecules based on RMSD using shared memory optimization."""
-
-    def __init__(
-        self,
-        molecules: Iterable[Molecule],
-        threshold: float = 0.5,
-        num_procs: int = 1,
-        align_molecules: bool = True,
-        ignore_hydrogens: bool = False,
-        label: str = None,
-        conformer_ids: List[str] = None,
-        matrix_format: str = "xlsx",
-        energy_type: str = "E",
-        **kwargs,
-    ):
-        super().__init__(
-            molecules,
-            num_procs,
-            label=label,
-            conformer_ids=conformer_ids,
-            matrix_format=matrix_format,
-            energy_type=energy_type,
-            **kwargs,
-        )
-        self.threshold = threshold
-        self.align_molecules = align_molecules
-        self.ignore_hydrogens = ignore_hydrogens
-
-    def group(self) -> Tuple[List[List[Molecule]], List[List[int]]]:
-        n = len(self.molecules)
-        num_atoms = self.molecules[0].positions.shape[0]
-        shared_pos = RawArray("d", n * num_atoms * 3)
-        pos_np = np.frombuffer(shared_pos, dtype=np.float64).reshape(
-            n, num_atoms, 3
-        )
-        for i, mol in enumerate(self.molecules):
-            pos_np[i] = mol.positions
-        indices = [(i, j) for i in range(n) for j in range(i + 1, n)]
-        with multiprocessing.Pool(
-            self.num_procs,
-            initializer=self._init_worker,
-            initargs=(shared_pos, (n, num_atoms, 3)),
-        ) as pool:
-            rmsd_values = pool.map(self._calculate_rmsd, indices)
-        adj_matrix = np.zeros((n, n), dtype=bool)
-        for (i, j), rmsd in zip(indices, rmsd_values):
-            if rmsd < self.threshold:
-                adj_matrix[i, j] = adj_matrix[j, i] = True
-        groups, index_groups = self._complete_linkage_grouping(adj_matrix, n)
-        self._cached_groups = groups
-        self._cached_group_indices = index_groups
-        return groups, index_groups
-
-    def _complete_linkage_grouping(self, adj_matrix, n):
-        assigned = [False] * n
-        groups = []
-        index_groups = []
-        for i in range(n - 1, -1, -1):
-            if assigned[i]:
-                continue
-            current_group = [i]
-            assigned[i] = True
-            for j in range(i - 1, -1, -1):
-                if assigned[j]:
-                    continue
-                if all(adj_matrix[j, member] for member in current_group):
-                    current_group.append(j)
-                    assigned[j] = True
-            current_group.sort()
-            groups.append([self.molecules[idx] for idx in current_group])
-            index_groups.append(current_group)
-        groups.reverse()
-        index_groups.reverse()
-        return groups, index_groups
-
-    @staticmethod
-    def _init_worker(shared_pos, pos_shape):
-        global shared_positions
-        shared_positions = np.frombuffer(shared_pos, dtype=np.float64).reshape(
-            pos_shape
-        )
-
-    def _calculate_rmsd(self, idx_pair: Tuple[int, int]) -> float:
-        i, j = idx_pair
-        pos1 = np.array(shared_positions[i])
-        pos2 = np.array(shared_positions[j])
-        if pos1.shape != pos2.shape:
-            return np.inf
-        if self.align_molecules:
-            pos1, pos2, _, _, _ = kabsch_align(pos1, pos2)
-        return np.sqrt(np.mean(np.sum((pos1 - pos2) ** 2, axis=1)))
-
-
 __all__ = [
     "RMSDGrouper",
     "BasicRMSDGrouper",
@@ -1324,5 +1184,4 @@ __all__ = [
     "SpyRMSDGrouper",
     "IRMSDGrouper",
     "PymolRMSDGrouper",
-    "RMSDGrouperSharedMemory",
 ]

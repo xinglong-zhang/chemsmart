@@ -10,6 +10,7 @@ infrastructure for file management and execution via job runners.
 import logging
 
 from chemsmart.jobs.mol.job import PyMOLJob
+from chemsmart.jobs.mol.runner import normalize_pymol_style
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +53,20 @@ class PyMOLVisualizationJob(PyMOLJob):
             jobrunner: Job execution runner (default: None).
             **kwargs: Additional arguments passed to parent PyMOLJob.
         """
+        style = kwargs.get("style")
+        if style is not None:
+            kwargs["style"] = normalize_pymol_style(style)
+
         super().__init__(
             molecule=molecule,
             label=label,
             jobrunner=jobrunner,
             **kwargs,
         )
+
+        # Distinguish cylview-flat outputs from plain cylview / pymol PSE names.
+        if self.label is not None and self.style == "cylview_flat":
+            self.label += f"_{self.style}_visualization"
 
 
 class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
@@ -75,7 +84,7 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
     - Accepts an arbitrary number of highlight groups.
     - Assign independent colors to each group (optional).
     - Render background atoms using a faded color palette.
-    - Optionally customize surface color and transparency.
+    - Optionally customize surface appearance and transparency.
     - Override default atomic colors (C, N,
     O, S, P) with user-specified RGB values.
 
@@ -138,3 +147,31 @@ class PyMOLHybridVisualizationJob(PyMOLVisualizationJob):
         self.new_color_oxygen = new_color_oxygen
         self.new_color_phosphorus = new_color_phosphorus
         self.new_color_sulfur = new_color_sulfur
+
+
+class PyMOLScientificStyleVisualizationJob(PyMOLVisualizationJob):
+    """
+    PyMOL job for derived ``zhang_group_scientific_styles.py`` visualization.
+
+    Applies bundled styles selected via ``-s`` on the ``visualize`` subcommand,
+    including ``glossy``, ``comic``, ``soft-cartoon``, ``editorial-minimal``,
+    and related derivatives.
+    """
+
+    TYPE = "pymol_scientific_style_visualization"
+
+    def __init__(self, **kwargs):
+        """
+        Initialize a derived scientific style visualization job.
+
+        Args:
+            **kwargs: Must include ``style`` and other PyMOLJob arguments.
+        """
+        style = kwargs.get("style")
+        if style is not None:
+            kwargs["style"] = normalize_pymol_style(style)
+
+        super().__init__(**kwargs)
+
+        if self.label is not None and self.style is not None:
+            self.label += f"_{self.style}_visualization"
