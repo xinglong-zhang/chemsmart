@@ -112,7 +112,7 @@ def _parse_cli_steps(steps, chain_settings):
             step = parse_chain_step(token)
         except ValueError as exc:
             raise click.UsageError(str(exc)) from exc
-        if step.program == "grouper":
+        if step.program in {"grouper", "thermochemistry"}:
             parsed.append(step)
             continue
         if step.program not in ChainProjectSettings.PROGRAMS:
@@ -211,7 +211,9 @@ def build_chain_pipeline_from_ctx(ctx):
     help=(
         "Pipeline step (repeatable). Use PROGRAM:JOB or quoted "
         "PROGRAM: [OPTIONS] JOB, e.g. gaussian:opt or "
-        '"gaussian: -o maxstep=8,maxsize=12 opt".'
+        '"gaussian: -o maxstep=8,maxsize=12 opt". '
+        "thermochemistry takes options only, e.g. "
+        '"thermochemistry: -T 353.15 -c 1.0".'
     ),
 )
 @click.pass_context

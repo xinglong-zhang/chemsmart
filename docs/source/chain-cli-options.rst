@@ -64,9 +64,11 @@ Project and File Options
          ``-nc N``, hands off ``crest_conformers.xyz``. ``-nc`` is not passed to CREST. A step may be any subcommand of
          ``crest``, ``xtb``, ``gaussian``, or ``orca`` except ``pka``, ``fukui``, ``redox``, ``reaction``,
          ``gaussian:com``, ``gaussian:traj``, ``gaussian:dias``, and ``orca:inp``. ``grouper`` is a grouper strategy.
-         ``gaussian:crest`` and ``grouper`` must follow ``crest:conformers``. Required for the CLI pipeline; repeat for
-         each phase. Not the same as ``run``/``sub`` ``-s/--server``. Cannot be combined with ``pka``, ``fukui``,
-         ``redox``, or ``reaction``.
+         ``thermochemistry`` takes options only (``thermochemistry: -T 353.15 -c 1.0``) and must follow a Gaussian,
+         ORCA, or xTB step. ``-T`` is required, and ``-c`` on that step is concentration in mol/L. ``gaussian:crest``
+         and ``grouper`` must follow ``crest:conformers``. Required for the CLI pipeline; repeat for each phase. Not the
+         same as ``run``/``sub`` ``-s/--server``. Cannot be combined with ``pka``, ``fukui``, ``redox``, or
+         ``reaction``.
 
    -  -  ``-l, --label``
       -  string
@@ -161,6 +163,9 @@ Pipeline (optional ``custom``):
      -s "crest:conformers -nc 10" \
      -s "grouper: -T 0.3 irmsd" \
      -s xtb:opt
+   chemsmart sub chain -p combined -f mol.xyz -c 0 -m 1 \
+     -s gaussian:opt -s gaussian:sp \
+     -s "thermochemistry: -T 353.15 -c 1.0 -csg 100 -ch 100"
 
 Workflow submit:
 

@@ -36,8 +36,8 @@ Top-level keys ``crest``, ``xtb``, ``gaussian``, and ``orca`` are aliases to exi
 other top-level key is rejected. A legacy ``steps`` key is also rejected — specify the pipeline with ``-s/--steps``.
 
 Each ``crest``, ``xtb``, ``gaussian``, and ``orca`` step, and each workflow ``--program``, must have an alias in the
-file. A ``grouper`` step does not. The target per-program YAML must exist. ``chemsmart sub gaussian -p test`` loads
-``~/.chemsmart/gaussian/test.yaml`` only — it does not read chain YAML.
+file. A ``grouper`` step and a ``thermochemistry`` step do not. The target per-program YAML must exist. ``chemsmart sub
+gaussian -p test`` loads ``~/.chemsmart/gaussian/test.yaml`` only — it does not read chain YAML.
 
 Packaged templates are copied to ``~/.chemsmart/chain/`` by ``chemsmart config`` and ``chemsmart update projects``. See
 :doc:`configuration-project-settings`.
@@ -47,7 +47,8 @@ Packaged templates are copied to ``~/.chemsmart/chain/`` by ``chemsmart config``
 ********************
 
 Repeat ``-s`` on the chain command for each phase. A step is ``PROGRAM:JOB`` or a quoted ``PROGRAM: [OPTIONS] JOB``
-string. Options before the job name are that program's options. Options after the job name are that command's options:
+string. Options before the job name are that program's options. Options after the job name are that command's options. A
+thermochemistry step is options only (``thermochemistry: -T 353.15 -c 1.0``).
 
 .. code:: bash
 
@@ -68,11 +69,21 @@ string. Options before the job name are that program's options. Options after th
      -s "grouper: -T 0.3 irmsd --inversion on" \
      -s gaussian:opt
 
+   chemsmart sub chain -p combined -f mol.xyz -c 0 -m 1 \
+     -s gaussian:opt -s gaussian:sp \
+     -s "thermochemistry: -T 353.15 -c 1.0 -csg 100 -ch 100"
+
 A step for ``crest``, ``xtb``, ``gaussian``, or ``orca`` is any subcommand of that program except ``pka``, ``fukui``,
 ``redox``, and ``reaction``. Those four stay on :ref:`chain-workflow-subcommands`. ``gaussian:com``, ``gaussian:traj``,
 ``gaussian:dias``, and ``orca:inp`` are also excluded: the chain hands off one structure, and those commands need an
 existing input file or a trajectory. A ``grouper`` step is a grouper strategy, such as ``irmsd``. Grouper has no alias
 in the chain YAML. ``gaussian:crest`` and ``grouper`` must immediately follow ``crest:conformers``.
+
+A ``thermochemistry`` step also has no alias in the chain YAML. It runs the default thermochemistry analysis on the
+previous Gaussian, ORCA, or xTB ``.log`` or ``.out``. The step is options only: ``thermochemistry: -T 353.15 -c 1.0``.
+``-T`` is required. ``-c`` on that step is concentration in mol/L, not the chain charge. The chain supplies the output
+file, so the step cannot set ``-f``, ``-d``, or ``-p``. It must follow ``gaussian``, ``orca``, or ``xtb``. A later step
+reads that same log.
 
 ``-nc`` after ``crest:conformers`` chooses that step's handoff file and is not passed to CREST. ``-nc 1`` hands off
 ``crest_best.xyz``. Omitting ``-nc``, or any other ``-nc N``, hands off ``crest_conformers.xyz``. There is no

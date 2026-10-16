@@ -180,6 +180,42 @@ orca: gas_solv
             "02_xtb_opt",
         ]
 
+    def test_thermochemistry_step_does_not_need_a_chain_alias(
+        self, isolated_config_dir, single_molecule_xyz_file
+    ):
+        _write_chain_yaml(
+            isolated_config_dir,
+            "combined",
+            "gaussian: gas_solv\n",
+        )
+        result = _invoke_chain(
+            [
+                "-p",
+                "combined",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-s",
+                "gaussian:opt",
+                "-s",
+                "gaussian:sp",
+                "-s",
+                "thermochemistry: -T 353.15 -c 1.0 -csg 100 -ch 100",
+            ],
+            standalone_mode=False,
+        )
+        assert result.exit_code == 0, result.output
+        job = result.return_value
+        assert job.programs == ("gaussian",)
+        assert [phase.name for phase in job.phases] == [
+            "00_gaussian_opt",
+            "01_gaussian_sp",
+            "02_thermochemistry",
+        ]
+
     def test_sub_test_writes_chain_pipeline_script(
         self,
         isolated_config_dir,

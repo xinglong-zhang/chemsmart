@@ -39,6 +39,7 @@ from chemsmart.jobs.orca.qrc import ORCAQRCJob
 from chemsmart.jobs.orca.settings import ORCAJobSettings
 from chemsmart.jobs.orca.singlepoint import ORCASinglePointJob
 from chemsmart.jobs.orca.ts import ORCATSJob
+from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.xtb.hess import XTBHessJob
 from chemsmart.jobs.xtb.opt import XTBOptJob
 from chemsmart.jobs.xtb.singlepoint import XTBSinglePointJob
@@ -119,6 +120,14 @@ class DummySPJob(Job):
 
     def _run(self, **kwargs):
         self._complete = True
+
+
+class _FinishedOpt(GaussianOptJob):
+    def is_complete(self):
+        return True
+
+    def optimized_structure(self):
+        return self.molecule
 
 
 class DummyCRESTJob(CRESTJob):
@@ -238,6 +247,30 @@ class TestParseChainStep:
         assert step.extra_option_tokens == ("-T", "0.3", "-N", "10")
         assert step.suffix_option_tokens == ("--inversion", "on")
 
+    def test_thermochemistry_takes_options_only(self):
+        step = parse_chain_step(
+            "thermochemistry: -T 353.15 -c 1.0 -csg 100 -ch 100"
+        )
+        assert step == ChainStep(
+            program="thermochemistry",
+            job="thermochemistry",
+            extra_option_tokens=(
+                "-T",
+                "353.15",
+                "-c",
+                "1.0",
+                "-csg",
+                "100",
+                "-ch",
+                "100",
+            ),
+        )
+        ChainStepParser().validate(step)
+
+    def test_thermochemistry_subcommand_is_rejected(self):
+        with pytest.raises(ValueError, match="cannot use 'boltzmann'"):
+            parse_chain_step("thermochemistry: -T 298.15 boltzmann")
+
     def test_missing_colon_errors(self):
         with pytest.raises(ValueError, match="expected PROGRAM:JOB"):
             parse_chain_step("gaussian")
@@ -279,6 +312,9 @@ class TestChainStepRegistry:
         validate_chain_step("grouper", "irmsd")
         with pytest.raises(ValueError, match="job 'nope'"):
             validate_chain_step("grouper", "nope")
+
+    def test_thermochemistry_default_analysis_is_a_step(self):
+        validate_chain_step("thermochemistry", "thermochemistry")
 
     def test_nested_only_jobs_are_explicit_workflow_names(self):
         assert CHAIN_NESTED_ONLY_JOBS == frozenset(
@@ -537,6 +573,113 @@ class TestBuildChainJob:
         assert len(children) == 1
         assert isinstance(children[0], XTBOptJob)
         assert np.allclose(children[0].molecule.positions, best.positions)
+
+    def test_thermochemistry_reads_the_previous_log(
+        self, isolated_config_dir, temporary_working_dir
+    ):
+        chain = build_chain_job(
+            _chain_settings(gaussian="gas_solv"),
+            steps=(
+                ChainStep(program="gaussian", job="opt"),
+                parse_chain_step(
+                    "thermochemistry: -T 353.15 -c 1.0 -csg 100 -ch 100"
+                ),
+            ),
+            molecules=_h2(),
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        assert chain.programs == ("gaussian",)
+        assert [phase.name for phase in chain.phases] == [
+            "00_gaussian_opt",
+            "01_thermochemistry",
+        ]
+        finished = _FinishedOpt(
+            molecule=_h2(z=0.90),
+            settings=GaussianJobSettings.default(),
+            label="opt_done",
+        )
+        chain.phases[0]._resolved_jobs = [finished]
+        job = chain.phases[1].resolve_jobs()[0]
+        assert isinstance(job, ThermochemistryJob)
+        assert job.filename == finished.outputfile
+        assert job.label == "mol_01_thermochemistry"
+        assert job.settings.temperature == 353.15
+        assert job.settings.concentration == 1.0
+        assert job.settings.s_freq_cutoff == 100.0
+        assert job.settings.entropy_method == "grimme"
+        assert job.settings.h_freq_cutoff == 100.0
+        assert job.settings.outputfile.endswith("mol_01_thermochemistry.dat")
+        assert job.molecule.charge == 0
+
+    def test_thermochemistry_requires_temperature_and_a_qc_step(self):
+        settings = _chain_settings(gaussian="gas_solv", crest="test")
+        with pytest.raises(ValueError, match="requires -T/--temperature"):
+            build_chain_job(
+                settings,
+                steps=(
+                    ChainStep(program="gaussian", job="opt"),
+                    ChainStep(
+                        program="thermochemistry", job="thermochemistry"
+                    ),
+                ),
+                molecules=_h2(),
+                label="mol",
+            )
+        with pytest.raises(ValueError, match="must follow"):
+            build_chain_job(
+                settings,
+                steps=(parse_chain_step("thermochemistry: -T 298.15"),),
+                molecules=_h2(),
+                label="mol",
+            )
+        with pytest.raises(ValueError, match="must follow"):
+            build_chain_job(
+                settings,
+                steps=(
+                    ChainStep(program="crest", job="conformers"),
+                    parse_chain_step("thermochemistry: -T 298.15"),
+                ),
+                molecules=_h2(),
+                label="mol",
+            )
+
+    def test_thermochemistry_passes_the_log_onward(
+        self,
+        isolated_config_dir,
+        temporary_working_dir,
+        gaussian_outputs_test_directory,
+    ):
+        log = os.path.join(gaussian_outputs_test_directory, "KOH.log")
+        molecule = Molecule.from_filepath(log)
+        chain = build_chain_job(
+            _chain_settings(gaussian="gas_solv"),
+            steps=(
+                ChainStep(program="gaussian", job="opt"),
+                parse_chain_step("thermochemistry: -T 298.15 -c 1.0"),
+                ChainStep(program="gaussian", job="sp"),
+            ),
+            molecules=molecule,
+            label="mol",
+            charge=0,
+            multiplicity=1,
+        )
+        finished = _FinishedOpt(
+            molecule=molecule,
+            settings=GaussianJobSettings.default(),
+            label="opt_done",
+        )
+        shutil.copy(log, finished.outputfile)
+        chain.phases[0]._resolved_jobs = [finished]
+        thermo = chain.phases[1].resolve_jobs()[0]
+        with open(thermo.settings.outputfile, "w", encoding="utf-8"):
+            pass
+        assert thermo.is_complete()
+        sp = chain.phases[2].resolve_jobs()[0]
+        assert isinstance(sp, GaussianSinglePointJob)
+        assert sp.molecule.chemical_symbols == molecule.chemical_symbols
+        assert not os.path.exists("mol_02_gaussian_sp.xyz")
 
 
 def _write_xyz(path, molecules):

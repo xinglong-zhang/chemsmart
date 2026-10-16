@@ -151,6 +151,17 @@ Options
 Examples
 ========
 
+**Chain step:**
+
+Run the same analysis after a Gaussian, ORCA, or xTB step. The chain passes that step's output file. ``-c`` here is
+concentration in mol/L. ``-T`` is required.
+
+.. code:: bash
+
+   chemsmart sub chain -p combined -f mol.xyz -c 0 -m 1 \
+     -s gaussian:opt -s gaussian:sp \
+     -s "thermochemistry: -T 353.15 -c 1.0 -csg 100 -ch 100"
+
 **Single file analysis:**
 
 Analyze a single Gaussian, ORCA, or xTB output file.

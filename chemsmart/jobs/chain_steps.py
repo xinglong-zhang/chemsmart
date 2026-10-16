@@ -19,6 +19,7 @@ from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.qrc import ORCAQRCJob
 from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.xtb.job import XTBJob
 from chemsmart.settings.chain import ChainProjectSettings
 from chemsmart.settings.crest import CRESTProjectSettings
@@ -180,17 +181,31 @@ class ChainStepParser:
             known_jobs = self._grouper_command_names()
         else:
             known_jobs = self.pipeline_job_names(program)
+        blocked = (
+            self._thermochemistry_command_names()
+            if program == "thermochemistry"
+            else frozenset()
+        )
         job_index = None
         job = None
         for index, part in enumerate(tokens):
             name = part.lower()
+            if name in blocked:
+                raise ValueError(
+                    f"Chain step {token!r} cannot use {name!r}. "
+                    "A thermochemistry step runs the default analysis "
+                    "and takes options only."
+                )
             if name in known_jobs or name in CHAIN_NESTED_ONLY_JOBS:
                 job_index = index
                 job = name
                 break
         suffix = ()
         num_conformers = None
-        if job is None:
+        if job is None and program == "thermochemistry":
+            job = "thermochemistry"
+            extra_option_tokens = tuple(tokens)
+        elif job is None:
             if len(tokens) == 1 and not tokens[0].startswith("-"):
                 job = tokens[0].lower()
                 extra_option_tokens = ()
@@ -226,6 +241,13 @@ class ChainStepParser:
                     "structure index."
                 )
         if program == "grouper" and job in self._grouper_command_names():
+            return
+        if program == "thermochemistry":
+            if job != "thermochemistry":
+                raise ValueError(
+                    "A thermochemistry chain step runs the default "
+                    "analysis and takes options only."
+                )
             return
         if program in PROGRAM_ADAPTERS and job in CHAIN_NESTED_ONLY_JOBS:
             raise ValueError(
@@ -280,6 +302,12 @@ class ChainStepParser:
         import chemsmart.cli.grouper as grouper_cli
 
         return frozenset(grouper_cli.grouper.commands)
+
+    def _thermochemistry_command_names(self):
+        """Subcommands of the thermochemistry command."""
+        import chemsmart.cli.thermochemistry as thermochemistry_cli
+
+        return frozenset(thermochemistry_cli.thermochemistry.commands)
 
     def _split_crest_num_conformers(self, tokens, token):
         """Pull ``-nc N`` out of a ``crest:conformers`` step.
@@ -361,6 +389,9 @@ class ChainHandoffResolver:
     def molecule_from_job(self, job, fallback=None):
         if not job.is_complete():
             return fallback
+        if isinstance(job, ThermochemistryJob):
+            mol = job.molecule
+            return fallback if mol is None else mol
         if isinstance(job, CRESTJob):
             output = job._output()
             mol = None if output is None else output.best_conformer
@@ -385,6 +416,7 @@ class ChainHandoffResolver:
         completed Gaussian IRC job contributes its directional endpoint
         jobs, one per log. Gaussian, ORCA, and xTB jobs also pass their
         output file, so the next step reads the last structure from it.
+        A thermochemistry step passes that same log or out file on.
         """
         if index == 0:
             if isinstance(initial_molecule, Molecule):
@@ -461,11 +493,12 @@ class ChainHandoffResolver:
                 if job.molecule is not None
                 else None
             )
-            sources.append(
-                (job.outputfile, "-1")
-                if isinstance(job, (GaussianJob, ORCAJob, XTBJob))
-                else None
-            )
+            if isinstance(job, (GaussianJob, ORCAJob, XTBJob)):
+                sources.append((job.outputfile, "-1"))
+            elif isinstance(job, ThermochemistryJob) and job.filename:
+                sources.append((job.filename, "-1"))
+            else:
+                sources.append(None)
         use_file_index = (
             len(molecules) > 1
             and None not in file_indices
@@ -681,6 +714,65 @@ def _program_argv(
     return argv
 
 
+def _thermochemistry_invocation(step):
+    """Parse a thermochemistry step into settings and Click parameters.
+
+    ``-f``, ``-d``, and ``-p`` are rejected. The chain supplies the
+    previous output file, and ``-T`` is required.
+    """
+    import click
+
+    from chemsmart.cli.thermochemistry.thermochemistry import (
+        resolve_entropy_cutoff,
+        thermochemistry,
+    )
+    from chemsmart.jobs.thermochemistry.settings import (
+        ThermochemistryJobSettings,
+    )
+
+    tokens = list(step.extra_option_tokens) + list(step.suffix_option_tokens)
+    try:
+        context = thermochemistry.make_context(
+            "thermochemistry", tokens, obj={}
+        )
+    except click.ClickException as exc:
+        raise ValueError(str(exc)) from exc
+    params = context.params
+    if params.get("temperature") is None:
+        raise ValueError(
+            "A thermochemistry chain step requires -T/--temperature."
+        )
+    if (
+        params.get("directory")
+        or params.get("filenames")
+        or params.get("program")
+        or params.get("filetype")
+    ):
+        raise ValueError(
+            "A thermochemistry chain step cannot set -d/--directory, "
+            "-t/--filetype, -f/--filenames, or -p/--program. "
+            "The chain supplies the previous output file."
+        )
+    cutoff_entropy, entropy_method = resolve_entropy_cutoff(
+        params["cutoff_entropy_grimme"], params["cutoff_entropy_truhlar"]
+    )
+    settings = ThermochemistryJobSettings(
+        temperature=params["temperature"],
+        concentration=params["concentration"],
+        pressure=params["pressure"],
+        use_weighted_mass=params["weighted"],
+        alpha=params["alpha"],
+        s_freq_cutoff=cutoff_entropy,
+        entropy_method=entropy_method,
+        h_freq_cutoff=params["cutoff_enthalpy"],
+        energy_units=params["energy_units"],
+        outputfile=params["outputfile"],
+        overwrite=params["overwrite"],
+        check_imaginary_frequencies=params["check_imaginary_frequencies"],
+    )
+    return settings, params
+
+
 def _grouper_argv(step, conformers_file, label):
     argv = ["-f", conformers_file]
     before = step.extra_option_tokens
@@ -706,11 +798,37 @@ def _jobs_from_cli_result(result):
     return jobs
 
 
+def _step_slug(step):
+    """Phase and child-label token for one step."""
+    if step.program == "thermochemistry":
+        return step.program
+    return f"{step.program}_{step.job}"
+
+
 def _child_label(chain_label, index, step, ordinal, count, kind):
-    base = f"{chain_label}_{index:02d}_{step.program}_{step.job}"
+    base = f"{chain_label}_{index:02d}_{_step_slug(step)}"
     if count > 1 and kind:
         return f"{base}_{kind}{ordinal}"
     return base
+
+
+def _handoff_child_label(chain_label, index, step, molecule, ordinal, handoff):
+    """Child label for one structure in a fan-out."""
+    label_ordinal = ordinal
+    if (
+        handoff.label_kind == "idx"
+        and molecule.structure_index_in_file is not None
+    ):
+        label_ordinal = molecule.structure_index_in_file
+    child_label = _child_label(
+        chain_label,
+        index,
+        step,
+        label_ordinal,
+        len(handoff.molecules),
+        handoff.label_kind,
+    )
+    return label_ordinal, child_label
 
 
 # Pipeline builder
@@ -728,6 +846,7 @@ class ChainPipelineBuilder:
         self.context = context
         self.phases = []
         self.handoff = ChainHandoffResolver()
+        self._thermochemistry = {}
 
     def build(self, steps: Sequence[ChainStep], **kwargs) -> ChainJob:
         if not steps:
@@ -752,7 +871,7 @@ class ChainPipelineBuilder:
             return factory
 
         for index, step in enumerate(prepared):
-            phase_name = f"{index:02d}_{step.program}_{step.job}"
+            phase_name = f"{index:02d}_{_step_slug(step)}"
             self.phases.append(
                 JobPhase(
                     name=phase_name,
@@ -799,6 +918,21 @@ class ChainPipelineBuilder:
             prepared.append(step)
 
         for index, step in enumerate(prepared):
+            if step.program == "thermochemistry":
+                previous = None if index == 0 else prepared[index - 1]
+                if previous is None or previous.program not in {
+                    "gaussian",
+                    "orca",
+                    "xtb",
+                    "thermochemistry",
+                }:
+                    raise ValueError(
+                        "thermochemistry must follow a gaussian, orca, "
+                        "or xtb step that writes a .log or .out file."
+                    )
+                self._thermochemistry[index] = _thermochemistry_invocation(
+                    step
+                )
             if not self._needs_conformers_file(step):
                 continue
             previous = None if index == 0 else prepared[index - 1]
@@ -836,6 +970,8 @@ class ChainPipelineBuilder:
             return self._gaussian_crest_jobs(
                 step, filename, handoff.molecules[0]
             )
+        if step.program == "thermochemistry":
+            return self._thermochemistry_jobs(step, handoff, index)
         return self._program_jobs(step, handoff, index)
 
     def _program_jobs(self, step, handoff, index):
@@ -855,19 +991,8 @@ class ChainPipelineBuilder:
         for ordinal, (molecule, source) in enumerate(
             zip(molecules, sources), start=1
         ):
-            label_ordinal = ordinal
-            if (
-                handoff.label_kind == "idx"
-                and molecule.structure_index_in_file is not None
-            ):
-                label_ordinal = molecule.structure_index_in_file
-            child_label = _child_label(
-                self.context.label,
-                index,
-                step,
-                label_ordinal,
-                count,
-                handoff.label_kind,
+            label_ordinal, child_label = _handoff_child_label(
+                self.context.label, index, step, molecule, ordinal, handoff
             )
             if source is None:
                 filename = os.path.abspath(f"{child_label}.xyz")
@@ -921,6 +1046,65 @@ class ChainPipelineBuilder:
                         molecule.structure_index_in_file
                     )
             jobs.extend(children)
+        return jobs
+
+    def _thermochemistry_jobs(self, step, handoff, index):
+        """One thermochemistry job per previous .log or .out file."""
+        settings, params = self._thermochemistry[index]
+        molecules = handoff.molecules
+        count = len(molecules)
+        sources = handoff.sources or (None,) * count
+        if len(sources) != count:
+            sources = (None,) * count
+        flags = step.extra_option_tokens + step.suffix_option_tokens
+        if _argv_has_option(
+            flags, "-S", "-R", "--skip-completed", "--no-skip-completed"
+        ):
+            skip_completed = params["skip_completed"]
+        else:
+            skip_completed = self.context.skip_completed
+        user_label = params.get("label")
+        append_label = params.get("append_label")
+        jobs = []
+        for ordinal, (molecule, source) in enumerate(
+            zip(molecules, sources), start=1
+        ):
+            filename = None if source is None else source[0]
+            if filename is None or not str(filename).endswith(
+                (".log", ".out")
+            ):
+                raise ValueError(
+                    "thermochemistry needs the previous step's "
+                    ".log or .out file."
+                )
+            label_ordinal, child_label = _handoff_child_label(
+                self.context.label, index, step, molecule, ordinal, handoff
+            )
+            if user_label:
+                child_label = user_label
+                if count > 1 and handoff.label_kind:
+                    child_label = (
+                        f"{user_label}_{handoff.label_kind}{label_ordinal}"
+                    )
+            elif append_label:
+                child_label = f"{child_label}_{append_label}"
+            job_settings = settings.copy()
+            if count > 1 and job_settings.outputfile and handoff.label_kind:
+                root, ext = os.path.splitext(job_settings.outputfile)
+                job_settings.outputfile = (
+                    f"{root}_{handoff.label_kind}{label_ordinal}{ext}"
+                )
+            job = ThermochemistryJob(
+                filename=filename,
+                molecule=molecule,
+                settings=job_settings,
+                label=child_label,
+                jobrunner=self.context.jobrunner,
+                skip_completed=skip_completed,
+            )
+            if job.settings.outputfile is None:
+                job.settings.outputfile = job.outputfile
+            jobs.append(job)
         return jobs
 
     def _grouper_jobs(self, step, conformers_file, molecules, index):
@@ -991,6 +1175,10 @@ def parse_chain_step(token):
     are that command's options. ``crest:conformers -nc 1`` hands off
     ``crest_best.xyz``. Omitting ``-nc``, or any other ``-nc N``, hands
     off ``crest_conformers.xyz``. ``-nc`` is not passed to CREST.
+    ``thermochemistry: [OPTIONS]`` has no job name. It runs the default
+    thermochemistry analysis, for example
+    ``thermochemistry: -T 353.15 -c 1.0 -csg 100 -ch 100``. ``-T`` is
+    required. ``-c`` on that step is concentration in mol/L.
 
     Args:
         token (str): One ``-s/--steps`` value.
@@ -1010,12 +1198,14 @@ def validate_chain_step(program, job):
 
     Args:
         program (str): Chain program name (``crest``, ``xtb``,
-            ``gaussian``, ``orca``, or ``grouper``).
+            ``gaussian``, ``orca``, ``grouper``, or ``thermochemistry``).
         job (str): Job name (e.g. ``opt``, ``sp``, ``irc``). A grouper
             job is a strategy registered on the grouper command. A
             program job is a subcommand of that program, other than
             pKa, Fukui, redox, reaction, ``gaussian:com``,
             ``gaussian:traj``, ``gaussian:dias``, and ``orca:inp``.
+            A thermochemistry job is ``thermochemistry``: the default
+            analysis, with options and no separate job token.
 
     Raises:
         ValueError: If the pair is not a pipeline step. Workflow jobs
@@ -1058,7 +1248,9 @@ def build_chain_job(
     ``crest_conformers.xyz``. ``gaussian:crest`` and ``grouper`` read that
     same file. The step after Gaussian crest receives that job's
     lowest-energy optimized conformer. The step after Gaussian IRC
-    receives one structure from each directional log.
+    receives one structure from each directional log. A thermochemistry
+    step reads the previous Gaussian, ORCA, or xTB ``.log`` or ``.out``
+    and does not use a chain project alias. ``-T`` is required.
     ``charge`` and ``multiplicity`` (otherwise taken from each starting
     structure) are passed only to the first program command. One starting
     structure is stored on the chain job. More than one starting structure
