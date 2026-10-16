@@ -120,6 +120,77 @@ class TestCRESTCLISettings:
         assert settings.force_constant == 0.5
 
 
+class TestCRESTCLILabelFallback:
+    """Covers the filename-less label fallback branches in the ``crest``
+    group callback (no -f/--filename, molecule obtained via --pubchem)."""
+
+    def test_pubchem_only_without_label_falls_back_to_crest_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                crest,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "conformers",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "crest_output_conformers"
+
+    def test_pubchem_only_with_append_label_falls_back_to_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                crest,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-a",
+                    "suffix",
+                    "conformers",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_suffix"
+
+
 class TestCRESTJobClasses:
     def test_crest_job_types_are_distinct(self):
         assert CRESTConformerSearchJob.TYPE == "crestconformers"
