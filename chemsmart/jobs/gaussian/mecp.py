@@ -106,6 +106,26 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
     TYPE = "g16mecp"
     STATE_OUTPUT_EXTENSION = ".log"
 
+    def __init__(
+        self,
+        molecule,
+        settings,
+        label,
+        jobrunner=None,
+        is_seam_follow_branch=False,
+        **kwargs,
+    ):
+        settings = GaussianMECPJobSettings.from_settings(settings)
+        super().__init__(
+            molecule=molecule,
+            settings=settings,
+            label=label,
+            jobrunner=jobrunner,
+            **kwargs,
+        )
+        self.is_seam_follow_branch = is_seam_follow_branch
+        self._reset_execution_state()
+
     @staticmethod
     def _route_without_guess_read(route):
         """Remove ``read`` from a Gaussian guess option for the first step."""
@@ -130,24 +150,6 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                 "the optimization coordinates; remove the explicit symmetry option."
             )
         return f"{route} nosymm".strip()
-
-    def __init__(
-        self,
-        molecule,
-        settings,
-        label,
-        jobrunner=None,
-        **kwargs,
-    ):
-        settings = GaussianMECPJobSettings.from_settings(settings)
-        super().__init__(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
-            **kwargs,
-        )
-        self._reset_execution_state()
 
     @classmethod
     def settings_class(cls) -> Type[GaussianMECPJobSettings]:
@@ -287,7 +289,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                 )
                 if saved_method != self.hessian_method:
                     return False
-        if getattr(self.settings, "mecp_numfreq_only", False):
+        if self.settings.mecp_numfreq_only:
             if not os.path.isfile(self.final_report_file):
                 return False
             with open(self.final_report_file, encoding="utf-8") as report:
@@ -297,7 +299,8 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                 for path in (
                     os.path.join(self.folder, f"{self.label}_mecp_freq.log"),
                     os.path.join(
-                        self.numfreq_folder, f"{self.label}_seam_check.log"
+                        self.frequency_type_folder,
+                        f"{self.label}_seam_check.log",
                     ),
                 )
             )
@@ -310,7 +313,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
         if self.settings.mecp_numfreq:
             if not os.path.isfile(
                 os.path.join(
-                    self.numfreq_folder, f"{self.label}_seam_check.log"
+                    self.frequency_type_folder, f"{self.label}_seam_check.log"
                 )
             ):
                 return False
@@ -503,7 +506,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
             "jobrunner": self.jobrunner,
             "skip_completed": False,
             "scratch_parent_folder": (
-                os.path.basename(self.numfreq_folder)
+                os.path.basename(self.frequency_type_folder)
                 if checkpoint_tag == "check"
                 else f"{self.label}_optimization"
             ),
@@ -519,7 +522,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
         else:
             job = GaussianGeneralJob(**job_kwargs)
         job_folder = (
-            self.numfreq_folder
+            self.frequency_type_folder
             if checkpoint_tag == "check"
             else self.steps_folder
         )
@@ -859,7 +862,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
 
     def _run(self, **kwargs):
         self._reset_execution_state()
-        if getattr(self.settings, "mecp_numfreq_only", False):
+        if self.settings.mecp_numfreq_only:
             return self._run_numfreq_only()
         positions_bohr = (
             np.array(self.molecule.positions, dtype=float) / units.Bohr
@@ -1076,7 +1079,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                     )
                 raise
 
-        if not getattr(self, "_is_seam_follow_branch", False):
+        if not self.is_seam_follow_branch:
             sources = (
                 seam_result["gaussian_output_files"]
                 if seam_result is not None
@@ -1129,7 +1132,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                         f"{self.label}_mecp_freq.log\n"
                     )
             report.write(f"Converged at step {converged_step}.\n")
-        if not getattr(self, "_is_seam_follow_branch", False):
+        if not self.is_seam_follow_branch:
             self._write_final_report(
                 initial_steps=converged_step,
                 initial_energy_a=ea,

@@ -92,7 +92,7 @@ class MECPSeamMixin:
         return self.mecp_files.optimization_folder
 
     @property
-    def numfreq_folder(self):
+    def frequency_type_folder(self):
         return self.mecp_files.hessian_folder(self.hessian_method)
 
     @property
@@ -110,7 +110,7 @@ class MECPSeamMixin:
 
     def _write_seam_check_log(self, result, h, step_prefix):
         filename = self.mecp_files.seam_check(self.hessian_method)
-        os.makedirs(self.numfreq_folder, exist_ok=True)
+        os.makedirs(self.frequency_type_folder, exist_ok=True)
         write_seam_check_log(
             filename, self.label, result, h, step_prefix, self.hessian_method
         )
@@ -440,8 +440,8 @@ class MECPSeamMixin:
             len(projection_vectors),
         )
 
-    @classmethod
-    def _lagrangian_hessian(cls, hessian_a, hessian_b, grad_a, grad_b):
+    @staticmethod
+    def lagrangian_hessian(hessian_a, hessian_b, grad_a, grad_b):
         """Return the constrained MECP Lagrangian Hessian and multiplier."""
         diff_grad = np.asarray(grad_a).ravel() - np.asarray(grad_b).ravel()
         diff_norm_sq = float(np.dot(diff_grad, diff_grad))
@@ -668,7 +668,7 @@ class MECPSeamMixin:
             macro_step=macro_step,
         )
 
-        H_lagrangian, lagrange_multiplier = self._lagrangian_hessian(
+        H_lagrangian, lagrange_multiplier = self.lagrangian_hessian(
             H_A, H_B, grad_a, grad_b
         )
         proj_vecs = self._build_projection_vectors(positions_bohr, diff_grad)
@@ -948,8 +948,8 @@ class MECPSeamMixin:
             label=label,
             jobrunner=self.jobrunner,
             skip_completed=False,
+            is_seam_follow_branch=True,
         )
-        branch._is_seam_follow_branch = True
         branch.set_folder(folder)
         return branch
 

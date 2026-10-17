@@ -52,7 +52,6 @@ class GaussianJob(Job):
         label=None,
         jobrunner=None,
         checkpoint_filename=None,
-        scratch_parent_folder=None,
         **kwargs,
     ):
         """
@@ -68,7 +67,6 @@ class GaussianJob(Job):
             label (str, optional): Job identifier for file naming.
             jobrunner (JobRunner, optional): Job execution handler.
             checkpoint_filename (str, optional): Explicit checkpoint filename.
-            scratch_parent_folder (str, optional): Scratch grouping folder.
             **kwargs: Additional keyword arguments for parent class.
 
         Raises:
@@ -91,7 +89,6 @@ class GaussianJob(Job):
         self.molecule = molecule.copy() if molecule is not None else None
         self.settings = settings.copy()
         self.checkpoint_filename = checkpoint_filename
-        self.scratch_parent_folder = scratch_parent_folder
 
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)

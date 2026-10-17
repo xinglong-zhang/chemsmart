@@ -50,7 +50,15 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
     def settings_class(cls) -> Type[ORCAMECPJobSettings]:
         return ORCAMECPJobSettings
 
-    def __init__(self, molecule, settings, label, jobrunner=None, **kwargs):
+    def __init__(
+        self,
+        molecule,
+        settings,
+        label,
+        jobrunner=None,
+        is_seam_follow_branch=False,
+        **kwargs,
+    ):
         """
         Initialize ORCAMECPJob.
 
@@ -93,6 +101,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
                     raise ValueError(
                         "ORCA seam analysis requires simple route keywords, not embedded blocks"
                     )
+        self.is_seam_follow_branch = is_seam_follow_branch
         self._reset_execution_state()
 
     @property
@@ -229,7 +238,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         molecule = self.molecule.copy()
         molecule.positions = np.asarray(positions_bohr) * units.Bohr
         folder = (
-            self.numfreq_folder
+            self.frequency_type_folder
             if checkpoint_tag == "check"
             else self.optimization_folder
         )

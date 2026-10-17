@@ -1946,7 +1946,7 @@ class TestGaussian16Output:
         assert np.isclose(ag_last_exp, 1.3971100000e00)
         assert np.isclose(ag_last_coeff, 1.0000000000e00)
 
-        ecp = g16.heavy_elements_ecp
+        ecp = g16.heavy_elements_ecp_functions
         ag_ecp = ecp["Ag"]
         assert ag_ecp["n_valence_electrons"] == 19
         channel_names = [ch["name"] for ch in ag_ecp["channels"]]

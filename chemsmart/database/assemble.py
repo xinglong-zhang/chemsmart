@@ -324,7 +324,7 @@ class GaussianAssembler(BaseAssembler):
             meta_data["custom_basis"] = {
                 "heavy_elements": self.output.heavy_elements,
                 "heavy_elements_basis": self.output.heavy_elements_basis,
-                "heavy_elements_ecp": self.output.heavy_elements_ecp,
+                "heavy_elements_ecp_functions": self.output.heavy_elements_ecp_functions,
                 "light_elements": self.output.light_elements,
                 "light_elements_basis": self.output.light_elements_basis,
             }

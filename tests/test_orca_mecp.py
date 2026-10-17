@@ -184,7 +184,7 @@ def test_orca_analytic_failure_does_not_reuse_old_hessian(
         jobrunner=MagicMock(),
     )
     job.folder = str(tmp_path)
-    folder = Path(job.numfreq_folder)
+    folder = Path(job.frequency_type_folder)
     folder.mkdir()
     reference = folder / "reference_A.gbw"
     if not missing_reference:

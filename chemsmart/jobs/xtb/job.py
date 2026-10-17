@@ -18,6 +18,22 @@ class XTBJob(Job):
     def __init__(
         self, molecule, settings=None, label=None, jobrunner=None, **kwargs
     ):
+        # Validated before self.label/folder are set (XTBJob's
+        # _determine_folder() depends on self.label, so it can't be
+        # computed from an unvalidated molecule and self isn't yet
+        # safely representable for an f-string).
+
+        if not isinstance(settings, XTBJobSettings):
+            raise ValueError(
+                f"Settings must be instance of {XTBJobSettings}, "
+                f"but is {settings} instead!"
+            )
+        if not isinstance(molecule, Molecule):
+            raise ValueError(
+                f"Molecule must be instance of Molecule, but is "
+                f"{molecule} instead!"
+            )
+
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
         self.label = label
@@ -25,17 +41,6 @@ class XTBJob(Job):
         super().__init__(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
-
-        if not isinstance(settings, XTBJobSettings):
-            raise ValueError(
-                f"Settings must be instance of {XTBJobSettings} for {self}, "
-                f"but is {settings} instead!"
-            )
-        if not isinstance(molecule, Molecule):
-            raise ValueError(
-                f"Molecule must be instance of Molecule for {self}, but is "
-                f"{molecule} instead!"
-            )
 
         self.molecule = molecule.copy()
         self.settings = settings.copy()

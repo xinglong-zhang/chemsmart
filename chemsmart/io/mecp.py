@@ -58,7 +58,7 @@ class MECPFiles:
         return self.path("seam_follow")
 
     def hessian_folder(self, method):
-        return self.path("anafreq" if method == "analytic" else "numfreq")
+        return self.path(f"{method}_frequency")
 
     def seam_check(self, method):
         return os.path.join(

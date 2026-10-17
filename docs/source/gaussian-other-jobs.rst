@@ -400,7 +400,7 @@ not yet exist, ``read`` is removed for that first step and retained thereafter. 
 and the two rolling checkpoints are kept in ``<label>_optimization``, along with the report and trajectory.
 
 When Gaussian scratch storage is enabled, initial MECP scratch jobs are grouped below ``<label>_optimization`` and
-frequency-analysis jobs below ``<label>_numfreq``, instead of being created directly in the scratch root.
+frequency-analysis jobs below ``<label>_numerical_frequency``, instead of being created directly in the scratch root.
 
 Seam-minimum verification uses a separate pair of temporary rolling checkpoints. They are deleted after a successful
 verification, so the final ``<label>_A.chk`` and ``<label>_B.chk`` continue to represent the converged MECP geometry.
@@ -410,9 +410,9 @@ Output Files
 ============
 
 The main job directory contains the final report and, when requested, the thermochemistry-ready frequency file.
-Intermediate files are grouped by function: ``<label>_optimization`` for the initial MECP search, ``<label>_numfreq``
-for numerical Hessian analysis, and ``<label>_seam_follow`` for optional imaginary-mode following. Only requested
-functions create their directories:
+Intermediate files are grouped by function: ``<label>_optimization`` for the initial MECP search,
+``<label>_numerical_frequency`` for numerical Hessian analysis, and ``<label>_seam_follow`` for optional imaginary-mode
+following. Only requested functions create their directories:
 
 ``<label>_report.log``
    Located in ``<label>_optimization``. Step-by-step optimization log. The file header records the run settings; each
@@ -465,9 +465,9 @@ functions create their directories:
    Ångström). Its A/B Gaussian sub-jobs are in the same directory.
 
 ``<label>_seam_check.log``
-   Located in ``<label>_numfreq`` when ``--mecp-numfreq`` is requested, alongside the numerical-Hessian Gaussian
-   sub-jobs. Reports the eigenvalues of the effective projected Hessian :math:`H_\text{eff}` (translations, rotations,
-   and gradient-difference direction removed) and whether the MECP is a true minimum on the seam. See the
+   Located in ``<label>_numerical_frequency`` when ``--mecp-numfreq`` is requested, alongside the numerical-Hessian
+   Gaussian sub-jobs. Reports the eigenvalues of the effective projected Hessian :math:`H_\text{eff}` (translations,
+   rotations, and gradient-difference direction removed) and whether the MECP is a true minimum on the seam. See the
    :ref:`seam-minimum-verification` section below.
 
 ``<label>_mecp_freq.log``
@@ -545,17 +545,17 @@ reference wavefunctions through their state-specific checkpoints. In broken-symm
 perform stability analysis before the separate analytic frequency jobs. The raw Cartesian force constants are read from
 formatted checkpoints generated automatically with Gaussian's ``formchk`` utility; the same Lagrangian Hessian, seam
 projection and mass weighting are used for both methods. An unsupported analytic calculation or missing/incomplete
-Hessian fails rather than silently falling back to ChemSmart numerical differences.
+Hessian fails rather than silently falling back to CHEMSMART numerical differences.
 
-Analytic inputs and raw outputs are stored under ``<label>_anafreq/``, with names such as
+Analytic inputs and raw outputs are stored under ``<label>_analytic_frequency/``, with names such as
 ``<label>_hessian_analytic_A.com``, ``.log`` and ``.fchk``. Macro-step files include ``macro07_hessian_analytic_A``. The
 final ``<label>_mecp_freq.log`` retains its existing name and records ``hessian_method=analytic``. The verification
-report is also stored in the corresponding ``_anafreq`` directory. ORCA has a separate ``.hess`` adapter using the same
-seam analysis and following algorithms; see :doc:`orca-cli-options` for supported states. ``formchk`` is located beside
-the configured Gaussian executable or on its configured PATH. Missing reference checkpoints or failed conversions stop
-the analysis. Formatted checkpoints are retained after successful verification; temporary binary verification
-checkpoints are cleaned up as before. All initial, macro-step and final checks use one Hessian-source dispatch followed
-by the shared seam projection and frequency analysis.
+report is also stored in the corresponding ``_analytic_frequency`` directory. ORCA has a separate ``.hess`` adapter
+using the same seam analysis and following algorithms; see :doc:`orca-cli-options` for supported states. ``formchk`` is
+located beside the configured Gaussian executable or on its configured PATH. Missing reference checkpoints or failed
+conversions stop the analysis. Formatted checkpoints are retained after successful verification; temporary binary
+verification checkpoints are cleaned up as before. All initial, macro-step and final checks use one Hessian-source
+dispatch followed by the shared seam projection and frequency analysis.
 
 To escape a stationary point that is a saddle on the crossing seam, add ``--follow-seam-imaginary-mode``. In each
 direction CHEMSMART fixes a progress plane normal to the tracked negative mode, restores :math:`E_A=E_B`, and optimizes
@@ -572,9 +572,9 @@ confirm the result:
 
 All displaced structures, branch reports, trajectories, frequency logs, and Gaussian sub-jobs are collected under
 ``<label>_seam_follow/``. Branch labels end in ``_seam_follow_plus`` and ``_seam_follow_minus``. The final
-projected-frequency log remains in the main calculation directory; the final seam check is in ``<label>_numfreq`` and
-the selection record ``<label>_seam_follow.log`` is in ``<label>_seam_follow``. This is constrained iterative seam-mode
-following; it does not invoke Gaussian IRC/QRC.
+projected-frequency log remains in the main calculation directory; the final seam check is in
+``<label>_numerical_frequency`` and the selection record ``<label>_seam_follow.log`` is in ``<label>_seam_follow``. This
+is constrained iterative seam-mode following; it does not invoke Gaussian IRC/QRC.
 
 Branch optimizations use at least the tight convergence thresholds. If neither direction loses its negative mode within
 ``--seam-mode-max-steps``, or if the released optimization returns to a saddle, the calculation stops and retains both
@@ -591,7 +591,7 @@ calculations per macro step. Iterative following performs this analysis after ev
 directions, plus the initial and final checks, so users should choose ``--seam-mode-max-steps`` conservatively. The
 finite-difference step size (default 1×10⁻³ Bohr) can be adjusted with ``--hess-step-size``.
 
-Results are written to ``<label>_numfreq/<label>_seam_check.log``:
+Results are written to ``<label>_numerical_frequency/<label>_seam_check.log``:
 
 .. code::
 

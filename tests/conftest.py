@@ -20,7 +20,9 @@ from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.crest.runner import FakeCRESTJobRunner
+from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.gaussian.settings import GaussianMECPJobSettings
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
@@ -35,6 +37,22 @@ from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
+
+# Gaussian MECP job fixtures
+# Settings shared by the MECP tests that drive the optimizer loop directly.
+MECP_DRIVER_SETTINGS = dict(
+    step_size=0.1,
+    trust_radius=0.3,
+    adaptive_step_size=False,
+    step_size_method="bb",
+    restart=False,
+    mecp_numfreq=False,
+    energy_diff_tol=1.0e-4,
+    force_max_tol=1.0e-3,
+    force_rms_tol=1.0e-3,
+    disp_max_tol=1.0e-3,
+    disp_rms_tol=1.0e-3,
+)
 
 thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
@@ -406,6 +424,49 @@ def run_orca_and_capture_settings():
                 captured_settings = mock_job_cls.call_args[1].get("settings")
 
         return result, captured_settings
+
+    return _run
+
+
+@pytest.fixture()
+def run_crest_and_capture_settings():
+    """Run the crest CLI with a patched job class and capture settings.
+
+    Unlike the other ``run_*_and_capture_settings`` fixtures, this also
+    returns the mock job class itself, since several crest CLI tests
+    need to inspect other constructor kwargs (e.g. ``label``) in
+    addition to ``settings``.
+
+    Usage in tests::
+
+        def test_something(run_crest_and_capture_settings):
+            result, settings, mock_job_cls = run_crest_and_capture_settings(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+                ["-p", "test", "-f", filename, "-c", "0", "-m", "1",
+                 "conformers"],
+            )
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.crest.crest import crest as crest_cli
+
+    def _run(job_class_path, cli_args, ctx_obj=None):
+        if ctx_obj is None:
+            ctx_obj = {"jobrunner": MagicMock()}
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                crest_cli,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings, mock_job_cls
 
     return _run
 
@@ -2157,6 +2218,69 @@ def gaussian_jobrunner_no_scratch(pbs_server):
 def gaussian_jobrunner_scratch(tmpdir, pbs_server):
     return FakeGaussianJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+############## Gaussian MECP Job Fixtures ##############
+@pytest.fixture()
+def make_mecp_job(
+    tmp_path,
+    gaussian_full_gen_outfile,
+    gaussian_jobrunner_no_scratch,
+):
+    """Build a real GaussianMECPJob rooted in ``tmp_path``.
+
+    The molecule defaults to the final geometry of the
+    bromochloromethane Gaussian output fixture; keyword arguments are
+    forwarded to :class:`GaussianMECPJobSettings`.
+    """
+
+    def _make(label="crossing", molecule=None, **settings_kwargs):
+        if molecule is None:
+            molecule = Molecule.from_filepath(gaussian_full_gen_outfile)
+        job = GaussianMECPJob(
+            molecule=molecule,
+            settings=GaussianMECPJobSettings(**settings_kwargs),
+            label=label,
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        job.set_folder(str(tmp_path))
+        return job
+
+    return _make
+
+
+@pytest.fixture()
+def mecp_job(make_mecp_job):
+    return make_mecp_job()
+
+
+@pytest.fixture()
+def make_driver_job(make_mecp_job):
+    """MECP job on a single H atom with fast optimizer settings."""
+
+    def _make(max_steps=2, **settings_kwargs):
+        settings = {**MECP_DRIVER_SETTINGS, **settings_kwargs}
+        job = make_mecp_job(
+            label="driver",
+            molecule=Molecule(symbols=["H"], positions=np.zeros((1, 3))),
+            max_steps=max_steps,
+            **settings,
+        )
+        job._export_final_gaussian_logs = lambda sources: None
+        return job
+
+    return _make
+
+
+@pytest.fixture()
+def adaptive_step_job(make_mecp_job):
+    return make_mecp_job(
+        step_size=0.1,
+        step_size_grow=1.2,
+        step_size_shrink=0.5,
+        step_size_min=1.0e-4,
+        step_size_max=1.0,
     )
 
 

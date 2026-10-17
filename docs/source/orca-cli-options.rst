@@ -744,12 +744,12 @@ corresponding reference orbitals. Raw Cartesian Hessians are read from ORCA ``.h
 effective Hessian, seam projection, mass weighting and following algorithms are shared with Gaussian. Missing or invalid
 files and unsupported analytic calculations fail explicitly without a numerical fallback.
 
-State calculations are stored in ``<label>_anafreq/`` or ``<label>_numfreq/``, constrained optimization jobs in
-``<label>_optimization/``, and branch records in ``<label>_seam_follow/``. The selected final geometry, projected
-frequencies and modes are written to ``<label>_mecp_freq.log``; the workflow status and selected branch are in
-``<label>_final_report.log``. ORCA's original output and native quality report describe the initial native optimization.
-Read the final workflow report when following changes the geometry. Raw ``.hess``, ``.engrad`` and ``.gbw`` files are
-retained for inspection.
+State calculations are stored in ``<label>_analytic_frequency/`` or ``<label>_numerical_frequency/``, constrained
+optimization jobs in ``<label>_optimization/``, and branch records in ``<label>_seam_follow/``. The selected final
+geometry, projected frequencies and modes are written to ``<label>_mecp_freq.log``; the workflow status and selected
+branch are in ``<label>_final_report.log``. ORCA's original output and native quality report describe the initial native
+optimization. Read the final workflow report when following changes the geometry. Raw ``.hess``, ``.engrad`` and
+``.gbw`` files are retained for inspection.
 
 The shared ORCA workflow supports ordinary and broken-symmetry PES2 spin states with structured settings and
 unconstrained molecules. Supply ``--broken-sym NA,NB`` (or ``-bs NA,NB``) with ``--multiplicity2 abs(NA-NB)+1``. For
