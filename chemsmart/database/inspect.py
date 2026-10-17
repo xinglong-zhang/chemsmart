@@ -287,7 +287,7 @@ class DatabaseInspector:
                     "light_elements",
                     "light_elements_basis",
                     "heavy_elements",
-                    "heavy_elements_basis",
+                    "heavy_elements_basis_functions",
                 )
             )
             if not has_detail:
@@ -301,7 +301,7 @@ class DatabaseInspector:
             light_elems = custom_basis.get("light_elements")
             light_basis = custom_basis.get("light_elements_basis")
             heavy_elems = custom_basis.get("heavy_elements")
-            heavy_basis = custom_basis.get("heavy_elements_basis")
+            heavy_basis = custom_basis.get("heavy_elements_basis_functions")
             heavy_ecp = custom_basis.get("heavy_elements_ecp")
             if light_elems:
                 light_str = ", ".join(light_elems)

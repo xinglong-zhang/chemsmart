@@ -106,7 +106,17 @@ class Gaussian16Output(GaussianFileMixin):
     @property
     def heavy_elements_basis(self):
         """
-        Structured basis specification for heavy elements.
+        Name of the basis set for heavy elements (consistent with
+        Gaussian16Input.heavy_elements_basis).  Gaussian does not print the
+        name of an explicitly defined gen/genecp basis, so this is None; see
+        `heavy_elements_basis_functions` for the printed basis functions.
+        """
+        return None
+
+    @property
+    def heavy_elements_basis_functions(self):
+        """
+        Structured basis functions for heavy elements.
         When the route string starts with #p, Gaussian prints the expanded
         orbital exponents and coefficients for elements that use an explicitly
         defined gen/genecp basis.  This property parses that information into
@@ -121,7 +131,7 @@ class Gaussian16Output(GaussianFileMixin):
             }
         Returns None when the information is unavailable.
         """
-        return self._genecp_info["heavy_elements_basis"]
+        return self._genecp_info["heavy_elements_basis_functions"]
 
     @property
     def heavy_elements_ecp(self):
@@ -167,7 +177,7 @@ class Gaussian16Output(GaussianFileMixin):
             "light_elements": None,
             "light_elements_basis": None,
             "heavy_elements": None,
-            "heavy_elements_basis": None,
+            "heavy_elements_basis_functions": None,
             "heavy_elements_ecp": None,
         }
         if self.gen_genecp is None:
@@ -249,7 +259,7 @@ class Gaussian16Output(GaussianFileMixin):
             result["heavy_elements"] = p.sorted_periodic_table_list(
                 list(heavy_basis_by_element.keys())
             )
-            result["heavy_elements_basis"] = heavy_basis_by_element
+            result["heavy_elements_basis_functions"] = heavy_basis_by_element
         ecp = self._parse_pseudopotential_section()
         if ecp:
             result["heavy_elements_ecp"] = ecp
