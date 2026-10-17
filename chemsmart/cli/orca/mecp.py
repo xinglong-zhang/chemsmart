@@ -107,7 +107,7 @@ logger = logging.getLogger(__name__)
     default=None,
     help=(
         "Maximum absolute state energy gap (Hartree) for shared seam analysis. "
-        "Defaults to the convergence preset (tight: 1e-5); does not change "
+        "Defaults to 1e-4, matching native SurfCrossOpt; does not change "
         "native SurfCrossOpt convergence."
     ),
 )

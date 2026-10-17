@@ -147,7 +147,6 @@ def test_orca_frequency_only_runs_shared_analysis(
             broken_sym=broken_sym,
             mode="anafreq" if method == "analytic" else "numfreq",
             mecp_numfreq_only=True,
-            energy_diff_tol=1e-4 if energy_gap else 1e-5,
         ),
         label="water",
         jobrunner=MagicMock(),
@@ -209,6 +208,54 @@ def test_orca_analytic_failure_does_not_reuse_old_hessian(
     assert "A" not in job._analytic_hessians
     if not missing_reference:
         assert not stale_hessian.exists()
+
+
+@pytest.mark.parametrize("preset", ["standard", "tight"])
+def test_orca_gap_default_is_independent_of_shared_presets(preset):
+    from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS
+
+    settings = mecp_settings(convergence_preset=preset)
+    assert settings.energy_diff_tol == 1e-4
+    assert (
+        settings.force_max_tol
+        == MECP_CONVERGENCE_PRESETS[preset]["force_max_tol"]
+    )
+    assert MECP_CONVERGENCE_PRESETS["tight"]["energy_diff_tol"] == 1e-5
+    assert MECP_CONVERGENCE_PRESETS["standard"]["energy_diff_tol"] == 5e-5
+    assert mecp_settings(energy_diff_tol=1e-6).energy_diff_tol == 1e-6
+
+
+@pytest.mark.parametrize(
+    "gap,tangent,tolerance",
+    [
+        (2e-4, 0.0, 1e-4),
+        (2.114262e-5, 0.0, 1e-5),
+        (0.0, 0.01, 1e-4),
+    ],
+)
+def test_orca_stationarity_checks_still_reject_before_hessians(
+    gap, tangent, tolerance
+):
+    from types import SimpleNamespace
+
+    job = object.__new__(ORCAMECPJob)
+    job.label = "nonstationary"
+    job.settings = mecp_settings(
+        mode="anafreq", mecp_numfreq_only=True, energy_diff_tol=tolerance
+    )
+    job.molecule = SimpleNamespace(positions=np.zeros((1, 3)))
+    job._run_state = lambda positions, step, state, **kwargs: (
+        (gap, np.array([[1.0, tangent, 0.0]]))
+        if state == "A"
+        else (0.0, np.array([[-1.0, tangent, 0.0]]))
+    )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Hessians must not run on a nonstationary crossing")
+
+    job._get_state_hessians = forbidden
+    with pytest.raises(RuntimeError, match="stationary crossing"):
+        job.verify_seam_minimum(write_frequencies=True)
 
 
 def test_both_backends_use_same_follow_algorithm():
@@ -1219,7 +1266,7 @@ def test_mecp_invalid_mode(args):
     [
         (["anafreq"], "analytic", False),
         (["anafreq", "--only"], "analytic", True),
-        (["anafreq", "--only", "--energy-diff-tol", "1e-4"], "analytic", True),
+        (["anafreq", "--only", "--energy-diff-tol", "1e-5"], "analytic", True),
         (["numfreq", "--only"], "numerical", True),
         (["followseam"], "numerical", False),
         (["followseam", "--hessian-method", "analytic"], "analytic", False),
@@ -1255,7 +1302,7 @@ def test_mecp_shared_workflow_cli(
     assert settings.hessian_method == method
     assert settings.mecp_numfreq_only == only
     assert settings.energy_diff_tol == (
-        1e-4 if "--energy-diff-tol" in args else 1e-5
+        1e-5 if "--energy-diff-tol" in args else 1e-4
     )
     assert settings.uses_seam_workflow
     if args[0] != "numfreq":

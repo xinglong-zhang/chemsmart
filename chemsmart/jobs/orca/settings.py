@@ -2744,7 +2744,14 @@ class ORCAMECPJobSettings(ORCAJobSettings):
     """
 
     MODES = frozenset({"opt", "numfreq", "anafreq", "followseam"})
-    CONVERGENCE_PRESETS = MECP_CONVERGENCE_PRESETS
+    # Native SurfCrossOpt accepts a state energy gap of 1e-4 Eh. Use
+    # that same gap for subsequent seam analysis rather than inheriting
+    # the stricter Python/Gaussian optimizer gap. Keep independent copies
+    # so ORCA defaults cannot change the shared optimizer presets.
+    CONVERGENCE_PRESETS = {
+        name: {**values, "energy_diff_tol": 1.0e-4}
+        for name, values in MECP_CONVERGENCE_PRESETS.items()
+    }
 
     def __init__(
         self,
