@@ -6,6 +6,7 @@ import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
+from chemsmart.cli.plugins import JOB_COMMANDS, add_commands
 from chemsmart.cli.subcommands import subcommands
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
@@ -140,8 +141,7 @@ def process_pipeline(ctx, *args, **kwargs):
         raise ValueError(f"Invalid job type: {type(job)}.")
 
 
-for subcommand in subcommands:
-    run.add_command(subcommand)
+add_commands(JOB_COMMANDS, run, subcommands)
 
 
 if __name__ == "__main__":
