@@ -8,14 +8,27 @@ Configure project-specific settings for Gaussian, ORCA, xTB, and CREST calculati
  Updating Project Templates
 ****************************
 
-To add project directories and files introduced in newer CHEMSMART version, run:
+To add program directories and project files introduced in a newer CHEMSMART
+version, run:
+
+.. code:: bash
+
+   chemsmart update programs
+
+The command only adds missing template directories and files. Existing files
+and user-created files are preserved. Initial ``make configure`` copies bundled
+templates when creating ``~/.chemsmart``.
+
+To add new settings from the bundled templates to existing project YAML files, run:
 
 .. code:: bash
 
    chemsmart update projects
 
-The command only adds missing project directories and files. Existing project files and user-created files are
-preserved. Running ``make configure`` performs this update automatically.
+This command adds missing keys recursively (including keys nested under job
+types such as ``gas``) without replacing existing values. It only updates
+project files with a matching bundled template; it does not create missing
+project files.
 
 ***************************
  Gaussian Project Settings

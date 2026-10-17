@@ -2,12 +2,14 @@ import builtins
 import tempfile
 from pathlib import Path
 
+import yaml
 from click.testing import CliRunner
 
 import chemsmart.cli.update as update_module
 from chemsmart.cli.update import (
     ConfigurationUpdater,
     DependencyUpdater,
+    ProgramsUpdater,
     ProjectsUpdater,
     VersionUpdater,
     update,
@@ -385,11 +387,11 @@ class TestConfigsUpdater:
         assert "Traceback" not in result.output
 
 
-class TestProjectsUpdater:
-    def test_update_projects_adds_missing_template_content_without_overwriting(
-        self, tmp_path, monkeypatch, write_text_file, invoke_update_projects
+class TestProgramsUpdater:
+    def test_update_programs_adds_missing_template_content_without_overwriting(
+        self, tmp_path, monkeypatch, write_text_file, invoke_update_programs
     ):
-        assert ProjectsUpdater._template_config_dir().is_dir()
+        assert ProgramsUpdater._template_config_dir().is_dir()
 
         template_root = tmp_path / "templates" / ".chemsmart"
         config_root = tmp_path / "user" / ".chemsmart"
@@ -426,14 +428,15 @@ class TestProjectsUpdater:
         )
 
         monkeypatch.setattr(
-            ProjectsUpdater,
+            ProgramsUpdater,
             "_template_config_dir",
             staticmethod(lambda: template_root),
         )
 
-        result = invoke_update_projects(config_root)
+        result = invoke_update_programs(config_root)
 
         assert result.exit_code == 0, result.output
+        assert "Updated program templates:" in result.output
         assert "added missing content: fake_a" in result.output
         assert "added missing content: fake_b" in result.output
         assert "added missing content: fake_empty" in result.output
@@ -458,7 +461,7 @@ class TestProjectsUpdater:
             for path in config_root.rglob("*")
             if path.is_file()
         }
-        repeated = invoke_update_projects(config_root)
+        repeated = invoke_update_programs(config_root)
         files_after = {
             path.relative_to(config_root): path.read_bytes()
             for path in config_root.rglob("*")
@@ -482,12 +485,12 @@ class TestProjectsUpdater:
         )
 
         monkeypatch.setattr(
-            ProjectsUpdater,
+            ProgramsUpdater,
             "_template_config_dir",
             staticmethod(lambda: template_root),
         )
 
-        result = invoke_update_projects(config_root)
+        result = invoke_update_programs(config_root)
 
         assert result.exit_code != 0
         assert "Expected a directory" in result.output
@@ -507,9 +510,106 @@ class TestProjectsUpdater:
             update_module.shutil, "copyfileobj", fail_during_copy
         )
 
-        copy_result = invoke_update_projects(copy_config_root)
+        copy_result = invoke_update_programs(copy_config_root)
 
         assert copy_result.exit_code != 0
         assert "copy failed" in copy_result.output
         assert not (copy_config_root / "fake_a" / "settings.yaml").exists()
         assert custom.read_text(encoding="utf-8") == "user custom\n"
+
+
+class TestProjectsUpdater:
+    def test_update_projects_recursively_adds_missing_template_keys(
+        self, tmp_path, monkeypatch, write_text_file, invoke_update_projects
+    ):
+        template_root = tmp_path / "templates" / ".chemsmart"
+        config_root = tmp_path / "user" / ".chemsmart"
+        write_text_file(
+            template_root / "gaussian" / "test.yaml",
+            """
+            gas:
+              functional: m062x
+              opt:
+                basis: def2svp
+                solvent_model: smd
+            solv:
+              freq: false
+            qmmm:
+              high_level_basis: def2svp
+            """,
+        )
+        project_file = write_text_file(
+            config_root / "gaussian" / "test.yaml",
+            """
+            gas:
+              functional: user-functional
+              opt:
+                basis: user-basis
+            custom:
+              value: keep
+            """,
+        )
+        unmatched = write_text_file(
+            config_root / "gaussian" / "custom.yaml",
+            "gas:\n  functional: custom\n",
+        )
+
+        monkeypatch.setattr(
+            ProjectsUpdater,
+            "_template_config_dir",
+            staticmethod(lambda: template_root),
+        )
+        monkeypatch.setattr(
+            ProgramsUpdater,
+            "_config_dir",
+            staticmethod(lambda: config_root),
+        )
+
+        result = invoke_update_projects(config_root)
+
+        assert result.exit_code == 0, result.output
+        assert "gaussian/test.yaml" in result.output
+        assert yaml.safe_load(project_file.read_text(encoding="utf-8")) == {
+            "gas": {
+                "functional": "user-functional",
+                "opt": {
+                    "basis": "user-basis",
+                    "solvent_model": "smd",
+                },
+            },
+            "custom": {"value": "keep"},
+            "solv": {"freq": False},
+            "qmmm": {"high_level_basis": "def2svp"},
+        }
+        assert unmatched.read_text(encoding="utf-8") == (
+            "gas:\n  functional: custom\n"
+        )
+
+        before = project_file.read_bytes()
+        repeated = invoke_update_projects(config_root)
+        assert repeated.exit_code == 0, repeated.output
+        assert "already up to date" in repeated.output
+        assert project_file.read_bytes() == before
+
+    def test_update_projects_does_not_create_missing_project_files(
+        self, tmp_path, monkeypatch, write_text_file
+    ):
+        template_root = tmp_path / "templates" / ".chemsmart"
+        config_root = tmp_path / "user" / ".chemsmart"
+        write_text_file(
+            template_root / "orca" / "test.yaml", "gas:\n  basis: def2-SVP\n"
+        )
+        (config_root / "orca").mkdir(parents=True)
+        monkeypatch.setattr(
+            ProjectsUpdater,
+            "_template_config_dir",
+            staticmethod(lambda: template_root),
+        )
+        monkeypatch.setattr(
+            ProgramsUpdater,
+            "_config_dir",
+            staticmethod(lambda: config_root),
+        )
+
+        assert ProjectsUpdater().update() == ()
+        assert not (config_root / "orca" / "test.yaml").exists()
