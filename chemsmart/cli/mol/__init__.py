@@ -5,6 +5,7 @@ from .mol import (
     mol,  # to avoid potential conflict with inbuilt pymol module, we use mol instead
 )
 from .movie import movie
+from .nbo import nbo
 from .nci import nci
 from .spin import spin
 from .visualize import visualize
@@ -16,6 +17,7 @@ __all__ = [
     "mo",
     "movie",
     "nci",
+    "nbo",
     "spin",
     "visualize",
 ]
