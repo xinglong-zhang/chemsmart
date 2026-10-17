@@ -462,6 +462,56 @@ class Gaussian16Output(GaussianFileMixin):
             if line.startswith("NAtoms="):
                 return int(line.split()[1])
 
+    def read_cartesian_hessian(self):
+        """Read the last complete lower-triangular Hessian (Hartree/Bohr²).
+
+        Requires Gaussian #p output. Reject incomplete matrices rather than
+        silently treating missing force constants as zeros.
+        """
+        path = self.filepath
+        if not self.num_atoms or self.num_atoms < 1:
+            raise RuntimeError(f"Missing or invalid atom count in {path}.")
+        size = 3 * self.num_atoms
+        result = None
+        matrix = None
+        columns = []
+        with open(path, encoding="utf-8") as stream:
+            for line in stream:
+                if "Force constants in Cartesian coordinates:" in line:
+                    matrix = np.full((size, size), np.nan)
+                    columns = []
+                    continue
+                if matrix is None:
+                    continue
+                fields = line.split()
+                if not fields:
+                    continue
+                if all(field.isdigit() for field in fields):
+                    columns = [int(field) - 1 for field in fields]
+                    continue
+                if not fields[0].isdigit() or not columns:
+                    continue
+                row = int(fields[0]) - 1
+                try:
+                    values = [
+                        float(value.replace("D", "E")) for value in fields[1:]
+                    ]
+                except ValueError:
+                    continue
+                if not 0 <= row < size:
+                    continue
+                for col, value in zip(columns, values):
+                    if 0 <= col <= row:
+                        matrix[row, col] = matrix[col, row] = value
+                if np.isfinite(matrix).all():
+                    result = matrix.copy()
+                    matrix = None
+        if matrix is not None or result is None:
+            raise RuntimeError(
+                f"Missing or incomplete Cartesian Hessian in {path}."
+            )
+        return result
+
     @property
     def charge(self):
         """

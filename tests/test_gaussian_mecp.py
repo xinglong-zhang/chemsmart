@@ -1666,13 +1666,11 @@ def test_frequency_method_conflict():
 
 
 def test_read_real_gaussian_cartesian_hessian():
-    from chemsmart.io.gaussian.hessian import read_cartesian_hessian
-
     path = (
         Path(__file__).parent
         / "data/GaussianTests/outputs/bromochloromethane_full_gen.log"
     )
-    matrix = read_cartesian_hessian(path, 5)
+    matrix = Gaussian16Output(path).read_cartesian_hessian()
     assert matrix.shape == (15, 15)
     assert matrix[0, 0] == pytest.approx(0.122156)
     assert matrix[1, 0] == pytest.approx(-0.0602661)
@@ -1680,14 +1678,12 @@ def test_read_real_gaussian_cartesian_hessian():
 
 
 def test_hessian_reader_rejects_truncated_matrix(tmp_path):
-    from chemsmart.io.gaussian.hessian import read_cartesian_hessian
-
     path = tmp_path / "truncated.log"
     path.write_text(
-        "Force constants in Cartesian coordinates:\n 1 2 3\n 1 1.0D+00\n"
+        "NAtoms= 1\nForce constants in Cartesian coordinates:\n 1 2 3\n 1 1.0D+00\n"
     )
     with pytest.raises(RuntimeError, match="incomplete"):
-        read_cartesian_hessian(path, 1)
+        Gaussian16Output(path).read_cartesian_hessian()
 
 
 @pytest.mark.parametrize("use_link", [False, True])
