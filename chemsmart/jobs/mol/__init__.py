@@ -11,6 +11,7 @@ from .irc import PyMOLIRCMovieJob
 from .job import PyMOLJob
 from .mo import PyMOLMOJob
 from .movie import PyMOLMovieJob
+from .nbo import PyMOLNBOJob
 from .nci import PyMOLNCIJob
 from .runner import PyMOLJobRunner
 from .spin import PyMOLSpinJob
@@ -33,6 +34,7 @@ __all__ = [
     "PyMOLMOJob",
     "PyMOLMovieJob",
     "PyMOLNCIJob",
+    "PyMOLNBOJob",
     "PyMOLSpinJob",
     "jobs",
 ]
