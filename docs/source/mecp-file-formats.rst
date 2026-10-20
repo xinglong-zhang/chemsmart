@@ -15,8 +15,15 @@ separate ``--charge1/-c1`` and ``--charge2/-c2`` values. Native ORCA MECP requir
 Both engines use ``--hessian-method numerical|analytic``, ``--hess-step-size`` (Bohr),
 ``--seam-mode-displacement/--displacement`` (Angstrom), and ``--seam-mode-max-steps/--max-follow-steps``. ``numfreq
 --only`` and ``anafreq --only`` analyze the supplied stationary crossing without optimization. Backend defaults are
-preserved. In particular, ORCA ``numfreq`` without ``--only`` retains native ``SurfCrossNumFreq``; Gaussian obtains
+preserved. ORCA ``numfreq`` without ``--only`` reuses native ``SurfCrossNumFreq`` results and exports
+``<label>_PES1_mecp_freq.log`` and ``<label>_PES2_mecp_freq.log`` without additional state or Hessian calculations.
+These files retain the separate native effective-Hessian definitions; the two frequency sets are never averaged. ORCA
+``numfreq --only`` retains ChemSmart's numerical Lagrangian-Hessian analysis of the supplied structure. Gaussian obtains
 numerical state Hessians through the ChemSmart driver.
+
+ORCA ``anafreq`` runs fixed-geometry ``AnFreq`` for each state and reads both ``.hess`` files. ChemSmart constructs the
+Lagrangian Hessian using the state gradients, then projects translations, rotations and the gradient-difference
+direction to obtain seam frequencies.
 
 Energies are in Hartree, Cartesian geometry in Angstrom, projected gradients in Hartree/Bohr, optimization displacements
 in Bohr, Cartesian Hessians in Hartree/Bohr², and projected frequencies in cm⁻¹.
@@ -33,6 +40,22 @@ in Bohr, Cartesian Hessians in Hartree/Bohr², and projected frequencies in cm�
 ``<label>_mecp_freq.log``
    Selected geometry, masses, projected frequencies and Cartesian normal modes. Both engines use the existing format
    accepted by ChemSmart thermochemistry and molecule readers.
+
+``<label>_PES1_mecp_freq.log`` and ``<label>_PES2_mecp_freq.log``
+   Native ORCA projected frequencies with the projected zero-mode prefix removed. Each file identifies
+   ``frequency_source=ORCA_SurfCrossNumFreq`` and ``frequency_surface=PES1|PES2``. Thermochemistry uses its
+   ``electronic_energy`` (the corresponding state's energy); ``mecp_energy`` retains the mean for reference. Only
+   complete, normally terminated and converged native results are exported. No normal-mode vectors or Lagrange
+   multiplier are fabricated. The electronic statistical weight defaults to one, as for other MECP inputs.
+
+   Analyze the surfaces separately, for example:
+
+   .. code::
+
+      chemsmart run thermochemistry -T 298.15 -f crossing_PES1_mecp_freq.log
+      chemsmart run thermochemistry -T 298.15 -f crossing_PES2_mecp_freq.log
+
+   These yield separate Gibbs energies, not a unique Lagrangian-seam Gibbs energy.
 
 ``<label>_numfreq/`` or ``<label>_anafreq/``
    Numerical or analytic state calculations and ``<label>_seam_check.log``. Reference jobs use

@@ -14,7 +14,11 @@ from typing import Type
 import numpy as np
 from ase import units
 
-from chemsmart.io.mecp import read_report_fields, state_energy_lines
+from chemsmart.io.mecp import (
+    read_report_fields,
+    state_energy_lines,
+    write_frequency_log,
+)
 from chemsmart.jobs.mecp import MECPSeamMixin
 from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
 from chemsmart.jobs.orca.settings import ORCAJobSettings, ORCAMECPJobSettings
@@ -110,7 +114,13 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
 
     def _job_is_complete(self):
         if not self.settings.uses_seam_workflow:
-            return super()._job_is_complete()
+            complete = super()._job_is_complete()
+            if complete and self.settings.mode == "numfreq":
+                try:
+                    self._export_native_frequencies()
+                except RuntimeError:
+                    return False
+            return complete
         report = read_report_fields(self.final_report_file)
         return (
             report.get("mode") == self.settings.mode
@@ -121,7 +131,10 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
 
     def _run(self, **kwargs):
         if not self.settings.uses_seam_workflow:
-            return super()._run(**kwargs)
+            super()._run(**kwargs)
+            if self.settings.mode == "numfreq":
+                self._export_native_frequencies()
+            return
         self._reset_execution_state()
         # Remove an earlier success marker before starting a fresh workflow.
         if os.path.isfile(self.seam_report_file):
@@ -329,6 +342,69 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
             ) from error
         return None, None
 
+    @property
+    def native_frequency_files(self):
+        """Separate thermochemistry inputs for native PES1 and PES2."""
+        return {
+            surface: os.path.join(
+                self.folder, f"{self.label}_{surface}_mecp_freq.log"
+            )
+            for surface in ("PES1", "PES2")
+        }
+
+    def _export_native_frequencies(self):
+        """Reuse ORCA effective frequencies without running state jobs."""
+        native = self.results
+        if (
+            native is None
+            or not native.converged
+            or not native.numfreq_completed
+        ):
+            raise RuntimeError("Native ORCA MECP frequencies are incomplete")
+        molecule = native.final_structure
+        positions = np.asarray(molecule.positions)
+        centered = positions - positions.mean(axis=0)
+        # A linear rotor has two rotational directions; otherwise three.
+        n_projected = 6 if np.linalg.matrix_rank(centered) == 1 else 7
+        energies = (native.state_1_energy, native.state_2_energy)
+        if any(e is None or not np.isfinite(e) for e in energies):
+            raise RuntimeError("Native ORCA MECP state energies are missing")
+        tables = (native.state_1_frequencies, native.state_2_frequencies)
+        for table in tables:
+            if not np.isfinite(table).all() or not np.allclose(
+                table[:n_projected], 0.0, atol=0.01
+            ):
+                raise RuntimeError("Invalid native ORCA projected zero modes")
+        for (surface, filename), energy, table in zip(
+            self.native_frequency_files.items(), energies, tables
+        ):
+            frequencies = np.asarray(table[n_projected:])
+            result = {
+                "positions_angstrom": positions,
+                "atomic_masses": molecule.most_abundant_masses,
+                "energy_a": energies[0],
+                "energy_b": energies[1],
+                "energy_diff": energies[0] - energies[1],
+                "mecp_energy": sum(energies) / 2,
+                "electronic_energy": energy,
+                "frequency_source": "ORCA_SurfCrossNumFreq",
+                "frequency_surface": surface,
+                "n_projected": n_projected,
+                "frequencies": frequencies,
+                "n_negative": int(np.sum(frequencies < -1.0)),
+                "multiplicity_a": self.settings.multiplicity_a,
+                "multiplicity_b": self.settings.multiplicity_b,
+                "rotational_symmetry_number": 1,
+            }
+            write_frequency_log(
+                filename,
+                self.label + "_" + surface,
+                list(molecule.symbols),
+                result,
+                None,
+                "native_numerical",
+            )
+
     def _validate_broken_symmetry(self):
         """Reject broken-symmetry requests incompatible with PES2.
 
@@ -397,6 +473,9 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         result = output.mecp_result
         if result is None:
             return None
+
+        if result.converged and result.numfreq_completed:
+            self._export_native_frequencies()
 
         issues = []
         if not result.normal_termination:
@@ -473,6 +552,12 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
                 "may be appropriate."
             )
         lines.append("")
+
+        if result.converged and result.numfreq_completed:
+            lines.extend(
+                f"frequency_file_{surface}={os.path.basename(path)}"
+                for surface, path in self.native_frequency_files.items()
+            )
 
         with open(self.report_file, "w", encoding="utf-8") as report:
             report.write("\n".join(lines))

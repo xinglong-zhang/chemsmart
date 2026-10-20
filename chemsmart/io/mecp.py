@@ -253,9 +253,17 @@ def write_frequency_log(filename, label, symbols, result, h, method):
         output.write(
             f"energy_difference={result['energy_diff']:+.6e} Hartree\n"
         )
-        output.write(
-            f"lagrange_multiplier=" f"{result['lagrange_multiplier']:+.8e}\n"
-        )
+        if "lagrange_multiplier" in result:
+            output.write(
+                f"lagrange_multiplier={result['lagrange_multiplier']:+.8e}\n"
+            )
+        for key in (
+            "frequency_source",
+            "frequency_surface",
+            "electronic_energy",
+        ):
+            if key in result:
+                output.write(f"{key}={result[key]}\n")
         output.write(f"n_atoms={len(symbols)}\n")
         output.write(f"n_projected={result['n_projected']}\n")
         output.write(f"n_modes={len(result['frequencies'])}\n")
@@ -282,10 +290,11 @@ def write_frequency_log(filename, label, symbols, result, h, method):
         for index, frequency in enumerate(result["frequencies"], 1):
             output.write(f"mode {index:4d}: {frequency:+14.6f}\n")
 
-        output.write(
-            "\nCartesian normal modes " "(mass-unweighted, unit-normalized):\n"
-        )
-        for mode_index, mode in enumerate(result["modes"], 1):
+        if "modes" in result:
+            output.write(
+                "\nCartesian normal modes (mass-unweighted, unit-normalized):\n"
+            )
+        for mode_index, mode in enumerate(result.get("modes", []), 1):
             frequency = result["frequencies"][mode_index - 1]
             output.write(
                 f"mode {mode_index:4d} " f"frequency={frequency:+.6f} cm^-1\n"
@@ -301,4 +310,4 @@ def write_frequency_log(filename, label, symbols, result, h, method):
                 )
             output.write("\n")
 
-        output.write(f"{MECP_FREQUENCY_TERMINATION_MARKER}\n")
+        output.write(f"\n{MECP_FREQUENCY_TERMINATION_MARKER}\n")

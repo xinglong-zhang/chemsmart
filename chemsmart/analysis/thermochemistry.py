@@ -118,7 +118,13 @@ class MECPProjectedFrequencyOutput(FileMixin):
 
     @cached_property
     def energies(self):
-        return [float(self.values["mecp_energy"])]
+        return [
+            float(
+                self.values.get(
+                    "electronic_energy", self.values["mecp_energy"]
+                )
+            )
+        ]
 
     @cached_property
     def multiplicity_a(self):

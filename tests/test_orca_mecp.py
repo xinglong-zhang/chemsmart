@@ -74,11 +74,14 @@ def test_orca_rejects_invalid_hessian(tmp_path, failure):
         read_hessian(path, 3)
 
 
-@pytest.mark.parametrize("method", ["analytic", "numerical"])
+@pytest.mark.parametrize(
+    "only,method",
+    [(True, "numerical"), (True, "analytic"), (False, "analytic")],
+)
 @pytest.mark.parametrize("broken_sym", [None, [1, 1]], ids=["ordinary", "bs"])
 @pytest.mark.parametrize("energy_gap", [0.0, 2.1142623040759645e-5])
 def test_orca_frequency_only_runs_shared_analysis(
-    tmp_path, monkeypatch, method, broken_sym, energy_gap
+    tmp_path, monkeypatch, method, broken_sym, energy_gap, only
 ):
     from ase import units
 
@@ -146,13 +149,23 @@ def test_orca_frequency_only_runs_shared_analysis(
             multiplicity2=1 if broken_sym else 3,
             broken_sym=broken_sym,
             mode="anafreq" if method == "analytic" else "numfreq",
-            mecp_numfreq_only=True,
+            mecp_numfreq_only=only,
         ),
         label="water",
         jobrunner=MagicMock(),
     )
     job.folder = str(tmp_path)
+    native_calls = []
+
+    def native_optimization(**kwargs):
+        native_calls.append(job.settings.route_string)
+        job._final_optimization_steps = 1
+
+    monkeypatch.setattr(job, "_run_native_optimization", native_optimization)
     job.run()
+    assert len(native_calls) == (0 if only else 1)
+    if not only and method == "numerical":
+        assert "SurfCrossNumFreq" in native_calls[0]
     assert job.is_complete()
     assert job._last_seam_result["is_minimum"]
     assert len(job._last_seam_result["frequencies"]) == 2
@@ -696,6 +709,73 @@ def test_real_ch3o_ch2oh_numfreq_result(mecp_case):
     assert result.state_2_frequencies[7] == pytest.approx(601.21)
     assert result.state_1_imaginary_frequencies == ()
     assert result.state_2_imaginary_frequencies == ()
+
+
+def test_native_numfreq_exports_thermochemistry_without_state_jobs(
+    tmp_path, monkeypatch, mecp_case
+):
+    from chemsmart.analysis.thermochemistry import thermochemistry_from_file
+
+    native_output = ORCAOutput(str(mecp_case("ch3o_ch2oh_numfreq")))
+    native = native_output.mecp_result
+    job = ORCAMECPJob(
+        molecule=native.final_structure,
+        settings=mecp_settings(mode="numfreq"),
+        label="native",
+        jobrunner=MagicMock(),
+    )
+    job.folder = str(tmp_path)
+    calls = []
+
+    def native_run(child, **kwargs):
+        calls.append(child)
+        shutil.copy(mecp_case("ch3o_ch2oh_numfreq"), child.outputfile)
+
+    job.jobrunner.run.side_effect = native_run
+    monkeypatch.setattr(
+        job,
+        "_run_state",
+        MagicMock(side_effect=AssertionError("extra state job")),
+    )
+    job._run()
+    assert calls == [job]
+    for surface, energy, frequencies in zip(
+        ("PES1", "PES2"),
+        (native.state_1_energy, native.state_2_energy),
+        (native.state_1_frequencies, native.state_2_frequencies),
+    ):
+        filename = job.native_frequency_files[surface]
+        thermo = thermochemistry_from_file(filename, temperature=298.15)
+        assert thermo.file_object.normal_termination
+        assert thermo.file_object.energies == pytest.approx([energy])
+        assert thermo.file_object.vibrational_frequencies == pytest.approx(
+            frequencies[7:]
+        )
+        assert np.isfinite(thermo.gibbs_free_energy)
+        contents = Path(filename).read_text()
+        assert f"frequency_surface={surface}" in contents
+        assert "frequency_source=ORCA_SurfCrossNumFreq" in contents
+        assert "lagrange_multiplier" not in contents
+        assert "Cartesian normal modes" not in contents
+
+    # Existing completed outputs can regenerate missing exports without ORCA.
+    Path(job.native_frequency_files["PES2"]).unlink()
+    assert job.is_complete()
+    assert Path(job.native_frequency_files["PES2"]).is_file()
+    assert calls == [job]
+
+    # An interrupted native calculation must not produce usable thermo inputs.
+    for filename in job.native_frequency_files.values():
+        Path(filename).unlink()
+    source = Path(job.outputfile).read_text()
+    Path(job.outputfile).write_text(
+        source.replace("ORCA TERMINATED NORMALLY", "INTERRUPTED")
+    )
+    with pytest.raises(RuntimeError, match="incomplete"):
+        job._export_native_frequencies()
+    assert not any(
+        Path(path).exists() for path in job.native_frequency_files.values()
+    )
 
 
 def test_orca_mecp_quality_report(

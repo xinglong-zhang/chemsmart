@@ -59,7 +59,9 @@ logger = logging.getLogger(__name__)
     help=(
         "Optimisation mode. 'opt' (default) runs straight SurfCrossOpt; "
         "'numfreq' adds SurfCrossNumFreq for a numerical-frequency "
-        "verification step after convergence. 'anafreq' uses state analytic "
+        "verification step after convergence and exports both native PES frequency "
+        "sets for thermochemistry without additional Hessian calculations. "
+        "'anafreq' uses state analytic "
         "Hessians; 'followseam' follows negative projected seam modes."
     ),
 )
