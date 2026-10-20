@@ -1,4 +1,4 @@
-"""ChemSmart MECP file conventions and backend-independent reports.
+"""CHEMSMART MECP file conventions and backend-independent reports.
 
 State A/B means state 1/2 for both engines. Energies are in Hartree,
 Cartesian coordinates in Angstrom, gradients in Hartree/Bohr, and
@@ -33,7 +33,7 @@ def state_job_label(label, step, state, checkpoint_tag=None):
 
 @dataclass(frozen=True)
 class MECPFiles:
-    """One naming convention for ChemSmart files and engine sub-jobs."""
+    """One naming convention for CHEMSMART files and engine sub-jobs."""
 
     folder: str
     label: str

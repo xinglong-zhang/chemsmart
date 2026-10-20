@@ -12,7 +12,7 @@ from click.testing import CliRunner
 from chemsmart.cli.orca.orca import orca
 from chemsmart.cli.sub import sub
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.orca.hessian import read_hessian
+from chemsmart.io.orca.hessian import ORCAHessianFile
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.mecp import MECPSeamMixin
 from chemsmart.jobs.orca.job import ORCAGeneralJob
@@ -47,16 +47,16 @@ def test_orca_blocked_hessian_reader(tmp_path):
     matrix = matrix + matrix.T
     path = tmp_path / "state.hess"
     _write_test_hessian(path, matrix)
-    np.testing.assert_allclose(read_hessian(path, 3), matrix)
+    np.testing.assert_allclose(ORCAHessianFile(path).read_hessian(3), matrix)
     with pytest.raises(ValueError, match="dimension"):
-        read_hessian(path, 2)
+        ORCAHessianFile(path).read_hessian(2)
     text = path.read_text()
     path.write_text(text.replace("$hessian", "$missing"))
     with pytest.raises(ValueError, match="section"):
-        read_hessian(path, 3)
+        ORCAHessianFile(path).read_hessian(3)
     path.write_text(text[: text.index("5 6 7 8")])
     with pytest.raises(ValueError, match="Incomplete"):
-        read_hessian(path, 3)
+        ORCAHessianFile(path).read_hessian(3)
 
 
 @pytest.mark.parametrize("failure", ["nonfinite", "asymmetric", "duplicate"])
@@ -71,7 +71,7 @@ def test_orca_rejects_invalid_hessian(tmp_path, failure):
     if failure == "duplicate":
         path.write_text(path.read_text().replace("5 6 7 8", "0 1 2 3"))
     with pytest.raises(ValueError):
-        read_hessian(path, 3)
+        ORCAHessianFile(path).read_hessian(3)
 
 
 @pytest.mark.parametrize(
@@ -797,7 +797,7 @@ def test_orca_mecp_quality_report(
     job.set_folder(str(tmp_path))
     shutil.copy(source, job.outputfile)
 
-    report_path = job.log_result(energy_gap_tolerance=2.0e-4)
+    report_path = job.log_results(energy_gap_tolerance=2.0e-4)
     report = Path(report_path).read_text(encoding="utf-8")
 
     assert Path(report_path).name == "ch3o_ch2oh_mecp_report.log"
@@ -841,7 +841,7 @@ THE OPTIMIZATION HAS CONVERGED
         encoding="utf-8",
     )
 
-    report = Path(job.log_result()).read_text(encoding="utf-8")
+    report = Path(job.log_results()).read_text(encoding="utf-8")
 
     assert "status=WARNING" in report
     assert "energy_gap_accepted=False" in report
@@ -856,7 +856,7 @@ def test_orca_runner_writes_mecp_report_after_run(
 
     orca_jobrunner_no_scratch._postrun(job)
 
-    job.log_result.assert_called_once_with()
+    job.log_results.assert_called_once_with()
 
 
 def test_numfreq_imaginary_mode_is_not_minimum(tmp_path, mecp_case):
@@ -954,7 +954,7 @@ def test_real_twisted_ethylene_numfreq_report_warns(
     )
     job.set_folder(str(tmp_path))
     shutil.copy(source, job.outputfile)
-    report = Path(job.log_result()).read_text(encoding="utf-8")
+    report = Path(job.log_results()).read_text(encoding="utf-8")
     assert "status=WARNING" in report
     assert "optimization_converged=True" in report
     assert "numfreq_completed=True" in report
@@ -1035,7 +1035,7 @@ def test_real_pathway_numfreq_results_and_reports(
     )
     job.set_folder(str(tmp_path))
     shutil.copy(source, job.outputfile)
-    report = Path(job.log_result()).read_text(encoding="utf-8")
+    report = Path(job.log_results()).read_text(encoding="utf-8")
     assert f"status={status}" in report
     assert "normal_termination=True" in report
     assert "optimization_converged=True" in report

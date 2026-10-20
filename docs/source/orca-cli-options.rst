@@ -719,7 +719,7 @@ mode in both directions:
    chemsmart sub orca -p project -f structure.xyz -c 0 mecp -m1 1 -m2 3 followseam --hessian-method analytic
 
 Without ``--only``, initial optimization and final unconstrained branch relaxation use native ``SurfCrossOpt`` with
-``TightOpt``. The shared ChemSmart driver controls the intervening constrained macro steps and selects the lower
+``TightOpt``. The shared CHEMSMART driver controls the intervening constrained macro steps and selects the lower
 verified seam minimum. Every initial, macro-step and final Hessian check uses the selected method. ``followseam``
 defaults to numerical Hessians; ``--hess-step-size`` (Bohr, default 0.001) controls the Cartesian central differences.
 ``--seam-mode-displacement`` (Angstrom, default 0.05) and ``--seam-mode-max-steps`` (default 30) control following;

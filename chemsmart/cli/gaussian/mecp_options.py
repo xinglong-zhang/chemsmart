@@ -5,10 +5,16 @@ import click
 from chemsmart.cli.mecp import (
     click_mecp_follow_controls,
     click_mecp_hessian_options,
+    click_mecp_state_options,
 )
-from chemsmart.cli.mecp import (
-    click_mecp_state_options as click_mecp_state_options,
-)
+
+__all__ = [
+    "add_mecp_method_suffix",
+    "click_mecp_frequency_options",
+    "click_mecp_restart_option",
+    "click_mecp_state_options",
+    "click_mecp_step_size_method_option",
+]
 
 
 def add_mecp_method_suffix(label, method):

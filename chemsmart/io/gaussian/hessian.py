@@ -1,4 +1,4 @@
-"""Gaussian formatted checkpoint files and Cartesian force constants."""
+"""Gaussian formatted-checkpoint Cartesian force constants."""
 
 import re
 from functools import cached_property
@@ -6,10 +6,14 @@ from functools import cached_property
 import numpy as np
 
 from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.repattern import (
+    gaussian_fchk_force_constants_pattern,
+    gaussian_fchk_num_atoms_pattern,
+)
 
 
-class GaussianFormattedCheckpoint(FileMixin):
-    """Read Gaussian .fchk files, including unweighted Cartesian Hessians."""
+class GaussianHessianFile(FileMixin):
+    """Read an unweighted Cartesian Hessian from a Gaussian .fchk file."""
 
     def __init__(self, filename):
         self.filename = filename
@@ -18,14 +22,14 @@ class GaussianFormattedCheckpoint(FileMixin):
     def num_atoms(self):
         """Read the atom count stored in the formatted checkpoint."""
         for line in self.contents:
-            match = re.fullmatch(r"Number of atoms\s+I\s+(\d+)", line)
+            match = re.fullmatch(gaussian_fchk_num_atoms_pattern, line)
             if match and int(match[1]) > 0:
                 return int(match[1])
         raise RuntimeError(
             f"Missing or invalid atom count in {self.filepath}."
         )
 
-    def read_fchk_hessian(self):
+    def read_hessian(self):
         """Read the packed lower triangle in Hartree/Bohr², without rounding."""
         path = self.filepath
         n_atoms = self.num_atoms
@@ -35,11 +39,11 @@ class GaussianFormattedCheckpoint(FileMixin):
         atom_count = None
         with open(path, encoding="utf-8") as stream:
             for line in stream:
-                match = re.match(r"Number of atoms\s+I\s+(\d+)\s*$", line)
+                match = re.fullmatch(gaussian_fchk_num_atoms_pattern, line)
                 if match:
                     atom_count = int(match[1])
-                match = re.match(
-                    r"Cartesian Force Constants\s+R\s+N=\s*(\d+)\s*$", line
+                match = re.fullmatch(
+                    gaussian_fchk_force_constants_pattern, line
                 )
                 if not match:
                     continue

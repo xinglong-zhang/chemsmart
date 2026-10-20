@@ -678,7 +678,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
         eff_grad_flat = eff_grad.ravel().copy()
 
         # 2. Update the inverse Hessian with BFGS and compute the displacement.
-        # Harvey's original code uses Angstrom, whereas ChemSmart uses Bohr.
+        # Harvey's original code uses Angstrom, whereas CHEMSMART uses Bohr.
         # Initial inverse Hessian: 0.7 Angstrom^2/Hartree converted to
         # Bohr^2/Hartree.
         bohr_per_ang = 1.0 / units.Bohr
@@ -833,7 +833,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
             )
         )
 
-    def log_step(
+    def _log_step(
         self,
         f,
         step_idx,
@@ -973,7 +973,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                 if self.settings.step_size_method != "harvey":
                     displacement = self._apply_trust_radius(displacement)
 
-                self.log_step(
+                self._log_step(
                     report,
                     step_idx,
                     ea,
@@ -1133,7 +1133,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                     )
             report.write(f"Converged at step {converged_step}.\n")
         if not self.is_seam_follow_branch:
-            self._write_final_report(
+            self.log_results(
                 initial_steps=converged_step,
                 initial_energy_a=ea,
                 initial_energy_b=eb,

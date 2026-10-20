@@ -150,7 +150,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         self._final_convergence_metrics = {
             "energy_diff": result["energy_diff"]
         }
-        self._write_final_report(
+        self.log_results(
             self._final_optimization_steps,
             result["energy_a"],
             result["energy_b"],
@@ -312,7 +312,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         checkpoint_tag=None,
         analytic=False,
     ):
-        from chemsmart.io.orca.hessian import read_hessian
+        from chemsmart.io.orca.hessian import ORCAHessianFile
 
         settings = self._state_settings(state, checkpoint_tag, analytic)
         job = self._state_job(
@@ -332,10 +332,9 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         if not analytic:
             return self._read_state_gradient(job)
         try:
-            self._analytic_hessians[state] = read_hessian(
-                os.path.join(job.folder, job.label + ".hess"),
-                len(job.molecule.symbols),
-            )
+            self._analytic_hessians[state] = ORCAHessianFile(
+                os.path.join(job.folder, job.label + ".hess")
+            ).read_hessian(len(job.molecule.symbols))
         except (OSError, ValueError) as error:
             raise RuntimeError(
                 f"Cannot read ORCA analytic Hessian: {job.label}"
@@ -447,7 +446,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         """Path to the concise, user-facing MECP quality report."""
         return os.path.join(self.folder, f"{self.label}_report.log")
 
-    def log_result(self, energy_gap_tolerance=None):
+    def _log_native_results(self, energy_gap_tolerance=None):
         """Write a concise quality report for a completed ORCA MECP job.
 
         ORCA remains responsible for the optimization and frequency

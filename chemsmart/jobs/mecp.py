@@ -80,6 +80,7 @@ class MECPSeamMixin:
         self._state_checkpoint_files = {}
         self._last_spin_squared = {"A": None, "B": None}
         for name in (
+            "_final_report_context",
             "_initial_seam_result",
             "_last_seam_result",
             "_selected_seam_follow_branch",
@@ -148,7 +149,7 @@ class MECPSeamMixin:
         self._final_convergence_metrics = {
             "energy_diff": result["energy_diff"]
         }
-        self._write_final_report(
+        self.log_results(
             0,
             result["energy_a"],
             result["energy_b"],
@@ -156,6 +157,62 @@ class MECPSeamMixin:
             frequency_only=True,
         )
         return result
+
+    def log_results(
+        self,
+        initial_steps=None,
+        initial_energy_a=None,
+        initial_energy_b=None,
+        seam_result=None,
+        frequency_only=False,
+        *,
+        energy_gap_tolerance=None,
+    ):
+        """Write a final MECP report for either backend.
+
+        Supply optimization energies and optional seam-analysis results to
+        record a driver-based result. With no arguments, regenerate the
+        recorded report or read native output. Return its path, or None
+        when no reportable result is available.
+        """
+        if initial_steps is not None:
+            if initial_energy_a is None or initial_energy_b is None:
+                raise ValueError("Both initial state energies are required.")
+            if energy_gap_tolerance is not None:
+                raise ValueError(
+                    "Driver-based reports use the settings' convergence thresholds."
+                )
+            context = (
+                initial_steps,
+                initial_energy_a,
+                initial_energy_b,
+                seam_result,
+                frequency_only,
+            )
+            path = self._write_final_report(*context)
+            self._final_report_context = context
+            return path
+        if (
+            initial_energy_a is not None
+            or initial_energy_b is not None
+            or seam_result is not None
+            or frequency_only
+        ):
+            raise ValueError("Driver-based reports require initial_steps.")
+        context = getattr(self, "_final_report_context", None)
+        if context is not None:
+            if energy_gap_tolerance is not None:
+                raise ValueError(
+                    "Driver-based reports use the settings' convergence thresholds."
+                )
+            return self._write_final_report(*context)
+        return self._log_native_results(
+            energy_gap_tolerance=energy_gap_tolerance
+        )
+
+    def _log_native_results(self, energy_gap_tolerance=None):
+        """Backends with native MECP output implement result reporting."""
+        return None
 
     def _write_final_report(
         self,
@@ -218,6 +275,7 @@ class MECPSeamMixin:
             ),
             mode=mode,
         )
+        return self.final_report_file
 
     @staticmethod
     def _rms(array):

@@ -448,7 +448,7 @@ following. Only requested functions create their directories:
    ``--mecp-numfreq`` it also lists the final projected frequencies and seam-minimum status. It distinguishes the
    initial optimization step count from the number of constrained seam-following macro steps and, when applicable, the
    final branch optimization step count. Intermediate structures and per-step diagnostics remain in the other reports.
-   This uses the same final-report schema as ORCA's ChemSmart seam workflows; see :doc:`mecp-file-formats`.
+   This uses the same final-report schema as ORCA's CHEMSMART seam workflows; see :doc:`mecp-file-formats`.
 
 ``<label>.log`` and ``<label>_B.log`` (when the label already ends in ``_mecp``)
    After successful optimization and any requested seam verification/following, the main directory receives unchanged

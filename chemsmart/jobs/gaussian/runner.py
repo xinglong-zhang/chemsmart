@@ -360,7 +360,7 @@ class GaussianJobRunner(JobRunner):
 
     def format_hessian_checkpoint(self, job):
         """Convert and validate a fresh Hessian checkpoint beside its log."""
-        from chemsmart.io.gaussian.fchk import GaussianFormattedCheckpoint
+        from chemsmart.io.gaussian.hessian import GaussianHessianFile
 
         if not os.path.isfile(job.chkfile):
             raise RuntimeError(f"Missing analytic checkpoint: {job.chkfile}")
@@ -399,10 +399,10 @@ class GaussianJobRunner(JobRunner):
                 raise RuntimeError(
                     f"formchk failed for {job.label}: {error}"
                 ) from error
-            checkpoint = GaussianFormattedCheckpoint(output)
+            checkpoint = GaussianHessianFile(output)
             if checkpoint.num_atoms != len(job.molecule.symbols):
                 raise RuntimeError(f"Hessian atom count mismatch in {output}.")
-            hessian = checkpoint.read_fchk_hessian()
+            hessian = checkpoint.read_hessian()
             os.replace(output, destination)
         return hessian
 

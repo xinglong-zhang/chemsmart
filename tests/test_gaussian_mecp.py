@@ -1057,7 +1057,7 @@ def test_step_and_seam_logs_include_diagnostics(tmp_path):
     job.folder = str(tmp_path)
     job.label = "crossing"
     report = StringIO()
-    job.log_step(
+    job._log_step(
         report,
         3,
         -10.0,
@@ -1379,7 +1379,7 @@ def test_final_report_summarizes_selected_structure(tmp_path):
         "optimization_steps": 4,
     }
 
-    job._write_final_report(15, -11.0, -11.000001, result)
+    job.log_results(15, -11.0, -11.000001, result)
 
     report = Path(job.final_report_file).read_text(encoding="utf-8")
     assert "initial_optimization_steps=15" in report
@@ -1432,8 +1432,13 @@ def test_gaussian_and_orca_share_final_report_format(tmp_path):
         job.label = "crossing"
         job.settings = settings
         job.molecule = SimpleNamespace(symbols=["H", "H"], positions=positions)
-        job._write_final_report(5, -2.0, -2.0, result)
+        assert job.log_results(5, -2.0, -2.0, result) == job.final_report_file
         report = Path(job.final_report_file).read_text()
+        Path(job.final_report_file).unlink()
+        assert job.log_results() == job.final_report_file
+        assert Path(job.final_report_file).read_text() == report
+        with pytest.raises(ValueError, match="convergence thresholds"):
+            job.log_results(energy_gap_tolerance=1e-4)
         fields = read_report_fields(job.final_report_file)
         assert fields["backend"] == backend.PROGRAM.lower()
         assert fields["mode"] == "anafreq"
@@ -1448,7 +1453,28 @@ def test_gaussian_and_orca_share_final_report_format(tmp_path):
             in report
         )
         reports.append(report[report.index("energy_A=") :])
+        job._reset_execution_state()
+        job._output = lambda: None
+        assert job.log_results() is None
     assert reports[0] == reports[1]
+
+
+@pytest.mark.parametrize(
+    "arguments,message",
+    [
+        ({"initial_steps": 1}, "Both initial state energies"),
+        ({"initial_energy_a": -1.0}, "require initial_steps"),
+        ({"seam_result": {"energy_a": -1.0}}, "require initial_steps"),
+        ({"frequency_only": True}, "require initial_steps"),
+    ],
+)
+def test_mecp_report_rejects_incomplete_driver_data(arguments, message):
+    from chemsmart.jobs.orca.mecp import ORCAMECPJob
+
+    for backend in (GaussianMECPJob, ORCAMECPJob):
+        job = object.__new__(backend)
+        with pytest.raises(ValueError, match=message):
+            job.log_results(**arguments)
 
 
 def test_mecp_report_records_failed_seam_verification(tmp_path):

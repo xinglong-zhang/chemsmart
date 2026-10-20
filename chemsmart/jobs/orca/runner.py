@@ -485,7 +485,7 @@ class ORCAJobRunner(JobRunner):
         # scratch, matching the report-file convention used by Gaussian MECP.
         if job.TYPE == "orcamecp":
             try:
-                job.log_result()
+                job.log_results()
             except (OSError, ValueError) as e:
                 logger.error(f"Failed to write ORCA MECP quality report: {e}")
 

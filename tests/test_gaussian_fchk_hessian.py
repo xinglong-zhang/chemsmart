@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from chemsmart.io.gaussian.fchk import GaussianFormattedCheckpoint
+from chemsmart.io.gaussian.hessian import GaussianHessianFile
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
@@ -25,10 +25,10 @@ FCHK = (
 def test_fchk_preserves_precision_and_unpacks_lower_triangle(tmp_path):
     path = tmp_path / "state.fchk"
     path.write_text(FCHK)
-    checkpoint = GaussianFormattedCheckpoint(path)
+    checkpoint = GaussianHessianFile(path)
     assert checkpoint.num_atoms == 1
     assert checkpoint.filepath == str(path.resolve())
-    matrix = checkpoint.read_fchk_hessian()
+    matrix = checkpoint.read_hessian()
     np.testing.assert_array_equal(
         matrix,
         [[1.123456789012, 0.02, -0.04], [0.02, 3.0, 0.05], [-0.04, 0.05, 6.0]],
@@ -51,7 +51,7 @@ def test_fchk_rejects_invalid_data(tmp_path, contents):
     path = tmp_path / "state.fchk"
     path.write_text(contents)
     with pytest.raises(RuntimeError):
-        GaussianFormattedCheckpoint(path).read_fchk_hessian()
+        GaussianHessianFile(path).read_hessian()
 
 
 @pytest.mark.parametrize("failure", [None, "process", "invalid", "atom_count"])
