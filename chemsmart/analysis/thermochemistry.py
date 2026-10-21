@@ -120,9 +120,9 @@ class MECPProjectedFrequencyOutput(FileMixin):
     def energies(self):
         return [
             float(
-                self.values.get(
-                    "electronic_energy", self.values["mecp_energy"]
-                )
+                self.values["electronic_energy"]
+                if "electronic_energy" in self.values
+                else self.values["mecp_energy"]
             )
         ]
 

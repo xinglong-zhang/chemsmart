@@ -37,7 +37,6 @@ computational chemistry software.
 
    cli-overview
    molecule-input-formats
-   mecp-file-formats
    convert-cli-options
    chemdraw-organometallic
 
@@ -53,6 +52,7 @@ computational chemistry software.
    gaussian-electronic-structure
    gaussian-qmmm-jobs
    gaussian_submitqmmmjobs
+   gaussian-mecp
    gaussian-other-jobs
 
 .. toctree::
@@ -63,6 +63,7 @@ computational chemistry software.
    orca-structure-optimization
    orca-transition-state
    orca-direct-input
+   orca-mecp
    orca-multiscale-calculations
    orca_submitqmmmjobs
 

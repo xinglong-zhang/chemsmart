@@ -414,5 +414,6 @@ For detailed information on each job type:
 -  :doc:`gaussian-conformational-sampling`
 -  :doc:`gaussian-qrc`
 -  :doc:`gaussian-electronic-structure`
+-  :doc:`gaussian-mecp`
 -  :doc:`gaussian-other-jobs`
 -  :doc:`gaussian-qmmm-jobs`
