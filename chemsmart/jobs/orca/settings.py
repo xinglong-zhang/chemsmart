@@ -14,6 +14,7 @@ import os
 import re
 
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
+from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS, configure_convergence
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
     deduplicate_string_keywords,
@@ -102,6 +103,8 @@ class ORCAJobSettings(MolecularJobSettings):
         scf_algorithm=None,
         scf_maxiter=None,
         scf_convergence=None,
+        scf_hftyp=None,
+        scf_broken_sym=None,
         charge=None,
         multiplicity=None,
         gbw=True,
@@ -211,6 +214,8 @@ class ORCAJobSettings(MolecularJobSettings):
         self.scf_algorithm = scf_algorithm
         self.scf_maxiter = scf_maxiter
         self.scf_convergence = scf_convergence
+        self.scf_hftyp = scf_hftyp
+        self.scf_broken_sym = scf_broken_sym
         self.gbw = gbw
         self.mdci_cutoff = mdci_cutoff
         self.mdci_density = mdci_density
@@ -2714,6 +2719,264 @@ class ORCANEBJobSettings(ORCAJobSettings):
                 route_string, self.solvent_model
             )
 
+        return route_string
+
+
+class ORCAMECPJobSettings(ORCAJobSettings):
+    """
+    Settings for ORCA Minimum Energy Cross Point (MECP) calculations
+    using the native ``SurfCrossOpt`` optimization in ORCA.
+
+    ORCA performs a single self-contained geometry optimization on the
+    crossing seam between two spin states — all iterations are internal to
+    ORCA (unlike the Gaussian MECP driver in this package which runs two
+    Gaussian SP+forces sub-jobs per Python-driven step).
+
+    Attributes:
+        multiplicity1 (int | None): Spin multiplicity of state 1.
+        multiplicity2 (int | None): Spin multiplicity of state 2.
+        mode (str): ``"opt"`` (default) uses ``SurfCrossOpt``,
+            ``"numfreq"`` uses ``SurfCrossOpt SurfCrossNumFreq`` for numerical
+            frequency verification on the converged geometry.
+        maxiter (int | None): Maximum number of SurfCrossOpt iterations
+            (written as ``MaxIter`` in ``%geom``; the ORCA ``%mecp`` block
+            has no ``MaxIter`` keyword).
+    """
+
+    MODES = frozenset({"opt", "numfreq", "anafreq", "followseam"})
+    # Native SurfCrossOpt accepts a state energy gap of 1e-4 Eh. Use
+    # that same gap for subsequent seam analysis rather than inheriting
+    # the stricter Python/Gaussian optimizer gap. Keep independent copies
+    # so ORCA defaults cannot change the shared optimizer presets.
+    CONVERGENCE_PRESETS = {
+        name: {**values, "energy_diff_tol": 1.0e-4}
+        for name, values in MECP_CONVERGENCE_PRESETS.items()
+    }
+
+    def __init__(
+        self,
+        multiplicity1=None,
+        multiplicity2=None,
+        mode="opt",
+        maxiter=200,
+        broken_sym=None,
+        moinp=None,
+        casscf_nel=None,
+        casscf_norb=None,
+        casscf_mult=None,
+        casscf_nroots=None,
+        casscf_bweight=None,
+        hessian_method=None,
+        mecp_numfreq_only=False,
+        seam_mode_displacement=0.05,
+        seam_mode_max_steps=30,
+        hess_step_size=1.0e-3,
+        max_steps=200,
+        step_size=0.1,
+        convergence_preset="tight",
+        # Tight convergence defaults (overridden by preset if not supplied)
+        energy_diff_tol=None,  # Hartree   – None means "use preset"
+        force_max_tol=None,  # Hartree/Bohr
+        force_rms_tol=None,  # Hartree/Bohr
+        disp_max_tol=None,  # Bohr
+        disp_rms_tol=None,  # Bohr
+        trust_radius=None,  # Bohr
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        mode = mode.lower()
+        if mode not in self.MODES:
+            raise ValueError(
+                f"ORCAMECPJobSettings.mode must be one of {sorted(self.MODES)}, "
+                f"got {mode!r}."
+            )
+        self.multiplicity1 = multiplicity1
+        self.multiplicity2 = multiplicity2
+        self.mode = mode
+        self.maxiter = maxiter
+        self.broken_sym = broken_sym
+        self.moinp = moinp
+        self.casscf_nel = casscf_nel
+        self.casscf_norb = casscf_norb
+        self.casscf_mult = casscf_mult
+        self.casscf_nroots = casscf_nroots
+        self.casscf_bweight = casscf_bweight
+        self.hessian_method = hessian_method or (
+            "analytic" if mode == "anafreq" else "numerical"
+        )
+        self.mecp_numfreq_only = mecp_numfreq_only
+        self.mecp_numfreq = (
+            mode in {"anafreq", "followseam"} or mecp_numfreq_only
+        )
+        self.follow_seam_imaginary_mode = mode == "followseam"
+        self.seam_mode_displacement = seam_mode_displacement
+        self.seam_mode_max_steps = seam_mode_max_steps
+        self.hess_step_size = hess_step_size
+        self.max_steps = max_steps
+        self.step_size = step_size
+        self.convergence_preset = convergence_preset
+        overrides = {
+            "energy_diff_tol": energy_diff_tol,
+            "force_max_tol": force_max_tol,
+            "force_rms_tol": force_rms_tol,
+            "disp_max_tol": disp_max_tol,
+            "disp_rms_tol": disp_rms_tol,
+            "trust_radius": trust_radius,
+        }
+        configure_convergence(
+            self,
+            convergence_preset,
+            {
+                name: value
+                for name, value in overrides.items()
+                if value is not None
+            },
+        )
+
+    @property
+    def multiplicity_a(self):
+        return self.multiplicity1
+
+    @property
+    def multiplicity_b(self):
+        return self.multiplicity2
+
+    @property
+    def uses_seam_workflow(self):
+        return self.mode in {"anafreq", "followseam"} or self.mecp_numfreq_only
+
+    def validate(self):
+        """Validate the two surfaces required by native ORCA MECP."""
+        if self.mode not in self.MODES:
+            raise ValueError("Unknown ORCA MECP mode")
+        if self.hessian_method not in {"numerical", "analytic"}:
+            raise ValueError("Hessian method must be numerical or analytic")
+        if self.mode == "anafreq" and self.hessian_method != "analytic":
+            raise ValueError("anafreq requires analytic Hessians")
+        if self.mode == "numfreq" and self.hessian_method != "numerical":
+            raise ValueError("numfreq requires numerical Hessians")
+        if self.mecp_numfreq_only and self.mode not in {"anafreq", "numfreq"}:
+            raise ValueError("--only requires anafreq or numfreq")
+        if any(
+            getattr(self, name) <= 0
+            for name in (
+                "seam_mode_displacement",
+                "seam_mode_max_steps",
+                "hess_step_size",
+                "max_steps",
+                "step_size",
+                *self.CONVERGENCE_PRESETS["tight"],
+            )
+        ):
+            raise ValueError("MECP seam controls must be positive")
+        if self.uses_seam_workflow and (
+            self.moinp is not None
+            or any(
+                getattr(self, name) is not None
+                for name in (
+                    "casscf_nel",
+                    "casscf_norb",
+                    "casscf_mult",
+                    "casscf_nroots",
+                    "casscf_bweight",
+                )
+            )
+        ):
+            raise ValueError(
+                "ORCA anafreq/followseam supports ordinary and broken-symmetry spin states; "
+                "explicit PES2 orbital guesses and CASSCF require "
+                "state-specific adapters. Use native opt/numfreq for these states."
+            )
+        if self.charge is None:
+            raise ValueError("ORCA MECP requires a charge.")
+        if self.multiplicity1 is None or self.multiplicity2 is None:
+            raise ValueError("ORCA MECP requires two multiplicities.")
+        if self.multiplicity1 <= 0 or self.multiplicity2 <= 0:
+            raise ValueError("ORCA MECP multiplicities must be positive.")
+        if self.multiplicity1 == self.multiplicity2:
+            raise ValueError(
+                "ORCA MECP requires two different multiplicities."
+            )
+        if self.maxiter is not None and self.maxiter <= 0:
+            raise ValueError("ORCA MECP maxiter must be positive.")
+        if self.broken_sym is not None:
+            if len(self.broken_sym) != 2 or not all(
+                isinstance(value, int) and value > 0
+                for value in self.broken_sym
+            ):
+                raise ValueError(
+                    "ORCA MECP broken_sym requires two positive integers."
+                )
+        if (self.casscf_nel is None) != (self.casscf_norb is None):
+            raise ValueError(
+                "CASSCF MECP requires both casscf_nel and casscf_norb."
+            )
+        # PES1 is the state on the coordinate line; keep one source of truth.
+        self.multiplicity = self.multiplicity1
+        return self
+
+    @classmethod
+    def from_settings(cls, settings):
+        """Build MECP settings from an ORCAJobSettings-like object."""
+        if isinstance(settings, cls):
+            return settings.copy()
+        return cls(**settings.__dict__)
+
+    @property
+    def route_string(self):
+        """
+        Return the ORCA route string for a SurfCrossOpt MECP job.
+
+        ``SurfCrossOpt`` is an **additional** keyword that modifies the
+        regular geometry-optimization RunTyp — the route therefore keeps
+        ``Opt`` and inserts ``SurfCrossOpt`` after it.  In
+        ``mode="numfreq"`` the keyword ``SurfCrossNumFreq`` is appended
+        for a numerical effective-Hessian verification of the converged
+        crossing seam (see ORCA §4.9.1).
+
+        Example output::
+
+            ! Opt SurfCrossOpt B3LYP def2-SVP
+            ! Opt SurfCrossOpt SurfCrossNumFreq PBE0 def2-TZVP
+        """
+        if self.route_to_be_written is not None:
+            base = self._get_route_string_from_user_input()
+        else:
+            orig_jobtype = self.jobtype
+            self.jobtype = "opt"
+            try:
+                base = self._get_route_string_from_jobtype()
+            finally:
+                self.jobtype = orig_jobtype
+        if not re.search(r"\bOpt\b", base, re.IGNORECASE):
+            base = re.sub(r"^!\s*", "! Opt ", base, count=1)
+        if not re.search(r"\bSurfCrossOpt\b", base, re.IGNORECASE):
+            base = re.sub(
+                r"\bOpt\b",
+                "Opt SurfCrossOpt",
+                base,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        # Strip any Freq/NumFreq inherited from project settings —
+        # SurfCrossOpt + separate Freq/NumFreq is not meaningful.
+        base = re.sub(r"\bSurfCrossNumFreq\b", "", base, flags=re.IGNORECASE)
+        base = re.sub(r"\bFreq\b", "", base, flags=re.IGNORECASE)
+        base = re.sub(r"\bNumFreq\b", "", base, flags=re.IGNORECASE)
+        if self.mode == "numfreq":
+            base = re.sub(
+                r"\bSurfCrossOpt\b",
+                "SurfCrossOpt SurfCrossNumFreq",
+                base,
+                count=1,
+            )
+        # Normalise whitespace
+        if self.uses_seam_workflow and not re.search(
+            r"\b(?:TightOpt|VeryTightOpt)\b", base, re.IGNORECASE
+        ):
+            base = re.sub(r"\bLooseOpt\b", "", base, flags=re.IGNORECASE)
+            base += " TightOpt"
+        route_string = re.sub(r"\s+", " ", base).strip()
         return route_string
 
 

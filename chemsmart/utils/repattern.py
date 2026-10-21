@@ -33,6 +33,10 @@ frozen_coordinates_pattern = (
     r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"
 )
 scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
+spin_squared_pattern = (
+    r"S\*\*2 before annihilation\s+([-+0-9.DEde]+),"
+    r"\s+after\s+([-+0-9.DEde]+)"
+)
 mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
 oniom_gridpoint_pattern = r"ONIOM:\s+gridpoint\s+(\d+)\s+method:\s+(\w+)\s+system:\s+(\w+)\s+energy:\s+([+-]?\d*\.\d+|\d+)"
 oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
@@ -229,3 +233,9 @@ ecp_center_header_pattern = r"^\d+(?:\s+\d+){1,2}\s*$"
 # Matches an ECP term line, e.g. "2   14.2200000  -33.68992012   0.00000000"
 # (r_power  exponent  coefficient  so_coefficient, with floats in D-notation)
 ecp_term_pattern = r"^\d+\s+\S+\s+\S+\s+\S+\s*$"
+
+# Gaussian formatted checkpoint scalar and array headers.
+gaussian_fchk_num_atoms_pattern = r"Number of atoms\s+I\s+(\d+)\s*"
+gaussian_fchk_force_constants_pattern = (
+    r"Cartesian Force Constants\s+R\s+N=\s*(\d+)\s*"
+)
