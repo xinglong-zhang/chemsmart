@@ -1,0 +1,14 @@
+interface:
+  display_name: Xinglong Zhang Code Reviewer
+  short_description: Review CHEMSMART correctness, ownership, and APIs
+  default_prompt: Use $xinglong-zhang-code-reviewer to review this CHEMSMART PR for
+    correctness and OOP/API design, with separate style notes.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
