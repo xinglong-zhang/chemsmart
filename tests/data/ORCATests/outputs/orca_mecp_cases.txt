@@ -1,0 +1,3232 @@
+===== feo_plus =====
+
+|  1> ! Opt SurfCrossOpt B3LYP TZVP defgrid2
+|  6> %mecp
+|  7>   Mult 4
+|  8> end
+| 12> * xyz 1 6
+
+                    ***********************HURRAY********************
+                    ***        THE OPTIMIZATION HAS CONVERGED     ***
+                    *************************************************
+
+                 *******************************************************
+                 *** FINAL ENERGY EVALUATION AT THE STATIONARY POINT ***
+                 ***               (AFTER    8 CYCLES)               ***
+                 *******************************************************
+         *************************************************************
+         *              Energy and Gradient with M =  6              *
+         *************************************************************
+---------------------------------
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  Fe     0.000000    0.000000   -0.161824
+  O      0.000000    0.000000    1.831824
+
+----------------------------
+CARTESIAN COORDINATES (A.U.)
+----------------------------
+
+-------------------------   --------------------
+FINAL SINGLE POINT ENERGY     -1338.458695032703
+-------------------------   --------------------
+
+         *************************************************************
+         *              Energy and Gradient with M =  4              *
+         *************************************************************
+---------------------------------
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  Fe     0.000000    0.000000   -0.161824
+  O      0.000000    0.000000    1.831824
+
+----------------------------
+CARTESIAN COORDINATES (A.U.)
+----------------------------
+
+-------------------------   --------------------
+FINAL SINGLE POINT ENERGY     -1338.458688185430
+-------------------------   --------------------
+
+-------------------------------------   ----------------
+Energy difference between both states       -0.000006847
+-------------------------------------   ----------------
+                                *** OPTIMIZATION RUN DONE ***
+
+                             ****ORCA TERMINATED NORMALLY****
+TOTAL RUN TIME: 0 days 0 hours 2 minutes 55 seconds 394 msec
+
+
+===== END =====
+
+
+===== ch3o_ch2oh_numfreq =====
+
+|  1> ! Opt SurfCrossOpt SurfCrossNumFreq B3LYP TZVP defgrid2
+|  6> %mecp
+|  7>   Mult 1
+|  8> end
+|  9> * xyz 1 3
+
+                    ***        THE OPTIMIZATION HAS CONVERGED     ***
+
+                 *** FINAL ENERGY EVALUATION AT THE STATIONARY POINT ***
+---------------------------------
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  C      0.086457   -0.131383    0.008765
+  H     -0.165724    0.261005    1.099429
+  H      1.126136   -0.015513   -0.325040
+  O     -0.891187    0.034252   -0.743881
+  H     -0.128580   -1.015029    0.770384
+
+FINAL SINGLE POINT ENERGY      -114.621194569527
+FINAL SINGLE POINT ENERGY      -114.621307186894
+Energy difference between both states        0.000112617
+
+----------------------------
+VIBRATIONAL FREQUENCIES PES2
+----------------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:     601.21 cm**-1
+     8:     764.60 cm**-1
+     9:    1068.50 cm**-1
+    10:    1343.94 cm**-1
+    11:    1477.92 cm**-1
+    12:    2299.72 cm**-1
+    13:    2357.27 cm**-1
+    14:    3050.18 cm**-1
+
+-----------------------
+VIBRATIONAL FREQUENCIES
+-----------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:     775.23 cm**-1
+     8:     988.49 cm**-1
+     9:     989.90 cm**-1
+    10:    1218.71 cm**-1
+    11:    1334.59 cm**-1
+    12:    2003.78 cm**-1
+    13:    2355.70 cm**-1
+    14:    3004.94 cm**-1
+
+                             ****ORCA TERMINATED NORMALLY****
+
+
+===== END =====
+
+
+===== ethylene_twisted_numfreq =====
+
+# Trimmed real ORCA output for MECP regression tests.
+# Retained lines are unchanged; intermediate ORCA output is omitted.
+
+# [... original output omitted ...]
+
+                         Program Version 6.1.0  -  RELEASE   -
+
+# [... original output omitted ...]
+
+|  1> ! Opt SurfCrossOpt SurfCrossNumFreq B3LYP def2-SVP defgrid2
+|  2> # Number of processors
+|  3> %pal nprocs 32 end
+|  4> # Memory per core
+|  5> %maxcore 2812
+|  6> %mecp
+|  7>   Mult 1
+|  8>   brokenSym 1,1
+|  9> end
+| 10> %geom
+| 11>   MaxIter 200
+| 12> end
+| 13> * xyz 0 3
+| 14> C        0.0000000000    0.0000000000    0.7250000000
+| 15> C        0.0000000000    0.0000000000   -0.7250000000
+| 16> H        0.0000000000    0.9300000000    1.2900000000
+| 17> H        0.0000000000   -0.9300000000    1.2900000000
+| 18> H        0.9300000000    0.0000000000   -1.2900000000
+| 19> H       -0.9300000000    0.0000000000   -1.2900000000
+| 20> *
+| 21> 
+| 22>                          ****END OF INPUT****
+
+# [... original output omitted ...]
+
+Number of atoms                         .... 6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371926534911
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373322709409
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001396174
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372057610750
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373463808904
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001406198
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372035410492
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373437441812
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001402031
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371508028923
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372938327267
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001430298
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371935036653
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373324008500
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001388972
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371905244859
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373284184600
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001378940
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371529615062
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372878184974
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001348570
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371025471258
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372339804919
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001314334
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370332659811
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371609314125
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001276654
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.369434536431
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370672547656
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001238011
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.368250628102
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.369447730730
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001197103
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.366771412388
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.367924532837
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001153120
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.365205459115
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.366307333525
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001101874
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.364744272118
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.365807222944
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001062951
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.365030881640
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.366061342716
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001030461
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.365708877025
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.366713564806
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001004688
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.367736478031
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.368810723808
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001074246
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.369149444409
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370294631820
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001145187
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370386024436
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371665916375
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001279892
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370648668035
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371973060570
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001324393
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371017538399
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372524961187
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001507423
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371263267699
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372755064135
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001491796
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371797964511
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373325320339
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001527356
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372026442909
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373556804478
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001530362
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372219421222
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373735197193
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001515776
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372226252863
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373693675644
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001467423
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371958335220
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373351924381
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001393589
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371325760145
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372638600547
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001312840
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371683136617
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.373016588423
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001333452
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371451877703
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372744940596
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001293063
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371093389865
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372327416430
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001234027
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371152130049
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372393141344
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001241011
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371117440184
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372352056330
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001234616
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370979728975
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.372189162197
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001209433
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370386685584
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.371512081567
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001125396
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.369682188837
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.370703546684
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.001021358
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.368938358596
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.369862447994
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000924089
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.367856644885
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.368661443019
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000804798
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.366537278015
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.367215539700
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000678262
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.364926523191
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.365469553481
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000543030
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.363005969283
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.363407575382
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000401606
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.360728652058
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.360980876399
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000252224
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.358129848241
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.358229063282
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000099215
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355753054741
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355713290942
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000039764
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.353409303703
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.353235009053
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000174295
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.352229764307
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.351989467407
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000240297
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.353964383962
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.353816081748
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000148302
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355521692761
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355459889016
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000061804
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.354271099524
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.354138204235
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000132895
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.354544034068
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.354425678297
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000118356
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.354643135132
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.354526861249
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000116274
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355076855977
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.354987690015
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000089166
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.356143245017
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.356113227542
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000030017
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355854613173
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355808511939
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000046101
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355978851640
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.355939308574
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000039543
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.356132457128
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.356107423946
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000025033
+
+# [... original output omitted ...]
+
+Number of atoms                         ....   6
+
+# [... original output omitted ...]
+
+                    ***        THE OPTIMIZATION HAS CONVERGED     ***
+
+# [... original output omitted ...]
+
+                 *** FINAL ENERGY EVALUATION AT THE STATIONARY POINT ***
+
+# [... original output omitted ...]
+
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  C      0.247611   -0.096436    0.736547
+  C      0.096811   -0.247251   -0.736836
+  H     -0.140991    0.886226    1.024571
+  H     -0.189678   -0.874348    1.373953
+  H      0.873124    0.192081   -1.374761
+  H     -0.886877    0.139728   -1.023473
+
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.356194200478
+
+# [... original output omitted ...]
+
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  C      0.247611   -0.096436    0.736547
+  C      0.096811   -0.247251   -0.736836
+  H     -0.140991    0.886226    1.024571
+  H     -0.189678   -0.874348    1.373953
+  H      0.873124    0.192081   -1.374761
+  H     -0.886877    0.139728   -1.023473
+
+
+# [... original output omitted ...]
+
+Number of atoms                             ...      6
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY       -78.356166977352
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000027223
+
+# [... original output omitted ...]
+
+Number of atoms                         ...      6
+
+# [... original output omitted ...]
+
+Number of atoms                ... 6
+
+# [... original output omitted ...]
+
+VIBRATIONAL FREQUENCIES PES2
+----------------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:    -969.14 cm**-1  ***imaginary mode***
+     8:     715.28 cm**-1
+     9:     878.91 cm**-1
+    10:    1025.76 cm**-1
+    11:    1027.05 cm**-1
+    12:    1362.40 cm**-1
+    13:    1375.51 cm**-1
+    14:    2977.93 cm**-1
+    15:    3101.43 cm**-1
+    16:    3169.88 cm**-1
+    17:    3176.34 cm**-1
+
+
+# [... original output omitted ...]
+
+VIBRATIONAL FREQUENCIES
+-----------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:     518.28 cm**-1
+     8:     712.42 cm**-1
+     9:     913.97 cm**-1
+    10:    1020.28 cm**-1
+    11:    1035.44 cm**-1
+    12:    1360.97 cm**-1
+    13:    1377.72 cm**-1
+    14:    2979.41 cm**-1
+    15:    3103.16 cm**-1
+    16:    3173.40 cm**-1
+    17:    3180.32 cm**-1
+
+
+# [... original output omitted ...]
+
+                             ****ORCA TERMINATED NORMALLY****
+
+
+===== END =====
+
+
+===== co_pathway_numfreq =====
+
+# Trimmed real ORCA output for MECP regression tests.
+# Retained lines are unchanged; intermediate ORCA output is omitted.
+
+# [... original output omitted ...]
+
+                         Program Version 6.1.0  -  RELEASE   -
+
+# [... original output omitted ...]
+
+|  1> ! Opt SurfCrossOpt SurfCrossNumFreq M062X maug-cc-pV(D+d)Z defgrid2 SMD(acetonitrile)
+|  2> # Number of processors
+|  3> %pal nprocs 32 end
+|  4> # Memory per core
+|  5> %maxcore 2812
+|  6> %mecp
+|  7>   Mult 1
+|  8>   brokenSym 1,1
+|  9> end
+| 10> %geom
+| 11>   MaxIter 200
+| 12> end
+| 13> * xyz 0 3
+| 14> H       -1.5369524000   -2.4528385000    0.2545103000
+| 15> C       -1.8548055000   -1.4106036000    0.2335591000
+| 16> C       -2.6287496000    1.2733243000    0.1642661000
+| 17> C       -0.8724461000   -0.3988476000    0.1129978000
+| 18> C       -3.1964629000   -1.0721105000    0.3366251000
+| 19> C       -3.5916569000    0.2694442000    0.3129566000
+| 20> C       -1.2795722000    0.9616742000    0.0544643000
+| 21> H       -3.9443511000   -1.8592141000    0.4411550000
+| 22> H       -4.6457859000    0.5339491000    0.4026968000
+| 23> H       -2.9363286000    2.3207049000    0.1223412000
+| 24> C        1.0529437000    1.6637424000    0.5796454000
+| 25> H        1.8448244000    2.4032854000    0.3884190000
+| 26> H        0.8470397000    1.6665208000    1.6616422000
+| 27> C       -0.2223193000    2.0054556000   -0.1853474000
+| 28> H        0.0077237000    2.0504797000   -1.2644504000
+| 29> H       -0.5897079000    2.9984432000    0.1093524000
+| 30> C        0.5116465000   -0.7234855000    0.0394273000
+| 31> C        1.5983198000    0.2860010000    0.2229614000
+| 32> C        2.6799490000   -0.1609885000    1.1995452000
+| 33> H        3.4314782000    0.6342191000    1.3081885000
+| 34> H        3.1840949000   -1.0737246000    0.8566116000
+| 35> H        2.2210817000   -0.3614919000    2.1775403000
+| 36> O        2.2789259000    0.4966590000   -1.1045529000
+| 37> O        2.7739575000   -0.5975690000   -1.5822376000
+| 38> O        0.8519811000   -2.0296217000   -0.0773814000
+| 39> H        1.7305937000   -2.0765336000   -0.4908792000
+| 40> *
+| 41> 
+| 42>                          ****END OF INPUT****
+
+# [... original output omitted ...]
+
+Number of atoms                         .... 26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.747321711556
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.747318010680
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000003701
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.747867527117
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.747525310304
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000342217
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748038252067
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.747789287735
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000248964
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748089914195
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.747987354313
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000102560
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748121045148
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748062118959
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000058926
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748154210618
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748067021916
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000087189
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748186499693
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748057205499
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000129294
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748207401626
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748047629936
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000159772
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+                    ***        THE OPTIMIZATION HAS CONVERGED     ***
+
+# [... original output omitted ...]
+
+                 *** FINAL ENERGY EVALUATION AT THE STATIONARY POINT ***
+
+# [... original output omitted ...]
+
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  H     -1.565460   -2.457330    0.278101
+  C     -1.870387   -1.411312    0.232765
+  C     -2.636678    1.272667    0.119234
+  C     -0.878161   -0.402395    0.138277
+  C     -3.217033   -1.071889    0.277548
+  C     -3.609752    0.271022    0.225883
+  C     -1.281702    0.960721    0.065578
+  H     -3.969387   -1.858720    0.360245
+  H     -4.667078    0.537943    0.266045
+  H     -2.938990    2.321769    0.069983
+  C      1.059166    1.651209    0.621520
+  H      1.846431    2.397256    0.439822
+  H      0.873772    1.623758    1.706525
+  C     -0.224150    2.016644   -0.117791
+  H     -0.006715    2.126192   -1.194792
+  H     -0.597463    2.988805    0.231818
+  C      0.508078   -0.733063    0.111817
+  C      1.597262    0.283214    0.225192
+  C      2.753802   -0.153019    1.112951
+  H      3.499977    0.652261    1.166705
+  H      3.251958   -1.057884    0.736624
+  H      2.374517   -0.356192    2.124233
+  O      2.175532    0.509670   -1.156297
+  O      2.635623   -0.574961   -1.684908
+  O      0.826974   -2.045818    0.053868
+  H      1.775286   -2.143674   -0.136890
+
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748192575514
+
+# [... original output omitted ...]
+
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  H     -1.565460   -2.457330    0.278101
+  C     -1.870387   -1.411312    0.232765
+  C     -2.636678    1.272667    0.119234
+  C     -0.878161   -0.402395    0.138277
+  C     -3.217033   -1.071889    0.277548
+  C     -3.609752    0.271022    0.225883
+  C     -1.281702    0.960721    0.065578
+  H     -3.969387   -1.858720    0.360245
+  H     -4.667078    0.537943    0.266045
+  H     -2.938990    2.321769    0.069983
+  C      1.059166    1.651209    0.621520
+  H      1.846431    2.397256    0.439822
+  H      0.873772    1.623758    1.706525
+  C     -0.224150    2.016644   -0.117791
+  H     -0.006715    2.126192   -1.194792
+  H     -0.597463    2.988805    0.231818
+  C      0.508078   -0.733063    0.111817
+  C      1.597262    0.283214    0.225192
+  C      2.753802   -0.153019    1.112951
+  H      3.499977    0.652261    1.166705
+  H      3.251958   -1.057884    0.736624
+  H      2.374517   -0.356192    2.124233
+  O      2.175532    0.509670   -1.156297
+  O      2.635623   -0.574961   -1.684908
+  O      0.826974   -2.045818    0.053868
+  H      1.775286   -2.143674   -0.136890
+
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.748053038959
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000139537
+
+# [... original output omitted ...]
+
+Number of atoms                         ...     26
+
+# [... original output omitted ...]
+
+Number of atoms                ... 26
+
+# [... original output omitted ...]
+
+VIBRATIONAL FREQUENCIES PES2
+----------------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:     -16.03 cm**-1  ***imaginary mode***
+     8:     107.71 cm**-1
+     9:     128.29 cm**-1
+    10:     172.86 cm**-1
+    11:     221.12 cm**-1
+    12:     236.13 cm**-1
+    13:     262.17 cm**-1
+    14:     291.22 cm**-1
+    15:     332.50 cm**-1
+    16:     346.71 cm**-1
+    17:     362.09 cm**-1
+    18:     386.62 cm**-1
+    19:     438.55 cm**-1
+    20:     455.21 cm**-1
+    21:     481.57 cm**-1
+    22:     517.78 cm**-1
+    23:     533.19 cm**-1
+    24:     565.78 cm**-1
+    25:     597.60 cm**-1
+    26:     609.12 cm**-1
+    27:     663.21 cm**-1
+    28:     706.88 cm**-1
+    29:     739.26 cm**-1
+    30:     771.20 cm**-1
+    31:     802.40 cm**-1
+    32:     872.04 cm**-1
+    33:     883.41 cm**-1
+    34:     908.40 cm**-1
+    35:     963.79 cm**-1
+    36:     979.97 cm**-1
+    37:     992.42 cm**-1
+    38:    1006.03 cm**-1
+    39:    1036.57 cm**-1
+    40:    1068.95 cm**-1
+    41:    1075.98 cm**-1
+    42:    1107.35 cm**-1
+    43:    1145.06 cm**-1
+    44:    1152.78 cm**-1
+    45:    1187.60 cm**-1
+    46:    1213.09 cm**-1
+    47:    1222.32 cm**-1
+    48:    1230.50 cm**-1
+    49:    1250.99 cm**-1
+    50:    1275.24 cm**-1
+    51:    1288.75 cm**-1
+    52:    1349.53 cm**-1
+    53:    1366.06 cm**-1
+    54:    1372.07 cm**-1
+    55:    1379.69 cm**-1
+    56:    1385.77 cm**-1
+    57:    1424.05 cm**-1
+    58:    1432.29 cm**-1
+    59:    1439.26 cm**-1
+    60:    1453.99 cm**-1
+    61:    1462.85 cm**-1
+    62:    1503.93 cm**-1
+    63:    1524.12 cm**-1
+    64:    1629.28 cm**-1
+    65:    1655.60 cm**-1
+    66:    3062.67 cm**-1
+    67:    3086.80 cm**-1
+    68:    3097.23 cm**-1
+    69:    3135.22 cm**-1
+    70:    3151.54 cm**-1
+    71:    3172.73 cm**-1
+    72:    3182.79 cm**-1
+    73:    3208.13 cm**-1
+    74:    3221.50 cm**-1
+    75:    3236.46 cm**-1
+    76:    3244.21 cm**-1
+    77:    3747.55 cm**-1
+
+
+# [... original output omitted ...]
+
+VIBRATIONAL FREQUENCIES
+-----------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:      33.98 cm**-1
+     8:     115.21 cm**-1
+     9:     128.21 cm**-1
+    10:     171.48 cm**-1
+    11:     223.82 cm**-1
+    12:     235.07 cm**-1
+    13:     260.44 cm**-1
+    14:     291.03 cm**-1
+    15:     330.32 cm**-1
+    16:     346.37 cm**-1
+    17:     364.44 cm**-1
+    18:     387.71 cm**-1
+    19:     440.84 cm**-1
+    20:     458.08 cm**-1
+    21:     483.26 cm**-1
+    22:     518.93 cm**-1
+    23:     531.87 cm**-1
+    24:     562.79 cm**-1
+    25:     593.66 cm**-1
+    26:     611.70 cm**-1
+    27:     658.76 cm**-1
+    28:     702.75 cm**-1
+    29:     739.61 cm**-1
+    30:     775.17 cm**-1
+    31:     803.77 cm**-1
+    32:     873.06 cm**-1
+    33:     886.47 cm**-1
+    34:     908.77 cm**-1
+    35:     966.68 cm**-1
+    36:     980.51 cm**-1
+    37:     993.82 cm**-1
+    38:    1007.66 cm**-1
+    39:    1037.29 cm**-1
+    40:    1068.58 cm**-1
+    41:    1076.74 cm**-1
+    42:    1107.10 cm**-1
+    43:    1143.55 cm**-1
+    44:    1152.97 cm**-1
+    45:    1190.03 cm**-1
+    46:    1213.14 cm**-1
+    47:    1222.76 cm**-1
+    48:    1230.71 cm**-1
+    49:    1251.27 cm**-1
+    50:    1277.06 cm**-1
+    51:    1290.55 cm**-1
+    52:    1349.39 cm**-1
+    53:    1366.76 cm**-1
+    54:    1371.93 cm**-1
+    55:    1380.53 cm**-1
+    56:    1384.95 cm**-1
+    57:    1425.47 cm**-1
+    58:    1434.49 cm**-1
+    59:    1439.05 cm**-1
+    60:    1454.17 cm**-1
+    61:    1462.92 cm**-1
+    62:    1506.88 cm**-1
+    63:    1524.51 cm**-1
+    64:    1629.76 cm**-1
+    65:    1655.17 cm**-1
+    66:    3062.30 cm**-1
+    67:    3086.12 cm**-1
+    68:    3096.71 cm**-1
+    69:    3135.76 cm**-1
+    70:    3151.62 cm**-1
+    71:    3172.38 cm**-1
+    72:    3183.15 cm**-1
+    73:    3207.91 cm**-1
+    74:    3221.30 cm**-1
+    75:    3235.94 cm**-1
+    76:    3244.13 cm**-1
+    77:    3748.72 cm**-1
+
+
+# [... original output omitted ...]
+
+                             ****ORCA TERMINATED NORMALLY****
+
+
+===== END =====
+
+
+===== ooh_pathway_numfreq =====
+
+# Trimmed real ORCA output for MECP regression tests.
+# Retained lines are unchanged; intermediate ORCA output is omitted.
+
+# [... original output omitted ...]
+
+                         Program Version 6.1.0  -  RELEASE   -
+
+# [... original output omitted ...]
+
+|  1> ! Opt SurfCrossOpt SurfCrossNumFreq M062X maug-cc-pV(D+d)Z defgrid2 SMD(acetonitrile)
+|  2> # Number of processors
+|  3> %pal nprocs 32 end
+|  4> # Memory per core
+|  5> %maxcore 2812
+|  6> %mecp
+|  7>   Mult 1
+|  8>   brokenSym 1,1
+|  9> end
+| 10> %geom
+| 11>   MaxIter 200
+| 12> end
+| 13> * xyz 0 3
+| 14> C       -3.6044291000    0.3013736000    0.1067626000
+| 15> C       -2.6440269000    1.3124680000    0.0578038000
+| 16> C       -1.2851002000    1.0020799000    0.1210706000
+| 17> C       -1.8659882000   -1.3638216000    0.2271656000
+| 18> C       -3.2177958000   -1.0384022000    0.1862676000
+| 19> H       -4.6634174000    0.5596950000    0.0801750000
+| 20> H       -2.9515270000    2.3550234000   -0.0327310000
+| 21> H       -1.5279186000   -2.3994425000    0.2673272000
+| 22> H       -3.9730054000   -1.8244902000    0.2152977000
+| 23> C       -0.9037177000   -0.3465171000    0.2186365000
+| 24> C        0.5354000000   -0.6974142000    0.3189325000
+| 25> C        1.4408942000    0.3238368000    0.7811634000
+| 26> C        0.9520067000    1.7215177000    0.9706502000
+| 27> H        0.6403772000    1.8288586000    2.0284843000
+| 28> H        1.7882057000    2.4218713000    0.8231789000
+| 29> C       -0.2087606000    2.0527467000    0.0348998000
+| 30> H        0.1796662000    2.0832836000   -0.9981597000
+| 31> H       -0.6210967000    3.0466727000    0.2525330000
+| 32> C        2.8317294000   -0.0130815000    1.1658019000
+| 33> H        3.5360416000    0.6445897000    0.6305190000
+| 34> H        3.0629378000   -1.0629068000    0.9619293000
+| 35> H        2.9678954000    0.1799330000    2.2453922000
+| 36> O        0.9301051000   -1.8512323000    0.0483446000
+| 37> H        2.0378286000   -1.7088623000   -1.1228039000
+| 38> O        2.3319614000   -0.0837469000   -1.9445345000
+| 39> O        2.6847021000   -1.3288256000   -1.8013715000
+| 40> *
+| 41> 
+| 42>                          ****END OF INPUT****
+
+# [... original output omitted ...]
+
+Number of atoms                         .... 26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.744166843062
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.743810259257
+
+# [... original output omitted ...]
+
+Energy difference between both states       -0.000356584
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.744814371516
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.744818891185
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000004520
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745231022030
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745283743683
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000052722
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745371377052
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745512633067
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000141256
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745369306575
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745580445761
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000211139
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745313499364
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745565624001
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000252125
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745086285831
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745472307007
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000386021
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.744771550673
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745340316599
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000568766
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.744801027573
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745363131435
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000562104
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745139363373
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745531446770
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000392083
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745158607443
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745540635823
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000382028
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745159643081
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745546354084
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000386711
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745190748176
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745570679024
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000379931
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745287519464
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745622865774
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000335346
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745371901581
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745663937591
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000292036
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745385754865
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745681142839
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000295388
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745489949452
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745741652856
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000251703
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745552092202
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745778757382
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000226665
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745615535630
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745825556065
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000210020
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745587288442
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745809728065
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000222440
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745641908544
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745920145465
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000278237
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745857918341
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745992444119
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000134526
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.745997051709
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746068858048
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000071806
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746170919160
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746218512768
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000047594
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746181658577
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746222122320
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000040464
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746335608147
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746355055444
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000019447
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746264385153
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746300072334
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000035687
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746227645870
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746276401378
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000048756
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746172312446
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746246641956
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000074330
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746185453674
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746258212786
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000072759
+
+# [... original output omitted ...]
+
+Number of atoms                         ....  26
+
+# [... original output omitted ...]
+
+                    ***        THE OPTIMIZATION HAS CONVERGED     ***
+
+# [... original output omitted ...]
+
+                 *** FINAL ENERGY EVALUATION AT THE STATIONARY POINT ***
+
+# [... original output omitted ...]
+
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  C     -3.640489    0.313479    0.087932
+  C     -2.695486    1.338655    0.135438
+  C     -1.328838    1.047762    0.189479
+  C     -1.874043   -1.328796    0.133766
+  C     -3.231028   -1.024210    0.085601
+  H     -4.703856    0.558346    0.054225
+  H     -3.018617    2.381945    0.131781
+  H     -1.534132   -2.365502    0.135451
+  H     -3.970818   -1.825284    0.047369
+  C     -0.923505   -0.299620    0.192981
+  C      0.521387   -0.638471    0.258447
+  C      1.430755    0.367923    0.741374
+  C      0.928607    1.742140    1.031107
+  H      0.662213    1.768995    2.106874
+  H      1.747196    2.465805    0.902943
+  C     -0.282713    2.130977    0.188032
+  H      0.044835    2.302749   -0.852088
+  H     -0.713762    3.073932    0.549538
+  C      2.840130    0.034732    1.068844
+  H      3.516900    0.437699    0.294233
+  H      3.010344   -1.045206    1.156944
+  H      3.123530    0.527636    2.012258
+  O      0.909734   -1.789803   -0.062460
+  H      2.235812   -1.834220   -0.898593
+  O      2.438658   -0.624816   -2.269641
+  O      2.960154   -1.601638   -1.579102
+
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746166826518
+
+# [... original output omitted ...]
+
+CARTESIAN COORDINATES (ANGSTROEM)
+---------------------------------
+  C     -3.640489    0.313479    0.087932
+  C     -2.695486    1.338655    0.135438
+  C     -1.328838    1.047762    0.189479
+  C     -1.874043   -1.328796    0.133766
+  C     -3.231028   -1.024210    0.085601
+  H     -4.703856    0.558346    0.054225
+  H     -3.018617    2.381945    0.131781
+  H     -1.534132   -2.365502    0.135451
+  H     -3.970818   -1.825284    0.047369
+  C     -0.923505   -0.299620    0.192981
+  C      0.521387   -0.638471    0.258447
+  C      1.430755    0.367923    0.741374
+  C      0.928607    1.742140    1.031107
+  H      0.662213    1.768995    2.106874
+  H      1.747196    2.465805    0.902943
+  C     -0.282713    2.130977    0.188032
+  H      0.044835    2.302749   -0.852088
+  H     -0.713762    3.073932    0.549538
+  C      2.840130    0.034732    1.068844
+  H      3.516900    0.437699    0.294233
+  H      3.010344   -1.045206    1.156944
+  H      3.123530    0.527636    2.012258
+  O      0.909734   -1.789803   -0.062460
+  H      2.235812   -1.834220   -0.898593
+  O      2.438658   -0.624816   -2.269641
+  O      2.960154   -1.601638   -1.579102
+
+
+# [... original output omitted ...]
+
+Number of atoms                             ...     26
+
+# [... original output omitted ...]
+
+FINAL SINGLE POINT ENERGY      -651.746242182235
+
+# [... original output omitted ...]
+
+Energy difference between both states        0.000075356
+
+# [... original output omitted ...]
+
+Number of atoms                         ...     26
+
+# [... original output omitted ...]
+
+Number of atoms                ... 26
+
+# [... original output omitted ...]
+
+VIBRATIONAL FREQUENCIES PES2
+----------------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:      38.45 cm**-1
+     8:      53.27 cm**-1
+     9:     100.31 cm**-1
+    10:     107.34 cm**-1
+    11:     150.74 cm**-1
+    12:     164.94 cm**-1
+    13:     183.31 cm**-1
+    14:     237.33 cm**-1
+    15:     256.60 cm**-1
+    16:     289.43 cm**-1
+    17:     335.70 cm**-1
+    18:     359.78 cm**-1
+    19:     397.05 cm**-1
+    20:     422.25 cm**-1
+    21:     472.48 cm**-1
+    22:     479.92 cm**-1
+    23:     522.94 cm**-1
+    24:     581.74 cm**-1
+    25:     617.89 cm**-1
+    26:     672.04 cm**-1
+    27:     703.01 cm**-1
+    28:     732.02 cm**-1
+    29:     747.80 cm**-1
+    30:     784.62 cm**-1
+    31:     795.81 cm**-1
+    32:     871.67 cm**-1
+    33:     905.52 cm**-1
+    34:     924.80 cm**-1
+    35:     941.27 cm**-1
+    36:     993.01 cm**-1
+    37:    1000.79 cm**-1
+    38:    1011.05 cm**-1
+    39:    1023.04 cm**-1
+    40:    1048.16 cm**-1
+    41:    1070.61 cm**-1
+    42:    1112.94 cm**-1
+    43:    1150.10 cm**-1
+    44:    1153.78 cm**-1
+    45:    1191.56 cm**-1
+    46:    1216.39 cm**-1
+    47:    1223.58 cm**-1
+    48:    1259.68 cm**-1
+    49:    1262.21 cm**-1
+    50:    1284.28 cm**-1
+    51:    1343.74 cm**-1
+    52:    1356.57 cm**-1
+    53:    1375.23 cm**-1
+    54:    1382.74 cm**-1
+    55:    1402.11 cm**-1
+    56:    1411.79 cm**-1
+    57:    1429.20 cm**-1
+    58:    1442.45 cm**-1
+    59:    1455.09 cm**-1
+    60:    1502.80 cm**-1
+    61:    1507.60 cm**-1
+    62:    1541.57 cm**-1
+    63:    1604.10 cm**-1
+    64:    1662.90 cm**-1
+    65:    1692.05 cm**-1
+    66:    2785.34 cm**-1
+    67:    3022.27 cm**-1
+    68:    3056.11 cm**-1
+    69:    3072.23 cm**-1
+    70:    3123.09 cm**-1
+    71:    3126.32 cm**-1
+    72:    3145.10 cm**-1
+    73:    3182.82 cm**-1
+    74:    3214.41 cm**-1
+    75:    3224.13 cm**-1
+    76:    3236.30 cm**-1
+    77:    3243.40 cm**-1
+
+
+# [... original output omitted ...]
+
+VIBRATIONAL FREQUENCIES
+-----------------------
+
+Scaling factor for frequencies =  1.000000000  (already applied!)
+
+     0:       0.00 cm**-1
+     1:       0.00 cm**-1
+     2:       0.00 cm**-1
+     3:       0.00 cm**-1
+     4:       0.00 cm**-1
+     5:       0.00 cm**-1
+     6:       0.00 cm**-1
+     7:      39.88 cm**-1
+     8:      46.32 cm**-1
+     9:      92.27 cm**-1
+    10:     110.00 cm**-1
+    11:     159.92 cm**-1
+    12:     169.94 cm**-1
+    13:     178.94 cm**-1
+    14:     236.29 cm**-1
+    15:     256.79 cm**-1
+    16:     288.36 cm**-1
+    17:     336.55 cm**-1
+    18:     358.67 cm**-1
+    19:     397.23 cm**-1
+    20:     423.51 cm**-1
+    21:     473.61 cm**-1
+    22:     480.20 cm**-1
+    23:     523.21 cm**-1
+    24:     582.36 cm**-1
+    25:     619.24 cm**-1
+    26:     673.79 cm**-1
+    27:     703.01 cm**-1
+    28:     736.00 cm**-1
+    29:     749.41 cm**-1
+    30:     784.46 cm**-1
+    31:     797.80 cm**-1
+    32:     871.56 cm**-1
+    33:     908.00 cm**-1
+    34:     925.38 cm**-1
+    35:     940.98 cm**-1
+    36:     994.16 cm**-1
+    37:    1001.53 cm**-1
+    38:    1011.85 cm**-1
+    39:    1024.63 cm**-1
+    40:    1048.26 cm**-1
+    41:    1070.32 cm**-1
+    42:    1112.77 cm**-1
+    43:    1150.31 cm**-1
+    44:    1154.15 cm**-1
+    45:    1191.38 cm**-1
+    46:    1217.26 cm**-1
+    47:    1223.56 cm**-1
+    48:    1260.07 cm**-1
+    49:    1261.97 cm**-1
+    50:    1284.31 cm**-1
+    51:    1343.98 cm**-1
+    52:    1356.86 cm**-1
+    53:    1374.65 cm**-1
+    54:    1382.71 cm**-1
+    55:    1402.80 cm**-1
+    56:    1412.15 cm**-1
+    57:    1428.96 cm**-1
+    58:    1442.65 cm**-1
+    59:    1456.00 cm**-1
+    60:    1502.76 cm**-1
+    61:    1507.48 cm**-1
+    62:    1542.53 cm**-1
+    63:    1603.66 cm**-1
+    64:    1662.83 cm**-1
+    65:    1692.25 cm**-1
+    66:    2784.86 cm**-1
+    67:    3021.11 cm**-1
+    68:    3055.44 cm**-1
+    69:    3071.30 cm**-1
+    70:    3122.66 cm**-1
+    71:    3126.15 cm**-1
+    72:    3145.18 cm**-1
+    73:    3182.40 cm**-1
+    74:    3214.13 cm**-1
+    75:    3224.59 cm**-1
+    76:    3236.28 cm**-1
+    77:    3243.19 cm**-1
+
+
+# [... original output omitted ...]
+
+                             ****ORCA TERMINATED NORMALLY****
+
+
+===== END =====
+
+

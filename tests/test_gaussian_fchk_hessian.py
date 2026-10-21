@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from chemsmart.io.gaussian.hessian import read_fchk_hessian
+from chemsmart.io.gaussian.hessian import GaussianHessianFile
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.mecp import GaussianMECPJob
 from chemsmart.jobs.gaussian.runner import GaussianJobRunner
@@ -25,7 +25,10 @@ FCHK = (
 def test_fchk_preserves_precision_and_unpacks_lower_triangle(tmp_path):
     path = tmp_path / "state.fchk"
     path.write_text(FCHK)
-    matrix = read_fchk_hessian(path, 1)
+    checkpoint = GaussianHessianFile(path)
+    assert checkpoint.num_atoms == 1
+    assert checkpoint.filepath == str(path.resolve())
+    matrix = checkpoint.read_hessian()
     np.testing.assert_array_equal(
         matrix,
         [[1.123456789012, 0.02, -0.04], [0.02, 3.0, 0.05], [-0.04, 0.05, 6.0]],
@@ -41,16 +44,17 @@ def test_fchk_preserves_precision_and_unpacks_lower_triangle(tmp_path):
         FCHK.replace("6.0E+00", "nan"),
         FCHK.replace("6.0E+00", "Next field I 3"),
         "No Hessian\n",
+        FCHK.replace("I                1", "I                0"),
     ],
 )
 def test_fchk_rejects_invalid_data(tmp_path, contents):
     path = tmp_path / "state.fchk"
     path.write_text(contents)
     with pytest.raises(RuntimeError):
-        read_fchk_hessian(path, 1)
+        GaussianHessianFile(path).read_hessian()
 
 
-@pytest.mark.parametrize("failure", [None, "process", "invalid"])
+@pytest.mark.parametrize("failure", [None, "process", "invalid", "atom_count"])
 def test_conversion_uses_environment_and_never_reuses_old_output(
     tmp_path, monkeypatch, failure
 ):
@@ -69,7 +73,9 @@ def test_conversion_uses_environment_and_never_reuses_old_output(
         chkfile=str(chk),
         folder=str(tmp_path),
         label="state",
-        molecule=SimpleNamespace(symbols=["H"]),
+        molecule=SimpleNamespace(
+            symbols=["H", "H"] if failure == "atom_count" else ["H"]
+        ),
     )
 
     def run(command, **kwargs):
@@ -78,7 +84,9 @@ def test_conversion_uses_environment_and_never_reuses_old_output(
         assert kwargs["check"] is True
         if failure == "process":
             raise subprocess.CalledProcessError(1, command)
-        Path(command[2]).write_text(FCHK if failure is None else "invalid")
+        Path(command[2]).write_text(
+            "invalid" if failure == "invalid" else FCHK
+        )
 
     monkeypatch.setattr(module.subprocess, "run", run)
     if failure:

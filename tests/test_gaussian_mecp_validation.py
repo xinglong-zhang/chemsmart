@@ -31,10 +31,7 @@ def test_curved_seam_matches_exact_energy(a, b, crossing_scale, alpha):
     hessian_a = np.diag([0.0, b])
     hessian_b = np.diag([0.0, b + 2 * crossing_scale * alpha])
     actual, multiplier = GaussianMECPJob.lagrangian_hessian(
-        hessian_a,
-        hessian_b,
-        grad_a,
-        grad_b,
+        hessian_a, hessian_b, grad_a, grad_b
     )
     assert multiplier == pytest.approx(a / crossing_scale)
     assert actual[1, 1] == pytest.approx(b + 2 * a * alpha)
@@ -132,16 +129,10 @@ def test_state_exchange_preserves_lagrangian_hessian_and_frequencies():
     hessian_a = target - multiplier * perturbation
     hessian_b = target + (1 - multiplier) * perturbation
     first, lam = GaussianMECPJob.lagrangian_hessian(
-        hessian_a,
-        hessian_b,
-        grad_a,
-        grad_b,
+        hessian_a, hessian_b, grad_a, grad_b
     )
     second, swapped = GaussianMECPJob.lagrangian_hessian(
-        hessian_b,
-        hessian_a,
-        grad_b,
-        grad_a,
+        hessian_b, hessian_a, grad_b, grad_a
     )
     assert swapped == pytest.approx(1 - lam)
     np.testing.assert_allclose(first, target, atol=1.0e-12)

@@ -233,3 +233,9 @@ ecp_center_header_pattern = r"^\d+(?:\s+\d+){1,2}\s*$"
 # Matches an ECP term line, e.g. "2   14.2200000  -33.68992012   0.00000000"
 # (r_power  exponent  coefficient  so_coefficient, with floats in D-notation)
 ecp_term_pattern = r"^\d+\s+\S+\s+\S+\s+\S+\s*$"
+
+# Gaussian formatted checkpoint scalar and array headers.
+gaussian_fchk_num_atoms_pattern = r"Number of atoms\s+I\s+(\d+)\s*"
+gaussian_fchk_force_constants_pattern = (
+    r"Cartesian Force Constants\s+R\s+N=\s*(\d+)\s*"
+)
