@@ -51,7 +51,9 @@ MECP_CONVERGENCE_PRESETS = {
 
 
 def configure_convergence(settings, preset_name, overrides):
-    """Apply a preset and explicit overrides without changing their values."""
+    """Apply a preset and explicit overrides without changing their values.
+    This should be used in constructor before any call that sets attributes
+    after object instantiation."""
     if preset_name not in settings.CONVERGENCE_PRESETS:
         raise ValueError(
             f"Unknown convergence_preset={preset_name!r}. "

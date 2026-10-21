@@ -2771,9 +2771,16 @@ class ORCAMECPJobSettings(ORCAJobSettings):
         seam_mode_displacement=0.05,
         seam_mode_max_steps=30,
         hess_step_size=1.0e-3,
-        convergence_preset="tight",
         max_steps=200,
         step_size=0.1,
+        convergence_preset="tight",
+        # Tight convergence defaults (overridden by preset if not supplied)
+        energy_diff_tol=None,  # Hartree   – None means "use preset"
+        force_max_tol=None,  # Hartree/Bohr
+        force_rms_tol=None,  # Hartree/Bohr
+        disp_max_tol=None,  # Bohr
+        disp_rms_tol=None,  # Bohr
+        trust_radius=None,  # Bohr
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -2805,10 +2812,26 @@ class ORCAMECPJobSettings(ORCAJobSettings):
         self.seam_mode_displacement = seam_mode_displacement
         self.seam_mode_max_steps = seam_mode_max_steps
         self.hess_step_size = hess_step_size
-        self.convergence_preset = convergence_preset
         self.max_steps = max_steps
         self.step_size = step_size
-        configure_convergence(self, convergence_preset, kwargs)
+        self.convergence_preset = convergence_preset
+        overrides = {
+            "energy_diff_tol": energy_diff_tol,
+            "force_max_tol": force_max_tol,
+            "force_rms_tol": force_rms_tol,
+            "disp_max_tol": disp_max_tol,
+            "disp_rms_tol": disp_rms_tol,
+            "trust_radius": trust_radius,
+        }
+        configure_convergence(
+            self,
+            convergence_preset,
+            {
+                name: value
+                for name, value in overrides.items()
+                if value is not None
+            },
+        )
 
     @property
     def multiplicity_a(self):
