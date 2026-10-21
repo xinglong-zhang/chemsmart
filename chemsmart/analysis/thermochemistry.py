@@ -1369,12 +1369,12 @@ class Thermochemistry:
 
     def __str__(self):
         """String representation of the thermochemistry results."""
-        filename = getattr(self, "filename", "Unknown")
-        temperature = getattr(self, "temperature", None)
-        concentration = getattr(self, "concentration", None)
-        pressure = getattr(self, "pressure", None)
-        use_weighted_mass = getattr(self, "use_weighted_mass", False)
-        energy_units = getattr(self, "energy_units", "Unknown")
+        filename = self.filename
+        temperature = self.temperature
+        concentration = self.concentration
+        pressure = self.pressure
+        use_weighted_mass = self.use_weighted_mass
+        energy_units = self.energy_units
 
         temperature_str = (
             f"{temperature:.2f} K" if temperature is not None else "N/A"

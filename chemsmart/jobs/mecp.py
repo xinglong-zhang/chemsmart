@@ -71,9 +71,7 @@ class MECPSeamMixin:
 
     @property
     def hessian_method(self):
-        return getattr(
-            getattr(self, "settings", None), "hessian_method", "numerical"
-        )
+        return self.settings.hessian_method
 
     def _reset_execution_state(self):
         """Initialize shared state for optimization and frequency workflows."""
