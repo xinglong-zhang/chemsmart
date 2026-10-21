@@ -14,7 +14,7 @@ import os
 import re
 
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
-from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS, configure_convergence
+from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.utils import (
     deduplicate_string_keywords,
@@ -2771,9 +2771,16 @@ class ORCAMECPJobSettings(ORCAJobSettings):
         seam_mode_displacement=0.05,
         seam_mode_max_steps=30,
         hess_step_size=1.0e-3,
-        convergence_preset="tight",
         max_steps=200,
         step_size=0.1,
+        convergence_preset="tight",
+        # Tight convergence defaults (overridden by preset if not supplied)
+        energy_diff_tol=None,  # Hartree   – None means "use preset"
+        force_max_tol=None,  # Hartree/Bohr
+        force_rms_tol=None,  # Hartree/Bohr
+        disp_max_tol=None,  # Bohr
+        disp_rms_tol=None,  # Bohr
+        trust_radius=None,  # Bohr
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -2805,10 +2812,36 @@ class ORCAMECPJobSettings(ORCAJobSettings):
         self.seam_mode_displacement = seam_mode_displacement
         self.seam_mode_max_steps = seam_mode_max_steps
         self.hess_step_size = hess_step_size
-        self.convergence_preset = convergence_preset
         self.max_steps = max_steps
         self.step_size = step_size
-        configure_convergence(self, convergence_preset, kwargs)
+        if convergence_preset not in self.CONVERGENCE_PRESETS:
+            raise ValueError(
+                f"Unknown convergence_preset={convergence_preset!r}. "
+                f"Choose from: {list(self.CONVERGENCE_PRESETS)}"
+            )
+        # Explicitly supplied tolerances take precedence over the preset.
+        preset = self.CONVERGENCE_PRESETS[convergence_preset]
+        self.convergence_preset = convergence_preset
+        self.energy_diff_tol = (
+            preset["energy_diff_tol"]
+            if energy_diff_tol is None
+            else energy_diff_tol
+        )
+        self.force_max_tol = (
+            preset["force_max_tol"] if force_max_tol is None else force_max_tol
+        )
+        self.force_rms_tol = (
+            preset["force_rms_tol"] if force_rms_tol is None else force_rms_tol
+        )
+        self.disp_max_tol = (
+            preset["disp_max_tol"] if disp_max_tol is None else disp_max_tol
+        )
+        self.disp_rms_tol = (
+            preset["disp_rms_tol"] if disp_rms_tol is None else disp_rms_tol
+        )
+        self.trust_radius = (
+            preset["trust_radius"] if trust_radius is None else trust_radius
+        )
 
     @property
     def multiplicity_a(self):

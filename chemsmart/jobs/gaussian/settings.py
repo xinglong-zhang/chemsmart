@@ -18,7 +18,7 @@ import re
 
 from chemsmart.io.gaussian import GAUSSIAN_SOLVATION_MODELS
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
-from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS, configure_convergence
+from chemsmart.jobs.mecp import MECP_CONVERGENCE_PRESETS
 from chemsmart.jobs.settings import MolecularJobSettings
 from chemsmart.utils.periodictable import PeriodicTable
 
@@ -2183,22 +2183,33 @@ class GaussianMECPJobSettings(GaussianJobSettings):
         self.max_steps = max_steps
         self.step_size = step_size
 
-        overrides = {
-            "energy_diff_tol": energy_diff_tol,
-            "force_max_tol": force_max_tol,
-            "force_rms_tol": force_rms_tol,
-            "disp_max_tol": disp_max_tol,
-            "disp_rms_tol": disp_rms_tol,
-            "trust_radius": trust_radius,
-        }
-        configure_convergence(
-            self,
-            convergence_preset,
-            {
-                name: value
-                for name, value in overrides.items()
-                if value is not None
-            },
+        if convergence_preset not in self.CONVERGENCE_PRESETS:
+            raise ValueError(
+                f"Unknown convergence_preset={convergence_preset!r}. "
+                f"Choose from: {list(self.CONVERGENCE_PRESETS)}"
+            )
+        # Explicitly supplied tolerances take precedence over the preset.
+        preset = self.CONVERGENCE_PRESETS[convergence_preset]
+        self.convergence_preset = convergence_preset
+        self.energy_diff_tol = (
+            preset["energy_diff_tol"]
+            if energy_diff_tol is None
+            else energy_diff_tol
+        )
+        self.force_max_tol = (
+            preset["force_max_tol"] if force_max_tol is None else force_max_tol
+        )
+        self.force_rms_tol = (
+            preset["force_rms_tol"] if force_rms_tol is None else force_rms_tol
+        )
+        self.disp_max_tol = (
+            preset["disp_max_tol"] if disp_max_tol is None else disp_max_tol
+        )
+        self.disp_rms_tol = (
+            preset["disp_rms_tol"] if disp_rms_tol is None else disp_rms_tol
+        )
+        self.trust_radius = (
+            preset["trust_radius"] if trust_radius is None else trust_radius
         )
 
         self.adaptive_step_size = adaptive_step_size

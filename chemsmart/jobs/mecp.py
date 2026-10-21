@@ -50,18 +50,6 @@ MECP_CONVERGENCE_PRESETS = {
 }
 
 
-def configure_convergence(settings, preset_name, overrides):
-    """Apply a preset and explicit overrides without changing their values."""
-    if preset_name not in settings.CONVERGENCE_PRESETS:
-        raise ValueError(
-            f"Unknown convergence_preset={preset_name!r}. "
-            f"Choose from: {list(settings.CONVERGENCE_PRESETS)}"
-        )
-    settings.convergence_preset = preset_name
-    for name, value in settings.CONVERGENCE_PRESETS[preset_name].items():
-        setattr(settings, name, overrides.get(name, value))
-
-
 class MECPSeamMixin:
     """Shared algorithms for backends implementing the state-job contract."""
 
