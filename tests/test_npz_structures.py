@@ -94,6 +94,33 @@ def test_npz_rejects_unsupported_layout_and_nonfinite_coordinates(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "coords, charges, message",
+    [
+        (np.zeros((2, 1, 3)), [[1]], "matching molecule counts"),
+        (np.empty((0, 1, 3)), np.empty((0, 1)), "no molecular structures"),
+        (np.zeros((1, 1, 2)), [[1]], r"coordinates must have shape"),
+        (np.zeros((1, 2, 3)), [[1]], "atom and coordinate counts differ"),
+        (np.zeros((1, 1, 3)), [[-1]], "invalid atomic numbers"),
+        (np.zeros((1, 1, 3)), [[1.5]], "invalid atomic numbers"),
+        (np.zeros((1, 1, 3)), [[119]], "invalid atomic numbers"),
+        (np.zeros((1, 1, 3)), [[float("nan")]], "invalid atomic numbers"),
+    ],
+)
+def test_revqm9_rejects_invalid_structures(tmp_path, coords, charges, message):
+    path = tmp_path / "invalid.npz"
+    np.savez(path, coords=coords, charges=charges)
+    with pytest.raises(ValueError, match=message):
+        Molecule.from_filepath(path, index=":")
+
+
+def test_revqm9_rejects_invalid_element_symbol(tmp_path):
+    path = tmp_path / "invalid_element.npz"
+    np.savez(path, coords=[[0, 0, 0]], charges=[1], elements=["Invalid"])
+    with pytest.raises(ValueError, match="invalid elements"):
+        Molecule.from_filepath(path)
+
+
+@pytest.mark.parametrize(
     "extra", [{"elements": ["C"]}, {"atomic_numbers": [6]}]
 )
 def test_npz_rejects_conflicting_atom_identity(tmp_path, extra):
