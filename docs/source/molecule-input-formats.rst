@@ -77,6 +77,21 @@ Standard XYZ format for atomic coordinates:
 
    XYZ files do not contain charge or multiplicity information. You must specify these using ``-c`` and ``-m`` flags.
 
+NumPy Archives (.npz)
+---------------------
+
+The supported dataset layouts are DGL QM9 (``R``, ``Z``, ``N``) and official revQM9 (``coords``, ``charges``, optionally
+``elements``). In revQM9, ``charges`` are atomic numbers, not partial charges. If additional element identities are
+provided, they must agree. Coordinates must be in Angstrom.
+
+.. code:: bash
+
+   chemsmart sub -s server gaussian -p project -f revQM9.npz -i 1 -c 0 -m 1 opt
+
+These readers import atomic species and coordinates only. Molecular charge and multiplicity are supplied separately with
+``-c`` and ``-m``. The Python API defaults to the last structure. Other NPZ schemas and zero padding are not supported.
+Object arrays are read using restricted NumPy reconstruction.
+
 SDF Files
 ---------
 

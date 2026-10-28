@@ -1174,6 +1174,11 @@ class Molecule:
                     return_list=return_list,
                 )
 
+        if basename.lower().endswith(".npz"):
+            return cls._read_npz_file(
+                filepath=filepath, index=index, return_list=return_list
+            )
+
         if basename.endswith(".xyz"):
             logger.debug(f"Reading xyz file: {filepath}")
             return cls._read_xyz_file(
@@ -1283,6 +1288,14 @@ class Molecule:
             index=index, return_list=return_list
         )
         return molecules
+
+    @classmethod
+    def _read_npz_file(cls, filepath, index="-1", return_list=False):
+        """Read molecular structures from a NumPy archive."""
+        from chemsmart.io.npz import NPZFile
+
+        npz_file = NPZFile(filename=filepath)
+        return npz_file.get_molecules(index=index, return_list=return_list)
 
     @staticmethod
     @file_cache()
