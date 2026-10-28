@@ -8,6 +8,7 @@ from zipfile import ZipFile
 
 import numpy as np
 import pytest
+from ase.units import Hartree
 from click.testing import CliRunner
 from numpy.lib.format import write_array_header_1_0
 
@@ -62,6 +63,56 @@ def test_dgl_concatenated_molecules_and_selection(tmp_path):
         Molecule.from_filepath(path, index="0")
     with pytest.raises(IndexError):
         Molecule.from_filepath(path, index="4")
+
+
+@pytest.mark.parametrize(
+    "fields, energy_key, energy_name, factor",
+    [
+        (
+            {"R": np.zeros((2, 3)), "Z": [1, 8], "N": [1, 1]},
+            "U0",
+            "dgl_qm9_U0",
+            1 / Hartree,
+        ),
+        (
+            {"coords": np.zeros((2, 1, 3)), "charges": [[1], [8]]},
+            "energies",
+            "revqm9_energy",
+            1,
+        ),
+    ],
+)
+def test_npz_energy_is_stored_with_source_and_unit(
+    tmp_path, fields, energy_key, energy_name, factor
+):
+    path = tmp_path / "energies.npz"
+    np.savez(path, **fields, **{energy_key: [-1.2, -3.4]})
+    molecules = Molecule.from_filepath(path, index="2,1")
+    assert [m.energies[energy_name] for m in molecules] == pytest.approx(
+        [-3.4 * factor, -1.2 * factor]
+    )
+    assert all(m.energy is None for m in molecules)
+
+
+def test_multiple_named_energies_preserve_existing_total_energy():
+    molecule = Molecule(symbols=["H"], positions=np.zeros((1, 3)), energy=-0.5)
+    molecule.energies["xtb_total"] = -0.4
+    molecule.energies["dft_total"] = -0.5
+    assert molecule.energy == -0.5
+    assert molecule.energies == {"xtb_total": -0.4, "dft_total": -0.5}
+    copied = molecule.copy()
+    copied.energies["xtb_total"] = -0.3
+    assert molecule.energies["xtb_total"] == -0.4
+
+
+@pytest.mark.parametrize(
+    "energies", [[1.0], [1.0, float("nan")], [[1.0], [2.0]]]
+)
+def test_npz_rejects_invalid_energy_values(tmp_path, energies):
+    path = tmp_path / "invalid_energy.npz"
+    np.savez(path, R=np.zeros((2, 3)), Z=[1, 8], N=[1, 1], U0=energies)
+    with pytest.raises(ValueError, match="U0"):
+        Molecule.from_filepath(path, index=":")
 
 
 @pytest.mark.parametrize(

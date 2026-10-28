@@ -6,6 +6,7 @@ from zipfile import ZipFile
 
 import numpy as np
 from ase.symbols import Symbols
+from ase.units import Hartree
 
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import parse_index_specification
@@ -14,8 +15,7 @@ from chemsmart.utils.utils import parse_index_specification
 class NPZFile(FileMixin):
     """Molecular NPZ parser; coordinates must be in Angstrom.
 
-    Supports DGL QM9 (R/Z/N) and revQM9 (coords/charges). Energy arrays are not
-    imported because NPZ does not define a standard energy unit.
+    Supports DGL QM9 (R/Z/N) and revQM9 (coords/charges).
     """
 
     def __init__(self, filename):
@@ -38,8 +38,11 @@ class NPZFile(FileMixin):
             }
             if {"R", "Z", "N"} <= keys:
                 position_key, atom_key = "R", "Z"
+                energy_key, energy_name = "U0", "dgl_qm9_U0"
             elif {"coords", "charges"} <= keys:
                 position_key, atom_key = "coords", "charges"
+                # Assume revQM9 total energies are in Hartree.
+                energy_key, energy_name = "energies", "revqm9_energy"
             else:
                 raise ValueError(
                     "NPZ requires DGL QM9 fields R/Z/N or revQM9 fields coords/charges."
@@ -96,6 +99,16 @@ class NPZFile(FileMixin):
                 num_molecules = len(positions)
             if not num_molecules:
                 raise ValueError("NPZ contains no molecular structures.")
+            energies = None
+            if energy_key in keys:
+                energies = self._read_array(archive, energy_key)
+                if (
+                    energies.shape != (num_molecules,)
+                    or energies.dtype.kind not in "iuf"
+                ):
+                    raise ValueError(
+                        f"NPZ {energy_key} must contain one numeric energy per molecule."
+                    )
             selector = parse_index_specification(str(index))
             if isinstance(selector, slice):
                 indices = list(range(num_molecules))[selector]
@@ -161,10 +174,21 @@ class NPZFile(FileMixin):
                     raise ValueError(
                         f"NPZ structure {i + 1}: coordinates must be finite."
                     )
+                named_energies = {}
+                if energies is not None:
+                    value = float(energies[i])
+                    if not np.isfinite(value):
+                        raise ValueError(
+                            f"NPZ structure {i + 1}: {energy_key} must be finite."
+                        )
+                    if energy_key == "U0":
+                        value /= Hartree
+                    named_energies[energy_name] = value
                 molecules.append(
                     Molecule(
                         symbols=symbols,
                         positions=xyz,
+                        energies=named_energies,
                         structure_index_in_file=int(i) + 1,
                     )
                 )

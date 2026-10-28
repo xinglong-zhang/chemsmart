@@ -88,9 +88,13 @@ provided, they must agree. Coordinates must be in Angstrom.
 
    chemsmart sub -s server gaussian -p project -f revQM9.npz -i 1 -c 0 -m 1 opt
 
-These readers import atomic species and coordinates only. Molecular charge and multiplicity are supplied separately with
-``-c`` and ``-m``. The Python API defaults to the last structure. Other NPZ schemas and zero padding are not supported.
-Object arrays are read using restricted NumPy reconstruction.
+The reader imports atomic species and coordinates. When present, DGL's ``U0`` is converted from eV to Hartree and stored
+in ``molecule.energies["dgl_qm9_U0"]``. The revQM9 ``energies`` value is stored in
+``molecule.energies["revqm9_energy"]``. The ``energies`` mapping holds named values in Hartree and is not currently
+persisted by the CHEMSMART database. These source values are not assigned to ``molecule.energy``, which represents total
+energy in Hartree. Molecular charge and multiplicity are supplied separately with ``-c`` and ``-m``. The Python API
+defaults to the last structure. Other NPZ schemas and zero padding are not supported. Object arrays are read using
+restricted NumPy reconstruction.
 
 SDF Files
 ---------

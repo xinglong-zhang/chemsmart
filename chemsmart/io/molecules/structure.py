@@ -138,6 +138,7 @@ class Molecule:
         rotational_constants=None,
         point_group=None,
         info=None,
+        energies=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
@@ -150,6 +151,7 @@ class Molecule:
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self._energy = energy
+        self._energies = dict(energies) if energies is not None else {}
         self.forces = forces
         self.velocities = velocities
         if info is None:
@@ -267,6 +269,11 @@ class Molecule:
         Set the molecular energy.
         """
         self._energy = value
+
+    @property
+    def energies(self):
+        """Named energy values in Hartree, separate from the current total energy."""
+        return self._energies
 
     @property
     def positions(self):
