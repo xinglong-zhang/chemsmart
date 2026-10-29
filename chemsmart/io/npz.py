@@ -6,7 +6,6 @@ from zipfile import ZipFile
 
 import numpy as np
 from ase.symbols import Symbols
-from ase.units import Hartree
 
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import parse_index_specification
@@ -38,11 +37,36 @@ class NPZFile(FileMixin):
             }
             if {"R", "Z", "N"} <= keys:
                 position_key, atom_key = "R", "Z"
-                energy_key, energy_name = "U0", "dgl_qm9_U0"
+                energy_key = None
+                property_keys = (
+                    "id",
+                    "A",
+                    "B",
+                    "C",
+                    "mu",
+                    "alpha",
+                    "homo",
+                    "lumo",
+                    "gap",
+                    "r2",
+                    "zpve",
+                    "U0",
+                    "U",
+                    "H",
+                    "G",
+                    "Cv",
+                )
             elif {"coords", "charges"} <= keys:
                 position_key, atom_key = "coords", "charges"
                 # Assume revQM9 total energies are in Hartree.
-                energy_key, energy_name = "energies", "revqm9_energy"
+                energy_key = "energies"
+                property_keys = (
+                    "atomization",
+                    "homo",
+                    "lumo",
+                    "dipole",
+                    "inds",
+                )
             else:
                 raise ValueError(
                     "NPZ requires DGL QM9 fields R/Z/N or revQM9 fields coords/charges."
@@ -99,8 +123,24 @@ class NPZFile(FileMixin):
                 num_molecules = len(positions)
             if not num_molecules:
                 raise ValueError("NPZ contains no molecular structures.")
+            properties = {}
+            for key in property_keys:
+                if key in keys:
+                    values = self._read_array(archive, key)
+                    if values.ndim != 1 or len(values) != num_molecules:
+                        raise ValueError(
+                            f"NPZ {key} must contain one value per molecule."
+                        )
+                    if (
+                        values.dtype.kind not in "iuf"
+                        or not np.isfinite(values).all()
+                    ):
+                        raise ValueError(
+                            f"NPZ {key} must contain finite numeric values."
+                        )
+                    properties[key] = values
             energies = None
-            if energy_key in keys:
+            if energy_key is not None and energy_key in keys:
                 energies = self._read_array(archive, energy_key)
                 if (
                     energies.shape != (num_molecules,)
@@ -174,24 +214,61 @@ class NPZFile(FileMixin):
                     raise ValueError(
                         f"NPZ structure {i + 1}: coordinates must be finite."
                     )
-                named_energies = {}
+                energy = None
                 if energies is not None:
-                    value = float(energies[i])
-                    if not np.isfinite(value):
+                    energy = float(energies[i])
+                    if not np.isfinite(energy):
                         raise ValueError(
                             f"NPZ structure {i + 1}: {energy_key} must be finite."
                         )
-                    if energy_key == "U0":
-                        value /= Hartree
-                    named_energies[energy_name] = value
-                molecules.append(
-                    Molecule(
-                        symbols=symbols,
-                        positions=xyz,
-                        energies=named_energies,
-                        structure_index_in_file=int(i) + 1,
-                    )
+                molecule = Molecule(
+                    symbols=symbols,
+                    positions=xyz,
+                    energy=energy,
+                    structure_index_in_file=int(i) + 1,
                 )
+                molecule.dataset_source = (
+                    "qm9_eV" if energy_key is None else "revQM9"
+                )
+                if "id" in properties:
+                    molecule.id = properties["id"][i].item()
+                if "A" in properties:
+                    molecule.A = properties["A"][i].item()
+                if "B" in properties:
+                    molecule.B = properties["B"][i].item()
+                if "C" in properties:
+                    molecule.C = properties["C"][i].item()
+                if "mu" in properties:
+                    molecule.mu = properties["mu"][i].item()
+                if "alpha" in properties:
+                    molecule.alpha = properties["alpha"][i].item()
+                if "homo" in properties:
+                    molecule.homo = properties["homo"][i].item()
+                if "lumo" in properties:
+                    molecule.lumo = properties["lumo"][i].item()
+                if "gap" in properties:
+                    molecule.gap = properties["gap"][i].item()
+                if "r2" in properties:
+                    molecule.r2 = properties["r2"][i].item()
+                if "zpve" in properties:
+                    molecule.zpve = properties["zpve"][i].item()
+                if "U0" in properties:
+                    molecule.U0 = properties["U0"][i].item()
+                if "U" in properties:
+                    molecule.U = properties["U"][i].item()
+                if "H" in properties:
+                    molecule.H = properties["H"][i].item()
+                if "G" in properties:
+                    molecule.G = properties["G"][i].item()
+                if "Cv" in properties:
+                    molecule.Cv = properties["Cv"][i].item()
+                if "atomization" in properties:
+                    molecule.atomization = properties["atomization"][i].item()
+                if "dipole" in properties:
+                    molecule.dipole = properties["dipole"][i].item()
+                if "inds" in properties:
+                    molecule.inds = properties["inds"][i].item()
+                molecules.append(molecule)
         if return_list or not isinstance(selector, int):
             return molecules
         return molecules[0]

@@ -108,6 +108,8 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
+    dataset_source and dataset properties: optional
+        Original dataset fields and values, in their source units.
     """
 
     def __init__(
@@ -138,7 +140,26 @@ class Molecule:
         rotational_constants=None,
         point_group=None,
         info=None,
-        energies=None,
+        dataset_source=None,
+        id=None,
+        A=None,
+        B=None,
+        C=None,
+        mu=None,
+        alpha=None,
+        homo=None,
+        lumo=None,
+        gap=None,
+        r2=None,
+        zpve=None,
+        U0=None,
+        U=None,
+        H=None,
+        G=None,
+        Cv=None,
+        atomization=None,
+        dipole=None,
+        inds=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
@@ -151,13 +172,33 @@ class Molecule:
         self.pbc_conditions = pbc_conditions
         self.translation_vectors = translation_vectors
         self._energy = energy
-        self._energies = dict(energies) if energies is not None else {}
         self.forces = forces
         self.velocities = velocities
         if info is None:
             # initialise info as empty dict if it is None
             info = dict()
         self.info = info
+        # Dataset values retain their source units.
+        self.dataset_source = dataset_source
+        self.id = id
+        self.A = A
+        self.B = B
+        self.C = C
+        self.mu = mu
+        self.alpha = alpha
+        self.homo = homo
+        self.lumo = lumo
+        self.gap = gap
+        self.r2 = r2
+        self.zpve = zpve
+        self.U0 = U0
+        self.U = U
+        self.H = H
+        self.G = G
+        self.Cv = Cv
+        self.atomization = atomization
+        self.dipole = dipole
+        self.inds = inds
         self.structure_index_in_file = structure_index_in_file
         self._num_atoms = len(self.symbols)
         self.rotational_symmetry_number = rotational_symmetry_number
@@ -269,11 +310,6 @@ class Molecule:
         Set the molecular energy.
         """
         self._energy = value
-
-    @property
-    def energies(self):
-        """Named energy values in Hartree, separate from the current total energy."""
-        return self._energies
 
     @property
     def positions(self):
