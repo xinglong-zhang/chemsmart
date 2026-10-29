@@ -12,14 +12,14 @@ from transformers import (
 )
 
 
-class ChemSmartTrainer:
+class CHEMSMARTTrainer:
     def __init__(
         self,
         model_name="deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
         dataset_path="chemsmart_data.json",
     ):
         """
-        Initializes the ChemSmartTrainer class using a remote Hugging Face model.
+        Initializes the CHEMSMARTTrainer class using a remote Hugging Face model.
 
         :param model_name: Hugging Face model name (e.g., "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B").
         :param dataset_path: Path to the training dataset in JSON format.
@@ -132,7 +132,7 @@ class ChemSmartTrainer:
 
 
 if __name__ == "__main__":
-    trainer = ChemSmartTrainer()
+    trainer = CHEMSMARTTrainer()
 
     # Example inference (interactive command generation)
     user_input = "Please submit a DFT optimization job using Gaussian with project settings toluene for file input.xyz."

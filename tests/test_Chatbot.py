@@ -1,5 +1,4 @@
-"""Tests for the ChemSmart chatbot module."""
-
+"""Tests for the CHEMSMART chatbot module."""
 
 from chemsmart.chatbot.chatbot import Chatbot
 from chemsmart.chatbot.llm import LLM

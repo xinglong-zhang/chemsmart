@@ -16,7 +16,7 @@ from . import COMMANDS_DATASET
 logger = logging.getLogger(__name__)
 
 # System prompt for the LLM
-SYSTEM_PROMPT = """You are ChemSmart Assistant, an expert in computational chemistry \
+SYSTEM_PROMPT = """You are CHEMSMART Assistant, an expert in computational chemistry \
 and quantum chemistry simulations. Your task is to help users create and submit \
 chemistry simulation jobs using the chemsmart command-line interface.
 
@@ -115,9 +115,7 @@ class LLM:
                 )
                 self.offline_mode = True
         else:
-            logger.warning(
-                "OPENAI_API_KEY not set. Running in offline mode."
-            )
+            logger.warning("OPENAI_API_KEY not set. Running in offline mode.")
             self.offline_mode = True
 
     def _load_training_data(self):

@@ -1,4 +1,4 @@
-"""CLI interface for ChemSmart chatbot."""
+"""CLI interface for CHEMSMART chatbot."""
 
 import contextlib
 import logging
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 )
 @click.pass_context
 def chat(ctx, auto_execute):
-    """Start the ChemSmart chatbot for interactive command generation.
+    """Start the CHEMSMART chatbot for interactive command generation.
 
     The chatbot helps you create chemistry simulation job commands
     using natural language. Describe what you want to do, and it

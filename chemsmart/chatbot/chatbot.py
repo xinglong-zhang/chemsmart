@@ -1,4 +1,4 @@
-"""ChemSmart Chatbot for interactive command generation and execution."""
+"""CHEMSMART Chatbot for interactive command generation and execution."""
 
 import re
 
@@ -77,9 +77,11 @@ class Chatbot:
 
     def chats(self):
         """Start an interactive chat session."""
-        log("ChemSmart Chatbot started.")
+        log("CHEMSMART Chatbot started.")
         log("I can help you create and submit chemistry simulation jobs.")
-        log("Describe what job you want to run, and I'll generate the command.")
+        log(
+            "Describe what job you want to run, and I'll generate the command."
+        )
         log("Type 'exit' or 'quit' to end the session.")
         log("Type 'execute' to run the last generated command.")
         log("Type 'clear' to clear conversation history.")
@@ -116,7 +118,9 @@ class Chatbot:
                 continue
 
             # Process the message
-            response, command, command_output = self.process_message(user_input)
+            response, command, command_output = self.process_message(
+                user_input
+            )
 
             print(f"\nAssistant: {response}")
 
@@ -152,9 +156,9 @@ class Chatbot:
         in the basic chatbot mode.
         """
         try:
-            from .llm_trainer import ChemSmartTrainer
+            from .llm_trainer import CHEMSMARTTrainer
 
-            trainer = ChemSmartTrainer()
+            trainer = CHEMSMARTTrainer()
             trainer.preprocess_data()
             trainer.train()
         except ImportError as e:

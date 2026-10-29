@@ -17,10 +17,10 @@ from . import CHEMSMART_MODEL, COMMANDS_DATASET, MODEL_NAME
 logger = logging.getLogger(__name__)
 
 
-class ChemSmartTrainer:
+class CHEMSMARTTrainer:
     def __init__(self):
         """
-        Initializes the ChemSmartTrainer class using a remote Hugging Face model.
+        Initializes the CHEMSMARTTrainer class using a remote Hugging Face model.
 
         :param model_name: Hugging Face model name (e.g., "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B").
         :param dataset_path: Path to the training dataset in JSON format.
@@ -138,6 +138,6 @@ class ChemSmartTrainer:
 
 
 if __name__ == "__main__":
-    trainer = ChemSmartTrainer()
+    trainer = CHEMSMARTTrainer()
     trainer.preprocess_data()
     trainer.train()

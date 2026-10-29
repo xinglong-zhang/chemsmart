@@ -168,7 +168,7 @@ This section provides the API reference for CHEMSMART modules, classes, and func
 
 ## LLM Chatbot Integration
 
-ChemSmart includes an LLM-powered chatbot that helps users create job submission commands using natural language. Instead of memorizing command syntax, you can simply describe what you want to do.
+CHEMSMART includes an LLM-powered chatbot that helps users create job submission commands using natural language. Instead of memorizing command syntax, you can simply describe what you want to do.
 
 ### Starting the Chatbot
 
