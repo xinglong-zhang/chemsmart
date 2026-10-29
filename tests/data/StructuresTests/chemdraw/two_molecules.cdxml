@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd">
+<CDXML BondLength="30" LabelFont="3" CaptionFont="4">
+  <page id="1">
+    <fragment id="2">
+      <n id="3" p="100 100" Element="6"/>
+      <n id="4" p="130 100" Element="8"/>
+      <b id="5" B="3" E="4" Order="2"/>
+    </fragment>
+    <fragment id="6">
+      <n id="7" p="200 100" Element="7"/>
+      <n id="8" p="230 100" Element="7"/>
+      <b id="9" B="7" E="8" Order="3"/>
+    </fragment>
+  </page>
+</CDXML>

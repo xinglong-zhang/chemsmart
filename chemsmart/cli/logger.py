@@ -7,16 +7,17 @@ logger = logging.getLogger(__name__)
 
 
 def logger_options(f):
+    """Logging configuration options."""
+
     @click.option(
-        "-d",
         "--debug/--no-debug",
         default=False,
-        help="Turns on debug logging.",
+        help="Turn on debug logging.",
     )
     @click.option(
         "--stream/--no-stream",
-        default=False,
-        help="Turns on logging to stdout.",
+        default=True,
+        help="Turn on logging to stdout.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

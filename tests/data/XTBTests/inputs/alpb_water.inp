@@ -1,0 +1,138 @@
+$cmd xtb --define --copy coord --alpb water
+$date 2025/03/22 at 15:26:14.838     
+$chrg 0
+$spin 0
+$gfn
+   method=2
+   scc=true
+   periodic=false
+   dispscale=1.0000000000000000
+$scc
+   maxiterations=250
+   temp=300.00000000000000
+   broydamp=0.40000000000000002
+$opt
+   optlevel=normal
+   microcycle=20
+   maxcycle=0
+   maxdispl=1.0000000000000000
+   hlow=0.10000000000000000E-1
+   hessian=old
+   s6=20.000000000000000
+   kstretch=0.40000000000000002
+   kbend   =0.13000000000000000
+   ktorsion=0.74999999999999997E-2
+   koutofp =0.0000000000000000
+   kvdw    =0.0000000000000000
+   kes     =0.0000000000000000
+   rcut    =8.3666002653407556
+   ts=0
+   tsroot=0
+   exact rf=false
+   average conv=false
+$thermo
+   temp=298.14999999999998
+   sthr=50.000000000000000
+   imagthr=-20.000000000000000
+   scale=1.0000000000000000
+$md
+   temp=298.14999999999998
+   time=50.000000000000000
+   dump=50.000000000000000
+   velo=0
+   nvt=1
+   skip=500
+   step=4.0000000000000000
+   hmass=4
+   shake=2
+   sccacc=2.0000000000000000
+   forcewrrestart=0
+$siman
+   dump=1000.0000000000000
+   n=3
+   ewin=20.000000000000000
+   temp=1000.0000000000000
+   enan=0
+   check=0
+$hess
+   sccacc=0.29999999999999999
+   step=0.50000000000000001E-2
+   scale=1.0000000000000000
+$solvation
+   solvent=water
+   ion_st=0.0000000000000000
+   ion_rad=0.0000000000000000
+   grid=normal
+   alpb=true
+   kernel=p16
+   cosmo=false
+$modef
+   n=31
+   step=1.0000000000000000
+   updat=0.20000000000000001
+   local=0
+   vthr=0.0000000000000000
+   prj=0
+   mode=7
+$cube
+   step=0.40000000000000002
+   pthr=0.50000000000000003E-1
+$symmetry
+   desy=0.10000000000000001
+   maxat=200
+$embedding
+   at=7
+   es=true
+$write
+   esp=false
+   mos=false
+   gbw=false
+   tm mos=false
+   tm basis=false
+   lmo=false
+   density=false
+   spin population=false
+   spin density=false
+   fod=false
+   fod population=false
+   wiberg=true
+   wbo fragments=false
+   dipole=true
+   charges=true
+   mulliken=true
+   orbital energies=true
+   inertia=true
+   distances=true
+   angles=false
+   torsions=false
+   final struct=true
+   geosum=true
+   stm=false
+   modef=false
+   gbsa=false
+   vib_normal_modes=false
+   hessian.out=false
+$external
+$path
+   nrun=3
+   npoint=50
+   anopt=3
+   kpush=0.50000000000000003E-1
+   kpull=-0.40000000000000001E-1
+   ppull=0.50000000000000003E-1
+   alp=0.69999999999999996
+$split
+   fragment: 1,1-3
+$wall
+   potential=polynomial
+   alpha=30
+   beta=6.0000000000000000
+   temp=300.00000000000000
+   autoscale=1.0000000000000000
+   axisshift=3.5000000000000000
+$reactor
+   max=50
+   density=1.0000000000000000 # in kg/L
+   kpush=0.50000000000000003E-1
+   alp=0.69999999999999996
+$end

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=70.1.1", "wheel"]
+requires = ["setuptools==74.1.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "0.1.0"  # Update this dynamically if needed
+version = "3.4.5"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -16,30 +16,62 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "ase~=3.24.0",
-    "basis-set-exchange",
-    "click~=8.1.8",
-    "crest",
-    "numpy~=2.1.0",
-    "pytest~=8.3.4",
+    "ase==3.24.0",
+    "basis_set_exchange==0.11",
+    "click==8.1.8",
+    "dictdiffer==0.9.0",
+    "filelock",
+    "joblib==1.4.2",
+    "networkx==3.4.2",
+    "numpy~=1.26.4",  # rdkit and pymol require numpy 1.x
+    "pytest==8.3.4",
     "pyyaml",
-    "pymatgen>=2024.8.9",
-    "rdkit>=2024.9.0",
-    "scipy~=1.15.1",
-    "setuptools>=70.1.1",
+    "ruamel.yaml>=0.18.16",
+    "pymatgen==2025.10.7",
+    "rdkit==2025.3.3",
+    "tomlkit==0.13.2",
+    "types-PyYAML",
+    "scipy==1.15.2",
+    "pandas==2.2.3",
+    "openpyxl==3.1.5",
+    "requests>=2.32.3",
+    "tenacity>=9.1.2",
+    "matplotlib>=3.10.1",
+    "scikit-learn>=1.6.1",
+    "pytest_mock>=3.14.0",
+    "spyrmsd>=0.8.0",
+    "lockfile>=0.12.2",
+    "contextlib2>=21.6.0",
+    "pillow>=12.1.1",
+    "ipython>=8.12.3",
+    "image>=1.5.33",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pytest-mock",
     "coverage",
-    "flake8",
-    "ruff",
-    "black",
-    "isort",
     "pytest-cov",
+]
+dev = [
+    "pre-commit>=3.6.0",
+    "flake8",
+    "ruff==0.15.22",
+    "black==26.1.0",
+    "isort==7.0.0",
     "gitchangelog",
-    "mkdocs",
+    "pipreqs",
+    "types-PyYAML",
+]
+docs = [
+    "sphinx",
+    "myst-parser",
+    "sphinx-autodoc-typehints",
+    "sphinx-rtd-theme",
+    "doc8",
+    "rstcheck",
+    "rstfmt",
 ]
 chat = [
     "openai>=1.0.0",
@@ -55,8 +87,18 @@ train = [
 homepage = "https://github.com/xinglong-zhang/chemsmart/"
 "Source" = "https://github.com/xinglong-zhang/chemsmart/"
 
+[project.scripts]
+chemsmart = "chemsmart.cli.main:main"
+
 [tool.setuptools.packages.find]
 exclude = [".github"]
+
+[tool.setuptools.package-data]
+"chemsmart" = [
+    "VERSION",
+    "settings/templates/**",
+    "settings/templates/.chemsmart/**",
+]
 
 [tool.flake8]
 ignore = ["E226", "W503", "W504"]
@@ -79,12 +121,16 @@ profile = "black"
 minversion = "6.0"
 addopts = "--strict-markers --disable-warnings"
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 [tool.coverage.run]
 branch = true
 source = ["chemsmart"]
 
-[tool.mkdocs]
-site_name = "chemsmart"
-theme = "readthedocs"
-
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

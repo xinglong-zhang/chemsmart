@@ -1,46 +1,121 @@
+"""
+Mixin classes for file handling and computational chemistry operations.
+
+This module provides mixin classes that add common functionality to
+computational chemistry file readers and data processors. Includes
+mixins for file operations, Gaussian/ORCA specific functionality,
+YAML file handling, and folder operations.
+
+Key mixin classes:
+- FileMixin: Basic file reading and property extraction
+- GaussianFileMixin: Gaussian-specific file parsing
+- ORCAFileMixin: ORCA-specific file parsing
+- YAMLFileMixin: YAML file handling
+- RegistryMixin: Automatic subclass registration
+- FolderMixin: Directory and file search operations
+"""
+
 import inspect
+import logging
 import os
 import re
+from datetime import datetime
 from functools import cached_property
 
 from ase import units
 
+from chemsmart.io.crest.route import CRESTRoute
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.io.xtb.route import XTBRoute
+from chemsmart.utils.repattern import (
+    gaussian_date_pattern,
+    orca_date_pattern,
+    xtb_date_pattern,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class FileMixin:
-    """Mixin class for files that can be opened and read"""
+    """
+    Mixin class for files that can be opened and read.
+
+    Provides common file operations and property extraction methods
+    for computational chemistry files. Includes path handling,
+    content reading, and unit conversion utilities.
+    """
 
     @property
     def filepath(self):
+        """
+        Get the absolute path of the file.
+
+        Returns:
+            str: Absolute file path.
+        """
         return os.path.abspath(self.filename)
 
     @property
     def filepath_directory(self):
+        """
+        Get the directory containing the file.
+
+        Returns:
+            str: Directory path containing the file.
+        """
         return os.path.split(self.filepath)[0]
 
     @property
     def base_filename_with_extension(self):
+        """
+        Get the filename with extension (no directory path).
+
+        Returns:
+            str: Filename with extension.
+        """
         return os.path.split(self.filepath)[1]
 
     @property
     def basename(self):
+        """
+        Get the filename without extension.
+
+        Returns:
+            str: Base filename without extension.
+        """
         return self.base_filename_with_extension.split(".")[0]
 
     @cached_property
     def contents(self):
-        with open(self.filepath, "r") as f:
+        """
+        Read and cache file contents as list of stripped lines.
+
+        Returns:
+            list: List of strings, each representing a line from the file.
+        """
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return [line.strip() for line in f.readlines()]
 
     @cached_property
     def content_lines_string(self):
-        with open(self.filepath, "r") as f:
+        """
+        Read and cache file contents as a single string.
+
+        Returns:
+            str: Complete file contents as a single string.
+        """
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return f.read()
 
     @cached_property
     def forces_in_eV_per_angstrom(self):
-        """Convert forces from Hartrees/Bohr to eV/Angstrom."""
+        """
+        Convert forces from Hartrees/Bohr to eV/Angstrom.
+
+        Returns:
+            list: List of force arrays converted to eV/Angstrom units.
+        """
         if self.forces is None:
             return [None] * len(self.energies)
         forces_in_eV_per_A = []
@@ -50,7 +125,12 @@ class FileMixin:
 
     @cached_property
     def input_translation_vectors(self):
-        """Obtain the translation vectors from the input that is printed in the outputfile."""
+        """
+        Obtain translation vectors from input printed in the output file.
+
+        Returns:
+            list: Translation vectors from input coordinates block.
+        """
         tvs = []
         if self.input_coordinates_block is not None:
             cb = self.input_coordinates_block
@@ -60,80 +140,524 @@ class FileMixin:
 
     @cached_property
     def symbols(self):
+        """
+        Get chemical symbols from input coordinates block.
+
+        Returns:
+            list: List of chemical symbols.
+        """
         return self.input_coordinates_block.chemical_symbols
 
     @cached_property
     def list_of_pbc_conditions(self):
+        """
+        Get periodic boundary conditions from input coordinates.
+
+        Returns:
+            list: Periodic boundary conditions.
+        """
         return self.input_coordinates_block.pbc_conditions
 
     @cached_property
     def energies_in_eV(self):
-        """Convert energies from Hartree to eV."""
+        """
+        Convert energies from Hartree to eV.
+
+        Returns:
+            list: List of energies converted to eV units.
+        """
         return [energy * units.Hartree for energy in self.energies]
 
     @property
     def num_energies(self):
-        return len(self.energies_in_eV)
+        """
+        Get the number of energy values.
+
+        Returns:
+            int: Number of energy values.
+        """
+        return len(self.energies)
+
+    # -------------------------------------------------------------------------
+    # Frontier orbital properties (common to Gaussian and ORCA output parsers)
+    # These depend on subclasses providing:
+    # multiplicity, alpha_occ_eigenvalues,
+    # beta_occ_eigenvalues, alpha_virtual_eigenvalues, beta_virtual_eigenvalues
+    # -------------------------------------------------------------------------
+
+    @cached_property
+    def num_unpaired_electrons(self):
+        """Get the number of unpaired electrons.
+
+        The number of unpaired electrons equals multiplicity - 1.
+        For closed-shell systems (multiplicity == 1), returns 0.
+
+        Returns:
+            int: Number of unpaired electrons.
+        """
+        return self.multiplicity - 1
+
+    @cached_property
+    def somo_energies(self):
+        """Returns a list of all SOMO energies for open-shell systems.
+
+        For high-spin states (triplet, quintet, etc.), these are the
+        singly occupied molecular orbitals (SOMOs) in the α spin channel.
+
+        For a triplet (S=1), there are 2 SOMOs.
+        For a quintet (S=2), there are 4 SOMOs.
+
+        The list is ordered from lowest to highest energy.
+
+        Returns:
+            list or None: List of SOMO energies, or None for closed-shell.
+        """
+        if self.multiplicity != 1:
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[
+                    -self.num_unpaired_electrons :
+                ]
+        return None
+
+    @cached_property
+    def lowest_somo_energy(self):
+        """Returns the lowest SOMO energy for open-shell systems.
+
+        For high-spin states (triplet, quintet, etc.), this returns the
+        lowest-energy singly occupied molecular orbital (SOMO), which is
+        the first α orbital above the doubly-occupied manifold.
+
+        For closed-shell systems (multiplicity == 1), returns None.
+        For a complete picture of all SOMOs, use `somo_energies` property.
+
+        Returns:
+            float or None: Lowest SOMO energy, or None for closed-shell.
+        """
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[0]
+        return None
+
+    @cached_property
+    def highest_somo_energy(self):
+        """Returns the highest SOMO energy for open-shell systems.
+
+        This is equivalent to HOMOα (the highest occupied α orbital)
+        for high-spin states. It represents the highest-energy singly
+        occupied molecular orbital.
+
+        For a complete picture of all SOMOs, use `somo_energies` property.
+
+        Returns:
+            float or None: Highest SOMO energy, or None for closed-shell.
+        """
+        if self.multiplicity != 1 and self.somo_energies:
+            return self.somo_energies[-1]
+        return None
+
+    @cached_property
+    def alpha_homo_energy(self):
+        """Returns the HOMO energy for α spin orbitals.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest occupied α orbital,
+        which is also the highest SOMO.
+
+        Returns:
+            float or None: α-spin HOMO energy.
+        """
+        if self.alpha_occ_eigenvalues:
+            return self.alpha_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def beta_homo_energy(self):
+        """Returns the HOMO energy for β spin orbitals.
+
+        For closed-shell systems, this equals the standard HOMO energy.
+        For open-shell systems, this is the highest doubly-occupied
+        orbital energy.
+
+        Returns:
+            float or None: β-channel HOMO energy.
+        """
+        if self.beta_occ_eigenvalues:
+            return self.beta_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def alpha_lumo_energy(self):
+        """Returns the LUMO energy for α spin orbitals.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied α orbital.
+
+        Returns:
+            float or None: α-channel LUMO energy.
+        """
+        if self.alpha_virtual_eigenvalues:
+            return self.alpha_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def beta_lumo_energy(self):
+        """Returns the LUMO energy for β spin orbitals.
+
+        For closed-shell systems, this equals the standard LUMO energy.
+        For open-shell systems, this is the lowest unoccupied β orbital.
+
+        Returns:
+            float or None: β-channel LUMO energy.
+        """
+        if self.beta_virtual_eigenvalues:
+            return self.beta_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def homo_energy(self):
+        """Returns the HOMO (Highest Occupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy
+        of the highest doubly-occupied orbital. For open-shell systems,
+        returns None (use homo_alpha_energy or beta_homo_energy or
+        somo_energies instead).
+
+        Returns:
+            float or None: HOMO energy for closed-shell systems.
+        """
+        if self.multiplicity == 1:
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[-1]
+        return None
+
+    @cached_property
+    def lumo_energy(self):
+        """Returns the LUMO (Lowest Unoccupied Molecular Orbital) energy.
+
+        For closed-shell systems (multiplicity == 1), returns the energy
+        of the lowest unoccupied orbital. For open-shell systems,
+        returns None (use alpha_lumo_energy or beta_lumo_energy instead).
+
+        Returns:
+            float or None: LUMO energy for closed-shell systems.
+        """
+        if self.multiplicity == 1:
+            if self.alpha_virtual_eigenvalues:
+                return self.alpha_virtual_eigenvalues[0]
+        return None
+
+    @cached_property
+    def fmo_gap(self):
+        """Returns the frontier molecular orbital (FMO) gap.
+
+        For closed-shell systems, this is the HOMO-LUMO gap.
+        For open-shell systems, this is the gap between the highest SOMO
+        and the lowest LUMO (min of α and β channels).
+
+        Returns:
+            float or None: FMO gap in eV.
+        """
+        if self.multiplicity == 1:
+            if self.homo_energy is not None and self.lumo_energy is not None:
+                return self.lumo_energy - self.homo_energy
+        else:
+            # radical systems
+            if (
+                self.alpha_lumo_energy is not None
+                and self.beta_lumo_energy is not None
+                and self.highest_somo_energy is not None
+            ):
+                return (
+                    min(self.alpha_lumo_energy, self.beta_lumo_energy)
+                    - self.highest_somo_energy
+                )
+        return None
+
+    @cached_property
+    def alpha_fmo_gap(self):
+        """Returns the frontier molecular orbital
+        (FMO) gap for alpha-spin orbitals,
+        for open-shell systems.
+        For closed-shell systems (multiplicity == 1), returns fmo_gap.
+        Returns:
+            float or None: alpha FMO gap in eV."""
+
+        if (
+            self.alpha_lumo_energy is not None
+            and self.alpha_homo_energy is not None
+        ):
+            return self.alpha_lumo_energy - self.alpha_homo_energy
+        else:
+            return None
+
+    @cached_property
+    def beta_fmo_gap(self):
+        """Returns the frontier molecular
+        orbital (FMO) gap for beta-spin orbitals,
+        for open-shell systems.
+        For closed-shell systems (multiplicity == 1), under restricted KS, beta
+        orbitals are not printed, and this returns None.
+        Returns:
+            float or None: beta FMO gap in eV."""
+        if (
+            self.beta_lumo_energy is not None
+            and self.beta_homo_energy is not None
+        ):
+            return self.beta_lumo_energy - self.beta_homo_energy
+        else:
+            return None
+
+    def validate_frequencies(self, ignore_threshold=-15.0):
+        """
+        Validate vibrational frequencies based on the job type and return a report.
+
+        - For an "OPT" job, it checks for zero imaginary frequencies.
+        - For a "TS" job, it checks for exactly one imaginary frequency.
+        - For other job types, validation is not performed.
+
+        Args:
+            ignore_threshold (float): Frequencies above this threshold are ignored.
+
+        Returns:
+            dict: A dictionary containing the validation results.
+        """
+        imaginary_freqs = []
+        if self.vibrational_frequencies is not None:
+            imaginary_freqs = [
+                freq
+                for freq in self.vibrational_frequencies
+                if freq < ignore_threshold
+            ]
+
+        num_imaginary = len(imaginary_freqs)
+        job_type = self.jobtype.upper() if self.jobtype else ""
+
+        is_valid_minimum = False
+        is_valid_ts = False
+        detected_job_type = "UNKNOWN"
+
+        if "OPT" in job_type:
+            is_valid_minimum = num_imaginary == 0
+            detected_job_type = "OPT"
+        elif "TS" in job_type:
+            is_valid_ts = num_imaginary == 1
+            detected_job_type = "TS"
+        elif self.jobtype:
+            detected_job_type = self.jobtype.upper()
+
+        if self.vibrational_frequencies is None and "OPT" in job_type:
+            is_valid_minimum = True
+
+        return {
+            "detected_job_type": detected_job_type,
+            "total_imaginary_frequencies": num_imaginary,
+            "imaginary_frequencies_list": imaginary_freqs,
+            "is_valid_minimum": is_valid_minimum,
+            "is_valid_ts": is_valid_ts,
+        }
 
 
 class GaussianFileMixin(FileMixin):
-    """Mixin class for Gaussian files."""
+    """
+    Mixin class for Gaussian computational chemistry files.
+
+    Extends FileMixin with Gaussian-specific functionality including
+    route string parsing, job type detection, and settings extraction.
+    Handles Gaussian input/output file formats and job parameters.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for i, line in enumerate(self.contents):
+            if (
+                "******************************************" in line
+                and i + 1 < len(self.contents)
+            ):
+                next_line = self.contents[i + 1]
+                if "Gaussian" in next_line:
+                    version_line = next_line
+                    version = version_line.split()[2].split("-")[1]
+                    return version
+        return None
+
+    @property
+    def file_date(self):
+        if not self.contents:
+            return None
+        last_line = self.contents[-1]
+        match = re.search(gaussian_date_pattern, last_line)
+        if match:
+            time_info = match.group(1)
+            try:
+                return datetime.strptime(
+                    time_info, "%a %b %d %H:%M:%S %Y"
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        return None
 
     def _get_chk(self):
+        """
+        Check if checkpoint file directive is present.
+
+        Returns:
+            bool: True if %chk directive found, False otherwise.
+        """
         for line in self.contents:
             if line.startswith("%chk"):
                 return True
         return False
 
     def _get_mem(self):
-        mem = 20  # default value: 20 GB
+        """
+        Extract memory allocation from file.
+
+        Returns:
+            int: Memory allocation in GB (default 20 if not found).
+        """
+        mem = 20  # Default value: 20 GB
         for line in self.contents:
             if line.startswith("%mem"):
                 mem = int(line.split("=")[-1].split("GB")[0])
         return mem
 
     def _get_nproc(self):
-        nproc = 16  # default value
+        """
+        Extract number of processors from file.
+
+        Returns:
+            int: Number of processors (default 16 if not found).
+        """
+        nproc = 16  # Default value
         for line in self.contents:
             if line.startswith("%nproc"):
                 nproc = int(line.split("=")[-1])
         return nproc
 
     @property
+    def freq(self):
+        """
+        Get frequency calculation setting from route.
+
+        Returns:
+            bool: True if frequency calculations are requested.
+        """
+        return self.route_object.freq
+
+    @property
     def route_string(self):
-        """Route string for Gaussian file.
-        Returned by individual subclasses."""
+        """
+        Get the route string for Gaussian file.
+
+        Returns the computational route string as defined in the
+        Gaussian input file. Implementation is provided by subclasses.
+
+        Returns:
+            str: Route string for Gaussian calculations.
+        """
         return self._get_route()
 
     def _get_route(self):
-        """Default implementation. Subclasses must override this method."""
+        """
+        Get route string from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
         raise NotImplementedError("Subclasses must implement `_get_route`.")
 
     @property
+    def is_link(self):
+        """
+        Check if file contains a Gaussian link job.
+
+        Searches for link job indicators such as ``stable=opt`` in complete
+        route blocks. Gaussian may wrap a route across multiple lines.
+
+        Returns:
+            bool: True if link job detected, False otherwise.
+        """
+        lines = self.contents
+        for i, line in enumerate(lines):
+            if not line.startswith("#"):
+                continue
+
+            route_lines = [line]
+            for continuation in lines[i + 1 :]:
+                if not continuation or continuation.startswith(
+                    ("------", "#")
+                ):
+                    break
+                route_lines.append(continuation)
+
+            if "stable=opt" in "".join(route_lines).lower():
+                return True
+        return False
+
+    @property
     def modred(self):
+        """
+        Get modified redundant coordinate specifications.
+
+        Extracts modredundant coordinate definitions from the file
+        for constrained optimizations or coordinate scans.
+
+        Returns:
+            dict or list or None: Modredundant coordinate specifications.
+        """
         return self._get_modredundant_conditions()
 
     def _get_modredundant_conditions(self):
+        """
+        Extract modredundant coordinate conditions from route.
+
+        Parses modredundant coordinate specifications for frozen
+        coordinates (F) or scan coordinates (S) from the file.
+
+        Returns:
+            dict or list or None: Modredundant conditions or None.
+        """
         modred = None
         if (
             "modred" in self.route_string
             and self.modredundant_group is not None
         ):
+            # Check if any line is a scan coordinate
+            is_scan = False
             for line in self.modredundant_group:
-                if "F" in line or "f" in line:
-                    modred = self._get_modred_frozen_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "modred"
-                elif "S" in line or "s" in line:
-                    modred = self._get_modred_scan_coords(
-                        self.modredundant_group
-                    )
-                    self.job_type = "scan"
-                return modred
+                if "S" in line or "s" in line:
+                    is_scan = True
+                    break
+
+            if is_scan:
+                modred = self._get_modred_scan_coords(self.modredundant_group)
+                self.jobtype = "scan"
+            else:
+                modred = self._get_modred_frozen_coords(
+                    self.modredundant_group
+                )
+                self.jobtype = "modred"
+            return modred
 
     @staticmethod
     def _get_modred_frozen_coords(modred_list_of_string):
+        """
+        Parse frozen coordinate specifications from modredundant block.
+
+        Extracts integer coordinate indices for frozen internal
+        coordinates from modredundant input lines.
+
+        Args:
+            modred_list_of_string (list): Raw modredundant input lines.
+
+        Returns:
+            list: List of frozen coordinate specifications.
+        """
         modred = []
         for raw_line in modred_list_of_string:
             line = raw_line[2:-2]
@@ -147,10 +671,26 @@ class GaussianFileMixin(FileMixin):
 
     @staticmethod
     def _get_modred_scan_coords(modred_list_of_string):
+        """
+        Parse scan coordinate specifications from modredundant block.
+
+        Extracts coordinate scan parameters including atom indices,
+        number of steps, and step size from modredundant input.
+
+        Args:
+            modred_list_of_string (list): Raw modredundant input lines.
+
+        Returns:
+            dict: Scan coordinate specifications with keys: 'coords',
+                  'num_steps', 'step_size'.
+        """
         modred = {}
         coords = []
-        # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1, 2], [3, 4]]}
+        # modred = {'num_steps': 10, 'step_size':
+        # 0.05, 'coords': [[1, 2], [3, 4]]}
         for raw_line in modred_list_of_string:
+            if "S" not in raw_line and "s" not in raw_line:
+                continue
             line = raw_line.strip()[2:]
             line_elems = line.split("S")
 
@@ -166,7 +706,8 @@ class GaussianFileMixin(FileMixin):
             coords.append(each_modred_list)
             modred["coords"] = coords
 
-            # obtain num_steps and step_size (assumed the same for each scan coordinate)
+            # obtain num_steps and step_size (assumed
+            # the same for each scan coordinate)
             steps_string = line_elems[-1]
             steps_list = steps_string.split()
             num_steps = int(steps_list[0])
@@ -178,6 +719,15 @@ class GaussianFileMixin(FileMixin):
 
     @property
     def route_object(self):
+        """
+        Get parsed route object from route string.
+
+        Creates a GaussianRoute object from the route string to
+        provide structured access to calculation parameters.
+
+        Returns:
+            GaussianRoute or None: Parsed route object or None on error.
+        """
         try:
             route_object = GaussianRoute(route_string=self.route_string)
             return route_object
@@ -186,85 +736,259 @@ class GaussianFileMixin(FileMixin):
 
     @property
     def dieze_tag(self):
+        """
+        Get dieze tag from route object.
+
+        Returns the dieze tag (calculation level indicator) from
+        the parsed route string.
+
+        Returns:
+            str: Dieze tag indicating calculation level.
+        """
         return self.route_object.dieze_tag
 
     @property
-    def job_type(self):
-        return self.route_object.job_type
+    def jobtype(self):
+        """
+        Get job type from route object.
 
-    @job_type.setter
-    def job_type(self, value):
-        self.route_object.job_type = value
+        Returns the type of calculation (e.g., 'opt', 'freq', 'sp')
+        as determined from the route string.
+
+        Returns:
+            str: Job type specification.
+        """
+        return self.route_object.jobtype
+
+    @jobtype.setter
+    def jobtype(self, value):
+        """
+        Set job type in route object.
+
+        Updates the job type in the route object for dynamic
+        job type modification during parsing.
+
+        Args:
+            value (str): New job type to set.
+        """
+        self.route_object.jobtype = value
 
     @property
     def chk(self):
+        """
+        Get checkpoint file usage status.
+
+        Returns whether checkpoint file directive is specified
+        in the input file.
+
+        Returns:
+            bool: True if checkpoint file is used, False otherwise.
+        """
         return self._get_chk()
 
     @property
-    def freq(self):
-        return self.route_object.freq
-
-    @property
     def numfreq(self):
+        """
+        Get numerical frequency calculation setting.
+
+        Returns whether numerical frequency calculations are
+        requested in the route string.
+
+        Returns:
+            bool: True if numerical frequencies requested.
+        """
         return self.route_object.numfreq
 
     @property
     def ab_initio(self):
+        """
+        Get ab initio method from route string.
+
+        Returns the ab initio quantum chemistry method specified
+        in the calculation route.
+
+        Returns:
+            str or None: Ab initio method name or None if not specified.
+        """
         return self.route_object.ab_initio
 
     @property
     def functional(self):
+        """
+        Get DFT functional from route string.
+
+        Returns the density functional theory functional specified
+        in the calculation route.
+
+        Returns:
+            str or None: DFT functional name or None if not specified.
+        """
         return self.route_object.functional
 
     @property
+    def method(self):
+        """Get the computational method from route string."""
+        return self.route_object.method
+
+    @property
     def basis(self):
+        """
+        Get basis set from route string.
+
+        Returns the basis set specification from the calculation
+        route string.
+
+        Returns:
+            str or None: Basis set name or None if not specified.
+        """
         return self.route_object.basis
 
     @property
+    def semiempirical(self):
+        """
+        Get semiempirical method from route string.
+
+        Returns the semiempirical quantum chemistry method
+        specified in the calculation route.
+
+        Returns:
+            str or None: Semiempirical method or None if not specified.
+        """
+        return self.route_object.semiempirical
+
+    @property
     def force(self):
+        """
+        Get force calculation setting from route string.
+
+        Returns whether force calculations are requested in
+        the calculation route.
+
+        Returns:
+            bool: True if force calculations requested.
+        """
         return self.route_object.force
 
     @property
     def solvent_on(self):
+        """
+        Get solvent model activation status.
+
+        Returns whether solvent model calculations are enabled
+        in the calculation route.
+
+        Returns:
+            bool: True if solvent model is active.
+        """
         return self.route_object.solv
 
     @property
     def solvent_model(self):
+        """
+        Get solvent model type from route string.
+
+        Returns the type of implicit solvent model specified
+        in the calculation route.
+
+        Returns:
+            str or None: Solvent model name or None if not specified.
+        """
         return self.route_object.solvent_model
 
     @property
     def solvent_id(self):
+        """
+        Get solvent identifier from route string.
+
+        Returns the specific solvent identifier used in implicit
+        solvent calculations.
+
+        Returns:
+            str or None: Solvent identifier or None if not specified.
+        """
         return self.route_object.solvent_id
 
     @property
+    def additional_solvent_options(self):
+        """
+        Get additional solvent options from route string.
+
+        Returns any additional solvent-related parameters
+        specified in the calculation route.
+
+        Returns:
+            str or None: Additional solvent options or None.
+        """
+        return self.route_object.additional_solvent_options
+
+    @property
     def additional_opt_options_in_route(self):
+        """
+        Get additional optimization options from route string.
+
+        Returns any additional optimization parameters specified
+        in the calculation route.
+
+        Returns:
+            str or None: Additional optimization options or None.
+        """
         return self.route_object.additional_opt_options_in_route
 
     @property
     def additional_route_parameters(self):
+        """
+        Get additional route parameters from route string.
+
+        Returns any additional calculation parameters not covered
+        by standard route parsing.
+
+        Returns:
+            str or None: Additional route parameters or None.
+        """
         return self.route_object.additional_route_parameters
 
     def read_settings(self):
+        """
+        Create GaussianJobSettings from file parameters.
+
+        Extracts all relevant calculation parameters from the file
+        and creates a comprehensive settings object for job submission.
+
+        Returns:
+            GaussianJobSettings: Complete job settings configuration.
+        """
         from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
         filename = os.path.basename(self.filename)
 
         title = f"Job prepared from Gaussian file {filename}"
 
+        # Gaussian output files expose custom SMD parameters as a dictionary
+        # for convenient programmatic inspection, whereas job settings use
+        # the free-form text that is written back to a Gaussian input file.
+        # Convert only at this boundary so both APIs keep their intended type.
+        custom_solvent = self.custom_solvent
+        if isinstance(custom_solvent, dict):
+            custom_solvent = "\n".join(
+                f"{key}={value}" for key, value in custom_solvent.items()
+            )
+
         return GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
             basis=self.basis,
+            semiempirical=self.semiempirical,
             charge=self.charge,
             multiplicity=self.multiplicity,
             chk=self.chk,
-            job_type=self.job_type,
+            jobtype=self.jobtype,
             title=title,
             freq=self.freq,
             numfreq=self.numfreq,
             dieze_tag=self.dieze_tag,
             solvent_model=self.solvent_model,
             solvent_id=self.solvent_id,
+            additional_solvent_options=self.additional_solvent_options,
             additional_opt_options_in_route=self.additional_opt_options_in_route,
             additional_route_parameters=self.additional_route_parameters,
             route_to_be_written=None,
@@ -273,29 +997,78 @@ class GaussianFileMixin(FileMixin):
             heavy_elements=self.heavy_elements,
             heavy_elements_basis=self.heavy_elements_basis,
             light_elements_basis=self.light_elements_basis,
-            custom_solvent=self.custom_solvent,
+            custom_solvent=custom_solvent,
             append_additional_info=None,
             forces=False,
         )
 
 
 class ORCAFileMixin(FileMixin):
-    """Mixin class for ORCA files."""
+    """
+    Mixin class for ORCA computational chemistry files.
+
+    Extends FileMixin with ORCA-specific functionality including
+    route string parsing, solvent model detection, and MDCI parameter
+    extraction. Handles ORCA input/output file formats and job settings.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "Program Version" in line:
+                version = line.split()[2]
+                return version
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "Starting time:" in line:
+                match = re.search(orca_date_pattern, line)
+                if match:
+                    time_info = match.group(1)
+                    try:
+                        return datetime.strptime(
+                            time_info, "%a %b %d %H:%M:%S %Y"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
 
     @cached_property
     def contents_string(self):
+        """
+        Get file contents as a single joined string.
+
+        Returns:
+            str: Complete file contents with newlines preserved.
+        """
         return "\n".join(self.contents)
 
     @property
     def mdci_cutoff(self):
+        """
+        Extract MDCI cutoff parameter from input file.
+
+        Searches for MDCI cutoff specification in the %mdci block
+        and returns the cutoff value for multireference calculations.
+
+        Returns:
+            str or None: MDCI cutoff value or None if not found.
+        """
         for i, line in enumerate(self.contents):
             if "%mdci" in line.lower():
                 # mdci cutoff in %mdci block
                 next_lines = self.contents[i + 1 :]
                 for next_line in next_lines:
                     if "cutoff" in next_line.lower():
-                        # Find the string prior to it. This is assuming the input is written by
-                        # this program where the comment on the cutoff is also written
+                        # Find the string prior to it. This
+                        # is assuming the input is written by
+                        # this program where the comment
+                        # on the cutoff is also written
                         l_elem = next_line.split()
                         c_idx = l_elem.index("cutoff")
                         return l_elem[c_idx - 1]
@@ -303,6 +1076,15 @@ class ORCAFileMixin(FileMixin):
 
     @property
     def mdci_density(self):
+        """
+        Extract MDCI density parameter from input file.
+
+        Searches for MDCI density specification in the %mdci block
+        and returns the density value for multireference calculations.
+
+        Returns:
+            str or None: MDCI density value or None if not found.
+        """
         for i, line in enumerate(self.contents):
             if "%mdci" in line.lower():
                 # mdci density in %mdci block
@@ -317,16 +1099,31 @@ class ORCAFileMixin(FileMixin):
         return None
 
     @property
+    def solvent_on(self):
+        return self.solvent_model is not None and self.solvent_id is not None
+
+    @property
     def solvent_model(self):
+        """
+        Determine solvent model type from ORCA input file.
+
+        First checks the ``%cpcm`` block (old-style ORCA inputs with
+        ``SMD true``/``SMDsolvent``): returns ``"smd"`` if the block contains
+        ``smd true``, ``"cpcm"`` if the block exists without the SMD flag.
+
+        If no ``%cpcm`` block is found, falls back to checking the route line
+        for ORCA 6.0 style simple-input keywords: ``COSMORS``, ``CPCMC``,
+        ``SMD``, or ``CPCM`` (matched as whole words, case-insensitively).
+
+        Returns:
+            str or None: One of ``"cpcm"``, ``"cpcmc"``, ``"smd"``,
+            ``"cosmors"``, or ``None`` if no solvent model is found.
+        """
         cpcm = False
         smd = False
 
         for i, line in enumerate(self.contents):
-            # not even needed to test the route string for solvent
-            # if '!' in line and 'cpcm' in line:
-            #    cpcm = True
-
-            # solvent specification not in the route string but in the %cpcm block (ORCA_Test_0829.inp)
+            # solvent specification in the %cpcm block (old-style ORCA)
             if "%cpcm" in line.lower():
                 cpcm = True
                 next_lines = self.contents[i + 1 :]
@@ -338,96 +1135,275 @@ class ORCAFileMixin(FileMixin):
             if smd:
                 return "smd"
             return "cpcm"
+
+        # Fallback: detect ORCA 6.0 style keyword from the route line.
+        # Check in priority order (most specific first).
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        if re.search(r"\bcosmors\b", route_lower):
+            return "cosmors"
+        if re.search(r"\bcpcmc\b", route_lower):
+            return "cpcmc"
+        if re.search(r"\bsmd\b", route_lower):
+            return "smd"
+        if re.search(r"\bcpcm\b", route_lower):
+            return "cpcm"
         return None
 
     @property
     def solvent_id(self):
-        pattern = re.compile(
-            r'"([^"]*)"'
-        )  # pattern to find text between double quotes
-        for line in self.contents:
-            line_lower = line.lower()
-            if "solvent" in line_lower:
-                if not pattern.search(line_lower):
-                    raise Exception(
-                        "Your input file specifies solvent but solvent is not in quotes, "
-                        "thus, your input file is not valid to run for ORCA!"
-                    )
+        """
+        Extract solvent identifier from ORCA input file.
 
-                # Find all matches of the pattern in the line
-                matches = pattern.findall(line_lower)
+        First searches for a solvent name in lines that contain a solvent
+        keyword (``solvent``, ``SMDsolvent``), explicitly excluding
+        ``solventfilename`` lines (which point to a file, not a solvent name).
+
+        If no match is found in the file body, falls back to extracting the
+        solvent name from the route line using ``MODEL(solvent)`` patterns
+        (e.g. ``COSMORS(water)``, ``SMD(cyclohexane)``).
+
+        Returns:
+            str or None: Solvent identifier or None if not found.
+        """
+        for line in self.contents:
+            if line.startswith("Solvent name"):
+                return line.split()[-1]
+        for line in self.contents:
+            if "solvent" in line.lower() and not re.search(
+                r"\bsolventfilename\b", line.lower()
+            ):
+                pattern = re.compile(r'"([^"]*)"')
+                matches = pattern.findall(line.lower())
                 if len(matches) == 1:
                     return matches[0]
-
                 raise Exception(
-                    f"{len(matches)} solvents found! Only can specify 1 solvent!"
+                    "Your input file specifies solvent but solvent is not in quotes, "
+                    "thus, your input file is not valid to run for ORCA!"
                 )
+
+        # Fallback: extract solvent from route-line pattern 'MODEL(solvent)'.
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        m = re.search(r"\b(?:cosmors|cpcmc|smd|cpcm)\(([^)]+)\)", route_lower)
+        if m:
+            return m.group(1)
         return None
 
     # properties from orca route string
     @property
     def route_string(self):
-        """Route string for ORCA file."""
+        """
+        Route string for ORCA file.
+        """
         raise NotImplementedError
 
     ## properties derived from route string
     @property
     def route_object(self):
+        """
+        Get parsed ORCA route object from route string.
+
+        Creates an ORCARoute object from the route string to
+        provide structured access to calculation parameters.
+
+        Returns:
+            ORCARoute: Parsed ORCA route object.
+        """
         return ORCARoute(route_string=self.route_string)
 
     @property
     def route_keywords(self):
+        """
+        Get route keywords from ORCA route object.
+
+        Returns the parsed route keywords from the ORCA
+        calculation specification.
+
+        Returns:
+            list: List of route keywords.
+        """
         return self.route_object.route_keywords
 
     @property
     def functional(self):
+        """
+        Get DFT functional from ORCA route string.
+
+        Returns the density functional theory functional specified
+        in the ORCA calculation route.
+
+        Returns:
+            str or None: DFT functional name or None if not specified.
+        """
         return self.route_object.functional
 
     @property
     def ab_initio(self):
+        """
+        Get ab initio method from ORCA route string.
+
+        Returns the ab initio quantum chemistry method specified
+        in the ORCA calculation route.
+
+        Returns:
+            str or None: Ab initio method name or None if not specified.
+        """
         return self.route_object.ab_initio
 
     @property
+    def method(self):
+        """Get the computational method from ORCA route string."""
+        return self.route_object.method
+
+    @property
     def dispersion(self):
+        """
+        Get dispersion correction from ORCA route string.
+
+        Returns the dispersion correction method specified
+        in the ORCA calculation route.
+
+        Returns:
+            str or None: Dispersion correction or None if not specified.
+        """
         return self.route_object.dispersion
 
     @property
     def basis(self):
+        """
+        Get basis set from ORCA route string.
+
+        Returns the basis set specification from the ORCA
+        calculation route string.
+
+        Returns:
+            str or None: Basis set name or None if not specified.
+        """
         return self.route_object.basis
 
     @property
     def aux_basis(self):
+        """
+        Get auxiliary basis set from ORCA route string.
+
+        Returns the auxiliary basis set for density fitting
+        calculations from the ORCA route.
+
+        Returns:
+            str or None: Auxiliary basis set or None if not specified.
+        """
         return self.route_object.auxiliary_basis
 
     @property
     def extrapolation_basis(self):
+        """
+        Get extrapolation basis from ORCA route string.
+
+        Returns the basis set used for extrapolation schemes
+        in the ORCA calculation route.
+
+        Returns:
+            str or None: Extrapolation basis or None if not specified.
+        """
         return self.route_object.extrapolation_basis
 
     @property
     def defgrid(self):
+        """
+        Get integration grid specification from ORCA route.
+
+        Returns the integration grid definition specified
+        in the ORCA calculation route.
+
+        Returns:
+            str or None: Grid specification or None if not specified.
+        """
         return self.route_object.defgrid
 
     @property
     def scf_tol(self):
+        """
+        Get SCF convergence tolerance from ORCA route.
+
+        Returns the self-consistent field convergence tolerance
+        specified in the ORCA calculation route.
+
+        Returns:
+            str or None: SCF tolerance or None if not specified.
+        """
         return self.route_object.scf_tol
 
     @property
     def scf_algorithm(self):
+        """
+        Get SCF algorithm from ORCA route string.
+
+        Returns the self-consistent field algorithm specified
+        in the ORCA calculation route.
+
+        Returns:
+            str or None: SCF algorithm or None if not specified.
+        """
         return self.route_object.scf_algorithm
 
     @property
-    def job_type(self):
-        return self.route_object.job_type
+    def jobtype(self):
+        """
+        Get job type from ORCA route string.
+
+        Returns the type of calculation (e.g., 'opt', 'freq', 'sp')
+        as determined from the ORCA route string.
+
+        Returns:
+            str: Job type specification.
+        """
+        return self.route_object.jobtype
 
     @property
     def freq(self):
+        """
+        Get frequency calculation setting from ORCA route.
+
+        Returns whether frequency calculations are requested
+        in the ORCA calculation route.
+
+        Returns:
+            bool: True if frequency calculations requested.
+        """
         return self.route_object.freq
 
     @property
     def numfreq(self):
+        """
+        Get numerical frequency calculation setting from ORCA route.
+
+        Returns whether numerical frequency calculations are
+        requested in the ORCA route string.
+
+        Returns:
+            bool: True if numerical frequencies requested.
+        """
         return self.route_object.numfreq
 
     def read_settings(self):
+        """
+        Create ORCAJobSettings from file parameters.
+
+        Extracts all relevant ORCA calculation parameters from the file
+        and creates a comprehensive settings object for job submission.
+
+        Returns:
+            ORCAJobSettings: Complete ORCA job settings configuration.
+        """
         from chemsmart.jobs.orca.settings import ORCAJobSettings
 
         dv = ORCAJobSettings.default()
@@ -452,7 +1428,7 @@ class ORCAFileMixin(FileMixin):
             quadrupole=self.quadrupole,
             mdci_cutoff=self.mdci_cutoff,
             mdci_density=self.mdci_density,
-            job_type=self.job_type,
+            jobtype=self.jobtype,
             solvent_model=self.solvent_model,
             solvent_id=self.solvent_id,
             additional_route_parameters=dv.additional_route_parameters,
@@ -467,31 +1443,421 @@ class ORCAFileMixin(FileMixin):
         )
 
 
+class XTBFileMixin(FileMixin):
+    """
+    Mixin class for xTB computational chemistry files.
+
+    Extends FileMixin with xTB-specific functionality including
+    program call parsing, job type detection, and settings extraction.
+    Handles xTB file formats and calculation parameters.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "xtb version" in line:
+                parts = line.split()
+                if "version" in parts:
+                    idx = parts.index("version")
+                    if idx + 1 < len(parts):
+                        return parts[idx + 1]
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "finished run on" in line:
+                match = re.search(xtb_date_pattern, line)
+                if match:
+                    date_str = match.group(1)  # YYYY/MM/DD
+                    time_str = match.group(2)  # HH:MM:SS
+                    try:
+                        # Convert from YYYY/MM/DD HH:MM:SS to YYYY-MM-DD HH:MM:SS
+                        date_obj = datetime.strptime(
+                            f"{date_str} {time_str}", "%Y/%m/%d %H:%M:%S"
+                        )
+                        return date_obj.strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
+    @property
+    def route_string(self):
+        """
+        Get the program call from xTB main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Program call for xTB calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get program call from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed xTB route object from the program call.
+
+        Creates an XTBRoute object from the program call to
+        provide structured access to calculation parameters.
+
+        Returns:
+            XTBRoute: Parsed xTB route object.
+        """
+        return XTBRoute(route_string=self.route_string)
+
+    @property
+    def method(self):
+        """Get the computational method from the xTB program call or output Hamiltonian."""
+        gfn = self.route_object.method
+        if gfn:
+            return gfn
+        hamiltonian = self.hamiltonian
+        if hamiltonian:
+            return hamiltonian.lower().split("-")[0]
+        return None
+
+    @property
+    def basis(self):
+        """Return default xTB basis set specification."""
+        return self.route_object.basis
+
+    @property
+    def custom_solvent(self):
+        """xTB does not use Gaussian/ORCA-style inline custom solvent blocks."""
+        return None
+
+    @property
+    def jobtype(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type (e.g. 'sp', 'opt', 'hess', 'md')
+        """
+        return self.route_object.jobtype
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def optimization_level(self):
+        """
+        Extract optimization level from route string.
+
+        Returns:
+            str or None: Optimization level (e.g., 'loose', 'normal', 'tight')
+        """
+        return self.route_object.optimization_level
+
+    @property
+    def solvent_model(self):
+        """
+        Extract solvent model from route string.
+
+        Returns:
+            str or None: Solvent model (e.g., 'alpb', 'gbsa', 'cosmo')
+        """
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """
+        Extract solvent identity from route string.
+
+        Returns:
+            str or None: Solvent identity (e.g., 'water', 'toluene')
+        """
+        return self.route_object.solvent_id
+
+    @property
+    def charge(self):
+        """
+        Extract molecular charge from route string.
+
+        Returns:
+            int or None: Molecular charge
+        """
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """
+        Extract number of unpaired electrons from route string.
+
+        Returns:
+            int or None: Number of unpaired electrons (Nalpha - Nbeta)
+        """
+        return self.route_object.uhf
+
+    @property
+    def freq(self):
+        """
+        Check if frequency calculation is requested.
+
+        Returns:
+            bool: True if frequency calculation is specified
+        """
+        return self.route_object.freq
+
+    @property
+    def grad(self):
+        """
+        Check if gradient calculation is requested.
+
+        Returns:
+            bool: True if gradient calculation is specified
+        """
+        return self.route_object.grad
+
+
+class CRESTFileMixin(FileMixin):
+    """
+    Mixin class for CREST computational chemistry output files.
+
+    Extends FileMixin with CREST-specific functionality including
+    route string parsing, job type detection, and settings extraction.
+    Handles CREST file formats and calculation parameters.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        """
+        Extract CREST version from the banner line.
+
+        Example line:
+            Version 3.0.2, Tue, 05 August 16:25:20, 08/05/2025
+        """
+        for line in self.contents:
+            stripped = line.strip()
+            if stripped.startswith("Version "):
+                # "Version 3.0.2, ..." → "3.0.2"
+                return (
+                    stripped.split(",", 1)[0].replace("Version ", "").strip()
+                )
+        return None
+
+    @property
+    def route_string(self):
+        """
+        Get the route string from CREST main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Program call for CREST calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get program call from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed CREST route object from the program call.
+
+        Creates a CRESTRoute object from the program call to
+        provide structured access to calculation parameters.
+
+        Returns:
+            CRESTRoute: Parsed CREST route object.
+        """
+        return CRESTRoute(route_string=self.route_string)
+
+    @property
+    def method(self):
+        """Get the computational method from CREST route string."""
+        return self.route_object.method
+
+    @property
+    def basis(self):
+        """Return default xTB basis set specification."""
+        return self.route_object.basis
+
+    @property
+    def custom_solvent(self):
+        """CREST does not use Gaussian/ORCA-style inline custom solvent blocks."""
+        return None
+
+    @property
+    def jobtype(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type (always 'conformers' for CREST).
+        """
+        return self.route_object.jobtype
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def charge(self):
+        """Molecular charge from the CREST command line."""
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """Number of unpaired electrons from the CREST command line."""
+        return self.route_object.uhf
+
+    @property
+    def multiplicity(self):
+        """Spin multiplicity (uhf + 1)."""
+        return self.route_object.multiplicity
+
+    @property
+    def solvent_model(self):
+        """Implicit solvent model ('alpb' or 'gbsa')."""
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """Solvent identifier."""
+        return self.route_object.solvent_id
+
+    @property
+    def optimization_level(self):
+        """Optimization convergence level."""
+        return self.route_object.optimization_level
+
+    @property
+    def constrained(self):
+        """Whether --cinp constraint input file was specified."""
+        return self.route_object.constrained
+
+
 class YAMLFileMixin(FileMixin):
-    """Mixin class for YAML files."""
+    """
+    Mixin class for YAML file handling and parsing.
+
+    Extends FileMixin with YAML-specific functionality including
+    content parsing, key/value extraction, and dictionary access.
+    Provides convenient methods for working with YAML configuration files.
+    """
 
     @cached_property
     def yaml_contents_dict(self):
+        """
+        Parse YAML file contents into a Python object.
+
+        Uses `yaml.safe_load` to read the YAML root (typically a mapping).
+        The return type depends on the file contents: dict (common), list,
+        scalar, or None for empty files.
+
+        Returns:
+            Any: Parsed YAML root object.
+        """
         import yaml
 
         return yaml.safe_load(self.content_lines_string)
 
     @property
     def yaml_contents_keys(self):
+        """
+        Get all keys from the parsed YAML dictionary.
+
+        Returns the top-level keys from the YAML file contents
+        for iteration and inspection.
+
+        Returns:
+            dict_keys: Dictionary keys from YAML contents.
+        """
         return self.yaml_contents_dict.keys()
 
     @property
     def yaml_contents_values(self):
+        """
+        Get all values from the parsed YAML dictionary.
+
+        Returns the top-level values from the YAML file contents
+        for iteration and inspection.
+
+        Returns:
+            dict_values: Dictionary values from YAML contents.
+        """
         return self.yaml_contents_dict.values()
 
     def yaml_contents_by_key(self, key):
+        """
+        Get YAML content value by specific key.
+
+        Retrieves the value associated with a specific key from
+        the parsed YAML dictionary.
+
+        Args:
+            key: The key to look up in the YAML dictionary.
+
+        Returns:
+            Any: Value associated with the key.
+        """
         return self.yaml_contents_dict[key]
 
 
 class RegistryMeta(type):
-    """Metaclass to ensure all subclasses are registered in the root class's _REGISTRY."""
+    """
+    Metaclass that seeds a shared subclass registry on the root class.
+
+    Initializes a `_REGISTRY` list on the first (root) class in a hierarchy.
+    Actual automatic registration of subclasses happens in
+    `RegistryMixin.__init_subclass__`, which appends new subclasses to
+    the root's `_REGISTRY` when `REGISTERABLE` is True.
+    """
 
     def __init__(cls, name, bases, dct):
+        """
+        Initialize class and set up registry if needed.
+
+        Args:
+            name (str): Class name.
+            bases (tuple): Base classes.
+            dct (dict): Class dictionary.
+        """
         super().__init__(name, bases, dct)
         # Only initialize _REGISTRY in the root parent class
         if not hasattr(cls, "_REGISTRY"):
@@ -499,16 +1865,44 @@ class RegistryMeta(type):
 
 
 class RegistryMixin(metaclass=RegistryMeta):
-    """Mixin to register subclasses in a shared registry."""
+    """
+    Mixin to automatically register subclasses in a shared registry.
 
+    Provides automatic subclass registration and discovery functionality.
+    Useful for implementing plugin systems and factory patterns where
+    subclasses need to be dynamically discovered and instantiated.
+    """
+
+    # Flag to control whether this class should be registered in the registry
     REGISTERABLE = True
 
     @classmethod
     def subclasses(cls, allow_abstract=False):
+        """
+        Get all registered subclasses of this class.
+
+        Args:
+            allow_abstract (bool): Whether to include abstract classes.
+                Defaults to False.
+
+        Returns:
+            list: List of subclass types.
+        """
         return cls._subclasses(cls, cls._REGISTRY, allow_abstract)
 
     @staticmethod
     def _subclasses(parent_cls, registry, allow_abstract):
+        """
+        Filter registry for subclasses of the parent class.
+
+        Args:
+            parent_cls (type): Parent class to filter by.
+            registry (list): Registry of all classes.
+            allow_abstract (bool): Whether to include abstract classes.
+
+        Returns:
+            list: Filtered list of subclasses.
+        """
         return [
             c
             for c in registry
@@ -518,6 +1912,15 @@ class RegistryMixin(metaclass=RegistryMeta):
         ]
 
     def __init_subclass__(cls, **kwargs):
+        """
+        Automatically register subclass in the registry.
+
+        Called when a subclass is created to automatically add it
+        to the shared registry if REGISTERABLE is True.
+
+        Args:
+            **kwargs: Additional keyword arguments passed to parent.
+        """
         super().__init_subclass__(**kwargs)
         if cls.REGISTERABLE:
             # Append the subclass to the root _REGISTRY
@@ -529,3 +1932,380 @@ class RegistryMixin(metaclass=RegistryMeta):
 #     def write(self, f):
 #         for line in self.contents:
 #             f.write(line)
+
+
+class FolderMixin:
+    """
+    Mixin class for folder operations and file discovery.
+
+    Provides methods for searching and filtering files within directories
+    based on contents, file extensions, regular expressions, and other criteria.
+    Supports both current directory and recursive subdirectory searches.
+
+    Attributes:
+        folder (str): Path to the base directory. Consumers are expected to
+            set this attribute (e.g., via BaseFolder or a subclass).
+    """
+
+    @property
+    def folderpath(self):
+        """
+        Get the absolute path of the folder.
+
+        Returns:
+            str: Absolute folder path.
+        """
+        return os.path.abspath(self.folder)
+
+    @staticmethod
+    def _normalize_file_suffix(filetype):
+        """
+        Normalize a file-type argument to a dotted suffix.
+
+        Callers may pass ``\"xyz\"`` or ``\".xyz\"``. Matching always uses a
+        leading-dot suffix so ``filetype=\"xyz\"`` matches ``foo.xyz`` but not
+        ``foo.extxyz``.
+        """
+        if not filetype:
+            return filetype
+        return filetype if filetype.startswith(".") else f".{filetype}"
+
+    def _get_all_output_files_by_program(self, program=None, recursive=False):
+        """
+        Obtain a list of quantum chemistry output files by program.
+        File discovery is performed in two stages:
+        (1) lightweight suffix-based filtering for efficiency;
+        (2) program detection using get_program_type_from_file method.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+            recursive (bool): Whether to search recursively in subdirectories.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+
+        Raises:
+            ValueError: If an unsupported program name is provided.
+        """
+        from chemsmart.utils.io import (
+            ALL_SUFFIXES,
+            PROGRAM_INFO,
+            get_program_type_from_file,
+        )
+
+        # Validate program parameter
+        if program is not None and program not in PROGRAM_INFO:
+            valid_programs = ", ".join(sorted(PROGRAM_INFO))
+            raise ValueError(
+                f"Unsupported program '{program}'. "
+                f"Supported programs: {valid_programs}."
+            )
+
+        candidate_files = []
+        if recursive:
+            for subdir, _dirs, files in os.walk(self.folder):
+                for file in files:
+                    filepath = os.path.join(subdir, file)
+                    # Skip directories and empty files
+                    if not os.path.isfile(filepath):
+                        continue
+                    if os.stat(filepath).st_size == 0:
+                        continue
+                    if program is None:
+                        if file.endswith(ALL_SUFFIXES):
+                            candidate_files.append(filepath)
+                    else:
+                        if file.endswith(
+                            tuple(PROGRAM_INFO[program]["suffixes"])
+                        ):
+                            candidate_files.append(filepath)
+        else:
+            for file in os.listdir(self.folder):
+                filepath = os.path.join(self.folder, file)
+                # Skip directories and empty files
+                if not os.path.isfile(filepath):
+                    continue
+                if os.stat(filepath).st_size == 0:
+                    continue
+                # Filter by suffix first for efficiency
+                if program is None:
+                    if file.endswith(ALL_SUFFIXES):
+                        candidate_files.append(filepath)
+                else:
+                    if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
+                        candidate_files.append(filepath)
+
+        matched_files = []
+        for filepath in candidate_files:
+            detected_program = get_program_type_from_file(filepath)
+            if detected_program == "unknown":
+                continue
+            if program is None or detected_program == program:
+                matched_files.append(filepath)
+        return matched_files
+
+    def get_all_output_files_in_current_folder_by_program(self, program=None):
+        """
+        Obtain a list of quantum chemistry output files in the current folder by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=False
+        )
+
+    def get_all_output_files_in_current_folder_and_subfolders_by_program(
+        self, program=None
+    ):
+        """
+        Obtain quantum chemistry output files in folder and all subfolders by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=True
+        )
+
+    def is_program_calculation_directory(self, program):
+        """
+        Check if the current folder contains output files from a specific program.
+
+        Args:
+            program (str): Target QC program (e.g., "xtb", "crest", "gaussian", "orca").
+
+        Returns:
+            bool: True if the folder contains at least one output file from
+                  the specified program, False otherwise.
+        """
+        if not os.path.isdir(self.folder):
+            return False
+        return bool(
+            self.get_all_output_files_in_current_folder_by_program(program)
+        )
+
+    def get_program_type_from_folder(self):
+        """
+        Detect the type of calculation folder based on programs.
+
+        Note:
+            Folder-level detection is currently only supported for xtb and crest
+            programs. Other supported programs like gaussian and orca require
+            file-level detection (see get_program_type_from_file).
+
+        Returns:
+            str: Program name ("xtb", "crest"), "mixed" if multiple programs detected,
+             or "unknown" if the format cannot be detected.
+        """
+        from chemsmart.utils.io import PROGRAMS_WITH_FOLDER_DETECTION
+
+        programs = []
+        for program in PROGRAMS_WITH_FOLDER_DETECTION:
+            if self.is_program_calculation_directory(program):
+                programs.append(program)
+        if len(programs) == 1:
+            return programs[0]
+        elif len(programs) > 1:
+            return "mixed"
+        return "unknown"
+
+    def get_all_files_in_current_folder_by_suffix(self, filetype):
+        """
+        Obtain a list of files of specified type in the current folder.
+
+        Non-recursively lists files in `self.folder` whose names end with
+        the normalized dotted suffix (see ``_normalize_file_suffix``).
+        Empty files are excluded.
+
+        Args:
+            filetype (str): File name suffix to match (e.g., ``'log'``,
+                ``'.log'``, ``'out'``).
+
+        Returns:
+            list[str]: Full file paths matching the suffix.
+        """
+        suffix = self._normalize_file_suffix(filetype)
+        all_files = []
+        for file in os.listdir(self.folder):
+            # Check that the file is not empty:
+            if os.stat(os.path.join(self.folder, file)).st_size == 0:
+                continue
+            # Collect files of specified type
+            if file.endswith(suffix):
+                all_files.append(os.path.join(self.folder, file))
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders_by_suffix(
+        self, filetype
+    ):
+        """
+        Obtain files of specified type in folder and all subfolders.
+
+        Recursively searches `self.folder` for files whose names end with
+        the normalized dotted suffix. Unlike the non-recursive variant,
+        empty files are not filtered out here.
+
+        Args:
+            filetype (str): File name suffix to match (e.g., ``'xyz'`` or
+                ``'.xyz'``). ``'xyz'`` matches ``foo.xyz`` but not
+                ``foo.extxyz``.
+
+        Returns:
+            list[str]: Full file paths matching the suffix.
+        """
+        suffix = self._normalize_file_suffix(filetype)
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
+            for file in files:
+                if file.endswith(suffix):
+                    all_files.append(os.path.join(subdir, file))
+        return all_files
+
+    def get_all_files_in_current_folder_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in the current folder matching a program.
+
+        Non-recursively lists files in `self.folder` whose names end with
+        the normalized dotted suffix and are detected as output files from
+        the specified program. Empty files are excluded.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        suffix = self._normalize_file_suffix(filetype)
+        all_files = []
+        for file in os.listdir(self.folder):
+            filepath = os.path.join(self.folder, file)
+            # Check that the file is not empty:
+            if not os.path.isfile(filepath) or os.stat(filepath).st_size == 0:
+                continue
+            # Collect files of specified type and program
+            if file.endswith(suffix):
+                detected_program = get_program_type_from_file(filepath)
+                if detected_program == program:
+                    all_files.append(filepath)
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in folder and subfolders matching a program.
+
+        Recursively searches `self.folder` for files whose names end with
+        the normalized dotted suffix and are detected as output files from
+        the specified program. Unlike the non-recursive variant, empty files
+        are not filtered out here.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        suffix = self._normalize_file_suffix(filetype)
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
+            for file in files:
+                if file.endswith(suffix):
+                    filepath = os.path.join(subdir, file)
+                    detected_program = get_program_type_from_file(filepath)
+                    if detected_program == program:
+                        all_files.append(filepath)
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders_matching_regex(
+        self, regex
+    ):
+        """
+        Obtain files matching regex pattern in folder and subfolders.
+
+        Recursively searches `self.folder` for files whose names match
+        the given regular expression using `re.match` (anchored at the
+        beginning of the filename). Empty files are not filtered out here.
+
+        Args:
+            regex (str | re.Pattern): Regular expression pattern to match
+                against filenames (not full paths).
+
+        Returns:
+            list[str]: Full file paths whose basenames match the pattern.
+        """
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
+            for file in files:
+                if re.match(regex, file):
+                    all_files.append(os.path.join(subdir, file))
+        return all_files
+
+    def get_all_files_in_current_folder_matching_regex(self, regex):
+        """
+        Obtain files matching regex pattern in the current folder only.
+
+        Searches only `self.folder` for files whose names match the given
+        regular expression using `re.match` (anchored at the beginning of
+        the filename). Empty files are excluded.
+
+        Args:
+            regex (str | re.Pattern): Regular expression pattern to match
+                against filenames (not full paths).
+
+        Returns:
+            list[str]: Full file paths whose basenames match the pattern.
+        """
+        all_files = []
+        for file in os.listdir(self.folder):
+            # check that the file is not empty:
+            if os.stat(os.path.join(self.folder, file)).st_size == 0:
+                continue
+            # collect files of specified type
+            if re.match(regex, file):
+                all_files.append(os.path.join(self.folder, file))
+        return all_files
+
+
+class FolderOutputMixin:
+    """Mixin for output classes that read from a calculation folder."""
+
+    FILE_PARSERS = ()
+
+    def __getattr__(self, name):
+        """Delegate attribute access to internal file parsers.
+
+        Searches the file parsers specified by FILE_PARSERS in order and returns the requested
+        attribute from the first parser that provides it. Parser attributes that are None or do
+        not provide the requested attribute are skipped. Raises AttributeError when no parser
+        provides the requested attribute.
+        """
+        for file_parser in self.FILE_PARSERS:
+            try:
+                parser = object.__getattribute__(self, file_parser)
+                if parser is not None:
+                    try:
+                        return getattr(parser, name)
+                    except AttributeError:
+                        continue
+            except Exception as e:
+                logger.debug(f"Failed to access parser {file_parser}: {e}")
+                continue
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )

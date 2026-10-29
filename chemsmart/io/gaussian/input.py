@@ -2,32 +2,56 @@ from functools import cached_property
 
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
 from chemsmart.utils.mixins import GaussianFileMixin
-from chemsmart.utils.utils import content_blocks_by_paragraph
+from chemsmart.utils.utils import (
+    content_blocks_by_paragraph,
+    get_range_from_list,
+)
 
 
 class Gaussian16Input(GaussianFileMixin):
+    """
+    Parser for Gaussian 16 input files.
+    """
+
     def __init__(self, filename):
+        """
+        Initialize Gaussian input file parser.
+        """
         self.filename = filename
 
     @property
     def num_content_blocks(self):
+        """
+        Get the number of content blocks in the input file.
+        """
         return len(self.content_groups)
 
     @cached_property
     def content_groups(self):
-        """Gaussian input file with content groups.
-        # content_groups[0] gives the header information and the route string
-        # content_groups[1] gives the title
-        # content_groups[2] gives the charge/multiplicity and the xyz coordinates
-        # content_groups[3:] gives everything else that are appended at the end of the coordinates:
-        # modred, followed by gen/genecp, then custom solvent definitions - the details vary as it
-        depends on the actual calculation
-        # may need to be updated if there are job specific sections appended at the end.
+        """
+        Parse Gaussian input file into content groups.
+
+        The input file is organized into blocks separated by blank lines:
+        - content_groups[0]: Header information and route string
+        - content_groups[1]: Job title/description
+        - content_groups[2]: Charge/multiplicity and molecular coordinates
+        - content_groups[3:]: Additional
+        sections (modred, gen/genecp, solvents)
+
+        Note: Structure may vary depending on calculation type and may need
+        updates for job-specific sections.
         """
         return content_blocks_by_paragraph(string_list=self.contents)
 
+    @cached_property
+    def num_content_groups(self):
+        return len(self.content_groups)
+
     @property
     def coordinate_block(self):
+        """
+        Get the molecular coordinate block.
+        """
         from chemsmart.io.molecules.structure import CoordinateBlock
 
         cb = CoordinateBlock(coordinate_block=self.content_groups[2])
@@ -35,15 +59,22 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def modredundant_group(self):
+        """
+        Get the modredundant coordinates group if present.
+        """
         if (
             "modred" in self.route_string or "modred" in self.route_string
         ) and self.num_content_blocks > 3:
-            # in case the input .com file has opt=modred
-            # in route but no modred section at the end
+            # Handle case where input file has opt=modred in route
+            # but no modred section at the end
             return self.content_groups[3]
+        return None
 
     @property
     def is_pbc(self):
+        """
+        Check if the calculation uses periodic boundary conditions.
+        """
         for line in self.contents:
             line_elements = line.split()
             if len(line_elements) == 4 and line_elements[0].upper() == "TV":
@@ -52,37 +83,93 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def translation_vectors(self):
+        """
+        Get translation vectors for periodic calculations.
+        """
         return self.coordinate_block.translation_vectors
 
     @property
     def mem(self):
+        """
+        Get memory allocation specification.
+        """
         return self._get_mem()
 
     @property
     def nproc(self):
+        """
+        Get number of processors specification.
+        """
         return self._get_nproc()
 
     @property
     def charge(self):
-        charge, _ = self._get_charge_and_multiplicity()
-        return charge
+        """
+        Get molecular charge.
+        """
+        charge_multiplicity = self._get_charge_and_multiplicity()
+        if charge_multiplicity is not None:
+            charge, _ = charge_multiplicity
+            return charge
+        return None
 
     @property
     def multiplicity(self):
-        _, multiplicity = self._get_charge_and_multiplicity()
-        return multiplicity
+        """
+        Get spin multiplicity.
+        """
+        charge_multiplicity = self._get_charge_and_multiplicity()
+        if charge_multiplicity is not None:
+            _, multiplicity = charge_multiplicity
+            return multiplicity
+        return None
 
     @property
     def route_string(self):
+        """
+        Get the complete route string.
+        """
         return self._get_route()
 
     @property
+    def has_frozen_coordinates(self):
+        return self.coordinate_block.constrained_atoms
+
+    @property
+    def frozen_coordinate_indices(self):
+        frozen_coordinate_indices = []
+        if self.has_frozen_coordinates:
+            for i, frozen_mask in enumerate(list(self.molecule.frozen_atoms)):
+                if frozen_mask == -1:
+                    # use 1-index throughout
+                    frozen_coordinate_indices.append(i + 1)
+        if len(frozen_coordinate_indices) == 0:
+            return None
+        return frozen_coordinate_indices
+
+    @property
+    def free_coordinate_indices(self):
+        """Obtain list of free coordinate indices from the input format."""
+        if self.frozen_coordinate_indices is None:
+            return None
+        return [
+            i
+            for i in range(1, self.num_atoms + 1)
+            if i not in self.frozen_coordinate_indices
+        ]
+
+    @property
     def gen_genecp_group(self):
-        """Block of strings in the input file specifying the gen/genecp group."""
+        """
+        Block of strings in the input file specifying the gen/genecp group.
+        """
         return self._get_gen_genecp_group()
 
     @property
     def genecp_section(self):
+        """
+        Get parsed Gen/GenECP section object.
+        """
         if self.gen_genecp_group:
             return GenGenECPSection.from_genecp_group(
                 genecp_group=self.gen_genecp_group
@@ -91,124 +178,407 @@ class Gaussian16Input(GaussianFileMixin):
 
     @property
     def light_elements(self):
+        """
+        Get light elements from Gen/GenECP section.
+        """
         if self.genecp_section:
             return self.genecp_section.light_elements
         return None
 
     @property
     def light_elements_basis(self):
+        """
+        Get basis set for light elements.
+        """
         if self.genecp_section:
             return self.genecp_section.light_elements_basis
         return None
 
     @property
     def heavy_elements(self):
+        """
+        Get heavy elements from Gen/GenECP section.
+        """
         if self.genecp_section:
             return self.genecp_section.heavy_elements
         return None
 
     @property
     def heavy_elements_basis(self):
+        """
+        Get basis set for heavy elements.
+        """
         if self.genecp_section:
             return self.genecp_section.heavy_elements_basis
         return None
 
     @property
     def custom_solvent(self):
-        """Get the custom solvent string."""
+        """
+        Get the custom solvent specification string.
+        """
         return self._get_custom_solvent_string()
 
     @property
     def custom_solvent_group(self):
+        """
+        Get the custom solvent group.
+        """
         return self._get_custom_solvent_group()
 
     @property
     def molecule(self):
+        """
+        Get the molecular structure object with charge and multiplicity.
+        """
         molecule = self.coordinate_block.molecule
-        # update the charge and multiplicity of the molecule
+        # Update the charge and multiplicity of the molecule
         molecule.charge = self.charge
         molecule.multiplicity = self.multiplicity
         return molecule
 
     @property
     def num_atoms(self):
+        """
+        Get the number of atoms in the molecule.
+        """
         return self.molecule.num_atoms
 
     @property
     def constrained_atoms(self):
+        """
+        Get atoms with coordinate constraints.
+        """
         return self.coordinate_block.constrained_atoms
 
     @constrained_atoms.setter
     def constrained_atoms(self, value):
+        """
+        Set atoms with coordinate constraints.
+        """
         self.constrained_atoms = value
 
     def _get_route(self):
-        """Obtain route string that may span over multiple lines
-        and convert route to lower case."""
-        concatenated_string = ""
-        for line in self.content_groups[0]:
-            found_hash = False
-            if line.startswith("#"):
-                concatenated_string += (
-                    line.strip()
-                )  # Remove the '#' and any leading/trailing whitespace
-                found_hash = True
-            elif found_hash:
-                concatenated_string += (
-                    " " + line.strip()
-                )  # Concatenate with a space separator
-            else:
+        """
+        Extract and format route strings from the input file.
+
+        Route strings may span multiple lines starting with '#' and are
+        terminated by blank lines or non-# lines. All route content is
+        converted to lowercase for consistency.
+        """
+        route_strings = []
+        current_block = []
+
+        for line in self.contents:
+            # Blank line ends current block if any
+            if not line:
+                if current_block:
+                    route_strings.append(" ".join(current_block).lower())
+                    current_block = []
                 continue
-            return concatenated_string.lower()
+
+            # Line starts or continues a '#' block
+            if line.startswith("#"):
+                # remove the leading '#' then trim again
+                current_block.append(line)
+            else:
+                # Non-blank, non-# line also ends a block
+                if current_block:
+                    route_strings.append(" ".join(current_block).lower())
+                    current_block = []
+                # Otherwise ignore non-# lines
+
+        # Flush last block if file ends with route content
+        if current_block:
+            route_strings.append(" ".join(current_block).lower())
+
+        if self.is_link and route_strings:
+            return route_strings[-1]
+
+        return " ".join(route_strings)
 
     def _get_charge_and_multiplicity(self):
+        """
+        Extract molecular charge and spin multiplicity.
+
+        Accepts a normal ``charge multiplicity`` line, or an ONIOM-style
+        multi-pair line (uses the first charge/multiplicity pair).
+        """
         for line in self.contents:
             line_elements = line.split()
             if (
-                len(line_elements) == 2
+                len(line_elements) >= 2
                 and line_elements[0].replace("-", "").isdigit()
                 and line_elements[1].isdigit()
+                and all(
+                    element.replace("-", "").isdigit()
+                    for element in line_elements
+                )
             ):
                 charge = int(line_elements[0])
                 multiplicity = int(line_elements[1])
                 return charge, multiplicity
 
     def _get_gen_genecp_group(self):
+        """
+        Extract Gen/GenECP basis set specification groups.
+        """
+        # Semi-empirical calculations don't use explicit basis sets
+        if self.basis is None:
+            return None
+
+        # Only applicable for Gen/GenECP calculations
         if "gen" not in self.basis:
             return None
+
+        # Determine group position based on additional input features
         if (
             "modred" in self.route_string
             and "solvent=generic" in self.route_string
         ):
+            # Both modred and custom solvent present
             return self.content_groups[4:-1]
         if (
             "modred" in self.route_string
             and "solvent=generic" not in self.route_string
         ):
-            return self.content_groups[
-                4:
-            ]  # need to change if there are additional append info after these
+            # Only modred present
+            return self.content_groups[4:]
         if (
             "modred" not in self.route_string
             and "solvent=generic" in self.route_string
         ):
+            # Only custom solvent present
             return self.content_groups[3:-1]
         if (
             "modred" not in self.route_string
             and "solvent=generic" not in self.route_string
         ):
+            # Neither modred nor custom solvent
             return self.content_groups[3:]
+
         return None
 
     def _get_custom_solvent_group(self):
-        """Get the custom solvent group from the content groups.
-        Custom solvent is always the last content group in the input file.
+        """
+        Extract the custom solvent specification group.
+
+        Custom solvent specifications appear as the last content group
+        when 'solvent=generic' is specified in the route section.
         """
         if "solvent=generic" in self.route_string:
             return self.content_groups[-1]
         return None
 
     def _get_custom_solvent_string(self):
+        """
+        Convert custom solvent group to formatted string.
+        """
         if self.custom_solvent_group is not None:
             return "\n".join(self.custom_solvent_group)
+        return None
+
+
+class Gaussian16QMMMInput(Gaussian16Input):
+    """This class has all the properties of
+    Gaussian16Input but also additional ones
+    for Gaussian16QMMMInput."""
+
+    @property
+    def molecule(self):
+        """
+        Get the QMMM molecular structure with MM parameters attached.
+        """
+        from chemsmart.io.molecules.structure import QMMMMolecule
+
+        molecule = super().molecule
+        if not isinstance(molecule, QMMMMolecule):
+            return molecule
+        mm_parameters = self._get_mm_parameters_text()
+        if mm_parameters is not None:
+            molecule.mm_parameters = mm_parameters
+        return molecule
+
+    @property
+    def oniom_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        return oniom_charge
+
+    @property
+    def real_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_charge["charge_total"])
+
+    @property
+    def int_charge(self):
+        """Intermediate-system charge, or None for 2-layer ONIOM."""
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        int_charge = oniom_charge.get("int_charge")
+        if int_charge is None:
+            return None
+        return int(int_charge)
+
+    @property
+    def model_charge(self):
+        oniom_charge, _ = self._get_oniom_charge_and_multiplicity()
+        model_charge = oniom_charge.get("model_charge")
+        if model_charge is None:
+            return self.real_charge
+        return int(model_charge)
+
+    @property
+    def oniom_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        return oniom_multiplicity
+
+    @property
+    def real_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        return int(oniom_multiplicity["real_multiplicity"])
+
+    @property
+    def int_multiplicity(self):
+        """Intermediate-system multiplicity, or None for 2-layer ONIOM."""
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        int_multiplicity = oniom_multiplicity.get("int_multiplicity")
+        if int_multiplicity is None:
+            return None
+        return int(int_multiplicity)
+
+    @property
+    def model_multiplicity(self):
+        _, oniom_multiplicity = self._get_oniom_charge_and_multiplicity()
+        model_multiplicity = oniom_multiplicity.get("model_multiplicity")
+        if model_multiplicity is None:
+            return self.real_multiplicity
+        return int(model_multiplicity)
+
+    @property
+    def partition(self):
+        """Get the partition string."""
+        partition = {}
+        partitions_data = getattr(self.coordinate_block, "partitions", None)
+        if partitions_data:
+            _, high_atoms, medium_atoms, low_atoms = partitions_data
+            if high_atoms:
+                partition["high level atoms"] = get_range_from_list(high_atoms)
+            if medium_atoms:
+                partition["medium level atoms"] = get_range_from_list(
+                    medium_atoms
+                )
+            if low_atoms:
+                partition["low level atoms"] = get_range_from_list(low_atoms)
+        return partition
+
+    def _get_oniom_charge_and_multiplicity(self):
+        """Parse ONIOM charge/multiplicity pairs from the input."""
+        line_elements = []
+        for line in self.contents:
+            line_elements = line.split()
+            # ONIOM charge/mult line: all tokens are integers (allow leading '-').
+            if len(line_elements) > 0 and all(
+                element.replace("-", "").isdigit() for element in line_elements
+            ):
+                break
+        charge_multiplicity_list = [
+            "charge_total",
+            "real_multiplicity",
+            "int_charge",
+            "int_multiplicity",
+            "model_charge",
+            "model_multiplicity",
+        ]
+        oniom_charge = {}
+        oniom_multiplicity = {}
+        try:
+            partition_len = len(self.partition)
+        except RecursionError:
+            partition_len = None
+        if partition_len == 2:
+            # Two-layer line has no intermediate pair:
+            # charge_total mult_total [model_charge model_mult ...]
+            charge_multiplicity_list = [
+                "charge_total",
+                "real_multiplicity",
+                "model_charge",
+                "model_multiplicity",
+            ]
+        elif len(line_elements) >= 8:
+            # Three-layer full line:
+            # cRealL sRealL cIntM sIntM cIntL sIntL cModH sModH ...
+            charge_multiplicity_list = [
+                "charge_total",
+                "real_multiplicity",
+                "int_charge",
+                "int_multiplicity",
+                None,
+                None,
+                "model_charge",
+                "model_multiplicity",
+            ]
+        real_charge = line_elements[0] if line_elements else None
+        real_multiplicity = (
+            line_elements[1] if len(line_elements) > 1 else None
+        )
+
+        def _value(index, default):
+            if index >= len(line_elements):
+                return default
+            element = line_elements[index]
+            if element.replace("-", "").isdigit() and element.replace("-", ""):
+                return element
+            return default
+
+        for charge in range(0, len(charge_multiplicity_list), 2):
+            key = charge_multiplicity_list[charge]
+            if key is None:
+                continue
+            oniom_charge[key] = _value(charge, real_charge)
+        for multiplicity in range(1, len(charge_multiplicity_list), 2):
+            key = charge_multiplicity_list[multiplicity]
+            if key is None:
+                continue
+            oniom_multiplicity[key] = _value(multiplicity, real_multiplicity)
+        return oniom_charge, oniom_multiplicity
+
+    def _get_mm_parameters_text(self):
+        """Extract trailing MM parameter lines after coords/connectivity."""
+        mm_prefixes = (
+            "hrmstr",
+            "hrmbnd",
+            "ambtrs",
+            "imptrs",
+            "vdw",
+            "nonbon",
+            "bond",
+            "angle",
+            "torsion",
+            "improper",
+        )
+        for group in self.content_groups[3:]:
+            if not group:
+                continue
+            # Skip Geom=Connectivity blocks (atom index + numeric pairs).
+            is_connectivity = True
+            is_mm_params = False
+            for line in group:
+                parts = line.split()
+                if not parts:
+                    continue
+                if not parts[0].isdigit():
+                    is_connectivity = False
+                else:
+                    for value in parts[1:]:
+                        try:
+                            float(value)
+                        except ValueError:
+                            is_connectivity = False
+                            break
+                first = parts[0].lower()
+                if any(first.startswith(prefix) for prefix in mm_prefixes):
+                    is_mm_params = True
+            if is_connectivity:
+                continue
+            if is_mm_params:
+                return "\n".join(group)
         return None

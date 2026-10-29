@@ -1,0 +1,255 @@
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from click.testing import CliRunner
+
+from chemsmart.cli.crest.crest import crest
+from chemsmart.cli.run import run
+from chemsmart.cli.sub import sub
+from chemsmart.jobs.crest import CRESTConformerSearchJob
+
+
+class TestCRESTHelp:
+    def test_run_help_lists_crest(self):
+        result = CliRunner().invoke(run, ["--help"])
+        assert result.exit_code == 0, result.output
+        assert "crest" in result.output
+
+    def test_sub_help_lists_crest(self):
+        result = CliRunner().invoke(sub, ["--help"])
+        assert result.exit_code == 0, result.output
+        assert "crest" in result.output
+
+    def test_crest_help_lists_subcommands(self):
+        result = CliRunner().invoke(run, ["crest", "--help"])
+        assert result.exit_code == 0, result.output
+        assert "conformers" in result.output
+
+
+class TestCRESTCLISettings:
+    def test_conformers_settings_merge(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
+            "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "-1",
+                "-m",
+                "2",
+                "-g",
+                "gfn1",
+                "-O",
+                "loose",
+                "-sm",
+                "alpb",
+                "-si",
+                "water",
+                "-w",
+                "8.0",
+                "conformers",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.jobtype == "conformers"
+        assert settings.charge == -1
+        assert settings.multiplicity == 2
+        assert settings.gfn_version == "gfn1"
+        assert settings.optimization_level == "loose"
+        assert settings.solvent_model == "alpb"
+        assert settings.solvent_id == "water"
+        assert settings.energy_window == 8.0
+
+    def test_conformers_default_settings(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, _ = run_crest_and_capture_settings(
+            "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "conformers",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.jobtype == "conformers"
+        assert settings.gfn_version == "gfn2"
+        assert settings.constraints is None
+
+    def test_constrained_settings(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, _ = run_crest_and_capture_settings(
+            "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "conformers",
+                "-c",
+                "[[1,2],[1,3]]",
+                "--force-constant",
+                "0.5",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.constraints == [[1, 2], [1, 3]]
+        assert settings.force_constant == 0.5
+
+
+class TestCRESTCLILabelFallback:
+    """Covers the filename-less label fallback branches in the ``crest``
+    group callback (no -f/--filename, molecule obtained via --pubchem)."""
+
+    def test_pubchem_only_without_label_falls_back_to_crest_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                crest,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "conformers",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "crest_output_conformers"
+
+    def test_pubchem_only_with_append_label_falls_back_to_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                crest,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-a",
+                    "suffix",
+                    "conformers",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_suffix"
+
+    def test_append_label_suffixes_filename_derived_label(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, _, mock_job_cls = run_crest_and_capture_settings(
+            "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-a",
+                "suffix",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "conformers",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label.endswith("_suffix")
+
+
+class TestCRESTJobClasses:
+    def test_crest_job_types_are_distinct(self):
+        assert CRESTConformerSearchJob.TYPE == "crestconformers"
+
+
+class TestCRESTSubmission:
+    def test_sub_test_writes_crest_scripts(
+        self, tmp_path, server_yaml_file, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        xyz_file = (
+            Path(__file__).resolve().parent
+            / "data"
+            / "StructuresTests"
+            / "xyz"
+            / "1-mer.xyz"
+        )
+        result = CliRunner().invoke(
+            sub,
+            [
+                "-s",
+                server_yaml_file,
+                "--test",
+                "crest",
+                "-p",
+                "test",
+                "-f",
+                str(xyz_file),
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "conformers",
+            ],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, result.output
+        run_script = tmp_path / "chemsmart_run_crest_1-mer_conformers.py"
+        submit_script = tmp_path / "chemsmart_sub_crest_1-mer_conformers.sh"
+        assert run_script.exists()
+        assert submit_script.exists()
+        assert "'--test'" not in run_script.read_text()
+        assert "'crest'" in run_script.read_text()
+        assert (
+            "conda activate ~/anaconda3/envs/chemsmart"
+            in submit_script.read_text()
+        )

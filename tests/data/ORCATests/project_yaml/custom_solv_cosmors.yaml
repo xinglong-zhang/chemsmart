@@ -1,0 +1,25 @@
+# ORCA project settings with openCOSMO-RS and custom %cosmors parameters
+# All custom parameters go into the %cosmors block via custom_solvent.
+# Note: 'solvent "water"' is included to verify the ORCA 6.1 guard — when
+# solvent_id is already in the route as COSMORS(water), the writer filters
+# out 'solvent "name"' lines from the block to prevent a duplicate-keyword
+# INPUT ERROR.  'solventfilename' is a separate keyword and is NOT filtered.
+gas:
+  functional: m062x
+  basis: def2-svp
+  defgrid: DEFGRID3
+solv:
+  functional: m062x
+  basis: def2-tzvp
+  defgrid: DEFGRID3
+  freq: False
+  solvent_model: cosmors
+  solvent_id: water
+  custom_solvent: |
+    aeff              5.925
+    lnalpha           0.202
+    lnchb             0.166
+    temp              298.15
+    dftfunc           "BP86"
+    dftbas            "def2-TZVPD"
+    solvent           "water"

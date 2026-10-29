@@ -1,0 +1,33 @@
+%chk=link_opt_input_opt_link.chk
+%nprocshared=12
+%mem=40GB
+#  um062x def2svp scrf=(smd,solvent=dichloroethane) stable=opt guess=mix
+
+Gaussian job with default settings
+
+0 1
+C       -0.5448210000   -1.1694570000    0.0001270000
+C        0.8378780000   -1.0476350000    0.0001900000
+C        1.4329940000    0.2194290000    0.0001440000
+C        0.6358350000    1.3657650000   -0.0000040000
+C       -0.7521390000    1.2582750000    0.0000710000
+C       -1.3283680000   -0.0113420000    0.0001560000
+H       -1.0298620000   -2.1454490000    0.0001020000
+H        1.4853190000   -1.9262430000    0.0002620000
+H        1.1050940000    2.3527070000    0.0000530000
+H       -1.3913950000    2.1406100000   -0.0000130000
+C        2.9142600000    0.3363820000    0.0000140000
+O        3.6625230000   -0.6037690000   -0.0002940000
+H        3.3025560000    1.3842410000    0.0001510000
+Cl      -3.0556310000   -0.1578960000   -0.0001400000
+
+--Link1--
+%chk=link_opt_input_opt_link.chk
+%nprocshared=12
+%mem=40GB
+# opt freq um062x def2svp scrf=(smd,solvent=dichloroethane) geom=check guess=read
+
+Gaussian job with default settings
+
+0 1
+

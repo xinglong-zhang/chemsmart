@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
     "--fragment-indices",
     required=True,
     type=str,
-    help="Indices of one fragment for DI-AS analysis.",
+    help="Indices of one fragment for DI-AS analysis. 1-indexed.",
 )
 @click.option(
     "-n",
     "--every-n-points",
     type=int,
     default=3,
-    help="Every nth points along the IRC file to prepare for DI-AS analysis.",
+    help="Every nth point along the IRC file to prepare for DI-AS analysis.",
 )
 @click.option(
     "-s",
@@ -33,15 +33,66 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Turn on/off solvent for DI-AS job calculations.",
 )
+@click.option(
+    "-m",
+    "--mode",
+    type=click.Choice(["irc", "ts"], case_sensitive=False),
+    default="irc",
+    help="Mode of DI-AS analysis. Defaults to IRC.",
+)
+@click.option(
+    "-c1",
+    "--charge-of-fragment1",
+    type=int,
+    default=None,
+    help="Charge of fragment 1.",
+)
+@click.option(
+    "-m1",
+    "--multiplicity-of-fragment1",
+    type=int,
+    default=None,
+    help="Multiplicity of fragment 1.",
+)
+@click.option(
+    "-c2",
+    "--charge-of-fragment2",
+    type=int,
+    default=None,
+    help="Charge of fragment 2.",
+)
+@click.option(
+    "-m2",
+    "--multiplicity-of-fragment2",
+    type=int,
+    default=None,
+    help="Multiplicity of fragment 2.",
+)
 @click.pass_context
 def dias(
-    ctx, fragment_indices, every_n_points, skip_completed, solv=False, **kwargs
+    ctx,
+    fragment_indices,
+    every_n_points,
+    skip_completed,
+    solv=False,
+    mode="irc",
+    charge_of_fragment1=None,
+    multiplicity_of_fragment1=None,
+    charge_of_fragment2=None,
+    multiplicity_of_fragment2=None,
+    **kwargs,
 ):
+    """CLI subcommand for running Gaussian DI-AS jobs."""
+
+    # get jobrunner for running Gaussian DI-AS jobs
+    jobrunner = ctx.obj["jobrunner"]
+
     # get settings from project
     project_settings = ctx.obj["project_settings"]
     sp_settings = project_settings.sp_settings()
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
     # e.g., `sub.py gaussian -c <user_charge> -m <user_multiplicity>`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
@@ -59,8 +110,7 @@ def dias(
     label = ctx.obj["label"]
 
     if not solv:
-        sp_settings.solvent_model = None
-        sp_settings.solvent_id = None
+        sp_settings.remove_solvent()
 
     logger.info(f"DI-AS settings from project: {sp_settings.__dict__}")
 
@@ -70,8 +120,14 @@ def dias(
         molecules=molecules,
         settings=sp_settings,
         label=label,
+        jobrunner=jobrunner,
         fragment_indices=fragment_indices,
         every_n_points=every_n_points,
+        mode=mode,
+        charge_of_fragment1=charge_of_fragment1,
+        multiplicity_of_fragment1=multiplicity_of_fragment1,
+        charge_of_fragment2=charge_of_fragment2,
+        multiplicity_of_fragment2=multiplicity_of_fragment2,
         skip_completed=skip_completed,
         **kwargs,
     )

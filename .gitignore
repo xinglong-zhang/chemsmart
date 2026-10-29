@@ -2,6 +2,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.idea/
+.idea/*
+*.idea/
+*.idea/*
+*.vscode/
+*.vscode/*
+
 
 # C extensions
 *.so
@@ -67,9 +74,6 @@ instance/
 # Scrapy stuff:
 .scrapy
 
-# Sphinx documentation
-docs/_build/
-
 # PyBuilder
 target/
 
@@ -102,7 +106,7 @@ celerybeat.pid
 
 # Environments
 .env
-.venv
+.venv*
 env/
 venv/
 ENV/
@@ -116,8 +120,9 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-/site
+# sphinx build 
+docs/_build/
+docs/build/
 
 # mypy
 .mypy_cache/
@@ -133,3 +138,9 @@ dmypy.json
 # templates
 .github/templates/*
 
+#macos
+.DS_Store
+.idea/
+
+# Local manual convert CLI scratch (not used by pytest)
+convert_test_files/

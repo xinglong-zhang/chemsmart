@@ -2,7 +2,7 @@ SERVER:
     SCHEDULER: PBS
     QUEUE_NAME: normal
     NUM_HOURS: 24
-    MEM_GB: 400
+    MEM_GB: 375
     NUM_CORES: 64
     NUM_GPUS: 0
     NUM_THREADS: 64
@@ -11,6 +11,8 @@ SERVER:
     ##PROJECT: 13002374
     SCRATCH_DIR: null
     USE_HOSTS: true
+    EXTRA_SCHEDULER_DIRECTIVES: |
+      #PBS -m abe
     EXTRA_COMMANDS: |
         #extra commands to activate chemsmart environment in submission script
 GAUSSIAN:
@@ -25,7 +27,7 @@ GAUSSIAN:
         module load craype-x86-rome
         module load libfabric/1.11.0.4.125
     SCRIPTS: |
-        source GAUSS_DIR=~/bin/g16
+        tcsh -c "source ~/bin/g16/bsd/g16.login"
     ENVARS: |
         export SCRATCH=~/scratch  # required if scratch is true
         export GAUSS_EXEDIR=~/bin/g16
@@ -34,3 +36,48 @@ GAUSSIAN:
 ORCA:
     EXEFOLDER: ~/bin/orca_6_0_0
     LOCAL_RUN: False  # local run False to use parallel_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: |
+        module purge
+        module load libfabric
+        module load openmpi
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
+
+XTB:
+    EXEFOLDER: null  # use xtb from activated conda environment/PATH
+    LOCAL_RUN: True
+    SCRATCH: False  # run in job folder by default; set True for batch/scratch runs
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: null
+    SCRIPTS: null
+    ENVARS: null
+
+CREST:
+    EXEFOLDER: null  # use crest from activated conda environment/PATH
+    LOCAL_RUN: True
+    SCRATCH: False  # run in job folder by default; set True for batch/scratch runs
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: null
+    SCRIPTS: null
+    ENVARS: null
+
+NCIPLOT:
+    EXEFOLDER: ~/bin/nciplot
+    LOCAL_RUN: False  # local run True to use serial_command
+    SCRATCH: True  # set scratch to True to run in scratch folder
+    CONDA_ENV: |   # program-specific conda env
+        source ~/miniconda3/etc/profile.d/conda.sh
+        conda activate ~/miniconda3/envs/chemsmart
+    MODULES: |
+        module purge
+    ENVARS: |
+        export SCRATCH=~/scratch  # required if scratch is true
+        export NCIPLOT_HOME=~/bin/nciplot

@@ -6,7 +6,7 @@ import shutil
 import time
 from abc import abstractmethod
 from contextlib import suppress
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -15,29 +15,55 @@ logger = logging.getLogger(__name__)
 
 class Job(RegistryMixin):
     """Class that encapsulates and runs a task.
-
     Args:
-        skip_completed (bool): If True, completed jobs will not be rerun. Defaults to True.
+        molecule: The molecule object associated with the job.
+        label (str): A label for the job.
+        jobrunner (JobRunner): The JobRunner instance to execute the job.
+        local (bool): If True, run the job locally. Defaults to False.
+        skip_completed (bool): If True, completed
+        jobs will not be rerun. Defaults to True.
+        **kwargs: Additional keyword arguments.
     """
 
     TYPE: Optional[str] = None
     PROGRAM: Optional[str] = None
 
     def __init__(
-        self, molecule, label, local=False, skip_completed=True, **kwargs
+        self,
+        molecule,
+        label,
+        jobrunner,
+        local=False,
+        skip_completed=True,
+        **kwargs,
     ):
+        self._folder = self._determine_folder()  # Private backing attribute
         self.molecule = molecule
         self.label = label
+        self.jobrunner = jobrunner
         self.local = local
         self.skip_completed = skip_completed
+        self.kwargs = kwargs
+
+    @property
+    def execution_name(self):
+        """Program-prefixed name for scheduling, scripts, and scratch."""
+        if self.label is None or self.PROGRAM is None:
+            return self.label
+        return f"{self.PROGRAM.lower()}_{self.label}"
 
     @property
     def folder(self):
-        return self._determine_folder()
+        return self._folder
+
+    @folder.setter
+    def folder(self, folder):
+        self._folder = folder
 
     def _determine_folder(self):
         """
-        Determine the folder based on the current working directory where the job is submitted.
+        Determine the folder based on the current working directory
+        where the job is submitted.
         """
         # Get the current working directory at runtime
         cwd = os.getcwd()
@@ -50,7 +76,10 @@ class Job(RegistryMixin):
         return os.path.basename(os.path.abspath(self.folder))
 
     def __repr__(self):
-        return f"{self.__class__.__qualname__}<folder={self.folder}, label={self.label}>"
+        return (
+            f"{self.__class__.__qualname__}<folder={self.folder}, "
+            f"label={self.label}, jobrunner={self.jobrunner}>"
+        )
 
     @property
     def joblog(self):
@@ -62,9 +91,90 @@ class Job(RegistryMixin):
             return
         self._run(**kwargs)
 
+    @staticmethod
+    def _propagate_runner(
+        runner, job, *, num_cores=None, mem_gb=None, num_gpus=None
+    ):
+        """Copy *runner* onto *job*, optionally patching resource fields.
+
+        This is the **single, centralised** mechanism for propagating a
+        runner to a child job.  Every call site that needs to hand a runner
+        to a child should use this helper rather than assigning directly, so
+        that:
+
+        * The child always receives its own ``.copy()`` — no shared-reference
+          mutations between siblings.
+        * Resource overrides (e.g. splitting cores across parallel workers)
+          are applied in one place, making future additions (``num_gpus``,
+          ``mem_per_cpu``, …) a single-line change.
+
+        Args:
+            runner: The parent runner to propagate, or ``None``.
+            job (Job): The child job that will receive the runner copy.
+            num_cores (int, optional): Override ``runner.num_cores`` on the copy.
+            mem_gb (int, optional): Override ``runner.mem_gb`` on the copy.
+            num_gpus (int, optional): Override ``runner.num_gpus`` on the copy.
+
+        Returns:
+            The runner copy that was assigned, or ``None`` if *runner* was falsy.
+        """
+        if not runner:
+            return None
+        child_runner = runner.copy()
+        if num_cores is not None:
+            child_runner.num_cores = num_cores
+        if mem_gb is not None:
+            child_runner.mem_gb = mem_gb
+        if num_gpus is not None:
+            child_runner.num_gpus = num_gpus
+        job.jobrunner = child_runner
+        return child_runner
+
+    @staticmethod
+    def _execute_phase_jobs(
+        *,
+        parent_runner,
+        jobs: Optional[Sequence],
+        jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+        stop_on_incomplete: bool = False,
+        before_run: Optional[Callable[[], None]] = None,
+        logger_obj: Optional[logging.Logger] = None,
+        phase_label: str = "phase",
+    ) -> None:
+        """Run a phase of child jobs using shared orchestration semantics.
+
+        This centralizes the repeated pattern of optional pre-phase refresh,
+        per-job runner propagation, and fail-fast behavior.
+        """
+        if before_run is not None:
+            before_run()
+
+        if jobs_factory is not None:
+            jobs = jobs_factory()
+
+        if not jobs:
+            return
+
+        for child_job in jobs:
+            if logger_obj is not None:
+                logger_obj.info(f"Running {phase_label} job: {child_job}")
+            Job._propagate_runner(parent_runner, child_job)
+            child_job.run()
+            if stop_on_incomplete and not child_job.is_complete():
+                if logger_obj is not None:
+                    logger_obj.info(
+                        f"Job {child_job} incomplete, breaking {phase_label} loop."
+                    )
+                break
+
     @abstractmethod
     def _run(self, **kwargs):
-        raise NotImplementedError
+        """
+        Run the job using the assigned jobrunner.
+        Subclasses can override this method for custom behavior.
+        """
+        logger.info(f"Running job {self} with jobrunner {self.jobrunner}")
+        self.jobrunner.run(self, **kwargs)
 
     def set_folder(self, folder):
         self.folder = folder
@@ -102,7 +212,7 @@ class Job(RegistryMixin):
 
         if remove:
             shutil.move(src=file, dst=newfilepath)
-        else:  # noqa: PLR5501
+        else:
             if os.path.isdir(file):
                 if os.path.exists(newfilepath):
                     os.rename(newfilepath, newfilepath + f"_{time.time()}")
@@ -141,3 +251,22 @@ class Job(RegistryMixin):
 
     def is_complete(self):
         return self._job_is_complete()
+
+    @classmethod
+    def from_molecule(cls, molecule, label, jobrunner=None, **kwargs):
+        """
+        Create a Job instance with a JobRunner initialized from the job's TYPE.
+
+        Args:
+            molecule: The molecule object associated with the job.
+            label (str): A label for the job.
+            jobrunner: The JobRunner instance to execute the job.
+            If None, it will be created based on the job's TYPE.
+            **kwargs: Additional keyword arguments for Job or JobRunner.
+
+        Returns:
+            Job: A new Job instance with an appropriate JobRunner.
+        """
+        return cls(
+            molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
+        )

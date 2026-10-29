@@ -52,7 +52,6 @@ class ChemSmartTrainer:
             }
         )
 
-
     def _load_pipeline(self):
         """Loads a Hugging Face pipeline for inference (zero-shot command generation)."""
         logger.info(f"Loading pipeline  using model {self.model_name}")

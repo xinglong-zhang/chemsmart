@@ -1,4 +1,9 @@
-"""Submission of jobs to queuing system via cli."""
+"""
+Submission of jobs to queuing system via cli.
+
+This module provides command-line interface for submitting jobs to
+various queuing systems and cluster schedulers.
+"""
 
 import logging
 
@@ -19,22 +24,30 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 @click_jobrunner_options
 @logger_options
-@click.option("-t", "--time-hours", type=float, default=None)
-@click.option("-q", "--queue", type=str, help="queue")
 @click.option(
-    "-v",
+    "-t",
+    "--time-hours",
+    type=float,
+    default=None,
+    help="Time limit in hours for the job (e.g., 48.0).",
+)
+@click.option("-q", "--queue", type=str, help="Queue name for job submission.")
+@click.option(
+    "-v/",
     "--verbose/--no-verbose",
-    help="Turns on logging to stream output and debug logging.",
+    default=False,
+    help="Turn on logging to stream output and debug logging.",
 )
 @click.option(
     "--test/--no-test",
     default=False,
-    help="If true, job will not be submitted; only run and submit scripts will be written.",
+    help="If true, job will not be submitted; only run and submit "
+    "scripts will be written.",
 )
 @click.option(
     "--print-command/--no-print-command",
     default=False,
-    help="print the command generated",
+    help="Print the generated command.",
 )
 def sub(
     ctx,
@@ -44,6 +57,7 @@ def sub(
     mem_gb,
     fake,
     scratch,
+    delete_scratch,
     debug,
     stream,
     time_hours,
@@ -53,6 +67,12 @@ def sub(
     print_command,
     **kwargs,
 ):
+    """
+    Main command for submitting chemsmart jobs to queuing systems.
+
+    This command prepares and submits jobs to cluster schedulers with
+    specified resource requirements and queue parameters.
+    """
     # Set up logging
     if verbose:
         create_logger(stream=True, debug=True)
@@ -60,17 +80,25 @@ def sub(
         create_logger(debug=debug, stream=stream)
     logger.info("Entering main program")
 
-    # Instantiate the jobrunner with CLI options
-    if server is not None:
-        server = Server.from_servername(server)
-        if time_hours is not None:
-            server.num_hours = time_hours
-        if queue is not None:
-            server.queue_name = queue
+    # Resolve one shared Server instance for both JobRunner and Submitter.
+    server = (
+        Server.current() if server is None else Server.from_servername(server)
+    )
+    if time_hours is not None:
+        server.num_hours = time_hours
+    if queue is not None:
+        server.queue_name = queue
+    if num_cores is not None:
+        server.kwargs["NUM_CORES"] = num_cores
+    if num_gpus is not None:
+        server.kwargs["NUM_GPUS"] = num_gpus
+    if mem_gb is not None:
+        server.kwargs["MEM_GB"] = mem_gb
 
     jobrunner = JobRunner(
         server=server,
         scratch=scratch,
+        delete_scratch=delete_scratch,
         fake=fake,
         num_cores=num_cores,
         num_gpus=num_gpus,
@@ -88,63 +116,233 @@ def sub(
 @sub.result_callback(replace=True)
 @click.pass_context
 def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
-    def _clean_command(ctx):
-        """Remove keywords used in sub.py but not in run.py.
+    """
+    Process the job for submission to queuing system.
+
+    This callback function handles job submission by reconstructing
+    command-line arguments and interfacing with the appropriate
+    scheduler system.
+    """
+
+    def _clean_command_list(commands):
+        """
+        Remove keywords used in sub.py but not in run.py from a command list.
+
         Specifically: Some keywords/options (like queue, verbose, etc.)
-        are only relevant to sub.py and not applicable to run.py."""
+        are only relevant to sub.py and not applicable to run.py.
+        """
         # Get "sub" command and assert that there is exactly one.
         command = next(
             (
                 subcommand
-                for subcommand in ctx.obj["subcommand"]
+                for subcommand in commands
                 if subcommand["name"] == "sub"
             ),
             None,
         )
-        if not command:
-            raise ValueError("No 'sub' command found in context.")
 
-        # Find the keywords that are valid in sub.py
-        # but should not be passed to run.py and remove those
-        keywords_not_in_run = [
-            "time_hours",
-            "queue",
-            "verbose",
-            "test",
-            "print_command",
-        ]
+        if command:
+            # Find the keywords that are valid in sub.py
+            # but should not be passed to run.py and remove those
+            keywords_not_in_run = [
+                "time_hours",
+                "queue",
+                "verbose",
+                "test",
+                "print_command",
+            ]
 
-        for keyword in keywords_not_in_run:
-            # Remove keyword if it exists
-            command["kwargs"].pop(keyword, None)
+            for keyword in keywords_not_in_run:
+                # Remove keyword if it exists
+                command["kwargs"].pop(keyword, None)
+
+    def _clean_command(ctx):
+        """
+        Remove keywords used in sub.py but not in run.py.
+        """
+        if "subcommand" in ctx.obj:
+            _clean_command_list(ctx.obj["subcommand"])
         return ctx
 
-    def _reconstruct_cli_args(ctx, job):
-        """Get cli args that reconstruct the command line."""
-        commands = ctx.obj["subcommand"]
+    def _replace_batch_table_tokens(cli_args, batch_entry):
+        """Rewrite table-mode args to a single-entry invocation.
 
+        For pKa table mode we generated one job per table row. Submission
+        scripts should therefore execute just that row, not the entire table.
+        """
+        if not batch_entry:
+            return cli_args
+
+        args = list(cli_args)
+        table_option_names = {
+            "-f",
+            "--filename",
+        }
+
+        # Replace table filename with row filepath.
+        for idx in range(len(args) - 1):
+            if args[idx] in table_option_names:
+                args[idx + 1] = str(batch_entry["filepath"])
+                break
+
+        # Per-row scripts should run a single pKa submission, not table mode.
+        if "batch" in args:
+            args[args.index("batch")] = "submit"
+
+        def _drop_option(tokens, option_names):
+            idx = 0
+            while idx < len(tokens):
+                if tokens[idx] in option_names:
+                    del tokens[idx]
+                    if idx < len(tokens):
+                        del tokens[idx]
+                    continue
+                idx += 1
+
+        # Ensure row-level proton/charge/multiplicity are explicit.
+        option_map = {
+            "--proton-index": str(batch_entry["proton_index"]),
+            "-pi": str(batch_entry["proton_index"]),
+            "--charge": str(batch_entry["charge"]),
+            "-c": str(batch_entry["charge"]),
+            "--multiplicity": str(batch_entry["multiplicity"]),
+            "-m": str(batch_entry["multiplicity"]),
+        }
+
+        fragment_index = batch_entry.get("fragment_index")
+        if fragment_index is not None:
+            option_map["--index"] = str(fragment_index)
+            option_map["-i"] = str(fragment_index)
+
+        batch_label = batch_entry.get("label")
+        if batch_label is not None:
+            option_map["--label"] = str(batch_label)
+            option_map["-l"] = str(batch_label)
+
+        def _drop_option_pair(tokens, option_names):
+            idx = 0
+            while idx < len(tokens):
+                if tokens[idx] in option_names:
+                    del tokens[idx : idx + 2]
+                    continue
+                idx += 1
+
+        def _set_option(tokens, long_opt, short_opt, insert_before=None):
+            if long_opt in tokens:
+                pos = tokens.index(long_opt)
+                if pos + 1 < len(tokens):
+                    tokens[pos + 1] = option_map[long_opt]
+                return
+            if short_opt in tokens:
+                pos = tokens.index(short_opt)
+                if pos + 1 < len(tokens):
+                    tokens[pos + 1] = option_map[short_opt]
+                return
+
+            insert_idx = len(tokens)
+            if insert_before in tokens:
+                insert_idx = tokens.index(insert_before)
+            # Prefer long-form options to avoid Click treating multi-char
+            # aliases such as "-pi" as grouped short flags (e.g. "-p -i").
+            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
+
+        def _set_option_after(tokens, long_opt, short_opt, insert_after=None):
+            _drop_option_pair(tokens, {long_opt, short_opt})
+            insert_idx = len(tokens)
+            if insert_after in tokens:
+                insert_idx = tokens.index(insert_after) + 1
+            tokens[insert_idx:insert_idx] = [long_opt, option_map[long_opt]]
+
+        # Proton index is declared on ``pka submit``; place it after ``submit``
+        # so per-row ``chemsmart run`` scripts parse it reliably.
+        _set_option_after(args, "--proton-index", "-pi", insert_after="submit")
+        # Charge/multiplicity belong to the backend group (gaussian/orca), so
+        # they must appear before entering the "pka" group.
+        _set_option(args, "--charge", "-c", insert_before="pka")
+        _set_option(args, "--multiplicity", "-m", insert_before="pka")
+        if fragment_index is not None:
+            _set_option(args, "--index", "-i", insert_before="pka")
+        if batch_label is not None:
+            _set_option(args, "--label", "-l", insert_before="pka")
+
+        batch_scheme = batch_entry.get("scheme")
+        if batch_scheme is not None:
+            option_map.update(
+                {
+                    "--scheme": str(batch_scheme),
+                    "-s": str(batch_scheme),
+                }
+            )
+            _set_option(args, "--scheme", "-s", insert_before="submit")
+
+            if batch_scheme == "direct":
+                # Subsequent batch rows run direct mode only; drop all
+                # reference-acid CLI options so click validation does not fail.
+                _drop_option(
+                    args,
+                    {
+                        "--reference",
+                        "-r",
+                        "--reference-proton-index",
+                        "-rpi",
+                        "--reference-color-code",
+                        "-rcc",
+                        "--reference-charge",
+                        "-rc",
+                        "--reference-multiplicity",
+                        "-rm",
+                        "--reference-conjugate-base-charge",
+                        "--reference-conjugate-base-multiplicity",
+                    },
+                )
+
+        return args
+
+    def _reconstruct_cli_args(ctx, job):
+        """
+        Get cli args that reconstruct the command line.
+
+        Rebuilds the command-line arguments from the context object
+        for job submission purposes.
+        """
+        commands = ctx.obj["subcommand"]
         args = CtxObjArguments(commands, entry_point="sub")
         cli_args = args.reconstruct_command_line()[
             1:
         ]  # remove the first element 'sub'
+        cli_args = _replace_batch_table_tokens(
+            cli_args, getattr(job, "_batch_entry", None)
+        )
+
         if kwargs.get("print_command"):
             print(cli_args)
         return cli_args
 
-    def _process_single_job(job, jobrunner):
+    def _process_single_job(job):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
         cli_args = _reconstruct_cli_args(ctx, job)
 
-        server = Server.from_servername(kwargs.get("server"))
-        server.submit(job=job, test=kwargs.get("test"), cli_args=cli_args)
+        jobrunner.server.submit(
+            job=job,
+            test=kwargs.get("test"),
+            cli_args=cli_args,
+        )
 
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
 
-    _process_single_job(job=job, jobrunner=jobrunner)
+    # Handle list of jobs (when multiple molecules are specified with --index)
+    if isinstance(job, list):
+        logger.info(f"Processing {len(job)} jobs")
+        for single_job in job:
+            single_job.jobrunner = jobrunner
+            _process_single_job(job=single_job)
+    else:
+        job.jobrunner = jobrunner
+        _process_single_job(job=job)
 
 
 for subcommand in subcommands:

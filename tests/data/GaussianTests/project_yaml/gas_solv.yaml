@@ -1,9 +1,13 @@
 # Default Gaussian settings for calculations 
 gas:
+  ab_initio: Null
   functional: "b3lyp empiricaldispersion=gd3bj"  # quotes required for string with spaces
   basis: def2svp
+  semiempirical: Null
 solv: 
+  ab_initio: Null
   functional: "b3lyp empiricaldispersion=gd3bj"  # quotes required for string with spaces
   basis: def2tzvp
+  semiempirical: Null
   solvent_model: smd
   solvent_id: toluene

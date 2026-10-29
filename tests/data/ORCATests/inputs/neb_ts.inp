@@ -1,0 +1,11 @@
+! GFN2-xTB NEB-TS
+%pal nprocs 32 end
+# Memory per core
+%maxcore 3600
+%NEB
+  NImages 16
+  NEB_END_XYZFILE "C_ts1_opt.xyz"
+  NEB_TS_XYZFILE "C_TS1_initial.xyz"  
+  PREOPT_ENDS FALSE
+END
+* xyzfile 0 2 C_reactant_opt.xyz

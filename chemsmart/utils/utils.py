@@ -1,22 +1,110 @@
+"""
+General utility functions and classes for CHEMSMART.
+
+Provides a collection of utility functions for file handling, caching,
+data structures, text processing, and system operations. Includes
+specialized decorators for function caching and ordered set implementation.
+"""
+
+import ast
 import copy
 import hashlib
+import logging
 import os
 import re
+import shlex
 import subprocess
+import sys
 import time
 from functools import lru_cache, wraps
 from itertools import groupby
-from typing import Union
+from pathlib import Path
+from typing import Tuple, Union
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+class OrderedSet:
+    """
+    Set-like container that maintains insertion order.
+
+    Provides set operations while preserving the order in which items
+    were added. Useful when uniqueness is required but order matters.
+    """
+
+    def __init__(self, iterable=None):
+        """
+        Initialize an OrderedSet with optional initial items.
+
+        Args:
+            iterable (optional): Initial items to add to the set.
+        """
+        self.items = []
+        if iterable:
+            for item in iterable:
+                self.add(item)
+
+    def add(self, item):
+        """
+        Add an item to the set if not already present.
+
+        Args:
+            item: Item to add to the set.
+        """
+        if item not in self.items:
+            self.items.append(item)
+
+    def remove(self, item):
+        """
+        Remove an item from the set if present.
+
+        Args:
+            item: Item to remove from the set.
+        """
+        if item in self.items:
+            self.items.remove(item)
+
+    def __contains__(self, item):
+        """
+        Check if an item is in the set.
+
+        Args:
+            item: Item to check for membership.
+
+        Returns:
+            bool: True if item is in the set, False otherwise.
+        """
+        return item in self.items
+
+    def __iter__(self):
+        """
+        Return an iterator over the items in the set.
+
+        Returns:
+            iterator: Iterator over set items in insertion order.
+        """
+        return iter(self.items)
+
+    def __len__(self):
+        """
+        Return the number of items in the set.
+
+        Returns:
+            int: Number of items in the set.
+        """
+        return len(self.items)
 
 
 def file_cache(copy_result=True, maxsize=64):
     """
-    Caches results of functions that take files as input.
+    Cache function results based on file modification times.
 
+    Decorator that caches results of functions that take files as input.
     Uses the modified time of the files to see if they changed or not.
     If unchanged, will return the cached results of the function call.
+    For recently modified files, uses file content hash for cache validation.
 
     Use before @classmethod or @staticmethod. For example:
 
@@ -26,9 +114,15 @@ def file_cache(copy_result=True, maxsize=64):
         ...
 
     Args:
-        copy_result (bool): If true, will copy the result of the function call before caching.
-            This is to prevent changes to the result from polluting the cache.
-        maxsize (int): Maximum number of results to cache. Defaults to 64.
+        copy_result (bool, optional): If true, will copy the result of the
+                                    function call before caching. This
+                                    prevents changes to the result from
+                                    polluting the cache. Defaults to True.
+        maxsize (int, optional): Maximum number of results to cache.
+                               Defaults to 64.
+
+    Returns:
+        function: Decorated function with file-based caching.
     """
 
     def decorator(func):
@@ -86,12 +180,29 @@ def file_cache(copy_result=True, maxsize=64):
 
 
 class FileReadError(Exception):
+    """
+    Exception raised when file reading operations fail.
+
+    Used to indicate errors during file parsing or reading operations
+    in computational chemistry file processing.
+    """
+
     pass
 
 
 def is_float(string):
-    """Function to test if a given string is float or not.
-    This should exclude string that is a digit."""
+    """
+    Test if a given string represents a float value.
+
+    Checks if a string can be converted to a float, excluding
+    strings that represent integers.
+
+    Args:
+        string (str): String to test for float representation.
+
+    Returns:
+        bool: True if string represents a float, False otherwise.
+    """
     if string.replace("-", "").isdigit():
         return False  # if test string is a digit, then it is not a float
     try:
@@ -102,12 +213,34 @@ def is_float(string):
 
 
 def strip_out_comments(string):
-    """Strips out comments from a string by removing everything
-    that follows after # for each line."""
+    """
+    Remove comments from a string.
+
+    Strips out comments by removing everything that follows after '#'
+    for each line in the input string.
+
+    Args:
+        string (str): Input string potentially containing comments.
+
+    Returns:
+        str: String with comments removed.
+    """
     return "\n".join(line.split("#")[0].strip() for line in string.split("\n"))
 
 
 def content_blocks_by_paragraph(string_list):
+    """
+    Group lines into content blocks separated by empty lines.
+
+    Takes a list of strings and groups them into blocks based on
+    empty line separators.
+
+    Args:
+        string_list (list): List of strings to group into blocks.
+
+    Returns:
+        list: List of content blocks, each block is a list of strings.
+    """
     return [
         list(group)
         for k, group in groupby(string_list, lambda x: x == "")
@@ -118,43 +251,158 @@ def content_blocks_by_paragraph(string_list):
 def write_list_of_lists_as_a_string_with_empty_line_between_lists(
     list_of_lists,
 ):
+    """
+    Convert nested lists to a formatted string with separating empty lines.
+
+    Converts a list of lists into a single string where each inner list
+    becomes a block of lines, separated by empty lines between blocks.
+
+    Args:
+        list_of_lists (list): Nested list structure to convert.
+
+    Returns:
+        str: Formatted string with empty lines between list blocks.
+    """
     string = ""
     num_lists = len(list_of_lists)
     for i in range(num_lists):
         for line in list_of_lists[i]:
             string += line + "\n"
         if i < num_lists - 1:
-            # ensures that only empty line is written in between lists, but not after the last list
-            # as the empty line after each block is written in gaussian job settings.write_gaussian_input()
+            # ensures that only empty line is written in
+            # between lists, but not after the last list
+            # as the empty line after each block is written
+            # in gaussian job settings.write_gaussian_input()
             string += "\n"
     return string
 
 
 def get_list_from_string_range(string_of_range):
-    """Use 1-indexed.
-    See chemsmart/tests/GaussianUtilsTest.py::GetListFromStringRangeTest::test_get_list_from_string_range
-    :param string_of_range: accepts string of range. e.g., s='[1-3,28-31,34-41]' or s='1-3,28-31,34-41'
-    :return: list of range.
     """
-    if "[" in string_of_range:
-        string_of_range = string_of_range.replace("[", "")
-        string_of_range = string_of_range.replace("]", "")
+    Parse 1-indexed index ranges from a string.
 
-    string_ranges = string_of_range.split(",")
+    Accepts hyphen or colon ranges, comma or whitespace separators,
+    optional square brackets, and Unicode dashes.
+
+    Examples:
+        ``'1-3,28-31,34-41'``
+        ``'[1-3,28-31,34-41]'``
+        ``'1:15 20'``
+        ``'397–469'``
+
+    Args:
+        string_of_range: Range specification string.
+
+    Returns:
+        list: 1-indexed integer indices.
+
+    Raises:
+        ValueError: If the string is empty or contains an invalid token.
+    """
+    if string_of_range is None:
+        raise ValueError(
+            "Could not parse atom indices from None. "
+            "Pass a range such as '1-10,15' or '1:10 15'."
+        )
+    if not isinstance(string_of_range, str):
+        raise TypeError(
+            "Expected a string of index ranges, "
+            f"got {type(string_of_range).__name__}."
+        )
+
+    original = string_of_range
+    text = string_of_range.strip()
+    for dash in ("\u2013", "\u2014", "\u2212"):
+        text = text.replace(dash, "-")
+    text = text.replace("[", "").replace("]", "")
+    text = re.sub(r"\s*-\s*", "-", text)
+    text = re.sub(r"\s*:\s*", ":", text)
+
+    if not text:
+        raise ValueError(
+            "Could not parse atom indices from an empty string. "
+            "Pass a range such as '1-10,15' or '1:10 15'."
+        )
+
     indices = []
-    for s in string_ranges:
-        if "-" in s:
-            each_range = s.split("-")
-            for i in range(int(each_range[0]), int(each_range[1]) + 1):
-                indices.append(i)
-        else:
-            indices.append(int(s))
+    for token in re.split(r"[,\s]+", text):
+        if not token:
+            continue
+        try:
+            if ":" in token:
+                start_s, end_s = token.split(":", 1)
+                start, end = int(start_s), int(end_s)
+                if start <= 0 or end <= 0 or start > end:
+                    raise ValueError(
+                        f"Invalid atom index range {token!r}. "
+                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+                    )
+                indices.extend(range(start, end + 1))
+            elif "-" in token and not token.startswith("-"):
+                start_s, end_s = token.split("-", 1)
+                start, end = int(start_s), int(end_s)
+                if start <= 0 or end <= 0 or start > end:
+                    raise ValueError(
+                        f"Invalid atom index range {token!r}. "
+                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+                    )
+                indices.extend(range(start, end + 1))
+            else:
+                value = int(token)
+                if value <= 0:
+                    raise ValueError(
+                        f"Invalid atom index {token!r}. "
+                        "Expected 1-indexed indices such as '1,15' or '15'."
+                    )
+                indices.append(value)
+        except ValueError:
+            raise ValueError(
+                f"Invalid atom index token {token!r} in {original!r}. "
+                "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+            ) from None
+
+    if not indices:
+        raise ValueError(
+            f"Could not parse atom indices from {original!r}. "
+            "Pass a range such as '1-10,15' or '1:10 15'."
+        )
     return indices
 
 
+def parse_qmmm_scale_factors(scale_factors):
+    """Parse QM/MM scale factors to ``{(atom1, atom2): [factors, ...]}``.
+
+    String input may use list or tuple keys, e.g. ``'{[3, 4]: [0.709]}'``.
+    """
+    if isinstance(scale_factors, str):
+        tree = ast.parse(scale_factors, mode="eval")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                node.keys = [
+                    (
+                        ast.Tuple(elts=key.elts, ctx=key.ctx)
+                        if isinstance(key, ast.List)
+                        else key
+                    )
+                    for key in node.keys
+                ]
+        return ast.literal_eval(tree)
+    return scale_factors
+
+
 def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
-    """Convert a list of indices to a list of indices for Gaussian frozen list.
-    Use 1-indexed list.
+    """
+    Convert atom indices to Gaussian frozen coordinate format.
+
+    Creates a mask list for Gaussian input where specified atoms
+    are marked for coordinate freezing. Uses 1-indexed numbering.
+
+    Args:
+        list_of_indices (list): List of atom indices to freeze (1-indexed).
+        molecule: Molecule object containing chemical symbols.
+
+    Returns:
+        list: Binary mask list for Gaussian frozen coordinates.
     """
     num_atoms_in_molecule = len(molecule.chemical_symbols)
     masks = [0] * num_atoms_in_molecule
@@ -164,8 +412,18 @@ def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
 
 
 def convert_list_to_orca_frozen_list(list_of_indices, molecule):
-    """Convert a list of indices to a list of indices for Orca frozen list.
-    Use 0-indexed list.
+    """
+    Convert atom indices to ORCA frozen coordinate format.
+
+    Creates a mask list for ORCA input where specified atoms
+    are marked for coordinate freezing. Uses 0-indexed numbering.
+
+    Args:
+        list_of_indices (list): List of atom indices to freeze (0-indexed).
+        molecule: Molecule object containing chemical symbols.
+
+    Returns:
+        list: Binary mask list for ORCA frozen coordinates.
     """
     num_atoms_in_molecule = len(molecule.chemical_symbols)
     masks = [0] * num_atoms_in_molecule
@@ -175,43 +433,121 @@ def convert_list_to_orca_frozen_list(list_of_indices, molecule):
 
 
 def str_indices_range_to_list(str_indices):
-    """Convert a supplied string of indices to a list of indices. All 1-indexed.
-
-    Supported formats: e.g.,
-        '1:9' -> gives [1,2,3,4,5,6,7,8]
-        '1,2,4' -> gives [1,2,4]
-        '1-9' -> gives [1,2,3,4,5,6,7,8]
-        '[1-9]' -> gives [1,2,3,4,5,6,7,8].
     """
+    Convert string index notation to a list of indices.
+
+    Parses various string formats for specifying index ranges
+    and converts them to a list of individual indices. All 1-indexed.
+
+    Supported formats:
+        '1:9' -> gives [1,2,3,4,5,6,7,8] (exclusive end, Python slice style)
+        '1,2,4' -> gives [1,2,4]
+        '1-9' -> gives [1,2,3,4,5,6,7,8,9] (inclusive end, range style)
+        '[1-9]' -> gives [1,2,3,4,5,6,7,8,9] (inclusive end, range style)
+
+    Args:
+        str_indices (str): String representation
+        of indices in supported formats.
+
+    Returns:
+        list: List of individual integer indices.
+    """
+    # Strip brackets if present
+    str_indices = str_indices.strip()
+    if str_indices.startswith("[") and str_indices.endswith("]"):
+        str_indices = str_indices[1:-1]
+
     list_indices = []
-    if "[" in str_indices:
-        str_indices = str_indices.replace("[", "")
-    if "]" in str_indices:
-        str_indices = str_indices.replace("]", "")
+
+    # Check if this is a comma-separated list
+    # (handles both single values and ranges)
     if "," in str_indices:
-        str_indices_split = str_indices.split(",")
-        for i in str_indices_split:
-            list_indices.append(int(i))
-    if ":" in str_indices:
+        parts = str_indices.split(",")
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part and not part.startswith("-"):
+                # This is a range like "1-9" or "1--1" (1 to -1)
+                # Use split with maxsplit=1 to handle negative end values
+                range_parts = part.split("-", 1)
+                if len(range_parts) == 2 and range_parts[0]:
+                    start = int(range_parts[0])
+                    end = int(range_parts[1])
+                    list_indices.extend(range(start, end + 1))  # inclusive
+                else:
+                    # Just a negative number
+                    list_indices.append(int(part))
+            else:
+                # Single index (could be negative)
+                list_indices.append(int(part))
+        # Check if this is a colon-separated slice like "1:9" or ":"
+    elif ":" in str_indices:
         str_indices_split = str_indices.split(":")
-        start_index = int(str_indices_split[0])
-        end_index = int(str_indices_split[-1])
-        for i in range(start_index, end_index):
-            list_indices.append(i)
-    if "-" in str_indices:
-        str_indices_split = str_indices.split("-")
-        start_index = int(str_indices_split[0])
-        end_index = int(str_indices_split[-1])
-        for i in range(start_index, end_index):
-            list_indices.append(i)
+        # Handle empty parts in slice notation
+        start_str = str_indices_split[0].strip()
+        end_str = (
+            str_indices_split[-1].strip() if len(str_indices_split) > 1 else ""
+        )
+
+        # For ":" we return empty list (means all indices, handled by caller)
+        if not start_str and not end_str:
+            return []  # Special case: ":" means all
+
+        start_index = int(start_str) if start_str else 1
+        # Exclusive end for slice notation
+        if end_str:
+            end_index = int(end_str)
+            list_indices = list(range(start_index, end_index))
+        else:
+            # Open-ended like "5:" - return empty to signal open-ended
+            return []
+    # Check if this is a hyphen-separated range like "1-9" (no commas)
+    elif "-" in str_indices and not str_indices.startswith("-"):
+        # Must check it's not a negative number
+        # Use split with maxsplit=1 to handle negative end values like "1--1"
+        parts = str_indices.split("-", 1)
+        if len(parts) == 2 and parts[0]:
+            start_index = int(parts[0])
+            end_index = int(parts[1])
+            # Inclusive end for range notation
+            list_indices = list(range(start_index, end_index + 1))
+        else:
+            # Just a negative number
+            if str_indices:
+                list_indices.append(int(str_indices))
+    else:
+        # Single index
+        if str_indices:
+            list_indices.append(int(str_indices))
+
     return list_indices
 
 
 def string2index_1based(stridx: str) -> Union[int, slice, str]:
-    """Wrapper for string2index to use 1-based indexing."""
+    """
+    Convert string index to appropriate type using 1-based indexing.
+
+    Wrapper function that converts string representations of indices
+    to the appropriate Python types (int, slice) while handling
+    1-based to 0-based index conversion.
+
+    Args:
+        stridx (str): String representation
+        of index (e.g., '1', '1:5', '1:5:2').
+
+    Returns:
+        Union[int, slice, str]: Converted index in appropriate Python type.
+
+    Raises:
+        ValueError: If index is 0 or has invalid format.
+    """
 
     def adjust_to_0based(index):
         """Adjust a 1-based index to 0-based. Handles None gracefully."""
+        # raise error if index is 0, since requires 1-based indexing
+        if index == 0:
+            raise ValueError("Index cannot be 0 in 1-based indexing.")
         return index - 1 if index is not None else None
 
     # If it's not a slice, handle as a single integer or string
@@ -252,7 +588,602 @@ def string2index_1based(stridx: str) -> Union[int, slice, str]:
             raise ValueError(f"Invalid slice input: {stridx}")
 
 
+def convert_string_index_from_1_based_to_0_based(
+    index: Union[str, int, slice],
+    total_count: int = None,
+    allow_duplicates: bool = True,
+    allow_out_of_range: bool = True,
+) -> Union[int, slice, list]:
+    """
+    Convert string index from 1-based to 0-based indexing.
+    Args:
+        index (Union[str, int, slice]): String representing an index or slice,
+                                       e.g., "1", "2:5", "3:10:2", "-1",
+                                       or user-defined ranges
+                                       like "1-2,5", "1,-1".
+        total_count (int, optional): Total
+        number of items, used for validation.
+        allow_duplicates (bool, optional): If True, allows duplicate indices.
+            Defaults to True.
+        allow_out_of_range (bool, optional):
+        If True, allows out-of-range indices.
+            Defaults to True.
+
+    Returns:
+        Union[int, slice, list]: Integer, slice, or list adjusted for
+                                0-based indexing.
+
+    Raises:
+        ValueError: If index is 0 or has invalid format.
+    """
+    # If already an int or slice, handle directly
+    if isinstance(index, int):
+        if index == 0:
+            raise ValueError(
+                f"Index {index} is out of range, as 1-indexing is used!\n "
+                f"Please provide a positive integer.\n"
+            )
+        elif index < 0:
+            return index  # Negative indices stay as-is
+        else:
+            return index - 1  # Convert to 0-based
+
+    if isinstance(index, slice):
+        return index  # Already processed
+
+    # String index - use the new unified parser
+    if isinstance(index, str):
+        return parse_index_specification(
+            index, total_count, allow_duplicates, allow_out_of_range
+        )
+
+    raise ValueError(f"Invalid index type: {type(index)}")
+
+
+def parse_index_specification(
+    index_spec: str,
+    total_count: int = None,
+    allow_duplicates: bool = True,
+    allow_out_of_range: bool = True,
+) -> Union[int, slice, list]:
+    """
+    Parse index specification string and return appropriate Python type.
+
+    This function integrates both ASE-style index specifications (using colons)
+    and free-format index specifications (using commas and hyphens). It handles
+    1-based indexing and converts to 0-based for Python.
+
+    Supported formats:
+        ASE-style (colon-based slicing):
+            ':' -> all indices (returns slice(None, None))
+            '1' -> first item (returns 0)
+            '-1' -> last item (returns -1)
+            '1:5' -> items 1-4, exclusive end (returns slice(0, 4))
+            '1:5:2' -> items 1, 3 with step 2 (returns slice(0, 4, 2))
+            '::2' -> every 2nd item (returns slice(None, None, 2))
+            '5:' -> from 5th to end (returns slice(4, None))
+            ':5' -> from start to 4th (returns slice(None, 4))
+
+        Free-format (comma and hyphen based):
+            '1,3,5' -> specific items (returns [0, 2, 4])
+            '1-5' -> items 1-5, inclusive (returns [0, 1, 2, 3, 4])
+            '1-3,5,7-9' -> mixed ranges (returns [0, 1, 2, 4, 6, 7, 8])
+            '1,-1' -> first and last (returns [0, -1])
+
+    Args:
+        index_spec (str): String specification of indices.
+        total_count (int, optional): Total number of items, used for resolving
+            negative indices to positive ones if needed.
+        allow_duplicates (bool, optional): If True, allows duplicate indices in
+            the result. If False, raises ValueError when duplicates are found.
+            Defaults to True.
+        allow_out_of_range (bool, optional):
+        If True, allows out-of-range indices.
+            If False, raises ValueError when indices are out of bounds.
+            Defaults to True.
+
+    Returns:
+        Union[int, slice, list]: Appropriate Python type for indexing.
+            - int: for single indices
+            - slice: for colon-based ranges
+            - list: for comma-separated or hyphen-range specifications
+
+    Raises:
+        ValueError: If index is 0 (1-based indexing doesn't allow 0)
+                   or if format is invalid.
+
+    Examples:
+        >>> parse_index_specification(':')
+        slice(None, None, None)
+        >>> parse_index_specification('1')
+        0
+        >>> parse_index_specification('-1')
+        -1
+        >>> parse_index_specification('-1', total_count=5)
+        4
+        >>> parse_index_specification('1:5')
+        slice(0, 4, None)
+        >>> parse_index_specification('1,3,5')
+        [0, 2, 4]
+        >>> parse_index_specification('1-5')
+        [0, 1, 2, 3, 4]
+        >>> parse_index_specification('1,-1')
+        [0, -1]
+        >>> parse_index_specification('1,-1', total_count=5)
+        [0, 4]
+    """
+    if not isinstance(index_spec, str):
+        raise ValueError(
+            f"Index specification must be a string, got {type(index_spec)}"
+        )
+
+    index_spec = index_spec.strip()
+
+    # Strip brackets if present (for compatibility with formats like "[1-3]")
+    if index_spec.startswith("[") and index_spec.endswith("]"):
+        index_spec = index_spec[1:-1].strip()
+
+    # Check if this contains commas - if so, it's a free-format list
+    if "," in index_spec:
+        # Parse as free-format list (can include negative indices and ranges)
+        parts = index_spec.split(",")
+        indices = []
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            # Check if this part is a range like "1-5"
+            if "-" in part and not part.startswith("-"):
+                # Split carefully to handle negative numbers
+                # "1-5" should split to ["1", "5"]
+                # "1--1" should split to ["1", "-1"]
+                range_match = part.split("-", 1)
+                if len(range_match) == 2 and range_match[0]:
+                    try:
+                        start = int(range_match[0])
+                        end = int(range_match[1])
+
+                        # Validate 1-based indexing
+                        if start == 0 or end == 0:
+                            raise ValueError(
+                                "Index cannot be 0 in 1-based indexing"
+                            )
+
+                        # Handle positive ranges
+                        if start > 0 and end > 0:
+                            # Inclusive range, convert to 0-based
+                            indices.extend(range(start - 1, end))
+                        else:
+                            # If either is negative, add them separately
+                            indices.append(start - 1 if start > 0 else start)
+                            indices.append(end - 1 if end > 0 else end)
+                    except ValueError as e:
+                        if "invalid literal" in str(e):
+                            raise ValueError(f"Invalid range format: {part}")
+                        raise
+                else:
+                    # Just a negative number like "-1"
+                    idx = int(part)
+                    if idx == 0:
+                        raise ValueError(
+                            "Index cannot be 0 in 1-based indexing"
+                        )
+                    indices.append(idx if idx < 0 else idx - 1)
+            else:
+                # Single index (could be negative)
+                idx = int(part)
+                if idx == 0:
+                    raise ValueError("Index cannot be 0 in 1-based indexing")
+                # Convert to 0-based if positive
+                indices.append(idx if idx < 0 else idx - 1)
+
+        # Apply validation if needed
+        if total_count is not None:
+            _validate_parsed_indices(
+                indices, total_count, allow_duplicates, allow_out_of_range
+            )
+
+            # Apply filtering if out of range is allowed
+            if allow_out_of_range:
+                indices = _filter_out_of_range_indices(indices, total_count)
+
+            # Normalize negative indices to positive 0-based equivalents
+            # This ensures downstream code can safely
+            # do `idx + 1` for 1-based conversion
+            indices = _normalize_negative_indices(indices, total_count)
+
+        return indices
+
+    # Check if this is a colon-based slice (ASE-style)
+    elif ":" in index_spec:
+        return string2index_1based(index_spec)
+
+    # Check if this is a hyphen-based range (free-format, no commas)
+    elif "-" in index_spec and not index_spec.startswith("-"):
+        # This is a range like "1-5" (inclusive)
+        parts = index_spec.split("-", 1)
+        if len(parts) == 2 and parts[0]:
+            start = int(parts[0])
+            end = int(parts[1])
+
+            if start == 0 or end == 0:
+                raise ValueError("Index cannot be 0 in 1-based indexing")
+
+            if start > 0 and end > 0:
+                # Inclusive range, convert to 0-based
+                result = list(range(start - 1, end))
+                if total_count is not None:
+                    _validate_parsed_indices(
+                        result,
+                        total_count,
+                        allow_duplicates,
+                        allow_out_of_range,
+                    )
+                    if allow_out_of_range:
+                        result = _filter_out_of_range_indices(
+                            result, total_count
+                        )
+                    # Normalize negative indices to
+                    # positive 0-based equivalents
+                    result = _normalize_negative_indices(result, total_count)
+                return result
+            else:
+                # Handle mixed positive/negative
+                result = []
+                result.append(start - 1 if start > 0 else start)
+                result.append(end - 1 if end > 0 else end)
+                if total_count is not None:
+                    _validate_parsed_indices(
+                        result,
+                        total_count,
+                        allow_duplicates,
+                        allow_out_of_range,
+                    )
+                    if allow_out_of_range:
+                        result = _filter_out_of_range_indices(
+                            result, total_count
+                        )
+                    # Normalize negative indices to
+                    # positive 0-based equivalents
+                    result = _normalize_negative_indices(result, total_count)
+                return result
+        else:
+            # Just a negative number
+            idx = int(index_spec)
+            if idx == 0:
+                raise ValueError("Index cannot be 0 in 1-based indexing")
+            if total_count is not None:
+                _validate_parsed_indices(
+                    idx, total_count, allow_duplicates, allow_out_of_range
+                )
+                # Normalize negative indices to positive 0-based equivalents
+                idx = _normalize_negative_indices(idx, total_count)
+            return idx
+
+        # Single index (no special characters)
+
+    else:
+        idx = int(index_spec)
+        if idx == 0:
+            raise ValueError("Index cannot be 0 in 1-based indexing")
+            # Convert to 0-based if positive
+        result = idx if idx < 0 else idx - 1
+
+        # Apply validation if needed
+        if total_count is not None:
+            _validate_parsed_indices(
+                result, total_count, allow_duplicates, allow_out_of_range
+            )
+
+            # Normalize negative indices to positive 0-based equivalents
+            # This ensures downstream code can safely
+            # do `idx + 1` for 1-based conversion
+            result = _normalize_negative_indices(result, total_count)
+
+        return result
+
+
+def _validate_parsed_indices(
+    indices, total_count, allow_duplicates, allow_out_of_range
+):
+    """
+    Helper function to validate parsed indices for duplicates and bounds.
+
+    Args:
+        indices: The parsed indices (int, list, or slice)
+        total_count: Total number of items available
+        allow_duplicates: Whether to allow duplicate indices
+        allow_out_of_range: Whether to allow out-of-range indices
+
+    Raises:
+        ValueError: If validation fails
+    """
+    if isinstance(indices, list):
+        # Check for duplicates - convert negative
+        # indices to positive for comparison
+        if not allow_duplicates:
+            # Convert all indices to positive indices for duplicate checking
+            normalized_indices = []
+            for idx in indices:
+                if idx < 0:
+                    # Convert negative index to positive equivalent
+                    normalized_idx = total_count + idx
+                else:
+                    normalized_idx = idx
+                normalized_indices.append(normalized_idx)
+
+            # Check for duplicates in normalized indices
+            if len(normalized_indices) != len(set(normalized_indices)):
+                # Find which original indices are duplicates
+                duplicate_positions = []
+                seen_normalized = {}
+                for i, (orig_idx, norm_idx) in enumerate(
+                    zip(indices, normalized_indices)
+                ):
+                    if norm_idx in seen_normalized:
+                        # Both the current and previously
+                        # seen indices point to same structure
+                        duplicate_positions.extend(
+                            [seen_normalized[norm_idx], i]
+                        )
+                    seen_normalized[norm_idx] = i
+
+                # Get the original indices that are duplicates
+                # (convert back to 1-based for error message)
+                duplicate_indices_1based = []
+                for pos in set(duplicate_positions):
+                    orig_idx = indices[pos]
+                    duplicate_indices_1based.append(
+                        orig_idx + 1 if orig_idx >= 0 else orig_idx
+                    )
+
+                raise ValueError(
+                    f"Index overlap detected. Indices {sorted(set(duplicate_indices_1based))} point to the same structures."
+                )
+
+        # Check bounds for each index in the list
+        if not allow_out_of_range:
+            for idx in indices:
+                _validate_single_index_bounds(idx, total_count)
+
+    elif isinstance(indices, int):
+        # Check bounds for single index
+        if not allow_out_of_range:
+            _validate_single_index_bounds(indices, total_count)
+
+    # Note: slice objects are not validated for
+    # bounds as Python handles them gracefully
+
+
+def _filter_out_of_range_indices(indices, total_count):
+    """
+    Filter out indices that are out of range, keeping only valid ones.
+
+    Args:
+        indices: List of indices to filter (or single index)
+        total_count: Total number of items available
+
+    Returns:
+        List of valid indices, or raises error if no valid indices remain
+
+    Raises:
+        ValueError: If all indices are out of range
+    """
+    if isinstance(indices, list):
+        valid_indices = [
+            idx for idx in indices if _is_index_in_bounds(idx, total_count)
+        ]
+        if not valid_indices:
+            raise ValueError(
+                f"All specified indices are out of range. File has {total_count} structures."
+            )
+        return valid_indices
+    else:
+        # Single index
+        if _is_index_in_bounds(indices, total_count):
+            return indices
+        else:
+            raise ValueError(
+                f"Index is out of range. File has {total_count} structures."
+            )
+
+
+def _is_index_in_bounds(idx, total_count):
+    """
+    Helper function to check if an index is
+    within bounds without raising an exception.
+
+    Args:
+        idx: The index to check (0-based)
+        total_count: Total number of items available
+
+    Returns:
+        bool: True if index is valid, False otherwise
+    """
+    if isinstance(idx, int):
+        if idx >= 0:
+            return idx < total_count
+        else:
+            return abs(idx) <= total_count
+    return True  # Non-integer indices are considered valid
+
+
+def _normalize_negative_indices(indices, total_count):
+    """
+    Convert negative indices to their positive 0-based equivalents.
+
+    This helper ensures that downstream code can safely convert indices back
+    to 1-based by doing `idx + 1` without producing incorrect results for
+    negative indices.
+
+    Args:
+        indices: The indices to normalize (int, list, or slice)
+        total_count: Total number of items available
+
+    Returns:
+        Normalized indices with negatives
+        converted to positive 0-based equivalents
+
+    Examples:
+        >>> _normalize_negative_indices(-1, 5)
+        4
+        >>> _normalize_negative_indices([0, -1], 5)
+        [0, 4]
+        >>> _normalize_negative_indices([0, 2, -1], 5)
+        [0, 2, 4]
+    """
+    if isinstance(indices, list):
+        normalized = []
+        for idx in indices:
+            if idx < 0:
+                normalized.append(total_count + idx)
+            else:
+                normalized.append(idx)
+        return normalized
+    elif isinstance(indices, int):
+        if indices < 0:
+            return total_count + indices
+        else:
+            return indices
+    else:
+        # slice objects are not normalized
+        return indices
+
+
+def _validate_single_index_bounds(idx, total_count):
+    """
+    Helper function to validate a single index against bounds.
+
+    Args:
+        idx: The index to validate (0-based)
+        total_count: Total number of items available
+
+    Raises:
+        ValueError: If index is out of bounds
+    """
+    if isinstance(idx, int):
+        if idx >= 0 and idx >= total_count:
+            raise ValueError(
+                f"Index {idx + 1} is out of range. File has {total_count} structures."
+            )
+        elif idx < 0 and abs(idx) > total_count:
+            raise ValueError(
+                f"Negative index {idx} is out of range. File has {total_count} structures."
+            )
+
+
+def return_objects_from_string_index(list_of_objects, index):
+    """
+    Return objects from a list of objects based on the given index.
+    The index can be a single integer, a slice, or a list of integers.
+    If the index is negative, it will return the last n objects.
+    If the index is a string, it will convert it to an integer or slice first.
+    Index is 1-based, so inputting 0 will raise an error.
+    """
+    # convert index from 1-based (user input) to 0-based (python code-needed)
+    index = convert_string_index_from_1_based_to_0_based(index)
+    if isinstance(index, list):
+        # if index is a list, use it to select objects
+        objects = [list_of_objects[i] for i in index]
+    elif isinstance(index, int):
+        # if index is a single integer, use it to select a single object
+        objects = list_of_objects[index]
+    else:
+        # index is a Slice
+        objects = list_of_objects[index]
+
+    # if not isinstance(objects, list):
+    #     objects = [objects]
+
+    return objects
+
+
+def return_objects_and_indices_from_string_index(list_of_objects, index):
+    """
+    Return objects and their original 1-based
+    indices from a list based on the given index.
+
+    This function is similar to
+    return_objects_from_string_index but also returns
+    the original 1-based indices that were used to select the objects.
+
+    Args:
+        list_of_objects: List of objects to select from.
+        index: String or integer representing
+        the index/indices to select (1-based).
+
+    Returns:
+        tuple: (objects, indices_1based) where:
+            - objects: List of selected objects
+            (or single object if single index)
+            - indices_1based: List of original 1-based
+            indices (or single index if single index)
+
+    Examples:
+        >>> objects = ['a', 'b', 'c', 'd', 'e']
+        >>> # '2:4' in 1-based means items 2 and
+        3 (exclusive of 4, like Python slicing)
+        >>> return_objects_and_indices_from_string_index(objects, '2:4')
+        (['b', 'c'], [2, 3])
+        >>> # Single index '5' returns the 5th item
+        >>> return_objects_and_indices_from_string_index(objects, '5')
+        ('e', 5)
+    """
+    # convert index from 1-based (user input) to 0-based (python code-needed)
+    index_0based = convert_string_index_from_1_based_to_0_based(index)
+
+    if isinstance(index_0based, list):
+        # if index is a list, use it to select objects
+        objects = [list_of_objects[i] for i in index_0based]
+        # Convert back to 1-based for tracking
+        indices_1based = [i + 1 for i in index_0based]
+    elif isinstance(index_0based, int):
+        # if index is a single integer, use it to select a single object
+        objects = list_of_objects[index_0based]
+        # Handle negative indices: convert to
+        # positive 0-based first, then to 1-based
+        if index_0based < 0:
+            indices_1based = len(list_of_objects) + index_0based + 1
+        else:
+            indices_1based = index_0based + 1
+    else:
+        # index is a Slice
+        objects = list_of_objects[index_0based]
+        # Convert slice to list of indices
+        if isinstance(objects, list):
+            # Figure out which indices were actually selected
+            start = index_0based.start if index_0based.start is not None else 0
+            stop = (
+                index_0based.stop
+                if index_0based.stop is not None
+                else len(list_of_objects)
+            )
+            step = index_0based.step if index_0based.step is not None else 1
+            indices_0based = list(range(start, stop, step))
+            indices_1based = [i + 1 for i in indices_0based]
+        else:
+            # Single object from slice
+            start = index_0based.start if index_0based.start is not None else 0
+            indices_1based = start + 1
+
+    return objects, indices_1based
+
+
 def get_value_by_number(num, data):
+    """
+    Retrieve dictionary value by matching numeric part of keys.
+
+    Searches through dictionary keys to find one containing the
+    specified number and returns the corresponding value.
+
+    Args:
+        num (int): Number to search for in dictionary keys.
+        data (dict): Dictionary to search through.
+
+    Returns:
+        Any: Value corresponding to the key containing the number.
+    """
     # Iterate through all keys in the dictionary
     for key in data.keys():
         # Extract the numeric part of the key
@@ -262,6 +1193,20 @@ def get_value_by_number(num, data):
 
 
 def get_key_by_value_and_number(value, number, data):
+    """
+    Find dictionary key by matching both value and numeric suffix.
+
+    Searches for a dictionary entry where both the value matches
+    the specified value and the key ends with the specified number.
+
+    Args:
+        value (Any): Value to match in the dictionary.
+        number (int): Number that should appear at the end of the key.
+        data (dict): Dictionary to search through.
+
+    Returns:
+        str: Key that matches both criteria, or None if not found.
+    """
     # Iterate through all items in the dictionary
     for key, val in data.items():
         # Extract the numerical part of the key using regex
@@ -276,11 +1221,20 @@ def get_key_by_value_and_number(value, number, data):
 def two_files_have_similar_contents(
     reference_file, output_file, ignored_string=None
 ):
-    """Checks if the reference_file has same contents as output_file, except where ignored strings.
+    """
+    Compare two files for similar contents with optional string exclusion.
 
-    reference_file: reference file
-    output_file: output file
-    ignored_string: If a string is ignored, it will not be compared.
+    Checks if the reference file has the same contents as the output file,
+    optionally ignoring lines containing specified strings.
+
+    Args:
+        reference_file (str): Path to the reference file.
+        output_file (str): Path to the output file to compare.
+        ignored_string (str, optional): If specified, lines containing this
+                                       string will not be compared.
+
+    Returns:
+        bool: True if files have similar contents, False otherwise.
     """
     with open(reference_file, "r") as f:
         reference_lines = f.readlines()
@@ -297,8 +1251,21 @@ def two_files_have_similar_contents(
 
 
 def two_lists_have_similar_contents(list1, list2, ignore_string=None):
-    """Checks if two lists have the same contents.
-    If ignored string appears in the list member, then this member is ignored.
+    """
+    Compare two lists for identical contents with optional string exclusion.
+
+    Checks if two lists have the same contents, optionally ignoring
+    list members that contain a specified string.
+
+    Args:
+        list1 (list): First list to compare.
+        list2 (list): Second list to compare.
+        ignore_string (str, optional): If specified, list items containing
+                                      this string will be
+                                      ignored in comparison.
+
+    Returns:
+        bool: True if lists have similar contents, False otherwise.
     """
     if len(list1) != len(list2):
         return False
@@ -311,18 +1278,51 @@ def two_lists_have_similar_contents(list1, list2, ignore_string=None):
 
 
 def update_dict_with_existing_keys(dict1, dict2):
+    """
+    Update dictionary with values from another dictionary.
+
+    Updates dict1 with values from dict2, but only for keys that
+    already exist in dict1. Raises an error if dict2 contains
+    keys not present in dict1.
+
+    Args:
+        dict1 (dict): Dictionary to be updated (modified in place).
+        dict2 (dict): Dictionary containing new values.
+
+    Returns:
+        dict: The updated dict1.
+
+    Raises:
+        ValueError: If dict2 contains keys not present in dict1.
+    """
     for k, v in dict2.items():
         if k in dict1:
             dict1[k] = v
         else:
             raise ValueError(
-                f"Keyword `{k}` is not in list of keywords `{dict1.keys()}`\nPlease double check and rectify!"
+                f"Keyword `{k}` is not in list of keywords `{dict1.keys()}`\n"
+                f"Please double check and rectify!"
             )
     return dict1
 
 
 # Common utils for orca and gaussian
 def get_prepend_string_for_modred(list_of_string):
+    """
+    Get coordinate type prefix for molecular geometry modifications.
+
+    Returns the appropriate prefix string based on the number of
+    atoms involved in the coordinate specification.
+
+    Args:
+        list_of_string (list): List of atom indices for coordinate.
+
+    Returns:
+        str: Prefix string ('B' for bond, 'A' for angle, 'D' for dihedral).
+
+    Raises:
+        ValueError: If list length is not 2, 3, or 4.
+    """
     list_length = len(list_of_string)
     prepend_strings = {2: "B", 3: "A", 4: "D"}
     if list_length not in prepend_strings:
@@ -333,6 +1333,15 @@ def get_prepend_string_for_modred(list_of_string):
 
 
 def convert_modred_list_to_string(modred_list):
+    """
+    Convert a list of modification coordinates to a space-separated string.
+
+    Args:
+        modred_list (list): List of coordinate values to convert.
+
+    Returns:
+        str: Space-separated string of coordinate values.
+    """
     list_of_string = [str(a) for a in modred_list]
     return " ".join(list_of_string)
 
@@ -340,12 +1349,15 @@ def convert_modred_list_to_string(modred_list):
 def get_prepend_string_list_from_modred_free_format(
     input_modred, program="gaussian"
 ):
-    """Get prepend string list from either a list of lists or a list.
+    """
+    Get prepend string list from either a list of lists or a list.
     e.g., [[1,2],[5,6]] or [1,2] -> ['B 1 2', 'B 5 6']
     program: gaussian or orca, variable to decide the index to start from
     Gaussian starts from 1, while orca starts from 0
-    For chemsmart applications in homogeneous catalysis, we will use 1-indexing throughout,
-    since this is what we usually see when we use GaussView or Avogadro to visualise the structures.
+    For chemsmart applications in homogeneous
+    catalysis, we will use 1-indexing throughout,
+    since this is what we usually see when we use
+    GaussView or Avogadro to visualise the structures.
     """
     prepend_string_list = []
     if not isinstance(input_modred, list):
@@ -359,7 +1371,7 @@ def get_prepend_string_list_from_modred_free_format(
         num_list = len(input_modred)
         for i in range(num_list):
             prepend_string = get_prepend_string_for_modred(input_modred[i])
-            if program == "gaussian":
+            if program == "gaussian" or program == "pymol":
                 modred_string = convert_modred_list_to_string(input_modred[i])
             elif program == "orca":
                 modred_string = convert_modred_list_to_string(
@@ -374,7 +1386,7 @@ def get_prepend_string_list_from_modred_free_format(
     elif isinstance(input_modred[0], int):
         # for a single list; e.g.: [2,3]
         prepend_string = get_prepend_string_for_modred(input_modred)
-        if program == "gaussian":
+        if program == "gaussian" or program == "pymol":
             modred_string = convert_modred_list_to_string(input_modred)
         elif program == "orca":
             modred_string = convert_modred_list_to_string(
@@ -386,15 +1398,43 @@ def get_prepend_string_list_from_modred_free_format(
 
 
 def prune_list_of_elements(list_of_elements, molecule):
-    """Prune the list of elements so that only the specified elements that appear in a molecule is returned.
-    E.g., one can specify heavy elements to be heavy_elements = ["Pd", "Ag", "Au"], but if only "Pd" appears
-    in the molecule, then only "Pd" will be returned."""
+    """
+    Filter element list to only include elements present in molecule.
+
+    Prunes the list of elements so that only the specified elements
+    that appear in a molecule are returned. Useful for filtering
+    predefined element lists based on actual molecular composition.
+
+    Example:
+        Heavy elements specified as ["Pd", "Ag", "Au"], but if only "Pd"
+        appears in the molecule, then only "Pd" will be returned.
+
+    Args:
+        list_of_elements (list): List of element symbols to filter.
+        molecule: Molecule object with chemical_symbols attribute.
+
+    Returns:
+        list: Filtered list containing only elements present in molecule.
+    """
     return list(
         set(molecule.chemical_symbols).intersection(set(list_of_elements))
     )
 
 
 def sdf2molecule(sdf_lines):
+    """
+    Convert SDF format data to a Molecule object.
+
+    Parses Structure Data Format (SDF) lines containing atomic coordinates
+    and element information to create a Molecule object.
+
+    Args:
+        sdf_lines (Union[list, str]): SDF format data as list of lines
+                                     or as a single string.
+
+    Returns:
+        Molecule: Molecule object created from SDF coordinate data.
+    """
     from chemsmart.io.molecules.structure import Molecule
 
     list_of_symbols = []
@@ -427,25 +1467,48 @@ def sdf2molecule(sdf_lines):
 
 
 def check_charge_and_multiplicity(settings):
+    """
+    Validate that charge and multiplicity are set in settings.
+
+    Checks if both charge and multiplicity are properly configured
+    in the settings object, raising an error if either is missing.
+
+    Args:
+        settings: Settings object containing
+        charge and multiplicity attributes.
+
+    Raises:
+        ValueError: If charge or multiplicity is None.
+    """
     if settings.charge is None or settings.multiplicity is None:
         raise ValueError(
-            "Charge and multiplicity must be set for Gaussian jobs."
+            "Charge and multiplicity must be set for Gaussian/ORCA jobs."
         )
 
 
 def cmp_with_ignore(f1, f2, ignore_string=None):
     """
-    Compare two files with an option to ignore lines containing a specific string
-    or a list of strings.
+    Compare two files with option to ignore lines containing specific strings.
 
-    Arguments:
-    f1 -- First file name
-    f2 -- Second file name
-    ignore_string -- Ignore lines containing this string or any member in a list of strings
-     during content comparison. [default: None]
+    Compares the contents of two files while optionally ignoring lines
+    that contain specified strings. Useful for comparing files that may
+    have minor differences in timestamps, paths, or other variable content.
+
+    Args:
+        f1 (str): First file path to compare.
+        f2 (str): Second file path to compare.
+        ignore_string (Union[str, list], optional): String or list of strings
+                                                   to ignore during comparison.
+                                                   Lines containing
+                                                   any of these
+                                                   strings will be skipped.
 
     Returns:
-    True if the files are the same except where the lines contain ignore string, False otherwise.
+        bool: True if files are identical except for ignored lines,
+              False otherwise.
+
+    Raises:
+        ValueError: If ignore_string is not a string or list of strings.
     """
 
     if ignore_string is not None:
@@ -473,16 +1536,577 @@ def cmp_with_ignore(f1, f2, ignore_string=None):
 
 
 def run_command(command):
-    """Runs a shell command using subprocess.Popen and captures its output."""
+    """
+    Execute a shell command and capture its output.
+
+    Runs a shell command using subprocess.Popen and captures its output.
+    Handles both string commands and command lists with proper error handling.
+
+    Args:
+        command (Union[str, list]): Command to execute. Can be a string
+                                  (e.g., 'ls -l') or a list
+                                  (e.g., ['ls', '-l']).
+
+    Returns:
+        str: The command's stdout as a string, or None if an error occurs.
+    """
     try:
+        # If command is a string, split it into a list using shlex.split
+        if isinstance(command, str):
+            command = shlex.split(command)
+
+        # Ensure command is a list at this point
+        if not isinstance(command, list):
+            logger.error(
+                f"Invalid command type: {type(command)}. Expected str or list."
+            )
+            return None
+
         process = subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         stdout, stderr = process.communicate()
         if process.returncode != 0:
-            print(f"Error running {command}: {stderr.strip()}")
+            logger.info(f"Error running {command}: {stderr.strip()}")
             return None
         return stdout.strip()
     except Exception as e:
-        print(f"Exception while running {command}: {e}")
+        logger.error(f"Exception while running {command}: {e}")
         return None
+
+
+def quote_path(path):
+    """
+    Quote file paths to handle spaces and special characters.
+
+    Adds quotes around paths on Windows to handle spaces and backslashes
+    properly. On other platforms, returns the path unchanged.
+
+    Args:
+        path (str): File path to quote.
+
+    Returns:
+        str: Quoted path on Windows, original path on other platforms.
+    """
+    if sys.platform == "win32":
+        # Double-quote paths on Windows to preserve spaces;
+        # sidesteps backslash weirdness entirely with as_posix()
+        return f'"{Path(path).as_posix()}"'
+    return shlex.quote(path)
+
+
+def kabsch_align(
+    P: np.ndarray, Q: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Align molecules using the Kabsch algorithm.
+
+    Performs optimal alignment of two molecular structures using the
+    Kabsch algorithm for finding the optimal rotation and translation
+    that minimizes RMSD between corresponding atoms.
+
+    Args:
+        P (np.ndarray): First molecule coordinates (N x 3 array).
+        Q (np.ndarray): Second molecule coordinates (N x 3 array).
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Aligned coordinates for both molecules.
+
+    Raises:
+        AssertionError: If matrix dimensions don't match.
+
+    Reference:
+        From https://hunterheidenreich.com/posts/kabsch_algorithm/
+    """
+    # Center molecules
+    assert P.shape == Q.shape, "Matrix dimensions must match"
+
+    # Compute centroids
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+
+    # Optimal translation
+    t = centroid_Q - centroid_P
+
+    # Center the points
+    p = P - centroid_P
+    q = Q - centroid_Q
+
+    # Compute the covariance matrix
+    H = np.dot(p.T, q)
+
+    # SVD
+    U, S, Vt = np.linalg.svd(H)
+
+    # Validate right-handed coordinate system
+    if np.linalg.det(np.dot(Vt.T, U.T)) < 0.0:
+        Vt[-1, :] *= -1.0
+
+    # Optimal rotation
+    R = np.dot(Vt.T, U.T)
+
+    # rotate p
+    p = np.dot(p, R.T)
+
+    # RMSD
+    rmsd = np.sqrt(np.sum(np.square(p - q)) / P.shape[0])
+
+    return p, q, R, t, rmsd
+
+
+def kabsch_align2(
+    P: np.ndarray, Q: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+    """
+    Alternative Kabsch algorithm implementation for molecular alignment.
+
+    Note: This implementation may not work correctly and is kept for
+    reference. Use kabsch_align() for reliable molecular alignment.
+
+    Args:
+        P (np.ndarray): First molecule coordinates (N x 3 array).
+        Q (np.ndarray): Second molecule coordinates (N x 3 array).
+
+    Returns:
+        Tuple containing:
+        - aligned_P: P after rotation and translation to match Q's position
+        - R: Optimal rotation matrix
+        - t: Optimal translation vector
+        - rmsd: Root Mean Square Deviation after alignment
+
+    Raises:
+        AssertionError: If input matrices have different dimensions.
+    """
+    assert P.shape == Q.shape, "Input matrices must have the same dimensions"
+
+    # Compute centroids and center coordinates
+    centroid_P = np.mean(P, axis=0)
+    centroid_Q = np.mean(Q, axis=0)
+    centered_P = P - centroid_P
+    centered_Q = Q - centroid_Q
+
+    # Compute covariance matrix
+    H = centered_P.T @ centered_Q
+
+    # Singular Value Decomposition
+    U, S, Vt = np.linalg.svd(H)
+
+    # Ensure proper rotation (right-hand system)
+    det_sign = np.linalg.det(Vt.T @ U.T)
+    if det_sign < 0:
+        Vt[-1, :] *= -1
+
+    # Compute optimal rotation matrix
+    R = Vt.T @ U.T
+
+    # Apply rotation to centered_P (corrected from original)
+    rotated_P = centered_P @ R  # Changed from R.T to R
+
+    # Apply final translation to Q's coordinate system
+    aligned_P = rotated_P + centroid_Q  # Translate to Q's position
+
+    # Calculate RMSD using centered coordinates
+    rmsd = np.sqrt(np.mean(np.sum((rotated_P - centered_Q) ** 2, axis=1)))
+
+    return aligned_P, Q, R, centroid_Q - centroid_P, rmsd
+
+
+def extract_number(filename):
+    """
+    Extract numeric part from filename for sorting purposes.
+
+    Extracts the numeric component from filenames containing patterns
+    like 'c123' or 'c456*'. Used for natural sorting of files.
+
+    Args:
+        filename (str): Filename to extract number from.
+
+    Returns:
+        int or float: Extracted number, or infinity if no number found
+                     (to place files without numbers
+                     at the end during sorting).
+    """
+    match = re.search(r"c(\d+)\*?", filename)
+    if match:
+        return int(match.group(1))
+    else:
+        return float("inf")  # If no number is found, place it at the end
+
+
+## file handling
+
+
+def search_file(filename):
+    """
+    Search for a file in current directory and subdirectories.
+
+    Searches for a file in the current directory and its subdirectories
+    using the system's find command. Returns both absolute file path
+    and directory path.
+
+    Args:
+        filename (str): Name of the file to search for.
+
+    Returns:
+        tuple: (absolute_file_path, absolute_file_dir) or (None, None)
+               if file is not found or an error occurs.
+    """
+    try:
+        # Search for the absolute file path
+        result = subprocess.run(
+            ["find", ".", "-name", filename],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_path = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        # Search for the absolute directory path
+        result = subprocess.run(
+            ["find", ".", "-name", filename, "-exec", "dirname", "{}", ";"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        absolute_file_dir = (
+            result.stdout.strip().split("\n")[0]
+            if result.stdout.strip()
+            else None
+        )
+
+        if absolute_file_path and absolute_file_dir:
+            return absolute_file_path, absolute_file_dir
+        else:
+            logger.error(f"{filename} not found! Check your Excel file.")
+            return None, None
+    except subprocess.CalledProcessError:
+        logger.error(f"Error occurred while searching for {filename}.")
+        return None, None
+
+
+def iterative_compare(input_list):
+    """
+    Extract unique elements from a list while preserving order.
+
+    Compares an input list and returns a list of unique elements,
+    maintaining the order of first occurrence. Can handle lists
+    of various data types including nested lists, strings, or dictionaries.
+
+    Args:
+        input_list (list): List to process for unique elements.
+
+    Returns:
+        list: List containing unique elements in order of first occurrence.
+    """
+    if not input_list:
+        return []
+    # Use OrderedSet to maintain order
+    if isinstance(input_list, list) and len(input_list) > 0:
+        return list(OrderedSet(input_list))
+
+
+def naturally_sorted(lst):
+    """
+    Sort a list of strings in natural order with numeric awareness.
+
+    Unlike standard alphabetical sorting, this function treats numerical
+    parts as numbers rather than strings, ensuring proper ordering
+    (e.g., "file10.txt" comes after "file2.txt").
+
+    Args:
+        lst (list): List of strings to sort naturally.
+
+    Returns:
+        list: Sorted list using natural ordering.
+    """
+
+    def key_func(key):
+        return [
+            int(c) if c.isdigit() else c.lower()
+            for c in re.split("([0-9]+)", key)
+        ]
+
+    return sorted(lst, key=key_func)
+
+
+def spline_data(x, y, new_length=1000, k=3):
+    """
+    Interpolate data points using univariate spline with even spacing.
+
+    Interpolates data points using a univariate spline and returns
+    evenly spaced points. Input points are automatically sorted by
+    x-values to ensure proper interpolation.
+
+    Args:
+        x (list or array-like): X-coordinates of the input data points.
+        y (list or array-like): Y-coordinates of the input data points.
+        new_length (int, optional): Number of points in interpolated output.
+                                   Defaults to 1000.
+        k (int, optional): Degree of the spline (1 <= k <= 5).
+                          Defaults to 3 (cubic spline).
+
+    Returns:
+        tuple: Two arrays (new_x, new_y) containing interpolated coordinates.
+
+    Notes:
+        - Uses scipy.interpolate.UnivariateSpline for interpolation.
+        - Output new_x is evenly spaced between min and max input x-values.
+
+    Raises:
+        ValueError: If input lists x and y have different lengths or are empty.
+        scipy.interpolate.InterpolationError: If spline interpolation fails
+                                            (e.g., invalid k or
+                                            insufficient points).
+    """
+    from scipy.interpolate import UnivariateSpline
+
+    # Combine lists into list of tuples
+    points = zip(x, y, strict=False)
+
+    # Sort list of tuples by x-value
+    points = sorted(points, key=lambda point: point[0])
+
+    # Split list of tuples into two list of x values any y values
+    x1, y1 = zip(*points, strict=False)
+    new_x = np.linspace(min(x1), max(x1), new_length)
+    new_y = UnivariateSpline(x1, y1, k=k)(new_x)
+    return new_x, new_y
+
+
+def safe_min_lengths(*lists):
+    """Return the minimum length of any
+    number of provided lists (ignoring None).
+
+    Args:
+        *lists: Variable number of list-like objects. None values are ignored.
+
+    Returns:
+        int: The minimum length among the provided
+        lists, or 0 if no valid lists are given.
+    """
+    lengths = [len(lst) for lst in lists if lst is not None]
+    return min(lengths) if lengths else 0
+
+
+def get_range_from_list(list_of_indices):
+    """Convert a list of indices to a string range.
+    e.g., [1, 2, 3, 7,8,9] -> ['1-3','7-9']
+    """
+    list_of_indices = sorted(list_of_indices)
+    ranges = []
+    for k, g in groupby(enumerate(list_of_indices), lambda ix: ix[0] - ix[1]):
+        group = list(map(lambda x: x[1], g))
+        if len(group) > 1:
+            ranges.append(f"{group[0]}-{group[-1]}")
+        else:
+            ranges.append(str(group[0]))
+    return ranges
+
+
+def convert_string_to_slices(index_str):
+    """
+    Converts a string to a list of slices and indices, 0-based.
+    e.g. '[1-3, 6-9, 7, 8, 10]' --> ['0:3', '5:9', 6, 7, 9]
+    """
+    # Remove brackets and split by comma
+    items = re.findall(r"\d+\s*-\s*\d+|\d+", index_str)
+
+    result = []
+    for item in items:
+        if "-" in item:
+            start_str, end_str = map(str.strip, item.split("-"))
+            start = int(start_str) - 1  # convert to 0-based
+            end = int(
+                end_str
+            )  # upper bound remains because Python slice is exclusive
+            result.append(f"{start}:{end}")
+        else:
+            result.append(int(item) - 1)
+    return result
+
+
+def to_graph_wrapper(
+    mol, bond_cutoff_buffer: float = 0.0, adjust_H: bool = True
+):
+    """
+    Global helper function to call Molecule.to_graph() for multiprocessing.
+
+    Provides a picklable wrapper for the Molecule.to_graph() method that
+    can be used with multiprocessing pools.
+
+    Args:
+        mol (Molecule): Molecule instance to convert to graph.
+        bond_cutoff_buffer (float): Buffer for bond cutoff distance.
+        adjust_H (bool): Whether to adjust hydrogen bond detection.
+
+    Returns:
+        networkx.Graph: Molecular graph representation.
+    """
+    return mol.to_graph(
+        bond_cutoff_buffer=bond_cutoff_buffer, adjust_H=adjust_H
+    )
+
+
+def find_irmsd_command():
+    """
+    Find the irmsd command, checking multiple sources.
+
+    Priority:
+    1. IRMSD_PATH environment variable (full path to irmsd executable)
+    2. IRMSD_CONDA_ENV environment variable (conda environment name)
+    3. irmsd in current PATH
+
+    Returns:
+        str or None: Full path to irmsd command, or None if not found.
+
+    Example:
+        # Check availability
+        if find_irmsd_command():
+            print("irmsd is available")
+
+        # Get path
+        irmsd_path = find_irmsd_command()
+    """
+    import shutil
+    import subprocess
+
+    # Option 1: IRMSD_PATH environment variable (highest priority)
+    irmsd_path = os.environ.get("IRMSD_PATH")
+    if (
+        irmsd_path
+        and os.path.isfile(irmsd_path)
+        and os.access(irmsd_path, os.X_OK)
+    ):
+        return irmsd_path
+
+    # Option 2: IRMSD_CONDA_ENV environment variable
+    conda_env = os.environ.get("IRMSD_CONDA_ENV")
+    if conda_env:
+        # Try to find conda base path from environment
+        conda_base = os.environ.get("CONDA_PREFIX_1") or os.environ.get(
+            "CONDA_PREFIX"
+        )
+        if conda_base:
+            # Go up to envs directory
+            if "envs" in conda_base:
+                envs_dir = conda_base.rsplit("envs", 1)[0] + "envs"
+            else:
+                envs_dir = os.path.join(os.path.dirname(conda_base), "envs")
+
+            irmsd_path = os.path.join(envs_dir, conda_env, "bin", "irmsd")
+            if os.path.isfile(irmsd_path) and os.access(irmsd_path, os.X_OK):
+                return irmsd_path
+
+        # Try common conda locations
+        for base in [
+            os.path.expanduser("~/anaconda3"),
+            os.path.expanduser("~/miniconda3"),
+            "/opt/anaconda3",
+            "/opt/miniconda3",
+            os.path.expanduser("~/.conda"),
+        ]:
+            irmsd_path = os.path.join(base, "envs", conda_env, "bin", "irmsd")
+            if os.path.isfile(irmsd_path) and os.access(irmsd_path, os.X_OK):
+                return irmsd_path
+
+        # Fallback: use conda run to find irmsd (handles unusual conda installations)
+        try:
+            result = subprocess.run(
+                ["conda", "run", "-n", conda_env, "which", "irmsd"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                irmsd_path = result.stdout.strip()
+                if os.path.isfile(irmsd_path) and os.access(
+                    irmsd_path, os.X_OK
+                ):
+                    return irmsd_path
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            # conda not available or timeout, continue to next option
+            pass
+
+    # Option 3: irmsd in current PATH
+    irmsd_in_path = shutil.which("irmsd")
+    if irmsd_in_path:
+        return irmsd_in_path
+
+    return None
+
+
+def deduplicate_string_keywords(route_string, keywords):
+    """Remove repeated route keywords, keeping the most informative form.
+
+    Parameters
+    ----------
+    route_string : str
+        Route string such as:
+        "! m062x def2-tzvp cosmors defgrid2 COSMORS(water)"
+    keywords : str or list[str] or tuple[str]
+        Keyword(s) to deduplicate, e.g. "cosmors" or ["cosmors", "smd"].
+
+    Returns
+    -------
+    str
+        Cleaned route string.
+
+    Notes
+    -----
+    - Matching is case-insensitive.
+    - If both ``keyword`` and ``keyword(...)`` appear, the latter is kept.
+    - If the same keyword appears multiple times with the same information
+      content, the first one is kept.
+    - This assumes the route string is whitespace-tokenized.
+    """
+    if not route_string or not keywords:
+        return route_string
+
+    if isinstance(keywords, str):
+        keywords = [keywords]
+
+    keyword_set = {k.lower() for k in keywords}
+    tokens = route_string.split()
+
+    def keyword_base(token):
+        """Return the base keyword, e.g. 'cosmors' from 'COSMORS(water)'."""
+        stripped = token.strip(",")
+        return stripped.split("(", 1)[0].lower()
+
+    def token_score(token):
+        """Score how informative a token is."""
+        stripped = token.strip(",")
+        has_args = "(" in stripped and ")" in stripped
+        return (has_args, len(stripped))
+
+    # Count matching tokens and find the best token index for each keyword
+    counts = {}
+    best_index = {}
+    best_score = {}
+
+    for i, token in enumerate(tokens):
+        base = keyword_base(token)
+        if base not in keyword_set:
+            continue
+
+        counts[base] = counts.get(base, 0) + 1
+        score = token_score(token)
+
+        if base not in best_score or score > best_score[base]:
+            best_score[base] = score
+            best_index[base] = i
+
+    # Rebuild tokens, removing duplicates but keeping the best one
+    new_tokens = []
+    for i, token in enumerate(tokens):
+        base = keyword_base(token)
+        if base in keyword_set and counts.get(base, 0) > 1:
+            if i != best_index[base]:
+                continue
+        new_tokens.append(token)
+
+    return " ".join(new_tokens)

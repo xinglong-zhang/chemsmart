@@ -1,0 +1,11 @@
+# TS search for F- + CH3Cl -> CH3F + Cl-
+! M062X Def2-SVP OptTS Freq
+* xyz -1 1
+# Paste the highest-energy geometry from the scan here
+C   0.000000   0.000000   -0.038166
+Cl  0.000000   0.000000    1.905623
+H   0.000000   1.037145   -0.327668
+H   0.899732  -0.518572   -0.327668
+H  -0.899732  -0.518572   -0.327668
+F   0.000000   0.000000   -1.905623
+*
