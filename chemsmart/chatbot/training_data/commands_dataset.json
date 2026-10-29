@@ -1,0 +1,73 @@
+{
+  "dataset": "chemsmart_commands",
+  "training_data": [
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f input.com opt",
+      "description": "Submits a geometry optimization job using Gaussian on the shared server with the test project settings and input.com file."
+    },
+    {
+      "command": "chemsmart sub -s xz gaussian -p test -f input.com ts",
+      "description": "Submits a transition state search job using Gaussian on server xz."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f input.com scan -c [[4,17]] -s 0.1 -n 10",
+      "description": "Submits a relaxed PES scan job along the bond between atoms 4 and 17 for 10 steps with 0.1Å increment per step."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f input.com sp",
+      "description": "Submits a single-point energy calculation job."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f input.com irc",
+      "description": "Submits an intrinsic reaction coordinate (IRC) job."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f input.com -c 1 -m 2 -l test_charge_multiplicity opt",
+      "description": "Modifies the charge to +1 and multiplicity to 2 before submitting a geometry optimization job."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f crest_conformers.xyz -c 0 -m 1 crest -j opt",
+      "description": "Optimizes all conformers from a CREST-generated conformers file using Gaussian."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f md.traj -c 0 -m 1 saopt -x 0.2 -n 10 -g seq",
+      "description": "Optimizes the 10 lowest energy unique structures from the last 20% of an MD Simulated Annealing trajectory."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f irc.log dias -i 5-17 -n 10",
+      "description": "Runs a distortion-interaction/activation-strain (DI-AS) job for fragment 1 with atoms 5-17 at every 10 steps along the IRC."
+    },
+    {
+      "command": "chemsmart sub -s shared gaussian -p test -f test.com -l user_defined_job userjob -r 'mnr functional/basis solvent etc' -a 'B 1 2 F\nA 1 2 3 F'",
+      "description": "Runs a user-defined Gaussian job with a custom route and appended input information."
+    }
+  ],
+  "parameters": {
+    "server": "<server_name>",
+    "project": "<project_name>",
+    "input_file": "<file_name>",
+    "job_type": "<job_type>",
+    "charge": "<charge>",
+    "multiplicity": "<multiplicity>",
+    "constrained_atoms": "<list_of_atoms>",
+    "scan_step": "<step_size>",
+    "scan_steps": "<num_steps>",
+    "solvent_model": "<solvent_model>",
+    "solvent_id": "<solvent_id>",
+    "n_conformers": "<num_conformers>"
+  },
+  "output_format": "JSON",
+  "example_usage": {
+    "input": {
+      "server": "shared",
+      "project": "test",
+      "input_file": "input.com",
+      "job_type": "opt",
+      "charge": "1",
+      "multiplicity": "2"
+    },
+    "output": {
+      "command": "chemsmart sub -s shared gaussian -p test -f input.com -c 1 -m 2 opt"
+    }
+  }
+}

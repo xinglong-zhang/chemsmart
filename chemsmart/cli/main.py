@@ -11,6 +11,7 @@ import click
 from chemsmart import __version__
 from chemsmart.utils.cli import MyGroup
 
+from .chat import chat
 from .config import config
 from .run import run
 from .sub import sub
@@ -69,6 +70,7 @@ entry_point.add_command(run)
 entry_point.add_command(sub)
 entry_point.add_command(config)
 entry_point.add_command(update)
+entry_point.add_command(chat)
 
 
 def main():  # pragma: no cover
