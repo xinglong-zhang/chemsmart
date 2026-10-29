@@ -1,18 +1,40 @@
+"""
+ORCA Command Line Interface
+
+This module provides the main CLI interface for ORCA quantum chemistry
+calculations. It defines common options, settings configurations, and the
+main ORCA command group that serves as the entry point for all ORCA-related
+operations.
+"""
+
 import functools
 import logging
 import os
 
 import click
 
+from chemsmart.cli.database.database import click_database_id_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filename_options,
+    click_pubchem_options,
+)
+from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import string2index_1based
+from chemsmart.utils.io import clean_label, get_program_type_from_file
+from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 
 logger = logging.getLogger(__name__)
 
 
 def click_orca_options(f):
-    """Common click options for ORCA jobs."""
+    """
+    Common click options decorator for ORCA jobs.
+
+    This decorator adds common command-line options that are shared across
+    different ORCA job types, specifically project settings.
+    """
 
     @click.option(
         "--project", "-p", type=str, default=None, help="Project settings."
@@ -25,41 +47,31 @@ def click_orca_options(f):
 
 
 def click_orca_settings_options(f):
-    """Common click options for ORCA Settings."""
+    """
+    Common click options decorator for ORCA computational settings.
 
-    @click.option(
-        "-f",
-        "--filename",
-        type=str,
-        default=None,
-        help="filename from which new ORCA input is prepared.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="write user input filename for the job (without extension)",
-    )
-    @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="name to be appended to file for the job",
-    )
+    This decorator adds comprehensive command-line options for configuring
+    ORCA calculations including file I/O, molecular properties, computational
+    methods, basis sets, SCF settings, and various quantum chemistry
+    parameters.
+    """
+
     @click.option(
         "-t", "--title", type=str, default=None, help="ORCA job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the molecule"
+        "-c",
+        "--charge",
+        type=int,
+        default=None,
+        help="Charge of the molecule.",
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the molecule",
+        help="Multiplicity of the molecule.",
     )
     @click.option(
         "-A",
@@ -86,7 +98,7 @@ def click_orca_settings_options(f):
         "-b", "--basis", type=str, default=None, help="New basis set to run."
     )
     @click.option(
-        "-a",
+        "-B",
         "--aux-basis",
         type=str,
         default=None,
@@ -106,7 +118,8 @@ def click_orca_settings_options(f):
             ["defgrid1", "defgrid2", "defgrid3"], case_sensitive=False
         ),
         default="defgrid2",  # default used in ORCA is defgrid2
-        help="Grid for numerical integration. Choices are ['defgrid1', 'defgrid2', 'defgrid3']",
+        help="Grid for numerical integration. Choices are "
+        "['defgrid1', 'defgrid2', 'defgrid3'].",
     )
     @click.option(
         "--scf-tol",
@@ -128,9 +141,11 @@ def click_orca_settings_options(f):
         "--scf-algorithm",
         type=click.Choice(
             ["GDIIS", "DIIS", "SOSCF", "AutoTRAH"], case_sensitive=False
-        ),  # SOSCF is an approximately quadratically convergent variant of the SCF procedure
-        # In cases conventional SCF procedures (DIIS/KDIIS/SOSCF) struggle, we invoke TRAH-SCF
-        # automatically (AutoTRAH).
+        ),  # SOSCF is an approximately quadratically convergent variant of
+        # the SCF procedure.
+        # In cases where conventional SCF
+        # procedures (DIIS/KDIIS/SOSCF) struggle,
+        # we invoke TRAH-SCF automatically (AutoTRAH).
         default=None,
         help="SCF algorithm to use.",
     )
@@ -150,19 +165,19 @@ def click_orca_settings_options(f):
         "--dipole/--no-dipole",
         default=None,
         type=bool,
-        help="Dipole moment calculation.",
+        help="Enable dipole moment calculation.",
     )
     @click.option(
         "--quadrupole/--no-quadrupole",
         default=None,
         type=bool,
-        help="Quadrupole moment calculation.",
+        help="Enable quadrupole moment calculation.",
     )
     @click.option(
         "--mdci-cutoff",
         type=click.Choice(["loose", "normal", "tight"], case_sensitive=False),
         default=None,
-        help="MDCI cutoff. Choices are ['loose', 'normal', 'tight']",
+        help="MDCI cutoff. Choices are ['loose', 'normal', 'tight'].",
     )
     @click.option(
         "--mdci-density",
@@ -170,24 +185,175 @@ def click_orca_settings_options(f):
             ["none", "unrelaxed", "relaxed"], case_sensitive=False
         ),
         default=None,
-        help="MDCI density. Choices are ['none', 'unrelaxed', 'relaxed']",
-    )
-    @click.option(
-        "-i",
-        "--index",
-        type=str,
-        default=None,
-        help="index of molecule to use; default to the last molecule structure.",
+        help="MDCI density. Choices are ['none', 'unrelaxed', 'relaxed'].",
     )
     @click.option(
         "-r",
         "--additional-route-parameters",
         type=str,
         default=None,
-        help="additional route parameters",
+        help="Additional route parameters.",
     )
     @click.option(
-        "--forces/--no-forces", default=False, help="Forces calculation."
+        "--forces/--no-forces",
+        default=False,
+        help="Enable forces calculation.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_orca_solvent_options(f):
+    """Common click options for ORCA solvent settings (subcommand level).
+
+    Provides ``--remove-solvent``, ``-sm``/``--solvent-model``,
+    ``-si``/``--solvent-id``, ``-so``/``--solvent-options``, and
+    ``-sf``/``--solventfilename`` to every ORCA subcommand that decorates
+    with this function.
+    """
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        default=False,
+        help="Remove the solvent model from the job. Defaults to project "
+        "settings.",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="Solvent model to use: cpcm (CPCM with CPCM epsilon), "
+        "cpcmc (CPCM with COSMO epsilon; replaces legacy COSMO removed in ORCA 4.0), "
+        "smd (Minnesota SMD; route !SMD(solvent)), "
+        "cosmors (openCOSMO-RS; route !COSMORS(solvent)).",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="Solvent identifier (e.g. water, toluene, dichloromethane). "
+        "Optional when specifying a custom solvent via -so (Epsilon/Refrac).",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help=(
+            "Additional solvent options written inside the model's solvent block "
+            "(%%cpcm for cpcm/cpcmc/smd, %%cosmors for cosmors). "
+            "Supports newline-separated entries for multiple options. "
+            "Common %%cpcm parameters: "
+            "'Epsilon 78.36' (dielectric constant, for custom solvents), "
+            "'Refrac 1.33' (refractive index), "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_sas, "
+            "vdw_gaussian, gepol_ses_gaussian), "
+            "'Rsolv 1.30' (probe radius in Angstrom), "
+            "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
+            "Common %%cosmors parameters: 'temp 298.15' (temperature in K), "
+            "'aeff 5.925' (contact area), 'lnalpha 0.202' (misfit prefactor), "
+            "'lnchb 0.166' (HB strength), 'dftfunc \"BP86\"', "
+            "'dftbas \"def2-TZVPD\"', 'solvent \"water\"', "
+            "'solventfilename \"water\"', 'orbs_vac false'. "
+            "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
+    )
+    @click.option(
+        "-sf",
+        "--solventfilename",
+        type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+        default=None,
+        help=(
+            "Path to a solvent file for the cosmors model. If in .cosmorsxyz, this"
+            "file will be used directly, else, CHEMSMART will convert it into"
+            ".cosmorsxyz format."
+            "The file is copied to the running directory (scratch or job folder) "
+            "and its basename (without the .cosmorsxyz extension) is written as "
+            "'solventfilename \"name\"' in the %%cosmors block. "
+            "Example: -sf /path/to/water.cosmorsxyz"
+        ),
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_orca_solvent_group_options(f):
+    """Solvent options for the ORCA group level (applicable to all subcommands).
+
+    Uses long-form ``--remove-solvent``/``--no-remove-solvent`` without a
+    ``-rs`` short alias to avoid conflicts with other short flags in
+    :func:`click_orca_settings_options`.
+    """
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        default=False,
+        help="Remove the solvent model from the job (overrides project settings).",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="Solvent model to use: cpcm (CPCM with CPCM epsilon), "
+        "cpcmc (CPCM with COSMO epsilon; replaces legacy COSMO removed in ORCA 4.0), "
+        "smd (Minnesota SMD; route !SMD(solvent)), "
+        "cosmors (openCOSMO-RS; route !COSMORS(solvent)).",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="Solvent identifier (e.g. water, toluene, dichloromethane). "
+        "Optional when specifying a custom solvent via -so (Epsilon/Refrac).",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help=(
+            "Additional solvent options written inside the model's solvent block "
+            "(%%cpcm for cpcm/cpcmc/smd, %%cosmors for cosmors). "
+            "Supports newline-separated entries for multiple options. "
+            "Common %%cpcm parameters: "
+            "'Epsilon 78.36' (dielectric constant, for custom solvents), "
+            "'Refrac 1.33' (refractive index), "
+            "'SurfaceType gepol_ses' (cavity surface: gepol_ses, gepol_sas, "
+            "vdw_gaussian, gepol_ses_gaussian), "
+            "'Rsolv 1.30' (probe radius in Angstrom), "
+            "'soln', 'soln25', 'sola', 'solb', 'solg', 'solc', 'solh' (SMD descriptors). "
+            "Common %%cosmors parameters: 'temp 298.15' (temperature in K), "
+            "'aeff 5.925' (contact area), 'lnalpha 0.202' (misfit prefactor), "
+            "'lnchb 0.166' (HB strength), 'dftfunc \"BP86\"', "
+            "'dftbas \"def2-TZVPD\"', 'solvent \"water\"', "
+            "'solventfilename \"water\"', 'orbs_vac false'. "
+            "Example: -so $'Epsilon 78.36\\nRefrac 1.33'"
+        ),
+    )
+    @click.option(
+        "-sf",
+        "--solventfilename",
+        type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+        default=None,
+        help=(
+            "Path to a solvent file for the cosmors model. If in .cosmorsxyz, this"
+            "file will be used directly, else, CHEMSMART will convert it into"
+            ".cosmorsxyz format."
+            "The file is copied to the running directory (scratch or job folder) "
+            "and its basename (without the .cosmorsxyz extension) is written as "
+            "'solventfilename \"name\"' in the %%cosmors block. "
+            "Example: -sf /path/to/water.cosmorsxyz"
+        ),
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -197,38 +363,45 @@ def click_orca_settings_options(f):
 
 
 def click_orca_jobtype_options(f):
-    """Common click options for ORCA link/crest jobs."""
+    """
+    Common click options decorator for ORCA job type specifications.
+
+    This decorator adds command-line options for specifying ORCA job types
+    and related parameters for geometry optimizations, transition state
+    searches, scans, and coordinate constraints.
+    """
 
     @click.option(
         "-j",
         "--jobtype",
         type=str,
         default=None,
-        help='ORCA job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+        help='ORCA job type. Options: ["opt", "ts", "modred", "scan", "sp"].',
     )
     @click.option(
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates to be fixed for modred or scan jobs. "
+        "1-indexed.",
     )
     @click.option(
         "-x",
         "--dist-start",
         default=None,
-        help="starting distance to scan, in Angstroms.",
+        help="Starting distance to scan, in Angstroms.",
     )
     @click.option(
         "-y",
         "--dist-end",
         default=None,
-        help="ending distance to scan, in Angstroms.",
+        help="Ending distance to scan, in Angstroms.",
     )
     @click.option(
         "-n",
         "--num-steps",
         default=None,
-        help="Step size of coordinates to scan.",
+        help="Number of intermediate points for coordinate scans.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -239,14 +412,12 @@ def click_orca_jobtype_options(f):
 
 @click.group(cls=MyGroup)
 @click_orca_options
+@click_filename_options
+@click_file_label_and_index_options
+@click_database_id_options
 @click_orca_settings_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer informaotion.",
-)
+@click_orca_solvent_group_options
+@click_pubchem_options
 @click.pass_context
 def orca(
     ctx,
@@ -273,36 +444,144 @@ def orca(
     mdci_cutoff,
     mdci_density,
     index,
+    record_index,
+    record_id,
+    structure_id,
+    structure_index,
+    molecule_id,
     additional_route_parameters,
     forces,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
+    solventfilename,
     pubchem,
 ):
+    """
+    Main CLI command group for running ORCA jobs using the chemsmart framework.
+
+    This function serves as the primary entry point for all ORCA quantum
+    chemistry calculations. It processes command-line arguments, configures
+    job settings, loads molecular structures, and prepares the context for
+    subcommands.
+    """
+    # --mid is not supported for job submission
+    if molecule_id is not None:
+        raise click.UsageError(
+            "--mid/--molecule-id is not supported for ORCA job submission. "
+            "Use --sid/--structure-id or --ri/--rid with -i/--si instead."
+        )
+    # -i/--index and --si/--structure-index are equivalent aliases
+    if index is not None and structure_index is not None:
+        raise click.UsageError(
+            "-i/--index and --si/--structure-index are mutually exclusive. "
+            "Use only one to specify the structure index."
+        )
+    # If --si is given, treat it as -i so all downstream code uses index
+    if structure_index is not None:
+        index = structure_index
+
+    is_chemsmart_db = is_chemsmart_database(filename)
+    if is_chemsmart_db:
+        record_selectors = [record_index is not None, record_id is not None]
+        if sum(record_selectors) + (structure_id is not None) != 1:
+            raise click.UsageError(
+                "For chemsmart database input, select exactly one of "
+                "--ri/--record-index, --rid/--record-id, or "
+                "--sid/--structure-id."
+            )
+        if index is not None and not any(record_selectors):
+            raise click.UsageError(
+                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "can only be used together with --ri/--record-index or --rid/--record-id."
+            )
 
     from chemsmart.jobs.orca.settings import ORCAJobSettings
     from chemsmart.settings.orca import ORCAProjectSettings
 
     # get project settings
     project_settings = ORCAProjectSettings.from_project(project)
+    logger.debug(f"Loaded project settings: {project_settings}")
 
-    # obtain ORCA Settings from filename, if supplied; otherwise return defaults
+    # obtain ORCA Settings from filename, if supplied; otherwise return
+    # defaults
+
+    # Defer filetype validation if the pka subcommand is being invoked,
+    # as it has its own table file handling.
+    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
+    from chemsmart.utils.datasets import PKaTableEntry
+
+    is_pka_subcommand = ctx.invoked_subcommand == "pka"
+    is_pka_table_input = is_pka_subcommand and (
+        PKaTableEntry.is_submission_table(filename)
+        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
+    )
 
     if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
+        # for cases where filename is not supplied, eg, get structure from
+        # pubchem
         job_settings = ORCAJobSettings.default()
         logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filename supplied, using ORCA default settings: "
+            f"{job_settings.__dict__}"
         )
     elif filename.endswith((".com", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
-        job_settings = ORCAJobSettings.from_filepath(filename)
+        # filename supplied - we would want to use the settings from here and
+        # do not use any defaults!
+        if filename.endswith(".out") and (
+            get_program_type_from_file(filename) == "xtb"
+        ):
+            # xTB output is only a geometry source; its route/method do not
+            # map onto ORCA settings. Start from defaults (like .xyz) but
+            # inherit charge/multiplicity from the xTB calculation so the new
+            # ORCA job is fully specified. CLI -c/-m still override below.
+            job_settings = ORCAJobSettings.default()
+            xtb_molecule = Molecule.from_filepath(filename)
+            if xtb_molecule.charge is not None:
+                job_settings.charge = xtb_molecule.charge
+            if xtb_molecule.multiplicity is not None:
+                job_settings.multiplicity = xtb_molecule.multiplicity
+            logger.info(
+                f"Detected xTB output {filename}; using default ORCA "
+                f"settings with geometry and charge/multiplicity from the "
+                f"xTB calculation."
+            )
+        else:
+            job_settings = ORCAJobSettings.from_filepath(filename)
+            logger.info(f"Loaded ORCA settings from file: {filename}")
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
+        logger.info(f"Using default ORCA settings for XYZ file: {filename}")
+    elif filename.endswith(".db"):
+        if is_chemsmart_db:
+            job_settings = ORCAJobSettings.from_database(
+                filepath=filename,
+                record_index=record_index,
+                record_id=record_id,
+                structure_index=index or "-1",
+                structure_id=structure_id,
+            )
+            logger.info(f"Loaded ORCA settings from database file: {filename}")
+        else:
+            logger.debug(
+                f"File {filename} is not a valid chemsmart database file."
+            )
+            job_settings = ORCAJobSettings.default()
+    elif is_pka_table_input or (
+        is_pka_subcommand and is_pka_cdxml_input(filename)
+    ):
+        job_settings = ORCAJobSettings.default()
+        logger.info(
+            "pka subcommand invoked with table or CDXML file; "
+            "skipping filetype validation and using default ORCA settings"
+        )
     else:
         raise ValueError(
             f"Unrecognised filetype {filename} to obtain ORCAJobSettings"
         )
 
-    # Update keywords
+    # Update keywords based on command-line arguments
     keywords = (
         "charge",
         "multiplicity",
@@ -366,57 +645,157 @@ def orca(
         job_settings.forces = forces
         keywords += ("forces",)
 
-    # obtain molecule structure
-    if filename is None and pubchem is None:
-        raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
+    # Handle solvent options specified at the orca group level.
+    # These are propagated to every subcommand via the merge mechanism,
+    # allowing e.g. `orca -sm cpcm -si water sp` or
+    # `orca -sm smd -si water -so 'Epsilon 78.36' opt`.
+    if remove_solvent:
+        job_settings.solvent_model = None
+        job_settings.solvent_id = None
+        job_settings.custom_solvent = None
+        job_settings.solventfilename = None
+        keywords += (
+            "solvent_model",
+            "solvent_id",
+            "custom_solvent",
+            "solventfilename",
         )
-    if filename and pubchem:
-        raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
-        )
+    else:
+        if solvent_model is not None:
+            job_settings.solvent_model = solvent_model
+            keywords += ("solvent_model",)
+        if solvent_id is not None:
+            job_settings.solvent_id = solvent_id
+            keywords += ("solvent_id",)
+        if solvent_options is not None:
+            job_settings.additional_solvent_options = solvent_options
+            keywords += ("additional_solvent_options",)
+        if solventfilename is not None:
+            job_settings.solventfilename = solventfilename
+            keywords += ("solventfilename",)
 
-    if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=";", return_list=True
-        )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecules {molecules} from {filename}")
+    # obtain molecule structure from file or PubChem
+    molecules = None
 
-    if pubchem:
+    # Skip molecule loading for pKa table/CDXML files (handled by pKa batch)
+    if is_pka_table_input:
+        logger.debug(
+            f"Skipping molecule loading for pKa table/CDXML file: {filename}"
+        )
+        molecules = None
+    else:
+        if filename is None and pubchem is None:
+            raise ValueError(
+                "[filename] or [pubchem] has not been specified!\n"
+                "Please specify one of them!"
+            )
+        if filename and pubchem:
+            raise ValueError(
+                "Both [filename] and [pubchem] have been specified!\n"
+                "Please specify only one of them."
+            )
+
+    if filename and not is_pka_table_input:
+        if is_chemsmart_db:
+            if structure_id is not None:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    return_list=True,
+                    structure_id=structure_id,
+                )
+            else:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    index=index or "-1",
+                    return_list=True,
+                    record_index=record_index,
+                    record_id=record_id,
+                )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from database {filename}!"
+            logger.debug(
+                f"Obtained database molecule {molecules} from {filename}"
+            )
+        else:
+            molecules = Molecule.from_filepath(
+                filepath=filename, index=":", return_list=True
+            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filename}!"
+            logger.debug(f"Obtained molecules {molecules} from {filename}")
+
+    if pubchem and not is_pka_table_input:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None
         ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
-    # update labels
+    # update job labels for output file naming
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give ORCA input filename or name to be be appended, but not both!"
+            "Only give ORCA input filename or name to be appended, "
+            "but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{append_label}"
+        logger.debug(f"Created label with append: {label}")
     if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{ctx.invoked_subcommand}"
+        logger.debug(f"Created default label: {label}")
+
+    label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
-    # then return that structure as a list
-    if index is not None:
-        # return list of molecules
-        molecules = molecules[string2index_1based(index)]
+    # then return that structure as a list and track the original indices
+    molecule_indices = None
+    if index is not None and not is_chemsmart_db:
+        molecules, molecule_indices = (
+            return_objects_and_indices_from_string_index(
+                list_of_objects=molecules, index=index
+            )
+        )
 
-    logger.debug(f"Obtained molecules: {molecules}")
+    if not isinstance(molecules, list):
+        molecules = [molecules]
+        if molecule_indices is not None and not isinstance(
+            molecule_indices, list
+        ):
+            molecule_indices = [molecule_indices]
 
-    # store objects
+    logger.debug(f"Final molecules list: {molecules}")
+    logger.debug(f"Molecule indices: {molecule_indices}")
+    logger.debug(f"Job settings keywords: {keywords}")
+
+    # store objects in context for subcommands
     ctx.obj["project_settings"] = project_settings
     ctx.obj["job_settings"] = job_settings
     ctx.obj["keywords"] = keywords
     ctx.obj["molecules"] = molecules
+    ctx.obj["molecule_indices"] = (
+        molecule_indices  # Store original 1-based indices
+    )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename
 
@@ -424,6 +803,16 @@ def orca(
 @orca.result_callback()
 @click.pass_context
 def orca_process_pipeline(ctx, *args, **kwargs):
+    """
+    Result callback function for processing ORCA command pipeline.
+
+    This function is executed after the ORCA subcommand completes and
+    handles the final processing of results. It updates the context
+    with subcommand information and returns the processed results.
+    """
     kwargs.update({"subcommand": ctx.invoked_subcommand})
     ctx.obj[ctx.info_name] = kwargs
+    logger.debug(
+        f"Pipeline completed for subcommand: {ctx.invoked_subcommand}"
+    )
     return args[0]

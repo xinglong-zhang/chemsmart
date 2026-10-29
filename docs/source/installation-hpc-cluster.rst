@@ -1,0 +1,24 @@
+##############################
+ Installation for HPC Cluster
+##############################
+
+CHEMSMART can run on any High Performance Computing (HPC) cluster, using the same commands as on a local machine. If you
+only need to use CHEMSMART on an HPC cluster, you can install it directly there.
+
+***************
+ Prerequisites
+***************
+
+Before starting:
+
+-  Consult your HPC cluster administrator about pre-installed software and your installation permissions.
+-  Confirm the supported queue system (SLURM, Torque, PBS, etc.).
+-  Ensure that a suitable C/C++ compiler is available (e.g. via environment modules such as ``gcc``), as some
+   dependencies require compilation.
+
+**************
+ Installation
+**************
+
+Since most HPC clusters run Linux, follow the instructions in :doc:`installation-linux-macos` to install CHEMSMART on
+your cluster.

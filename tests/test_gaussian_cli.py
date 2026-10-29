@@ -1,0 +1,1274 @@
+"""
+Tests for Gaussian CLI option propagation and subcommand behaviour.
+
+This module verifies that solvent-related options
+ (``-sm``/``--solvent-model``, ``-si``/``--solvent-id``,
+ ``-so``/``--solvent-options``, and ``--remove-solvent``) on the
+ ``gaussian`` CLI *group* are correctly propagated to every relevant
+ subcommand (``opt``, ``td``, ``sp``, …) via the ``merge()`` mechanism.
+ It also exercises non-solvent Gaussian CLI functionality for various
+ subcommands (such as ``sp``, ``ts``, ``irc``, ``scan``, and ``crest``),
+ including job type flags, directions, scan/QRC settings, and related
+ options.
+
+Each test uses :class:`click.testing.CliRunner` to invoke the ``gaussian``
+group and :mod:`unittest.mock` to intercept the job constructor so that
+the merged :class:`~chemsmart.jobs.gaussian.settings.GaussianJobSettings`
+can be inspected without running an actual calculation.
+"""
+
+import os
+from unittest.mock import MagicMock, patch
+
+
+class TestGaussianCLIPubChemOptCommand:
+    """CLI tests for PubChem / database label paths without an explicit ``-l``."""
+
+    def test_pubchem_only_opt_passes_molecule_to_job(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--pubchem <cid> opt`` loads a structure and passes it to the job."""
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+
+        with patch(
+            "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+            return_value=[pubchem_molecule],
+        ) as mock_from_pubchem:
+            result, settings = run_gaussian_and_capture_settings(
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-l",
+                    "ammonia",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            )
+
+        assert result.exit_code == 0, result.output
+        mock_from_pubchem.assert_called_once_with(
+            identifier="222", return_list=True
+        )
+        assert settings is not None, "GaussianOptJob was never instantiated"
+
+    def test_pubchem_default_label_uses_output_prefix(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian as gaussian_cli
+
+        runner = CliRunner()
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch("chemsmart.jobs.gaussian.opt.GaussianOptJob") as mock,
+        ):
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock.call_args.kwargs["label"] == "output_opt"
+
+    def test_database_sid_preserved_in_default_label(
+        self,
+        database_chemsmart_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+    ):
+        from os.path import basename, splitext
+
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian as gaussian_cli
+        from chemsmart.database.database import Database
+
+        db = Database(database_chemsmart_file)
+        structure_id = db.get_record(record_index=1)["molecules"][0][
+            "structure_id"
+        ]
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.opt.GaussianOptJob") as mock:
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian_cli,
+                [
+                    "-p",
+                    "gas_solv",
+                    "-f",
+                    database_chemsmart_file,
+                    "--sid",
+                    structure_id,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        base = splitext(basename(database_chemsmart_file))[0]
+        assert (
+            mock.call_args.kwargs["label"] == f"{base}_SID-{structure_id}_opt"
+        )
+
+
+class TestGaussianSolventCLIOptCommand:
+    """CLI solvent options propagated to the ``opt`` subcommand."""
+
+    def test_solvent_model_and_id_injected_into_opt_settings(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``-sm smd -si water`` sets solvent on the opt job settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert settings is not None, "GaussianOptJob was never instantiated"
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+
+    def test_solvent_options_iterative_injected_into_opt_settings(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``-sm smd -si water -so iterative`` sets iterative solvent on opt."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "iterative",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+        assert settings.additional_solvent_options == "iterative"
+
+    def test_solvent_route_keyword_for_opt(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Route string for opt job contains ``scrf=(smd,solvent=water,iterative)``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "iterative",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert "scrf=(smd,solvent=water,iterative)" in settings.route_string
+
+    def test_remove_solvent_clears_solvent_from_opt(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--remove-solvent`` nulls the solvent on a project that has one."""
+        # The ``solv`` project sets solvent_model=smd and solvent_id=toluene
+        # for every job type (including opt).  ``--remove-solvent`` must strip
+        # these from the merged settings.
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "--remove-solvent",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+
+
+class TestGaussianSolventCLITdCommand:
+    """CLI solvent options propagated to the ``td`` subcommand."""
+
+    def test_solvent_model_and_id_override_td_project_settings(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``-sm smd -si water`` overrides project td solvent (toluene→water)."""
+        # ``solv`` project has smd/toluene for td; CLI overrides solvent_id.
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "cpcm",
+                "-si",
+                "water",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model == "cpcm"
+        assert settings.solvent_id == "water"
+
+    def test_td_route_keyword_with_smd_water_iterative(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """TD route string contains ``scrf=(smd,solvent=water,iterative)``."""
+        # ``solv`` project has smd/toluene for td; CLI overrides to water+iterative.
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "-so",
+                "iterative",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert "scrf=(smd,solvent=water,iterative)" in settings.route_string
+
+    def test_remove_solvent_clears_solvent_from_td(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``--remove-solvent`` nulls solvent settings for a td job."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "--remove-solvent",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+
+    def test_no_solvent_options_leaves_project_settings_unchanged(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Without solvent CLI options the project solvent settings are kept."""
+        # ``solv`` project has smd/toluene for td; no CLI override → kept.
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.tddft.GaussianTDDFTJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "td",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "toluene"
+
+
+class TestGaussianCLISinglePointCommand:
+    """CLI tests for the ``sp`` (single point) subcommand."""
+
+    def test_basic_sp_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``sp`` subcommand creates a ``GaussianSinglePointJob``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.basis == "def2tzvp"
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "toluene"
+
+    def test_sp_subcommand_solvent_override(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """sp-level ``-sm``/``-si`` options override project solvent settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+                "-sm",
+                "pcm",
+                "-si",
+                "acetonitrile",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model == "pcm"
+        assert settings.solvent_id == "acetonitrile"
+
+    def test_sp_subcommand_remove_solvent(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """sp-level ``--remove-solvent`` strips solvent from project settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+                "--remove-solvent",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+
+    def test_sp_group_level_solvent_propagated(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Group-level ``-sm``/``-si`` options are merged into sp settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.singlepoint.GaussianSinglePointJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "cpcm",
+                "-si",
+                "thf",
+                "sp",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model == "cpcm"
+        assert settings.solvent_id == "thf"
+
+
+class TestGaussianCLITsCommand:
+    """CLI tests for the ``ts`` (transition state) subcommand."""
+
+    def test_basic_ts_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``ts`` subcommand creates a ``GaussianTSJob`` with gas settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.ts.GaussianTSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        # gas_solv project ts settings use ``gas`` config: def2svp, no solvent
+        assert settings.basis == "def2svp"
+        assert settings.solvent_model is None
+
+    def test_ts_settings_from_solv_project(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``ts`` with ``solv`` project inherits solvent settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.ts.GaussianTSJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "toluene"
+
+    def test_ts_group_level_solvent_injected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Group-level solvent options are propagated to ``ts`` settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.ts.GaussianTSJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "dmso",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "dmso"
+
+
+class TestGaussianCLIIrcCommand:
+    """CLI tests for the ``irc`` (Intrinsic Reaction Coordinate) subcommand."""
+
+    def test_basic_irc_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``irc`` subcommand creates a ``GaussianIRCJob``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert settings.basis == "def2svp"
+
+    def test_irc_direction_forward_option(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``-d forward`` sets the IRC direction to ``forward``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-d",
+                "forward",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings.direction == "forward"
+
+    def test_irc_direction_reverse_option(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``-d reverse`` sets the IRC direction to ``reverse``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-d",
+                "reverse",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.direction == "reverse"
+
+    def test_irc_group_level_solvent_injected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Group-level solvent options are propagated to ``irc`` settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.irc.GaussianIRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "methanol",
+                "irc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "methanol"
+
+
+class TestGaussianCLIScanCommand:
+    """CLI tests for the ``scan`` (potential energy surface scan) subcommand."""
+
+    def test_basic_scan_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``scan`` subcommand creates a ``GaussianScanJob``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2]]",
+                "-s",
+                "0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.basis == "def2svp"
+
+    def test_scan_settings_from_project(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``scan`` with ``solv`` project inherits solvent settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2]]",
+                "-s",
+                "0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "toluene"
+
+    def test_scan_group_level_solvent_injected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Group-level solvent options are propagated to ``scan`` settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "scan",
+                "-c",
+                "[[1,2]]",
+                "-s",
+                "0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+
+    def test_scan_multiple_coords_single_step_size_and_num_steps(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Multiple scan coordinates with a single step_size and num_steps broadcasts them."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2],[2,3]]",
+                "-s",
+                "-0.1",
+                "-n",
+                "10",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.modred["step_size"] == [-0.1, -0.1]
+        assert settings.modred["num_steps"] == [10, 10]
+
+    def test_scan_multiple_coords_explicit_step_size_and_num_steps(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Multiple scan coordinates with explicit per-coordinate step_size and num_steps."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.scan.GaussianScanJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "scan",
+                "-c",
+                "[[1,2],[2,3]]",
+                "-s",
+                "[-0.1,-0.2]",
+                "-n",
+                "[10,15]",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.modred["step_size"] == [-0.1, -0.2]
+        assert settings.modred["num_steps"] == [10, 15]
+
+
+class TestGaussianCLICrestCommand:
+    """CLI tests for the ``crest`` (conformer search) subcommand."""
+
+    def test_basic_crest_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``crest -j opt`` subcommand creates a ``GaussianCrestJob``."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.crest.GaussianCrestJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "crest",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.basis == "def2svp"
+
+    def test_crest_settings_from_solv_project(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``crest`` with ``solv`` project inherits solvent settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.crest.GaussianCrestJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "crest",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "toluene"
+
+    def test_crest_group_level_solvent_injected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Group-level solvent options are propagated to ``crest`` settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.crest.GaussianCrestJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "crest",
+                "-j",
+                "opt",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+
+
+class TestGaussianCLIQrcCommand:
+    """CLI tests for the ``qrc`` (Quick Reaction Coordinate) subcommand."""
+
+    def test_basic_qrc_job_creation(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``qrc`` subcommand creates a ``GaussianQRCJob`` (default jobtype=opt)."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.basis == "def2svp"
+
+    def test_qrc_settings_from_solv_project(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``qrc`` with ``solv`` project inherits solvent settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "toluene"
+
+    def test_qrc_group_level_solvent_injected(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """Group-level solvent options are propagated to ``qrc`` settings."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "-sm",
+                "smd",
+                "-si",
+                "water",
+                "qrc",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+
+    def test_qrc_explicit_ts_jobtype(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        run_gaussian_and_capture_settings,
+    ):
+        """``qrc -j ts`` uses TS settings from the project for the QRC job."""
+        result, settings = run_gaussian_and_capture_settings(
+            "chemsmart.jobs.gaussian.qrc.GaussianQRCJob",
+            [
+                "-p",
+                "gas_solv",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "qrc",
+                "-j",
+                "ts",
+            ],
+            make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.basis == "def2svp"
+
+
+class TestGaussianQMMMCLI:
+    """CLI tests for the nested ``opt qmmm`` (and related) subcommands."""
+
+    def test_opt_qmmm_propagates_cli_options_to_settings_and_molecule(
+        self,
+        single_molecule_xyz_file,
+        tmpdir,
+        gaussian_jobrunner_no_scratch,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        mm_info = os.path.join(tmpdir, "mm_atoms.dat")
+        with open(mm_info, "w") as handle:
+            handle.write("1 C 0.0\n")
+            handle.write("2 H 0.0\n")
+            handle.write("3 H 0.0\n")
+            handle.write("4 H 0.0\n")
+        params = os.path.join(tmpdir, "mm_params.dat")
+        with open(params, "w") as handle:
+            handle.write("NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n")
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "qmmm",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-l",
+                    "testjob",
+                    "opt",
+                    "-f",
+                    "5",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "6-31g*",
+                    "-hff",
+                    "UFF",
+                    "-mx",
+                    "hf",
+                    "-mb",
+                    "sto-3g",
+                    "-mff",
+                    "UFF",
+                    "-lx",
+                    "pm6",
+                    "-lb",
+                    "sto-3g",
+                    "-lff",
+                    "UFF",
+                    "-ct",
+                    "0",
+                    "-mt",
+                    "1",
+                    "-ci",
+                    "0",
+                    "-mi",
+                    "1",
+                    "-ch",
+                    "1",
+                    "-mh",
+                    "2",
+                    "-ha",
+                    "1-3",
+                    "-ma",
+                    "4",
+                    "-la",
+                    "5-6",
+                    "-ba",
+                    "[[3, 4]]",
+                    "-sf",
+                    "{[3, 4]: [0.709]}",
+                    "-mai",
+                    mm_info,
+                    "-mpf",
+                    params,
+                ],
+                obj={"jobrunner": gaussian_jobrunner_no_scratch},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_job.call_args is not None
+        call_kwargs = mock_job.call_args.kwargs
+        settings = call_kwargs["settings"]
+        molecule = call_kwargs["molecule"]
+
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "6-31g*"
+        assert settings.high_level_force_field == "UFF"
+        assert settings.medium_level_functional == "hf"
+        assert settings.medium_level_basis == "sto-3g"
+        assert settings.medium_level_force_field == "UFF"
+        assert settings.low_level_functional == "pm6"
+        assert settings.low_level_basis == "sto-3g"
+        assert settings.low_level_force_field == "UFF"
+        assert settings.charge_total == 0
+        assert settings.mult_total == 1
+        assert settings.charge_intermediate == 0
+        assert settings.mult_intermediate == 1
+        assert settings.model_charge == 1
+        assert settings.model_multiplicity == 2
+        assert settings.mm_atom_info_file == mm_info
+        assert settings.mm_parameters_file == params
+        assert settings.parent_jobtype == "opt"
+        assert molecule.high_level_atoms == [1, 2, 3]
+        assert molecule.medium_level_atoms == [4]
+        assert molecule.low_level_atoms == [5, 6]
+        assert molecule.bonded_atoms == [[3, 4]]
+        assert molecule.scale_factors == {(3, 4): [0.709]}
+        assert molecule.frozen_atoms[4] == -1
+
+        assert call_kwargs["label"] == "testjob_qmmm"
+
+    def test_opt_qmmm_without_mm_sidecar_options(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+    ):
+        """Exercise False branches for -mai/-mpf CLI options."""
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian
+
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian,
+                [
+                    "-p",
+                    "qmmm",
+                    "-f",
+                    single_molecule_xyz_file,
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                    "qmmm",
+                    "-hx",
+                    "b3lyp",
+                    "-hb",
+                    "sto-3g",
+                    "-ch",
+                    "0",
+                    "-mh",
+                    "1",
+                    "-ha",
+                    "1-3",
+                ],
+                obj={"jobrunner": gaussian_jobrunner_no_scratch},
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        settings = mock_job.call_args.kwargs["settings"]
+        assert settings.mm_atom_info_file is None
+        assert settings.mm_parameters_file is None

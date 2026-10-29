@@ -1,17 +1,33 @@
+"""
+ORCA Transition State Search CLI Module
+
+This module provides the command-line interface for ORCA transition state
+(TS) search calculations. It supports various TS optimization methods
+including OptTS and ScanTS approaches with comprehensive Hessian handling
+options.
+"""
+
+import ast
 import logging
 
 import click
 
 from chemsmart.cli.job import click_job_options
-from chemsmart.cli.orca.orca import click_orca_jobtype_options, orca
-from chemsmart.utils.cli import MyCommand, check_scan_coordinates_orca
+from chemsmart.cli.orca.orca import (
+    click_orca_jobtype_options,
+    click_orca_solvent_options,
+    orca,
+)
+from chemsmart.cli.orca.qmmm import create_orca_qmmm_subcommand
+from chemsmart.utils.cli import MyGroup, check_scan_coordinates_orca
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
 
 
-@orca.command("ts", cls=MyCommand)
+@orca.group("ts", cls=MyGroup, invoke_without_command=True)
 @click_job_options
+@click_orca_solvent_options
 @click_orca_jobtype_options
 @click.option(
     "-i/",
@@ -38,7 +54,8 @@ logger = logging.getLogger(__name__)
     "-a",
     "--hybrid-hess-atoms",
     default=None,
-    help="List of atoms to use for hybrid Hessian.\nzero-indexed, e.g. [0, 1, 2, 3]",
+    help="List of atoms to use for hybrid Hessian.\n"
+    "zero-indexed, e.g. [0, 1, 2, 3]",
 )
 @click.option(
     "--numhess/--no-numhess",
@@ -77,88 +94,172 @@ logger = logging.getLogger(__name__)
 @click.pass_context
 def ts(
     ctx,
-    jobtype,
-    coordinates,
-    dist_start,
-    dist_end,
-    num_steps,
-    inhess,
-    inhess_filename,
-    hybrid_hess,
-    hybrid_hess_atoms,
-    numhess,
-    recalc_hess,
-    trust_radius,
-    tssearch_type,
-    full_scan,
+    remove_solvent=False,
+    solvent_model=None,
+    solvent_id=None,
+    solvent_options=None,
+    solventfilename=None,
+    jobtype=None,
+    coordinates=None,
+    dist_start=None,
+    dist_end=None,
+    num_steps=None,
+    inhess=False,
+    inhess_filename=None,
+    hybrid_hess=False,
+    hybrid_hess_atoms=None,
+    numhess=False,
+    recalc_hess=5,
+    trust_radius=None,
+    tssearch_type=None,
+    full_scan=False,
+    skip_completed=True,
     **kwargs,
 ):
-    # get settings from project
+    """
+    Run ORCA transition state search calculations.
+
+    This command performs transition state searches using ORCA with support
+    for multiple search strategies and Hessian handling options. It can
+    perform both direct TS optimization (OptTS) and coordinate scanning
+    approaches (ScanTS).
+
+    The calculation uses settings from the project configuration merged
+    with command-line overrides. Various Hessian options are available
+    including analytical, numerical, hybrid, and read-in from files.
+    """
+    # get transition state settings from project configuration
     project_settings = ctx.obj["project_settings"]
     ts_project_settings = project_settings.ts_settings()
+    logger.debug(f"Loaded TS settings from project: {ts_project_settings}")
 
-    # job setting from filename or default, with updates from user in cli specified in keywords
-    # e.g., `sub.py orca -c <user_charge> -m <user_multiplicity>`
+    # job setting from filename or default, with updates from user in cli
+    # specified in keywords
+    # e.g., `chemsmart orca -c <user_charge> -m <user_multiplicity> ts`
     job_settings = ctx.obj["job_settings"]
     keywords = ctx.obj["keywords"]
 
-    # merge project irc settings with job settings from cli keywords from cli.orca.py subcommands
+    # merge project TS settings with job settings from cli keywords
     ts_settings = ts_project_settings.merge(job_settings, keywords=keywords)
 
-    # get label for the job
+    # cli-supplied solvent model, solvent id, and additional solvent options
+    ts_settings.modify_solvent(
+        remove_solvent=remove_solvent,
+        solvent_model=solvent_model,
+        solvent_id=solvent_id,
+    )
+    if solvent_options is not None:
+        ts_settings.additional_solvent_options = solvent_options
+    if solventfilename is not None:
+        ts_settings.solventfilename = solventfilename
+
+    # get label for the job output files
     label = ctx.obj["label"]
 
-    # update irc_settings if any attribute is specified in cli options
-    # suppose project has a non None value, and user does not specify a value (None),
-    # then the project value should be used and unmodified, ie, should not be merged.
-    # update value only if user specifies a value for the attribute:
+    # update ts_settings if any attribute is specified in cli options
+    # note: only update value if user explicitly specifies a value for
+    # the attribute to preserve project defaults
     if inhess is True:
         ts_settings.inhess = inhess
+        logger.debug("Enabled reading Hessian from file")
     if inhess_filename is not None:
         ts_settings.inhess_filename = inhess_filename
+        logger.debug(f"Set Hessian filename: {inhess_filename}")
     if hybrid_hess is True:
         ts_settings.hybrid_hess = hybrid_hess
+        logger.debug("Enabled hybrid Hessian calculation")
     if hybrid_hess_atoms is not None:
         ts_settings.hybrid_hess_atoms = hybrid_hess_atoms
+        logger.debug(f"Set hybrid Hessian atoms: {hybrid_hess_atoms}")
     if numhess is True:
         ts_settings.numhess = numhess
+        logger.debug("Enabled numerical Hessian calculation")
     if recalc_hess is not None:
         ts_settings.recalc_hess = recalc_hess
+        logger.debug(f"Set Hessian recalculation interval: {recalc_hess}")
     if trust_radius is not None:
         ts_settings.trust_radius = trust_radius
-    if tssearch_type is not None:
-        ts_settings.tssearch_type = tssearch_type
+        logger.debug(f"Set trust radius: {trust_radius}")
 
-    if tssearch_type.lower() == "scants":
-        check_scan_coordinates_orca(
-            coordinates, dist_start, dist_end, num_steps
-        )
-        coordinates = eval(coordinates)
-        scan_info = {
-            "coordinates": coordinates,
-            "dist_start": dist_start,
-            "dist_end": dist_end,
-            "num_steps": num_steps,
-        }
-        ts_settings.scants_modred = scan_info
+    jobtype_normalized = (jobtype or "").lower()
+    cli_tssearch_type = tssearch_type.lower() if tssearch_type else None
+    effective_tssearch_type = ts_settings.tssearch_type or "optts"
+
+    if jobtype_normalized == "scants":
+        effective_tssearch_type = "scants"
+    if cli_tssearch_type is not None:
+        effective_tssearch_type = cli_tssearch_type
+
+    ts_settings.tssearch_type = effective_tssearch_type
+    logger.debug(f"Using TS search type: {ts_settings.tssearch_type}")
+
+    is_scants = ts_settings.tssearch_type.lower() == "scants"
+
+    if is_scants:
         label = label.replace("ts", "scants")
+
+        if coordinates is not None:
+            missing = [
+                name
+                for name, value in (
+                    ("dist_start", dist_start),
+                    ("dist_end", dist_end),
+                    ("num_steps", num_steps),
+                )
+                if value is None
+            ]
+            if missing:
+                raise click.BadParameter(
+                    "ScanTS (--tssearch-type scants or -j scants) requires "
+                    "--coordinates, --dist-start, --dist-end, and --num-steps."
+                )
+            check_scan_coordinates_orca(
+                coordinates, dist_start, dist_end, num_steps
+            )
+            coordinates = ast.literal_eval(coordinates)
+            scan_info = {
+                "coordinates": coordinates,
+                "dist_start": dist_start,
+                "dist_end": dist_end,
+                "num_steps": num_steps,
+            }
+            ts_settings.scants_modred = scan_info
+            logger.info(f"Configured ScanTS with scan info: {scan_info}")
+        elif ts_settings.scants_modred is None:
+            raise click.BadParameter(
+                "ScanTS requires scan coordinates via CLI options or project settings."
+            )
+        else:
+            logger.debug(
+                "Using ScanTS coordinate settings inherited from the project configuration."
+            )
     else:
         label = label.replace("ts", "optts")
+        logger.debug("Using OptTS approach")
 
     if full_scan is True:
         ts_settings.full_scan = full_scan
+        logger.debug("Enabled full coordinate scan")
 
-    check_charge_and_multiplicity(ts_settings)
+    logger.debug(f"Final job label: {label}")
 
-    logger.debug(f"Label for job: {label}")
-
-    # get molecule
-    molecules = ctx.obj[
-        "molecules"
-    ]  # use all molecules as a list for crest jobs
+    # get molecule from context (use the last molecule if multiple)
+    molecules = ctx.obj["molecules"]
     molecule = molecules[-1]  # get last molecule from list of molecules
+    logger.info(f"Running TS search on molecule: {molecule}")
 
-    logger.info(f"TS job settings from project: {ts_settings.__dict__}")
+    logger.info(f"Final TS job settings: {ts_settings.__dict__}")
+
+    ctx.obj["parent_skip_completed"] = skip_completed
+    ctx.obj["parent_kwargs"] = kwargs
+    ctx.obj["parent_settings"] = ts_settings
+    ctx.obj["parent_jobtype"] = "ts"
+
+    if ctx.invoked_subcommand is not None:
+        return
+
+    # validate charge and multiplicity consistency only for direct ts jobs
+    check_charge_and_multiplicity(ts_settings)
 
     from chemsmart.jobs.orca.ts import ORCATSJob
 
@@ -166,5 +267,9 @@ def ts(
         molecule=molecule,
         settings=ts_settings,
         label=label,
+        skip_completed=skip_completed,
         **kwargs,
     )
+
+
+create_orca_qmmm_subcommand(ts)

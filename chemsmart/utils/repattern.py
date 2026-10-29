@@ -2,13 +2,41 @@ eV_pattern = r"([\d\.]+) eV"
 nm_pattern = r"([\d\.]+) nm"
 f_pattern = r"f=([\d\.]+)"
 float_pattern = r"[-]?\d*\.\d+|\d+"
+integer_pattern = r"^\+?\d+$"  # Non-negative integer (incl. 0)
+# optional leading + allowed
+float_pattern_with_exponential = (
+    r"[+-]?(?:(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+(?:[eE][+-]?\d+))"
+)
+orca_line_integer_followed_by_floats = (
+    rf"^\s*[+-]?\d+(?:\s+{float_pattern_with_exponential})+\s*$"
+)
+raw_energy_value_pattern = r"(-\d+\.\d+)"
+
+element_token = r"[A-Z][a-z]?"
+orca_mayer_population_analysis_line_pattern = rf"^\s*(?:\+?\d+)\s+{element_token}(?:\s+{float_pattern_with_exponential}){{6}}\s*$"
+
+xyz_filename_pattern = r"([^\s\"']+\.xyz\b)"
+allxyz_filename_pattern = r"([^\s\"']+\.allxyz\b)"
+# \b ensures that the match ends right after xyz
+# and is not followed by something like: xyz1, xyzabc xyz_thing
+# It will match if .xyz is followed by: a
+# space, a quote, end of line, punctuation
+
+# Pattern to match the solvent name in a %cosmors solventfilename line, e.g.:
+#   solventfilename "water"
+# Captures the name (without quotes).  Used to locate the corresponding
+# .cosmorsxyz file (name + ".cosmorsxyz") and copy it to scratch.
+solventfilename_block_pattern = r'(?i)solventfilename\s+"([^"]+)"'
+
 normal_mode_pattern = r"\s*(\d+)\s+(\d+)((?:\s+[+-]?\d*\.\d+)+)\s*"
 frozen_coordinates_pattern = (
     r"\s*([A-Z][a-z]?)\s+(-1|0)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)\s+(-?\d+\.\d*)"
 )
 scf_energy_pattern = r"SCF Done:\s+E\([^)]*\)\s*=\s*([-.\d]+)"
 mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
+oniom_gridpoint_pattern = r"ONIOM:\s+gridpoint\s+(\d+)\s+method:\s+(\w+)\s+system:\s+(\w+)\s+energy:\s+([+-]?\d*\.\d+|\d+)"
 oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
+xyz_energy_pattern = r"Energy\(Hartree\):\s*(-?\d+\.\d+)"
 
 # standard coordinate pattern with (symbol x y z)
 standard_coord_pattern = (
@@ -18,14 +46,17 @@ standard_coord_pattern = (
 """
 An example of the relevant part of the output describing the structure is:
         | 20> * xyz 0 1
-        | 21>   O   -0.00000000323406      0.00000000000000      0.08734060152197
-        | 22>   H   -0.75520523910536      0.00000000000000     -0.50967029975151
+        | 21> O -0.00000000323406
+        0.00000000000000 0.08734060152197
+        | 22> H -0.75520523910536
+        0.00000000000000 -0.50967029975151
 """
 orca_input_coordinate_in_output = r"(?i)\|\s+(\d+)>\s+(\w+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)\s+([-+]?\d*\.\d+)"
 
 """Given input example:
         Mayer bond orders larger than 0.100000
-        B( 25-C , 27-C ) :   1.4263 B( 25-C , 29-H ) :   1.0007 B( 27-C , 58-C ) :   1.0067
+        B( 25-C , 27-C ) : 1.4263 B( 25-C , 29-H
+        ) : 1.0007 B( 27-C , 58-C ) : 1.0067
         B(  0-O ,  1-H ) :   0.9959 B(  0-O ,  2-H ) :   0.9959.
 """
 
@@ -41,3 +72,160 @@ sdf_pattern = (
     r"\s*([\d\.-]+)\s+([\d\.-]+)\s+([\d\.-]+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
     r"\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*"
 )
+
+# regex pattern for constrained coordinates in orca input
+# Examples of ORCA constraints patterns:
+# Constraining bond distances : { B N1 N2 value C }
+# Constraining bond angles : { A N1 N2 N1 value C }
+# Constraining dihedral angles : { D N1 N2 N3 N4 value C }
+# Constraining cartesian coordinates : { C N1 C }
+# where the value is optional, by default
+# it is the present value in the structure
+constrained_bond_length_pattern_in_input = (
+    r"\|\s*(\d+)>.*\{\s*B\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
+)
+
+constrained_bond_angles_pattern_in_input = (
+    r"\|\s*(\d+)>.*\{\s*A\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
+)
+
+constrained_dihedrals_pattern_in_input = r"\|\s*(\d+)>.*\{\s*D\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(?:\s+([\d.]+))?\s+C\s*\}"
+
+# in orca output:
+# Will constrain atom 2 coordinate 1
+# Will constrain atom 2 coordinate 2
+# Will constrain atom 2 coordinate 3
+# etc.
+orca_frozen_atoms_output_pattern = r"Will constrain atom \d+ coordinate \d"
+
+# regex pattern for constrained coordinates in orca
+# \s+[BAD] : B, A, or D with whitespace.
+# example lines for match:
+# 10. B(H   9,H   8)                  2.4714         0.000431 C
+# 30. A(C   1,C   5,H   8)           69.0631         0.105398 C
+# 49. D(H   9,C   4,C   3,C   2)   -180.0000         0.024745 C
+orca_constrained_coordinates_pattern = r"^\d+\.\s+[BAD]\([A-Z][a-z]?\s+\d+,[A-Z][a-z]?\s+\d+(?:,[A-Z][a-z]?\s+\d+)?(?:,[A-Z][a-z]?\s+\d+)?\)\s+-?\d+\.\d{4}\s+\d+\.\d{6}\s+C$"
+
+# regex pattern for QMMM calculations in orca
+orca_qm_h_bond_length_pattern = r"Dist_\w+_\w+\s+[\d.]+"
+
+# filename pattern for orca output files
+
+# filename matches with point pxx but not with fragment fx
+orca_dias_filename_point_without_fragment = r".*_p(\d+)(?:_(?!f)(.+))?\.out"
+
+# filename matches with point pxx and fragment f1
+orca_dias_filename_point_with_fragment1 = r".*_p(\d+)_(f1)(?:_(.+)?)?\.out"
+
+# filename matches with point pxx and fragment f2
+orca_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.out"
+
+# filename matches with reactant r1 or r2
+orca_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.out"
+
+orca_date_pattern = (
+    r"\* Starting time:\s+(\w{3} \w{3}\s+\d+ \d{2}:\d{2}:\d{2} \d{4})"
+)
+
+xtb_date_pattern = (
+    r"\* finished run on (\d{4}/\d{2}/\d{2}) at (\d{2}:\d{2}:\d{2})"
+)
+
+
+# filename pattern for gaussian output files
+
+# filename matches with point pxx but not with fragment fx or reactant rx
+# matches from the word "dias" onwards
+gaussian_dias_filename_point_without_fragment_without_reactant = r"(?:(?!.*_r[12](?:_|\.)).*dias_p(\d+)(?:_((?:(?!f\d).)+))?\.log)|(?:(?!.*_r[12](?:_|\.)).*_p(\d+)(?:_((?:(?!f\d).)+))?\.log)"
+
+# filename matches with point pxx and fragment f1
+gaussian_dias_filename_point_with_fragment1 = r".*_p(\d+)_(f1)(?:_(.+)?)?\.log"
+
+# filename matches with point pxx and fragment f2
+gaussian_dias_filename_point_with_fragment2 = r".*_p(\d+)_(f2)(?:_(.+)?)?\.log"
+
+# filename matches with reactant r1 or r2
+gaussian_dias_filename_with_reactant = r".*_r([12])(?:_(.+)?)?\.log"
+
+
+# Route string cleaning patterns for Gaussian link job settings
+
+# Pattern to find optimization keywords from route string
+# Matches: "opt", "opt=word", "opt=(parameters)", "opt = word", etc.
+gaussian_opt_keywords_pattern = r"\bopt\s*(=\s*(\([^)]*\)|\w+))?\s*"
+
+# Pattern to find frequency calculation keywords from route string
+# Matches: "freq", "freq=numer", "freq = analytical", etc.
+# The \b ensures that "freq" is matched as a whole word
+# and not part of another word like "frequency"
+# Although note that "frequency" is a valid Gaussian keyword,
+# we'd want to avoid erroneous partial matches, eg.,
+# freqency (spelling error eg)
+gaussian_freq_keywords_pattern = r"\bfreq\b\s*(=\s*\w+)?\s*"
+
+gaussian_date_pattern = r"Normal termination of Gaussian.* at (.+)\."
+
+# Gaussian ONIOM/MM atom labels: Element-Type-Charge (negative uses Type--0.65)
+gaussian_mm_element_type_charge_neg_pattern = (
+    r"^([A-Za-z][a-z]?)-(.+)--(\d+(?:\.\d+)?)$"
+)
+gaussian_mm_element_type_charge_pos_pattern = (
+    r"^([A-Za-z][a-z]?)-(.+)-(\d+(?:\.\d+)?)$"
+)
+
+# Pattern to find multiple consecutive spaces in strings
+element_partition_split_pattern = r"[\s:_-]+"
+element_non_alpha_pattern = r"[^A-Za-z]"
+multiple_spaces_pattern = r"\s+"
+
+# Gaussian TDDFT output
+gaussian_tddft_transition_pattern = r"^\s*(\d+[AB]?)\s*(->|<-)\s*(\d+[AB]?)\s+([-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?)\s*$"
+
+
+# PyMOL strings
+pymol_isosurface_pattern = r"isosurface\s*=\s*[\d\.]+"
+pymol_color_range_pattern = r"range\s*=\s*[\d\.]+"
+
+
+# version release
+version_pattern = r'(version\s*=\s*")[^"]+(")'
+release_pattern = r'(release\s*=\s*")[^"]+(")'
+safe_label_pattern = r"^[a-zA-Z0-9_\-\.]+$"
+
+
+# Route string sub-token splitter: splits on whitespace, '/', '=', '(', ')', ','
+route_split_pattern = r"[/=(),\s]+"
+
+# Database query patterns
+# Matches a single condition: field  operator  value
+# value is either a quoted string ('…' or "…") or a bare numeric token.
+query_condition_pattern = (
+    r"(\w+)"  # field name
+    r"\s*(==|<=|>=|!=|~|<|>|=)\s*"  # operator
+    r"('(?:[^'\\]|\\.)*'"  # single-quoted string value
+    r'|"(?:[^"\\]|\\.)*"'  # double-quoted string value
+    r"|[\w.+\-]+)"  # bare numeric / identifier value
+)
+
+# Split on AND / OR while keeping the keyword
+query_logic_split_pattern = r"\s+(AND|OR)\s+"
+
+
+# Gaussian gen/genecp explicit basis patterns
+# Matches a shell header line, e.g. "S 8 1.00" or "P 4 1.00"
+# Group 1: angular-momentum letter (S/P/D/F/G/H)
+basis_shell_header_pattern = r"^([SPDFGH])\s+\d+\s+[\d.]+$"
+
+# Matches an exponent/coefficient line printed by Gaussian in verbose mode
+# e.g. "Exponent=  5.6507325256D+05 Coefficients=  2.3660314690D-04"
+# Group 1: exponent string (Fortran D-notation); Group 2: coefficient string
+basis_primitive_line_pattern = r"Exponent=\s*(\S+)\s+Coefficients=\s*(\S+)"
+
+# Gaussian Pseudopotential Parameters section (genecp)
+# Matches a center-header line, e.g. "1   47   19" or "2   17"
+# (2–3 pure integer tokens: center_num, atomic_num[, n_valence_electrons])
+ecp_center_header_pattern = r"^\d+(?:\s+\d+){1,2}\s*$"
+
+# Matches an ECP term line, e.g. "2   14.2200000  -33.68992012   0.00000000"
+# (r_power  exponent  coefficient  so_coefficient, with floats in D-notation)
+ecp_term_pattern = r"^\d+\s+\S+\s+\S+\s+\S+\s*$"

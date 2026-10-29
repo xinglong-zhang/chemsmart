@@ -1,8 +1,24 @@
-import logging
-import os.path
+"""
+ORCA input file writer implementation.
 
-from chemsmart.jobs.orca.settings import ORCAIRCJobSettings, ORCATSJobSettings
+This module contains the input file writer for ORCA quantum chemistry
+calculations, handling the generation of properly formatted input files
+based on job settings and molecular structures.
+"""
+
+import logging
+import os
+
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.jobs.orca.settings import (
+    ORCAIRCJobSettings,
+    ORCANEBJobSettings,
+    ORCAQMMMJobSettings,
+    ORCATDDFTJobSettings,
+    ORCATSJobSettings,
+)
 from chemsmart.jobs.writer import InputWriter
+from chemsmart.utils.io import remove_keyword
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
@@ -11,12 +27,38 @@ logger = logging.getLogger(__name__)
 
 
 class ORCAInputWriter(InputWriter):
-    """Class that writes ORCA input files for a job."""
+    """
+    ORCA input file writer.
+
+    This class handles the generation of ORCA input files with proper
+    formatting for quantum chemistry calculations, including route sections,
+    job parameters, and molecular geometry specifications.
+
+    Attributes:
+        job (ORCAJob): Target job for which the input is generated.
+        settings (ORCAJobSettings): Settings
+        used to generate the route and blocks.
+        jobrunner (ORCAJobRunner): Runner providing cores/memory and paths.
+    """
 
     def write(self, **kwargs):
+        """
+        Write the ORCA input file.
+
+        Args:
+            **kwargs: Additional arguments for writing
+        """
         self._write(**kwargs)
 
     def _write(self, target_directory=None):
+        """
+        Internal method to write the input file.
+
+        Args:
+            target_directory: Directory to write the file to
+        """
+        import shutil
+
         if target_directory is not None:
             if not os.path.exists(target_directory):
                 os.makedirs(target_directory)
@@ -34,8 +76,38 @@ class ORCAInputWriter(InputWriter):
         logger.info(f"Finished writing ORCA input file: {job_inputfile}")
         f.close()
 
+        # Copy the .cosmorsxyz file to the target directory so that ORCA can
+        # find it when running in scratch.  Only done when solventfilename is
+        # set via the -sf CLI option (an explicit file path).
+        # If sf_path is already a .cosmorsxyz file, copy it directly.
+        # If sf_path is any other format (e.g. .log, .out), the converted
+        # .cosmorsxyz file produced by _write_solvent_block() is copied instead.
+        sf_path = self.job.settings.solventfilename
+        if sf_path is not None and os.path.isfile(sf_path):
+            if sf_path.lower().endswith(".cosmorsxyz"):
+                file_to_copy = sf_path
+            else:
+                sf_basename = os.path.basename(sf_path)
+                file_to_copy = os.path.join(
+                    os.path.dirname(sf_path),
+                    f"{os.path.splitext(sf_basename)[0]}.cosmorsxyz",
+                )
+            if os.path.isfile(file_to_copy):
+                dest = os.path.join(folder, os.path.basename(file_to_copy))
+                if os.path.abspath(file_to_copy) != os.path.abspath(dest):
+                    shutil.copy2(file_to_copy, dest)
+                    logger.info(
+                        f"Copied solventfilename file {file_to_copy} to {dest}."
+                    )
+
     def _write_all(self, f):
-        """Write the entire input file."""
+        """
+        Write the complete input file with all sections.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing complete ORCA input file")
         self._write_route_section(f)
         self._write_processors(f)
         self._write_memory(f)
@@ -43,9 +115,13 @@ class ORCAInputWriter(InputWriter):
         self._write_solvent_block(f)
         self._write_mdci_block(f)
         self._write_elprop_block(f)
+        self._write_tddft_block(f)
+        self._write_rel_block(f)
+        self._write_qmmm_block(f)
         self._write_modred_block(f)
         self._write_hessian_block(f)
         self._write_irc_block(f)
+        self._write_neb_block(f)
         self._write_constrained_atoms(f)
         self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
@@ -59,27 +135,73 @@ class ORCAInputWriter(InputWriter):
         # self._append_other_additional_info(f)
 
     def _write_self(self, f):
-        """Write the input file itself for direct run."""
+        """
+        Write user-provided input string directly.
+
+        Args:
+            f: File object to write to
+        """
         f.write(self.job.settings.input_string)
 
     def _write_route_section(self, f):
-        logger.debug("Writing ORCA route section.")
-        route_string = self.settings.route_string
+        """
+        Write the ORCA route section (calculation keywords).
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing ORCA route section")
+
+        if self.job.molecule.is_monoatomic:
+            logger.info(f"Molecule {self.job.molecule} is monoatomic.")
+            logger.info(
+                "Removing `opt` keyword from route string, since ORCA cannot run OPT on monoatomic molecule."
+            )
+            route_string = remove_keyword(self.settings.route_string, "opt")
+        else:
+            route_string = self.settings.route_string
+
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            logger.debug("Writing qmmm route string")
+            route_string = self.settings.qmmm_route_string
+
         f.write(route_string + "\n")
 
     def _write_processors(self, f):
+        """
+        Write processor specification for parallel execution.
+
+        Args:
+            f: File object to write to
+        """
         logger.debug("Writing processors.")
         f.write("# Number of processors\n")
         f.write(f"%pal nprocs {self.jobrunner.num_cores} end\n")
 
     def _write_memory(self, f):
-        logger.debug("Writing memory.")
+        """
+        Write memory specification per core.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing memory specification")
         f.write("# Memory per core\n")
-        mpc = self.jobrunner.mem_gb / self.jobrunner.num_cores
-        f.write(f"%maxcore {round(mpc)}\n")
+        mpc = (self.jobrunner.mem_gb * 1000) / self.jobrunner.num_cores * 0.75
+        # Safety Factor: Applies a 75% factor to the memory per core to
+        # reduce the risk of out-of-memory errors, as recommended for ORCA.
+        mpc = int(mpc)
+        f.write(f"%maxcore {mpc}\n")
 
     def _write_scf_block(self, f):
-        logger.debug("Writing SCF black.")
+        """
+        Write SCF convergence parameters.
+
+        Args:
+            f: File object to write to
+        """
+        logger.debug("Writing SCF block")
+
         if self.settings.scf_convergence or self.settings.scf_maxiter:
             f.write("%scf\n")
             self._write_scf_maxiter(f)
@@ -87,11 +209,29 @@ class ORCAInputWriter(InputWriter):
             f.write("end\n")
 
     def _write_scf_maxiter(self, f):
-        """Write the SCF maxiter for the ORCA input file."""
-        scf_maxiter = self.scf_maxiter if self.scf_maxiter is not None else 200
+        """
+        Write SCF maximum iterations parameter.
+
+        Args:
+            f: File object to write to
+        """
+        scf_maxiter = (
+            self.settings.scf_maxiter
+            if self.settings.scf_maxiter is not None
+            else 200
+        )
         f.write(f"  maxiter {scf_maxiter}\n")
 
     def _write_scf_convergence(self, f):
+        """
+        Write SCF convergence criteria.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            ValueError: If unsupported convergence option is specified
+        """
         if self.settings.scf_convergence:
             from chemsmart.io.orca import ORCA_SCF_CONVERGENCE
 
@@ -107,18 +247,198 @@ class ORCAInputWriter(InputWriter):
             f.write(f"  convergence {scf_conv}\n")
 
     def _write_solvent_block(self, f):
-        """Write the solvent block for the ORCA input file."""
-        # to implement if there is more complex solvents to be specified via
-        # %cpcm block, %cosmo block, or %smd block that cannot be capture by route
-        pass
+        """
+        Write solvent parameters block.
+
+        Args:
+            f: File object to write to
+
+        Note:
+            Dispatches to the correct named ORCA block based on
+            ``solvent_model``:
+
+            * ``cpcm``, ``cpcmc``, ``smd`` (or unset) → ``%cpcm … end``
+            * ``cosmors`` → ``%cosmors … end``
+
+            A block is emitted whenever any of the following apply:
+
+            * ``custom_solvent`` is set — the string is written line-by-line
+              inside the block.  In ORCA, custom solvent parameters (Epsilon,
+              Refrac, etc.) are specified directly in the solvent block
+              rather than as a separate appended section (as in Gaussian).
+              For CPCM/CPCMC/SMD, the block is ``%cpcm``; for COSMO-RS it is
+              ``%cosmors``.  A typical ORCA project YAML entry for CPCM looks
+              like::
+
+                  custom_solvent : |
+                    Epsilon 16.7
+                    Refrac 1.275
+
+              which produces:
+
+              .. code-block:: text
+
+                  ! CPCM B3LYP def2-SVP
+                  %cpcm
+                    Epsilon 16.7
+                    Refrac 1.275
+                  end
+
+            * ``additional_solvent_options`` is set — each line of the string
+              is written indented inside the block. Commonly used ORCA block
+              options that can be passed here:
+
+              For ``%cpcm`` (``cpcm``, ``cpcmc``, ``smd`` models):
+              - ``Epsilon <value>`` — static dielectric constant (e.g.
+                ``Epsilon 78.36``), used for custom/non-named solvents
+              - ``Refrac <value>`` — refractive index (e.g. ``Refrac 1.33``)
+              - ``SurfaceType <type>`` — cavity surface (``gepol_ses``,
+                ``gepol_sas``, ``vdw_gaussian``, or ``gepol_ses_gaussian``;
+                default is ``vdw_gaussian`` since ORCA 5)
+              - ``Rsolv <value>`` — solvent probe radius in Ångström
+                (e.g. ``Rsolv 1.30``)
+              - ``MaxIter <n>`` — maximum iterations
+              - ``Tolerance <value>`` — convergence tolerance
+              - SMD descriptors: ``soln``, ``soln25``, ``sola``, ``solb``,
+                ``solg``, ``solc``, ``solh``
+
+              For ``%cosmors`` (``cosmors`` model):
+              - ``temp <value>`` — reference temperature in K (e.g. ``temp 298.15``)
+              - ``aeff <value>`` — effective contact area between surface segments (Å²)
+              - ``lnalpha <value>`` — logarithm of the misfit prefactor
+              - ``lnchb <value>`` — hydrogen bond (HB) strength parameter
+              - ``chbt <value>`` — parameter for temperature dependence of HB
+              - ``sigmahb <value>`` — HB threshold parameter (e/Å²)
+              - ``rav <value>`` — radius to average ideal screening charges (Å)
+              - ``fcorr <value>`` — parameter from dielectric screening energies
+              - ``ravcorr <value>`` — radius for misfit energy calculation (Å)
+              - ``astd <value>`` — standard surface area normalization factor (Å²)
+              - ``zcoord <value>`` — coordination number
+              - ``dgsolv_eta <value>`` — offset for solvation energy calculation
+              - ``dgsolv_omegaring <value>`` — solvation energy correction for rings
+              - ``dftfunc "name"`` — DFT functional (e.g. ``dftfunc "BP86"``)
+              - ``dftbas "name"`` — basis set (e.g. ``dftbas "def2-TZVPD"``)
+              - ``solvent "name"`` — solvent from internal database (e.g. ``solvent "THF"``)
+              - ``solventfilename "name"`` — name of the ``.cosmorsxyz`` solvent file
+              - ``orbs_vac true|false`` — reuse gas-phase orbitals for conductor calc
+
+            Both conditions can apply simultaneously in the same block:
+            ``custom_solvent`` lines are written first, then
+            ``additional_solvent_options``.
+
+        Note on SMD: In ORCA 6.0, SMD is invoked via ``!SMD(solvent)`` in the
+        route line.  No ``SMD true`` / ``SMDsolvent`` activation is needed in
+        the ``%cpcm`` block; the route line handles that automatically.  The
+        ``%cpcm`` block is only written when ``custom_solvent`` or
+        ``additional_solvent_options`` are present.
+
+        Note on COSMO: The standalone COSMO model (``!COSMO(solvent)``) was
+        removed from ORCA in version 4.0.  Use ``cpcmc`` (``!CPCMC(solvent)``)
+        to apply CPCM with the COSMO epsilon function.
+        """
+        solvent_model = self.settings.solvent_model
+        custom_solvent = self.settings.custom_solvent
+        additional = self.settings.additional_solvent_options
+        solvent_id = self.settings.solvent_id
+        sf_path = self.settings.solventfilename
+
+        model_lower = (solvent_model or "").lower()
+        is_cosmors = model_lower == "cosmors"
+
+        # Choose the block name based on the model
+        if is_cosmors:
+            block_name = "cosmors"
+        else:
+            block_name = "cpcm"
+
+        # ORCA 6.1 INPUT ERROR guard: when solvent_id is already encoded in the
+        # route as COSMORS(solvent_id), having 'solvent "name"' in the %cosmors
+        # block causes a "DUPLICATED KEYWORD" error.  Filter those lines out.
+        # 'solventfilename' is a distinct keyword (file path) and is preserved.
+        # Filtering is case-insensitive (matches 'solvent', 'Solvent', 'SOLVENT').
+        filter_solvent_name = is_cosmors and solvent_id is not None
+
+        def _accepted(line):
+            if not filter_solvent_name:
+                return True
+            stripped = line.strip()
+            if not stripped:
+                return True  # preserve blank lines unchanged
+            # 'solvent "name"' starts with 'solvent ' (with space, case-insensitive)
+            # 'solventfilename "..."' starts with 'solventf' — not filtered
+            return not stripped.lower().startswith("solvent ")
+
+        custom_lines = (
+            [ln for ln in custom_solvent.splitlines() if _accepted(ln)]
+            if custom_solvent is not None
+            else []
+        )
+        additional_lines = (
+            [ln for ln in additional.splitlines() if _accepted(ln)]
+            if additional is not None
+            else []
+        )
+
+        # Build the solventfilename line from the settings attribute (CLI -sf).
+        # The basename without the .cosmorsxyz extension is written, matching
+        # ORCA convention: solventfilename "water" → looks for water.cosmorsxyz.
+        sf_line = None
+        if sf_path is not None and is_cosmors:
+            logger.info(f"Solvent filename is: {sf_path}")
+            sf_basename = os.path.basename(sf_path)
+            logger.info(f"Solvent basename is: {sf_basename}")
+            # Strip .cosmorsxyz extension if present
+            if sf_basename.lower().endswith(".cosmorsxyz"):
+                sf_name = sf_basename[: -len(".cosmorsxyz")]
+            else:
+                sf_cosmorsxyz = os.path.join(
+                    os.path.dirname(sf_path),
+                    f"{os.path.splitext(sf_basename)[0]}.cosmorsxyz",
+                )
+                # write to cosmorsxyz file in the same directory as the input file
+                logger.info(f"Creating molecule from solvent file: {sf_path}")
+                solvent_mol = Molecule.from_filepath(sf_path)
+                logger.info(f"Solvent molecule is: {solvent_mol}")
+                logger.info(
+                    f"Writing solvent molecule .cosmorsxyz to {sf_cosmorsxyz}"
+                )
+                solvent_mol.write_cosmorsxyz(sf_cosmorsxyz)
+                sf_name = os.path.splitext(sf_basename)[0]
+            sf_line = f'solventfilename "{sf_name}"'
+
+        needs_block = (
+            bool(custom_lines) or bool(additional_lines) or sf_line is not None
+        )
+
+        if needs_block:
+            logger.debug(f"Writing {block_name} solvent block")
+            f.write(f"%{block_name}\n")
+            if sf_line is not None:
+                f.write(f"  {sf_line}\n")
+            for line in custom_lines:
+                f.write(f"  {line.rstrip()}\n")
+            for line in additional_lines:
+                f.write(f"  {line.rstrip()}\n")
+            f.write("end\n")
 
     def _write_mdci_block(self, f):
+        """
+        Write MDCI (domain-based local correlation) parameters.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If invalid MDCI options are specified
+        """
         mdci_cutoff = self.settings.mdci_cutoff
         mdci_density = self.settings.mdci_density
+
         if mdci_cutoff is not None:
-            logger.debug("Writing MDCI block.")
-            # check that mdci_cutoff is one of the allowed values: ["loose", "normal", "tight"]
-            assert mdci_cutoff in ["loose", "normal", "tight"], (
+            logger.debug("Writing MDCI block")
+            # check that mdci_cutoff is one of the
+            # allowed values: ["loose", "normal", "tight"]
+            assert mdci_cutoff.lower() in ["loose", "normal", "tight"], (
                 "mdci_cutoff must be one of the allowed values: "
                 "['loose', 'normal', 'tight']"
             )
@@ -138,9 +458,15 @@ class ORCAInputWriter(InputWriter):
                 f.write("  TCutPairs 1e-5\n")
                 f.write("  TCutPNO 1e-7\n")
                 f.write("  TCutMKN 1e-4\n")
+
             if mdci_density is not None:
-                # check that mdci_density is one of the allowed values: ["none", "unrelaxed", "relaxed"]
-                assert mdci_density in ["none", "unrelaxed", "relaxed"], (
+                # check that mdci_density is one of the allowed
+                # values: ["none", "unrelaxed", "relaxed"]
+                assert mdci_density.lower() in [
+                    "none",
+                    "unrelaxed",
+                    "relaxed",
+                ], (
                     "mdci_density must be one of the allowed values: "
                     "['none', 'unrelaxed', 'relaxed']"
                 )
@@ -153,11 +479,17 @@ class ORCAInputWriter(InputWriter):
             f.write("end\n")
 
     def _write_elprop_block(self, f):
-        """Write the elprop block for the ORCA input file."""
+        """
+        Write electronic properties calculation block.
+
+        Args:
+            f: File object to write to
+        """
         dipole = self.settings.dipole
         quadrupole = self.settings.quadrupole
+
         if dipole or quadrupole:
-            logger.debug("Writing elprop block.")
+            logger.debug("Writing elprop block")
             f.write("%elprop\n")
             if dipole:
                 f.write("  Dipole True\n")
@@ -169,13 +501,121 @@ class ORCAInputWriter(InputWriter):
                 f.write("  Quadrupole False\n")
             f.write("end\n")
 
+    def _write_tddft_block(self, f):
+        """Write ``%tddft`` block for excited-state jobs.
+
+        Only fields explicitly set on :class:`ORCATDDFTJobSettings` are
+        written; ``None`` values are omitted so ORCA falls back to its own
+        defaults.  Booleans use lower-case ``true``/``false`` (accepted by
+        both ORCA 6.0 and 6.1).
+        """
+        if not isinstance(self.settings, ORCATDDFTJobSettings):
+            return
+
+        s = self.settings
+        lines = []
+
+        def _bool(value):
+            return "true" if value else "false"
+
+        if s.nroots is not None:
+            lines.append(f"  NRoots {s.nroots}")
+        if s.triplets is not None:
+            lines.append(f"  Triplets {_bool(s.triplets)}")
+        if s.tda is not None:
+            lines.append(f"  TDA {_bool(s.tda)}")
+        if s.dosoc is not None:
+            lines.append(f"  DoSOC {_bool(s.dosoc)}")
+        if s.printlevel is not None:
+            lines.append(f"  PrintLevel {s.printlevel}")
+        if s.cpcmeq is not None:
+            lines.append(f"  CPCMEQ {_bool(s.cpcmeq)}")
+        if s.donto is not None:
+            lines.append(f"  DoNTO {_bool(s.donto)}")
+        if s.ntostates is not None:
+            states = ",".join(str(int(v)) for v in s.ntostates)
+            # NTOStates is a value list, not a nested block — no trailing ``end``.
+            lines.append(f"  NTOStates {states}")
+        if s.ntothresh is not None:
+            lines.append(f"  NTOThresh {s.ntothresh}")
+        if s.td_maxiter is not None:
+            lines.append(f"  MaxIter {s.td_maxiter}")
+        if s.td_maxdim is not None:
+            lines.append(f"  MaxDim {s.td_maxdim}")
+        if s.td_etol is not None:
+            lines.append(f"  ETol {s.td_etol}")
+        if s.td_rtol is not None:
+            lines.append(f"  RTol {s.td_rtol}")
+        if s.tprint is not None:
+            lines.append(f"  TPrint {s.tprint}")
+        if s.iroot is not None:
+            lines.append(f"  IRoot {s.iroot}")
+        if s.iroot_mult is not None:
+            lines.append(f"  IRootMult {s.iroot_mult}")
+        if s.follow_iroot is not None:
+            lines.append(f"  FollowIRoot {_bool(s.follow_iroot)}")
+
+        if not lines:
+            return
+
+        logger.debug("Writing %tddft block")
+        f.write("%tddft\n")
+        for line in lines:
+            f.write(line + "\n")
+        f.write("end\n")
+
+    def _write_rel_block(self, f):
+        """Write minimal ``%rel`` block for spin-orbit coupling.
+
+        Only ``SOCType`` is emitted; when unset the block is skipped
+        entirely, even if ``DoSOC true`` is requested.
+        """
+        if not isinstance(self.settings, ORCATDDFTJobSettings):
+            return
+        soc_type = self.settings.soc_type
+        if soc_type is None:
+            return
+
+        logger.debug("Writing %rel block")
+        f.write("%rel\n")
+        f.write(f"  SOCType {soc_type}\n")
+        f.write("end\n")
+
+    def _write_qmmm_block(self, f):
+        """
+        Write QM/MM parameter block to ORCA input file.
+
+        Writes the complete %qmmm block for multiscale calculations
+        when using ORCAQMMMJobSettings. The block contains all necessary
+        parameters for defining QM/MM partitioning and calculation setup.
+
+        Args:
+            f: File object to write to
+        """
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            logger.debug("Writing qmmm block")
+            f.write(f"{self.settings.qmmm_block}\n")
+
     def _write_modred_block(self, f):
+        """
+        Write modified redundant coordinates block.
+
+        Args:
+            f: File object to write to
+        """
         if self.settings.modred:
             f.write("%geom\n")
             self._write_modred(f, modred=self.settings.modred)
             f.write("end\n")
 
     def _write_modred(self, f, modred):
+        """
+        Write modified redundant coordinates.
+
+        Args:
+            f: File object to write to
+            modred: Modified redundant coordinates specification
+        """
         if isinstance(modred, list):
             self._write_modred_if_list(f, modred)
         elif isinstance(modred, dict):
@@ -183,9 +623,17 @@ class ORCAInputWriter(InputWriter):
 
     @staticmethod
     def _write_modred_if_list(f, modred):
+        """
+        Write modred as constraints (list format).
+
+        Args:
+            f: File object to write to
+            modred: List of coordinate constraints
+        """
         f.write("  Constraints\n")
         # append for modred jobs
-        # 'self.modred' as list of lists, or a single list if only one fixed constraint
+        # 'self.modred' as list of lists, or a
+        # single list if only one fixed constraint
         prepend_string_list = get_prepend_string_list_from_modred_free_format(
             input_modred=modred, program="orca"
         )
@@ -196,13 +644,44 @@ class ORCAInputWriter(InputWriter):
 
     @staticmethod
     def _write_modred_if_dict(f, modred):
+        """
+        Write modred as scan coordinates (dictionary format).
+
+        Args:
+            f: File object to write to
+            modred: Dictionary containing scan parameters
+        """
+        # append for additonal contraints for scan jobs
+        if "constrained_coordinates" in modred:
+            logger.debug("Writing modredundant constraints for scan job")
+            f.write("  Constraints\n")
+            constrained_coordinates_list = modred["constrained_coordinates"]
+            prepend_string_list = (
+                get_prepend_string_list_from_modred_free_format(
+                    input_modred=constrained_coordinates_list,
+                    program="orca",
+                )
+            )
+            for prepend_string in prepend_string_list:
+                f.write(f"  {{{prepend_string} C}}\n")
+            # write 'end' for each modred specified
+            f.write("  end\n")
+            f.write("\n")
+
         f.write("  Scan\n")
         # append for scanning job
-        coords_list = modred["coordinates"]
-        prepend_string_list = get_prepend_string_list_from_modred_free_format(
-            input_modred=coords_list, program="orca"
+        coords_list = modred["coords"]
+        scan_prepend_string_list = (
+            get_prepend_string_list_from_modred_free_format(
+                input_modred=coords_list, program="orca"
+            )
         )
-        for prepend_string in prepend_string_list:
+        for prepend_string, dist_start, dist_end, num_steps in zip(
+            scan_prepend_string_list,
+            modred["dist_start"],
+            modred["dist_end"],
+            modred["num_steps"],
+        ):
             if prepend_string.lower().startswith("b"):
                 scan_var = "bond distance"
                 scan_unit = "Angstrom"
@@ -216,18 +695,33 @@ class ORCAInputWriter(InputWriter):
                 scan_var = "variable"
                 scan_unit = "unit"
             f.write(
-                f"  {prepend_string} = {modred['dist_start']}, {modred['dist_end']}, "
-                f"{modred['num_steps']}  # Scanning {scan_var} from {modred['dist_start']} {scan_unit} "
-                f"to {modred['dist_end']} {scan_unit} in {modred['num_steps']} steps. \n"
+                f"  {prepend_string} = {dist_start}, {dist_end}, "
+                f"{num_steps}  # Scanning {scan_var} from {dist_start} {scan_unit} "
+                f"to {dist_end} {scan_unit} in {num_steps} steps. \n"
             )
         # write 'end' for each modred specified
         f.write("  end\n")
 
     def _write_hessian_block(self, f):
+        """
+        Write Hessian calculation parameters for transition state jobs.
+
+        Args:
+            f: File object to write to
+        """
         if isinstance(self.settings, ORCATSJobSettings):
             self._write_hessian_block_for_ts(f)
 
     def _write_hessian_block_for_ts(self, f):
+        """
+        Write ORCA Hessian block for transition state calculations.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If required Hessian files or parameters are missing
+        """
         # write orca block for hessian options
         f.write("%geom\n")
 
@@ -244,8 +738,10 @@ class ORCAInputWriter(InputWriter):
                 f'  InHessName "{self.settings.inhess_filename}"  # Hessian file\n'
             )
 
-        """Hybrid Hessian for speed up of TS search: TS mode is complicated and delocalized, 
-        e.g. in a concerted proton transfer reaction, can use hybrid Hessian to calc 
+        """Hybrid Hessian for speed up of TS search:
+        TS mode is complicated and delocalized,
+        e.g. in a concerted proton transfer
+        reaction, can use hybrid Hessian to calc
         numerical second derivatives only for atoms involved in the TS mode"""
         if self.settings.hybrid_hess:
             assert (
@@ -295,8 +791,24 @@ class ORCAInputWriter(InputWriter):
         f.write("end\n")
 
     def _write_irc_block(self, f):
+        """
+        Write IRC calculation parameters.
+
+        Args:
+            f: File object to write to
+        """
         if isinstance(self.settings, ORCAIRCJobSettings):
             self._write_irc_block_for_irc(f)
+
+    def _write_neb_block(self, f):
+        """
+        Write NEB block section if settings is ORCANEBJobSettings.
+
+        Args:
+            f: File object to write to
+        """
+        if isinstance(self.settings, ORCANEBJobSettings):
+            self._write_neb_block_for_neb(f)
 
     def _write_irc_block_for_irc(self, f):
         """Writes the IRC block options.
@@ -311,35 +823,51 @@ class ORCAInputWriter(InputWriter):
                             # backward
                             # down
         # Initial displacement
-            InitHess   read # by default ORCA uses the Hessian from AnFreq or NumFreq, or computes a new one
-                            # read    - reads the Hessian that is defined via Hess_Filename
+            InitHess read # by default ORCA uses the Hessian
+            from AnFreq or NumFreq, or computes a new one
+                            # read - reads the Hessian that
+                            # is defined via Hess_Filename
                             # calc_anfreq  - computes the analytic Hessian
                             # calc_numfreq - computes the numeric Hessian
-            Hess_Filename "h2o.hess"  # Hessian for initial displacement, must be used together with InitHess = read
-            hessMode   0  # Hessian mode that is used for the initial displacement. Default 0
+            Hess_Filename "h2o.hess" # Hessian for initial
+            displacement, must be used together with InitHess = read
+            hessMode 0 # Hessian mode that is used
+            for the initial displacement. Default 0
             Init_Displ DE      # DE (default) - energy difference
                                # length       - step size
-            Scale_Init_Displ 0.1 # step size for initial displacement from TS. Default 0.1 a.u.
-            DE_Init_Displ    2.0 # energy difference that is expected for initial displacement
+            Scale_Init_Displ 0.1 # step size for initial
+            displacement from TS. Default 0.1 a.u.
+            DE_Init_Displ 2.0 # energy difference
+            that is expected for initial displacement
                                  #  based on provided Hessian (Default: 2 mEh)
         # Steps
             Follow_CoordType cartesian # default and only option
-            Scale_Displ_SD    0.15  # Scaling factor for scaling the 1st SD step
-            Adapt_Scale_Displ true  # modify Scale_Displ_SD when the step size becomes smaller or larger
-            SD_ParabolicFit   true  # Do a parabolic fit for finding an optimal SD step length
-            Interpolate_only  true  # Only allow interpolation for parabolic fit, not extrapolation
+            Scale_Displ_SD 0.15 # Scaling
+            factor for scaling the 1st SD step
+            Adapt_Scale_Displ true # modify Scale_Displ_SD
+            when the step size becomes smaller or larger
+            SD_ParabolicFit true # Do a parabolic
+            fit for finding an optimal SD step length
+            Interpolate_only true # Only allow interpolation
+            for parabolic fit, not extrapolation
             Do_SD_Corr        true  # Apply a correction to the 1st SD step
-            Scale_Displ_SD_Corr  0.333 # Scaling factor for scaling the correction step to the SD step.
-                                       # It is multiplied by the length of the final 1st SD step
-            SD_Corr_ParabolicFit true  # Do a parabolic fit for finding an optimal correction
+            Scale_Displ_SD_Corr 0.333 # Scaling factor for
+            scaling the correction step to the SD step.
+                                       # It is multiplied by the length
+                                       # of the final 1st SD step
+            SD_Corr_ParabolicFit true # Do a parabolic
+            fit for finding an optimal correction
                                        # step length
         # Convergence thresholds - similar to LooseOpt
             TolRMSG   5.e-4      # RMS gradient (a.u.)
             TolMaxG   2.e-3      # Max. element of gradient (a.u.)
         # Output options
-            Monitor_Internals   # Up to three internal coordinates can be defined
-                {B 0 1}         # for which the values are printed during the IRC run.
-                {B 1 5}         # Possible are (B)onds, (A)ngles, (D)ihedrals and (I)mpropers
+            Monitor_Internals # Up to three
+            internal coordinates can be defined
+                {B 0 1} # for which the values
+                are printed during the IRC run.
+                {B 1 5} # Possible are (B)onds,
+                (A)ngles, (D)ihedrals and (I)mpropers
             end
         end.
         """
@@ -413,8 +941,127 @@ class ORCAInputWriter(InputWriter):
                 f.write(f"  {key} {value}\n")
         f.write("end\n")
 
+    @property
+    def neb_block(self):
+        """
+        Generate ORCA NEB input block as a string.
+
+        This property is for testing and inspection. Actual file writing
+        is handled by _write_neb_block_for_neb().
+
+        Returns:
+            str: Formatted %NEB block for ORCA input file
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+
+        Example output:
+            %NEB
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            NImages 8
+            PREOPT_ENDS True
+            end
+        """
+        settings = self.settings
+
+        # Validate required settings
+        assert settings.nimages, "The number of images is missing!"
+        assert (
+            settings.restarting_xyzfile or settings.ending_xyzfile
+        ), "No valid input geometry is given!"
+
+        lines = ["%NEB"]
+
+        if settings.restarting_xyzfile:
+            restart_file = os.path.basename(settings.restarting_xyzfile)
+            lines.append(f'Restart_ALLXYZFile "{restart_file}"')
+        else:
+            assert settings.ending_xyzfile, "No end geometry file is given!"
+            ending_file = os.path.basename(settings.ending_xyzfile)
+            lines.append(f'NEB_END_XYZFILE "{ending_file}"')
+
+            if settings.intermediate_xyzfile:
+                intermediate_file = os.path.basename(
+                    settings.intermediate_xyzfile
+                )
+                lines.append(f'NEB_TS_XYZFILE "{intermediate_file}"')
+
+        lines.append(f"NImages {settings.nimages}")
+
+        if not settings.restarting_xyzfile:
+            bool_str = "True" if settings.preopt_ends else "False"
+            lines.append(f"PREOPT_ENDS {bool_str}")
+
+        lines.append("end")
+        return "\n".join(lines)
+
+    def _write_neb_block_for_neb(self, f):
+        """
+        Write ORCA NEB block configuration to input file.
+
+        Generates the %NEB block with NEB-specific options including number
+        of images, geometry files, and optimization settings. Uses basenames
+        for file paths to work with scratch directory execution.
+
+        Args:
+            f: File object to write to
+
+        Example output:
+            %NEB
+            NEB_END_XYZFILE "product.xyz"
+            NEB_TS_XYZFILE "ts_guess.xyz"
+            NImages 8
+            PREOPT_ENDS True
+            end
+
+        Raises:
+            AssertionError: If nimages is not set or geometry files are missing
+        """
+        settings = self.settings
+
+        # Validate required settings
+        assert settings.nimages, "The number of images is missing!"
+        assert (
+            settings.restarting_xyzfile or settings.ending_xyzfile
+        ), "No valid input geometry is given!"
+
+        f.write("%NEB\n")
+
+        if settings.restarting_xyzfile:
+            # Use basename for scratch compatibility
+            restart_file = os.path.basename(settings.restarting_xyzfile)
+            f.write(f'Restart_ALLXYZFile "{restart_file}"\n')
+        else:
+            assert settings.ending_xyzfile, "No end geometry file is given!"
+            # Use basename for scratch compatibility
+            ending_file = os.path.basename(settings.ending_xyzfile)
+            f.write(f'NEB_END_XYZFILE "{ending_file}"\n')
+
+            # Write TS guess file if provided
+            if settings.intermediate_xyzfile:
+                intermediate_file = os.path.basename(
+                    settings.intermediate_xyzfile
+                )
+                f.write(f'NEB_TS_XYZFILE "{intermediate_file}"\n')
+
+        # Write number of images
+        f.write(f"NImages {settings.nimages}\n")
+
+        # Write pre-optimization setting (only when not using restart)
+        if not settings.restarting_xyzfile:
+            bool_str = "True" if settings.preopt_ends else "False"
+            f.write(f"PREOPT_ENDS {bool_str}\n")
+
+        f.write("end\n")
+
     def _write_constrained_atoms(self, f):
-        """Write constraints on atoms in a molecule, if specified via frozen_atoms."""
+        """
+        Write atomic constraints for frozen atoms.
+
+        Args:
+            f: File object to write to
+        """
         molecule = self.job.molecule
         if molecule.frozen_atoms:
             f.write("%geom\n")
@@ -426,17 +1073,41 @@ class ORCAInputWriter(InputWriter):
             f.write("end\n")
 
     def _write_charge_and_multiplicity(self, f):
-        logger.debug("Writing charge and multiplicity.")
-        charge = self.settings.charge
-        multiplicity = self.settings.multiplicity
+        """
+        Write molecular charge and spin multiplicity.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If charge or multiplicity is not specified
+        """
+        # QMMM coordinate section uses the high-level (QM) region only.
+        # Intermediate/total charges belong in the %qmmm block.
+        if isinstance(self.settings, ORCAQMMMJobSettings):
+            charge = self.settings.charge_high
+            multiplicity = self.settings.mult_high
+        else:
+            charge = self.settings.charge
+            multiplicity = self.settings.multiplicity
+
         assert (
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"
         f.write(f"* xyz {charge} {multiplicity}\n")
 
     def _write_cartesian_coordinates(self, f):
+        """
+        Write molecular Cartesian coordinates.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            AssertionError: If molecular geometry is not available
+        """
         logger.debug(
-            f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
+            f"Writing Cartesian coordinates of molecule: {self.job.molecule}"
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
         self.job.molecule.write_coordinates(f, program="orca")

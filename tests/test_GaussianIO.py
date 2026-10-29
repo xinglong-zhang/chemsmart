@@ -1,17 +1,21 @@
 import os.path
 
 import numpy as np
+import pytest
 from ase import units
 from ase.symbols import Symbols
 
 from chemsmart.io.gaussian.cube import GaussianCubeFile
-from chemsmart.io.gaussian.input import Gaussian16Input
+from chemsmart.io.gaussian.input import Gaussian16Input, Gaussian16QMMMInput
 from chemsmart.io.gaussian.output import (
     Gaussian16Output,
     Gaussian16OutputWithPBC,
+    Gaussian16pKaOutput,
     Gaussian16WBIOutput,
 )
 from chemsmart.io.gaussian.route import GaussianRoute
+from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
+from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
 
 class TestRouteString:
@@ -20,7 +24,7 @@ class TestRouteString:
         r1a = GaussianRoute(s1a)
         assert r1a.functional == "mn15"
         assert r1a.basis == "def2svp"
-        assert r1a.job_type == "opt"
+        assert r1a.jobtype == "opt"
         assert r1a.solv is False
         assert r1a.dieze_tag is None
         assert r1a.additional_opt_options_in_route is None
@@ -29,16 +33,16 @@ class TestRouteString:
     def test_read_route_string_standard2(self):
         s1b = "# opt=(ts,calcfc,noeigentest) freq b3lyp/6-311+G(d,p) empiricaldispersion=gd3bj"
         r1b = GaussianRoute(s1b)
-        assert r1b.functional == "b3lyp empiricaldispersion=gd3bj"
+        assert r1b.functional == "b3lyp-d3bj"
         assert r1b.basis == "6-311+g(d,p)"
-        assert r1b.job_type == "ts"
+        assert r1b.jobtype == "ts"
         assert r1b.solv is False
         assert r1b.dieze_tag is None
         assert (
             r1b.additional_opt_options_in_route is None
         )  # noeigentest prevents Gaussian from stopping
         # if no negative Hessian eigenvalue was found
-        #                                                   # (not additional opt options for geometry opt)
+        # (not additional opt options for geometry opt)
         assert r1b.additional_route_parameters is None
 
     def test_read_route_string_standard3a(self):
@@ -46,7 +50,7 @@ class TestRouteString:
         r1c = GaussianRoute(s1c)
         assert r1c.functional == "mn15"
         assert r1c.basis == "gen"
-        assert r1c.job_type == "opt"
+        assert r1c.jobtype == "opt"
         assert r1c.solv is False
         assert r1c.dieze_tag is None
         assert r1c.additional_opt_options_in_route is None
@@ -57,7 +61,7 @@ class TestRouteString:
         r1c = GaussianRoute(s1c)
         assert r1c.functional == "mn15"
         assert r1c.basis == "genecp"
-        assert r1c.job_type == "opt"
+        assert r1c.jobtype == "opt"
         assert r1c.solv is False
         assert r1c.dieze_tag is None
         assert r1c.additional_opt_options_in_route is None
@@ -68,7 +72,7 @@ class TestRouteString:
         r1d = GaussianRoute(s1d)
         assert r1d.functional == "mn15"
         assert r1d.basis == "def2qzvp"
-        assert r1d.job_type == "sp"
+        assert r1d.jobtype == "sp"
         assert r1d.solv is True
         assert r1d.solvent_model == "smd"
         assert r1d.solvent_id == "generic,read"
@@ -79,11 +83,11 @@ class TestRouteString:
     def test_read_route_string_standard5(self):
         s1e = "#p opt=modred freq tpsstpss/def2tzvp/fit empiricaldispersion=gd3bj scrf=(cpcm,solvent=toluene)"
         r1e = GaussianRoute(s1e)
-        assert r1e.functional == "tpsstpss empiricaldispersion=gd3bj"
+        assert r1e.functional == "tpsstpss-d3bj"
         assert (
             r1e.basis == "def2tzvp/fit"
         )  # density fitting basis set (for pure functionals)
-        assert r1e.job_type == "modred"
+        assert r1e.jobtype == "modred"
         assert r1e.solv is True
         assert r1e.solvent_model == "cpcm"
         assert r1e.solvent_id == "toluene"
@@ -96,7 +100,7 @@ class TestRouteString:
         r1f = GaussianRoute(s1f)
         assert r1f.functional == "mpw1pw91"
         assert r1f.basis == "6-311+g(2d,p)"
-        assert r1f.job_type == "sp"
+        assert r1f.jobtype == "sp"
         assert r1f.dieze_tag is None
         assert r1f.additional_opt_options_in_route is None
         assert r1f.additional_route_parameters is None
@@ -104,17 +108,32 @@ class TestRouteString:
         # TODO: nmr route to be specified
 
     def test_read_route_string_standard7(self):
-        s1g = "# TD(nstates=30) wB97XD/def2SVP scrf(solvent=dichloroethane)"  # TD-DFT route
+        s1g = "# TD(nstates=30) wB97XD/def2SVP scrf(solvent=dichloroethane)"
+        # TD-DFT route
         r1g = GaussianRoute(s1g)
         assert r1g.functional == "wb97xd"
         assert r1g.basis == "def2svp"
-        assert r1g.job_type == "sp"
+        assert r1g.jobtype == "sp"
         assert r1g.dieze_tag is None
         assert r1g.solv is True
         assert r1g.solvent_model == "pcm"  # default solvet model in Gaussian
         assert r1g.solvent_id == "dichloroethane"
         assert r1g.additional_opt_options_in_route is None
         # TODO: TD-DFT route to be specified
+
+    def test_read_route_string_oniom_layer_methods_and_bases(self):
+        s1qmmm = "# oniom(b3lyp/6-31g(d,p):uff) opt"
+        r1qmmm = GaussianRoute(s1qmmm)
+        assert r1qmmm.functional == "b3lyp:uff"
+        assert r1qmmm.basis == "6-31g(d,p):none"
+        s2qmmm = "# oniom(mp2/6-31g:hf/6-31g:am1) geom=connectivity"
+        r2qmmm = GaussianRoute(s2qmmm)
+        assert r2qmmm.functional == "mp2:hf:am1"
+        assert r2qmmm.basis == "6-31g:6-31g:none"
+        s3qmmm = "# oniom(mp2/6-31g:hf/6-31g) geom=connectivity"
+        r3qmmm = GaussianRoute(s3qmmm)
+        assert r3qmmm.functional == "mp2:hf"
+        assert r3qmmm.basis == "6-31g:6-31g"
 
     def test_read_route_string_nonstandard(self):
         s1 = "# pbepbe 6-31g(d,p)/auto force scrf=(dipole,solvent=water) pbc=gammaonly"
@@ -123,12 +142,24 @@ class TestRouteString:
         assert r1.solvent_id == "water"
         # TODO: fix nonstandard functional/basis (very rare cases such as this)
 
+    def test_read_route_semiempirical(self):
+        s1 = "# opt freq PM6"
+        r1 = GaussianRoute(s1)
+        assert r1.functional is None
+        assert r1.basis is None
+        assert r1.ab_initio is None
+        assert r1.semiempirical == "PM6"
+        assert r1.solv is False
+        assert r1.dieze_tag is None
+        assert r1.additional_opt_options_in_route is None
+        assert r1.additional_route_parameters is None
+
     def test_read_route_string_opt_options(self):
         s2a = "# opt=(recalcfc=5) freq mn15 def2svp"
         r2a = GaussianRoute(s2a)
         assert r2a.functional == "mn15"
         assert r2a.basis == "def2svp"
-        assert r2a.job_type == "opt"
+        assert r2a.jobtype == "opt"
         assert r2a.solv is False
         assert r2a.dieze_tag is None
         assert r2a.additional_opt_options_in_route == "recalcfc=5"
@@ -136,7 +167,7 @@ class TestRouteString:
 
         s2b = "# opt=(recalcfc=5,MaxStep=3,MaxCycles=128) freq mn15 def2svp"
         r2b = GaussianRoute(s2b)
-        assert r2b.job_type == "opt"
+        assert r2b.jobtype == "opt"
         assert (
             r2b.additional_opt_options_in_route
             == "recalcfc=5,maxstep=3,maxcycles=128"
@@ -144,7 +175,7 @@ class TestRouteString:
 
         s2c = "# opt=(ts,calcfc,noeigentest,recalcfc=5,MaxStep=3,MaxCycles=128) freq mn15 def2svp"
         r2c = GaussianRoute(s2c)
-        assert r2c.job_type == "ts"
+        assert r2c.jobtype == "ts"
         assert (
             r2c.additional_opt_options_in_route
             == "recalcfc=5,maxstep=3,maxcycles=128"
@@ -153,14 +184,48 @@ class TestRouteString:
     def test_read_additional_route_parameters(self):
         s3a = "# opt=(recalcfc=5) freq=numer pbepbe/def2svp nosymm guess=mix"
         r3a = GaussianRoute(s3a)
-        assert r3a.job_type == "opt"
+        assert r3a.jobtype == "opt"
         assert r3a.additional_opt_options_in_route == "recalcfc=5"
-        assert r3a.freq is False
+        assert r3a.freq is True
         assert r3a.numfreq is True
         assert r3a.solv is False
         assert r3a.functional == "pbepbe"
         assert r3a.basis == "def2svp"
         assert r3a.additional_route_parameters == "nosymm guess=mix"
+
+    def test_solvent_in_route(self):
+        s4a = (
+            "# opt=(recalcfc=5) freq mn15 def2svp scrf=(dipole,solvent=water)"
+        )
+        r4a = GaussianRoute(s4a)
+        assert r4a.additional_opt_options_in_route == "recalcfc=5"
+        assert r4a.solvent_model == "dipole"
+        assert r4a.solvent_id == "water"
+        assert r4a.additional_solvent_options is None
+
+        s4b = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(smd,solvent=generic,read)"
+        r4b = GaussianRoute(s4b)
+        assert r4b.solvent_model == "smd"
+        assert r4b.solvent_id == "generic,read"
+        assert r4b.additional_solvent_options is None
+
+        s4c = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(cpcm,solvent=toluene,iterative)"
+        r4c = GaussianRoute(s4c)
+        assert r4c.solvent_model == "cpcm"
+        assert r4c.solvent_id == "toluene"
+        assert r4c.additional_solvent_options == "iterative"
+
+        s4d = "# opt=(recalcfc=5) freq mn15 def2svp scrf=(cpcm,iterative,solvent=toluene)"
+        r4d = GaussianRoute(s4d)
+        assert r4d.solvent_model == "cpcm"
+        assert r4d.solvent_id == "toluene"
+        assert r4d.additional_solvent_options == "iterative"
+
+        s4e = "# opt=(recalcfc=5) freq mn15 def2svp\n scrf=(cpcm,iterative,solvent=toluene)"
+        r4e = GaussianRoute(s4e)
+        assert r4e.solvent_model == "cpcm"
+        assert r4e.solvent_id == "toluene"
+        assert r4e.additional_solvent_options == "iterative"
 
 
 class TestGaussian16Input:
@@ -197,7 +262,7 @@ class TestGaussian16Input:
         )
         assert g16_input.additional_opt_options_in_route is None
         assert g16_input.additional_route_parameters is None
-        assert g16_input.job_type == "opt"
+        assert g16_input.jobtype == "opt"
         assert g16_input.functional == "m062x"
         assert g16_input.basis == "def2svp"
         assert g16_input.molecule.frozen_atoms is None
@@ -209,7 +274,359 @@ class TestGaussian16Input:
         assert g16_frozen.molecule.empirical_formula == "C7H5ClO"
         assert g16_frozen.additional_opt_options_in_route is None
         assert g16_frozen.additional_route_parameters is None
-        assert g16_frozen.job_type == "opt"
+        assert g16_frozen.jobtype == "opt"
+
+    def test_partition(self, gaussian_qmmm_inputfile_2layer):
+        assert os.path.exists(gaussian_qmmm_inputfile_2layer)
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert g16_oniom.molecule.symbols.formula == "CH3CH3"
+        assert g16_oniom.partition == {
+            "high level atoms": ["1-4"],
+            "low level atoms": ["5-8"],
+        }
+        assert g16_oniom.molecule.num_atoms == 8
+        assert g16_oniom.molecule.high_level_atoms == [1, 2, 3, 4]
+        np.testing.assert_allclose(
+            g16_oniom.molecule.positions[0],
+            [-0.48611108, -0.34722222, 0.00000000],
+        )
+        from_filepath = Molecule.from_filepath(gaussian_qmmm_inputfile_2layer)
+        assert from_filepath.high_level_atoms == [1, 2, 3, 4]
+        np.testing.assert_allclose(
+            from_filepath.positions[0],
+            [-0.48611108, -0.34722222, 0.00000000],
+        )
+
+    def test_oniom_charge_multiplicity(self, gaussian_qmmm_inputfile_3layer):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_3layer
+        )
+        assert g16_oniom.oniom_charge == {
+            "charge_total": "0",
+            "int_charge": "0",
+            "model_charge": "0",
+        }
+        assert g16_oniom.oniom_multiplicity == {
+            "real_multiplicity": "1",
+            "int_multiplicity": "1",
+            "model_multiplicity": "1",
+        }
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.int_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.int_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+
+    def test_oniom_charge_multiplicity_2layer(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert g16_oniom.oniom_charge == {
+            "charge_total": "0",
+            "model_charge": "0",
+        }
+        assert g16_oniom.oniom_multiplicity == {
+            "real_multiplicity": "1",
+            "model_multiplicity": "1",
+        }
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.int_charge is None
+        assert g16_oniom.int_multiplicity is None
+
+    def test_oniom_negative_charge_line(self, tmp_path):
+        com = tmp_path / "charged_oniom.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "-1 1 0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " H   -1.0  0.0  0.0 H\n"
+            " H    0.0  1.0  0.0 H\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            " H    1.0  0.0  1.5 L\n"
+            " H   -1.0  0.0  1.5 L\n"
+            " H    0.0  1.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == -1
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.molecule.num_atoms == 8
+        assert g16_oniom.molecule.chemical_symbols[0] == "C"
+        assert g16_oniom.partition == {
+            "high level atoms": ["1-4"],
+            "low level atoms": ["5-8"],
+        }
+
+    def test_oniom_single_pair_charge_defaults_model(self, tmp_path):
+        com = tmp_path / "single_pair_oniom.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " H   -1.0  0.0  0.0 H\n"
+            " H    0.0  1.0  0.0 H\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            " H    1.0  0.0  1.5 L\n"
+            " H   -1.0  0.0  1.5 L\n"
+            " H    0.0  1.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+        assert g16_oniom.molecule.num_atoms == 8
+
+    def test_oniom_three_layer_full_charge_line_maps_model(self, tmp_path):
+        com = tmp_path / "three_layer_charges.com"
+        com.write_text(
+            "%chk=charged.chk\n"
+            "# oniom(hf/sto-3g:am1:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "1 2 3 4 5 6 7 8 9 10 11 12\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 H\n"
+            " C    0.0  0.0  1.5 M H 1\n"
+            " H    1.0  0.0  1.5 M\n"
+            " C    0.0  0.0  3.0 L H 3\n"
+            " H    1.0  0.0  3.0 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 1
+        assert g16_oniom.int_charge == 3
+        assert g16_oniom.model_charge == 7
+        assert g16_oniom.real_multiplicity == 2
+        assert g16_oniom.int_multiplicity == 4
+        assert g16_oniom.model_multiplicity == 8
+
+    def test_oniom_freeze_flags_are_preserved(self, tmp_path):
+        com = tmp_path / "frozen_oniom.com"
+        com.write_text(
+            "%chk=frozen.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            " C    0    0.0  0.0  0.0 H\n"
+            " H    0    1.0  0.0  0.0 H\n"
+            " C   -1    0.0  0.0  1.5 L H 1\n"
+            " H   -1    1.0  0.0  1.5 L\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.molecule.num_atoms == 4
+        np.testing.assert_allclose(
+            g16_oniom.molecule.positions[2], [0.0, 0.0, 1.5]
+        )
+        assert g16_oniom.molecule.frozen_atoms == [0, 0, -1, -1]
+        from_filepath = Molecule.from_filepath(str(com))
+        assert from_filepath.frozen_atoms == [0, 0, -1, -1]
+        assert from_filepath.high_level_atoms == [1, 2]
+
+    def test_oniom_mm_parameters_extracted_after_connectivity(self, tmp_path):
+        com = tmp_path / "oniom_mm_params.com"
+        com.write_text(
+            "%chk=mm.chk\n"
+            "# oniom(hf/sto-3g:AMBER=HardFirst) geom=connectivity\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            "C-CT-0.03      0.0 0.0 0.0 H\n"
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1\n"
+            "\n"
+            "1 2 1.0\n"
+            "2\n"
+            "\n"
+            "HrmBnd1 CT OH HC 50.0 109.5\n"
+            "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert isinstance(g16_oniom.molecule, QMMMMolecule)
+        assert (
+            "HrmBnd1 CT OH HC 50.0 109.5" in g16_oniom.molecule.mm_parameters
+        )
+        assert "NonBon 3 1 0 0 0.0 0.0 0.5 0.0 0.0 0.0" in (
+            g16_oniom.molecule.mm_parameters
+        )
+
+    def test_oniom_connectivity_only_has_no_mm_parameters(
+        self, gaussian_qmmm_inputfile_2layer
+    ):
+        g16_oniom = Gaussian16QMMMInput(
+            filename=gaussian_qmmm_inputfile_2layer
+        )
+        assert isinstance(g16_oniom.molecule, QMMMMolecule)
+        assert g16_oniom.molecule.mm_parameters is None
+
+    def test_oniom_route_without_layer_labels_returns_plain_molecule(
+        self, tmp_path
+    ):
+        com = tmp_path / "oniom_plain.com"
+        com.write_text(
+            "%chk=plain.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0\n"
+            " H    1.0  0.0  0.0\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        mol = g16_oniom.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+
+    def test_oniom_three_layer_short_charge_line(self, tmp_path):
+        com = tmp_path / "three_layer_short_charge.com"
+        com.write_text(
+            "%chk=short.chk\n"
+            "# oniom(hf/sto-3g:hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 M\n"
+            " C    0.0  0.0  1.5 L H 1\n"
+            "\n"
+        )
+        g16_oniom = Gaussian16QMMMInput(filename=str(com))
+        assert g16_oniom.real_charge == 0
+        assert g16_oniom.int_charge == 0
+        assert g16_oniom.model_charge == 0
+        assert g16_oniom.real_multiplicity == 1
+        assert g16_oniom.int_multiplicity == 1
+        assert g16_oniom.model_multiplicity == 1
+
+    def test_oniom_model_charge_defaults_when_absent(self, tmp_path):
+        """Fallback when model charge/mult keys are missing from the ONIOM dict."""
+        from unittest.mock import patch
+
+        com = tmp_path / "fallback.com"
+        com.write_text(
+            "%chk=fallback.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 L\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        with patch.object(
+            g16,
+            "_get_oniom_charge_and_multiplicity",
+            return_value=(
+                {"charge_total": "-1"},
+                {"real_multiplicity": "2"},
+            ),
+        ):
+            assert g16.model_charge == -1
+            assert g16.model_multiplicity == 2
+
+    def test_oniom_partition_recursion_error_is_tolerated(self, tmp_path):
+        com = tmp_path / "recurse.com"
+        com.write_text(
+            "%chk=recurse.chk\n"
+            "# oniom(hf/sto-3g:uff)\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1\n"
+            " C    0.0  0.0  0.0 H\n"
+            " H    1.0  0.0  0.0 L\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        from unittest.mock import PropertyMock, patch
+
+        with patch.object(
+            type(g16),
+            "partition",
+            new_callable=PropertyMock,
+            side_effect=RecursionError,
+        ):
+            charge, mult = g16._get_oniom_charge_and_multiplicity()
+        assert charge["charge_total"] == "0"
+        assert mult["real_multiplicity"] == "1"
+
+    def test_oniom_mm_parameters_empty_parts_and_groups(self):
+        """Cover empty groups/lines and non-float connectivity tokens."""
+
+        class _Fake:
+            content_groups = [
+                ["header"],
+                ["title"],
+                ["0 1", "C 0 0 0 H"],
+                [],
+                ["   "],
+                ["1 2 foo"],
+                ["HrmBnd1 CT OH HC 50.0 109.5"],
+            ]
+
+            def _get_mm_parameters_text(self):
+                return Gaussian16QMMMInput._get_mm_parameters_text(self)
+
+        params = _Fake()._get_mm_parameters_text()
+        assert "HrmBnd1" in params
+
+    def test_oniom_mm_parameters_skips_empty_and_non_mm_groups(self, tmp_path):
+        com = tmp_path / "mm_edge.com"
+        # content_groups layout depends on blank-line splitting; include
+        # empty groups, a bogus non-connectivity/non-MM block, and MM params.
+        com.write_text(
+            "%chk=mm_edge.chk\n"
+            "# oniom(hf/sto-3g:AMBER=HardFirst) geom=connectivity\n"
+            "\n"
+            "title\n"
+            "\n"
+            "0 1 0 1 0 1\n"
+            "C-CT-0.03      0.0 0.0 0.0 H\n"
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1\n"
+            "\n"
+            "1 2 foo\n"
+            "\n"
+            "\n"
+            "not-a-mm-keyword 1 2 3\n"
+            "\n"
+            "HrmBnd1 CT OH HC 50.0 109.5\n"
+            "\n"
+        )
+        g16 = Gaussian16QMMMInput(filename=str(com))
+        params = g16._get_mm_parameters_text()
+        assert params is not None
+        assert "HrmBnd1 CT OH HC 50.0 109.5" in params
 
     def test_read_modred_inputfile(self, gaussian_modred_inputfile):
         assert os.path.exists(gaussian_modred_inputfile)
@@ -234,7 +651,7 @@ class TestGaussian16Input:
         assert g16_modred.molecule.empirical_formula == "C3H7NO3"
         assert g16_modred.additional_opt_options_in_route is None
         assert g16_modred.additional_route_parameters is None
-        assert g16_modred.job_type == "modred"
+        assert g16_modred.jobtype == "modred"
         assert g16_modred.modred == [[2, 12], [9, 2]]
         assert g16_modred.functional == "m062x"
         assert g16_modred.basis == "def2svp"
@@ -262,7 +679,7 @@ class TestGaussian16Input:
         assert g16_scan.molecule.empirical_formula == "C3H7NO3"
         assert g16_scan.additional_opt_options_in_route is None
         assert g16_scan.additional_route_parameters is None
-        assert g16_scan.job_type == "modred"
+        assert g16_scan.jobtype == "modred"
         assert g16_scan.modred == {
             "coords": [[2, 12], [9, 2]],
             "num_steps": 10,
@@ -278,7 +695,7 @@ class TestGaussian16Input:
         assert g16_genecp.molecule.empirical_formula == "C4H6O4Pd"
         assert g16_genecp.additional_opt_options_in_route is None
         assert g16_genecp.additional_route_parameters is None
-        assert g16_genecp.job_type == "opt"
+        assert g16_genecp.jobtype == "opt"
         assert g16_genecp.functional == "mn15"
         assert g16_genecp.basis == "genecp"
         assert g16_genecp.genecp_section.genecp_type == "genecp"
@@ -287,6 +704,60 @@ class TestGaussian16Input:
         assert g16_genecp.genecp_section.light_elements_basis == "def2svp"
         assert g16_genecp.genecp_section.heavy_elements_basis == "def2-tzvppd"
         assert g16_genecp.molecule.frozen_atoms is None
+
+    def test_read_gaussian_link_opt_input(self, gaussian_link_opt_input):
+        assert os.path.exists(gaussian_link_opt_input)
+        g16_link_opt = Gaussian16Input(filename=gaussian_link_opt_input)
+        assert g16_link_opt.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_opt.is_link
+        assert (
+            g16_link_opt.route_string
+            == "# opt freq um062x def2svp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_opt.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_opt.additional_opt_options_in_route is None
+        assert g16_link_opt.jobtype == "opt"
+        assert g16_link_opt.functional == "m062x"
+        assert g16_link_opt.basis == "def2svp"
+        assert g16_link_opt.molecule.frozen_atoms is None
+
+    def test_read_gaussian_link_ts_input(self, gaussian_link_ts_input):
+        assert os.path.exists(gaussian_link_ts_input)
+        g16_link_ts = Gaussian16Input(filename=gaussian_link_ts_input)
+        assert g16_link_ts.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_ts.is_link
+        assert (
+            g16_link_ts.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq um062x def2svp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_ts.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_ts.additional_opt_options_in_route is None
+        assert g16_link_ts.jobtype == "ts"
+        assert g16_link_ts.functional == "m062x"
+        assert g16_link_ts.basis == "def2svp"
+        assert g16_link_ts.molecule.frozen_atoms is None
+
+    def test_read_gausssian_link_sp_input(self, gaussian_link_sp_input):
+        assert os.path.exists(gaussian_link_sp_input)
+        g16_link_sp = Gaussian16Input(filename=gaussian_link_sp_input)
+        assert g16_link_sp.molecule.empirical_formula == "C7H5ClO"
+        assert g16_link_sp.is_link
+        assert (
+            g16_link_sp.route_string
+            == "# um062x def2tzvp scrf=(smd,solvent=dichloroethane) geom=check guess=read"
+        )
+        assert (
+            g16_link_sp.additional_route_parameters == "geom=check guess=read"
+        )
+        assert g16_link_sp.additional_opt_options_in_route is None
+        assert g16_link_sp.jobtype == "sp"
+        assert g16_link_sp.functional == "m062x"
+        assert g16_link_sp.basis == "def2tzvp"
+        assert g16_link_sp.molecule.frozen_atoms is None
 
     def test_pbc_1d_input(self, gaussian_pbc_1d_inputfile):
         assert os.path.exists(gaussian_pbc_1d_inputfile)
@@ -302,13 +773,114 @@ class TestGaussian16Input:
         )
         assert g16_pbc_1d.additional_opt_options_in_route is None
         assert g16_pbc_1d.additional_route_parameters == "scf=tight"
-        assert g16_pbc_1d.job_type == "sp"
+        assert g16_pbc_1d.jobtype == "sp"
         assert g16_pbc_1d.modred is None
         assert g16_pbc_1d.functional == "pbepbe"
         assert g16_pbc_1d.basis == "6-31g(d,p)/auto"
 
 
 class TestGaussian16Output:
+    def test_wrapped_stable_route_is_detected_as_link(self, tmp_path):
+        logfile = tmp_path / "wrapped_link.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "----------------------------------",
+                    "# um062x def2svp scf=(xqc,maxcycle=512,novar",
+                    "acc),nosymm stable=opt guess=mix",
+                    "----------------------------------",
+                    "# opt=(ts,calcfc,noeigentest) freq um062x def2svp",
+                    "----------------------------------",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert output.is_link
+        assert (
+            output.route_string
+            == "# opt=(ts,calcfc,noeigentest) freq um062x def2svp"
+        )
+        assert output.jobtype == "ts"
+
+    def test_wrapped_regular_route_is_not_detected_as_link(self, tmp_path):
+        logfile = tmp_path / "wrapped_regular.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "----------------------------------",
+                    "# opt=(ts,calcfc,noeigentest) freq um062x def2svp "
+                    "scf=(xqc,maxcycle=512,novar",
+                    "acc) nosymm int=ultrafine",
+                    "----------------------------------",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert not output.is_link
+        assert output.route_string == (
+            "# opt=(ts,calcfc,noeigentest) freq um062x def2svp "
+            "scf=(xqc,maxcycle=512,novaracc) nosymm int=ultrafine"
+        )
+        assert output.jobtype == "ts"
+
+    def test_only_wrapped_stable_route_is_returned(self, tmp_path):
+        logfile = tmp_path / "stable_only.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "# um062x def2svp scf=(xqc,maxcycle=512,novar",
+                    "acc),nosymm stable=opt guess=mix",
+                    "",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert output.is_link
+        assert output.route_string == (
+            "# um062x def2svp scf=(xqc,maxcycle=512,novaracc),nosymm "
+            "stable=opt guess=mix"
+        )
+        assert output.jobtype == "link"
+
+    def test_wrapped_regular_route_can_end_at_eof(self, tmp_path):
+        logfile = tmp_path / "wrapped_regular_at_eof.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "# opt=(ts,calcfc,noeigentest) freq um062x def2svp",
+                    "scf=(xqc,maxcycle=512) nosymm int=ultrafine",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert not output.is_link
+        assert output.route_string == (
+            "# opt=(ts,calcfc,noeigentest) freq um062x def2svp"
+            "scf=(xqc,maxcycle=512) nosymm int=ultrafine"
+        )
+        assert output.jobtype == "ts"
+
+    def test_adjacent_route_blocks_are_not_combined(self, tmp_path):
+        logfile = tmp_path / "adjacent_routes.log"
+        logfile.write_text(
+            "\n".join(
+                [
+                    "# opt freq um062x def2svp",
+                    "# um062x def2tzvp",
+                    "----------------------------------",
+                ]
+            )
+        )
+        output = Gaussian16Output(filename=str(logfile))
+
+        assert output.route_string == "# opt freq um062x def2svp"
+        assert not output.is_link
+        assert output.jobtype == "opt"
+
     def test_normal_termination_with_forces_and_frequencies(
         self, td_outputfile
     ):
@@ -318,6 +890,7 @@ class TestGaussian16Output:
             g16_output.route_string
             == "# cam-b3lyp gen td(singlets,nstates=50,root=1)"
         )
+        assert g16_output.spin == "unrestricted"
         assert g16_output.num_atoms == 49
         assert g16_output.tddft_transitions[0] == (0.7744, 1601.13, 0.0084)
         assert g16_output.tddft_transitions[1] == (1.0201, 1215.37, 0.0632)
@@ -376,13 +949,14 @@ class TestGaussian16Output:
         assert len(g16_output.excitation_energies_eV) == 50
         assert len(g16_output.transitions) == 50
         assert len(g16_output.contribution_coefficients) == 50
+        assert len(g16_output.contributions) == 50
         assert g16_output.transitions[0] == [
-            "104A ->108A",
-            "105A ->107A",
-            "106A ->107A",
-            "106A ->108A",
-            "105B ->106B",
-            "106A <-107A",
+            "104A -> 108A",
+            "105A -> 107A",
+            "106A -> 107A",
+            "106A -> 108A",
+            "105B -> 106B",
+            "106A <- 107A",
         ]
         assert g16_output.contribution_coefficients[0] == [
             0.15573,
@@ -400,6 +974,22 @@ class TestGaussian16Output:
             0.79088,
             0.17825,
         ]
+        assert g16_output.contributions[0] == [
+            2.4,
+            1.5,
+            87.5,
+            1.1,
+            6.8,
+            1.5,
+        ]
+        assert g16_output.contributions[-1] == [
+            3.0,
+            2.2,
+            1.9,
+            9.7,
+            62.5,
+            3.2,
+        ]
 
         assert (
             g16_output.total_core_hours
@@ -407,11 +997,31 @@ class TestGaussian16Output:
             == 361.7
         )
         assert g16_output.total_elapsed_walltime == 6.4
+        mol = g16_output.molecule
+        assert not mol.has_vibrations
+
+    def test_contribution_percentage_spin_scaling(self):
+        output = type("Output", (), {})()
+        output.contribution_coefficients = [[0.5, -0.3]]
+
+        output.spin = "restricted"
+        assert Gaussian16Output.contributions.func(output) == [[50.0, 18.0]]
+
+        output.spin = "unrestricted"
+        assert Gaussian16Output.contributions.func(output) == [[25.0, 9.0]]
+
+        output.spin = None
+        with pytest.raises(ValueError, match="Unknown spin type"):
+            Gaussian16Output.contributions.func(output)
 
     def test_singlet_opt_output(self, gaussian_singlet_opt_outfile):
         assert os.path.exists(gaussian_singlet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_singlet_opt_outfile)
+        assert g16_output.version == "G16RevB.01"
+        assert g16_output.file_date == "2024-06-20 18:09:26"
         assert g16_output.normal_termination
+        assert g16_output.molecule.num_atoms == 40
+        assert g16_output.spin == "restricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 116
         assert g16_output.alpha_occ_eigenvalues[0] == -25.29096 * units.Hartree
@@ -429,11 +1039,130 @@ class TestGaussian16Output:
         assert g16_output.homo_energy == -0.29814 * units.Hartree
         assert g16_output.lumo_energy == -0.02917 * units.Hartree
         assert np.isclose(g16_output.fmo_gap, 0.26897 * units.Hartree)
+        assert g16_output.temperature_in_K == 298.15
+        assert g16_output.pressure_in_atm == 1.0
+        assert g16_output.fmo_gap == g16_output.alpha_fmo_gap
+        assert np.allclose(
+            g16_output.rotational_temperatures, [0.0078, 0.00354, 0.00256]
+        )
+        assert np.allclose(
+            g16_output.rotational_constants_in_Hz,
+            [0.16245 * 1e9, 0.07382 * 1e9, 0.05332 * 1e9],
+        )
+        assert g16_output.rotational_symmetry_number == 1
+        mol = g16_output.molecule
+        assert mol.has_vibrations
+        assert mol.num_vib_frequencies == mol.num_vib_modes == 114
+        vibrational_mode1 = [
+            [0.0, 0.08, 0.03],
+            [0.01, 0.01, 0.04],
+            [0.01, 0.03, 0.04],
+            [0.02, 0.09, 0.06],
+            [0.0, 0.01, 0.03],
+            [0.0, 0.06, 0.02],
+            [0.01, 0.05, 0.04],
+            [0.01, -0.05, 0.06],
+            [0.02, -0.06, 0.07],
+            [-0.02, -0.08, 0.05],
+            [0.06, -0.06, 0.1],
+            [0.06, -0.06, 0.09],
+            [-0.05, -0.12, 0.0],
+            [-0.05, -0.02, -0.04],
+            [-0.11, 0.03, -0.14],
+            [-0.16, -0.03, -0.21],
+            [-0.16, -0.13, -0.16],
+            [-0.11, -0.18, -0.06],
+            [0.02, -0.15, 0.11],
+            [-0.11, 0.11, -0.17],
+            [-0.21, -0.18, -0.21],
+            [-0.11, -0.26, -0.03],
+            [-0.02, -0.25, 0.15],
+            [0.08, -0.14, 0.18],
+            [0.01, 0.04, 0.01],
+            [0.04, 0.03, 0.03],
+            [-0.01, 0.01, -0.01],
+            [0.05, -0.0, 0.02],
+            [-0.0, -0.02, -0.03],
+            [0.03, -0.02, -0.01],
+            [0.07, -0.01, 0.03],
+            [-0.02, -0.04, -0.05],
+            [0.14, -0.05, 0.13],
+            [-0.21, 0.0, -0.29],
+            [0.07, 0.07, 0.05],
+            [-0.06, 0.02, -0.03],
+            [0.04, -0.06, -0.03],
+            [0.02, -0.07, -0.03],
+            [0.07, -0.06, -0.04],
+            [0.03, -0.08, -0.03],
+        ]
+
+        assert np.allclose(
+            mol.vibrational_modes[0], vibrational_mode1, atol=1e-4
+        )
+        assert mol.vibrational_frequencies[0] == 11.9481
+        assert g16_output.zero_point_energy == 0.284336
+        assert np.isclose(
+            g16_output.thermal_vibration_correction,
+            190.931 * kcal_per_mol_to_hartree - 0.284336,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_rotation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.thermal_translation_correction,
+            0.889 * kcal_per_mol_to_hartree,
+            atol=1e-6,
+        )
+        assert g16_output.thermal_energy_correction == 0.307101
+        assert g16_output.thermal_enthalpy_correction == 0.308045
+        assert g16_output.thermal_gibbs_free_energy_correction == 0.225790
+        assert g16_output.internal_energy == -1863.733079
+        assert g16_output.enthalpy == -1863.732135
+        assert g16_output.gibbs_free_energy == -1863.814390
+        assert np.isclose(
+            g16_output.electronic_entropy,
+            0.000 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.vibrational_entropy,
+            90.556 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.rotational_entropy,
+            37.462 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert np.isclose(
+            g16_output.translational_entropy,
+            45.103 * 1e-3 * kcal_per_mol_to_hartree,
+            atol=1e-3,
+        )
+        assert g16_output.has_dipole_moment
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([4.7915, -0.1097, 0.4554]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 4.8143, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants()[-1],
+            np.array([0.16245 * 1e9, 0.07382 * 1e9, 0.05332 * 1e9]),
+            rtol=1e-4,
+        )
 
     def test_triplet_opt_output(self, gaussian_triplet_opt_outfile):
         assert os.path.exists(gaussian_triplet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_triplet_opt_outfile)
         assert g16_output.normal_termination
+        assert g16_output.spin == "unrestricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 215
         assert (
@@ -459,11 +1188,55 @@ class TestGaussian16Output:
         )
         assert g16_output.homo_energy is None
         assert g16_output.lumo_energy is None
-        assert g16_output.somo_energy == -0.15673 * units.Hartree
+        assert g16_output.num_unpaired_electrons == 2
+        assert g16_output.multiplicity == 3
+        # somo_energies should return list of 2 SOMOs for triplet
+        assert len(g16_output.somo_energies) == 2
+        assert g16_output.somo_energies == [
+            -0.19177 * units.Hartree,
+            -0.15673 * units.Hartree,
+        ]
+        assert g16_output.lowest_somo_energy == -0.19177 * units.Hartree
+        assert g16_output.highest_somo_energy == -0.15673 * units.Hartree
+        assert g16_output.alpha_homo_energy == -0.15673 * units.Hartree
+        assert g16_output.beta_homo_energy == -0.18923 * units.Hartree
+        assert g16_output.alpha_lumo_energy == -0.07423 * units.Hartree
+        assert g16_output.beta_lumo_energy == -0.05025 * units.Hartree
+        assert np.isclose(
+            g16_output.fmo_gap,
+            (min(-0.07423, -0.05025) - (-0.15673)) * units.Hartree,
+        )
+        assert np.isclose(
+            g16_output.alpha_fmo_gap,
+            (-0.07423 - (-0.15673)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.beta_fmo_gap,
+            (-0.05025 - (-0.18923)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert g16_output.has_dipole_moment
+        assert g16_output.num_dipole_moments == 3
+        assert np.allclose(
+            g16_output.all_dipole_moments[-1],
+            np.array([-1.6500, -5.4954, -2.3627]),
+            rtol=1e-4,
+        )
+        assert np.isclose(
+            g16_output.all_dipole_moment_magnitudes[-1], 6.2052, rtol=1e-4
+        )
+        assert g16_output.all_point_groups[-1] == "C1"
+        assert np.allclose(
+            g16_output.all_rotational_constants()[-1],
+            np.array([0.06229 * 1e9, 0.05513 * 1e9, 0.04690 * 1e9]),
+            rtol=1e-4,
+        )
 
     def test_quintet_opt_output(self, gaussian_quintet_opt_outfile):
         assert os.path.exists(gaussian_quintet_opt_outfile)
         g16_output = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        assert g16_output.spin == "unrestricted"
         assert g16_output.tddft_transitions == []  # no tddft calcs
         assert len(g16_output.alpha_occ_eigenvalues) == 216
         assert (
@@ -487,8 +1260,257 @@ class TestGaussian16Output:
         assert (
             g16_output.beta_virtual_eigenvalues[-1] == 4.23626 * units.Hartree
         )
-        assert g16_output.somo_energy == -0.18764 * units.Hartree
-        assert g16_output.fmo_gap is None
+        assert g16_output.num_unpaired_electrons == 4
+        assert g16_output.multiplicity == 5
+        # somo_energies should return list of 4 SOMOs for quintet
+        assert len(g16_output.somo_energies) == 4
+        assert g16_output.somo_energies == [
+            -0.22065 * units.Hartree,
+            -0.21055 * units.Hartree,
+            -0.19474 * units.Hartree,
+            -0.18764 * units.Hartree,
+        ]
+        assert g16_output.lowest_somo_energy == -0.22065 * units.Hartree
+        assert g16_output.highest_somo_energy == -0.18764 * units.Hartree
+        assert g16_output.alpha_homo_energy == -0.18764 * units.Hartree
+        assert g16_output.beta_homo_energy == -0.19564 * units.Hartree
+        assert g16_output.alpha_lumo_energy == -0.03881 * units.Hartree
+        assert g16_output.beta_lumo_energy == -0.06116 * units.Hartree
+        assert np.isclose(
+            g16_output.fmo_gap,
+            (min(-0.03881, -0.06116) - (-0.18764)) * units.Hartree,
+        )
+        assert np.isclose(
+            g16_output.alpha_fmo_gap,
+            (-0.03881 - (-0.18764)) * units.Hartree,
+            rtol=1e-6,
+        )
+        assert np.isclose(
+            g16_output.beta_fmo_gap,
+            (-0.06116 - (-0.19564)) * units.Hartree,
+            rtol=1e-6,
+        )
+
+    def test_read_gaussian_link_opt_output_file(
+        self, gaussian_link_opt_outputfile
+    ):
+        assert os.path.exists(gaussian_link_opt_outputfile)
+        g16_link_opt = Gaussian16Output(filename=gaussian_link_opt_outputfile)
+        assert (
+            g16_link_opt.route_string
+            == "# opt freq um062x def2svp geom=check guess=read"
+        )
+        assert g16_link_opt.is_link
+        assert g16_link_opt.jobtype == "opt"
+        assert g16_link_opt.normal_termination
+        assert g16_link_opt.spin == "unrestricted"
+        assert isinstance(g16_link_opt.molecule, Molecule)
+        assert g16_link_opt.tddft_transitions == []
+        assert len(g16_link_opt.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_opt.alpha_occ_eigenvalues[0] == -19.77692 * units.Hartree
+        )
+        assert (
+            g16_link_opt.alpha_occ_eigenvalues[-1] == -0.36639 * units.Hartree
+        )
+        assert len(g16_link_opt.alpha_virtual_eigenvalues) == 20
+        assert (
+            g16_link_opt.alpha_virtual_eigenvalues[0]
+            == -0.06479 * units.Hartree
+        )
+        assert (
+            g16_link_opt.alpha_virtual_eigenvalues[-1]
+            == 3.87784 * units.Hartree
+        )
+        assert len(g16_link_opt.beta_occ_eigenvalues) == 8
+        assert (
+            g16_link_opt.beta_occ_eigenvalues[0] == -19.77692 * units.Hartree
+        )
+        assert (
+            g16_link_opt.beta_occ_eigenvalues[-1] == -0.36639 * units.Hartree
+        )
+        assert len(g16_link_opt.beta_virtual_eigenvalues) == 20
+        assert (
+            g16_link_opt.beta_virtual_eigenvalues[0]
+            == -0.06479 * units.Hartree
+        )
+        assert (
+            g16_link_opt.beta_virtual_eigenvalues[-1]
+            == 3.87784 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_opt.fmo_gap, 0.3016 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_ts_output_file(
+        self, gaussian_link_ts_outputfile
+    ):
+        assert os.path.exists(gaussian_link_ts_outputfile)
+        g16_link_ts = Gaussian16Output(filename=gaussian_link_ts_outputfile)
+        assert not g16_link_ts.normal_termination  # Error termination
+        assert g16_link_ts.spin == "unrestricted"
+        assert (
+            g16_link_ts.route_string
+            == "# opt=(ts,calcfc,noeigentest,maxstep=10) freq um062x def2svp geom=check guess=read"
+        )
+        assert g16_link_ts.is_link
+        assert g16_link_ts.jobtype == "ts"
+        assert len(g16_link_ts.vibrational_frequencies) == 0
+        assert (
+            g16_link_ts.num_vib_modes == g16_link_ts.num_vib_frequencies == 0
+        )
+        assert len(g16_link_ts.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_ts.alpha_occ_eigenvalues[0] == -19.78334 * units.Hartree
+        )
+        assert (
+            g16_link_ts.alpha_occ_eigenvalues[-1] == -0.38325 * units.Hartree
+        )
+        assert len(g16_link_ts.alpha_virtual_eigenvalues) == 20
+        assert (
+            g16_link_ts.alpha_virtual_eigenvalues[0]
+            == -0.08312 * units.Hartree
+        )
+        assert (
+            g16_link_ts.alpha_virtual_eigenvalues[-1]
+            == 3.85967 * units.Hartree
+        )
+        assert len(g16_link_ts.beta_occ_eigenvalues) == 8
+        assert g16_link_ts.beta_occ_eigenvalues[0] == -19.78334 * units.Hartree
+        assert g16_link_ts.beta_occ_eigenvalues[-1] == -0.38325 * units.Hartree
+        assert len(g16_link_ts.beta_virtual_eigenvalues) == 20
+        assert (
+            g16_link_ts.beta_virtual_eigenvalues[0] == -0.08312 * units.Hartree
+        )
+        assert (
+            g16_link_ts.beta_virtual_eigenvalues[-1] == 3.85967 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_ts.fmo_gap, 0.30013 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_gaussian_link_modred_output_file(
+        self, gaussian_link_modred_output
+    ):
+        assert os.path.exists(gaussian_link_modred_output)
+        g16_link_modred = Gaussian16Output(
+            filename=gaussian_link_modred_output
+        )
+        assert g16_link_modred.normal_termination
+        assert g16_link_modred.spin == "unrestricted"
+        assert (
+            g16_link_modred.route_string
+            == "# opt=modredundant freq umn15 def2svp geom=check guess=read"
+        )
+        assert g16_link_modred.is_link
+        assert g16_link_modred.jobtype == "modred"
+        assert isinstance(g16_link_modred.molecule, Molecule)
+        assert len(g16_link_modred.vibrational_frequencies) == 126
+        assert (
+            g16_link_modred.num_vib_modes
+            == g16_link_modred.num_vib_frequencies
+            == 126
+        )
+        assert len(g16_link_modred.alpha_occ_eigenvalues) == 97
+        assert (
+            g16_link_modred.alpha_occ_eigenvalues[0]
+            == -254.07064 * units.Hartree
+        )
+        assert (
+            g16_link_modred.alpha_occ_eigenvalues[-1]
+            == -0.24253 * units.Hartree
+        )
+        assert len(g16_link_modred.alpha_virtual_eigenvalues) == 339
+        assert (
+            g16_link_modred.alpha_virtual_eigenvalues[0]
+            == 0.01660 * units.Hartree
+        )
+        assert (
+            g16_link_modred.alpha_virtual_eigenvalues[-1]
+            == 4.09404 * units.Hartree
+        )
+        assert len(g16_link_modred.beta_occ_eigenvalues) == 93
+        assert (
+            g16_link_modred.beta_occ_eigenvalues[0]
+            == -254.07343 * units.Hartree
+        )
+        assert (
+            g16_link_modred.beta_occ_eigenvalues[-1]
+            == -0.26404 * units.Hartree
+        )
+        assert len(g16_link_modred.beta_virtual_eigenvalues) == 343
+        assert (
+            g16_link_modred.beta_virtual_eigenvalues[0]
+            == -0.03779 * units.Hartree
+        )
+        assert (
+            g16_link_modred.beta_virtual_eigenvalues[-1]
+            == 4.21075 * units.Hartree
+        )
+        assert g16_link_modred.multiplicity == 5
+        assert g16_link_modred.num_unpaired_electrons == 4
+        assert g16_link_modred.somo_energies == [
+            -0.30450 * units.Hartree,
+            -0.29487 * units.Hartree,
+            -0.26983 * units.Hartree,
+            -0.24253 * units.Hartree,
+        ]
+
+    def test_read_gaussian_link_sp_output_file(
+        self, gaussian_link_sp_outputfile
+    ):
+        assert os.path.exists(gaussian_link_sp_outputfile)
+        g16_link_sp = Gaussian16Output(filename=gaussian_link_sp_outputfile)
+        assert g16_link_sp.normal_termination
+        assert (
+            g16_link_sp.route_string
+            == "# um062x def2tzvp scrf=(smd,solvent=chloroform) geom=check guess=read"
+        )
+        assert g16_link_sp.is_link
+        assert g16_link_sp.jobtype == "sp"
+        assert len(g16_link_sp.vibrational_frequencies) == 0
+        assert (
+            g16_link_sp.num_vib_modes == g16_link_sp.num_vib_frequencies == 0
+        )
+        assert len(g16_link_sp.alpha_occ_eigenvalues) == 8
+        assert (
+            g16_link_sp.alpha_occ_eigenvalues[0] == -19.78515 * units.Hartree
+        )
+        assert (
+            g16_link_sp.alpha_occ_eigenvalues[-1] == -0.38742 * units.Hartree
+        )
+        assert len(g16_link_sp.alpha_virtual_eigenvalues) == 54
+        assert (
+            g16_link_sp.alpha_virtual_eigenvalues[0]
+            == -0.08907 * units.Hartree
+        )
+        assert (
+            g16_link_sp.alpha_virtual_eigenvalues[-1]
+            == 43.63078 * units.Hartree
+        )
+        assert len(g16_link_sp.beta_occ_eigenvalues) == 8
+        assert g16_link_sp.beta_occ_eigenvalues[0] == -19.78515 * units.Hartree
+        assert g16_link_sp.beta_occ_eigenvalues[-1] == -0.38742 * units.Hartree
+        assert len(g16_link_sp.beta_virtual_eigenvalues) == 54
+        assert (
+            g16_link_sp.beta_virtual_eigenvalues[0] == -0.08907 * units.Hartree
+        )
+        assert (
+            g16_link_sp.beta_virtual_eigenvalues[-1]
+            == 43.63078 * units.Hartree
+        )
+        assert np.isclose(
+            g16_link_sp.fmo_gap, 0.29835 * units.Hartree, atol=1e-5
+        )
+
+    def test_read_failed_link_job(self, gaussian_failed_link_output):
+        assert os.path.exists(gaussian_failed_link_output)
+        g16_failed_link = Gaussian16Output(
+            filename=gaussian_failed_link_output
+        )
+        assert not g16_failed_link.normal_termination
+        molecule = Molecule.from_filepath(gaussian_failed_link_output)
+        assert isinstance(molecule, Molecule)
 
     def test_read_genecp_outputfile(self, gaussian_ts_genecp_outfile):
         assert os.path.exists(gaussian_ts_genecp_outfile)
@@ -539,60 +1561,61 @@ class TestGaussian16Output:
         assert (
             g16_genecp.num_vib_modes == g16_genecp.num_vib_frequencies == 138
         )
+        vibrational_mode1 = np.array(
+            [
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, 0.0],
+                [0.0, -0.0, -0.01],
+                [0.0, -0.0, 0.0],
+                [-0.0, 0.06, 0.01],
+                [-0.03, 0.06, 0.01],
+                [0.0, -0.01, 0.0],
+                [-0.01, 0.02, 0.0],
+                [-0.0, -0.0, 0.01],
+                [0.84, -0.47, 0.23],
+                [-0.03, 0.05, -0.01],
+                [0.0, 0.0, 0.0],
+                [0.0, -0.0, 0.0],
+                [-0.0, -0.01, -0.0],
+                [0.01, -0.0, 0.0],
+                [0.01, 0.01, 0.0],
+                [-0.06, 0.01, -0.02],
+                [0.01, -0.02, -0.0],
+                [0.0, 0.0, 0.0],
+                [-0.01, 0.01, -0.0],
+                [0.02, 0.05, 0.01],
+                [-0.01, -0.01, -0.0],
+                [-0.0, -0.01, -0.0],
+                [-0.01, -0.01, -0.01],
+                [-0.01, -0.01, -0.0],
+                [0.0, -0.01, 0.0],
+                [-0.01, -0.01, -0.0],
+                [-0.0, -0.0, -0.0],
+            ]
+        )
         assert np.allclose(
             g16_genecp.vibrational_modes[0],
-            np.array(
-                [
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, 0.0],
-                    [0.0, -0.0, -0.01],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, 0.06, 0.01],
-                    [-0.03, 0.06, 0.01],
-                    [0.0, -0.01, 0.0],
-                    [-0.01, 0.02, 0.0],
-                    [-0.0, -0.0, 0.01],
-                    [0.84, -0.47, 0.23],
-                    [-0.03, 0.05, -0.01],
-                    [0.0, 0.0, 0.0],
-                    [0.0, -0.0, 0.0],
-                    [-0.0, -0.01, -0.0],
-                    [0.01, -0.0, 0.0],
-                    [0.01, 0.01, 0.0],
-                    [-0.06, 0.01, -0.02],
-                    [0.01, -0.02, -0.0],
-                    [0.0, 0.0, 0.0],
-                    [-0.01, 0.01, -0.0],
-                    [0.02, 0.05, 0.01],
-                    [-0.01, -0.01, -0.0],
-                    [-0.0, -0.01, -0.0],
-                    [-0.01, -0.01, -0.01],
-                    [-0.01, -0.01, -0.0],
-                    [0.0, -0.01, 0.0],
-                    [-0.01, -0.01, -0.0],
-                    [-0.0, -0.0, -0.0],
-                ]
-            ),
+            vibrational_mode1,
             rtol=1e-4,
         )
         assert len(g16_genecp.forces) == 11
@@ -870,13 +1893,17 @@ class TestGaussian16Output:
         )
         assert g16_genecp.additional_opt_options_in_route == "maxstep=10"
         assert g16_genecp.additional_route_parameters is None
-        assert g16_genecp.job_type == "ts"
+        assert g16_genecp.jobtype == "ts"
         assert g16_genecp.functional == "mn15"
         assert g16_genecp.basis == "genecp"
         assert g16_genecp.optimized_structure.frozen_atoms is None
         assert (
             len(g16_genecp.all_structures) == 11
         )  # 11 structures altogether, as shown in GaussView
+        optimized_flags = [
+            mol.is_optimized_structure for mol in g16_genecp.all_structures
+        ]
+        assert optimized_flags == [False] * 9 + [True, True]
         assert g16_genecp.optimized_structure.positions.shape == (48, 3)
         assert np.allclose(
             g16_genecp.optimized_structure.positions,
@@ -892,6 +1919,157 @@ class TestGaussian16Output:
             [3.69135800, -0.83587500, -0.25754700],
         )
         assert len(g16_genecp.get_molecule(index="4:")) == 8
+
+        mol = g16_genecp.molecule
+        assert np.allclose(mol.positions, last_structure_positions, rtol=1e-4)
+        mol2 = mol.vibrationally_displaced(mode_idx=1, amp=0.5)
+        assert np.allclose(
+            mol2.positions[29], [-1.668781, 1.679069, 0.38199], rtol=1e-4
+        )
+
+        mol3 = mol.vibrationally_displaced(mode_idx=1, amp=-0.5)
+        assert np.allclose(
+            mol3.positions[29], [-2.505441, 2.147201, 0.152904], rtol=1e-4
+        )
+
+    def test_read_full_gen_outputfile(self, gaussian_full_gen_outfile):
+        assert os.path.exists(gaussian_full_gen_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_gen_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "gen"
+        # Light elements use named basis
+        assert g16.light_elements == ["H", "C"]
+        assert g16.light_elements_basis == "6-31g(d)"
+        # Heavy elements has explicit orbital basis
+        assert g16.heavy_elements == ["Cl", "Br"]
+        heavy_basis = g16.heavy_elements_basis
+
+        cl_shells = heavy_basis["Cl"]
+        assert [shell["shell"] for shell in cl_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+        ]
+        cl_first_shell = cl_shells[0]
+        assert cl_first_shell["shell"] == "S"
+        assert len(cl_first_shell["primitives"]) == 6
+        cl_first_exp, cl_first_coeff = cl_first_shell["primitives"][0]
+        assert np.isclose(cl_first_exp, 1.0581900000e05)
+        assert np.isclose(cl_first_coeff, 7.3800000000e-04)
+        cl_last_shell = cl_shells[-1]
+        assert cl_last_shell["shell"] == "P"
+        assert len(cl_last_shell["primitives"]) == 1
+        cl_last_exp, cl_last_coeff = cl_last_shell["primitives"][0]
+        assert np.isclose(cl_last_exp, 1.0943700000e-01)
+        assert np.isclose(cl_last_coeff, 1.0000000000e00)
+
+        br_shells = heavy_basis["Br"]
+        assert [shell["shell"] for shell in br_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+        ]
+        br_first_shell = br_shells[0]
+        assert br_first_shell["shell"] == "S"
+        assert len(br_first_shell["primitives"]) == 6
+        br_first_exp, br_first_coeff = br_first_shell["primitives"][0]
+        assert np.isclose(br_first_exp, 4.3970000000e05)
+        assert np.isclose(br_first_coeff, 8.1300000000e-04)
+        br_last_shell = br_shells[-1]
+        assert br_last_shell["shell"] == "D"
+        assert len(br_last_shell["primitives"]) == 1
+        br_last_exp, br_last_coeff = br_last_shell["primitives"][0]
+        assert np.isclose(br_last_exp, 1.5350000000e00)
+        assert np.isclose(br_last_coeff, 1.0000000000e00)
+
+    def test_read_full_genecp_outputfile(self, gaussian_full_genecp_outfile):
+        assert os.path.exists(gaussian_full_genecp_outfile)
+        g16 = Gaussian16Output(filename=gaussian_full_genecp_outfile)
+        assert g16.normal_termination
+        assert g16.gen_genecp == "genecp"
+        # Light element (Cl) uses named basis
+        assert g16.light_elements == ["Cl"]
+        assert g16.light_elements_basis == "def2svp"
+        # Heavy element (Ag) has explicit orbital basis
+        assert g16.heavy_elements == ["Ag"]
+
+        ag_shells = g16.heavy_elements_basis["Ag"]
+        assert [s["shell"] for s in ag_shells] == [
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "S",
+            "P",
+            "P",
+            "P",
+            "P",
+            "D",
+            "D",
+            "D",
+            "F",
+        ]
+        ag_first_shell = ag_shells[0]
+        assert ag_first_shell["shell"] == "S"
+        assert len(ag_first_shell["primitives"]) == 2
+        ag_first_exp, ag_first_coef = ag_first_shell["primitives"][0]
+        assert np.isclose(ag_first_exp, 1.9000000000e01)
+        assert np.isclose(ag_first_coef, -1.6600104141e-01)
+        ag_last_shell = ag_shells[-1]
+        assert ag_last_shell["shell"] == "F"
+        assert len(ag_last_shell["primitives"]) == 1
+        ag_last_exp, ag_last_coeff = ag_last_shell["primitives"][0]
+        assert np.isclose(ag_last_exp, 1.3971100000e00)
+        assert np.isclose(ag_last_coeff, 1.0000000000e00)
+
+        ecp = g16.heavy_elements_ecp
+        ag_ecp = ecp["Ag"]
+        assert ag_ecp["n_valence_electrons"] == 19
+        channel_names = [ch["name"] for ch in ag_ecp["channels"]]
+        assert channel_names == ["F and up", "S - F", "P - F", "D - F"]
+        ag_first_channel = ag_ecp["channels"][0]
+        assert ag_first_channel["name"] == "F and up"
+        assert len(ag_first_channel["terms"]) == 2
+        r_pow, ag_first_exp, ag_first_coef, spin_orbit_coef = ag_first_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_first_exp, 14.22)
+        assert np.isclose(ag_first_coef, -33.68992012)
+        assert np.isclose(spin_orbit_coef, 0.0)
+        ag_last_channel = ag_ecp["channels"][-1]
+        assert ag_last_channel["name"] == "D - F"
+        assert len(ag_last_channel["terms"]) == 4
+        r_pow, ag_last_exp, ag_last_coef, spin_orbit_coef = ag_last_channel[
+            "terms"
+        ][0]
+        assert r_pow == 2
+        assert np.isclose(ag_last_exp, 10.21)
+        assert np.isclose(ag_last_coef, 73.71926087)
+        assert np.isclose(spin_orbit_coef, 0.0)
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
@@ -971,10 +2149,7 @@ class TestGaussian16Output:
             0,
             0,
         ]
-        assert (
-            g16_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_frozen.optimized_structure.energy == -804.614710796
         assert g16_frozen.free_coordinate_indices == [11, 12, 13, 14]
         assert g16_frozen.num_vib_modes == g16_frozen.num_vib_frequencies == 12
         assert np.allclose(
@@ -1073,13 +2248,11 @@ class TestGaussian16Output:
             0,
         ]
 
-        # since use_frozen is False, this is not included in the output structure
+        # since use_frozen is False, this is
+        # not included in the output structure
         assert g16_hide_frozen.optimized_structure.frozen_atoms is None
 
-        assert (
-            g16_hide_frozen.optimized_structure.energy
-            == -804.614710796 * units.Hartree
-        )
+        assert g16_hide_frozen.optimized_structure.energy == -804.614710796
         assert (
             g16_hide_frozen.num_vib_modes
             == g16_hide_frozen.num_vib_frequencies
@@ -1122,7 +2295,9 @@ class TestGaussian16Output:
     def test_read_scan_outputfile(self, gaussian_failed_scan_outfile):
         assert os.path.exists(gaussian_failed_scan_outfile)
         g16_scan = Gaussian16Output(
-            filename=gaussian_failed_scan_outfile, use_frozen=True
+            filename=gaussian_failed_scan_outfile,
+            use_frozen=True,
+            include_intermediate=False,
         )
         assert not g16_scan.normal_termination
         assert g16_scan.num_atoms == 110
@@ -1141,6 +2316,29 @@ class TestGaussian16Output:
             "num_steps": 10,
             "step_size": -0.1,
         }
+        assert g16_scan.num_steps == 11
+        assert len(g16_scan.all_structures) == 1
+
+        g16_scan_all_int = Gaussian16Output(
+            filename=gaussian_failed_scan_outfile,
+            use_frozen=True,
+            include_intermediate=True,
+        )
+        assert not g16_scan_all_int.normal_termination
+        assert g16_scan_all_int.num_atoms == 110
+        assert len(g16_scan_all_int.alpha_occ_eigenvalues) == 217
+        assert (
+            g16_scan_all_int.alpha_occ_eigenvalues[0]
+            == -19.75707 * units.Hartree
+        )
+        assert (
+            g16_scan_all_int.alpha_occ_eigenvalues[-1]
+            == -0.33917 * units.Hartree
+        )
+        assert len(g16_scan_all_int.alpha_virtual_eigenvalues) == 895
+
+        assert len(g16_scan_all_int.all_structures) == 9
+        # 10 orientations with last structure (failed job) removed
 
     def test_read_hirshfeld_charges_outputfile(
         self, gaussian_hirshfeld_outfile
@@ -1303,7 +2501,58 @@ class TestGaussian16Output:
     def test_read_oniom_outputfile(self, gaussian_oniom_outputfile):
         assert os.path.exists(gaussian_oniom_outputfile)
         g16_oniom = Gaussian16Output(filename=gaussian_oniom_outputfile)
+        assert g16_oniom.is_oniom
+        assert "high level atoms" in g16_oniom.oniom_partition
         assert g16_oniom.normal_termination is False
+        assert g16_oniom.oniom_cutting_bonds == {
+            (49, 50): (0.700189, 0.700189),
+            (80, 81): (0.700189, 0.700189),
+            (176, 177): (0.700189, 0.700189),
+            (198, 199): (0.700189, 0.700189),
+            (217, 218): (0.700189, 0.700189),
+            (439, 438): (0.700189, 0.700189),
+        }
+        assert g16_oniom.oniom_partition == {
+            "high level atoms": [
+                "50-60",
+                "81-89",
+                "177-186",
+                "199-207",
+                "218-225",
+                "291-294",
+                "308-312",
+                "364-367",
+                "375-379",
+                "387-390",
+                "421-438",
+                "440-475",
+            ],
+            "low level atoms": [
+                "1-49",
+                "61-80",
+                "90-176",
+                "187-198",
+                "208-217",
+                "226-290",
+                "295-307",
+                "313-363",
+                "368-374",
+                "380-386",
+                "391-420",
+                "439",
+                "476-483",
+            ],
+        }
+        assert g16_oniom.oniom_get_charge_and_multiplicity == {
+            "low-level, real system": (1, 2),
+            "high-level, model system": (1, 1),
+            "low-level, model system": (1, 1),
+        }
+        assert g16_oniom.oniom_layer_energies == {
+            "method:  high, system:  model": -5303.002072980664,
+            "method:  low, system:  model": 6.767438788151,
+            "method:  low, system:  real": 9.234384095059,
+        }
         assert g16_oniom.num_atoms == 483
         assert len(g16_oniom.oniom_energies) == 2
         assert g16_oniom.oniom_energies[0] == -5278.927903743607
@@ -1312,6 +2561,103 @@ class TestGaussian16Output:
         assert (
             g16_oniom.energies_in_eV[0] == -5278.927903743607 * units.Hartree
         )
+
+    def test_normal_termination_semiempirical_pm6_output_file(
+        self, gaussian_semiempirical_pm6_output_file
+    ):
+        g16_pm6 = Gaussian16Output(
+            filename=gaussian_semiempirical_pm6_output_file
+        )
+        assert g16_pm6.normal_termination
+        assert g16_pm6.molecule.num_atoms == 27
+        assert g16_pm6.molecule.empirical_formula == "C9H16N2"
+        assert g16_pm6.ab_initio is None
+        assert g16_pm6.functional is None
+        assert g16_pm6.basis is None
+        assert g16_pm6.jobtype == "opt"
+        assert g16_pm6.route_string == "# opt freq pm6"
+        assert g16_pm6.freq
+        assert (
+            g16_pm6.semiempirical == "PM6"
+        )  # changed to upper case in route_object.semiempirical
+
+    def test_normal_termination_with_trailing_blank_lines(
+        self, gaussian_ts_genecp_outfile, tmp_path
+    ):
+        with open(gaussian_ts_genecp_outfile, "r") as f:
+            contents = f.read()
+
+        output_with_trailing_blanks = tmp_path / "pd_genecp_ts_trailing.log"
+        with open(output_with_trailing_blanks, "w") as f:
+            f.write(contents + "\n\n")
+
+        g16_output = Gaussian16Output(
+            filename=str(output_with_trailing_blanks)
+        )
+        assert g16_output.normal_termination
+
+    def test_oldform_redundant_coordinates_atomic_numbers(self, tmp_path):
+        outputfile = tmp_path / "old_form_numeric_coords.log"
+        outputfile.write_text(
+            "\n".join(
+                [
+                    " ----------------------------------------------------------------------",
+                    " # opt b3lyp/gen",
+                    " ----------------------------------------------------------------------",
+                    ' Structure from the checkpoint file:  "Pd_insertion_ts_r.chk"',
+                    " Charge =  0 Multiplicity = 1",
+                    " Redundant internal coordinates found in file.  (old form).",
+                    " 46.0,0,0.000000,0.000000,0.000000",
+                    " H,0,0.000000,0.000000,1.000000",
+                    " Recover connectivity data from disk.",
+                    " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
+                ]
+            )
+            + "\n"
+        )
+        g16_output = Gaussian16Output(filename=str(outputfile))
+        assert g16_output.symbols == ["Pd", "H"]
+        assert g16_output.all_structures == []
+        assert g16_output.last_structure.chemical_symbols == ["Pd", "H"]
+        assert g16_output.molecule.chemical_symbols == ["Pd", "H"]
+
+    def test_pd_insertion_ts_r_logfile(
+        self, gaussian_pd_insertion_ts_r_outfile
+    ):
+        g16_output = Gaussian16Output(
+            filename=gaussian_pd_insertion_ts_r_outfile
+        )
+        assert g16_output.normal_termination
+        assert g16_output.charge == 0
+        assert g16_output.multiplicity == 1
+        assert len(g16_output.symbols) == g16_output.molecule.num_atoms
+        assert "Pd" in g16_output.symbols
+        assert "Pd" in g16_output.molecule.chemical_symbols
+
+    def test_energy_extraction_from_gaussian_output_file(
+        self, gaussian_quintet_opt_outfile
+    ):
+        g16_out = Gaussian16Output(filename=gaussian_quintet_opt_outfile)
+        h_from_file = g16_out.enthalpy
+        assert np.isclose(h_from_file, -7521.416016, rtol=1e-4)
+        g_from_file = g16_out.gibbs_free_energy
+        assert np.isclose(g_from_file, -7521.548653, rtol=1e-4)
+
+    def test_custom_solvent_smd_generic(self, gaussian_smd_generic_outfile):
+        g16_generic = Gaussian16Output(filename=gaussian_smd_generic_outfile)
+        assert g16_generic.normal_termination
+        custom_solvent = g16_generic.custom_solvent
+        assert (
+            custom_solvent["SolventName"]
+            == "1,1,1,3,3,3-HEXAFLUOROPROPAN-2-OL"
+        )
+        assert custom_solvent["Eps"] == 16.7
+        assert custom_solvent["EpsInf"] == 1.625625
+        assert custom_solvent["HbondAcidity"] == 0.77
+        assert custom_solvent["HbondBasicity"] == 0.10
+        assert custom_solvent["SurfaceTensionAtInterface"] == 23.23
+        assert custom_solvent["CarbonAromaticity"] == 0.0
+        assert custom_solvent["ElectronegativeHalogenicity"] == 0.60
 
 
 class TestGaussianWBIOutput:
@@ -1382,6 +2728,12 @@ class TestGaussianWBIOutput:
         assert g16_output.standard_orientations is not None
         assert len(g16_output.standard_orientations) == 1
         assert len(g16_output.all_structures) == 1
+
+    def test_molecules(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(
+            gaussian_benzene_opt_outfile
+        )  # benzene molecule
+        assert mol.is_aromatic
 
 
 class TestGaussianCubeFile:
@@ -1461,7 +2813,7 @@ class TestGaussianPBCOutputFile:
 
         assert np.isclose(
             g16_pbc_2d.last_structure.energy,
-            -76.1490641879 * units.Hartree,
+            -76.1490641879,
             rtol=1e-5,
         )
         assert np.allclose(
@@ -1471,9 +2823,7 @@ class TestGaussianPBCOutputFile:
                     [0.000015884, 0.000006763, 0.000000000],
                     [-0.000015884, -0.000006763, -0.000000000],
                 ]
-            )
-            * units.Hartree
-            / units.Bohr,
+            ),
             rtol=1e-5,
         )
 
@@ -1510,3 +2860,616 @@ class TestGaussianPBCOutputFile:
         # has only "Input orientation:" but no "Standard orientation:"
         assert g16_pbc_2d.standard_orientations is None
         assert g16_pbc_2d.standard_orientations_pbc is None
+
+
+class TestGaussian16pKaOutput:
+    """Tests for Gaussian16pKaOutput class for pKa thermochemistry calculations.
+
+    Reference values are from .dat files in tests/data/GaussianTests/outputs/
+    Generated at T=373.15K, c=1.0 mol/L, csg=100 cm^-1, ch=100 cm^-1
+
+    5PQ_Me_ts1_no_pd_opt.dat values (HA - protonated acid):
+        E = -345.741944 hartree
+        ZPE = 0.133804 hartree
+        H = -345.595097 hartree
+        qh-H = -345.596472 hartree
+        T.S = 0.053929 hartree
+        T.qh-S = 0.052278 hartree
+        G(T) = -345.649026 hartree
+        qh-G(T) = -345.648751 hartree
+
+    5PQ_Me_ts1_b_no_pd_opt.dat values (A- - conjugate base):
+        E = -344.915399 hartree
+        ZPE = 0.115987 hartree
+        H = -344.786580 hartree
+        qh-H = -344.787739 hartree
+        T.S = 0.052926 hartree
+        T.qh-S = 0.051766 hartree
+        G(T) = -344.839506 hartree
+        qh-G(T) = -344.839505 hartree
+    """
+
+    # Reference values from 5PQ_Me_ts1_no_pd_opt.dat at T=373.15K
+    HA_E = -345.741944
+    HA_ZPE = 0.133804
+    HA_H = -345.595097
+    HA_QH_H = -345.596472
+    HA_TS = 0.053929
+    HA_QH_TS = 0.052278
+    HA_G = -345.649026
+    HA_QH_G = -345.648751
+
+    # Reference values from 5PQ_Me_ts1_b_no_pd_opt.dat at T=373.15K
+    A_E = -344.915399
+    A_ZPE = 0.115987
+    A_H = -344.786580
+    A_QH_H = -344.787739
+    A_TS = 0.052926
+    A_QH_TS = 0.051766
+    A_G = -344.839506
+    A_QH_G = -344.839505
+
+    # Reference pKa for collidine (2,4,6-trimethylpyridine)
+    PKA_COLLIDINE_REFERENCE = 6.75
+
+    def test_init_with_default_settings(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test initialization with default thermochemistry settings."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile
+        )
+        assert output.filename == gaussian_pKa_HA_optimization_outputfile
+        assert output.temperature == 298.15
+        assert output.concentration == 1.0
+        assert output.pressure == 1.0
+        assert output.cutoff_entropy_grimme == 100.0
+        assert output.cutoff_enthalpy == 100.0
+        assert output.energy_units == "hartree"
+
+    def test_init_with_custom_settings(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test initialization with custom thermochemistry settings."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            pressure=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        assert output.temperature == 373.15
+        assert output.concentration == 1.0
+        assert output.cutoff_entropy_grimme == 100.0
+        assert output.cutoff_enthalpy == 100.0
+        assert output.energy_units == "hartree"
+
+    def test_electronic_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test electronic energy for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        E = output.electronic_energy_in_units
+        assert np.isclose(E, self.HA_E, rtol=1e-6)
+
+    def test_zero_point_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test ZPE for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        zpe = output.zero_point_energy_in_units
+        assert np.isclose(zpe, self.HA_ZPE, rtol=1e-4)
+
+    def test_enthalpy_ha(self, gaussian_pKa_HA_optimization_outputfile):
+        """Test enthalpy for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        H = output.enthalpy_in_units
+        assert np.isclose(H, self.HA_H, rtol=1e-5)
+
+    def test_qh_enthalpy_ha(self, gaussian_pKa_HA_optimization_outputfile):
+        """Test qh-H for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_H = output.qh_enthalpy_in_units
+        assert np.isclose(qh_H, self.HA_QH_H, rtol=1e-5)
+
+    def test_gibbs_free_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test G(T) for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        G = output.gibbs_free_energy_in_units
+        assert np.isclose(G, self.HA_G, rtol=1e-5)
+
+    def test_qh_gibbs_free_energy_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test qh-G(T) for HA matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_G = output.qh_gibbs_free_energy
+        assert np.isclose(qh_G, self.HA_QH_G, rtol=1e-5)
+
+    def test_electronic_energy_a(self, gaussian_pKa_A_optimization_outputfile):
+        """Test electronic energy for A- matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        E = output.electronic_energy_in_units
+        assert np.isclose(E, self.A_E, rtol=1e-6)
+
+    def test_qh_gibbs_free_energy_a(
+        self, gaussian_pKa_A_optimization_outputfile
+    ):
+        """Test qh-G(T) for A- matches reference value."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        qh_G = output.qh_gibbs_free_energy
+        assert np.isclose(qh_G, self.A_QH_G, rtol=1e-5)
+
+    def test_compute_thermochemistry_ha(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test compute_thermochemistry returns all values for HA."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+        result = output.compute_thermochemistry()
+
+        # Check structure name
+        assert result["structure"] == "5PQ_Me_ts1_no_pd_opt"
+
+        # Check all values match reference
+        assert np.isclose(result["electronic_energy"], self.HA_E, rtol=1e-6)
+        assert np.isclose(result["zero_point_energy"], self.HA_ZPE, rtol=1e-4)
+        assert np.isclose(result["enthalpy"], self.HA_H, rtol=1e-5)
+        assert np.isclose(result["qh_enthalpy"], self.HA_QH_H, rtol=1e-5)
+        assert np.isclose(result["gibbs_free_energy"], self.HA_G, rtol=1e-5)
+        assert np.isclose(
+            result["qh_gibbs_free_energy"], self.HA_QH_G, rtol=1e-5
+        )
+
+    def test_compute_pka_thermochemistry_ha_and_a(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test compute_pka_thermochemistry with exact reference values."""
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+            energy_units="hartree",
+        )
+
+        # Check settings
+        assert results["settings"]["temperature"] == 373.15
+        assert results["settings"]["concentration"] == 1.0
+        assert results["settings"]["cutoff_entropy_grimme"] == 100.0
+        assert results["settings"]["cutoff_enthalpy"] == 100.0
+        assert results["settings"]["energy_units"] == "hartree"
+
+        # Check HA values
+        assert results["HA"]["name"] == "HA"
+        assert np.isclose(results["HA"]["E"], self.HA_E, rtol=1e-6)
+        assert np.isclose(results["HA"]["qh_G"], self.HA_QH_G, rtol=1e-5)
+        assert np.isclose(results["HA"]["ZPE"], self.HA_ZPE, rtol=1e-4)
+        assert np.isclose(results["HA"]["H"], self.HA_H, rtol=1e-5)
+        assert np.isclose(results["HA"]["qh_H"], self.HA_QH_H, rtol=1e-5)
+        assert np.isclose(results["HA"]["G"], self.HA_G, rtol=1e-5)
+
+        # Check A- values
+        assert results["A"]["name"] == "A-"
+        assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
+        assert np.isclose(results["A"]["ZPE"], self.A_ZPE, rtol=1e-4)
+        assert np.isclose(results["A"]["H"], self.A_H, rtol=1e-5)
+        assert np.isclose(results["A"]["qh_H"], self.A_QH_H, rtol=1e-5)
+        assert np.isclose(results["A"]["G"], self.A_G, rtol=1e-5)
+
+    def test_deprotonation_energy_difference(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+    ):
+        """Test that deprotonation energy difference is calculated correctly.
+
+        ΔE = E(A-) - E(HA) should be positive (deprotonation is endothermic)
+        Δqh-G = qh-G(A-) - qh-G(HA) should also be positive
+        """
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        delta_E = results["A"]["E"] - results["HA"]["E"]
+        delta_qh_G = results["A"]["qh_G"] - results["HA"]["qh_G"]
+
+        # Expected values from .dat files
+        expected_delta_E = self.A_E - self.HA_E
+        expected_delta_qh_G = self.A_QH_G - self.HA_QH_G
+
+        assert np.isclose(delta_E, expected_delta_E, rtol=1e-6)
+        assert np.isclose(delta_qh_G, expected_delta_qh_G, rtol=1e-5)
+
+        # Deprotonation should be endothermic (ΔE > 0)
+        assert delta_E > 0
+        assert delta_qh_G > 0
+
+    def test_print_pka_thermochemistry_summary(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        capsys,
+    ):
+        """Test thermochemistry output for pKa calculation shows correct values.
+
+        This test verifies that individual thermochemistry values can be
+        extracted from the output objects for HA and A- species.
+        """
+        # Get thermochemistry for HA and A-
+        results = Gaussian16pKaOutput.compute_pka_thermochemistry(
+            ha_file=gaussian_pKa_HA_optimization_outputfile,
+            a_file=gaussian_pKa_A_optimization_outputfile,
+            temperature=373.15,
+            concentration=1.0,
+            cutoff_entropy_grimme=100.0,
+            cutoff_enthalpy=100.0,
+        )
+
+        # Verify HA values match reference
+        assert np.isclose(results["HA"]["E"], self.HA_E, rtol=1e-6)
+        assert np.isclose(results["HA"]["qh_G"], self.HA_QH_G, rtol=1e-5)
+
+        # Verify A- values match reference
+        assert np.isclose(results["A"]["E"], self.A_E, rtol=1e-6)
+        assert np.isclose(results["A"]["qh_G"], self.A_QH_G, rtol=1e-5)
+
+    def test_thermochemistry_property_caching(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test that thermochemistry object is cached."""
+        output = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+        )
+
+        # Access thermochemistry twice
+        thermo1 = output.thermochemistry
+        thermo2 = output.thermochemistry
+
+        # Should be the same object (cached)
+        assert thermo1 is thermo2
+
+    def test_energy_units_conversion_kcal_mol(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test energy conversion to kcal/mol."""
+        output_hartree = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="hartree",
+        )
+        output_kcal = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="kcal/mol",
+        )
+
+        E_hartree = output_hartree.electronic_energy_in_units
+        E_kcal = output_kcal.electronic_energy_in_units
+
+        # 1 hartree ≈ 627.5094740631 kcal/mol
+        assert np.isclose(E_kcal / E_hartree, 627.5094740631, rtol=0.001)
+
+    def test_energy_units_conversion_kj_mol(
+        self, gaussian_pKa_HA_optimization_outputfile
+    ):
+        """Test energy conversion to kJ/mol."""
+        output_hartree = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="hartree",
+        )
+        output_kj = Gaussian16pKaOutput(
+            filename=gaussian_pKa_HA_optimization_outputfile,
+            temperature=373.15,
+            energy_units="kJ/mol",
+        )
+
+        E_hartree = output_hartree.electronic_energy_in_units
+        E_kj = output_kj.electronic_energy_in_units
+
+        # 1 hartree ≈ 2625.5002 kJ/mol
+        assert np.isclose(E_kj / E_hartree, 2625.5002, rtol=0.001)
+
+    # =========================================================================
+    # pKa Calculation Tests - Dual-level Proton Exchange Scheme
+    # =========================================================================
+
+    def test_compute_pka(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+    ):
+        """Test pKa calculation using Dual-level Proton Exchange scheme.
+
+        Uses 5PQ_Me_ts1 as target acid (HA/A-) and collidine as reference (HB/B-).
+        Reference pKa of collidine = 6.75
+
+        The dual-level approach uses:
+        1. Gas-phase frequency calculations for thermal corrections (G_corr)
+        2. Solvent single-point calculations for E_solv
+        3. G_soln = E_solv + G_corr for solution free energy (in Hartree/au)
+        4. Proton exchange scheme: HA + B⁻ → A⁻ + HB
+        """
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        # Check that result contains expected keys
+        assert "pKa" in result
+        assert "pKa_reference" in result
+        assert "delta_G_soln_kcal_mol" in result
+        assert "delta_G_soln_au" in result
+        assert "temperature" in result
+
+        # Check solution free energies are present (in Hartree/au)
+        assert "G_soln_HA_au" in result
+        assert "G_soln_A_au" in result
+        assert "G_soln_HRef_au" in result
+        assert "G_soln_Ref_au" in result
+
+        # Check solvent SP energies are present (in Hartree/au)
+        assert "E_solv_HA_au" in result
+        assert "E_solv_A_au" in result
+        assert "E_solv_HRef_au" in result
+        assert "E_solv_Ref_au" in result
+
+        # Check thermal corrections are present (in Hartree/au)
+        assert "G_corr_HA_au" in result
+        assert "G_corr_A_au" in result
+        assert "G_corr_HRef_au" in result
+        assert "G_corr_Ref_au" in result
+
+        # Check gas-phase electronic energies are present (in Hartree/au)
+        assert "E_gas_HA_au" in result
+        assert "E_gas_A_au" in result
+        assert "E_gas_HRef_au" in result
+        assert "E_gas_Ref_au" in result
+
+        # Verify reference pKa is stored correctly
+        assert result["pKa_reference"] == self.PKA_COLLIDINE_REFERENCE
+
+        # Verify temperature is stored correctly
+        assert result["temperature"] == 373.15
+
+        assert np.isclose(result["pKa"], 52.7025859, rtol=1e-6)
+
+    def test_compute_pka_direct_scheme(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+    ):
+        """Test direct dissociation via unified compute_pka(scheme='direct')."""
+        delta_G_proton = -265.9
+        temperature = 373.15
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            scheme="direct",
+            delta_G_proton=delta_G_proton,
+            temperature=temperature,
+        )
+
+        HARTREE_TO_KCAL = 627.5094740631
+        G_soln_HA_kcal = result["G_soln_HA_au"] * HARTREE_TO_KCAL
+        G_soln_A_kcal = result["G_soln_A_au"] * HARTREE_TO_KCAL
+        expected_delta_G_diss = G_soln_A_kcal + delta_G_proton - G_soln_HA_kcal
+
+        assert result["scheme"] == "direct"
+        assert np.isclose(
+            result["delta_G_diss_kcal_mol"], expected_delta_G_diss, rtol=1e-6
+        )
+
+    def test_compute_pka_energy_values(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+    ):
+        """Test that dual-level calculation uses correct energy values.
+
+        All energies are in Hartree (au) except ΔG_soln which is also
+        provided in kcal/mol for the pKa formula.
+
+        Verifies:
+        - E_solv values from solvent SP files (Hartree)
+        - G_corr = qh-G(T) - E_gas from gas-phase files (Hartree)
+        - G_soln = E_solv + G_corr (Hartree)
+        - ΔG_soln in both au and kcal/mol
+        """
+        result = Gaussian16pKaOutput.compute_pka(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        HARTREE_TO_KCAL = 627.5094740631
+
+        # Verify G_soln = E_solv + G_corr for each species (all in Hartree/au)
+        for species in ["HA", "A", "HRef", "Ref"]:
+            E_solv_au = result[f"E_solv_{species}_au"]
+            G_corr_au = result[f"G_corr_{species}_au"]
+            G_soln_au = result[f"G_soln_{species}_au"]
+            expected_G_soln_au = E_solv_au + G_corr_au
+            assert np.isclose(
+                G_soln_au, expected_G_soln_au, rtol=1e-10
+            ), f"G_soln_{species}_au mismatch: {G_soln_au} vs {expected_G_soln_au}"
+
+        # Verify ΔG_soln in Hartree (au)
+        # ΔG_soln = [G(A⁻)_soln + G(HRef)_soln] - [G(HA)_soln + G(Ref⁻)_soln]
+        expected_delta_G_au = (
+            result["G_soln_A_au"] + result["G_soln_HRef_au"]
+        ) - (result["G_soln_HA_au"] + result["G_soln_Ref_au"])
+        assert np.isclose(
+            result["delta_G_soln_au"], expected_delta_G_au, rtol=1e-10
+        )
+
+        # Verify ΔG_soln conversion to kcal/mol
+        expected_delta_G_kcal = expected_delta_G_au * HARTREE_TO_KCAL
+        assert np.isclose(
+            result["delta_G_soln_kcal_mol"], expected_delta_G_kcal, rtol=1e-6
+        )
+
+    def test_print_pka_summary(
+        self,
+        gaussian_pKa_HA_optimization_outputfile,
+        gaussian_pKa_A_optimization_outputfile,
+        gaussian_pKa_HB_optimization_outputfile,
+        gaussian_pKa_B_optimization_outputfile,
+        gaussian_pKa_HA_single_point_outputfile,
+        gaussian_pKa_A_single_point_outputfile,
+        gaussian_pKa_HB_single_point_outputfile,
+        gaussian_pKa_B_single_point_outputfile,
+        capsys,
+    ):
+        """Test that print_pka_summary outputs correct format.
+
+        All energies should be displayed in Hartree (au) except ΔG_soln
+        which is shown in both au and kcal/mol.
+        """
+        Gaussian16pKaOutput.print_pka_summary(
+            ha_gas_file=gaussian_pKa_HA_optimization_outputfile,
+            a_gas_file=gaussian_pKa_A_optimization_outputfile,
+            href_gas_file=gaussian_pKa_HB_optimization_outputfile,
+            ref_gas_file=gaussian_pKa_B_optimization_outputfile,
+            ha_solv_file=gaussian_pKa_HA_single_point_outputfile,
+            a_solv_file=gaussian_pKa_A_single_point_outputfile,
+            href_solv_file=gaussian_pKa_HB_single_point_outputfile,
+            ref_solv_file=gaussian_pKa_B_single_point_outputfile,
+            pka_reference=self.PKA_COLLIDINE_REFERENCE,
+            temperature=373.15,
+        )
+
+        captured = capsys.readouterr()
+        output = captured.out
+
+        # Check header
+        assert "Dual-level Proton Exchange Scheme" in output
+        assert "HA + Ref⁻ → A⁻ + HRef" in output
+
+        # Check method description is present
+        assert "G_corr = qh-G(T) - E_gas" in output
+        assert "G_soln = E_solv + G_corr" in output
+
+        # Check sections are present with correct units (au)
+        assert "Gas-Phase Electronic Energies (E_gas, au)" in output
+        assert "Thermal Corrections" in output
+        assert "Solvent Single-Point Energies (E_solv, au)" in output
+        assert (
+            "Solution Free Energies (G_soln = E_solv + G_corr, au)" in output
+        )
+
+        # Check ΔG_soln is shown in both units
+        assert "ΔG_soln" in output
+        assert "kcal/mol" in output
+
+        # Check computed pKa is displayed
+        assert "Computed pKa(HA)" in output

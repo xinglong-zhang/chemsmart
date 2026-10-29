@@ -1,0 +1,35 @@
+###########################################
+ Installation for Windows Using WSL/Ubuntu
+###########################################
+
+This guide covers installing CHEMSMART on Windows using the Windows Subsystem for Linux (WSL) with Ubuntu. This is the
+preferred way of installation, as WSL provides similar terminal environment to Linux/Unix OS.
+
+***************
+ Prerequisites
+***************
+
+#. Install Ubuntu from the `Ubuntu website <https://ubuntu.com>`_ or directly from the Microsoft Store.
+
+#. Install conda (Anaconda3 or Miniconda3 for Linux) within Ubuntu:
+
+   See the `conda installation guide <https://docs.conda.io/projects/conda/en/stable/user-guide/install/index.html>`_.
+
+#. Install ``git`` and ``make``:
+
+   .. code:: bash
+
+      sudo apt install git make
+
+**************
+ Installation
+**************
+
+Since Ubuntu on WSL uses the Linux kernel, follow the instructions in :doc:`installation-linux-macos` to complete the
+CHEMSMART setup.
+
+.. note::
+
+   On WSL, ``make env`` / ``conda env create -f environment.yml`` installs the ``crest`` executable from conda-forge
+   together with ``xtb``. WSL provides a Linux environment, so CREST is included automatically via ``sel(unix): crest``
+   in ``environment.yml``.

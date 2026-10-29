@@ -1,0 +1,9 @@
+[[skeletons]]
+file_path = "./carbene1_opt.com"
+label = "Carbene1"
+link_index = "8"
+
+[[substituents]]
+file_path = "./OTf_opt.xyz"
+label = "OTf"
+link_index = "8"

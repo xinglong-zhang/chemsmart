@@ -1,0 +1,11 @@
+!gfn2-xtb neb-ts freq
+%pal nprocs 32 end
+# Memory per core
+%maxcore 3600
+%NEB
+  NImages 16
+  NEB_END_XYZFILE "S-1a_opt.xyz"
+  NEB_TS_XYZFILE "TS_rot1.xyz"
+  PREOPT_ENDS FALSE
+END
+* xyzfile 0 2 R-1a_opt.xyz

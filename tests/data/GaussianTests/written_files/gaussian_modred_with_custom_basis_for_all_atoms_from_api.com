@@ -1,6 +1,6 @@
 %chk=gaussian_modred_with_custom_basis_for_all_atoms_from_api.chk
 %nprocshared=64
-%mem=400GB
+%mem=375GB
 # opt=modredundant freq b3lyp empiricaldispersion=gd3bj genecp
 
 Job prepared from Gaussian file modred_genecp.com

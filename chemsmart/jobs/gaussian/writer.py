@@ -1,8 +1,26 @@
+"""
+Gaussian input file writer for computational chemistry jobs.
+
+This module provides the GaussianInputWriter class for generating
+properly formatted Gaussian input files from job configurations.
+It handles all aspects of input file creation including route sections,
+molecular coordinates, basis set specifications, and advanced options
+like modredundant coordinates and custom solvent parameters.
+
+The writer supports both standard job types and link jobs with
+multiple calculation steps.
+"""
+
 import logging
 import os.path
 
-from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
+from chemsmart.io.molecules.structure import QMMMMolecule
+from chemsmart.jobs.gaussian.settings import (
+    GaussianLinkJobSettings,
+    GaussianQMMMJobSettings,
+)
 from chemsmart.jobs.writer import InputWriter
+from chemsmart.utils.io import replace_word
 from chemsmart.utils.utils import (
     get_prepend_string_list_from_modred_free_format,
 )
@@ -11,65 +29,161 @@ logger = logging.getLogger(__name__)
 
 
 class GaussianInputWriter(InputWriter):
-    """Class that writes Gaussian input files for a job."""
+    """
+    Writer class for generating Gaussian input files from job settings.
+
+    Creates properly formatted Gaussian input files including route
+    sections, molecular coordinates, basis set specifications, and
+    advanced calculation options. Supports both standard calculations
+    and complex multi-step link jobs.
+
+    Handles all aspects of input file generation including modredundant
+    coordinates, custom solvent parameters, and GenECP specifications.
+    """
 
     def write(self, **kwargs):
+        """
+        Write the Gaussian input file for the job.
+
+        Main entry point for input file generation. Delegates to
+        internal write method with optional keyword arguments.
+
+        Args:
+            **kwargs: Additional arguments passed to _write method.
+        """
         self._write(**kwargs)
 
     def _write(self, target_directory=None):
+        """
+        Internal method to write the Gaussian input file.
+
+        Creates the output directory if needed and writes the complete
+        input file based on job settings and molecule configuration.
+
+        Args:
+            target_directory (str, optional): Directory to write file to.
+                If None, uses job's default folder.
+        """
         if target_directory is not None:
             if not os.path.exists(target_directory):
+                logger.debug(f"Creating target directory: {target_directory}")
                 os.makedirs(target_directory)
             folder = target_directory
         else:
             folder = self.job.folder
         job_inputfile = os.path.join(folder, f"{self.job.label}.com")
         logger.debug(f"Writing Gaussian input file: {job_inputfile}")
+
         f = open(job_inputfile, "w")
         if self.settings.input_string:
             # write the file itself for direct run
             self._write_self(f)
         else:
+            # Write complete input file from settings and molecule
+            logger.debug("Generating input file from settings and molecule")
             self._write_all(f)
         logger.info(f"Finished writing Gaussian input file: {job_inputfile}")
         f.close()
 
     def _write_all(self, f):
+        """
+        Write complete Gaussian input file with all sections.
+
+        Orchestrates writing of all input file sections in the proper
+        order including header, route, coordinates, basis sets, and
+        additional job-specific information.
+
+        Args:
+            f (file): Open file object to write to.
+        """
+        logger.debug("Starting complete input file generation")
         self._write_gaussian_header(f)
         self._write_route_section(f)
         self._write_gaussian_title(f)
-        self._write_charge_and_multiplicity(f)
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._write_charge_and_multiplicity_qmmm(f)
+        else:
+            self._write_charge_and_multiplicity(f)
         self._write_cartesian_coordinates(f)
-        self._append_modredundant(f)
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._append_qmmm_connectivity(f)
+
+        # Skip modredundant for link jobs (handled in link section)
+        if not isinstance(self.settings, GaussianLinkJobSettings):
+            self._append_modredundant(f)
+
         self._append_gen_genecp_basis(f)  # then write genecp info
         self._append_custom_solvent_parameters(
             f
         )  # followed by user defined solvent parameters
         self._append_job_specific_info(f)
         self._append_other_additional_info(f)
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            self._append_mm_parameters(f)
+
+        # Write link section for multi-step calculations
         if isinstance(self.settings, GaussianLinkJobSettings):
             self._write_link_section(f)
+        logger.debug("Completed input file generation")
 
     def _write_self(self, f):
-        """Write the input file itself for direct run."""
+        """
+        Write the input file content directly from settings string.
+
+        Used when the job has a pre-defined input string that should
+        be written directly to the file without any processing.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         f.write(self.settings.input_string)
 
     def _write_gaussian_header(self, f):
+        """
+        Write the Gaussian header section with resource specifications.
+
+        Writes checkpoint file specifications, processor count, and
+        memory allocation directives to the input file header.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing Gaussian header.")
         if self.settings.chk:
             logger.debug(f"Writing chk file: {self.job.label}.chk")
             f.write(f"%chk={self.job.label}.chk\n")
+
+        # Set default values if jobrunner resources are not specified
         num_cores = self.jobrunner.num_cores if not None else 12
         mem_gb = self.jobrunner.mem_gb if not None else 16
-        logger.debug(f"Writing nprocshared={num_cores} and mem={mem_gb}GB.")
+        logger.debug(
+            f"Writing resource specifications - cores: {num_cores}, "
+            f"memory: {mem_gb}GB"
+        )
         f.write(f"%nprocshared={num_cores}\n")
         f.write(f"%mem={mem_gb}GB\n")
 
     def _write_route_section(self, f):
+        """
+        Write the Gaussian route section with calculation keywords.
+
+        Constructs and writes the route line (#-line) containing all
+        calculation specifications. Handles basis set adjustments
+        for mixed heavy/light element calculations and determines
+        appropriate gen/genecp keyword based on elements present.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing route section.")
         route_string = self.settings.route_string
-        # if project settings has heavy elements but molecule has no heavy elements,
+        # if project settings has heavy elements
+        # but molecule has no heavy elements,
         # then replace the basis set with light elements basis
+
+        # Handle basis set replacement for structures without heavy elements
+        # if project settings has heavy elements but molecule has no heavy
+        # elements, then replace the basis set with light elements basis
         if self.settings.heavy_elements_basis is not None:
             heavy_elements_in_structure = self.settings.prune_heavy_elements(
                 self.job.molecule
@@ -81,40 +195,252 @@ class GaussianInputWriter(InputWriter):
                 # returns empty list if no heavy elements found in structure
                 # (heavy elements specified in settings)
             ):
-                route_string = route_string.replace(
-                    self.settings.basis,
-                    self.settings.light_elements_basis,
+                # first remove any '-' in light_elements_basis
+                # this is because '-' is needed by bse package to get the right
+                # basis set from
+                # https://www.basissetexchange.org/, eg, def2-SVP
+                # but this is not needed in Gaussian input file
+                # (will cause error when run), eg, def2svp
+                light_elements_basis = (
+                    self.settings.light_elements_basis.replace("-", "").lower()
                 )
+
+                route_string = replace_word(
+                    route_string, self.settings.basis, light_elements_basis
+                )
+            else:
+                # Determine the correct basis keyword (gen vs genecp) based on
+                # the heavy elements actually present in the molecule
+                determined_basis = self.settings.determine_basis_keyword(
+                    self.job.molecule
+                )
+                if determined_basis != self.settings.basis:
+                    logger.info(
+                        f"Replacing basis keyword '{self.settings.basis}' with "
+                        f"'{determined_basis}' based on heavy elements in molecule"
+                    )
+                    route_string = replace_word(
+                        route_string, self.settings.basis, determined_basis
+                    )
         f.write(route_string + "\n")
         f.write("\n")
 
     def _write_gaussian_title(self, f):
+        """
+        Write the job title section to the input file.
+
+        Writes the descriptive title for the calculation which appears
+        in the output file and helps identify the job purpose.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing Gaussian title.")
         title = self.settings.title
         f.write(f"{title}\n")
         f.write("\n")
 
     def _write_charge_and_multiplicity(self, f):
+        """
+        Write molecular charge and spin multiplicity to input file.
+
+        Writes the electronic configuration specification required
+        for all Gaussian calculations. Validates that both values
+        are properly defined.
+
+        Args:
+            f (file): Open file object to write to.
+
+        Raises:
+            AssertionError: If charge or multiplicity are not specified.
+        """
         logger.debug("Writing charge and multiplicity.")
         charge = self.settings.charge
         multiplicity = self.settings.multiplicity
         assert (
             charge is not None and multiplicity is not None
         ), "Charge and multiplicity must be specified!"
-        f.write(f"{charge} {multiplicity}\n")
+        line = f"{charge} {multiplicity}\n"
+        f.write(line)
+
+    def _write_charge_and_multiplicity_qmmm(self, f):
+        """
+        Write ONIOM charge and multiplicity
+        specifications for QM/MM calculations.
+
+        Outputs the ONIOM-specific charge and multiplicity line that defines
+        the electronic properties for each layer of the calculation. The format
+        follows Gaussian's ONIOM conventions for multi-layer systems.
+
+        For 2-layer ONIOM (High:Low):
+            charge_real multiplicity_real charge_model multiplicity_model
+            charge_model_low multiplicity_model_low
+
+        For 3-layer ONIOM (High:Medium:Low):
+            charge_real_low multiplicity_real_low
+            charge_int_med multiplicity_int_med
+            charge_int_low multiplicity_int_low
+            charge_model_high multiplicity_model_high
+            charge_model_med multiplicity_model_med
+            charge_model_low multiplicity_model_low
+
+        Args:
+            f (file): Open file object to write
+            charge and multiplicity line to.
+
+        Note:
+            The charge and multiplicity values
+            are generated by the settings object's
+            charge_and_multiplicity_string property,
+            which handles the ONIOM-specific
+            formatting and defaults according to Gaussian's requirements.
+        """
+        logger.debug("Writing charge and multiplicity for QM/MM.")
+        line = f"{self.settings.charge_and_multiplicity_string}\n"
+        f.write(line)
+        charge = self.settings.charge
+        multiplicity = self.settings.multiplicity
+        logger.debug(
+            f"Molecular charge: {charge}, multiplicity: {multiplicity}"
+        )
 
     def _write_cartesian_coordinates(self, f):
+        """
+        Write molecular Cartesian coordinates to the input file.
+
+        Outputs the molecular geometry in Cartesian coordinate format
+        suitable for Gaussian calculations. Validates that molecular
+        structure is available.
+
+        Args:
+            f (file): Open file object to write to.
+
+        Raises:
+            AssertionError: If no molecular geometry is found.
+
+        Note:
+            For QM/MM calculations, the molecule is converted to a QMMMMolecule
+            object that handles layer partitioning and link atom placement
+            according to the ONIOM methodology specifications.
+        """
         logger.debug(
             f"Writing Cartesian coordinates of molecule: {self.job.molecule}."
         )
         assert self.job.molecule is not None, "No molecular geometry found!"
+        # populate QM/MM partition to molecule object
+        if isinstance(self.settings, GaussianQMMMJobSettings):
+            source = self.job.molecule
+            mm_atom_info = None
+            mm_parameters = None
+            high_level_atoms = self.settings.high_level_atoms
+            medium_level_atoms = self.settings.medium_level_atoms
+            low_level_atoms = self.settings.low_level_atoms
+            bonded_atoms = self.settings.bonded_atoms
+            scale_factors = self.settings.scale_factors
+            if isinstance(source, QMMMMolecule):
+                mm_atom_info = source.mm_atom_info
+                mm_parameters = source.mm_parameters
+                if high_level_atoms is None:
+                    high_level_atoms = source.high_level_atoms
+                if medium_level_atoms is None:
+                    medium_level_atoms = source.medium_level_atoms
+                if low_level_atoms is None:
+                    low_level_atoms = source.low_level_atoms
+                if bonded_atoms is None:
+                    bonded_atoms = source.bonded_atoms
+                if scale_factors is None:
+                    scale_factors = source.scale_factors
+            self.job.molecule = QMMMMolecule(
+                molecule=source,
+                high_level_atoms=high_level_atoms,
+                medium_level_atoms=medium_level_atoms,
+                low_level_atoms=low_level_atoms,
+                bonded_atoms=bonded_atoms,
+                scale_factors=scale_factors,
+                mm_atom_info=mm_atom_info,
+                mm_parameters=mm_parameters,
+            )
+
+            if self.settings.mm_atom_info_file is not None:
+                self.job.molecule.mm_atom_info = (
+                    GaussianQMMMJobSettings.load_mm_atom_info(
+                        self.settings.mm_atom_info_file,
+                        num_atoms=self.job.molecule.num_atoms,
+                    )
+                )
+            elif self.settings.requires_mm_atom_info():
+                mm_info = self.job.molecule.mm_atom_info
+                complete = (
+                    mm_info is not None
+                    and len(mm_info) == self.job.molecule.num_atoms
+                    and all(
+                        record is not None
+                        and record[0] is not None
+                        and record[1] is not None
+                        for record in mm_info
+                    )
+                )
+                if not complete:
+                    raise ValueError(
+                        "AMBER ONIOM requires mm_atom_info_file with atom "
+                        "types and partial charges, or an input .com that "
+                        "already contains Element-Type-Charge labels."
+                    )
+
+        # Log molecular information for debugging
+        logger.debug(
+            f"Molecule contains {self.job.molecule.num_atoms} atoms with formula: "
+            f"{self.job.molecule.chemical_formula}"
+        )
+
         self.job.molecule.write_coordinates(f, program="gaussian")
         f.write("\n")
 
+    def _append_qmmm_connectivity(self, f):
+        """Write Geom=Connectivity for built-in MM ONIOM jobs."""
+        if not self.settings.uses_builtin_mm():
+            return
+        logger.debug("Writing Gaussian connectivity for MM ONIOM job.")
+        self.job.molecule.write_gaussian_connectivity(f)
+
+    def _append_mm_parameters(self, f):
+        """Append SoftFirst/HardFirst MM parameter lines from file or input."""
+        content = None
+        params_file = self.settings.mm_parameters_file
+        if params_file is not None:
+            params_path = os.path.expanduser(params_file)
+            if not os.path.isfile(params_path):
+                raise FileNotFoundError(
+                    f"MM parameters file not found: {params_path}"
+                )
+            logger.debug(f"Appending MM parameters from {params_path}")
+            with open(params_path) as handle:
+                content = handle.read()
+        else:
+            molecule = self.job.molecule
+            if isinstance(molecule, QMMMMolecule):
+                content = molecule.mm_parameters
+
+        if not content:
+            return
+        f.write(content)
+        if not content.endswith("\n"):
+            f.write("\n")
+        f.write("\n")
+
     def _append_modredundant(self, f):
-        """Write modred section if present in the job settings.
-        Given a list or list of lists, write the modred section for the constraints.
-        Given a dictionary with 'num_steps', 'step_size', and 'coords', write the scan section.
+        """
+        Write modredundant coordinate specifications to input file.
+
+        Handles both constraint optimization (list format) and
+        coordinate scanning (dictionary format) by writing appropriate
+        modredundant sections. Supports various coordinate types.
+
+        Args:
+            f (file): Open file object to write to.
+
+        Raises:
+            ValueError: If modredundant format is invalid.
         """
         logger.debug("Writing modred section.")
         modredundant = self.settings.modred
@@ -122,6 +448,7 @@ class GaussianInputWriter(InputWriter):
             if isinstance(modredundant, list):
                 # for modredunant job
                 # modred = [[1,2], [3,4]]
+                logger.debug("Writing modredundant constraints")
                 prepend_string_list = (
                     get_prepend_string_list_from_modred_free_format(
                         input_modred=modredundant
@@ -131,102 +458,186 @@ class GaussianInputWriter(InputWriter):
                     f.write(f"{prepend_string} F\n")
                 f.write("\n")
             elif isinstance(modredundant, dict):
-                # for scanning job
-                # modred = {'num_steps': 10, 'step_size': 0.05, 'coords': [[1,2], [3,4]]}
+                # For coordinate scanning job
+                # modred = {'num_steps': 10, 'step_size': 0.05,
+                #           'coords': [[1,2], [3,4]]}
+                logger.debug("Writing coordinate scan specifications")
                 coords_list = modredundant["coords"]
-                prepend_string_list = (
+                scan_prepend_string_list = (
                     get_prepend_string_list_from_modred_free_format(
                         input_modred=coords_list
                     )
                 )
-                for prepend_string in prepend_string_list:
-                    f.write(
-                        f"{prepend_string} S {self.settings.modred['num_steps']} {self.settings.modred['step_size']}\n"
+                for prepend_string, num_step, step_size in zip(
+                    scan_prepend_string_list,
+                    self.settings.modred["num_steps"],
+                    self.settings.modred["step_size"],
+                ):
+                    f.write(f"{prepend_string} S {num_step} {step_size}\n")
+                if "constrained_coordinates" in modredundant:
+                    logger.debug(
+                        "Writing modredundant constraints for scan job"
                     )
+                    constrained_coordinates_list = modredundant[
+                        "constrained_coordinates"
+                    ]
+                    prepend_string_list = (
+                        get_prepend_string_list_from_modred_free_format(
+                            input_modred=constrained_coordinates_list
+                        )
+                    )
+                    for prepend_string in prepend_string_list:
+                        f.write(f"{prepend_string} F\n")
                 f.write("\n")
             else:
+                logger.error(
+                    f"Invalid modredundant format: {type(modredundant)}"
+                )
                 raise ValueError(
-                    "modredundant must be a list or dictionary with 'num_steps', 'step_size', and 'coords'."
+                    "modredundant must be a list or dictionary with "
+                    "'num_steps', 'step_size', and 'coords'."
                 )
 
     def _append_gen_genecp_basis(self, f):
-        """Write the genecp basis set information if present in the job settings."""
+        """
+        Write GenECP basis set and pseudopotential information.
+
+        Appends mixed basis set specifications and effective core
+        potentials for calculations involving heavy elements. Handles
+        automatic basis set selection when no heavy elements are present.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing gen/genecp basis set information.")
         if self.settings.genecp:
             genecp_section = self.settings.get_genecp_section(
                 molecule=self.job.molecule
             )
 
-            # write genecp section only if heavy elements are in the molecule
+            # Write genecp section only if heavy elements are in the molecule
             heavy_elements_in_structure = self.settings.prune_heavy_elements(
                 self.job.molecule
             )
 
-            # for the given project setting, if heavy elements are not found in the structure,
-            # and no user-specified gen_genecp_file is supplied, then
-            # use light elements basis, e.g., organic reactant molecules in TM catalysis
+            # For the given project setting, if heavy elements are not found
+            # in the structure, and no user-specified gen_genecp_file is
+            # supplied, then use light elements basis, e.g., organic reactant
+            # molecules in TM catalysis
             if (
                 heavy_elements_in_structure is None
                 or len(heavy_elements_in_structure) == 0
             ) and self.settings.gen_genecp_file is None:
-                # replace gen or genecp keyword in route by light elements basis
+                # Replace gen or genecp keyword
+                # in route by light elements basis
+                logger.debug(
+                    "No heavy elements found - using light elements basis only"
+                )
                 pass
 
             else:
+                logger.debug("Writing GenECP section for heavy elements")
                 f.write(genecp_section.string)
-                # check that the last line of genecp_section.string is empty,
+                # Check that the last line of genecp_section.string is empty,
                 # if not, add an empty line
                 if genecp_section.string_list[-1] != "\n":
                     f.write("\n")
 
     def _append_custom_solvent_parameters(self, f):
-        """Write the custom solvent parameters if present in the job settings."""
+        """
+        Write custom solvent parameter specifications to input file.
+
+        Appends user-defined solvent parameters for advanced solvation
+        calculations that require custom dielectric constants or
+        other solvent-specific properties.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing custom solvent parameters.")
         custom_solvent = self.settings.custom_solvent
         if custom_solvent is not None:
+            logger.debug("Adding custom solvent specification")
             f.write(custom_solvent)
             f.write("\n")
 
     def _append_job_specific_info(self, f):
-        """Write any job specific information that needs to be appended to the input file."""
+        """
+        Write jobtype-specific information to the input file.
+
+        Appends calculation-specific data required for specialized
+        job types like NCI analysis, WBI calculations, and RESP
+        charge fitting. Each job type has unique requirements.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing job specific information.")
-        job_type = self.settings.job_type
+        jobtype = self.settings.jobtype
         job_label = self.job.label
-        if job_type == "nci":
-            # appending for nci job
+        if jobtype == "nci":
+            # Appending wavefunction file specification for NCI job
+            logger.debug("Adding NCI-specific wavefunction file")
             f.write(f"{job_label}.wfn\n")
             f.write("\n")
-        elif job_type == "wbi":
-            # appending for wbi job
+        elif jobtype == "wbi":
+            # Appending NBO directive for WBI job
+            logger.debug("Adding WBI-specific NBO directive")
             f.write("$nbo bndidx $end\n")
             f.write("\n")
-        elif job_type == "resp":
-            # appending for resp job
+        elif jobtype == "resp":
+            # Appending electrostatic potential file for RESP job
+            logger.debug("Adding RESP-specific potential file")
             f.write(f"{job_label}.gesp\n")
             f.write("\n")
 
     def _append_other_additional_info(self, f):
-        """Write any additional information that needs to be appended to the input file."""
+        """
+        Write additional user-specified information to input file.
+
+        Appends custom information that can be provided either as
+        a file path or as direct string content. Supports flexible
+        input file customization for advanced users.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing other additional information.")
         append_additional_info = self.settings.append_additional_info
         if append_additional_info is not None:
             if isinstance(append_additional_info, str) and os.path.exists(
                 os.path.expanduser(append_additional_info)
             ):
-                # path to the file for additional append info
+                # Path to the file for additional append info
+                logger.debug(
+                    f"Reading additional info from file: "
+                    f"{append_additional_info}"
+                )
                 with open(append_additional_info) as g:
                     for line in g.readlines():
                         f.write(line)
             else:
-                # ensures that the additional append info can be supplied in free string format
+                # Ensures that the additional append info can be supplied
+                # in free string format
+                logger.debug("Writing additional info from string")
                 line_elem = append_additional_info.strip().split("\n")
                 for line in line_elem:
                     f.write(f"{line}\n")
 
     def _write_link_section(self, f):
-        """Write the link section for the input file."""
+        """
+        Write the complete link section for multi-step calculations.
+
+        Creates the second part of a link job by writing the link
+        separator and all necessary sections for the continuation
+        calculation including headers, routes, and coordinates.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing link section.")
         if self.settings.link:
+            logger.debug("Adding link job separator and second calculation")
             f.write("--Link1--\n")
             self._write_gaussian_header(f)
             self._write_link_route(f)
@@ -242,7 +653,16 @@ class GaussianInputWriter(InputWriter):
             self._append_other_additional_info(f)
 
     def _write_link_route(self, f):
-        """Write the route section for the link job."""
+        """
+        Write the route section for the link calculation step.
+
+        Writes the route line for the second part of a link job,
+        which typically includes geometry and orbital continuation
+        from the previous calculation step.
+
+        Args:
+            f (file): Open file object to write to.
+        """
         logger.debug("Writing link route section.")
         f.write(f"{self.settings.link_route_string}\n")
         f.write("\n")

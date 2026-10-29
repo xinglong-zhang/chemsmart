@@ -1,5 +1,6 @@
 include LICENSE
-include HISTORY.md
-include Containerfile
-graft tests
-graft chemsmart
+include LICENSE.LESSER
+include README.md
+include CHANGELOG.md
+recursive-include chemsmart/data *
+recursive-include chemsmart/settings *

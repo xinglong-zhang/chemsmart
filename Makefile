@@ -1,91 +1,196 @@
-.ONESHELL:
-ENV_PREFIX=$(shell if conda env list | grep -q chemsmart; then echo "conda run -n chemsmart "; fi)
+# Detect Windows before invoking uname: cmd.exe cannot redirect to /dev/null.
+ifeq ($(OS),Windows_NT)
+    OS_FAMILY := Windows
+else
+    RAW_OS := $(shell uname -s 2>/dev/null)
+    ifneq ($(filter MINGW% MSYS% CYGWIN%,$(RAW_OS)),)
+        OS_FAMILY := Windows
+    else
+        OS_FAMILY := Unix
+    endif
+endif
 
-SHELL := /bin/bash
-USE_CONDA ?= true  # Default to true if not explicitly set
+ifeq ($(OS_FAMILY),Windows)
+    SHELL := cmd
+    ENV_PREFIX := $(if $(shell where conda >nul 2>&1 && conda env list | findstr chemsmart >nul 2>&1),conda run -n chemsmart --no-capture-output ,)
+    SEP := \\
+    RM := del /Q
+    RMDIR := rmdir /S /Q
+    ECHO := echo
+    NULL := nul
+else
+    SHELL := /bin/bash
+    # Skip the "conda run" wrapper when the chemsmart env is already active
+    # (e.g. in CI via `conda-incubator/setup-miniconda`'s activate-environment):
+    # some conda versions fail to propagate the wrapped command's exit code,
+    # which let a failing test suite report as a passing CI step.
+    ENV_PREFIX := $(shell if [ "$$CONDA_DEFAULT_ENV" = "chemsmart" ]; then echo ""; elif conda env list | grep -q chemsmart; then echo "conda run -n chemsmart --no-capture-output "; fi)
+    SEP := /
+    RM := rm -f
+    RMDIR := rm -rf
+    ECHO := echo
+    NULL := /dev/null
+endif
+
+# Default to true if not explicitly set
+USE_CONDA ?= true
 MAKEFILE_DIR := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))
-CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart/cli/chemsmart  # Relative to the Makefile directory
+CHEMSMART_PATH := $(MAKEFILE_DIR)chemsmart$(SEP)cli$(SEP)chemsmart  # Use platform-specific separator
 
+# === Help messages for make ===
 
 .PHONY: help
+ifeq ($(OS_FAMILY),Windows)
 help:             ## Show the help menu.
 	@echo "Usage: make <target>"
 	@echo ""
 	@echo "Targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@type $(MAKEFILE_LIST) | findstr /R "^[a-zA-Z_-]*:.*## " | for /F "tokens=1,2 delims=##" %%a in ('more') do @echo %%a                    %%b
+else
+help:             ## Show the help menu.
+	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+endif
 
 # === Environment Setup ===
 
 .PHONY: env
 env:  ## Create a Conda environment if USE_CONDA=true.
-	@echo "Debug: USE_CONDA=$(USE_CONDA)"
-	@if [ $(USE_CONDA) = "true" ]; then \
-		echo "Using Conda"; \
-		make conda-env; \
+ifeq ($(OS_FAMILY),Windows)
+	@if "$(USE_CONDA)"=="true" ( \
+		$(ECHO) "Using Conda" && $(MAKE) conda-env \
+	) else ( \
+		$(ECHO) "Using virtualenv" && $(MAKE) virtualenv \
+	)
+else
+	@if [ "$(USE_CONDA)" = "true" ]; then \
+		$(ECHO) "Using Conda"; \
+		$(MAKE) conda-env; \
 	else \
-		echo "Using virtualenv"; \
-		make virtualenv; \
+		$(ECHO) "Using virtualenv"; \
+		$(MAKE) virtualenv; \
 	fi
+endif
 
 .PHONY: conda-env
-conda-env:  ## Create a Conda environment.
-	@echo "Creating Conda environment 'chemsmart'..."
-	@if ! conda env list | grep -q chemsmart; then \
-		conda create -n chemsmart python=3.10 -y; \
+conda-env:  ## Create or update the Conda environment using environment.yml.
+	@echo Managing Conda environment 'chemsmart' with environment.yml...
+ifeq ($(OS_FAMILY),Windows)
+	@if not exist environment.yml ( \
+		$(ECHO) "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first." && exit 1 \
+	)
+	@conda env list | findstr chemsmart >$(NULL) && ( \
+		$(ECHO) "Updating existing 'chemsmart' environment..." && \
+		conda env update -n chemsmart -f environment.yml --prune \
+	) || ( \
+		$(ECHO) "Creating new 'chemsmart' environment..." && \
+		conda env create -f environment.yml \
+	)
+else
+	@if [ ! -f environment.yml ]; then \
+		$(ECHO) "Error: environment.yml not found in $(MAKEFILE_DIR). Please create it first."; \
+		exit 1; \
 	fi
-	conda run -n chemsmart pip install -U pip
-	@echo "Conda environment 'chemsmart' is ready. Activate it with 'conda activate chemsmart'."
+	@if conda env list | grep -q chemsmart; then \
+		$(ECHO) "Updating existing 'chemsmart' environment..."; \
+		conda env update -n chemsmart -f environment.yml --prune; \
+	else \
+		$(ECHO) "Creating new 'chemsmart' environment..."; \
+		conda env create -f environment.yml; \
+	fi
+endif
+	@echo Conda environment 'chemsmart' is ready. Activate it with 'conda activate chemsmart'.
 
 .PHONY: virtualenv
 virtualenv:  ## Create a virtual environment using virtualenv.
-	@if ! command -v python3 > /dev/null; then \
-		echo "Python 3 is required but not installed. Exiting."; \
+ifeq ($(OS_FAMILY),Windows)
+	@where python3 >$(NULL) 2>&1 || ( $(ECHO) "Python 3 is required but not installed. Exiting." && exit 1 )
+	@if not exist "venv" ( python3 -m venv venv )
+	@call venv\Scripts\activate.bat && pip install -U pip
+else
+	@if ! command -v python3 >$(NULL); then \
+		$(ECHO) "Python 3 is required but not installed. Exiting."; \
 		exit 1; \
 	fi
 	@if [ ! -d "venv" ]; then \
 		python3 -m venv venv; \
 	fi
-	@source venv/bin/activate && pip install -U pip
+	@. venv/bin/activate && pip install -U pip
+endif
 
 # === Project Setup ===
 
 .PHONY: install
-install:          ## Install the project in development mode.
-	$(ENV_PREFIX)pip install -e .[test]
-	$(ENV_PREFIX)pip install types-PyYAML
+install:          ## Install the project in user mode. Normal users (runtime only)
+	$(ENV_PREFIX)pip install .
+
+.PHONY: install-dev
+install-dev:          ## Install the project in development mode.
+	$(ENV_PREFIX)pip install -e .[voronoi,dev,test,docs]
+
+.PHONY: pre-commit
+pre-commit:       ## Install pre-commit hooks to enforce code style and quality.
+	$(ENV_PREFIX)pre-commit install
+	@echo Pre-commit hooks installed. They will run automatically on each commit.
 
 .PHONY: configure
 configure:        ## Run chemsmart configuration interactively.
-	@echo "Running chemsmart configuration..."
-	$(ENV_PREFIX)$(CHEMSMART_PATH) config 
-	@echo "Running chemsmart server configuration..."
-	$(ENV_PREFIX)$(CHEMSMART_PATH) config server || { echo "Error: chemsmart server configuration failed."; exit 1; }
-	@read -p "Enter the path to the Gaussian g16 folder (or press Enter to skip): " gaussian_folder; \
-	if [ -n "$$gaussian_folder" ]; then \
-		echo "Configuring Gaussian with folder: $$gaussian_folder"; \
-		$(ENV_PREFIX)$(CHEMSMART_PATH) config gaussian --folder $$gaussian_folder; \
-	else \
-		echo "Skipping Gaussian configuration."; \
-	fi
-	@read -p "Enter the path to the ORCA folder (or press Enter to skip): " orca_folder; \
-	if [ -n "$$orca_folder" ]; then \
-		echo "Configuring ORCA with folder: $$orca_folder"; \
-		$(ENV_PREFIX)$(CHEMSMART_PATH) config orca --folder $$orca_folder; \
-	else \
-		echo "Skipping ORCA configuration."; \
-	fi
+ifeq ($(OS_FAMILY),Windows)
+	@echo Running chemsmart configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
+	@echo Running chemsmart server configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
+	@echo.
+	@echo ===========================================================
+	@echo  Configuration complete!
+	@echo  chemsmart paths have been registered in your shell profile.
+	@echo  To activate chemsmart in your current session:
+	@echo    Git Bash:        source ~/.bashrc
+	@echo    Conda PowerShell: . $$PROFILE
+	@echo  Or open a new terminal window.
+	@echo ===========================================================
+else
+	@echo Running chemsmart configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config
+	@echo Running chemsmart server configuration...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) config server || ( $(ECHO) "Error: chemsmart server configuration failed." && exit 1 )
+	@echo ""
+	@echo "==========================================================="
+	@echo " Configuration complete!"
+	@echo " chemsmart paths have been written to your shell config."
+	@echo "==========================================================="
+	@for rc in "$${HOME}/.bashrc" "$${HOME}/.zshrc" "$${HOME}/.profile"; do \
+		if [ -f "$$rc" ]; then . "$$rc" 2>/dev/null || true; fi; \
+	done; \
+	echo "chemsmart is now active for the current make session."; \
+	echo "To activate chemsmart in your current terminal, run:"; \
+	if [ -f "$${HOME}/.bashrc" ]; then echo "  source ~/.bashrc  (bash / Git Bash)"; fi; \
+	if [ -f "$${HOME}/.zshrc" ]; then echo "  source ~/.zshrc   (zsh)"; fi; \
+	if [ -f "$${HOME}/.profile" ]; then echo "  source ~/.profile (sh / other)"; fi; \
+	echo "Or simply open a new terminal window."
+endif
 
 .PHONY: show
 show: ## Display the current environment information.
-	@echo "Current environment:"
-	@if [ "$(USE_CONDA)" = "true" ]; then \
-		conda env list | grep '*'; \
-	fi
+	@echo Current environment:
+ifeq ($(OS_FAMILY),Windows)
+	@if "$(USE_CONDA)"=="true" conda env list ^| findstr "*"
+else
+	@if [ "$(USE_CONDA)" = "true" ]; then conda env list | grep '*'; fi
+endif
 	$(ENV_PREFIX)python -V
 	$(ENV_PREFIX)python -m site
 
 # === Code Quality ===
+
+.PHONY: update-deps
+update-deps:          ## Automatically update new packages that are added in the codes
+	@echo Updating additional dependencies to pyproject.toml file...
+	$(ENV_PREFIX)python $(CHEMSMART_PATH) update deps
+	@echo Reinstalling chemsmart package...
+	$(ENV_PREFIX)pip install -e .[dev,test]
 
 .PHONY: fmt
 fmt:              ## Format code using black and isort.
@@ -97,20 +202,174 @@ lint:             ## Run linters (ruff).
 	$(ENV_PREFIX)ruff check . --fix
 
 # === Testing ===
+.PHONY: coverage-clean
+coverage-clean:   ## Remove stale coverage files before running tests.
+ifeq ($(OS_FAMILY),Windows)
+	-@if exist .coverage $(RM) .coverage 2>$(NULL)
+	-@for /R . %%f in (.coverage.*) do @$(RM) "%%f" 2>$(NULL)
+	-@if exist coverage.xml $(RM) coverage.xml 2>$(NULL)
+	-@if exist htmlcov $(RMDIR) htmlcov 2>$(NULL)
+else
+	-@rm -f .coverage .coverage.* coverage.xml 2>/dev/null
+	-@rm -rf htmlcov 2>/dev/null
+endif
 
 .PHONY: test
-test: lint        ## Run tests and generate coverage report.
-	$(ENV_PREFIX)pytest -v --cov-config .coveragerc --cov=chemsmart -l --tb=short --maxfail=1 tests/
-	$(ENV_PREFIX)coverage xml
-	$(ENV_PREFIX)coverage html
+test: lint coverage-clean ## Run tests and generate terminal, XML, and HTML coverage reports.
+	$(ENV_PREFIX)pytest \
+		-v \
+		--cov-config=pyproject.toml \
+		--cov=chemsmart \
+		--cov-branch \
+		--cov-report=term-missing \
+		--cov-report=xml:coverage.xml \
+		--cov-report=html:htmlcov \
+		-l \
+		--tb=short \
+		tests/
+
+# === Docs ===
+.PHONY: docs-lint docs-fmt docs docs-clean
+
+docs-lint: ## Lint reStructuredText/Markdown docs with doc8 and rstcheck.
+	@echo "==> Running doc8..."
+	$(ENV_PREFIX)doc8 --max-line-length=120 --ignore-path docs/build docs/source
+	@echo "==> Running rstcheck..."
+ifeq ($(OS_FAMILY),Windows)
+	$(ENV_PREFIX)rstcheck -r docs\source
+else
+	$(ENV_PREFIX)rstcheck -r docs/source
+endif
+
+# Format all .rst files in docs/source using rstfmt
+docs-fmt: ## Auto-format reStructuredText with rstfmt.
+	@echo "==> Running rstfmt..."
+	# Format recursively; --in-place edits files
+	$(ENV_PREFIX)rstfmt -w 120 docs/source
+
+docs: ## Build documentation (HTML).
+	+$(ENV_PREFIX)$(MAKE) -C docs html  # leading + tells GNU Make this is a recursive make; it preserves jobserver flags, etc.
+
+docs-clean: ## Clean documentation artifacts.
+	+$(ENV_PREFIX)$(MAKE) -C docs clean
+
 
 # === Cleanup ===
 
 .PHONY: clean
 clean: ## Remove temporary and unnecessary files.
+ifeq ($(OS_FAMILY),Windows)
+	@for /R . %%f in (*.pyc) do @$(RM) "%%f" 2>$(NULL)
+	@for /D /R . %%d in (__pycache__) do @if exist "%%d" $(RMDIR) "%%d" 2>$(NULL)
+	@for /R . %%f in (Thumbs.db) do @$(RM) "%%f" 2>$(NULL)
+	@for /R . %%f in (*~) do @$(RM) "%%f" 2>$(NULL)
+	@$(RMDIR) .cache .pytest_cache build dist *.egg-info htmlcov .tox .coverage.* docs\_build 2>$(NULL)
+else
 	@find ./ -name '*.pyc' -exec rm -f {} + 2>/dev/null
 	@find ./ -name '__pycache__' -exec rm -rf {} + 2>/dev/null
 	@find ./ -name 'Thumbs.db' -exec rm -f {} + 2>/dev/null
 	@find ./ -name '*~' -exec rm -f {} + 2>/dev/null
-	@rm -rf .cache .pytest_cache build dist *.egg-info htmlcov .tox docs/_build 2>/dev/null
+	@rm -rf .cache .pytest_cache build dist *.egg-info htmlcov .tox .coverage.* docs/_build 2>/dev/null
+endif
 
+
+# === Release ===
+REPOSITORY ?= testpypi
+PACKAGE_NAME := chemsmart
+VERSION_FILE := chemsmart$(SEP)VERSION
+
+GIT_STATUS_CLEAN_CMD = git diff --quiet && git diff --cached --quiet
+
+ifeq ($(OS_FAMILY),Windows)
+    VERSION := $(shell type $(VERSION_FILE))
+    GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >$(NULL) 2>&1
+else
+    VERSION := $(shell cat $(VERSION_FILE))
+    GIT_TAG_EXISTS_CMD = git rev-parse "v$(VERSION)" >/dev/null 2>&1
+endif
+
+TWINE_REPOSITORY_URL_testpypi := https://test.pypi.org/legacy/
+TWINE_REPOSITORY_URL_pypi := https://upload.pypi.org/legacy/
+
+.PHONY: version
+version: ## Show the current package version from chemsmart/VERSION.
+	@echo $(VERSION)
+
+.PHONY: build
+build: clean ## Build source and wheel distributions.
+	@echo "Building $(PACKAGE_NAME) version $(VERSION)..."
+	$(ENV_PREFIX)python -m pip install --upgrade build twine
+	$(ENV_PREFIX)python -m build
+	$(ENV_PREFIX)python -m twine check dist/*
+
+.PHONY: check-clean
+check-clean: ## Fail if git working tree is not clean.
+ifeq ($(OS_FAMILY),Windows)
+	@$(GIT_STATUS_CLEAN_CMD) || ( \
+		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first." && \
+		exit 1 \
+	)
+else
+	@$(GIT_STATUS_CLEAN_CMD) || { \
+		$(ECHO) "Error: git working tree is not clean. Commit or stash changes first."; \
+		exit 1; \
+	}
+endif
+
+.PHONY: check-git-tag
+check-git-tag: ## Fail if git tag v<VERSION> already exists.
+ifeq ($(OS_FAMILY),Windows)
+	@$(GIT_TAG_EXISTS_CMD) && ( \
+		$(ECHO) "Error: git tag v$(VERSION) already exists." && \
+		exit 1 \
+	) || exit 0
+else
+	@$(GIT_TAG_EXISTS_CMD) && { \
+		$(ECHO) "Error: git tag v$(VERSION) already exists."; \
+		exit 1; \
+	} || true
+endif
+
+.PHONY: tag
+tag: check-clean check-git-tag ## Create git tag v<VERSION>.
+	@echo "Creating git tag v$(VERSION)..."
+	git tag v$(VERSION)
+	@echo "Created tag v$(VERSION)"
+	@echo "To push it: git push origin v$(VERSION)"
+
+.PHONY: release-test
+release-test: check-clean check-git-tag build ## Build and upload to TestPyPI.
+	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to TestPyPI..."
+	$(ENV_PREFIX)python -m twine upload --repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+	@echo ""
+	@echo "Test install with:"
+	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
+
+.PHONY: release
+release: check-clean build ## Manually upload to PyPI/TestPyPI. Do not use before pushing a production release tag.
+	@echo "WARNING: This is a manual upload."
+	@echo "Do not use this target for a version that will also be published by GitHub Actions."
+	@echo "Uploading $(PACKAGE_NAME) $(VERSION) to $(REPOSITORY)..."
+ifeq ($(REPOSITORY),testpypi)
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_testpypi) dist/*
+	@echo ""
+	@echo "Test install with:"
+	@echo "python -m pip install --index-url https://test.pypi.org/simple/ --no-deps $(PACKAGE_NAME)==$(VERSION)"
+else ifeq ($(REPOSITORY),pypi)
+	$(ENV_PREFIX)python -m twine upload \
+		--repository-url $(TWINE_REPOSITORY_URL_pypi) dist/*
+	@echo ""
+	@echo "Install with:"
+	@echo "python -m pip install $(PACKAGE_NAME)==$(VERSION)"
+else
+	@echo "Error: REPOSITORY must be either 'pypi' or 'testpypi'"
+	@exit 1
+endif
+
+## # Normal production release
+## make test
+## make build
+## make tag
+## git push origin main
+## git push origin v$(make version)

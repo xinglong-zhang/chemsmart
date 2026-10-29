@@ -1,0 +1,170 @@
+"""Tests for BaseFolder and folder operations."""
+
+import os
+import tempfile
+
+from chemsmart.io.folder import BaseFolder
+
+
+class TestFolderOutputFileDiscovery:
+    """Tests for the BaseFolder output file discovery methods."""
+
+    def test_find_gaussian_outputs(self, gaussian_outputs_test_directory):
+        """Test finding Gaussian output files."""
+        gaussian_output_files = BaseFolder(
+            folder=gaussian_outputs_test_directory
+        ).get_all_output_files_in_current_folder_by_program(program="gaussian")
+        assert len(gaussian_output_files) > 0
+        for file in gaussian_output_files:
+            assert file.endswith((".log", ".out"))
+
+    def test_find_orca_outputs(self, orca_outputs_directory):
+        """Test finding ORCA output files."""
+        orca_output_files = BaseFolder(
+            folder=orca_outputs_directory
+        ).get_all_output_files_in_current_folder_by_program(program="orca")
+        assert len(orca_output_files) > 0
+        for file in orca_output_files:
+            assert file.endswith(".out")
+
+    def test_find_xtb_outputs_in_parent_folder(self, xtb_outputs_directory):
+        """Test that non-recursive search finds no xTB files in parent directory."""
+        xtb_output_files = BaseFolder(
+            folder=xtb_outputs_directory
+        ).get_all_output_files_in_current_folder_by_program(program="xtb")
+        assert not xtb_output_files  # No files in the top-level folder
+
+    def test_find_xtb_outputs_in_subfolders(self, xtb_outputs_directory):
+        """Test finding xTB output files with recursive search."""
+        xtb_output_files = BaseFolder(
+            folder=xtb_outputs_directory
+        ).get_all_output_files_in_current_folder_and_subfolders_by_program(
+            program="xtb"
+        )
+        # Recursive should find files in subdirectories
+        assert len(xtb_output_files) > 0
+        for file in xtb_output_files:
+            assert file.endswith(".out")
+
+    def test_find_crest_outputs_in_parent_folder(
+        self, crest_outputs_directory
+    ):
+        """Test that non-recursive search finds no CREST files in parent directory."""
+        crest_output_files = BaseFolder(
+            folder=crest_outputs_directory
+        ).get_all_output_files_in_current_folder_by_program(program="crest")
+        assert not crest_output_files  # No files in the top-level folder
+
+    def test_find_crest_outputs_in_subfolders(self, crest_outputs_directory):
+        """Test finding CREST output files with recursive search."""
+        crest_output_files = BaseFolder(
+            folder=crest_outputs_directory
+        ).get_all_output_files_in_current_folder_and_subfolders_by_program(
+            program="crest"
+        )
+        # Recursive should find files in subdirectories
+        assert len(crest_output_files) > 0
+        for file in crest_output_files:
+            assert file.endswith(".out")
+
+
+class TestFolderIsProgramCalculationDirectory:
+    """Tests for the is_program_calculation_directory method."""
+
+    def test_xtb_output_directory(self, xtb_outputs_directory):
+        """Test that parent directory is not detected as xTB calculation directory."""
+        assert not BaseFolder(
+            folder=xtb_outputs_directory
+        ).is_program_calculation_directory("xtb")
+
+    def test_crest_output_directory(self, crest_outputs_directory):
+        """Test that parent directory is not detected as CREST calculation directory."""
+        assert not BaseFolder(
+            folder=crest_outputs_directory
+        ).is_program_calculation_directory("crest")
+
+    def test_xtb_co2_calculation_directory(self, xtb_co2_outfolder):
+        """Test detection of xTB calculation directory for CO2."""
+        assert BaseFolder(
+            folder=xtb_co2_outfolder
+        ).is_program_calculation_directory("xtb")
+
+    def test_crest_styrene_calculation_directory(
+        self, crest_styrene_outfolder
+    ):
+        """Test detection of CREST calculation directory for styrene."""
+        assert BaseFolder(
+            folder=crest_styrene_outfolder
+        ).is_program_calculation_directory("crest")
+
+    def test_not_xtb_directory(self, gaussian_outputs_test_directory):
+        """Test that Gaussian directory is not detected as xTB."""
+        assert not BaseFolder(
+            folder=gaussian_outputs_test_directory
+        ).is_program_calculation_directory("xtb")
+
+
+class TestFolderGetProgramType:
+    """Tests for the get_program_type_from_folder method."""
+
+    def test_xtb_output_detection(self, xtb_water_outfolder):
+        """Test detection of xTB calculation folder."""
+        result = BaseFolder(
+            folder=xtb_water_outfolder
+        ).get_program_type_from_folder()
+        assert result == "xtb"
+
+    def test_crest_output_detection(self, crest_octane_outfolder):
+        """Test detection of CREST calculation folder."""
+        result = BaseFolder(
+            folder=crest_octane_outfolder
+        ).get_program_type_from_folder()
+        assert result == "crest"
+
+    def test_unknown_folder(self):
+        """Test unknown folder type."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create some random files
+            with open(os.path.join(temp_dir, "random.txt"), "w") as f:
+                f.write("Random content\n")
+            result = BaseFolder(folder=temp_dir).get_program_type_from_folder()
+            assert result == "unknown"
+
+
+class TestClickFolderOptionsDecorator:
+    """``click_folder_options`` registers the expected CLI options."""
+
+    def test_directory_option_present_in_help(self, invoke_folder_command):
+        """``-d/--directory`` appears in the command help text."""
+        result = invoke_folder_command(["--help"])
+        assert result.exit_code == 0, result.output
+        assert "--directory" in result.output
+
+    def test_filetype_option_present_in_help(self, invoke_folder_command):
+        """``-t/--filetype`` appears in the command help text."""
+        result = invoke_folder_command(["--help"])
+        assert result.exit_code == 0, result.output
+        assert "--filetype" in result.output
+
+    def test_program_option_present_in_help(self, invoke_folder_command):
+        """``-p/--program`` appears in the command help text."""
+        result = invoke_folder_command(["--help"])
+        assert result.exit_code == 0, result.output
+        assert "--program" in result.output
+
+    def test_directory_option_received_by_callback(
+        self, invoke_folder_command
+    ):
+        """Passing ``-d /some/path`` propagates the value to the callback."""
+        result = invoke_folder_command(["-d", "/some/path"])
+        assert result.exit_code == 0, result.output
+
+    def test_filetype_option_received_by_callback(self, invoke_folder_command):
+        """Passing ``-t log`` propagates the value to the callback."""
+        result = invoke_folder_command(["-t", "log"])
+        assert result.exit_code == 0, result.output
+
+    def test_program_option_received_by_callback(self, invoke_folder_command):
+        """Passing ``-p gaussian`` propagates the value to the callback."""
+        result = invoke_folder_command(["-p", "gaussian"])
+        assert result.exit_code == 0, result.output

@@ -4,9 +4,17 @@ import os
 
 import click
 
+from chemsmart.cli.database.database import click_database_id_options
+from chemsmart.cli.job import (
+    click_file_label_and_index_options,
+    click_filename_options,
+    click_pubchem_options,
+)
+from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.utils.cli import MyGroup
-from chemsmart.utils.utils import get_list_from_string_range
+from chemsmart.utils.io import clean_label, get_program_type_from_file
+from chemsmart.utils.utils import return_objects_and_indices_from_string_index
 
 logger = logging.getLogger(__name__)
 
@@ -28,38 +36,21 @@ def click_gaussian_settings_options(f):
     """Common click options for Gaussian Settings."""
 
     @click.option(
-        "-f",
-        "--filename",
-        type=str,
-        default=None,
-        help="filename from which new Gaussian input is prepared.",
-    )
-    @click.option(
-        "-l",
-        "--label",
-        type=str,
-        default=None,
-        help="write user input filename for the job (without extension)",
-    )
-    @click.option(
-        "-a",
-        "--append-label",
-        type=str,
-        default=None,
-        help="name to be appended to file for the job",
-    )
-    @click.option(
         "-t", "--title", type=str, default=None, help="Gaussian job title."
     )
     @click.option(
-        "-c", "--charge", type=int, default=None, help="charge of the molecule"
+        "-c",
+        "--charge",
+        type=int,
+        default=None,
+        help="Charge of the molecule.",
     )
     @click.option(
         "-m",
         "--multiplicity",
         type=int,
         default=None,
-        help="multiplicity of the molecule",
+        help="Multiplicity of the molecule.",
     )
     @click.option(
         "-x",
@@ -72,50 +63,49 @@ def click_gaussian_settings_options(f):
         "-b", "--basis", type=str, default=None, help="New basis set to run."
     )
     @click.option(
-        "-i",
-        "--index",
+        "-s",
+        "--semiempirical",
         type=str,
         default=None,
-        help="Index of molecules to use; 1-based indices. "
-        "Default to the last molecule structure. 1-based index.",
+        help="Semiempirical method to run.",
     )
     @click.option(
         "-o",
         "--additional-opt-options",
         type=str,
         default=None,
-        help="additional opt options",
+        help="Additional optimization options.",
     )
     @click.option(
         "-r",
         "--additional-route-parameters",
         type=str,
         default=None,
-        help="additional route parameters",
+        help="Additional route parameters.",
     )
     @click.option(
         "-A",
         "--append-additional-info",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the "
-        "input file. E.g, scrf=read",
+        help="Additional information to be appended at the end of the "
+        "input file (e.g., scrf=read).",
     )
     @click.option(
         "-C",
         "--custom-solvent",
         type=str,
         default=None,
-        help="additional information to be appended at the end of the "
-        "input file. E.g, scrf=read",
+        help="Custom solvent information to be appended at the end of the "
+        "input file (e.g., scrf=read).",
     )
     @click.option(
         "-d",
         "--dieze-tag",
         type=str,
         default=None,
-        help="dieze tag for gaussian job; possible options include "
-        '"n", "p", "t" to get "#n", "#p", "#t", respectively',
+        help="Dieze tag for Gaussian job. Possible options include "
+        '"n", "p", "t" to get "#n", "#p", "#t", respectively.',
     )
     @click.option(
         "--forces/--no-forces",
@@ -129,6 +119,77 @@ def click_gaussian_settings_options(f):
     return wrapper_common_options
 
 
+def click_gaussian_irc_options(f):
+    """Common click options for IRC-related jobs."""
+
+    @click.option(
+        "-fl/",
+        "--flat-irc/--no-flat-irc",
+        type=bool,
+        default=False,
+        help="Whether to run flat IRC or not.",
+    )
+    @click.option(
+        "-pt",
+        "--predictor",
+        type=click.Choice(
+            ["LQA", "HPC", "EulerPC", "DVV", "Euler"], case_sensitive=False
+        ),
+        default=None,
+        help="Type of predictor used for IRC. Examples include [HPC, EulerPC, "
+        "LQA, DVV, Euler].",
+    )
+    @click.option(
+        "-rc",
+        "--recorrect",
+        type=click.Choice(["Never", "Always", "Test"], case_sensitive=False),
+        default=None,
+        help="Recorrection step of HPC and EulerPC IRCs. Options are: "
+        '["Never", "Always", "Test"].',
+    )
+    @click.option(
+        "-rs",
+        "--recalc-step",
+        type=int,
+        default=6,
+        help="Compute the Hessian analytically every N predictor steps or every "
+        "|N| corrector steps if N < 0.",
+    )
+    @click.option(
+        "-mp",
+        "--maxpoints",
+        type=int,
+        default=512,
+        help="Number of points along the reaction path to examine.",
+    )
+    @click.option(
+        "-mc",
+        "--maxcycles",
+        type=int,
+        default=128,
+        help="Maximum number of steps along the IRC to run.",
+    )
+    @click.option(
+        "-ss",
+        "--stepsize",
+        type=int,
+        default=20,
+        help="Step size along the reaction path, in units of 0.01 Bohr.",
+    )
+    @click.option(
+        "-d",
+        "--direction",
+        type=click.Choice(["forward", "reverse"], case_sensitive=False),
+        default=None,
+        help="Only run the forward or reverse IRC. Defaults to run both directions.",
+    )
+    @functools.wraps(f)
+    def wrapper_irc_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_irc_options
+
+
 def click_gaussian_jobtype_options(f):
     """Common click options for Gaussian link/crest jobs."""
 
@@ -137,25 +198,27 @@ def click_gaussian_jobtype_options(f):
         "--jobtype",
         type=str,
         default=None,
-        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", "sp"]',
+        help='Gaussian job type. Options: ["opt", "ts", "modred", "scan", '
+        '"sp", "irc"].',
     )
     @click.option(
         "-c",
         "--coordinates",
         default=None,
-        help="List of coordinates to be fixed for modred or scan job. 1-indexed.",
+        help="List of coordinates to be fixed for modred or scan jobs. "
+        "1-indexed.",
     )
     @click.option(
         "-s",
         "--step-size",
         default=None,
-        help="Step size of coordinates to scan.",
+        help="Step size for coordinate scans.",
     )
     @click.option(
         "-n",
         "--num-steps",
         default=None,
-        help="Step size of coordinates to scan.",
+        help="Number of steps for coordinate scans.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -165,28 +228,82 @@ def click_gaussian_jobtype_options(f):
 
 
 def click_gaussian_solvent_options(f):
-    """Common click solvent options for Gaussian jobs."""
+    """Common click options for Gaussian solvent settings."""
 
     @click.option(
         "--remove-solvent/--no-remove-solvent",
         "-r/ ",
         type=bool,
         default=False,
-        help="Whether to use solvent model in the job. Defaults to project settings.",
+        help="Whether to remove the solvent model from the job. Defaults to project "
+        "settings.",
     )
     @click.option(
         "-sm",
         "--solvent-model",
         type=str,
         default=None,
-        help="solvent model to be used for single point.",
+        help="Solvent model to be used for single point calculations.",
     )
     @click.option(
         "-si",
         "--solvent-id",
         type=str,
         default=None,
-        help="solvent ID to be used for single point.",
+        help="Solvent ID to be used for single point calculations.",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help="Additional solvent options in scrf=() route. "
+        "E.g., `iterative` in scrf=(smd,water,iterative) via "
+        "chemsmart sub -s xz gaussian -p dnam -f output.log -a scrf_iter sp "
+        "-so iterative.",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_gaussian_solvent_group_options(f):
+    """Solvent options for the Gaussian group level (applicable to all subcommands).
+
+    Uses long-form ``--remove-solvent``/``--no-remove-solvent`` without a
+    ``-r`` short alias to avoid conflicting with the existing ``-r`` /
+    ``--additional-route-parameters`` option in
+    :func:`click_gaussian_settings_options`.
+    """
+
+    @click.option(
+        "--remove-solvent/--no-remove-solvent",
+        default=False,
+        help="Remove the solvent model from the job (overrides project settings).",
+    )
+    @click.option(
+        "-sm",
+        "--solvent-model",
+        type=str,
+        default=None,
+        help="Solvent model to use (e.g. smd, cpcm, iefpcm).",
+    )
+    @click.option(
+        "-si",
+        "--solvent-id",
+        type=str,
+        default=None,
+        help="Solvent identifier (e.g. water, toluene, dichloromethane).",
+    )
+    @click.option(
+        "-so",
+        "--solvent-options",
+        type=str,
+        default=None,
+        help="Additional options appended inside the scrf=() route keyword "
+        "(e.g. 'iterative' gives scrf=(smd,solvent=water,iterative)).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -196,6 +313,8 @@ def click_gaussian_solvent_options(f):
 
 
 def click_gaussian_td_options(f):
+    """Common click options for Gaussian TDDFT calculations."""
+
     @click.option(
         "-s",
         "--states",
@@ -203,22 +322,23 @@ def click_gaussian_td_options(f):
             ["singlets", "triplets", "50-50"], case_sensitive=False
         ),
         default="singlets",
-        help="States for closed-shell singlet systems.\n"
-        'Options choice =["Singlets", "Triplets", "50-50"]',
+        help="States for closed-shell singlet systems. "
+        'Options: ["Singlets", "Triplets", "50-50"].',
     )
     @click.option(
         "-r",
         "--root",
         type=int,
         default=1,
-        help="Specifies the “state of interest”. The default is the first excited state (N=1).",
+        help='Specifies the "state of interest". '
+        "The default is the first excited state (N=1).",
     )
     @click.option(
         "-n",
         "--nstates",
         type=int,
         default=3,
-        help="Solve for M states (the default is 3). "
+        help="Number of states to solve for (default is 3). "
         "If 50-50, this gives the number of each type of state to solve "
         "(i.e., 3 singlets and 3 triplets).",
     )
@@ -228,8 +348,140 @@ def click_gaussian_td_options(f):
         type=str,
         default=None,
         help="Whether to perform equilibrium or non-equilibrium PCM solvation. "
-        "NonEqSolv is the default except for excited state opt and when "
+        "NonEqSolv is the default except for excited state optimization and when "
         "excited state density is requested (e.g., Density=Current or All).",
+    )
+    @functools.wraps(f)
+    def wrapper_common_options(*args, **kwargs):
+        return f(*args, **kwargs)
+
+    return wrapper_common_options
+
+
+def click_gaussian_qmmm_options(f):
+    """Common click options for QMMM jobs."""
+
+    @click.option(
+        "-hx",
+        "--high-level-functional",
+        type=str,
+        help="High-level layer functional.",
+    )
+    @click.option(
+        "-hb",
+        "--high-level-basis",
+        type=str,
+        help="High-level layer basis.",
+    )
+    @click.option(
+        "-hf",
+        "--high-level-force-field",
+        type=str,
+        help="High-level layer force field.",
+    )
+    @click.option(
+        "-mx",
+        "--medium-level-functional",
+        type=str,
+        help="Medium-level layer functional.",
+    )
+    @click.option(
+        "-mb",
+        "--medium-level-basis",
+        type=str,
+        help="Medium-level layer basis.",
+    )
+    @click.option(
+        "-mf",
+        "--Medium-level-force-field",
+        type=str,
+        help="Medium-level layer force field.",
+    )
+    @click.option(
+        "-lx",
+        "--low-level-functional",
+        type=str,
+        help="Low level layer functional.",
+    )
+    @click.option(
+        "-lb",
+        "--low-level-basis",
+        type=str,
+        help="Low level layer basis.",
+    )
+    @click.option(
+        "-lf",
+        "--low-level-force-field",
+        type=str,
+        help="Low level layer force field.",
+    )
+    @click.option(
+        "-cr",
+        "--real-charge",
+        type=int,
+        help="Charge of real system.",
+    )
+    @click.option(
+        "-mr",
+        "--real-multiplicity",
+        type=int,
+        help="Spin multiplicity of real system.",
+    )
+    @click.option(
+        "-ci",
+        "--int-charge",
+        type=int,
+        help="Charge of intermediate system.",
+    )
+    @click.option(
+        "-mi",
+        "--int-multiplicity",
+        type=int,
+        help="Spin multiplicity of intermediate system.",
+    )
+    @click.option(
+        "-cm",
+        "--model-charge",
+        type=int,
+        help="Charge of model system.",
+    )
+    @click.option(
+        "-mm",
+        "--model-multiplicity",
+        type=int,
+        help="Spin multiplicity of model system.",
+    )
+    @click.option(
+        "-ha",
+        "--high-level-atoms",
+        type=str,
+        help="Atom indices for high level.",
+    )
+    @click.option(
+        "-ma",
+        "--medium-level-atoms",
+        type=str,
+        help="Atom indices for medium level.",
+    )
+    @click.option(
+        "-la",
+        "--low-level-atoms",
+        type=str,
+        help="Atom indices for low level.",
+    )
+    @click.option(
+        "-b",
+        "--bonded-atoms",
+        type=str,
+        help="List of tuples of the bonds to be cut, specified by "
+        "two atomic indexes in each tuple, e.g., (1,2), (3,4)",
+    )
+    @click.option(
+        "-s",
+        "--scale-factors",
+        type=dict,
+        help="A dictionary of scale factors for QM/MM calculations, where the key is the bonded atom "
+        "pair indices and the value is a list of scale factors for (low, medium, high).",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):
@@ -240,14 +492,12 @@ def click_gaussian_td_options(f):
 
 @click.group(cls=MyGroup)
 @click_gaussian_options
+@click_filename_options
+@click_file_label_and_index_options
+@click_database_id_options
 @click_gaussian_settings_options
-@click.option(
-    "-P",
-    "--pubchem",
-    type=str,
-    default=None,
-    help="Queries structure from PubChem using name, smiles, cid and conformer information.",
-)
+@click_gaussian_solvent_group_options
+@click_pubchem_options
 @click.pass_context
 def gaussian(
     ctx,
@@ -260,7 +510,13 @@ def gaussian(
     multiplicity,
     functional,
     basis,
+    semiempirical,
     index,
+    record_index,
+    record_id,
+    structure_id,
+    structure_index,
+    molecule_id,
     additional_opt_options,
     additional_route_parameters,
     append_additional_info,
@@ -268,7 +524,43 @@ def gaussian(
     dieze_tag,
     forces,
     pubchem,
+    remove_solvent,
+    solvent_model,
+    solvent_id,
+    solvent_options,
 ):
+    """CLI subcommand for running Gaussian
+    jobs using the chemsmart framework."""
+    # --mid is not supported for job submission
+    if molecule_id is not None:
+        raise click.UsageError(
+            "--mid/--molecule-id is not supported for Gaussian job submission. "
+            "Use --sid/--structure-id or --ri/--rid with -i/--si instead."
+        )
+    # -i/--index and --si/--structure-index are equivalent aliases
+    if index is not None and structure_index is not None:
+        raise click.UsageError(
+            "-i/--index and --si/--structure-index are mutually exclusive. "
+            "Use only one to specify the structure index."
+        )
+    # If --si is given, treat it as -i so all downstream code uses index
+    if structure_index is not None:
+        index = structure_index
+
+    is_chemsmart_db = is_chemsmart_database(filename)
+    if is_chemsmart_db:
+        record_selectors = [record_index is not None, record_id is not None]
+        if sum(record_selectors) + (structure_id is not None) != 1:
+            raise click.UsageError(
+                "For chemsmart database input, select exactly one of "
+                "--ri/--record-index, --rid/--record-id, or "
+                "--sid/--structure-id."
+            )
+        if index is not None and not any(record_selectors):
+            raise click.UsageError(
+                "For chemsmart database input, -i/--index (or --si/--structure-index) "
+                "can only be used together with --ri/--record-index or --rid/--record-id."
+            )
 
     from chemsmart.jobs.gaussian.settings import GaussianJobSettings
     from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -276,23 +568,78 @@ def gaussian(
     # get project settings
     project_settings = GaussianProjectSettings.from_project(project)
 
-    # obtain Gaussian Settings from filename, if supplied; otherwise return defaults
+    # obtain Gaussian Settings from filename, if supplied;
+    #  otherwise return defaults
+
+    # Defer filetype validation if the pka subcommand is being invoked,
+    # as it has its own table file handling.
+    from chemsmart.cli.pka import is_pka_batch_invocation, is_pka_cdxml_input
+    from chemsmart.utils.datasets import PKaTableEntry
+
+    is_pka_subcommand = ctx.invoked_subcommand == "pka"
+    is_pka_table_input = is_pka_subcommand and (
+        PKaTableEntry.is_submission_table(filename)
+        or (is_pka_cdxml_input(filename) and is_pka_batch_invocation(ctx))
+    )
 
     if filename is None:
-        # for cases where filename is not supplied, eg, get structure from pubchem
+        # for cases where filename is not supplied, eg,
+        #  get structure from pubchem
         job_settings = GaussianJobSettings.default()
         logger.info(
-            f"No filename is supplied and Gaussian default settings are used:\n{job_settings.__dict__} "
+            f"No filename is supplied and Gaussian default settings are used:\n"
+            f"{job_settings.__dict__} "
         )
-    elif filename.endswith((".com", ".inp", ".out", ".log")):
-        # filename supplied - we would want to use the settings from here and do not use any defaults!
-        job_settings = GaussianJobSettings.from_filepath(filename)
-    elif filename.endswith(".xyz"):
+    elif filename.endswith((".com", ".gjf", ".inp", ".out", ".log")):
+        # filename supplied - we would want to use the settings from here
+        #  and do not use any defaults!
+        if filename.endswith(".out") and (
+            get_program_type_from_file(filename) == "xtb"
+        ):
+            # xTB output is only a geometry source; its route/method do not
+            # map onto Gaussian settings. Start from defaults (like .xyz) but
+            # inherit charge/multiplicity from the xTB calculation so the new
+            # Gaussian job is fully specified. CLI -c/-m still override below.
+            logger.info(
+                f"Detected xTB output {filename}; using default Gaussian "
+                f"settings with geometry and charge/multiplicity from the "
+                f"xTB calculation."
+            )
+            job_settings = GaussianJobSettings.default()
+            xtb_molecule = Molecule.from_filepath(filename)
+            if xtb_molecule.charge is not None:
+                job_settings.charge = xtb_molecule.charge
+            if xtb_molecule.multiplicity is not None:
+                job_settings.multiplicity = xtb_molecule.multiplicity
+        else:
+            job_settings = GaussianJobSettings.from_filepath(filename)
+    elif filename.endswith(".db"):
+        if is_chemsmart_db:
+            job_settings = GaussianJobSettings.from_database(
+                filepath=filename,
+                record_index=record_index,
+                record_id=record_id,
+                structure_index=index or "-1",
+                structure_id=structure_id,
+            )
+        else:
+            logger.debug(
+                f"File {filename} is not a valid chemsmart database file."
+            )
+            job_settings = GaussianJobSettings.default()
+    # elif filename.endswith((".xyz", ".pdb", ".mol", ".mol2", ".sdf", ".smi",
+    #  ".cif", ".traj", ".gro")):
+    elif is_pka_table_input:
         job_settings = GaussianJobSettings.default()
-    else:
-        raise ValueError(
-            f"Unrecognised filetype {filename} to obtain GaussianJobSettings"
+        logger.info(
+            "pka subcommand invoked with table or CDXML file; "
+            "skipping filetype validation and using default Gaussian settings"
         )
+    else:
+        logger.debug(
+            f"Falling back to default Gaussian job settings for file {filename}."
+        )
+        job_settings = GaussianJobSettings.default()
 
     # Update keywords
     keywords = (
@@ -309,6 +656,9 @@ def gaussian(
     if basis is not None:
         job_settings.basis = basis
         keywords += ("basis",)
+    if semiempirical is not None:
+        job_settings.semiempirical = semiempirical
+        keywords += ("semiempirical",)
     if additional_opt_options is not None:
         job_settings.additional_opt_options_in_route = additional_opt_options
         keywords += ("additional_opt_options_in_route",)
@@ -331,26 +681,82 @@ def gaussian(
         job_settings.forces = forces
         keywords += ("forces",)
 
+    # Handle solvent options specified at the gaussian group level.
+    # These are propagated to every subcommand via the merge mechanism,
+    # allowing e.g. `gaussian -sm smd -si water opt` or
+    # `gaussian -sm smd -si water -so iterative td`.
+    if remove_solvent:
+        job_settings.solvent_model = None
+        job_settings.solvent_id = None
+        job_settings.custom_solvent = None
+        keywords += ("solvent_model", "solvent_id", "custom_solvent")
+    else:
+        if solvent_model is not None:
+            job_settings.solvent_model = solvent_model
+            keywords += ("solvent_model",)
+        if solvent_id is not None:
+            job_settings.solvent_id = solvent_id
+            keywords += ("solvent_id",)
+        if solvent_options is not None:
+            job_settings.additional_solvent_options = solvent_options
+            keywords += ("additional_solvent_options",)
+
     # obtain molecule structure
-    if filename is None and pubchem is None:
-        raise ValueError(
-            "[filename] or [pubchem] has not been specified!\nPlease specify one of them!"
-        )
-    if filename and pubchem:
-        raise ValueError(
-            "Both [filename] and [pubchem] have been specified!\nPlease specify only one of them."
-        )
+    molecules = None
 
-    if filename:
-        molecules = Molecule.from_filepath(
-            filepath=filename, index=":", return_list=True
+    # Skip molecule loading for pKa table files (handled by pKa batch)
+    if is_pka_table_input:
+        logger.debug(
+            f"Skipping molecule loading for pKa table file: {filename}"
         )
-        assert (
-            molecules is not None
-        ), f"Could not obtain molecule from {filename}!"
-        logger.debug(f"Obtained molecule {molecules} from {filename}")
+        molecules = None
+    else:
+        if filename is None and pubchem is None:
+            raise ValueError(
+                "[filename] or [pubchem] has not been specified!\n"
+                "Please specify one of them!"
+            )
+        if filename and pubchem:
+            raise ValueError(
+                "Both [filename] and [pubchem] have been specified!\n"
+                "Please specify only one of them."
+            )
 
-    if pubchem:
+    if filename and not is_pka_table_input:
+        if is_chemsmart_db:
+            if structure_id is not None:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    return_list=True,
+                    structure_id=structure_id,
+                )
+            else:
+                molecules = Molecule.from_filepath(
+                    filepath=filename,
+                    index=index or "-1",
+                    return_list=True,
+                    record_index=record_index,
+                    record_id=record_id,
+                )
+
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from database {filename}!"
+            logger.debug(
+                f"Obtained database molecule {molecules} from {filename}"
+            )
+        else:
+            molecules = Molecule.from_filepath(
+                filepath=filename, index=":", return_list=True
+            )
+            assert (
+                molecules is not None
+            ), f"Could not obtain molecule from {filename}!"
+            logger.debug(
+                f"Obtained {len(molecules)} molecule {molecules} from {filename}"
+            )
+
+    if pubchem and not is_pka_table_input:
         molecules = Molecule.from_pubchem(identifier=pubchem, return_list=True)
         assert (
             molecules is not None
@@ -360,36 +766,95 @@ def gaussian(
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
-            "Only give Gaussian input filename or name to be be appended, but not both!"
+            "Only give Gaussian input filename or name to be be appended,"
+            "but not both!"
         )
     if append_label is not None:
         label = os.path.splitext(os.path.basename(filename))[0]
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{append_label}"
     if label is None and append_label is None:
-        label = os.path.splitext(os.path.basename(filename))[0]
+        if filename:
+            label = os.path.splitext(os.path.basename(filename))[0]
+        else:
+            label = "output"
+        if is_chemsmart_db:
+            if structure_id is not None:
+                label = f"{label}_SID-{structure_id}"
+            elif record_id is not None:
+                label = f"{label}_RID-{record_id}"
+            elif record_index is not None:
+                label = f"{label}_RI-{record_index}"
         label = f"{label}_{ctx.invoked_subcommand}"
-
-    logger.debug(f"Obtained molecules: {molecules} before applying indices")
+    label = clean_label(label)
 
     # if user has specified an index to use to access particular structure
-    # then return that structure as a list
-    if index is not None:
-        try:
-            # try to get molecule using python style string indexing,
-            # but in 1-based
-            from chemsmart.utils.utils import string2index_1based
+    # then return that structure as a list and track the original indices
+    molecule_indices = None
+    if index is not None and not is_chemsmart_db:
+        molecules, molecule_indices = (
+            return_objects_and_indices_from_string_index(
+                list_of_objects=molecules, index=index
+            )
+        )
 
-            index = string2index_1based(index)
-            molecules = molecules[index]
-            if not isinstance(molecules, list):
-                molecules = [molecules]
-        except ValueError:
-            # except user defined indices such as s='[1-3,28-31,34-41]'
-            # or s='1-3,28-31,34-41' which cannot be parsed by string2index_1based
-            index = get_list_from_string_range(index)
-            molecules = [molecules[i - 1] for i in index]
+    if molecules is not None and not isinstance(molecules, list):
+        molecules = [molecules]
+        if molecule_indices is not None and not isinstance(
+            molecule_indices, list
+        ):
+            molecule_indices = [molecule_indices]
 
     logger.debug(f"Obtained molecules: {molecules}")
+    logger.debug(f"Molecule indices: {molecule_indices}")
+
+    # If the user requested the qmmm subcommand, ensure molecules are
+    # represented as QMMMMolecule so the subcommand sees QMMM-specific
+    # attributes early (e.g., high_level_atoms, bonded_atoms).
+    try:
+        if ctx.invoked_subcommand == "qmmm":
+            from chemsmart.io.molecules.structure import QMMMMolecule
+
+            converted = []
+            for idx, m in enumerate(molecules):
+                if isinstance(m, QMMMMolecule):
+                    converted.append(m)
+                    continue
+
+                try:
+                    converted.append(QMMMMolecule(molecule=m))
+                except (TypeError, AttributeError, ValueError) as exc:
+                    logger.debug(
+                        f"QMMM wrap via molecule= failed at index {idx}: {exc}; "
+                        f"retrying dict-based init",
+                    )
+                    try:
+                        converted.append(
+                            QMMMMolecule(**getattr(m, "__dict__", {}))
+                        )
+                    except Exception as exc2:
+                        logger.warning(
+                            f"Failed to convert molecule (idx {idx}) to QMMMMolecule: {exc2}; "
+                            f"leaving as original molecule type {type(m)}",
+                        )
+                        converted.append(m)
+
+            molecules = converted
+            logger.debug(
+                "Converted molecules to QMMMMolecule for qmmm subcommand."
+            )
+    except Exception as exc:
+        # Non-fatal: if anything goes wrong, keep original molecules and
+        # let the qmmm subcommand attempt conversion itself.
+        logger.debug(
+            f"Could not convert molecules to QMMMMolecule at group level: {exc}"
+        )
 
     # store objects
     ctx.obj["project_settings"] = project_settings
@@ -397,6 +862,9 @@ def gaussian(
     ctx.obj["keywords"] = keywords
     ctx.obj["molecules"] = (
         molecules  # molecules as a list, as some jobs requires all structures to be used
+    )
+    ctx.obj["molecule_indices"] = (
+        molecule_indices  # Store original 1-based indices
     )
     ctx.obj["label"] = label
     ctx.obj["filename"] = filename

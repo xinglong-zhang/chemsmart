@@ -1,0 +1,694 @@
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from click.testing import CliRunner
+
+from chemsmart.cli.run import run
+from chemsmart.cli.sub import sub
+from chemsmart.jobs.crest.runner import CRESTJobRunner, FakeCRESTJobRunner
+from chemsmart.jobs.gaussian.runner import (
+    FakeGaussianJobRunner,
+    GaussianJobRunner,
+)
+from chemsmart.jobs.iterate.runner import IterateJobRunner
+from chemsmart.jobs.job import Job
+from chemsmart.jobs.orca.runner import FakeORCAJobRunner, ORCAJobRunner
+from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.thermochemistry.runner import ThermochemistryJobRunner
+from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
+from chemsmart.settings.server import Server
+
+
+class DummyORCAJob:
+    PROGRAM = "ORCA"
+    execution_name = Job.execution_name
+
+    def __init__(self, folder, label):
+        self.folder = str(folder)
+        self.label = label
+
+    @property
+    def inputfile(self):
+        return str(Path(self.folder) / f"{self.label}.inp")
+
+    @property
+    def gbwfile(self):
+        return str(Path(self.folder) / f"{self.label}.gbw")
+
+    @property
+    def errfile(self):
+        return str(Path(self.folder) / f"{self.label}.err")
+
+    @property
+    def outputfile(self):
+        return str(Path(self.folder) / f"{self.label}.out")
+
+
+class DummyGaussianJob:
+    def __init__(self, folder, label):
+        self.folder = str(folder)
+        self.label = label
+
+    @property
+    def inputfile(self):
+        return str(Path(self.folder) / f"{self.label}.com")
+
+    @property
+    def chkfile(self):
+        return str(Path(self.folder) / f"{self.label}.chk")
+
+    @property
+    def errfile(self):
+        return str(Path(self.folder) / f"{self.label}.err")
+
+
+class TestProgramAwareNames:
+    @pytest.mark.parametrize(
+        "program,label,expected",
+        [
+            ("ORCA", "molecule_opt", "orca_molecule_opt"),
+            ("Gaussian", "molecule_opt", "gaussian_molecule_opt"),
+            (None, "molecule_opt", "molecule_opt"),
+            ("ORCA", None, None),
+        ],
+    )
+    def test_execution_name(self, program, label, expected):
+        """Derive a program prefix without mutating the calculation label.
+
+        Missing program or label values retain the original label.
+        """
+        job = Job(molecule=None, label=label, jobrunner=None)
+        job.PROGRAM = program
+
+        assert job.execution_name == expected
+        assert job.label == label
+
+    @pytest.mark.parametrize(
+        "runner_cls,program,input_attribute,expected_filename",
+        [
+            (
+                GaussianJobRunner,
+                "Gaussian",
+                "job_inputfile",
+                "molecule_opt.com",
+            ),
+            (
+                FakeGaussianJobRunner,
+                "Gaussian",
+                "job_inputfile",
+                "molecule_opt_fake.com",
+            ),
+            (ORCAJobRunner, "ORCA", "job_inputfile", "molecule_opt.inp"),
+            (
+                FakeORCAJobRunner,
+                "ORCA",
+                "job_inputfile",
+                "molecule_opt_fake.inp",
+            ),
+            (XTBJobRunner, "xtb", "job_inputfile", "molecule_opt.inp"),
+            (
+                FakeXTBJobRunner,
+                "xtb",
+                "job_inputfile",
+                "molecule_opt_fake.inp",
+            ),
+            (CRESTJobRunner, "crest", "job_xyzfile", "molecule_opt.xyz"),
+            (
+                FakeCRESTJobRunner,
+                "crest",
+                "job_xyzfile",
+                "molecule_opt_fake.xyz",
+            ),
+            (
+                ThermochemistryJobRunner,
+                "Thermochemistry",
+                "job_inputfile",
+                "molecule_opt.log",
+            ),
+        ],
+        ids=lambda value: value.__name__ if isinstance(value, type) else None,
+    )
+    def test_scratch_directory_uses_execution_name(
+        self,
+        runner_cls,
+        program,
+        input_attribute,
+        expected_filename,
+        pbs_server,
+        tmp_path,
+    ):
+        """Prefix scratch directories while preserving calculation filenames.
+
+        Only configure paths; no external program is executed. Fake runners
+        keep their existing ``_fake`` label suffix inside the prefixed directory.
+        """
+        runner = runner_cls(
+            server=pbs_server, scratch=True, scratch_dir=str(tmp_path)
+        )
+        job = Job(molecule=None, label="molecule_opt", jobrunner=runner)
+        job.PROGRAM = program
+        job.inputfile = str(tmp_path / "molecule_opt.log")
+        job.outputfile = str(tmp_path / "molecule_opt.out")
+        job.errfile = str(tmp_path / "molecule_opt.err")
+
+        runner._set_up_variables_in_scratch(job)
+
+        expected_dir = tmp_path / f"{program.lower()}_molecule_opt"
+        assert expected_dir.is_dir()
+        assert Path(runner.running_directory) == expected_dir
+        assert (
+            Path(getattr(runner, input_attribute))
+            == expected_dir / expected_filename
+        )
+        assert job.label == Path(expected_filename).stem
+
+
+class TestJobRunnerSelection:
+    def test_fake_gaussian_runner_selected_when_fake_enabled(self, pbs_server):
+        job = SimpleNamespace(TYPE="g16opt")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=True
+        )
+        assert isinstance(runner, FakeGaussianJobRunner)
+        assert runner.fake is True
+
+    def test_fake_orca_runner_selected_when_fake_enabled(self, pbs_server):
+        job = SimpleNamespace(TYPE="orcasp")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=True
+        )
+        assert isinstance(runner, FakeORCAJobRunner)
+        assert runner.fake is True
+
+    def test_fake_xtb_runner_selected_when_fake_enabled(self, pbs_server):
+        job = SimpleNamespace(TYPE="xtbhess")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=True
+        )
+        assert isinstance(runner, FakeXTBJobRunner)
+        assert runner.fake is True
+
+    def test_real_runner_selected_when_fake_disabled(self, pbs_server):
+        gaussian_job = SimpleNamespace(TYPE="g16opt")
+        gaussian_runner = JobRunner.from_job(
+            job=gaussian_job, server=pbs_server, scratch=False, fake=False
+        )
+        assert isinstance(gaussian_runner, GaussianJobRunner)
+
+        orca_job = SimpleNamespace(TYPE="orcasp")
+        orca_runner = JobRunner.from_job(
+            job=orca_job, server=pbs_server, scratch=False, fake=False
+        )
+        assert isinstance(orca_runner, ORCAJobRunner)
+
+        xtb_job = SimpleNamespace(TYPE="xtbsp")
+        xtb_runner = JobRunner.from_job(
+            job=xtb_job, server=pbs_server, scratch=False, fake=False
+        )
+        assert isinstance(xtb_runner, XTBJobRunner)
+
+    def test_fake_flag_propagates_when_no_fake_runner_exists(self, pbs_server):
+        job = SimpleNamespace(TYPE="iterate")
+        runner = JobRunner.from_job(
+            job=job, server=pbs_server, scratch=False, fake=True
+        )
+        assert isinstance(runner, IterateJobRunner)
+        assert runner.fake is True
+
+    def test_fake_orca_appends_fake_suffix_in_job_directory(
+        self, pbs_server, tmp_path
+    ):
+        runner = FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
+        job = DummyORCAJob(folder=tmp_path, label="orca_opt")
+
+        runner._set_up_variables_in_job_directory(job)
+
+        assert job.label == "orca_opt_fake"
+        assert Path(runner.job_inputfile).name == "orca_opt_fake.inp"
+        assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
+        assert Path(runner.job_errfile).name == "orca_opt_fake.err"
+        assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
+
+    def test_fake_orca_appends_fake_suffix_in_scratch(
+        self, pbs_server, tmp_path
+    ):
+        runner = FakeORCAJobRunner(
+            server=pbs_server,
+            scratch=True,
+            scratch_dir=str(tmp_path),
+            fake=True,
+        )
+        job = DummyORCAJob(folder=tmp_path, label="orca_opt")
+
+        runner._set_up_variables_in_scratch(job)
+
+        assert Path(runner.running_directory) == tmp_path / "orca_orca_opt"
+        assert job.label == "orca_opt_fake"
+        assert Path(runner.job_inputfile).name == "orca_opt_fake.inp"
+        assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
+        assert Path(runner.job_errfile).name == "orca_opt_fake.err"
+        assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
+
+    def test_fake_gaussian_does_not_duplicate_fake_suffix(
+        self, pbs_server, tmp_path
+    ):
+        runner = FakeGaussianJobRunner(
+            server=pbs_server, scratch=False, fake=True
+        )
+        job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt_fake")
+
+        runner._set_up_variables_in_job_directory(job)
+
+        assert job.label == "gaussian_opt_fake"
+        assert Path(runner.job_inputfile).name == "gaussian_opt_fake.com"
+        assert Path(runner.job_chkfile).name == "gaussian_opt_fake.chk"
+        assert Path(runner.job_errfile).name == "gaussian_opt_fake.err"
+
+    def test_fake_orca_does_not_duplicate_fake_suffix(
+        self, pbs_server, tmp_path
+    ):
+        runner = FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
+        job = DummyORCAJob(folder=tmp_path, label="orca_opt_fake")
+
+        runner._set_up_variables_in_job_directory(job)
+
+        assert job.label == "orca_opt_fake"
+        assert Path(runner.job_inputfile).name == "orca_opt_fake.inp"
+        assert Path(runner.job_gbwfile).name == "orca_opt_fake.gbw"
+        assert Path(runner.job_errfile).name == "orca_opt_fake.err"
+        assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
+
+
+class TestScratchCLI:
+    """Scratch CLI wiring: omit vs explicit flags."""
+
+    def test_run_omitted_scratch_leaves_none_for_from_job(
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+        )
+        observed = {"scratch_arg": "unset"}
+
+        def _from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+            observed["scratch_arg"] = scratch
+            return type("R", (), {"scratch": scratch})()
+
+        monkeypatch.setattr(
+            "chemsmart.jobs.runner.JobRunner.from_job",
+            classmethod(_from_job),
+        )
+        monkeypatch.setattr("chemsmart.jobs.job.Job.run", lambda self: None)
+
+        result = CliRunner().invoke(
+            run,
+            [
+                "--fake",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert observed["scratch_arg"] is None
+
+    def test_run_explicit_scratch_reaches_from_job(
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+        )
+        observed = {"scratch_arg": "unset"}
+
+        def _from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+            observed["scratch_arg"] = scratch
+            return type("R", (), {"scratch": scratch})()
+
+        monkeypatch.setattr(
+            "chemsmart.jobs.runner.JobRunner.from_job",
+            classmethod(_from_job),
+        )
+        monkeypatch.setattr("chemsmart.jobs.job.Job.run", lambda self: None)
+
+        result = CliRunner().invoke(
+            run,
+            [
+                "--fake",
+                "--scratch",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert observed["scratch_arg"] is True
+
+    def test_sub_omitted_scratch_does_not_reconstruct_no_scratch(
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
+        captured,
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+        )
+        fake_server = Server(name="dummy")
+        captured["cli_args"] = None
+        fake_server.submit = (
+            lambda job, test=False, cli_args=None, **kw: captured.update(
+                cli_args=cli_args
+            )
+        )
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "--server",
+                "dummy",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "--no-scratch" not in captured["cli_args"]
+        assert "--scratch" not in captured["cli_args"]
+
+
+def _write_server_yaml(
+    path, *, gaussian_scratch, orca_scratch, xtb_scratch=None
+):
+    """Write a minimal server YAML with optional program SCRATCH keys."""
+    gaussian_line = (
+        f"    SCRATCH: {gaussian_scratch}\n"
+        if gaussian_scratch is not None
+        else ""
+    )
+    orca_line = (
+        f"    SCRATCH: {orca_scratch}\n" if orca_scratch is not None else ""
+    )
+    xtb_line = (
+        f"    SCRATCH: {xtb_scratch}\n" if xtb_scratch is not None else ""
+    )
+    path.write_text(
+        "SERVER:\n"
+        "    SCHEDULER: PBS\n"
+        "    MEM_GB: 8\n"
+        "    NUM_CORES: 2\n"
+        "    NUM_GPUS: 0\n"
+        "    NUM_THREADS: 2\n"
+        "    SUBMIT_COMMAND: qsub\n"
+        "    SCRATCH_DIR: null\n"
+        "GAUSSIAN:\n"
+        "    EXEFOLDER: ~/programs/g16\n"
+        "    LOCAL_RUN: True\n"
+        f"{gaussian_line}"
+        "    ENVARS: |\n"
+        "        export SCRATCH=~/scratch\n"
+        "ORCA:\n"
+        "    EXEFOLDER: ~/programs/orca\n"
+        "    LOCAL_RUN: False\n"
+        f"{orca_line}"
+        "    ENVARS: |\n"
+        "        export SCRATCH=~/scratch\n"
+        "XTB:\n"
+        "    EXEFOLDER: null\n"
+        "    LOCAL_RUN: True\n"
+        f"{xtb_line}"
+        "    ENVARS: |\n"
+        "        export SCRATCH=~/scratch\n"
+    )
+    return path
+
+
+class TestScratchYamlOverride:
+    """CLI → YAML program SCRATCH → runner class SCRATCH."""
+
+    def test_program_scratch_from_servername_reads_yaml(self, tmp_path):
+        from chemsmart.settings.executable import (
+            GaussianExecutable,
+            ORCAExecutable,
+            XTBExecutable,
+        )
+
+        yaml_path = _write_server_yaml(
+            tmp_path / "mixed.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+            xtb_scratch=True,
+        )
+        assert (
+            GaussianExecutable.program_scratch_from_servername(str(yaml_path))
+            is True
+        )
+        assert (
+            ORCAExecutable.program_scratch_from_servername(str(yaml_path))
+            is False
+        )
+        assert (
+            XTBExecutable.program_scratch_from_servername(str(yaml_path))
+            is True
+        )
+
+    def test_program_scratch_from_servername_missing_key_is_none(
+        self, tmp_path
+    ):
+        from chemsmart.settings.executable import ORCAExecutable
+
+        yaml_path = _write_server_yaml(
+            tmp_path / "no_orca_scratch.yaml",
+            gaussian_scratch=True,
+            orca_scratch=None,
+        )
+        assert (
+            ORCAExecutable.program_scratch_from_servername(str(yaml_path))
+            is None
+        )
+
+    def test_omit_uses_yaml_false_over_orca_class_true(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "orca_off.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="orcasp"),
+            server=server,
+            scratch=None,
+            fake=True,
+        )
+        assert isinstance(runner, FakeORCAJobRunner)
+        assert ORCAJobRunner.SCRATCH is True
+        assert runner.scratch is False
+
+    def test_omit_uses_yaml_true_for_gaussian(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "g16_on.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="g16opt"),
+            server=server,
+            scratch=None,
+            fake=True,
+            scratch_dir=str(scratch_dir),
+        )
+        assert isinstance(runner, FakeGaussianJobRunner)
+        assert runner.scratch is True
+
+    def test_omit_falls_back_to_class_when_yaml_key_absent(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "orca_absent.yaml",
+            gaussian_scratch=True,
+            orca_scratch=None,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="orcasp"),
+            server=server,
+            scratch=None,
+            fake=True,
+            scratch_dir=str(scratch_dir),
+        )
+        assert runner.scratch is ORCAJobRunner.SCRATCH
+
+    def test_cli_scratch_true_overrides_yaml_false(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "orca_off.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        scratch_dir = tmp_path / "scratch"
+        scratch_dir.mkdir()
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="orcasp"),
+            server=server,
+            scratch=True,
+            fake=True,
+            scratch_dir=str(scratch_dir),
+        )
+        assert runner.scratch is True
+
+    def test_cli_scratch_false_overrides_yaml_true(self, tmp_path):
+        yaml_path = _write_server_yaml(
+            tmp_path / "g16_on.yaml",
+            gaussian_scratch=True,
+            orca_scratch=False,
+        )
+        server = Server.from_yaml(str(yaml_path))
+        runner = JobRunner.from_job(
+            job=SimpleNamespace(TYPE="g16opt"),
+            server=server,
+            scratch=False,
+            fake=True,
+        )
+        assert runner.scratch is False
+
+    def test_missing_scratch_dir_falls_back_to_job_folder(
+        self, pbs_server, tmp_path, monkeypatch
+    ):
+        runner = FakeGaussianJobRunner(
+            server=pbs_server, scratch=False, fake=True
+        )
+        runner.scratch = True
+        runner._scratch_dir = None
+        runner._set_scratch.cache_clear()
+        fake_exe = SimpleNamespace(
+            scratch_dir=str(tmp_path / "does_not_exist"),
+            local_run=None,
+        )
+        monkeypatch.setattr(
+            type(runner),
+            "executable",
+            property(lambda self: fake_exe),
+        )
+        runner._set_scratch()
+        job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt")
+        runner._assign_variables(job)
+
+        assert runner.scratch is False
+        assert runner.running_directory == job.folder
+
+
+class TestSubResourceOverrides:
+    def test_cli_resources_reach_submission_server(
+        self,
+        monkeypatch,
+        single_molecule_xyz_file,
+        gaussian_project_config_dir,
+        captured,
+    ):
+        monkeypatch.setenv(
+            "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+        )
+        fake_server = Server(
+            name="dummy",
+            NUM_CORES=2,
+            NUM_GPUS=0,
+            MEM_GB=8,
+            NUM_HOURS=1,
+            QUEUE_NAME="normal",
+        )
+
+        def _capture_script(self, job, cli_args, **kwargs):
+            captured.update(
+                server=self,
+                num_cores=self.num_cores,
+                num_gpus=self.num_gpus,
+                mem_gb=self.mem_gb,
+                num_hours=self.num_hours,
+                queue_name=self.queue_name,
+            )
+
+        monkeypatch.setattr(
+            Server,
+            "_check_running_jobs",
+            lambda self, job: None,
+        )
+        monkeypatch.setattr(
+            Server,
+            "_write_submission_script",
+            _capture_script,
+        )
+        monkeypatch.setattr(
+            Server,
+            "current",
+            classmethod(lambda cls: fake_server),
+        )
+
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "--num-cores",
+                "7",
+                "--num-gpus",
+                "2",
+                "--mem-gb",
+                "23",
+                "--time-hours",
+                "12.5",
+                "--queue",
+                "debug",
+                "gaussian",
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "opt",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert captured["server"] is fake_server
+        assert captured["num_cores"] == 7
+        assert captured["num_gpus"] == 2
+        assert captured["mem_gb"] == 23
+        assert captured["num_hours"] == 12.5
+        assert captured["queue_name"] == "debug"

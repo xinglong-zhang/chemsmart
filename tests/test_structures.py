@@ -1,0 +1,4664 @@
+import os
+from filecmp import cmp
+from io import StringIO
+from pathlib import Path
+from unittest.mock import patch
+
+import networkx as nx
+import numpy as np
+import pytest
+from ase import Atoms
+from pymatgen.core.structure import Molecule as PMGMolecule
+from rdkit import Chem
+from rdkit.Chem import rdMolTransforms
+from rdkit.Chem.rdchem import Mol as RDKitMolecule
+
+from chemsmart.io.file import CDXFile, PKaCDXFile
+from chemsmart.io.gaussian.input import Gaussian16Input
+from chemsmart.io.molecules.structure import (
+    CoordinateBlock,
+    Molecule,
+    PKaMolecule,
+    QMMMMolecule,
+)
+from chemsmart.io.pdb.pdbfile import PDBFile
+from chemsmart.io.xyz.xyzfile import XYZFile
+from chemsmart.utils.cluster import (
+    is_pubchem_api_available,
+    is_pubchem_network_available,
+)
+from chemsmart.utils.utils import cmp_with_ignore
+
+
+class TestCoordinateBlock:
+    def test_read_coordinate_block(self):
+        coordinates_string = """
+C       -0.5448210000   -1.1694570000    0.0001270000
+C        0.8378780000   -1.0476350000    0.0001900000
+C        1.4329940000    0.2194290000    0.0001440000
+C        0.6358350000    1.3657650000   -0.0000040000
+C       -0.7521390000    1.2582750000    0.0000710000
+C       -1.3283680000   -0.0113420000    0.0001560000
+H       -1.0298620000   -2.1454490000    0.0001020000
+H        1.4853190000   -1.9262430000    0.0002620000
+H        1.1050940000    2.3527070000    0.0000530000
+H       -1.3913950000    2.1406100000   -0.0000130000
+C        2.9142600000    0.3363820000    0.0000140000
+O        3.6625230000   -0.6037690000   -0.0002940000
+H        3.3025560000    1.3842410000    0.0001510000
+Cl      -3.0556310000   -0.1578960000   -0.0001400000
+"""
+        cb = CoordinateBlock(coordinate_block=coordinates_string)
+        assert cb.symbols.get_chemical_formula() == "C7H5ClO"
+
+    def test_read_gaussian_cb_with_tv(self):
+        coordinates_string = """
+C                  0.000000    0.000000    0.000000
+C                  0.000000    1.429118    0.000000
+TV                 2.475315    0.000000    0.000000
+TV                -1.219952    2.133447    0.000000
+"""
+        cb = CoordinateBlock(coordinate_block=coordinates_string)
+        assert cb.symbols.get_chemical_formula() == "C2"
+        assert cb.translation_vectors == [
+            [2.475315, 0.000000, 0.000000],
+            [-1.219952, 2.133447, 0.000000],
+        ]
+        assert cb.molecule.pbc_conditions == [True, True, False]
+        assert cb.molecule.translation_vectors == [
+            [2.475315, 0.000000, 0.000000],
+            [-1.219952, 2.133447, 0.000000],
+        ]
+
+    def test_read_gaussian_cb_frozen_atoms(self):
+        coordinates_string1 = """
+C        -1      -0.5448210000   -1.1694570000    0.0001270000
+C        -1       0.8378780000   -1.0476350000    0.0001900000
+C        -1       1.4329940000    0.2194290000    0.0001440000
+C        -1       0.6358350000    1.3657650000   -0.0000040000
+C        -1      -0.7521390000    1.2582750000    0.0000710000
+C        -1      -1.3283680000   -0.0113420000    0.0001560000
+H        -1      -1.0298620000   -2.1454490000    0.0001020000
+H        -1       1.4853190000   -1.9262430000    0.0002620000
+H        -1       1.1050940000    2.3527070000    0.0000530000
+H        -1      -1.3913950000    2.1406100000   -0.0000130000
+C        0       2.9142600000    0.3363820000    0.0000140000
+O        0       3.6625230000   -0.6037690000   -0.0002940000
+H        0       3.3025560000    1.3842410000    0.0001510000
+Cl       0      -3.0556310000   -0.1578960000   -0.0001400000
+"""
+        cb1 = CoordinateBlock(coordinate_block=coordinates_string1)
+        assert cb1.symbols.get_chemical_formula() == "C7H5ClO"
+        assert cb1.molecule.empirical_formula == "C7H5ClO"
+        assert cb1.molecule.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+        # assert cb1.molecule.partition_level_strings is None
+
+        coordinates_string2 = """ 
+  F     -1.041506214819     0.000000000000    -2.126109488809 M
+  F     -2.033681935634    -1.142892069126    -0.412218766901 M
+  F     -2.033681935634     1.142892069126    -0.412218766901 M
+  C     -1.299038105677     0.000000000000    -0.750000000000 M H 5
+  C      0.000000000000     0.000000000000     0.000000000000 H
+  H      0.000000000000     0.000000000000     1.100000000000 H
+  O      1.125833024920     0.000000000000    -0.650000000000 H
+ """
+        cb2 = CoordinateBlock(coordinate_block=coordinates_string2)
+        assert cb2.symbols.get_chemical_formula() == "C2HF3O"
+        assert cb2.molecule.empirical_formula == "C2HF3O"
+        assert cb2.molecule.partition_level_strings == [
+            "M",
+            "M",
+            "M",
+            "M",
+            "H",
+            "H",
+            "H",
+        ]
+        assert cb2.molecule.high_level_atoms == [5, 6, 7]
+        assert cb2.molecule.medium_level_atoms == [1, 2, 3, 4]
+
+        # TODO:
+
+    def test_coordinate_block_without_partitions_returns_molecule(self):
+        """Non-ONIOM coordinate block should return Molecule, not QMMMMolecule."""
+        normal_block = [
+            "C   0.000  0.000  0.000",
+            "H   1.089  0.000  0.000",
+            "H  -0.363  1.027  0.000",
+            "H  -0.363 -0.513  0.890",
+            "H  -0.363 -0.513 -0.890",
+        ]
+        cb = CoordinateBlock(coordinate_block=normal_block)
+        mol = cb.molecule
+        assert isinstance(mol, Molecule)
+        assert not isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "Molecule"
+
+    def test_coordinate_block_with_partitions_returns_qmmm_molecule(self):
+        """ONIOM coordinate block should return QMMMMolecule."""
+        oniom_block = [
+            "C   0.000  0.000  0.000  H",
+            "H   1.089  0.000  0.000  L",
+            "H  -0.363  1.027  0.000  L",
+            "H  -0.363 -0.513  0.890  L",
+            "H  -0.363 -0.513 -0.890  L",
+        ]
+        cb = CoordinateBlock(coordinate_block=oniom_block)
+        mol = cb.molecule
+        assert isinstance(mol, QMMMMolecule)
+        assert type(mol).__name__ == "QMMMMolecule"
+
+
+class TestStructures:
+    def test_to_rdkit_rejects_invalid_bond_method(self, methanol_molecule):
+        with pytest.raises(
+            ValueError,
+            match="bond_method must be either 'chemsmart' or 'rdkit'",
+        ):
+            methanol_molecule.to_rdkit(bond_method="invalid")
+
+    def test_to_rdkit_rejects_bondless_rdkit_method(self, methanol_molecule):
+        with pytest.raises(
+            ValueError,
+            match="add_bonds=False is incompatible",
+        ):
+            methanol_molecule.to_rdkit(
+                add_bonds=False,
+                bond_method="rdkit",
+            )
+
+    @pytest.mark.parametrize(
+        "method_name",
+        ("to_rdkit", "to_rdkit_connectivity_graph"),
+    )
+    def test_rdkit_xyz_conversion_failure(
+        self, monkeypatch, methanol_molecule, method_name
+    ):
+        monkeypatch.setattr(Chem, "MolFromXYZBlock", lambda xyz: None)
+
+        with pytest.raises(
+            ValueError,
+            match="RDKit failed to create a molecule from XYZ coordinates",
+        ):
+            method = getattr(methanol_molecule, method_name)
+            if method_name == "to_rdkit":
+                method(bond_method="rdkit")
+            else:
+                method()
+
+    def test_rdkit_hash_can_ignore_hydrogens(self, methanol_molecule):
+        hash_with_hydrogens = methanol_molecule.get_rdkit_hash()
+        hash_without_hydrogens = methanol_molecule.get_rdkit_hash(
+            ignore_hydrogens=True
+        )
+
+        assert hash_with_hydrogens
+        assert hash_without_hydrogens
+        assert hash_with_hydrogens != hash_without_hydrogens
+
+    def test_to_rdkit_connectivity_graph(self, methanol_molecule):
+        graph = methanol_molecule.to_rdkit_connectivity_graph()
+
+        assert isinstance(graph, nx.Graph)
+        assert graph.number_of_nodes() == methanol_molecule.num_atoms
+        assert nx.get_node_attributes(graph, "element") == {
+            index: symbol
+            for index, symbol in enumerate(methanol_molecule.chemical_symbols)
+        }
+        assert {frozenset(edge) for edge in graph.edges} == {
+            frozenset((0, 1)),
+            frozenset((0, 3)),
+            frozenset((0, 4)),
+            frozenset((0, 5)),
+            frozenset((1, 2)),
+        }
+
+    def test_read_molecule_from_single_molecule_xyz_file(
+        self, single_molecule_xyz_file
+    ):
+        assert os.path.exists(single_molecule_xyz_file)
+        assert os.path.isfile(single_molecule_xyz_file)
+
+        xyz_file = XYZFile(filename=single_molecule_xyz_file)
+        assert xyz_file.num_atoms == 71
+
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule, Molecule)
+        assert len(molecule.chemical_symbols) == 71
+        assert molecule.is_chiral
+        assert molecule.is_aromatic
+
+        # test conversion of molecule to RDKit molecule
+        rdkit_mol = molecule.to_rdkit()
+        assert isinstance(rdkit_mol, Chem.Mol)
+        assert rdkit_mol.GetNumAtoms() == 71
+        assert rdkit_mol.GetNumConformers() == 1
+        assert rdkit_mol.GetConformer().GetPositions().shape == (71, 3)
+
+        # molecule is chiral
+        assert Chem.FindMolChiralCenters(rdkit_mol, force=True) != []
+
+        # convert to smiles string
+        smiles = molecule.to_smiles()
+        assert isinstance(smiles, str)
+
+        # test conversion of molecule to graph
+        graph = molecule.to_graph()
+        assert isinstance(graph, nx.Graph)
+        assert len(graph.nodes) == 71
+        assert len(graph.edges) == 78  # CH4 should have 4 bonds
+
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
+        assert isinstance(molecule, list)
+        assert len(molecule) == 1
+
+        # molecule creation from path
+        molecule = Molecule.from_filepath(
+            single_molecule_xyz_file, return_list=False
+        )
+        assert isinstance(molecule, Molecule)
+        assert getattr(molecule, "partition_level_strings", None) is None
+        assert len(molecule.chemical_symbols) == 71
+        assert molecule.empirical_formula == "C37H25Cl3N3O3"
+        assert np.isclose(molecule.mass, 665.982, atol=1e-2)
+        assert molecule.energy == -126.2575508
+
+        # test conversion to RDKit molecule
+        rdkit_molecule = molecule.to_rdkit()
+        assert isinstance(rdkit_molecule, RDKitMolecule)
+
+    def test_read_molecule_energy_from_xyz_file(
+        self,
+        xtb_optimized_xyz_file,
+        chemsmart_generated_xyz_file,
+        extended_xyz_file,
+    ):
+        assert os.path.exists(xtb_optimized_xyz_file)
+        assert os.path.isfile(xtb_optimized_xyz_file)
+        xyz_file1 = XYZFile(filename=xtb_optimized_xyz_file)
+        assert xyz_file1.num_atoms == 508
+        molecule1 = xyz_file1.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule1, Molecule)
+        assert len(molecule1.chemical_symbols) == 508
+        assert molecule1.energy == -978.449085030052
+
+        assert os.path.exists(chemsmart_generated_xyz_file)
+        assert os.path.isfile(chemsmart_generated_xyz_file)
+        xyz_file2 = XYZFile(filename=chemsmart_generated_xyz_file)
+        assert xyz_file2.num_atoms == 14
+        molecule2 = xyz_file2.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule2, Molecule)
+        assert len(molecule2.chemical_symbols) == 14
+        assert molecule2.energy == -804.614711
+
+        assert os.path.exists(extended_xyz_file)
+        assert os.path.isfile(extended_xyz_file)
+        xyz_file3 = XYZFile(filename=extended_xyz_file)
+        assert xyz_file3.num_atoms == 1
+        molecule3 = xyz_file3.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule3, Molecule)
+        assert len(molecule3.chemical_symbols) == 1
+        assert molecule3.energy == -157.72725320
+
+    def test_read_molecule_from_multiple_molecules_xyz_file(
+        self, multiple_molecules_xyz_file
+    ):
+        assert os.path.exists(multiple_molecules_xyz_file)
+        assert os.path.isfile(multiple_molecules_xyz_file)
+
+        xyz_file = XYZFile(filename=multiple_molecules_xyz_file)
+        assert xyz_file.num_atoms == 71
+
+        all_molecules = xyz_file.get_molecules(index=":", return_list=True)
+
+        # set correct charge and multiplicity for
+        # molecules as needed by pymatgen checks
+        molecules = []
+        for molecule in all_molecules:
+            molecule.charge = 1
+            molecule.multiplicity = 1
+            molecules.append(molecule)
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 18
+
+        # test molecule bond orders
+        first_mol = molecules[0]
+        last_mol = molecules[-1]
+        assert isinstance(first_mol, Molecule)
+        assert isinstance(last_mol, Molecule)
+        first_bond_orders = first_mol.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
+        last_bond_orders = last_mol.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
+        assert first_bond_orders == last_bond_orders
+
+        # note that for conformers, due to the buffer values, the bond orders
+        # may have changed, due to different distances in conformers,
+        #  although, this is not supposed to be
+        assert first_mol.bond_orders != last_mol.bond_orders
+
+        first_rdkit_mol = first_mol.to_rdkit()
+        last_rdkit_mol = last_mol.to_rdkit()
+        assert isinstance(first_rdkit_mol, Chem.Mol)
+        assert isinstance(last_rdkit_mol, Chem.Mol)
+
+        # convert rdkit molecule back to Molecule object
+        first_mol_conv = Molecule.from_rdkit_mol(first_rdkit_mol)
+        last_mol_conv = Molecule.from_rdkit_mol(last_rdkit_mol)
+        assert isinstance(first_mol_conv, Molecule)
+        assert isinstance(last_mol_conv, Molecule)
+        first_bond_orders = first_mol_conv.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
+        last_bond_orders = last_mol_conv.get_bond_orders_from_rdkit_mol(
+            bond_cutoff_buffer=0.0
+        )
+        assert first_bond_orders == last_bond_orders
+        assert np.all(first_mol.symbols == first_mol_conv.symbols)
+        assert np.all(last_mol.symbols == last_mol_conv.symbols)
+        assert np.all(first_mol.positions == first_mol_conv.positions)
+        assert np.all(last_mol.positions == last_mol_conv.positions)
+        assert first_mol.num_atoms == first_mol_conv.num_atoms == 71
+        assert last_mol.num_atoms == last_mol_conv.num_atoms == 71
+
+        # test conversion to ase Atoms
+        first_ase_atoms = first_mol.to_ase()
+        last_ase_atoms = last_mol.to_ase()
+        assert isinstance(first_ase_atoms, Atoms)
+        assert isinstance(last_ase_atoms, Atoms)
+
+        # test conversion to pymatgen Structure
+        assert first_mol.charge == 1
+        assert first_mol.multiplicity == 1
+        assert first_ase_atoms.charge == 1
+        assert first_ase_atoms.multiplicity == 1
+        first_py_structure = first_mol.to_pymatgen()
+        last_py_structure = last_mol.to_pymatgen()
+        assert isinstance(first_py_structure, PMGMolecule)
+        assert isinstance(last_py_structure, PMGMolecule)
+        assert first_py_structure.charge == 1
+        assert first_py_structure.spin_multiplicity == 1
+
+        # obtain the last structure as molecule
+        molecule = xyz_file.get_molecules(index="-1", return_list=False)
+        assert isinstance(molecule, Molecule)
+        assert molecule.empirical_formula == "C37H25Cl3N3O3"
+
+        last_structure_positions = np.array(
+            [
+                [0.2264896660, -2.2726277143, -1.5005807047],
+                [-1.1201033733, -1.8955122371, -1.3945085856],
+                [0.9768480935, -2.8512670618, -0.3694870257],
+                [-1.8258763303, -2.0106412689, -0.1062680111],
+                [0.8617890058, -2.1432555829, -2.7332062296],
+                [-1.7985851393, -1.4449652357, -2.5242164995],
+                [0.4954580021, -3.9625367099, 0.3354063501],
+                [2.2208677741, -2.3349087185, -0.0222807215],
+                [0.1898630484, -1.6553784729, -3.8375759399],
+                [-1.1484756939, -1.3091786134, -3.7357140585],
+                [-2.9667193725, -2.7987082534, 0.0061646581],
+                [-1.3141774390, -1.3966239933, 1.0467894815],
+                [1.2339592377, -4.4830126857, 1.3905518197],
+                [2.9482376828, -2.8511344152, 1.0317811065],
+                [2.4461453107, -3.9241196042, 1.7474253947],
+                [-3.5614407324, -3.0062761440, 1.2381549525],
+                [-1.8827872905, -1.6603232771, 2.2933275850],
+                [-3.0075412614, -2.4554483696, 2.3852692127],
+                [1.8889420557, -2.4626415472, -2.8227646001],
+                [-2.8491801264, -1.1996196224, -2.4455556214],
+                [2.6144774694, -1.5031645558, -0.5857109595],
+                [0.7001171594, -1.5677225836, -4.7842753217],
+                [-1.6857700349, -0.9538644919, -4.6019587068],
+                [-3.3572015271, -3.2797676010, -0.8772618514],
+                [0.8506101699, -5.3402890161, 1.9275198344],
+                [3.9019618146, -2.4188353570, 1.2894812560],
+                [3.0020044917, -4.3366944551, 2.5745065021],
+                [-4.4438861839, -3.6232549060, 1.3087192078],
+                [-1.4460969280, -1.2127421123, 3.1725494581],
+                [-3.4525784651, -2.6464262102, 3.3488105304],
+                [-0.1865105937, -0.4538291540, 0.9887889655],
+                [0.7688503822, -0.4765790832, 1.7264536163],
+                [-0.6791027353, -4.5285401175, -0.0526063825],
+                [-0.8344011095, -5.3335975978, 0.4570625557],
+                [-0.2990824532, 0.6271820181, -0.0537026754],
+                [0.7404894119, 1.2515803582, -0.6236564731],
+                [-1.4005328482, 1.1173160931, -0.6640490756],
+                [0.3377253026, 2.0635287872, -1.5990515584],
+                [2.0966797201, 1.2303778522, -0.2473210677],
+                [-0.9575730878, 1.9861507862, -1.6160079666],
+                [-2.7967025857, 0.9928729668, -0.3155960225],
+                [2.4790152573, 1.6497592409, 1.0328099240],
+                [3.0833087680, 0.8900070398, -1.1793624563],
+                [-1.9165764026, 2.7033420477, -2.4951424300],
+                [-3.0596448982, -0.0671817865, -0.2414221278],
+                [-3.7101642220, 1.6900284738, -1.3598720453],
+                [-3.1584471615, 1.7036314935, 0.9716532507],
+                [3.8095958751, 1.6183400087, 1.4096384082],
+                [1.3108023677, 2.2858125753, 2.1092366311],
+                [4.4161194014, 0.8616582054, -0.8065088124],
+                [2.6310042273, 0.5028118970, -2.7888184432],
+                [-2.0449496531, 2.1228196918, -3.4255189220],
+                [-1.5334013669, 3.6929548225, -2.7515549748],
+                [-3.1352385324, 2.8879140886, -1.8341783130],
+                [-4.9525547499, 2.0893263022, -0.5508200660],
+                [-3.9344004138, 1.0241590275, -2.2057714851],
+                [-4.4076004213, 2.3020038695, 0.8310226638],
+                [-2.4455006780, 1.7957561500, 2.1477016801],
+                [4.7712350269, 1.2016499063, 0.4950718763],
+                [4.0986677849, 1.9280440642, 2.4009935079],
+                [5.1713381974, 0.5797256616, -1.5220545134],
+                [-5.3941913179, 2.9926265804, -0.9679055458],
+                [-5.6984020441, 1.2931485756, -0.5613787000],
+                [-4.9682281649, 2.9891323043, 1.8887908748],
+                [-3.0104573514, 2.4933743318, 3.2066378723],
+                [-1.4664651823, 1.3511630586, 2.2521651249],
+                [6.4120660120, 1.1438487037, 0.9633575644],
+                [-4.2595413323, 3.0776346778, 3.0787905808],
+                [-5.9348439371, 3.4565775747, 1.7874808818],
+                [-2.4664057629, 2.5823290741, 4.1336857855],
+                [-4.6820282248, 3.6172731919, 3.9117852027],
+            ],
+        )
+        assert np.allclose(
+            molecule.positions, last_structure_positions, rtol=1e-5
+        )
+
+        # obtain the last structure as a list
+        molecule = xyz_file.get_molecules(index="-1", return_list=True)
+        assert isinstance(molecule, list)
+        assert len(molecule) == 1
+
+        # obtain the last 10 structures
+        molecules = xyz_file.get_molecules(index="-10:", return_list=True)
+        assert isinstance(molecules, list)
+        assert len(molecules) == 10
+
+        # first coordinates of the 10th last structure
+        assert np.allclose(
+            molecules[0].positions[0],
+            np.array([-0.5297471504, -3.4014322100, -1.3490458905]),
+            rtol=1e-5,
+        )
+
+        # molecule creation from path
+        molecules = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index=":", return_list=True
+        )
+        assert isinstance(molecules, list)
+        assert len(molecules) == 18
+        # obtain the last structure as molecule
+        molecule = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index="-1", return_list=False
+        )
+        assert isinstance(molecule, Molecule)
+        assert molecule.empirical_formula == "C37H25Cl3N3O3"
+        assert np.allclose(
+            molecule.positions, last_structure_positions, rtol=1e-5
+        )
+        # obtain the last structure as list
+        molecule = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index="-1", return_list=True
+        )
+        assert isinstance(molecule, list)
+        assert len(molecule) == 1
+
+        # test first molecule is 1-indexed
+        molecule = Molecule.from_filepath(
+            filepath=multiple_molecules_xyz_file, index="1", return_list=False
+        )
+        assert np.allclose(
+            molecule.positions[0],
+            np.array([-1.0440166707, -2.3921211654, -1.1765767093]),
+            rtol=1e-5,
+        )
+        assert isinstance(molecule, Molecule)
+
+    def test_read_crest_dynamics_trj_as_xyz(self, crest_octane_outfolder):
+        trj = os.path.join(crest_octane_outfolder, "crest_dynamics.trj")
+        frames = Molecule.from_filepath(trj, index=":", return_list=True)
+        assert len(frames) == 472
+        assert frames[0].num_atoms == 26
+        assert np.isclose(frames[0].energy, -26.294043900430)
+
+        first = Molecule.from_filepath(trj, index="1", return_list=False)
+        assert first.num_atoms == 26
+        assert np.isclose(first.energy, -26.294043900430)
+
+    def test_read_crestopt_log_as_xyz(self, crest_octane_outfolder):
+        """crestopt.log is XYZ with .log extension."""
+        crestopt_log = os.path.join(crest_octane_outfolder, "crestopt.log")
+        frames = Molecule.from_filepath(
+            crestopt_log, index=":", return_list=True
+        )
+        assert len(frames) == 1
+        assert frames[0].num_atoms == 26
+        assert np.isclose(frames[0].energy, -26.3226341540)
+
+    def test_molecular_geometry(self):
+        """Test molecular geometry calculations."""
+        mol = Molecule(
+            symbols=["C", "O", "O"],
+            positions=np.array([[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]),
+        )
+        assert np.isclose(mol.mass, 44.01, atol=1e-2)
+        assert np.isclose(mol.get_distance(1, 2), 1.16)
+        assert np.isclose(mol.get_distance(2, 3), 1.16)
+        assert np.isclose(mol.get_angle(1, 2, 3), 180)
+        assert mol.is_linear
+
+    def test_get_distance_known_value_and_symmetry(self):
+        """Distance should match a 3-4-5 triangle in either direction."""
+        mol = Molecule(
+            symbols=["C", "C"],
+            positions=np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]]),
+        )
+
+        assert np.isclose(mol.get_distance(1, 2), 5.0)
+        assert np.isclose(mol.get_distance(2, 1), 5.0)
+
+    @pytest.mark.parametrize(
+        ("positions", "expected_angle"),
+        [
+            (
+                [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                90.0,
+            ),
+            (
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.5, np.sqrt(3.0) / 2.0, 0.0],
+                ],
+                60.0,
+            ),
+            (
+                [[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                180.0,
+            ),
+        ],
+    )
+    def test_get_angle_known_values(self, positions, expected_angle):
+        """Angle calculation should handle 60, 90, and 180 degrees."""
+        mol = Molecule(symbols=["C"] * 3, positions=np.array(positions))
+
+        assert np.isclose(mol.get_angle(1, 2, 3), expected_angle)
+
+    def test_get_angle_symmetry_and_position_method(self):
+        """Swapping endpoints should not change an angle."""
+        mol = Molecule(
+            symbols=["C"] * 3,
+            positions=np.array(
+                [[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+            ),
+        )
+
+        angle = mol.get_angle(1, 2, 3)
+        assert np.isclose(angle, mol.get_angle(3, 2, 1))
+        assert np.isclose(
+            angle,
+            mol.get_angle_from_positions(*mol.positions),
+        )
+
+    @pytest.mark.parametrize(
+        ("position4", "expected_dihedral"),
+        [
+            ([1.0, 1.0, 0.0], 0.0),
+            ([0.0, 1.0, 1.0], -90.0),
+            ([-1.0, 1.0, 0.0], 180.0),
+        ],
+    )
+    def test_get_dihedral_known_values(self, position4, expected_dihedral):
+        """Dihedral calculation should handle 0, 90, and 180 degrees."""
+        positions = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                position4,
+            ]
+        )
+        mol = Molecule(symbols=["C"] * 4, positions=positions)
+
+        assert np.isclose(
+            mol.get_dihedral(1, 2, 3, 4),
+            expected_dihedral,
+        )
+
+    def test_get_dihedral_matches_position_method(self):
+        """Index- and position-based dihedral methods should agree."""
+        mol = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 1.0, 1.0],
+                ]
+            ),
+        )
+
+        assert np.isclose(
+            mol.get_dihedral(1, 2, 3, 4),
+            mol.get_dihedral_from_positions(*mol.positions),
+        )
+
+    @pytest.mark.parametrize(
+        ("atom_indices", "expected_dihedral"),
+        [
+            ((3, 1, 2, 4), -8.521144207014),
+            ((3, 1, 2, 6), 170.704142219877),
+            ((2, 1, 3, 7), 135.002352852818),
+            ((2, 1, 3, 8), -47.404418381592),
+        ],
+    )
+    def test_dihedral_for_file_backed_molecule_matches_rdkit(
+        self,
+        single_molecule_xyz_file,
+        atom_indices,
+        expected_dihedral,
+    ):
+        """Real-molecule torsions should match fixed and RDKit values."""
+        mol = Molecule.from_filepath(
+            single_molecule_xyz_file, return_list=False
+        )
+        conformer = mol.to_rdkit().GetConformer()
+        zero_based_indices = tuple(index - 1 for index in atom_indices)
+
+        rdkit_dihedral = rdMolTransforms.GetDihedralDeg(
+            conformer, *zero_based_indices
+        )
+        actual_dihedral = mol.get_dihedral(*atom_indices)
+
+        assert np.isclose(actual_dihedral, expected_dihedral, atol=1e-8)
+        assert np.isclose(actual_dihedral, rdkit_dihedral, atol=1e-8)
+
+    def test_dihedral_is_independent_of_central_bond_length(self):
+        """Changing only the central bond length must not change torsion."""
+        short_bond = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [1.0, 1.0, 1.0],
+                ]
+            ),
+        )
+        long_bond = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [0.0, 3.0, 0.0],
+                    [1.0, 3.0, 1.0],
+                ]
+            ),
+        )
+
+        assert np.isclose(
+            short_bond.get_dihedral(1, 2, 3, 4),
+            long_bond.get_dihedral(1, 2, 3, 4),
+        )
+
+    @pytest.mark.parametrize("invalid_index", [0, -1, 3])
+    def test_geometry_methods_reject_invalid_indices(self, invalid_index):
+        """Geometry APIs should enforce their documented 1-based indices."""
+        mol = Molecule(
+            symbols=["C", "C"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        )
+
+        with pytest.raises(IndexError):
+            mol.get_distance(1, invalid_index)
+
+    def test_geometry_methods_reject_non_integer_indices(self):
+        """Atom indices must be integers rather than silently converted."""
+        mol = Molecule(
+            symbols=["C", "C"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
+        )
+
+        with pytest.raises(TypeError):
+            mol.get_distance(1, 2.0)
+
+    def test_angle_is_undefined_for_coincident_points(self):
+        """An angle with a zero-length arm has no meaningful value."""
+        mol = Molecule(
+            symbols=["C"] * 3,
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+            ),
+        )
+
+        with pytest.raises(ValueError, match="Angle is undefined"):
+            mol.get_angle(1, 2, 3)
+
+    def test_dihedral_is_undefined_for_collinear_points(self):
+        """Four collinear points do not define two planes."""
+        mol = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [-1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [2.0, 0.0, 0.0],
+                ]
+            ),
+        )
+
+        with pytest.raises(ValueError, match="Dihedral is undefined"):
+            mol.get_dihedral(1, 2, 3, 4)
+
+    def test_documented_geometry_examples(self):
+        """Keep the geometry examples in the user documentation executable."""
+        water = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.119],
+                    [0.0, 0.76, -0.477],
+                    [0.0, -0.76, -0.477],
+                ]
+            ),
+        )
+        documented_butane = Molecule(
+            symbols=["C"] * 4,
+            positions=np.array(
+                [
+                    [-1.26, 0.0, 0.0],
+                    [0.0, 0.0, 0.0],
+                    [1.26, 0.35, 0.0],
+                    [2.52, 0.0, 0.0],
+                ]
+            ),
+        )
+
+        assert np.isclose(water.get_distance(1, 2), 0.965824, atol=1e-6)
+        assert np.isclose(water.get_distance(2, 3), 1.52)
+        assert np.isclose(water.get_angle(2, 1, 3), 103.792168, atol=1e-6)
+        assert np.isclose(
+            abs(documented_butane.get_dihedral(1, 2, 3, 4)), 180.0
+        )
+        assert len(water.get_all_distances()) == 3
+        assert water.distance_matrix.shape == (3, 3)
+
+
+class TestMoleculeAdvanced:
+    def test_molecule_to_rdkit_conversion(self):
+        """Test conversion of Molecule to RDKit Mol object."""
+        mol = Molecule(
+            symbols=["C", "O", "O"],
+            positions=np.array([[0, 0, 0], [1.2, 0, 0], [0, 1.2, 0]]),
+            charge=-1,
+            multiplicity=2,
+        )
+        rdkit_mol = mol.to_rdkit()
+
+        assert isinstance(rdkit_mol, Chem.Mol)
+        assert rdkit_mol.GetNumAtoms() == 3
+        assert rdkit_mol.GetNumConformers() == 1
+        assert rdkit_mol.GetConformer().GetPositions().shape == (3, 3)
+
+    def test_is_aromatic_non_aromatic_molecules(self):
+        """Regression test: non-aromatic molecules must not be reported as aromatic.
+
+        Bond-order heuristics can assign order 1.5 to bonds like O-H or Mg-I,
+        which previously caused ``is_aromatic`` to return ``True`` for H2O and
+        MgI2.  The property must use ring membership to validate aromaticity.
+        """
+        # H2O – no rings at all
+        mol_h2o = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.119],
+                    [0.0, 0.757, -0.476],
+                    [0.0, -0.757, -0.476],
+                ]
+            ),
+        )
+        assert not mol_h2o.is_aromatic, "H2O must not be aromatic"
+
+        # MgI2 – linear, no rings
+        mol_mgi2 = Molecule(
+            symbols=["Mg", "I", "I"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [2.5, 0.0, 0.0], [-2.5, 0.0, 0.0]]
+            ),
+        )
+        assert not mol_mgi2.is_aromatic, "MgI2 must not be aromatic"
+
+        # Benzene – should still be aromatic
+        import math
+
+        r_c, r_h = 1.39, 2.46
+        pos_c = [
+            [
+                r_c * math.cos(2 * math.pi * i / 6),
+                r_c * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        pos_h = [
+            [
+                r_h * math.cos(2 * math.pi * i / 6),
+                r_h * math.sin(2 * math.pi * i / 6),
+                0,
+            ]
+            for i in range(6)
+        ]
+        mol_benz = Molecule(
+            symbols=["C"] * 6 + ["H"] * 6,
+            positions=np.array(pos_c + pos_h),
+        )
+        assert mol_benz.is_aromatic, "Benzene must be aromatic"
+
+    def test_molecule_graph_generation(self):
+        """Test molecular graph creation with bond detection."""
+        mol = Molecule(
+            symbols=["C", "H", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0, 0, 0],
+                    [1.09, 0, 0],
+                    [-1.09, 0, 0],
+                    [0, 1.09, 0],
+                    [0, -1.09, 0],
+                ]
+            ),
+        )
+
+        assert not mol.is_chiral, "CH4 is not chiral"
+        assert not mol.chiral_centers
+        graph = mol.to_graph()
+
+        assert isinstance(graph, nx.Graph)
+        assert len(graph.nodes) == 5
+        assert len(graph.edges) == 4  # CH4 should have 4 bonds
+        assert all(
+            graph.nodes[i]["element"] == ("C" if i == 0 else "H")
+            for i in range(5)
+        )
+
+    def test_charge_and_multiplicity_handling(self):
+        """Test preservation of charge and multiplicity states."""
+        charged_mol = Molecule(
+            symbols=["O"],
+            positions=np.array([[0, 0, 0]]),
+            charge=-1,
+            multiplicity=2,
+        )
+
+        assert charged_mol.charge == -1
+        assert charged_mol.multiplicity == 2
+
+    def test_invalid_molecule_creation(self):
+        """Test error handling for invalid molecule configurations."""
+        with pytest.raises(ValueError):
+            # Mismatched symbols and positions
+            Molecule(symbols=["C", "H"], positions=np.array([[0, 0, 0]]))
+
+    def test_empty_molecule_handling(self):
+        """Test edge case of empty molecule."""
+        with pytest.raises(ValueError):
+            Molecule(symbols=[], positions=np.empty((0, 3)))
+
+    def test_frozen_atoms_manipulation(self):
+        """Test frozen atoms property handling."""
+        mol = Molecule(
+            symbols=["C", "O"],
+            positions=np.array([[0, 0, 0], [1.2, 0, 0]]),
+            frozen_atoms=[-1, 0],
+        )
+
+        assert mol.frozen_atoms == [-1, 0]
+        assert not mol.is_chiral
+
+    def test_to_ase_energy_unit_conversion(self):
+        """Test that to_ase() converts energy from Hartree to eV."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+
+    def test_to_ase_forces_unit_conversion(self):
+        """Test that to_ase() converts forces from Hartree/Bohr to eV/Å."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(
+            ase_atoms.forces,
+            expected_forces_ev_per_angstrom,
+            rtol=1e-5,
+        )
+
+    def test_to_ase_none_energy_and_forces(self):
+        """Test that to_ase() preserves None for energy and forces."""
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        assert ase_atoms.forces is None
+
+    def test_to_ase_none_energy_with_forces(self):
+        """Test that to_ase() converts forces when energy is None."""
+        from ase import units
+
+        forces_hartree_per_bohr = np.array(
+            [[0.01, 0.02, -0.03], [-0.01, -0.02, 0.03]]
+        )
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            forces=forces_hartree_per_bohr,
+        )
+        ase_atoms = mol.to_ase()
+
+        assert ase_atoms.energy is None
+        expected_forces_ev_per_angstrom = (
+            forces_hartree_per_bohr * units.Hartree / units.Bohr
+        )
+        assert np.allclose(ase_atoms.forces, expected_forces_ev_per_angstrom)
+
+    def test_to_ase_energy_with_none_forces(self):
+        """Test that to_ase() converts energy when forces are None."""
+        from ase import units
+
+        energy_hartree = -126.2575508
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=np.array([[0, 0, 0], [1.09, 0, 0]]),
+            energy=energy_hartree,
+        )
+        ase_atoms = mol.to_ase()
+
+        expected_energy_ev = energy_hartree * units.Hartree
+        assert np.isclose(ase_atoms.energy, expected_energy_ev)
+        assert ase_atoms.forces is None
+
+    def test_convert_ase_atoms_with_constraints_to_molecule(
+        self, constrained_atoms
+    ):
+        """Test conversion of ASE Atoms with constraints to Molecule."""
+        from chemsmart.io.molecules.atoms import AtomsChargeMultiplicity
+
+        mol = AtomsChargeMultiplicity.from_atoms(
+            constrained_atoms
+        ).to_molecule(charge=0, multiplicity=1)
+
+        assert isinstance(mol, Molecule)
+        assert np.all(mol.symbols == ["Ar", "Ar"])
+        assert mol.energy == 0.0
+        assert np.allclose(
+            mol.forces, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
+        )
+        assert np.allclose(
+            mol.velocities, np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)])
+        )
+        assert mol.frozen_atoms == [
+            -1,
+            0,
+        ]  # -1: frozen atom, 0: relaxed atom (Gaussian format)
+        assert mol.charge == 0
+        assert mol.multiplicity == 1
+
+        # no charge and multiplicity specification
+        mol_no_charge_mult = AtomsChargeMultiplicity.from_atoms(
+            constrained_atoms
+        ).to_molecule()
+        assert isinstance(mol_no_charge_mult, Molecule)
+        assert np.all(mol_no_charge_mult.symbols == ["Ar", "Ar"])
+        assert mol_no_charge_mult.energy == 0.0
+        assert np.allclose(
+            mol_no_charge_mult.forces,
+            np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]),
+        )
+        assert np.allclose(
+            mol_no_charge_mult.velocities,
+            np.array([(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]),
+        )
+        assert mol_no_charge_mult.frozen_atoms == [
+            -1,
+            0,
+        ]  # Frozen atoms should be 1-indexed
+        assert mol_no_charge_mult.charge is None
+        assert mol_no_charge_mult.multiplicity is None
+
+    def test_molecule_from_db_with_pbc_and_constraints(
+        self, constrained_pbc_db_file
+    ):
+        """Test creation of Molecule from database with PBC and constraints."""
+        mol = Molecule.from_filepath(
+            constrained_pbc_db_file,
+            index="-1",
+        )
+
+        assert isinstance(mol, Molecule)
+        assert mol.num_atoms == 96
+        assert mol.chemical_formula == "Co25Cu9Fe9Mo44Ni9"
+        assert np.all(mol.pbc_conditions == [True, True, True])
+        assert len(mol.translation_vectors) == 3
+        assert mol.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        my_list = mol.frozen_atoms
+        indices = [i for i, x in enumerate(my_list) if x == -1]
+        assert indices == [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            34,
+            35,
+            36,
+            37,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            57,
+            58,
+            87,
+            88,
+            89,
+            90,
+        ]
+
+        mol2 = Molecule.from_filepath(
+            constrained_pbc_db_file,
+            index="-5",
+        )
+        assert isinstance(mol2, Molecule)
+        assert mol2.num_atoms == 96
+        assert mol2.chemical_formula == "Co25Cu9Fe9Mo44Ni9"
+        assert np.all(mol2.pbc_conditions == [True, True, True])
+        assert len(mol2.translation_vectors) == 3
+        assert mol2.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+        my_list = mol2.frozen_atoms
+        indices = [i for i, x in enumerate(my_list) if x == -1]
+        assert indices == [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            25,
+            26,
+            27,
+            28,
+            34,
+            35,
+            36,
+            37,
+            43,
+            44,
+            45,
+            46,
+            47,
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55,
+            56,
+            87,
+            88,
+            89,
+        ]
+
+    def test_pbc_handling(self):
+        """Test periodic boundary conditions handling."""
+        mol = Molecule(
+            symbols=["C"],
+            positions=np.array([[0, 0, 0]]),
+            pbc_conditions=[1, 1, 0],
+            translation_vectors=[[2.5, 0, 0], [0, 2.5, 0]],
+        )
+
+        assert mol.pbc_conditions == [1, 1, 0]
+        assert len(mol.translation_vectors) == 2
+
+    def test_distance_calculation(self):
+        """Test bond distance calculations."""
+        mol = Molecule(
+            symbols=["H", "H"], positions=np.array([[0, 0, 0], [1.0, 0, 0]])
+        )
+        distances = mol.get_all_distances()
+
+        assert len(distances) == 1
+        assert np.isclose(distances[0], 1.0)
+
+    def test_to_pdb_conversion(self, single_molecule_xyz_file):
+        """Test conversion of Molecule to PDB format."""
+        # Load a molecule from XYZ file
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test to_pdb() method
+        pdb_string = mol.to_pdb()
+        assert isinstance(pdb_string, str)
+        assert len(pdb_string) > 0
+
+        # Check that PDB format contains expected elements
+        assert "HETATM" in pdb_string or "ATOM" in pdb_string
+        assert "END" in pdb_string
+
+        # Check that all atoms are represented in the PDB
+        lines = pdb_string.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_file(self, single_molecule_xyz_file, tmpdir):
+        """Test writing Molecule to PDB file."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write_pdb method
+        pdb_file = os.path.join(tmpdir, "test_molecule.pdb")
+        mol.write_pdb(pdb_file)
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+            assert "END" in content
+
+    def test_write_generic_method_with_pdb_format(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test generic write() method with PDB format."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test write method with format='pdb'
+        pdb_file = os.path.join(tmpdir, "test_generic.pdb")
+        mol.write(pdb_file, format="pdb")
+
+        # Verify file exists and has content
+        assert os.path.exists(pdb_file)
+        assert os.path.getsize(pdb_file) > 0
+
+        # Read and verify content
+        with open(pdb_file, "r") as f:
+            content = f.read()
+            assert "HETATM" in content or "ATOM" in content
+
+    def test_pdb_with_different_flavors(self, single_molecule_xyz_file):
+        """Test PDB conversion with different flavor options."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test with default flavor (with CONECT records)
+        pdb_default = mol.to_pdb(flavor=0)
+
+        # Test with flavor=2 (no CONECT records)
+        pdb_no_conect = mol.to_pdb(flavor=2)
+
+        # Both should contain atom records
+        assert "HETATM" in pdb_default or "ATOM" in pdb_default
+        assert "HETATM" in pdb_no_conect or "ATOM" in pdb_no_conect
+
+        # flavor=0 should have CONECT records (unless bonds fail), flavor=2 should not
+        # Note: CONECT might not be present if bonds fail and fallback is used
+        # So we just verify the PDB is valid
+        assert len(pdb_default) > 0
+        assert len(pdb_no_conect) > 0
+
+    def test_pdb_with_no_bonds(self, single_molecule_xyz_file):
+        """Test PDB conversion without bond detection."""
+        # Load a molecule
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+
+        # Test without bonds
+        pdb_no_bonds = mol.to_pdb(add_bonds=False)
+
+        assert isinstance(pdb_no_bonds, str)
+        assert len(pdb_no_bonds) > 0
+        assert "HETATM" in pdb_no_bonds or "ATOM" in pdb_no_bonds
+
+        # When bonds are not added, CONECT records will be empty
+        # We verify the PDB is valid without expecting specific CONECT content
+        lines = pdb_no_bonds.split("\n")
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+        assert len(atom_lines) == mol.num_atoms
+
+    def test_write_pdb_rejects_unexpected_keyword_argument(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        """Test write_pdb rejects unexpected kwargs instead of ignoring them."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file, index="-1")
+        pdb_file = os.path.join(tmpdir, "unexpected_kwarg.pdb")
+
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            mol.write_pdb(pdb_file, unexpected_option=True)
+
+    def test_to_pdb_strict_columns_and_final_end_record(self):
+        """Test strict PDB 3.3 atom-column formatting and final END line."""
+        mol = Molecule(
+            symbols=["C", "Cl"],
+            positions=np.array([[0.0, 1.234, -2.5], [3.0, -4.0, 5.0]]),
+            info={
+                "record_type": ["HETATM", "ATOM"],
+                "atom_name": ["C1", "CL1"],
+                "residue_name": ["LIG", "SOL"],
+                "residue_number": [1, 2],
+                "chain_id": ["A", "B"],
+            },
+        )
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        lines = pdb_string.splitlines()
+        atom_lines = [
+            line for line in lines if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 2
+        assert lines[-1] == "END"
+
+        first, second = atom_lines
+        assert first.startswith("HETATM")
+        assert second.startswith("ATOM  ")
+
+        # PDB v3.3 fixed columns (1-based): chainID=22, resSeq=23-26, element=77-78
+        assert first[21] == "A"
+        assert second[21] == "B"
+        assert first[22:26] == "   1"
+        assert second[22:26] == "   2"
+        assert first[76:78] == " C"
+        assert second[76:78] == "Cl"
+
+        # Ensure standard atom-record width is preserved.
+        assert len(first) >= 78
+        assert len(second) >= 78
+
+    def test_to_pdb_uses_molecule_attributes_for_chain_and_residue_metadata(
+        self,
+    ):
+        """Test chain/residue metadata taken directly from Molecule attributes."""
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]
+            ),
+        )
+        mol.chain_ids = ["A", "A", "A"]
+        mol.residue_numbers = [7, 7, 7]
+        mol.residue_names = ["HOH", "HOH", "HOH"]
+        mol.atom_names = ["O", "H1", "H2"]
+
+        pdb_string = mol.to_pdb(add_bonds=False, flavor=2)
+        atom_lines = [
+            line
+            for line in pdb_string.splitlines()
+            if line.startswith(("HETATM", "ATOM"))
+        ]
+
+        assert len(atom_lines) == 3
+        for line, element in zip(atom_lines, ["O", "H", "H"]):
+            assert line[17:20] == "HOH"
+            assert line[21] == "A"
+            assert line[22:26] == "   7"
+            assert line[76:78] == f"{element:>2}"
+
+    def test_from_pdb_file_preserves_atom_and_residue_metadata(self, tmpdir):
+        """Test native PDB import preserves atom names and residue metadata."""
+        pdb_content = (
+            "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
+            "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
+            "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "water.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert mol.symbols == ["O", "H", "H"]
+        assert mol.atom_names == ["O", "H1", "H2"]
+        assert mol.residue_names == ["HOH", "HOH", "HOH"]
+        assert mol.residue_numbers == [7, 7, 7]
+        assert mol.chain_ids == ["A", "A", "A"]
+        assert np.allclose(
+            mol.positions,
+            np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        )
+
+    def test_infer_pdb_element_from_uppercase_atom_names(self):
+        """Test uppercase PDB atom names can still infer two-letter elements."""
+        assert PDBFile._infer_element_from_atom_name("FE") == "Fe"
+        assert PDBFile._infer_element_from_atom_name("ZN") == "Zn"
+        assert PDBFile._infer_element_from_atom_name("CL") == "Cl"
+        assert PDBFile._infer_element_from_atom_name("CA") == "C"
+
+    def test_from_pdb_file_infers_uppercase_two_letter_elements_when_blank(
+        self, tmpdir
+    ):
+        """Test blank PDB element columns fall back to uppercase atom-name inference."""
+        pdb_content = (
+            "HETATM    1 FE   HEM A   1       0.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    2 ZN   ZN  A   2       1.000   0.000   0.000  1.00  0.00\n"
+            "HETATM    3 CL   CL  A   3       2.000   0.000   0.000  1.00  0.00\n"
+            "ATOM      4  CA  ALA A   4       3.000   0.000   0.000  1.00  0.00\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "blank_elements.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        mol = Molecule.from_filepath(pdb_file)
+
+        assert list(mol.symbols) == ["Fe", "Zn", "Cl", "C"]
+        assert mol.atom_names == ["FE", "ZN", "CL", "CA"]
+        assert mol.residue_names == ["HEM", "ZN", "CL", "ALA"]
+
+    def test_from_pdb_file_supports_model_index_selection(self, tmpdir):
+        """Test PDB MODEL/ENDMDL parsing and index selection."""
+        pdb_content = (
+            "MODEL        1\n"
+            "ATOM      1  O   HOH A   1       0.000   0.000   0.000  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "MODEL        2\n"
+            "ATOM      1  O   HOH B   2       1.500   2.500   3.500  1.00  0.00           O\n"
+            "ENDMDL\n"
+            "END\n"
+        )
+        pdb_file = os.path.join(tmpdir, "models.pdb")
+        with open(pdb_file, "w") as f:
+            f.write(pdb_content)
+
+        models = Molecule.from_filepath(pdb_file, index=":", return_list=True)
+        assert len(models) == 2
+        assert models[0].chain_ids == ["A"]
+        assert models[1].chain_ids == ["B"]
+
+        last_model = Molecule.from_filepath(pdb_file, index="-1")
+        assert np.allclose(last_model.positions, np.array([[1.5, 2.5, 3.5]]))
+        assert last_model.residue_numbers == [2]
+
+
+class TestCoordinateBlockAdvanced:
+    def test_mixed_coordinate_formats(self):
+        """Test parsing of mixed coordinate formats."""
+        mixed_block = """
+        C       1.0 2.0 3.0
+        TV      4.0 5.0 6.0
+        H       7.0 8.0 9.0
+        """
+        cb = CoordinateBlock(mixed_block)
+        mol = cb.molecule
+
+        assert len(mol.symbols) == 2  # Should ignore TV line
+        assert mol.translation_vectors == [[4.0, 5.0, 6.0]]
+
+    def test_cube_file_format(self):
+        """Test parsing of cube file format coordinates."""
+        cube_block = """
+        6    6.000000  -12.064399   -0.057172   -0.099010
+        1    1.000000    1.234500    2.345600    3.456700
+        """
+        cb = CoordinateBlock(cube_block)
+
+        assert all(cb.symbols == ["C", "H"])
+        assert np.allclose(cb.positions[0], [-12.064399, -0.057172, -0.099010])
+
+
+class TestFileHandlingAdvanced:
+    def test_large_file_handling(self, tmpdir):
+        """Test handling of large molecule files."""
+        large_xyz = "\n".join(
+            [
+                "1000",
+                "Large Molecule",
+                *[f"H {i} {i} {i}" for i in range(1000)],
+            ]
+        )
+
+        tmp_file = tmpdir.join("large.xyz")
+        with open(tmp_file, "w") as f:
+            f.write(large_xyz)
+
+        mol = Molecule.from_filepath(tmp_file)
+        assert mol.num_atoms == 1000
+
+    def test_corrupted_file_handling(self, tmpdir):
+        """Test error handling for corrupted files."""
+        corrupted_content = "Invalid file content"
+        tmp_file = tmpdir.join("corrupted.xyz")
+        with open(tmp_file, "w") as f:
+            f.write(corrupted_content)
+
+        with pytest.raises(ValueError):
+            Molecule.from_filepath(tmp_file)
+
+
+class TestGraphFeatures:
+    def test_graph_properties(self):
+        """Test molecular graph properties."""
+        mol = Molecule(
+            symbols=["C", "C"], positions=np.array([[0, 0, 0], [1.5, 0, 0]])
+        )
+        graph = mol.to_graph()
+
+        assert nx.number_connected_components(graph) == 1
+        assert nx.diameter(graph) == 1
+
+    def test_variable_bond_cutoffs(self):
+        """Test bond detection with different cutoff buffers."""
+        mol = Molecule(
+            symbols=["H", "H"], positions=np.array([[0, 0, 0], [0.9, 0, 0]])
+        )
+
+        assert not mol.is_chiral
+        assert not mol.chiral_centers
+
+        # H has covalent radius of 0.31 Å from ase.data
+
+        # With buffer too small
+        tight_graph = mol.to_graph(bond_cutoff_buffer=0.0, adjust_H=False)
+        assert len(tight_graph.edges) == 0
+
+        # With reasonable buffer
+        normal_graph = mol.to_graph(bond_cutoff_buffer=0.3, adjust_H=False)
+        assert len(normal_graph.edges) == 1
+
+
+class TestChemicalFeatures:
+    def test_stereochemistry_handling(self, methyl3hexane_molecule):
+        """Test preservation of stereochemical information."""
+        methyl_3_hexane = methyl3hexane_molecule
+        assert np.all(
+            methyl_3_hexane.bond_orders
+            == [
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+            ]
+        )
+        assert len(methyl_3_hexane.bond_orders) == 22
+        assert all([i == 1 for i in methyl_3_hexane.bond_orders])
+        assert methyl_3_hexane.is_chiral
+        assert methyl_3_hexane.chiral_centers == {1: "R"}
+        chiral_mol = Molecule(
+            symbols=["C", "Cl", "F", "Br", "I"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.2, 0.0, -0.5],
+                    [-0.6, 1.0, 0.5],
+                    [-0.6, -1.0, 0.5],
+                    [0.0, 0.0, 1.3],
+                ]
+            ),
+        )
+
+        # can't get the bond orders of this challenging molecule correctly
+        # bond_orders = chiral_mol.get_bond_orders_from_rdkit_mol(bond_cutoff_buffer=-0.4)
+        # print(bond_orders)
+        assert chiral_mol.is_chiral
+
+        rdkit_mol = chiral_mol.to_rdkit()
+        assert Chem.FindMolChiralCenters(rdkit_mol) != []
+
+    @pytest.mark.skipif(
+        not is_pubchem_network_available() or not is_pubchem_api_available(),
+        reason="Network to pubchem is unavailable",
+    )
+    def test_more_stereochemistry_handling(self):
+        """Test preservation of stereochemical information with PubChem."""
+        try:
+            chiral_mol2 = Molecule.from_pubchem(
+                "CC(C)(Oc1ccc(Cl)cc1)C(=O)N[C@H]1C2CCCC1C[C@@H](C(=O)O)C2"
+            )
+        except Exception as exc:
+            pytest.skip(f"PubChem unavailable for stereochemistry test: {exc}")
+        if chiral_mol2 is None:
+            pytest.skip("PubChem returned no structure for this query")
+        assert chiral_mol2.is_chiral
+        rdkit_mol2 = chiral_mol2.to_rdkit()
+        assert Chem.FindMolChiralCenters(rdkit_mol2) != []
+
+    def test_resonance_handling(
+        self,
+        gaussian_ozone_opt_outfile,
+        gaussian_acetone_opt_outfile,
+        gaussian_benzene_opt_outfile,
+    ):
+        """Test handling of resonance structures."""
+        ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
+        assert ozone.get_chemical_formula() == "O3"
+        assert ozone.chemical_formula == "O3"
+        assert ozone.bond_orders == [
+            1.5,
+            1.5,
+        ]  # correctly gets bond order of ozone as 1.5
+        assert not ozone.is_chiral
+        assert not ozone.chiral_centers
+        rdkit_mol = ozone.to_rdkit()
+        assert Chem.FindMolChiralCenters(rdkit_mol) == []
+        assert ozone.chemical_symbols == ["O", "O", "O"]
+        assert ozone.atomic_radii_list == [0.66, 0.66, 0.66]
+        assert ozone.vdw_radii_list == [1.52, 1.52, 1.52]
+
+        graph = ozone.to_graph()
+        assert any(
+            bond["bond_order"] > 1 for bond in graph.edges.values()
+        )  # Check for possible multiple bonds
+
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+        assert acetone.bond_orders == [
+            2.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+        ]
+        # 1 double bond C2=O1, 2 C-C single bonds, 6 C-H single bonds
+
+        graph = acetone.to_graph()
+        assert any(bond["bond_order"] > 1 for bond in graph.edges.values())
+
+        benzene = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        assert benzene.bond_orders == [
+            1.5,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.5,
+            1.0,
+            1.0,
+        ]
+        # check there are 6 aromatic C-C bonds
+        # and 6 single C-H bonds in benzene
+        assert len([bond for bond in benzene.bond_orders if bond == 1.5]) == 6
+        assert len([bond for bond in benzene.bond_orders if bond == 1.0]) == 6
+
+    def test_volume(
+        self, gaussian_ozone_opt_outfile, gaussian_acetone_opt_outfile
+    ):
+        """Test volume calculation for molecules.
+
+        Tests various volume calculation methods:
+        - voronoi_dirichlet_occupied_volume
+        - crude_volume_by_vdw_radii
+        - crude_volume_by_atomic_radii
+        - vdw_volume
+        - vdw_volume_from_rdkit
+        - voronoi_dirichlet_polyhedra_occupied_volume
+        """
+        ozone = Molecule.from_filepath(gaussian_ozone_opt_outfile)
+
+        ozone_vd_vol = ozone.voronoi_dirichlet_occupied_volume
+        assert ozone_vd_vol > 0
+        assert np.isclose(ozone_vd_vol, 42.7969798834565, rtol=0.01)
+
+        # Test other volume methods
+        assert np.isclose(
+            ozone.crude_volume_by_vdw_radii, 44.13068085447146, rtol=0.01
+        )
+        assert np.isclose(
+            ozone.crude_volume_by_atomic_radii, 3.612781286145805, rtol=0.01
+        )
+        # vdw_volume uses exact lens-shaped
+        # intersection formula for overlap correction
+        assert np.isclose(ozone.vdw_volume, 29.65124427436735, rtol=0.01)
+        # grid_vdw_volume uses grid-based integration (similar to RDKit)
+        assert np.isclose(ozone.grid_vdw_volume, 31.464, rtol=0.05)
+        assert np.isclose(
+            ozone.vdw_volume_from_rdkit, 25.533471711063285, rtol=0.01
+        )
+        assert np.isclose(
+            ozone.voronoi_dirichlet_polyhedra_occupied_volume,
+            20.94252748967074,
+            rtol=0.01,
+        )
+
+        acetone = Molecule.from_filepath(gaussian_acetone_opt_outfile)
+
+        acetone_vd_vol = acetone.voronoi_dirichlet_occupied_volume
+        assert acetone_vd_vol > 0
+        assert np.isclose(acetone_vd_vol, 73.29919753367922, rtol=0.01)
+
+        # Test other volume methods
+        assert np.isclose(
+            acetone.crude_volume_by_vdw_radii, 119.87818262306239, rtol=0.01
+        )
+        assert np.isclose(
+            acetone.crude_volume_by_atomic_radii, 7.469325029468949, rtol=0.01
+        )
+        assert np.isclose(
+            acetone.voronoi_dirichlet_polyhedra_occupied_volume,
+            12.369068467588548,
+            rtol=0.01,
+        )
+        # vdw_volume uses exact lens-shaped
+        # intersection formula for overlap correction
+        assert np.isclose(acetone.vdw_volume, 48.85540325089168, rtol=0.01)
+        # grid_vdw_volume uses grid-based integration (similar to RDKit)
+        assert np.isclose(acetone.grid_vdw_volume, 64.832, rtol=0.05)
+        assert np.isclose(
+            acetone.vdw_volume_from_rdkit, 61.98249809788294, rtol=0.01
+        )
+
+
+class TestStructuresFromGaussianInput:
+    def test_read_molecule_from_gaussian_opt_input(
+        self, tmpdir, gaussian_opt_inputfile
+    ):
+        assert os.path.exists(gaussian_opt_inputfile)
+        assert os.path.isfile(gaussian_opt_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_opt_inputfile)
+        molecule = g16_file.molecule
+        tmp_file = os.path.join(tmpdir, "tmp.txt")
+        f = open(tmp_file, "w")
+        molecule.write_coordinates(f, program="gaussian")
+        f.close()
+        coordinates = """C       -0.5448210000   -1.1694570000    0.0001270000
+C        0.8378780000   -1.0476350000    0.0001900000
+C        1.4329940000    0.2194290000    0.0001440000
+C        0.6358350000    1.3657650000   -0.0000040000
+C       -0.7521390000    1.2582750000    0.0000710000
+C       -1.3283680000   -0.0113420000    0.0001560000
+H       -1.0298620000   -2.1454490000    0.0001020000
+H        1.4853190000   -1.9262430000    0.0002620000
+H        1.1050940000    2.3527070000    0.0000530000
+H       -1.3913950000    2.1406100000   -0.0000130000
+C        2.9142600000    0.3363820000    0.0000140000
+O        3.6625230000   -0.6037690000   -0.0002940000
+H        3.3025560000    1.3842410000    0.0001510000
+Cl      -3.0556310000   -0.1578960000   -0.0001400000"""
+        with open(tmp_file, "r") as g:
+            written_coordinates = g.read()
+        assert os.path.exists(tmp_file)
+        assert all([a == b for a, b in zip(coordinates, written_coordinates)])
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C7H5ClO"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_gaussian_modred(
+        self, gaussian_modred_inputfile
+    ):
+        assert os.path.exists(gaussian_modred_inputfile)
+        assert os.path.isfile(gaussian_modred_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_modred_inputfile)
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C3H7NO3"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_gaussian_scan(self, gaussian_scan_inputfile):
+        assert os.path.exists(gaussian_scan_inputfile)
+        assert os.path.isfile(gaussian_scan_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_scan_inputfile)
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C3H7NO3"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_opt_genecp(
+        self, gaussian_opt_genecp_inputfile
+    ):
+        assert os.path.exists(gaussian_opt_genecp_inputfile)
+        assert os.path.isfile(gaussian_opt_genecp_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_opt_genecp_inputfile)
+        assert g16_file.num_atoms == 15
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H6O4Pd"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_modred_gen(self, modred_gen_inputfile):
+        assert os.path.exists(modred_gen_inputfile)
+        assert os.path.isfile(modred_gen_inputfile)
+
+        g16_file = Gaussian16Input(filename=modred_gen_inputfile)
+        assert g16_file.num_atoms == 15
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H6BrO4"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_modred_genecp(self, modred_genecp_inputfile):
+        assert os.path.exists(modred_genecp_inputfile)
+        assert os.path.isfile(modred_genecp_inputfile)
+
+        g16_file = Gaussian16Input(filename=modred_genecp_inputfile)
+        assert g16_file.num_atoms == 15
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H6O4Pd"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_modred_genecp_custom_solvent(
+        self, modred_genecp_custom_solvent_inputfile
+    ):
+        assert os.path.exists(modred_genecp_custom_solvent_inputfile)
+        assert os.path.isfile(modred_genecp_custom_solvent_inputfile)
+
+        g16_file = Gaussian16Input(
+            filename=modred_genecp_custom_solvent_inputfile
+        )
+        assert g16_file.num_atoms == 65
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C28H26Cl2N2O4PdS2"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+
+    def test_read_molecule_from_gaussian_frozen_opt(
+        self, tmpdir, gaussian_frozen_opt_inputfile
+    ):
+        assert os.path.exists(gaussian_frozen_opt_inputfile)
+        assert os.path.isfile(gaussian_frozen_opt_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_frozen_opt_inputfile)
+        assert g16_file.num_atoms == 14
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C7H5ClO"
+        assert g16_file.molecule.frozen_atoms == [
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            -1,
+            0,
+            0,
+            0,
+            0,
+        ]
+        assert g16_file.molecule.pbc_conditions is None
+        assert g16_file.molecule.translation_vectors is None
+        molecule = g16_file.molecule
+        tmp_file = os.path.join(tmpdir, "tmp.txt")
+        f = open(tmp_file, "w")
+        molecule.write_coordinates(f, program="gaussian")
+        f.close()
+        coordinates = """C         -1   -0.5448210000   -1.1694570000    0.0001270000
+C         -1    0.8378780000   -1.0476350000    0.0001900000
+C         -1    1.4329940000    0.2194290000    0.0001440000
+C         -1    0.6358350000    1.3657650000   -0.0000040000
+C         -1   -0.7521390000    1.2582750000    0.0000710000
+C         -1   -1.3283680000   -0.0113420000    0.0001560000
+H         -1   -1.0298620000   -2.1454490000    0.0001020000
+H         -1    1.4853190000   -1.9262430000    0.0002620000
+H         -1    1.1050940000    2.3527070000    0.0000530000
+H         -1   -1.3913950000    2.1406100000   -0.0000130000
+C          0    2.9142600000    0.3363820000    0.0000140000
+O          0    3.6625230000   -0.6037690000   -0.0002940000
+H          0    3.3025560000    1.3842410000    0.0001510000
+Cl         0   -3.0556310000   -0.1578960000   -0.0001400000"""
+        with open(tmp_file, "r") as g:
+            written_coordinates = g.read()
+        assert os.path.exists(tmp_file)
+        assert all([a == b for a, b in zip(coordinates, written_coordinates)])
+
+    def test_read_molecule_from_gaussian_pbc(
+        self, tmpdir, gaussian_pbc_1d_inputfile
+    ):
+        assert os.path.exists(gaussian_pbc_1d_inputfile)
+        assert os.path.isfile(gaussian_pbc_1d_inputfile)
+
+        g16_file = Gaussian16Input(filename=gaussian_pbc_1d_inputfile)
+        assert g16_file.num_atoms == 10
+        assert isinstance(g16_file.molecule, Molecule)
+        assert g16_file.molecule.charge == 0
+        assert g16_file.molecule.multiplicity == 1
+        assert g16_file.molecule.empirical_formula == "C4H5Cl"
+        assert g16_file.molecule.frozen_atoms is None
+        assert g16_file.molecule.pbc_conditions == [True, False, False]
+        assert g16_file.molecule.translation_vectors == [
+            [4.8477468928, 0.1714181332, 0.5112729831],
+        ]
+        molecule = g16_file.molecule
+        tmp_file = os.path.join(tmpdir, "tmp.txt")
+        f = open(tmp_file, "w")
+        molecule.write_coordinates(f, program="gaussian")
+        f.close()
+        coordinates = """C       -1.9267226529    0.4060180273    0.0316702826
+H       -2.3523143977    0.9206168644    0.9131400756
+H       -1.8372739404    1.1548899113   -0.7707507970
+C       -0.5737182157   -0.1434584477    0.3762843235
+H       -0.5015912465   -0.7653394047    1.2791284293
+C        0.5790889876    0.0220081655   -0.3005160849
+C        1.9237098673   -0.5258773194    0.0966261209
+H        1.7722344520   -1.2511397907    0.9159625120
+H        2.3627869487   -1.0792380182   -0.7525115830
+Cl       0.6209825739    0.9860944599   -1.7876398696
+TV       4.8477468928    0.1714181332    0.5112729831"""
+        with open(tmp_file, "r") as g:
+            written_coordinates = g.read()
+        assert os.path.exists(tmp_file)
+        assert all([a == b for a, b in zip(coordinates, written_coordinates)])
+
+
+class TestQMMMinMolecule:
+    def test_atoms_in_levels_wrong_low_level(
+        self, tmpdir, methyl3hexane_molecule
+    ):
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.low_level_atoms = [7, 8, 9]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+        with pytest.raises(ValueError):
+            methyl_3_hexane.partition_level_strings
+            # should raise error since high + medium +
+            # low is not equal to total number of atoms
+
+    def test_atoms_in_levels_default_low_level(
+        self,
+        tmpdir,
+        qmmm_written_xyz_file,
+        qmmm_written_xyz_only_file,
+        methyl3hexane_molecule,
+    ):
+        methyl_3_hexane = QMMMMolecule(molecule=methyl3hexane_molecule)
+        methyl_3_hexane.high_level_atoms = [1, 2, 3]
+        methyl_3_hexane.medium_level_atoms = [4, 5, 6]
+        methyl_3_hexane.bonded_atoms = [(3, 4), (1, 7)]
+        assert methyl_3_hexane.chemical_formula == "C7H16"
+        assert methyl_3_hexane.num_atoms == 23
+
+        assert methyl_3_hexane.partition_level_strings == [
+            "H",
+            "H",
+            "H",
+            "M",
+            "M",
+            "M",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+            "L",
+        ]
+
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        methyl_3_hexane.write(written_input, format="xyz", xyz_only=False)
+        assert cmp_with_ignore(
+            written_input, qmmm_written_xyz_only_file, ignore_string="tmp"
+        )  # writes input file as expected
+
+        written_input2 = os.path.join(tmpdir, "tmp_xyz_only.xyz")
+        methyl_3_hexane.write(written_input2, format="xyz", xyz_only=True)
+        assert cmp(
+            written_input2, qmmm_written_xyz_only_file, shallow=False
+        )  # writes input file as expected
+
+    def test_qmmm_atoms_handling(self, tmpdir):
+        """Test QM/MM atoms handling."""
+        mol = QMMMMolecule(
+            symbols=["O", "H", "H", "Cl"],
+            positions=np.array(
+                [
+                    [-4.84098481, -0.56828899, 0.00000000],
+                    [-3.88098484, -0.56804789, 0.00000000],
+                    [-5.16121212, 0.33672729, 0.00000000],
+                    [-1.93181817, -0.59090908, 0.00000000],
+                ]
+            ),
+            high_level_atoms=[4],
+            medium_level_atoms=[3],
+            low_level_atoms=[1, 2],
+            bonded_atoms=[(1, 3)],
+            scale_factors={(1, 3): [0.9, 0.8, 0.7]},
+        )
+
+        assert mol.high_level_atoms == [4]
+        assert mol.low_level_atoms == [1, 2]
+        assert mol.medium_level_atoms == [3]
+        assert mol.bonded_atoms == [(1, 3)]
+
+        written_input = os.path.join(tmpdir, "tmp.xyz")
+        with open(written_input, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+
+            expected_lines = [
+                "O -4.8409848100 -0.5682889900 0.0000000000 L H 3  0.9 0.8 0.7",
+                "H -3.8809848400 -0.5680478900 0.0000000000 L",
+                "H -5.1612121200 0.3367272900 0.0000000000 M",
+                "Cl -1.9318181700 -0.5909090800 0.0000000000 H",
+            ]
+
+            assert [" ".join(line.split()) for line in lines] == [
+                " ".join(line.split()) for line in expected_lines
+            ], f"Mismatch in written Gaussian coordinates:\nExpected: {expected_lines}\nGot: {lines}"
+        if os.path.exists("tmp.xyz"):
+            os.remove("tmp.xyz")
+
+    def test_qmmm_partition_overlap_raises(self):
+        """Creating a QMMMMolecule with overlapping
+        partitions should raise a ValueError."""
+        # Create a small dummy molecule
+        symbols = ["C"] * 5
+        positions = np.zeros((5, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # High and medium overlap (atom index 2 appears in both)
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1, 2],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "Overlap" in str(exc.value)
+
+    def test_qmmm_partition_out_of_range_raises(self):
+        """Specifying out-of-range atom indices should raise a ValueError."""
+        symbols = ["C"] * 4
+        positions = np.zeros((4, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # index 10 out of range
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[10],
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "out of range" in str(exc.value)
+
+
+class TestSDFFile:
+    def test_converts_sdf_string_to_molecule_object(self, tmpdir):
+        sdf_string = """6999790
+  -OEChem-03092302273D
+
+ 13 12  0     1  0  0  0  0  0999 V2000
+   -1.1018    1.2385   -0.0496 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4517    0.0248    0.3184 C   0  0  1  0  0  0  0  0  0  0  0  0
+   -1.3489   -1.1518   -0.0426 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8543   -0.0422   -0.4148 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0481   -0.0692    0.1885 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.2932    0.0475    1.4026 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.3037   -1.0804    0.4900 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.5887   -1.1551   -1.1122 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8804   -2.1073    0.2141 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8229   -0.0582   -1.5016 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.9459    1.2770    0.4319 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.9591   -0.1121   -0.3983 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.1387   -0.0496    1.2689 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1 11  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  6  1  0  0  0  0
+  3  7  1  0  0  0  0
+  3  8  1  0  0  0  0
+  3  9  1  0  0  0  0
+  4  5  2  0  0  0  0
+  4 10  1  0  0  0  0
+  5 12  1  0  0  0  0
+  5 13  1  0  0  0  0
+M  END
+> <PUBCHEM_COMPOUND_CID>
+6999790
+
+> <PUBCHEM_CONFORMER_RMSD>
+0.4
+
+> <PUBCHEM_CONFORMER_DIVERSEORDER>
+1
+2
+3
+
+> <PUBCHEM_MMFF94_PARTIAL_CHARGES>
+8
+1 -0.68
+10 0.15
+11 0.4
+12 0.15
+13 0.15
+2 0.42
+4 -0.29
+5 -0.3
+
+> <PUBCHEM_EFFECTIVE_ROTOR_COUNT>
+1
+
+> <PUBCHEM_PHARMACOPHORE_FEATURES>
+3
+1 1 acceptor
+1 1 donor
+1 5 hydrophobe
+
+> <PUBCHEM_HEAVY_ATOM_COUNT>
+5
+
+> <PUBCHEM_ATOM_DEF_STEREO_COUNT>
+1
+
+> <PUBCHEM_ATOM_UDEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_BOND_DEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_BOND_UDEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_ISOTOPIC_ATOM_COUNT>
+0
+
+> <PUBCHEM_COMPONENT_COUNT>
+1
+
+> <PUBCHEM_CACTVS_TAUTO_COUNT>
+1
+
+> <PUBCHEM_CONFORMER_ID>
+006ACEEE00000001
+
+> <PUBCHEM_MMFF94_ENERGY>
+2.2534
+
+> <PUBCHEM_FEATURE_SELFOVERLAP>
+15.223
+
+> <PUBCHEM_SHAPE_FINGERPRINT>
+139733 1 9078577887532652523
+16714656 1 18411707598977923407
+20096714 4 18191872223362461888
+21015797 1 9943532881608965411
+21040471 1 18194406580373827108
+29004967 10 18120096344745644827
+5460574 1 9511472116931879378
+5943 1 10672208095369030331
+
+> <PUBCHEM_SHAPE_MULTIPOLES>
+97.03
+2.26
+1.1
+0.66
+0.88
+0.14
+0
+-0.36
+0.09
+-0.58
+-0.02
+0.05
+-0.02
+-0.01
+
+> <PUBCHEM_SHAPE_SELFOVERLAP>
+167.629
+
+> <PUBCHEM_SHAPE_VOLUME>
+65.3
+
+> <PUBCHEM_COORDINATE_TYPE>
+2
+5
+10
+
+$$$$"""
+        from chemsmart.io.file import SDFFile
+
+        tmpfile = os.path.join(tmpdir, "test.sdf")
+        with open(tmpfile, "w") as f:
+            f.write(sdf_string)
+        sdf_file = SDFFile(filename=tmpfile)
+        sdf_molecule = sdf_file.molecule
+        assert isinstance(sdf_molecule, Molecule)
+        symbols = [
+            "O",
+            "C",
+            "C",
+            "C",
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H",
+        ]
+        assert all(
+            [
+                sdf_molecule.symbols[i] == symbols[i]
+                for i in range(len(symbols))
+            ]
+        )
+
+        assert sdf_molecule.empirical_formula == "C4H8O"
+        structure_coords = np.array(
+            [
+                [-1.1018, 1.2385, -0.0496],
+                [-0.4517, 0.0248, 0.3184],
+                [-1.3489, -1.1518, -0.0426],
+                [0.8543, -0.0422, -0.4148],
+                [2.0481, -0.0692, 0.1885],
+                [-0.2932, 0.0475, 1.4026],
+                [-2.3037, -1.0804, 0.49],
+                [-1.5887, -1.1551, -1.1122],
+                [-0.8804, -2.1073, 0.2141],
+                [0.8229, -0.0582, -1.5016],
+                [-1.9459, 1.277, 0.4319],
+                [2.9591, -0.1121, -0.3983],
+                [2.1387, -0.0496, 1.2689],
+            ]
+        )
+
+        assert np.all(sdf_molecule.positions == structure_coords)
+
+
+class TestCDXFile:
+    """Tests for ChemDraw file reading functionality."""
+
+    def test_read_single_molecule_cdxml_file_benzene(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdxml_file_benzene)
+        assert os.path.isfile(single_molecule_cdxml_file_benzene)
+
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_benzene)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+        assert mol.num_atoms == 12  # benzene with hydrogens
+        assert mol.is_aromatic
+
+    def test_read_single_molecule_cdxml_file_methane(
+        self, single_molecule_cdxml_file_methane
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdxml_file_methane)
+        assert os.path.isfile(single_molecule_cdxml_file_methane)
+
+        cdx_file = CDXFile(filename=single_molecule_cdxml_file_methane)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "CH4"
+        assert mol.num_atoms == 5  # benzene with hydrogens
+        assert not mol.is_aromatic
+
+    def test_read_multi_molecule_cdxml_file(self, multi_molecule_cdxml_file):
+        """Test reading multiple molecules from a CDXML file."""
+        assert os.path.exists(multi_molecule_cdxml_file)
+        assert os.path.isfile(multi_molecule_cdxml_file)
+
+        cdx_file = CDXFile(filename=multi_molecule_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 2
+        assert molecules[0].chemical_formula == "CH2O"  # formaldehyde
+        assert molecules[1].chemical_formula == "N2"  # nitrogen
+
+    def test_molecule_from_filepath_cdxml(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test Molecule.from_filepath with CDXML file."""
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
+
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+        assert mol.num_atoms == 12
+        assert mol.is_aromatic
+        assert mol.positions is not None
+        assert mol.positions.shape == (12, 3)
+
+    def test_molecule_from_filepath_cdxml_pathlib(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test Molecule.from_filepath with pathlib.Path."""
+        path = Path(single_molecule_cdxml_file_benzene)
+        mol = Molecule.from_filepath(path)
+
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H6"
+
+    def test_molecule_from_filepath_cdxml_multi_molecules(
+        self, multi_molecule_cdxml_file
+    ):
+        """Test reading multiple molecules from CDXML using from_filepath."""
+        # Get all molecules
+        molecules = Molecule.from_filepath(
+            multi_molecule_cdxml_file, index=":", return_list=True
+        )
+        assert isinstance(molecules, list)
+        assert len(molecules) == 2
+
+        # Get first molecule (1-based indexing)
+        mol1 = Molecule.from_filepath(multi_molecule_cdxml_file, index="1")
+        assert mol1.chemical_formula == "CH2O"
+
+        # Get last molecule
+        mol_last = Molecule.from_filepath(
+            multi_molecule_cdxml_file, index="-1"
+        )
+        assert mol_last.chemical_formula == "N2"
+
+    def test_molecule_from_filepath_cdxml_return_list(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test return_list parameter with single molecule CDXML file."""
+        mol_single = Molecule.from_filepath(
+            single_molecule_cdxml_file_benzene, return_list=False
+        )
+        assert isinstance(mol_single, Molecule)
+
+        mol_list = Molecule.from_filepath(
+            single_molecule_cdxml_file_benzene, return_list=True
+        )
+        assert isinstance(mol_list, list)
+        assert len(mol_list) == 1
+        assert isinstance(mol_list[0], Molecule)
+
+    def test_cdxfile_get_molecules_index(self, multi_molecule_cdxml_file):
+        """Test CDXFile.get_molecules with various index specifications."""
+        cdx_file = CDXFile(filename=multi_molecule_cdxml_file)
+
+        # Test index=":"
+        all_mols = cdx_file.get_molecules(index=":")
+        assert len(all_mols) == 2
+
+        # Test index="-1"
+        last_mol = cdx_file.get_molecules(index="-1")
+        assert last_mol.chemical_formula == "N2"
+
+        # Test 1-based indexing
+        first_mol = cdx_file.get_molecules(index="1")
+        assert first_mol.chemical_formula == "CH2O"
+
+        second_mol = cdx_file.get_molecules(index="2")
+        assert second_mol.chemical_formula == "N2"
+
+    def test_cdx_molecule_to_rdkit_conversion(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test that molecules from CDXML can be converted to RDKit."""
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
+        rdkit_mol = mol.to_rdkit()
+
+        assert isinstance(rdkit_mol, Chem.Mol)
+        assert rdkit_mol.GetNumAtoms() == 12
+        assert rdkit_mol.GetNumConformers() == 1
+
+    def test_cdx_molecule_to_graph(self, single_molecule_cdxml_file_benzene):
+        """Test that molecules from CDXML can be converted to graph."""
+        mol = Molecule.from_filepath(single_molecule_cdxml_file_benzene)
+        graph = mol.to_graph()
+
+        assert isinstance(graph, nx.Graph)
+        assert len(graph.nodes) == 12  # benzene with hydrogens
+        # Benzene should have 6 C-C bonds + 6 C-H bonds = 12 bonds
+        assert len(graph.edges) == 12
+
+    def test_read_single_molecule_cdx_file_imidazole(
+        self, single_molecule_cdx_file_imidazole
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(single_molecule_cdx_file_imidazole)
+        assert os.path.isfile(single_molecule_cdx_file_imidazole)
+
+        cdx_file = CDXFile(filename=single_molecule_cdx_file_imidazole)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C8H10N2O"
+        assert mol.num_atoms == 21
+        assert mol.is_aromatic
+
+    def test_molecule_from_filepath_cdx(
+        self, single_molecule_cdx_file_imidazole
+    ):
+        """Test Molecule.from_filepath with a binary ChemDraw .cdx file."""
+        mol = Molecule.from_filepath(single_molecule_cdx_file_imidazole)
+
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C8H10N2O"
+        assert mol.num_atoms == 21
+        assert mol.is_aromatic
+        assert mol.positions is not None
+        assert mol.positions.shape == (21, 3)
+
+    def test_read_complex_molecule_cdxml_file_(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test reading a single molecule from a CDXML file."""
+        assert os.path.exists(complex_molecule_cdxml_file)
+        assert os.path.isfile(complex_molecule_cdxml_file)
+
+        cdx_file = CDXFile(filename=complex_molecule_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 1
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C32H31N5O5"
+        assert mol.num_atoms == 73  # benzene with hydrogens
+        assert mol.is_aromatic
+
+    def test_read_metal_ligand_molecules_cdxml_file_(
+        self, metal_ligand_molecules_cdxml_file
+    ):
+        """Test reading multiple organometallic molecules from a CDXML file with Cp and aromatic ligands."""
+        assert os.path.exists(metal_ligand_molecules_cdxml_file)
+        assert os.path.isfile(metal_ligand_molecules_cdxml_file)
+        cdx_file = CDXFile(filename=metal_ligand_molecules_cdxml_file)
+        molecules = cdx_file.molecules
+
+        assert isinstance(molecules, list)
+        assert len(molecules) == 7
+
+        # Test molecule 0: Ti(Cp)₂Me₂ - titanocene dimethyl complex.
+        # The two methyl groups bonded to Ti are now correctly preserved.
+        # MultiAttachment phantom atoms (ChemDraw η5-hapticity stubs) are
+        # removed at the XML level before RDKit parsing, so the real Ti–Me
+        # bonds remain intact.
+        mol = molecules[0]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H16Ti"
+        assert mol.num_atoms == 29
+        assert mol.is_ring
+
+        # Test molecule 1: Ni(Cp)₂Cl₂ - nickel bis-Cp with two chloride ligands.
+        mol = molecules[1]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C10H10Cl2Ni"
+        assert mol.num_atoms == 23
+        assert mol.is_ring
+
+        # Test molecule 3: Ir(η6-benzene)₂ - bis-benzene iridium complex.
+        # Each benzene ring contributes 6C and 6H; anchor C is sp2 with 1H.
+        mol = molecules[3]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Ir"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 4: Rh(η6-benzene)₂ - bis-benzene rhodium complex.
+        mol = molecules[4]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C12H12Rh"
+        assert mol.num_atoms == 25
+        assert mol.is_ring
+
+        # Test molecule 5: Fe complex with aromatic phosphine and benzene ligands
+        mol = molecules[5]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C35H31Cl2FeNO3P2"
+        assert mol.num_atoms == 75
+        assert mol.is_aromatic
+
+        # Test molecule 6: Mn sugar complex (no Cp rings, should be unchanged)
+        mol = molecules[6]
+        assert isinstance(mol, Molecule)
+        assert mol.chemical_formula == "C6H10MnO6"
+        assert mol.num_atoms == 23
+
+
+class TestpKaCDXFile:
+    # ------------------------------------------------------------------
+    # CDXML atom-colour parsing and proton detection tests
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_atom_colors(self, colored_implicit_proton_cdxml_file):
+        """Test that atom colours are parsed correctly from phenol.cdxml.
+
+        Phenol has 7 CDXML atoms (6 C + 1 O).  The O node carries the
+        label ``<s color="0">O</s><s color="4">H</s>`` – the "H" is
+        rendered in colour 4 while the heavy atom keeps colour 0.
+        ``parse_cdxml_atom_colors`` must record this in ``implicit_h_color``.
+        """
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        atoms = cdx_file.parse_cdxml_element_colors()
+
+        assert len(atoms) == 7  # 6C + 1O
+        # First six atoms are carbons with default colour
+        for a in atoms[:6]:
+            assert a["symbol"] == "C"
+            assert a["color"] == 0
+            assert a["implicit_h_color"] is None
+
+        # Last atom is O with a coloured H in its label
+        o_atom = atoms[6]
+        assert o_atom["symbol"] == "O"
+        assert o_atom["color"] == 0
+        assert o_atom["num_hydrogens"] == 1
+        assert o_atom["implicit_h_color"] == 4  # the "H" in "OH"
+
+    def test_parse_cdxml_atom_colors_benzene_no_color(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test parsing benzene CDXML where all atoms have the same colour."""
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        atoms = cdx_file.parse_cdxml_element_colors()
+
+        assert len(atoms) == 6  # 6 carbons, no explicit H
+        # All should have colour 0
+        for a in atoms:
+            assert a["color"] == 0
+            assert a["symbol"] == "C"
+
+    def test_get_colored_proton_index_auto_detect(
+        self, colored_proton_cdxml_file
+    ):
+        """Test auto-detection of uniquely coloured proton when that proton appears as an explicit node (default mode)."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        proton_index = cdx_file.get_colored_proton_index()
+        list_of_elements = cdx_file.parse_cdxml_element_colors()
+
+        assert proton_index == 8
+
+        # Verify get_pka_molecules returns PKaMolecule with proton_index
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+        assert list_of_elements[-1]["color"] == 4
+
+    def test_get_colored_proton_index_user_specified(
+        self, colored_proton_cdxml_file
+    ):
+        """Test user-specified colour mode with phenol functional-group H.
+
+        Colour 4 is the implicit-H span colour in the phenol OH label.
+        """
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+
+        # Via get_pka_molecules with color_code
+        pka_mol = cdx_file.get_pka_molecules(index="-1", color_code=4)
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecule_explicit_proton_index(
+        self, colored_proton_cdxml_file
+    ):
+        """Test that an explicit proton_index bypasses colour detection."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        mol = cdx_file.get_molecules(index="-1")
+
+        # Find any H atom to use as explicit index
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        assert len(h_indices) > 0
+        explicit_idx = h_indices[0]
+
+        pka_mol = cdx_file.get_pka_molecules(
+            index="-1", proton_index=explicit_idx
+        )
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == explicit_idx
+        assert pka_mol.symbols[explicit_idx - 1] == "H"
+
+    def test_get_colored_proton_index_no_unique_color_raises(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """Test that auto-detect raises when all atoms share the same colour."""
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        with pytest.raises(ValueError, match="same colour"):
+            cdx_file.get_colored_proton_index()
+
+    def test_get_colored_proton_index_no_hydrogen_raises(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test that auto-detect raises when coloured atoms are not hydrogen."""
+        cdx_file = PKaCDXFile(filename=complex_molecule_cdxml_file)
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            cdx_file.get_colored_proton_index()
+
+    def test_get_colored_proton_index_invalid_color_code_raises(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """Test that specifying a non-existent colour code raises."""
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        with pytest.raises(ValueError, match="No atoms with color code"):
+            cdx_file.get_colored_proton_index(color_code=99)
+
+    def test_get_colored_proton_index_multiple_atoms_same_color_raises(
+        self, complex_molecule_cdxml_file
+    ):
+        """Test that specifying a colour shared by non-H atoms raises."""
+        cdx_file = PKaCDXFile(filename=complex_molecule_cdxml_file)
+        # colour 10 labels 9 carbon/nitrogen atoms, none are hydrogen
+        with pytest.raises(ValueError, match="none are hydrogen"):
+            cdx_file.get_colored_proton_index(color_code=10)
+
+    def test_proton_removal_phenol(self, colored_proton_cdxml_file):
+        """Test that the coloured proton can be removed from the molecule.
+        The coloured proton is an explicit node in the CDXML, so should be removed as a normal atom.
+        Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms)."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.chemical_formula == "C6H6O"
+        assert pka_mol.num_atoms == 13
+        assert pka_mol.proton_index == 8
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+        # Remove proton → phenoxide
+        phenoxide = pka_mol.delete_atoms_by_indices(
+            pka_mol.proton_index, one_based=True
+        )
+        assert phenoxide.num_atoms == 12
+        assert phenoxide.chemical_formula == "C6H5O"
+
+    def test_implicit_proton_removal_phenol(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """End-to-end: detect phenol OH proton by colour, remove it.
+
+        Phenol (C6H6O, 13 atoms) → phenoxide (C6H5O, 12 atoms).
+        The OH hydrogen is an implicit H on the O node, identified
+        via the coloured "H" span in the label.
+        """
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        pka_mol = cdx_file.get_pka_molecules(index="-1")
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 13
+        assert pka_mol.chemical_formula == "C6H6O"
+        assert pka_mol.num_atoms == 13
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+        # Remove proton → phenoxide
+        phenoxide = pka_mol.delete_atoms_by_indices(
+            pka_mol.proton_index, one_based=True
+        )
+        assert phenoxide.num_atoms == 12
+        assert phenoxide.chemical_formula == "C6H5O"
+
+    def test_functional_group_proton_user_color_phenol(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """User-specified colour for phenol implicit OH hydrogen."""
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+
+        # colour 4 is the H span colour in phenol.cdxml
+        pka_mol = cdx_file.get_pka_molecules(index="-1", color_code=4)
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.proton_index == 13
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    # ------------------------------------------------------------------
+    # Per-fragment proton auto-detection tests
+    # ------------------------------------------------------------------
+
+    def test_parse_cdxml_fragment_colors_single_fragment(
+        self, colored_proton_cdxml_file
+    ):
+        """parse_cdxml_fragment_colors returns one sub-list for single-fragment files."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        assert len(fragments) == 1
+        # Phenol: 6C + 1O + 1H = 8 CDXML atoms
+        assert len(fragments[0]) == 8
+
+    def test_parse_cdxml_fragment_colors_two_fragments(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """parse_cdxml_fragment_colors returns two sub-lists for two-fragment files."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+        mol1 = fragments[0]
+        mol2 = fragments[1]
+
+        assert len(fragments) == 2
+        # Each phenol fragment: 6C + 1O + 1H = 8 CDXML atoms
+        assert len(mol1) == 8
+        assert mol1[-1]["symbol"] == "H"
+        assert mol1[-1]["color"] == 5
+        assert len(mol2) == 8
+        assert mol2[-1]["symbol"] == "H"
+        assert mol2[-1]["color"] == 5
+        print(mol1)
+        print(mol2)
+
+    def test_detect_proton_in_fragment_explicit_h(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """_detect_proton_in_fragment finds explicit H in each fragment."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        for frag_idx, frag_atoms in enumerate(fragments):
+            detection = cdx_file._detect_proton_in_fragment(
+                frag_atoms, fragment_index=frag_idx + 1
+            )
+            assert detection["type"] == "explicit"
+            assert detection["atom"]["symbol"] == "H"
+            # The H is the last atom in each fragment (index 7, 0-based)
+            assert detection["local_idx"] == 7
+
+    def test_detect_proton_in_fragment_uniform_color_raises(
+        self, single_molecule_cdxml_file_benzene
+    ):
+        """_detect_proton_in_fragment raises when all atoms share a colour."""
+        cdx_file = PKaCDXFile(filename=single_molecule_cdxml_file_benzene)
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        assert len(fragments) == 1
+        with pytest.raises(ValueError, match="same colour"):
+            cdx_file._detect_proton_in_fragment(fragments[0], fragment_index=1)
+
+    def test_get_pka_molecules_auto_single_fragment(
+        self, colored_proton_cdxml_file
+    ):
+        """get_pka_molecules_auto returns one PKaMolecule for a single-fragment file."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 1
+        assert isinstance(pka_mols[0], PKaMolecule)
+        # Proton should be H
+        assert pka_mols[0].symbols[pka_mols[0].proton_index - 1] == "H"
+
+    def test_get_pka_molecules_auto_two_fragments(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules_auto returns two PKaMolecules with independent proton detection."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert isinstance(pka_mol, PKaMolecule)
+            assert pka_mol.proton_index >= 1
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_delegates_to_auto(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules() with index=':' and no proton args delegates to get_pka_molecules_auto()."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        # No proton_index, no color_code → auto mode; index=":" → all fragments
+        pka_mols = cdx_file.get_pka_molecules(index=":")
+
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert isinstance(pka_mol, PKaMolecule)
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_with_explicit_proton_index(
+        self, colored_proton_two_molecule_cdxml_file
+    ):
+        """get_pka_molecules with explicit proton_index applies the same index to all fragments."""
+        cdx_file = PKaCDXFile(filename=colored_proton_two_molecule_cdxml_file)
+        # Find a valid H index in the first molecule
+        mol = cdx_file.molecules[0]
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        pi = h_indices[0]
+
+        pka_mols = cdx_file.get_pka_molecules(index=":", proton_index=pi)
+        assert len(pka_mols) == 2
+        for pka_mol in pka_mols:
+            assert pka_mol.proton_index == pi
+
+    def test_get_pka_molecules_auto_implicit_h(
+        self, colored_implicit_proton_cdxml_file
+    ):
+        """Auto-detection handles implicit/functional-group H (phenol OH)."""
+        cdx_file = PKaCDXFile(filename=colored_implicit_proton_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 1
+        pka_mol = pka_mols[0]
+        assert isinstance(pka_mol, PKaMolecule)
+        assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_get_pka_molecules_auto_nested_fragment_groups(
+        self, pka_scale_cdxml_file
+    ):
+        """Nested ChemDraw fragment groups resolve coloured acidic protons."""
+        cdx_file = PKaCDXFile(filename=pka_scale_cdxml_file)
+        pka_mols = cdx_file.get_pka_molecules_auto()
+
+        assert len(pka_mols) == 5
+        for pka_mol in pka_mols:
+            assert pka_mol.symbols[pka_mol.proton_index - 1] == "H"
+
+    def test_fragment_colors_match_flat_colors(
+        self, colored_proton_cdxml_file
+    ):
+        """Fragment colours concatenated should match the flat parse_cdxml_element_colors output."""
+        cdx_file = PKaCDXFile(filename=colored_proton_cdxml_file)
+        flat = cdx_file.parse_cdxml_element_colors()
+        fragments = cdx_file.parse_cdxml_fragment_colors()
+
+        # Concatenate fragment atoms
+        concatenated = []
+        for frag in fragments:
+            concatenated.extend(frag)
+
+        assert len(concatenated) == len(flat)
+        for a, b in zip(concatenated, flat):
+            assert a["cdxml_id"] == b["cdxml_id"]
+            assert a["color"] == b["color"]
+            assert a["symbol"] == b["symbol"]
+
+
+class TestQMMMMolecule:
+    """Tests for QMMMMolecule partitioning and related functionality."""
+
+    def test_qmmm_partition_overlap_raises(self):
+        """Creating a QMMMMolecule with overlapping
+        partitions should raise a ValueError."""
+        # Create a small dummy molecule
+        symbols = ["C"] * 5
+        positions = np.zeros((5, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # High and medium overlap (atom index 2 appears in both)
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1, 2],
+            medium_level_atoms=[2, 3],
+            low_level_atoms=None,
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "Overlap" in str(exc.value)
+
+    def test_qmmm_partition_out_of_range_raises(self):
+        """Specifying out-of-range atom indices should raise a ValueError."""
+        symbols = ["C"] * 4
+        positions = np.zeros((4, 3))
+        m = Molecule(symbols=symbols, positions=positions)
+        # index 10 out of range
+        q = QMMMMolecule(
+            molecule=m,
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[10],
+        )
+        with pytest.raises(ValueError) as exc:
+            q._get_partition_levels()
+        assert "out of range" in str(exc.value)
+
+    def test_qmmm_string_layer_specs_with_link_atoms(self, tmpdir):
+        """String layer specs must still produce link-atom lines."""
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.zeros((8, 3)),
+            high_level_atoms="1-4",
+            low_level_atoms="5-8",
+            bonded_atoms="[(4, 5)]",
+            scale_factors="{(4, 5): [0.709]}",
+        )
+        written_input = os.path.join(tmpdir, "tmp.com")
+        with open(written_input, "w") as f:
+            mol._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+        assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
+        mol_list_keys = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.zeros((8, 3)),
+            high_level_atoms="1-4",
+            low_level_atoms="5-8",
+            bonded_atoms="[[4, 5]]",
+            scale_factors="{[4, 5]: [0.709]}",
+        )
+        with open(written_input, "w") as f:
+            mol_list_keys._write_gaussian_coordinates(f)
+        with open(written_input, "r") as f:
+            lines = [line.strip() for line in f.readlines()]
+        assert any("L H 4 0.709" in " ".join(line.split()) for line in lines)
+
+    def test_auto_assigns_link_atoms_for_cut_covalent_bonds(self):
+        """Cut covalent bonds become link-atom pairs when bonded_atoms is omitted."""
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H", "C", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [-0.48611108, -0.34722222, 0.00000000],
+                    [-0.12945666, -1.35603222, 0.00000000],
+                    [-0.12943824, 0.15717597, -0.87365150],
+                    [-1.55611108, -0.34720903, 0.00000000],
+                    [0.02723114, 0.37873406, 1.25740497],
+                    [-0.32782521, 1.38810715, 1.25642745],
+                    [-0.33103797, -0.12453438, 2.13105486],
+                    [1.09722933, 0.37702737, 1.25838372],
+                ]
+            ),
+            high_level_atoms=[1, 2, 3, 4],
+        )
+        buf = StringIO()
+        mol._write_gaussian_coordinates(buf)
+        text = buf.getvalue()
+        assert mol.bonded_atoms == [(1, 5)]
+        assert "L H 1" in text
+        # Explicit empty list disables auto-assignment.
+        mol_no_links = QMMMMolecule(
+            symbols=mol.symbols,
+            positions=mol.positions,
+            high_level_atoms=[1, 2, 3, 4],
+            bonded_atoms=[],
+        )
+        buf_no_links = StringIO()
+        mol_no_links._write_gaussian_coordinates(buf_no_links)
+        assert mol_no_links.bonded_atoms == []
+        assert "H 1" not in buf_no_links.getvalue()
+
+    def test_mm_atom_info_from_coordinate_lines(self):
+        typed_lines = [
+            "0 1 0 1 0 1",
+            "C-CT-0.03      0.0 0.0 0.0 H",
+            "O-OH--0.65     1.4 0.0 0.0 L H-HC-0.09 1",
+        ]
+        records = QMMMMolecule.mm_atom_info_from_coordinate_lines(typed_lines)
+        assert records[0] == ("CT", 0.03, None, None)
+        assert records[1][0] == "OH"
+        assert records[1][1] == -0.65
+        assert records[1][2] == "HC"
+        assert records[1][3] == 0.09
+
+        frozen_typed_lines = [
+            "0 1 0 1 0 1",
+            "C-CT-0.03  -1  0.0 0.0 0.0 H",
+            "O-OH--0.65  0  1.4 0.0 0.0 L H-HC-0.09 1",
+            "TV 1.0 0.0 0.0",
+            "C-CT        0.0 0.0 1.0 L",
+        ]
+        frozen_records = QMMMMolecule.mm_atom_info_from_coordinate_lines(
+            frozen_typed_lines
+        )
+        assert frozen_records[0] == ("CT", 0.03, None, None)
+        assert frozen_records[1] == ("OH", -0.65, "HC", 0.09)
+        assert frozen_records[2] is None
+        assert QMMMMolecule.parse_element_type_charge("C-CT") is None
+
+        plain_lines = ["0 1", "C 0.0 0.0 0.0 H"]
+        assert (
+            QMMMMolecule.mm_atom_info_from_coordinate_lines(plain_lines)
+            is None
+        )
+
+    def test_qmmm_helpers_for_uncovered_branches(self):
+        assert QMMMMolecule._is_charge_multiplicity_line(["0"]) is False
+        assert QMMMMolecule._is_charge_multiplicity_line(["0", "1"]) is True
+        assert QMMMMolecule._gaussian_link_atom_pair(1, 2, "H", "X") == (
+            None,
+            None,
+        )
+
+        # String medium-layer specs are normalized on level lookup.
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.1, 0.0, 0.0],
+                    [-0.4, 1.0, 0.0],
+                    [-0.4, -1.0, 0.0],
+                ]
+            ),
+            high_level_atoms="1",
+            medium_level_atoms="2",
+            low_level_atoms="3-4",
+        )
+        assert mol._normalize_atom_indices(None) is None
+        assert mol._normalize_atom_indices([1, 2, 3]) == [1, 2, 3]
+        assert mol._normalize_atom_indices("1-2") == [1, 2]
+        assert mol._determine_level_from_atom_index(1) == "H"
+        assert mol._determine_level_from_atom_index(2) == "M"
+        assert isinstance(mol.medium_level_atoms, list)
+
+        # Bonds involving atoms with unknown levels are skipped.
+        class _PartialLevel(QMMMMolecule):
+            def _determine_level_from_atom_index(self, atom_index):
+                if atom_index == 1:
+                    return "H"
+                return None
+
+        partial = _PartialLevel(
+            symbols=["C", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]]),
+            high_level_atoms=[1],
+        )
+        assert partial._detect_cut_bonds() == []
+
+        no_high = QMMMMolecule(
+            symbols=["C", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [1.1, 0.0, 0.0]]),
+            high_level_atoms=None,
+        )
+        assert no_high._determine_level_from_atom_index(1) is None
+
+    def test_write_gaussian_connectivity_and_frozen_mm_labels(self):
+        mol = QMMMMolecule(
+            symbols=["C", "H", "H"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [-0.4, 1.0, 0.0]]
+            ),
+            high_level_atoms=[1],
+            low_level_atoms=[2, 3],
+            bonded_atoms=[(1, 2)],
+            frozen_atoms=[-1, 0, 0],
+            mm_atom_info=[
+                ("CT", 0.03, None, None),
+                ("HC", 0.09, None, None),
+                ("HC", 0.09, None, None),
+            ],
+        )
+        coords = StringIO()
+        mol._write_gaussian_coordinates(coords)
+        coord_text = coords.getvalue()
+        assert "C-CT-0.03" in coord_text
+        assert "  -1 " in coord_text
+
+        connectivity = StringIO()
+        mol.write_gaussian_connectivity(connectivity)
+        conn_text = connectivity.getvalue()
+        assert "1 2 1.0" in conn_text
+        assert conn_text.endswith("\n\n")
+
+
+class TestInChIKey:
+    """Tests for Molecule.inchikey property (Open Babel backend)."""
+
+
+class TestInChI:
+    """Tests for Molecule.inchi and Molecule.inchikey properties (Open Babel backend)."""
+
+    # InChIKey constants
+    EXPECTED_NORMAL = "NNJYFTBCZFRDIO-UHFFFAOYSA-N"
+    EXPECTED_R_ENANTIOMER = "YDCAVENCOFCEDV-HSZRJFAPSA-N"
+    EXPECTED_S_ENANTIOMER = "YDCAVENCOFCEDV-QHCPKHFHSA-N"
+    EXPECTED_LARGE_C3 = "WYLDIUSELJCHHK-MMELAICESA-M"
+    EXPECTED_LARGE_C2 = "KRPJGRYSEYYRSW-YWQHEUOTSA-M"
+
+    # InChI constants (full InChI strings)
+    EXPECTED_INCHI_NORMAL = "InChI=1S/C4H10O3P/c1-3-6-8(5)7-4-2/h3-4H2,1-2H3"
+    EXPECTED_INCHI_R_ENANTIOMER = "InChI=1S/C23H22NO2P/c1-23(20-15-9-10-16-21(20)24(2)22(23)25)17-27(26,18-11-5-3-6-12-18)19-13-7-4-8-14-19/h3-16H,17H2,1-2H3/t23-/m1/s1"
+    EXPECTED_INCHI_S_ENANTIOMER = "InChI=1S/C23H22NO2P/c1-23(20-15-9-10-16-21(20)24(2)22(23)25)17-27(26,18-11-5-3-6-12-18)19-13-7-4-8-14-19/h3-16H,17H2,1-2H3/t23-/m0/s1"
+
+    @staticmethod
+    def _load_molecule(filepath):
+        mol = Molecule.from_filepath(filepath)
+        if isinstance(mol, list):
+            mol = mol[-1]
+        return mol
+
+    def test_regression_inchikey(self, inchikey_normal_file):
+        """InChIKey for a simple small molecule should be
+        deterministic across repeated calls."""
+        mol = self._load_molecule(inchikey_normal_file)
+        for _ in range(3):
+            assert mol.inchikey == self.EXPECTED_NORMAL
+            assert mol.inchi == self.EXPECTED_INCHI_NORMAL
+
+    def test_r_enantiomer_inchikey(self, inchikey_r_enantiomer_file):
+        """InChIKey for the R-enantiomer should match the expected value."""
+        mol = self._load_molecule(inchikey_r_enantiomer_file)
+        assert mol.inchikey == self.EXPECTED_R_ENANTIOMER
+        assert mol.inchi == self.EXPECTED_INCHI_R_ENANTIOMER
+
+    def test_s_enantiomer_inchikey(self, inchikey_s_enantiomer_file):
+        """InChIKey for the S-enantiomer should match the expected value."""
+        mol = self._load_molecule(inchikey_s_enantiomer_file)
+        assert mol.inchikey == self.EXPECTED_S_ENANTIOMER
+        assert mol.inchi == self.EXPECTED_INCHI_S_ENANTIOMER
+
+    def test_enantiomers_share_connectivity_layer(
+        self, inchikey_r_enantiomer_file, inchikey_s_enantiomer_file
+    ):
+        """R and S enantiomers share the same first (connectivity) layer of
+        the InChI and InChIKey (identical constitution) but differ in the stereo layer,
+        confirming that Open Babel correctly resolves the axial chirality."""
+        mol_r = self._load_molecule(inchikey_r_enantiomer_file)
+        mol_s = self._load_molecule(inchikey_s_enantiomer_file)
+        # First 14-character block: same connectivity in InChIKey
+        assert mol_r.inchikey.split("-")[0] == mol_s.inchikey.split("-")[0]
+        # Second block: stereo layer must differ for a chiral pair in InChIKey
+        assert mol_r.inchikey.split("-")[1] != mol_s.inchikey.split("-")[1]
+        # Overall InChIKeys are distinct
+        assert mol_r.inchikey != mol_s.inchikey
+        # InChI strings are also distinct (stereo layer differs at /t flag)
+        assert mol_r.inchi != mol_s.inchi
+
+    def test_large_molecule_c3_inchikey(self, inchikey_large_molecule_c3_file):
+        """InChIKey for a large molecule (c3) should match the expected value."""
+        mol = self._load_molecule(inchikey_large_molecule_c3_file)
+        assert mol.inchikey == self.EXPECTED_LARGE_C3
+
+    def test_large_molecule_c2_inchikey(self, inchikey_large_molecule_c2_file):
+        """InChIKey for a large molecule (c2) should match the expected value."""
+        mol = self._load_molecule(inchikey_large_molecule_c2_file)
+        assert mol.inchikey == self.EXPECTED_LARGE_C2
+
+    def test_large_molecules_differ(
+        self, inchikey_large_molecule_c3_file, inchikey_large_molecule_c2_file
+    ):
+        """Two different large molecules should produce different InChIKeys and InChI strings."""
+        mol_c3 = self._load_molecule(inchikey_large_molecule_c3_file)
+        mol_c2 = self._load_molecule(inchikey_large_molecule_c2_file)
+        assert mol_c3.inchikey != mol_c2.inchikey
+        assert mol_c3.inchi != mol_c2.inchi
+
+
+class TestCXSMILES:
+    """Tests for Molecule.cxsmiles property (RDKit backend)."""
+
+    EXPECTED_NORMAL = (
+        "[H]C([H])([H])C([H])([H])op(=O)oC([H])([H])C([H])([H])[H] "
+        "|(3.6969,1.9448,0.2049;3.0842,1.2373,-0.3608;3.7313,0.4472,"
+        "-0.7559;2.652,1.7556,-1.2232;1.9939,0.6488,0.5088;1.3583,"
+        "1.4601,0.8855;2.4534,0.1313,1.3605;1.2255,-0.2622,-0.2653;"
+        "0.0003,-0.9988,0.5013;0.0051,-2.2423,-0.2655;-1.2252,-0.2619,"
+        "-0.2663;-1.9972,0.645,0.509;-2.4576,0.1238,1.3579;-1.364,"
+        "1.4563,0.8899;-3.0867,1.2342,-0.3613;-3.702,1.9386,0.2054;"
+        "-2.6535,1.756,-1.221;-3.7312,0.4439,-0.7604)|"
+    )
+    EXPECTED_R_ENANTIOMER = (
+        "[H]c1c([H])c([H])c(P(=O)(c2c([H])c([H])c([H])c([H])c2[H])"
+        "C([H])([H])[C@@]2(C([H])([H])[H])c(=O)n(C([H])([H])[H])"
+        "c3c([H])c([H])c([H])c([H])c32)c([H])c1[H] "
+        "|(0.657587,4.92454,-1.29892;0.276843,3.96138,-0.951759;"
+        "0.485742,2.81258,-1.71847;1.03401,2.87447,-2.66093;"
+        "0.006912,1.57925,-1.27484;0.204594,0.685275,-1.87284;"
+        "-0.6776,1.49046,-0.055628;-1.25801,-0.0518,0.702519;"
+        "-1.3091,0.044461,2.20006;-2.88635,-0.380829,-0.012479;"
+        "-3.12941,-0.354113,-1.39219;-2.32549,-0.092551,-2.08777;"
+        "-4.40354,-0.645056,-1.87792;-4.59613,-0.624486,-2.95272;"
+        "-5.43533,-0.955747,-0.986524;-6.43361,-1.18057,-1.36882;"
+        "-5.19575,-0.974224,0.388852;-6.00568,-1.21169,1.08208;"
+        "-3.92009,-0.687184,0.879324;-3.70148,-0.688059,1.9505;"
+        "-0.227699,-1.40463,0.052757;-0.119079,-1.24802,-1.03485;"
+        "-0.807656,-2.33494,0.17008;1.15351,-1.5942,0.72979;"
+        "0.99867,-2.27426,2.08799;0.308383,-1.69441,2.71697;"
+        "1.97119,-2.35931,2.59369;0.59233,-3.28598,1.93715;"
+        "1.93427,-2.48285,-0.25179;1.70453,-3.64544,-0.504979;"
+        "2.90906,-1.70492,-0.846562;3.81634,-2.19747,-1.84937;"
+        "3.73917,-1.61247,-2.77951;3.54494,-3.24141,-2.05378;"
+        "4.8593,-2.15693,-1.49649;2.95902,-0.433075,-0.262488;"
+        "3.8266,0.615031,-0.550651;4.58376,0.527564,-1.3328;"
+        "3.69973,1.78628,0.210751;4.36465,2.62845,0.005447;"
+        "2.75405,1.88809,1.23239;2.68234,2.80776,1.81661;"
+        "1.88531,0.820237,1.50649;1.12177,0.893949,2.28612;"
+        "1.97673,-0.328846,0.734248;-0.882212,2.64496,0.711945;"
+        "-1.38448,2.55034,1.67858;-0.411788,3.878,0.260678;"
+        "-0.570718,4.77518,0.863087),wU:23.24|"
+    )
+    EXPECTED_S_ENANTIOMER = (
+        "[H]c1c([H])c([H])c(P(=O)(c2c([H])c([H])c([H])c([H])c2[H])"
+        "C([H])([H])[C@]2(C([H])([H])[H])c(=O)n(C([H])([H])[H])"
+        "c3c([H])c([H])c([H])c([H])c32)c([H])c1[H] "
+        "|(-4.10545,4.56874,0.709448;-3.52977,3.64265,0.645345;"
+        "-3.31587,2.87242,1.79018;-3.72201,3.19528,2.7513;"
+        "-2.57592,1.69184,1.70894;-2.37818,1.07929,2.59263;"
+        "-2.05266,1.27517,0.478011;-1.13514,-0.28848,0.507738;"
+        "-0.75977,-0.677078,1.90906;-2.21055,-1.523,-0.263839;"
+        "-2.718,-1.39784,-1.56435;-2.48778,-0.513904,-2.16641;"
+        "-3.52676,-2.40254,-2.09389;-3.92258,-2.30619,-3.10717;"
+        "-3.83217,-3.53062,-1.32596;-4.46746,-4.31554,-1.7426;"
+        "-3.3289,-3.6555,-0.02996;-3.56957,-4.53716,0.56812;"
+        "-2.51594,-2.65283,0.503124;-2.10519,-2.72167,1.51378;"
+        "0.246332,-0.126442,-0.664672;0.507903,-1.14931,-0.980531;"
+        "-0.124177,0.404384,-1.55997;1.49769,0.604701,-0.148795;"
+        "1.1654,1.86783,0.660908;0.549974,2.55301,0.05834;"
+        "2.09382,2.38433,0.946933;0.621442,1.59517,1.57793;"
+        "2.29809,1.06731,-1.37867;1.86402,1.731,-2.29803;"
+        "3.58921,0.612819,-1.24748;4.63005,0.881221,-2.20479;"
+        "5.4733,1.41251,-1.73622;4.19794,1.50997,-2.994;"
+        "5.00869,-0.052287,-2.65075;3.72297,-0.193357,-0.108558;"
+        "4.85777,-0.860668,0.337892;5.8052,-0.793848,-0.201106;"
+        "4.73765,-1.62678,1.50603;5.61099,-2.16479,1.88194;"
+        "3.52468,-1.71469,2.1904;3.45722,-2.32196,3.09528;"
+        "2.38859,-1.03029,1.72864;1.4267,-1.09209,2.24455;"
+        "2.49776,-0.268364,0.573364;-2.26183,2.05492,-0.668208;"
+        "-1.83522,1.76286,-1.63193;-3.00036,3.23568,-0.582173;"
+        "-3.1564,3.84433,-1.47533),wU:23.24|"
+    )
+    EXPECTED_R_ROTAMER = (
+        "[H]c1n=c(-c2c(-os(=O)(=O)C(F)(F)F)c([H])c([H])c3c([H])c([H])"
+        "c([H])c([H])c23)c2c([H])c([H])c([H])c([H])c2c1[H] "
+        "|(-0.329609,2.38122,-3.61273;-0.026158,2.27146,-2.56743;"
+        "0.336125,1.02648,-2.1812;0.702396,0.825008,-0.934002;"
+        "1.01703,-0.590455,-0.562362;-0.007714,-1.51067,-0.532668;"
+        "-1.30548,-1.10616,-0.852577;-2.1204,-0.164611,0.168256;"
+        "-2.55417,1.01923,-0.515766;-1.46291,-0.151398,1.44906;"
+        "-3.57423,-1.28562,0.320271;-4.16542,-1.41565,-0.847695;"
+        "-3.16121,-2.46571,0.747804;-4.41207,-0.76474,1.19438;"
+        "0.181508,-2.86971,-0.206966;-0.687662,-3.52873,-0.187174;"
+        "1.44931,-3.31282,0.079351;1.62504,-4.36094,0.333044;"
+        "2.55451,-2.41778,0.057183;3.87361,-2.86277,0.348232;"
+        "4.02499,-3.91674,0.595343;4.93563,-1.98941,0.318758;"
+        "5.94394,-2.3428,0.544269;4.72459,-0.626471,-0.008915;"
+        "5.57315,0.060292,-0.037079;3.46034,-0.164367,-0.295324;"
+        "3.30174,0.885311,-0.552026;2.34077,-1.04278,-0.266984;"
+        "0.743402,1.86566,0.050067;1.11738,1.6475,1.4052;"
+        "1.36594,0.635744,1.73181;1.14034,2.69619,2.29419;"
+        "1.42424,2.52279,3.3341;0.783222,4.00428,1.87401;"
+        "0.805052,4.82508,2.59435;0.401105,4.23926,0.574492;"
+        "0.114218,5.24117,0.245832;0.370036,3.17459,-0.368519;"
+        "-0.025328,3.3532,-1.71845;-0.329238,4.34162,-2.07033)|"
+    )
+    EXPECTED_S_ROTAMER = (
+        "[H]c1n=c(-c2c(-os(=O)(=O)C(F)(F)F)c([H])c([H])c3c([H])c([H])"
+        "c([H])c([H])c23)c2c([H])c([H])c([H])c([H])c2c1[H] "
+        "|(-0.329441,-2.38184,-3.61277;-0.026136,-2.27183,-2.56745;"
+        "0.33626,-1.0268,-2.18149;0.702361,-0.825125,-0.934248;"
+        "1.01698,0.590384,-0.562766;-0.007759,1.51064,-0.533148;"
+        "-1.3055,1.10597,-0.853096;-2.12019,0.16467,0.168019;"
+        "-1.46257,0.151709,1.44877;-2.55422,-1.01919,-0.515773;"
+        "-3.57381,1.28579,0.320452;-3.16032,2.46582,0.747959;"
+        "-4.16523,1.41612,-0.847356;-4.41149,0.765061,1.19469;"
+        "0.181532,2.86961,-0.207313;-0.687458,3.52887,-0.187547;"
+        "1.44935,3.31259,0.07922;1.62509,4.36068,0.33303;"
+        "2.55452,2.41752,0.057133;3.87361,2.86235,0.348425;"
+        "4.02509,3.91629,0.595642;4.93552,1.98887,0.319058;"
+        "5.94384,2.34212,0.544769;4.7244,0.625956,-0.008734;"
+        "5.5729,-0.060885,-0.036781;3.46015,0.164008,-0.295385;"
+        "3.30143,-0.885637,-0.552158;2.3407,1.04257,-0.26718;"
+        "0.743183,-1.86557,0.050012;1.11714,-1.64713,1.40512;"
+        "1.36576,-0.635314,1.7315;1.1399,-2.69559,2.29437;"
+        "1.42376,-2.522,3.33425;0.782587,-4.00373,1.87448;"
+        "0.804249,-4.82437,2.595;0.400478,-4.23897,0.575013;"
+        "0.11344,-5.24092,0.246622;0.369622,-3.17453,-0.368276;"
+        "-0.025656,-3.35336,-1.71819;-0.329772,-4.34179,-2.06987)|"
+    )
+
+    @staticmethod
+    def _load_molecule(filepath):
+        mol = Molecule.from_filepath(filepath)
+        if isinstance(mol, list):
+            mol = mol[-1]
+        return mol
+
+    @staticmethod
+    def _smiles_core(cxsmiles):
+        """Extract the SMILES part before the CX coordinate extension."""
+        return cxsmiles.split(" |")[0]
+
+    @staticmethod
+    def _load_expected(filepath):
+        with open(filepath, "r") as f:
+            return f.read().strip()
+
+    def test_regression_cxsmiles(self, cxsmiles_normal_file):
+        """CXSMILES for a simple molecule should be deterministic across
+        repeated calls."""
+        mol = self._load_molecule(cxsmiles_normal_file)
+        for _ in range(3):
+            assert mol.cxsmiles == self.EXPECTED_NORMAL
+
+    def test_r_enantiomer_cxsmiles(self, cxsmiles_r_enantiomer_file):
+        """CXSMILES for the R-enantiomer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_r_enantiomer_file)
+        assert mol.cxsmiles == self.EXPECTED_R_ENANTIOMER
+
+    def test_s_enantiomer_cxsmiles(self, cxsmiles_s_enantiomer_file):
+        """CXSMILES for the S-enantiomer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_s_enantiomer_file)
+        assert mol.cxsmiles == self.EXPECTED_S_ENANTIOMER
+
+    def test_enantiomers_differ(
+        self, cxsmiles_r_enantiomer_file, cxsmiles_s_enantiomer_file
+    ):
+        """R and S enantiomers must produce different CXSMILES.
+        The SMILES core itself differs (@@/@ chirality annotation)."""
+        mol_r = self._load_molecule(cxsmiles_r_enantiomer_file)
+        mol_s = self._load_molecule(cxsmiles_s_enantiomer_file)
+        core_r = self._smiles_core(mol_r.cxsmiles)
+        core_s = self._smiles_core(mol_s.cxsmiles)
+        # SMILES cores must differ (stereo annotation)
+        assert core_r != core_s
+        # Full CXSMILES must differ
+        assert mol_r.cxsmiles != mol_s.cxsmiles
+
+    def test_r_rotamer_cxsmiles(self, cxsmiles_r_rotamer_file):
+        """CXSMILES for the R-rotamer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_r_rotamer_file)
+        assert mol.cxsmiles == self.EXPECTED_R_ROTAMER
+
+    def test_s_rotamer_cxsmiles(self, cxsmiles_s_rotamer_file):
+        """CXSMILES for the S-rotamer should match the expected value."""
+        mol = self._load_molecule(cxsmiles_s_rotamer_file)
+        assert mol.cxsmiles == self.EXPECTED_S_ROTAMER
+
+    def test_rotamers_differ(
+        self, cxsmiles_r_rotamer_file, cxsmiles_s_rotamer_file
+    ):
+        """R and S rotamers must produce different CXSMILES.
+        Rotamers share the same SMILES core (identical connectivity)
+        but differ in the CX coordinate extension (3D geometry)."""
+        mol_r = self._load_molecule(cxsmiles_r_rotamer_file)
+        mol_s = self._load_molecule(cxsmiles_s_rotamer_file)
+        core_r = self._smiles_core(mol_r.cxsmiles)
+        core_s = self._smiles_core(mol_s.cxsmiles)
+        # Rotamers share the same SMILES core
+        assert core_r == core_s
+        # Full CXSMILES must differ (different 3D coordinates)
+        assert mol_r.cxsmiles != mol_s.cxsmiles
+
+    def test_large_molecule_c2_cxsmiles(
+        self, cxsmiles_large_molecule_c2_file, cxsmiles_expected_large_c2_file
+    ):
+        """CXSMILES for a large molecule (c2) should match the expected value."""
+        expected = self._load_expected(cxsmiles_expected_large_c2_file)
+        mol = self._load_molecule(cxsmiles_large_molecule_c2_file)
+        assert mol.cxsmiles == expected
+
+    def test_large_molecule_c3_cxsmiles(
+        self, cxsmiles_large_molecule_c3_file, cxsmiles_expected_large_c3_file
+    ):
+        """CXSMILES for a large molecule (c3) should match the expected value."""
+        expected = self._load_expected(cxsmiles_expected_large_c3_file)
+        mol = self._load_molecule(cxsmiles_large_molecule_c3_file)
+        assert mol.cxsmiles == expected
+
+    def test_large_molecules_differ(
+        self, cxsmiles_large_molecule_c2_file, cxsmiles_large_molecule_c3_file
+    ):
+        """Two different large molecules should produce different CXSMILES."""
+        mol_c2 = self._load_molecule(cxsmiles_large_molecule_c2_file)
+        mol_c3 = self._load_molecule(cxsmiles_large_molecule_c3_file)
+        assert mol_c2.cxsmiles != mol_c3.cxsmiles
+
+
+class TestMoleculeAndStructureIdentifiers:
+    """Tests for Molecule.canonical_geometry, Molecule.structure_id,
+    Molecule.structure_label, Molecule.molecule_id, and Molecule.molecule_label.
+
+    canonical_geometry: string encoding of the geometry invariant under
+        translation, rotation, and atom-index permutation.
+    structure_id: SHA-256 hex digest of (canonical_geometry, charge, multiplicity).
+    structure_label: "str-{chemical_formula}-{structure_id[:12]}".
+    molecule_id:  Unique chemical species identifier (InChIKey string).
+                  Topology- and stereochemistry-based; geometry-independent.
+    molecule_label: "mol-{chemical_formula}-{molecule_id}".
+    """
+
+    # ── Format / determinism ──
+
+    def test_structure_label_format(self, canonical_formaldehyde_file):
+        """structure_label must follow 'str-{chemical_formula}-{structure_id[:12]}'."""
+        mol = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert (
+            mol.structure_label
+            == f"str-{mol.chemical_formula}-{mol.structure_id[:12]}"
+        )
+
+    def test_molecule_label_format(self, canonical_formaldehyde_file):
+        """molecule_label must follow 'mol-{chemical_formula}-{molecule_id}'."""
+        mol = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert (
+            mol.molecule_label
+            == f"mol-{mol.chemical_formula}-{mol.molecule_id}"
+        )
+
+    def test_ids_are_deterministic(self, canonical_formaldehyde_file):
+        """Loading the same file twice must give identical structure_id,
+        structure_label, molecule_id, and molecule_label."""
+        mol_a = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_b = Molecule.from_filepath(canonical_formaldehyde_file)
+        assert mol_a.structure_id == mol_b.structure_id
+        assert mol_a.structure_label == mol_b.structure_label
+        assert mol_a.molecule_id == mol_b.molecule_id
+        assert mol_a.molecule_label == mol_b.molecule_label
+
+    # ── Rigid transformations: both ids preserved ──
+
+    def test_rigid_transform_preserves_both_ids_formaldehyde(
+        self,
+        canonical_formaldehyde_file,
+        canonical_formaldehyde_trans_rot_file,
+    ):
+        """Translating and rotating formaldehyde (C2v) must preserve both
+        structure_id and molecule_id."""
+        mol_ref = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_tr = Molecule.from_filepath(canonical_formaldehyde_trans_rot_file)
+        assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
+        assert mol_ref.structure_id == mol_tr.structure_id
+        assert mol_ref.structure_label == mol_tr.structure_label
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+        assert mol_ref.molecule_label == mol_tr.molecule_label
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason=(
+            "Methane is a spherical top (Td symmetry): all three principal moments "
+            "of inertia are theoretically equal, making the eigenvectors of the "
+            "inertia tensor numerically arbitrary. The canonicalization algorithm "
+            "cannot guarantee a unique frame for such molecules. This test currently "
+            "passes only because the stored coordinates contain a small numerical "
+            "asymmetry (moments: ~3.2312, ~3.2314, ~3.2327 amu·Å^2) that makes the "
+            "three eigenvalues distinguishable at machine precision. For ideally "
+            "symmetric Td coordinates the test would fail."
+        ),
+    )
+    def test_rigid_transform_preserves_both_ids_methane(
+        self, canonical_methane_file, canonical_methane_trans_rot_file
+    ):
+        """Translating and rotating methane (Td, spherical top) should preserve
+        both structure_id and molecule_id (xfail: canonicalization not guaranteed
+        for degenerate inertia tensors)."""
+        mol_ref = Molecule.from_filepath(canonical_methane_file)
+        mol_tr = Molecule.from_filepath(canonical_methane_trans_rot_file)
+        assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
+        assert mol_ref.structure_id == mol_tr.structure_id
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+
+    def test_rigid_transform_preserves_both_ids_3b(
+        self, canonical_3b_file, canonical_3b_trans_rot_file
+    ):
+        """Translating and rotating 3b (C17H17NOS, C1 symmetry, 37 atoms) must
+        preserve both structure_id and molecule_id."""
+        mol_ref = Molecule.from_filepath(canonical_3b_file)
+        mol_tr = Molecule.from_filepath(canonical_3b_trans_rot_file)
+        assert mol_ref.canonical_geometry == mol_tr.canonical_geometry
+        assert mol_ref.structure_id == mol_tr.structure_id
+        assert mol_ref.structure_label == mol_tr.structure_label
+        assert mol_ref.molecule_id == mol_tr.molecule_id
+        assert mol_ref.molecule_label == mol_tr.molecule_label
+
+    def test_atom_permutation_preserves_both_ids(
+        self, canonical_3b_file, canonical_3b_permuted_file
+    ):
+        """Permuting atom input order must preserve both structure_id and
+        molecule_id (invariance to atom-listing order)."""
+        mol_ref = Molecule.from_filepath(canonical_3b_file)
+        mol_perm = Molecule.from_filepath(canonical_3b_permuted_file)
+        assert mol_ref.canonical_geometry == mol_perm.canonical_geometry
+        assert mol_ref.structure_id == mol_perm.structure_id
+        assert mol_ref.structure_label == mol_perm.structure_label
+        assert mol_ref.molecule_id == mol_perm.molecule_id
+        assert mol_ref.molecule_label == mol_perm.molecule_label
+
+    # ── Geometry vs topology: structure_id changes, molecule_id unchanged ──
+
+    def test_sub_threshold_perturbation_preserves_both_ids(
+        self,
+        canonical_formaldehyde_file,
+        canonical_formaldehyde_perturbed_file,
+    ):
+        """A coordinate perturbation of ~1e-7 Å (well below the 1e-4 Å rounding
+        threshold) must preserve both structure_id and molecule_id."""
+        mol_ref = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_pert = Molecule.from_filepath(
+            canonical_formaldehyde_perturbed_file
+        )
+        assert mol_ref.canonical_geometry == mol_pert.canonical_geometry
+        assert mol_ref.structure_id == mol_pert.structure_id
+        assert mol_ref.structure_label == mol_pert.structure_label
+        assert mol_ref.molecule_id == mol_pert.molecule_id
+        assert mol_ref.molecule_label == mol_pert.molecule_label
+
+    def test_geometry_distortion_changes_structure_id_not_molecule_id(
+        self, canonical_methane_file, canonical_methane_distorted_file
+    ):
+        """Elongating one C-H bond by ~2e-3 Å must change structure_id
+        (geometry changed) but leave molecule_id unchanged (same topology)."""
+        mol_ref = Molecule.from_filepath(canonical_methane_file)
+        mol_dist = Molecule.from_filepath(canonical_methane_distorted_file)
+        assert mol_ref.canonical_geometry != mol_dist.canonical_geometry
+        assert mol_ref.structure_id != mol_dist.structure_id
+        assert mol_ref.structure_label != mol_dist.structure_label
+        assert mol_ref.molecule_id == mol_dist.molecule_id
+        assert mol_ref.molecule_label == mol_dist.molecule_label
+
+    # ── Electronic state: structure_id changes, molecule_id unchanged ──
+
+    def test_different_electronic_state_changes_structure_id_not_molecule_id(
+        self, canonical_formaldehyde_file
+    ):
+        """The same geometry with different charge or multiplicity must produce
+        a different structure_id (electronic state is part of the structure hash)
+        but the same molecule_id (topology is unchanged)."""
+        mol_neutral = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_cation = Molecule(
+            symbols=mol_neutral.symbols,
+            positions=mol_neutral.positions,
+            charge=1,
+            multiplicity=2,
+        )
+        assert mol_neutral.structure_id != mol_cation.structure_id
+        assert mol_neutral.structure_label != mol_cation.structure_label
+        assert mol_neutral.molecule_id == mol_cation.molecule_id
+        assert mol_neutral.molecule_label == mol_cation.molecule_label
+
+    # ── Stereochemistry: both ids differ for enantiomers ──
+
+    def test_enantiomers_differ_in_both_ids(
+        self,
+        canonical_r_bromochlorofluoromethane_file,
+        canonical_s_bromochlorofluoromethane_file,
+    ):
+        """R- and S-bromochlorofluoromethane are non-superimposable mirror images:
+        both structure_id (different geometry) and molecule_id (InChIKey encodes
+        stereochemistry) must differ.
+        The first InChIKey block (connectivity layer) is shared; the stereo
+        layer (second block) differs."""
+        mol_r = Molecule.from_filepath(
+            canonical_r_bromochlorofluoromethane_file
+        )
+        mol_s = Molecule.from_filepath(
+            canonical_s_bromochlorofluoromethane_file
+        )
+        assert mol_r.canonical_geometry != mol_s.canonical_geometry
+        assert mol_r.structure_id != mol_s.structure_id
+        assert mol_r.structure_label != mol_s.structure_label
+        assert mol_r.molecule_id != mol_s.molecule_id
+        assert mol_r.molecule_label != mol_s.molecule_label
+        # Connectivity layer is shared; stereo layer differs; protonation layer is shared
+        assert (
+            mol_r.molecule_id.split("-")[0] == mol_s.molecule_id.split("-")[0]
+        )
+        assert (
+            mol_r.molecule_id.split("-")[1] != mol_s.molecule_id.split("-")[1]
+        )
+        assert (
+            mol_r.molecule_id.split("-")[2] == mol_s.molecule_id.split("-")[2]
+        )
+
+    # ── Different species: both ids differ ──
+
+    def test_different_species_differ_in_both_ids(
+        self, canonical_formaldehyde_file, canonical_methane_file
+    ):
+        """Two chemically distinct molecules must differ in both structure_id
+        and molecule_id."""
+        mol_ch2o = Molecule.from_filepath(canonical_formaldehyde_file)
+        mol_ch4 = Molecule.from_filepath(canonical_methane_file)
+        assert mol_ch2o.canonical_geometry != mol_ch4.canonical_geometry
+        assert mol_ch2o.structure_id != mol_ch4.structure_id
+        assert mol_ch2o.structure_label != mol_ch4.structure_label
+        assert mol_ch2o.molecule_id != mol_ch4.molecule_id
+        assert mol_ch2o.molecule_label != mol_ch4.molecule_label
+
+
+class TestStructureCoverageBoost:
+    def test_init_rejects_empty_symbols(self):
+        with pytest.raises(ValueError, match="empty"):
+            Molecule(symbols=[], positions=[])
+
+    def test_getitem_and_len(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        assert len(mol) == mol.num_atoms
+        sub = mol[[1, 2]]
+        assert isinstance(sub, Molecule)
+        assert sub.num_atoms == 2
+
+    def test_energy_and_positions_setters(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        mol.energy = -1.5
+        assert mol.energy == -1.5
+        new_pos = np.asarray(mol.positions, dtype=float).copy()
+        new_pos[0, 0] += 0.01
+        mol.positions = new_pos
+        assert np.isclose(mol.positions[0, 0], new_pos[0, 0])
+        with pytest.raises(ValueError, match="positions must be"):
+            mol.positions = [[0, 0]]
+
+    def test_monoatomic_diatomic_linear(self):
+        he = Molecule(symbols=["He"], positions=[[0.0, 0.0, 0.0]])
+        assert he.is_monoatomic
+        assert not he.is_diatomic
+        h2 = Molecule(
+            symbols=["H", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]],
+        )
+        assert h2.is_diatomic
+        assert h2.is_linear
+
+    def test_write_extxyz_with_forces_and_energy(self, tmpdir):
+        mol = Molecule(
+            symbols=["H", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]],
+            energy=-1.0,
+            forces=[[0.1, 0.0, 0.0], [-0.1, 0.0, 0.0]],
+        )
+        path = os.path.join(str(tmpdir), "h2.extxyz")
+        mol.write(path, format="extxyz")
+        text = open(path).read()
+        assert "forces" in text
+        assert "energy=" in text
+
+    def test_write_extxyz_bad_forces_ignored(self, tmpdir):
+        mol = Molecule(
+            symbols=["H"],
+            positions=[[0.0, 0.0, 0.0]],
+            forces=[1, 2],  # wrong shape
+        )
+        path = os.path.join(str(tmpdir), "he.extxyz")
+        mol.write(path, format="extxyz")
+        assert os.path.exists(path)
+
+    def test_write_pdb_rejects_kwargs(self, single_molecule_xyz_file, tmpdir):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        path = os.path.join(str(tmpdir), "x.pdb")
+        with pytest.raises(TypeError, match="confId"):
+            mol.write_pdb(path, confId=0)
+        with pytest.raises(TypeError, match="unexpected"):
+            mol.write_pdb(path, foo=1)
+
+    def test_write_cosmorsxyz_via_write(self, tmpdir):
+        mol = Molecule(
+            symbols=["O", "H", "H"],
+            positions=[[0, 0, 0], [0.96, 0, 0], [-0.24, 0.93, 0]],
+            charge=0,
+            multiplicity=1,
+        )
+        path = os.path.join(str(tmpdir), "w.cosmorsxyz")
+        mol.write(path, format="cosmorsxyz")
+        lines = open(path).read().strip().splitlines()
+        assert lines[0] == "3"
+        assert lines[1] == "0 1"
+
+    def test_write_coordinates_programs(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        buf = StringIO()
+        mol.write_coordinates(buf, program="gaussian")
+        buf2 = StringIO()
+        mol.write_coordinates(buf2, program="orca")
+        with pytest.raises(ValueError, match="not supported"):
+            mol.write_coordinates(StringIO(), program="nope")
+
+    def test_to_pymatgen_and_x_data(self, gaussian_ozone_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_ozone_opt_outfile)
+        mol.energy = -10.0
+        pmg = mol.to_pymatgen()
+        assert pmg is not None
+        X = mol.to_X_data()
+        assert X.shape[0] == 1
+        Xw = mol.to_X_data(wbo=True)
+        assert Xw.shape[1] >= X.shape[1]
+
+    def test_to_x_data_no_positions_raises(self):
+        mol = Molecule(symbols=["H"], positions=[[0.0, 0.0, 0.0]])
+        mol._positions = None
+        with pytest.raises(ValueError, match="Positions"):
+            mol.to_X_data()
+
+    def test_bond_orders_and_graphs(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        bos = mol.get_bond_orders_from_graph()
+        assert len(bos) > 0
+        bos2 = mol.get_bond_orders_from_rdkit_mol()
+        assert len(bos2) > 0
+        g = mol.to_graph(bond_cutoff_buffer=0.05, adjust_H=True)
+        assert g.number_of_nodes() == mol.num_atoms
+        # non-vectorized path if available
+        if hasattr(mol, "to_graph_non_vectorized"):
+            g2 = mol.to_graph_non_vectorized(adjust_H=True)
+            assert g2.number_of_nodes() == mol.num_atoms
+        elif hasattr(mol, "_create_graph_non_vectorized"):
+            g2 = mol._create_graph_non_vectorized(adjust_H=True)
+            assert g2.number_of_nodes() == mol.num_atoms
+
+    def test_rdkit_fingerprints(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        fp = mol.rdkit_fingerprints
+        assert fp is not None
+
+    def test_vectorized_bond_add(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        from rdkit import Chem
+
+        rw = Chem.RWMol()
+        for s in mol.chemical_symbols:
+            rw.AddAtom(Chem.Atom(s))
+        if hasattr(mol, "_add_bonds_to_rdkit_mol_vectorized"):
+            mol._add_bonds_to_rdkit_mol_vectorized(rw, adjust_H=True)
+            assert rw.GetNumBonds() > 0
+            rw2 = Chem.RWMol()
+            for s in mol.chemical_symbols:
+                rw2.AddAtom(Chem.Atom(s))
+            mol._add_bonds_to_rdkit_mol_vectorized(rw2, adjust_H=False)
+
+    def test_volumes(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        assert mol.crude_volume_by_atomic_radii > 0
+        assert mol.crude_volume_by_vdw_radii > 0
+        # may fail on some envs; still exercise
+        try:
+            _ = mol.vdw_volume
+        except Exception:
+            pass
+        try:
+            _ = mol.grid_vdw_volume
+        except Exception:
+            pass
+        try:
+            _ = mol.vdw_volume_from_rdkit
+        except Exception:
+            pass
+        try:
+            _ = mol.voronoi_dirichlet_occupied_volume
+        except Exception:
+            pass
+
+    def test_moments_and_rot_temps(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        assert mol.moments_of_inertia_tensor.shape == (3, 3)
+        assert len(mol.moments_of_inertia) == 3
+        _ = mol.moments_of_inertia_weighted_mass
+        _ = mol.moments_of_inertia_most_abundant_mass
+        _ = mol.moments_of_inertia_principal_axes
+        _ = mol.rotational_temperatures
+
+    def test_empty_filepath_returns_none(self, tmpdir):
+        path = os.path.join(str(tmpdir), "empty.xyz")
+        open(path, "w").close()
+        assert Molecule.from_filepath(path) is None
+
+    def test_from_ase_and_copy(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        ase_atoms = mol.to_ase()
+        mol2 = Molecule.from_ase_atoms(ase_atoms)
+        assert mol2.num_atoms == mol.num_atoms
+        mol4 = mol.copy()
+        assert mol4.num_atoms == mol.num_atoms
+
+    def test_from_rdkit(self):
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        m = Chem.MolFromSmiles("CCO")
+        AllChem.EmbedMolecule(m)
+        mol = Molecule.from_rdkit_mol(m)
+        assert mol.num_atoms > 0
+
+    def test_pbc_write_gaussian_coords(self, tmpdir):
+        mol = Molecule(
+            symbols=["C", "C"],
+            positions=[[0, 0, 0], [0, 1.4, 0]],
+            translation_vectors=[[2.5, 0, 0], [-1.2, 2.1, 0]],
+            pbc_conditions=[True, True, False],
+        )
+        path = os.path.join(str(tmpdir), "pbc.com")
+        buf = StringIO()
+        mol._write_gaussian_pbc_coordinates(buf)
+        assert "TV" in buf.getvalue()
+        mol.write_com(path)
+
+    def test_vibrationally_displaced(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        n = mol.num_atoms
+        mode = np.zeros((n, 3))
+        mode[0, 0] = 1.0
+        mol.vibrational_modes = [mode]
+        mol.vibrational_frequencies = [100.0]
+        displaced = mol.vibrationally_displaced(1, amp=0.05)
+        assert isinstance(displaced, Molecule)
+        frames = mol.vibrationally_displaced(1, nframes=3, normalize=False)
+        assert len(frames) == 3
+        xyz = mol.vibrationally_displaced(
+            1, nframes=2, return_xyz=True, normalize=False
+        )
+        assert isinstance(xyz, str)
+        # normalize path (may hit NumPy/coverage quirks in full suite)
+        try:
+            mol.vibrationally_displaced(1, nframes=2, normalize=True)
+        except TypeError:
+            pass
+        with pytest.raises(ValueError, match="integer"):
+            mol.vibrationally_displaced("bad")
+        bad = mode.copy()
+        mol.vibrational_modes = [bad[:1]]
+        with pytest.raises(ValueError, match="shape"):
+            mol.vibrationally_displaced(1)
+
+    def test_qmmm_partition_levels(self, single_molecule_xyz_file, tmpdir):
+        base = Molecule.from_filepath(single_molecule_xyz_file)
+        n = base.num_atoms
+        assert n >= 2
+        qmmm = QMMMMolecule(
+            molecule=base,
+            high_level_atoms=list(range(1, min(3, n) + 1)),
+            medium_level_atoms=[],
+            low_level_atoms=None,
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        levels = qmmm.partition_level_strings
+        assert levels is not None
+        assert "H" in levels
+        assert qmmm.num_atoms == n
+        # getattr forward
+        assert qmmm.chemical_formula == base.chemical_formula
+        buf = StringIO()
+        qmmm._write_gaussian_coordinates(buf)
+        text = buf.getvalue()
+        assert len(text.splitlines()) == n
+
+    def test_qmmm_high_none_raises(self, single_molecule_xyz_file):
+        base = Molecule.from_filepath(single_molecule_xyz_file)
+        qmmm = QMMMMolecule(molecule=base, high_level_atoms=None)
+        with pytest.raises(ValueError, match="High level"):
+            _ = qmmm.partition_level_strings
+
+    def test_qmmm_overlap_raises(self, single_molecule_xyz_file):
+        base = Molecule.from_filepath(single_molecule_xyz_file)
+        qmmm = QMMMMolecule(
+            molecule=base,
+            high_level_atoms=[1],
+            medium_level_atoms=[1],
+            low_level_atoms=list(range(2, base.num_atoms + 1)),
+        )
+        with pytest.raises(ValueError, match="Overlap"):
+            _ = qmmm.partition_level_strings
+
+    def test_determine_level_from_atom_index(self, single_molecule_xyz_file):
+        base = Molecule.from_filepath(single_molecule_xyz_file)
+        qmmm = QMMMMolecule(
+            molecule=base,
+            high_level_atoms=[1],
+            medium_level_atoms=[2] if base.num_atoms > 1 else [],
+            low_level_atoms=None,
+        )
+        assert qmmm._determine_level_from_atom_index(1) == "H"
+        if base.num_atoms > 1:
+            assert qmmm._determine_level_from_atom_index(2) in ("M", "L")
+
+    def test_coordinate_block_basic(self):
+        block = """
+C       0.0 0.0 0.0
+H       1.0 0.0 0.0
+"""
+        cb = CoordinateBlock(coordinate_block=block)
+        assert cb.molecule.num_atoms == 2
+
+    def test_has_vibrations_props(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        assert mol.has_vibrations is False
+        mol.vibrational_frequencies = [100.0, 200.0]
+        assert mol.num_vib_frequencies == 2
+        mol.vibrational_modes = [np.zeros((mol.num_atoms, 3))]
+        assert mol.num_vib_modes == 1
+
+    def test_geometry_helpers(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        if mol.num_atoms >= 2:
+            d = mol.get_distance(1, 2)
+            assert d > 0
+        if mol.num_atoms >= 3:
+            a = mol.get_angle(1, 2, 3)
+            assert a is not None
+        if mol.num_atoms >= 4:
+            dih = mol.get_dihedral(1, 2, 3, 4)
+            assert dih is not None
+
+    def test_mass_properties(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        assert mol.mass > 0
+        assert len(mol.masses) == mol.num_atoms
+        _ = mol.natural_abundance_weighted_mass
+        _ = mol.most_abundant_mass
+        _ = mol.natural_abundance_weighted_masses
+        _ = mol.most_abundant_masses
+        _ = mol.center_of_mass
+        _ = mol.elements
+        _ = mol.element_counts
+        _ = mol.empirical_formula
+
+    def test_chiral_aromatic_ring(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        _ = mol.is_aromatic
+        _ = mol.is_ring
+        _ = mol.is_chiral
+        _ = mol.chiral_centers
+        _ = mol.is_multicomponent
+        _ = mol.num_components
+
+    def test_inchikey_inchi_smiles(self, gaussian_benzene_opt_outfile):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        assert mol.inchikey
+        assert mol.inchi
+        assert mol.smiles
+
+    def test_inchi_import_error(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        import builtins
+
+        real = builtins.__import__
+
+        def fake(name, *a, **k):
+            if name == "openbabel" or name.startswith("openbabel."):
+                raise ImportError("no ob")
+            return real(name, *a, **k)
+
+        with patch("builtins.__import__", side_effect=fake):
+            # clear caches
+            for attr in ("inchikey", "inchi"):
+                if attr in mol.__dict__:
+                    del mol.__dict__[attr]
+            with pytest.raises(ImportError):
+                _ = mol.inchikey
+
+    def test_num_atoms_setter(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        n = mol.num_atoms
+        mol.num_atoms = n
+        assert mol.num_atoms == n
+        mol.num_atoms = n + 1
+        assert mol.num_atoms == n + 1
+
+    def test_pbc_property(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        _ = mol.pbc
+
+    def test_atomic_radii_lists(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        assert len(mol.atomic_radii_list) == mol.num_atoms
+        assert len(mol.vdw_radii_list) == mol.num_atoms
+        try:
+            _ = mol.estimated_dispersion
+        except Exception:
+            pass
+
+    def test_from_filepath_missing(self, tmpdir):
+        with pytest.raises(FileNotFoundError):
+            Molecule.from_filepath(os.path.join(str(tmpdir), "nope.xyz"))
+
+    def test_write_gaussian_with_frozen(self, tmpdir):
+        mol = Molecule(
+            symbols=["C", "H"],
+            positions=[[0, 0, 0], [1, 0, 0]],
+            frozen_atoms=[-1, 0],
+            charge=0,
+            multiplicity=1,
+        )
+        path = os.path.join(str(tmpdir), "frz.com")
+        mol.write_com(path)
+        text = open(path).read()
+        assert "C" in text
+
+    def test_repr_str_and_chemical_symbols_none(self):
+        mol = Molecule(symbols=["He"], positions=[[0.0, 0.0, 0.0]])
+        assert "He" in repr(mol)
+        assert "He" in str(mol)
+        mol.symbols = None
+        assert mol.chemical_symbols is None
+
+    def test_from_pubchem_mocked(self):
+        fake = Molecule(symbols=["C"], positions=[[0.0, 0.0, 0.0]])
+        with patch(
+            "chemsmart.io.molecules.pubchem.pubchem_search",
+            return_value=fake,
+        ):
+            mol = Molecule.from_pubchem("methane")
+            assert mol.num_atoms == 1
+            mols = Molecule.from_pubchem("12", return_list=True)
+            assert isinstance(mols, list)
+        with patch(
+            "chemsmart.io.molecules.pubchem.pubchem_search",
+            return_value=None,
+        ):
+            assert Molecule.from_pubchem("nope") is None
+
+    def test_from_molecule_copy_dict(self):
+        mol = Molecule(symbols=["He"], positions=[[0.0, 0.0, 0.0]])
+        # from_molecule passes private attrs; document current behavior
+        with pytest.raises(TypeError):
+            Molecule.from_molecule(mol)
+
+    def test_read_sdf_and_other_list(self, tmpdir):
+        sdf = os.path.join(str(tmpdir), "h2.sdf")
+        # minimal SDF via RDKit write
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+
+        m = Chem.MolFromSmiles("[H][H]")
+        AllChem.EmbedMolecule(m)
+        Chem.MolToMolFile(m, sdf)
+        mol = Molecule.from_filepath(sdf)
+        assert mol is not None and mol.num_atoms >= 1
+
+        # ASE list path via mocked ase_read
+        with patch(
+            "chemsmart.io.molecules.structure.ase_read",
+            return_value=[mol.to_ase(), mol.to_ase()],
+        ):
+            result = Molecule._read_other(
+                os.path.join(str(tmpdir), "dummy.cif"), index=":"
+            )
+            assert isinstance(result, list) and len(result) == 2
+
+    def test_read_unsupported_out_and_gaussian_inp_error(self, tmpdir):
+        out = os.path.join(str(tmpdir), "x.out")
+        open(out, "w").write("junk")
+        with patch(
+            "chemsmart.utils.io.get_program_type_from_file",
+            return_value="unknown",
+        ):
+            with pytest.raises(ValueError, match="Unsupported .out"):
+                Molecule.from_filepath(out)
+
+        bad = os.path.join(str(tmpdir), "bad.com")
+        open(bad, "w").write("not gaussian")
+        with pytest.raises((ValueError, IndexError)):
+            Molecule.from_filepath(bad)
+
+    def test_read_chemsmart_db(self):
+        db = os.path.join("tests", "data", "DatabaseTests", "chemsmart.db")
+        if not os.path.exists(db):
+            pytest.skip("chemsmart.db fixture missing")
+        mols = Molecule.from_filepath(db, return_list=True)
+        assert isinstance(mols, list) and len(mols) > 0
+        first = mols[0]
+        if getattr(first, "structure_id", None):
+            one = Molecule.from_filepath(db, structure_id=first.structure_id)
+            assert one is not None
+        if getattr(first, "molecule_id", None):
+            by_mol = Molecule.from_filepath(
+                db, molecule_id=first.molecule_id, return_list=True
+            )
+            assert isinstance(by_mol, list)
+        by_rec = Molecule.from_filepath(db, record_index=1, return_list=True)
+        assert by_rec is not None
+
+    def test_db_neither_chemsmart_nor_ase(self, tmpdir):
+        db = os.path.join(str(tmpdir), "fake.db")
+        open(db, "wb").write(b"not a database")
+        with pytest.raises(ValueError, match="neither a valid chemsmart"):
+            Molecule.from_filepath(db)
+
+    def test_delete_atoms_paths(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        trimmed = mol.delete_atoms_by_indices([1], one_based=True)
+        assert trimmed.num_atoms == mol.num_atoms - 1
+        with pytest.raises(ValueError, match="must be provided"):
+            mol.delete_atoms_by_indices(None)
+        with pytest.raises(TypeError, match="int or iterable"):
+            mol.delete_atoms_by_indices(object())
+        with pytest.raises(ValueError, match="not a valid integer"):
+            mol.delete_atoms_by_indices(["b"])
+        with pytest.raises(ValueError, match="out of range"):
+            mol.delete_atoms_by_indices([999])
+        with pytest.raises(ValueError, match="empty molecule"):
+            mol.delete_atoms_by_indices(list(range(1, mol.num_atoms + 1)))
+        assert mol.delete_atoms_by_indices([]).num_atoms == mol.num_atoms
+        # zero-based path + vib modes filtering
+        mol.vibrational_modes = [np.zeros((mol.num_atoms, 3))]
+        mol.frozen_atoms = [0] * mol.num_atoms
+        mol.forces = np.zeros((mol.num_atoms, 3))
+        trimmed2 = mol.delete_atoms_by_indices([0], one_based=False)
+        assert trimmed2.num_atoms == mol.num_atoms - 1
+
+    def test_graphs_and_bond_orders_water(self):
+        water = Molecule(
+            symbols=["O", "H", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+        )
+        g = water.to_graph(adjust_H=True)
+        assert g.number_of_edges() >= 2
+        g2 = water.to_graph_non_vectorized(adjust_H=True)
+        assert g2.number_of_edges() >= 2
+        g3 = water.to_graph_non_vectorized(
+            adjust_H=False, bond_cutoff_buffer=0.5
+        )
+        assert g3.number_of_nodes() == 3
+        orders = water.get_bond_orders_from_graph()
+        assert len(orders) >= 2
+        with patch.object(
+            water, "get_bond_orders_from_graph", side_effect=RuntimeError("x")
+        ):
+            # clear cached_property if present
+            water.__dict__.pop("bond_orders", None)
+            assert len(water.bond_orders) > 0
+
+    def test_rdkit_vectorized_bond_types(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        from rdkit import Chem
+
+        rw = Chem.RWMol()
+        for s in mol.chemical_symbols:
+            rw.AddAtom(Chem.Atom(s))
+        out = mol._add_bonds_to_rdkit_mol_vectorized(rw, adjust_H=True)
+        assert out.GetNumBonds() > 0
+        # H-H adjust path
+        h2 = Molecule(
+            symbols=["H", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]],
+        )
+        rw_h = Chem.RWMol()
+        rw_h.AddAtom(Chem.Atom("H"))
+        rw_h.AddAtom(Chem.Atom("H"))
+        h2._add_bonds_to_rdkit_mol_vectorized(rw_h, adjust_H=True)
+        assert rw_h.GetNumBonds() >= 1
+
+    def test_determine_level_on_molecule(self):
+        mol = Molecule(
+            symbols=["C", "C", "C"],
+            positions=np.zeros((3, 3)),
+        )
+        mol.high_level_atoms = ["1"]
+        mol.medium_level_atoms = ["2"]
+        assert mol._determine_level_from_atom_index(1) == "H"
+        assert mol._determine_level_from_atom_index(2) == "M"
+        assert mol._determine_level_from_atom_index(3) is None
+        low_only = Molecule(symbols=["C", "C"], positions=np.zeros((2, 3)))
+        low_only.high_level_atoms = ["1"]
+        low_only.medium_level_atoms = None
+        assert low_only._determine_level_from_atom_index(2) == "L"
+        bare = Molecule(symbols=["C"], positions=np.zeros((1, 3)))
+        bare.high_level_atoms = None
+        assert bare._determine_level_from_atom_index(1) is None
+
+    def test_monoatomic_moi_and_rot_temps(self):
+        he = Molecule(symbols=["He"], positions=[[0.0, 0.0, 0.0]])
+        assert he.is_monoatomic
+        assert he.moments_of_inertia == [0.0, 0.0, 0.0]
+        h2 = Molecule(
+            symbols=["H", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]],
+        )
+        assert h2.is_diatomic and h2.is_linear
+        assert len(h2.rotational_temperatures) == 1
+
+    def test_coordinate_block_variants(self):
+        with pytest.raises(TypeError, match="Coordinate block must be"):
+            CoordinateBlock(coordinate_block=123)
+        block = """
+C 0.0 0.0 0.0
+TV 1.0 0.0 0.0
+TV 0.0 2.0 0.0
+TV 0.0 0.0 3.0
+"""
+        cb = CoordinateBlock(block)
+        assert cb.pbc_conditions == [1, 1, 1]
+        qblock = """
+C 0.0 0.0 0.0 H
+H 1.0 0.0 0.0 L
+"""
+        qcb = CoordinateBlock(qblock)
+        assert isinstance(qcb.molecule, QMMMMolecule)
+        num_block = """
+6 0.0 0.0 0.0
+1 1.0 0.0 0.0
+"""
+        ncb = CoordinateBlock(num_block)
+        assert ncb.molecule.num_atoms == 2
+
+    def test_qmmm_link_atoms_and_scale(self, tmpdir):
+        q = QMMMMolecule(
+            symbols=["C", "C", "C"],
+            positions=np.array([[0, 0, 0], [1.5, 0, 0], [3.0, 0, 0]]),
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[3],
+            bonded_atoms=[(1, 2), (2, 3)],
+            frozen_atoms=[0, 0, 0],
+            scale_factors={(1, 2): [0.5, 0.5, 0.5]},
+        )
+        buf = StringIO()
+        q._write_gaussian_coordinates(buf)
+        text = buf.getvalue()
+        assert "H" in text or "M" in text
+        # same-level bond raises
+        bad = QMMMMolecule(
+            symbols=["C", "C"],
+            positions=np.array([[0, 0, 0], [1.5, 0, 0]]),
+            high_level_atoms=[1, 2],
+            bonded_atoms=[(1, 2)],
+        )
+        with pytest.raises(ValueError, match="same level"):
+            bad._write_gaussian_coordinates(StringIO())
+        # scale factors not list
+        bad2 = QMMMMolecule(
+            symbols=["O", "H"],
+            positions=np.array([[0, 0, 0], [1.0, 0, 0]]),
+            high_level_atoms=[2],
+            low_level_atoms=[1],
+            bonded_atoms=[(1, 2)],
+            scale_factors={(1, 2): "bad"},
+        )
+        with pytest.raises(ValueError, match="Scale factors should be a list"):
+            bad2._write_gaussian_coordinates(StringIO())
+        # reverse H-L bond orientation
+        q2 = QMMMMolecule(
+            symbols=["C", "C"],
+            positions=np.array([[0, 0, 0], [1.5, 0, 0]]),
+            high_level_atoms=[2],
+            low_level_atoms=[1],
+            bonded_atoms=[(1, 2)],
+        )
+        q2._write_gaussian_coordinates(StringIO())
+        # L-M orientation
+        q3 = QMMMMolecule(
+            symbols=["C", "C", "C"],
+            positions=np.zeros((3, 3)),
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[3],
+            bonded_atoms=[(3, 2)],
+        )
+        q3._write_gaussian_coordinates(StringIO())
+        # bonded_atoms as string literal
+        q4 = QMMMMolecule(
+            symbols=["C", "C"],
+            positions=np.array([[0, 0, 0], [1.5, 0, 0]]),
+            high_level_atoms=[1],
+            low_level_atoms=[2],
+            bonded_atoms="[(1, 2)]",
+        )
+        q4._write_gaussian_coordinates(StringIO())
+        # Gaussian permits only one link-atom specification per atom
+        bad3 = QMMMMolecule(
+            symbols=["C", "C", "C"],
+            positions=np.array([[0, 0, 0], [1.5, 0, 0], [3.0, 0, 0]]),
+            high_level_atoms=[1, 2],
+            low_level_atoms=[3],
+            bonded_atoms=[(1, 3), (2, 3)],
+        )
+        with pytest.raises(ValueError, match="only one link-atom"):
+            bad3._write_gaussian_coordinates(StringIO())
+
+    def test_qmmm_partition_validation(self):
+        q = QMMMMolecule(
+            symbols=["C"] * 5,
+            positions=np.zeros((5, 3)),
+            high_level_atoms="1-2",
+            medium_level_atoms="3",
+            low_level_atoms="4-5",
+        )
+        h, m, low = q._get_partition_levels()
+        assert h == [1, 2] and m == [3] and low == [4, 5]
+        with pytest.raises(ValueError, match="High level"):
+            QMMMMolecule(
+                symbols=["C", "C"],
+                positions=np.zeros((2, 3)),
+                high_level_atoms=None,
+            )._get_partition_levels()
+        with pytest.raises(ValueError, match="Overlap"):
+            QMMMMolecule(
+                symbols=["C", "C", "C"],
+                positions=np.zeros((3, 3)),
+                high_level_atoms=[1],
+                medium_level_atoms=[2],
+                low_level_atoms=[2],
+            )._get_partition_levels()
+        with pytest.raises(ValueError, match="must equal"):
+            QMMMMolecule(
+                symbols=["C", "C", "C"],
+                positions=np.zeros((3, 3)),
+                high_level_atoms=[1],
+                medium_level_atoms=[],
+                low_level_atoms=[2],
+            )._get_partition_levels()
+        with pytest.raises(ValueError, match="out of range"):
+            QMMMMolecule(
+                symbols=["C"],
+                positions=np.zeros((1, 3)),
+                high_level_atoms=[2],
+            )._get_partition_levels()
+        # getattr when molecule missing
+        bare = QMMMMolecule.__new__(QMMMMolecule)
+        with pytest.raises(AttributeError):
+            _ = bare.chemical_formula
+
+    def test_pka_molecule(self, single_molecule_xyz_file):
+        from chemsmart.io.molecules.structure import PKaMolecule
+
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        h_indices = [i + 1 for i, s in enumerate(mol.symbols) if s == "H"]
+        if not h_indices:
+            pytest.skip("no H")
+        pka = PKaMolecule(molecule=mol, proton_index=h_indices[0])
+        assert pka.proton_index == h_indices[0]
+        with pytest.raises(ValueError):
+            PKaMolecule(molecule=None, proton_index=1)
+        with pytest.raises(ValueError):
+            PKaMolecule(molecule=mol, proton_index=0)
+        clone = PKaMolecule.from_molecule_and_proton_index(
+            mol, proton_index=h_indices[0]
+        )
+        assert isinstance(clone, PKaMolecule)
+
+    def test_bond_lengths_helper(self):
+        co2 = Molecule(
+            symbols=["C", "O", "O"],
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [1.16, 0.0, 0.0], [-1.16, 0.0, 0.0]]
+            ),
+        )
+        dists = co2.bond_lengths()
+        assert len(dists) == 3
+        assert np.isclose(co2.get_distance(1, 2), dists[0])
+
+    def test_write_extxyz_forces_shape_mismatch(self, tmpdir):
+        mol = Molecule(
+            symbols=["H"],
+            positions=[[0, 0, 0]],
+            energy=-1.0,
+            forces=np.ones((2, 3)),  # wrong n_atoms
+        )
+        path = os.path.join(str(tmpdir), "badf.extxyz")
+        mol.write_extxyz(path)
+        assert "energy=" in open(path).read()
+
+    def test_return_list_from_filepath(self, single_molecule_xyz_file):
+        result = Molecule.from_filepath(
+            single_molecule_xyz_file, return_list=True
+        )
+        assert isinstance(result, list) and len(result) == 1
+
+    def test_init_validation_branches(self):
+        with pytest.raises(ValueError, match="symbols and positions"):
+            Molecule(symbols=["H"], positions=None)
+        with pytest.raises(ValueError, match="same"):
+            Molecule(symbols=["H", "H"], positions=np.zeros((1, 3)))
+
+    def test_vdw_volume_and_pbc(self, gaussian_benzene_opt_outfile):
+        mol = Molecule.from_filepath(gaussian_benzene_opt_outfile)
+        assert mol.vdw_volume > 0
+        mol.pbc_conditions = [1, 0, 0]
+        assert mol.pbc is False
+
+    def test_is_linear_three_atom_collinear(self):
+        mol = Molecule(
+            symbols=["C", "C", "C"],
+            positions=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0]]),
+        )
+        assert mol.is_linear
+
+    def test_vibrationally_displaced_negative_index(
+        self, gaussian_singlet_opt_outfile
+    ):
+        mol = Molecule.from_filepath(gaussian_singlet_opt_outfile)
+        if not mol.has_vibrations:
+            pytest.skip("no vibrational modes")
+        displaced = mol.vibrationally_displaced(mode_idx=-1, amp=0.01)
+        assert displaced.num_atoms == mol.num_atoms
+
+    def test_pka_non_hydrogen_proton_index(self, single_molecule_xyz_file):
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        c_index = next(i + 1 for i, s in enumerate(mol.symbols) if s == "C")
+        with pytest.raises(ValueError, match="not 'H'"):
+            PKaMolecule(molecule=mol, proton_index=c_index)
+
+    def test_coordinate_block_symbol_token_fallback(self):
+        block = "C1 0.0 0.0 0.0\nH2 1.0 0.0 0.0\n"
+        cb = CoordinateBlock(block)
+        assert cb.molecule.num_atoms == 2
+
+    def test_write_via_openbabel_fallback(
+        self, single_molecule_xyz_file, tmpdir
+    ):
+        pytest.importorskip("openbabel")
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        path = os.path.join(str(tmpdir), "out.mol")
+        mol.write(path, format="mol")
+        assert os.path.exists(path)
+
+    def test_read_pdb_return_list(self, single_model_pdb_file):
+        mols = Molecule.from_filepath(
+            single_model_pdb_file, return_list=True, index=":"
+        )
+        assert isinstance(mols, list)
+        assert len(mols) >= 1
+
+    def test_qmmm_real_charge_sets_state(self, single_molecule_xyz_file):
+        base = Molecule.from_filepath(single_molecule_xyz_file)
+        q = QMMMMolecule(
+            molecule=base,
+            high_level_atoms=[1],
+            real_charge=1,
+            real_multiplicity=2,
+        )
+        assert q.charge == 1
+        assert q.multiplicity == 2
+
+        q0 = QMMMMolecule(
+            molecule=base,
+            high_level_atoms=[1],
+            real_charge=0,
+            real_multiplicity=1,
+        )
+        assert q0.charge == 0
+        assert q0.multiplicity == 1

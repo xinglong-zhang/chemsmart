@@ -2,16 +2,190 @@ import copy
 import logging
 import os
 from abc import abstractmethod
+from contextlib import suppress
+from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+from shutil import rmtree
+from typing import Callable, Optional, Sequence
 
+from chemsmart.jobs.job import Job
+from chemsmart.settings.executable import Executable
 from chemsmart.settings.server import Server
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+
+def _executable_class_for_program(program):
+    """Return Executable subclass for a runner PROGRAM name, if any."""
+    if not program or program is NotImplemented:
+        return None
+    key = str(program).upper()
+    for exe_cls in Executable.subclasses():
+        if exe_cls.PROGRAM and str(exe_cls.PROGRAM).upper() == key:
+            return exe_cls
+    return None
+
+
+def _scratch_from_server_yaml(runner_cls, server):
+    """Return program ``SCRATCH`` from server YAML for executable-backed runners."""
+    exe_cls = _executable_class_for_program(runner_cls.PROGRAM)
+    if exe_cls is None or server is None:
+        return None
+    servername = server.name if isinstance(server, Server) else server
+    return exe_cls.program_scratch_from_servername(servername)
+
+
+def _resolve_scratch(scratch, runner_cls, server):
+    """Resolve scratch: CLI wins; else YAML program SCRATCH; else class default.
+
+    Priority when constructing a typed runner:
+
+    1. Explicit CLI/API ``scratch`` (``True``/``False``) wins.
+    2. If omitted (``None``), use program-block ``SCRATCH`` from server YAML
+       when that key is set and the runner maps to an ``Executable`` subclass
+       (for example Gaussian, ORCA, xTB, or NCIPLOT).
+    3. If the YAML key is absent or the program has no executable config,
+       use the runner class ``SCRATCH`` default.
+    """
+    if scratch is not None:
+        return scratch
+    yaml_scratch = _scratch_from_server_yaml(runner_cls, server)
+    if yaml_scratch is not None:
+        return yaml_scratch
+    return runner_cls.SCRATCH
+
+
+@dataclass(frozen=True)
+class PhaseTransitionDecision:
+    """Decision payload for moving from one workflow phase to the next."""
+
+    proceed: bool
+    should_raise: bool
+    message: Optional[str] = None
+
+
+def run_phase_jobs(
+    *,
+    parent_runner,
+    jobs: Optional[Sequence] = None,
+    jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+    stop_on_incomplete: bool = False,
+    before_run: Optional[Callable[[], None]] = None,
+    logger_obj=None,
+    phase_label: str = "phase",
+) -> None:
+    """Shared phase runner wrapper."""
+    Job._execute_phase_jobs(
+        parent_runner=parent_runner,
+        jobs=jobs,
+        jobs_factory=jobs_factory,
+        stop_on_incomplete=stop_on_incomplete,
+        before_run=before_run,
+        logger_obj=logger_obj,
+        phase_label=phase_label,
+    )
+
+
+def _positive_int_or_none(value) -> Optional[int]:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def get_configured_max_submitters(jobrunner=None) -> int:
+    """Return configured submitter concurrency limit.
+
+    Resolution order:
+    1. ``CHEMSMART_MAX_SUBMITTERS`` environment variable
+    2. ``jobrunner.max_submitters`` (if present)
+    3. ``jobrunner.server.max_submitters`` (if present)
+    4. ``jobrunner.num_cores``
+    5. ``jobrunner.server.num_cores``
+    6. ``os.cpu_count()``
+    """
+    env_value = _positive_int_or_none(
+        os.environ.get("CHEMSMART_MAX_SUBMITTERS")
+    )
+    if env_value is not None:
+        return env_value
+
+    runner_value = _positive_int_or_none(
+        getattr(jobrunner, "max_submitters", None)
+    )
+    if runner_value is not None:
+        return runner_value
+
+    server = getattr(jobrunner, "server", None)
+    server_value = _positive_int_or_none(
+        getattr(server, "max_submitters", None)
+    )
+    if server_value is not None:
+        return server_value
+
+    cores_value = _positive_int_or_none(getattr(jobrunner, "num_cores", None))
+    if cores_value is not None:
+        return cores_value
+
+    server_cores_value = _positive_int_or_none(
+        getattr(server, "num_cores", None)
+    )
+    if server_cores_value is not None:
+        return server_cores_value
+
+    cpu_count = _positive_int_or_none(os.cpu_count())
+    return cpu_count if cpu_count is not None else 1
+
+
+def get_submitter_worker_count(jobrunner, num_jobs: int) -> int:
+    """Return bounded worker count for batch/list submitter threads."""
+    if num_jobs <= 0:
+        return 1
+    configured_max_submitters = get_configured_max_submitters(jobrunner)
+    return max(1, min(num_jobs, configured_max_submitters))
+
+
+def decide_phase_transition(
+    *,
+    phase_name: str,
+    failures: Optional[Sequence[str]] = None,
+    require_complete: bool = False,
+    is_complete: Optional[bool] = None,
+    stop_message: Optional[str] = None,
+) -> PhaseTransitionDecision:
+    """Return a shared decision for whether a workflow should enter next phase."""
+    phase_failures = [f for f in (failures or []) if f]
+    if phase_failures:
+        summary = (
+            f"{phase_name} phase failed in {len(phase_failures)} worker(s):\n"
+            + "\n".join(f"  - {item}" for item in phase_failures)
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=True,
+            message=summary,
+        )
+
+    if require_complete and is_complete is False:
+        message = (
+            stop_message or f"{phase_name} jobs incomplete, halting execution."
+        )
+        return PhaseTransitionDecision(
+            proceed=False,
+            should_raise=False,
+            message=message,
+        )
+
+    return PhaseTransitionDecision(proceed=True, should_raise=False)
 
 
 class JobRunner(RegistryMixin):
@@ -19,8 +193,16 @@ class JobRunner(RegistryMixin):
 
     Args:
         server (Server): Server to run the job on.
-        scratch (bool): Whether to use scratch directory.
-        scratch_dir (str): Path to scratch directory.
+        scratch (bool or None): Whether to use a scratch directory.
+            None means unset: ``from_job`` uses program ``SCRATCH`` from
+            server YAML when that key is set, otherwise the typed runner's
+            ``SCRATCH`` class default. Explicit False or True forces
+            scratch off or on regardless of YAML or class defaults.
+        scratch_dir (str or None): Path to scratch directory, or None to
+            resolve from executable ENVARS, ``SERVER.SCRATCH_DIR``, then user
+            settings.
+        delete_scratch (bool): whether to delete scratch after
+            job finishes normally.
         fake (bool): Whether to use fake job runner.
         **kwargs: Additional keyword arguments.
     """
@@ -32,7 +214,9 @@ class JobRunner(RegistryMixin):
     def __init__(
         self,
         server,
-        scratch=None,
+        scratch=None,  # CLI placeholder: None = flag omitted; see from_job
+        scratch_dir=None,  # None: resolve via _set_scratch() when scratch is on
+        delete_scratch=False,
         fake=False,
         num_cores=None,
         num_gpus=None,
@@ -52,7 +236,10 @@ class JobRunner(RegistryMixin):
 
         self.server = server
         self.scratch = scratch
-        if self.scratch:
+        self._scratch_dir = scratch_dir  # Store user-defined scratch_dir
+        self.delete_scratch = delete_scratch
+
+        if self.scratch and type(self) is not JobRunner:
             self._set_scratch()
 
         self.fake = fake
@@ -75,35 +262,74 @@ class JobRunner(RegistryMixin):
         self.kwargs = kwargs
 
     @property
-    @lru_cache(maxsize=12)
     def scratch_dir(self):
-        return self._set_scratch()
+        """Return the scratch directory, setting it if necessary."""
+        if self._scratch_dir is None:
+            self._scratch_dir = self._set_scratch()
+        return self._scratch_dir
+
+    @scratch_dir.setter
+    def scratch_dir(self, value):
+        """Allow explicit setting of scratch_dir."""
+        if value is not None:
+            value = os.path.expanduser(value)  # Expand '~' to absolute path
+            if not os.path.exists(value):
+                raise FileNotFoundError(
+                    f"Specified scratch dir does not exist: {value}"
+                )
+        self._scratch_dir = value
 
     @lru_cache(maxsize=12)
     def _set_scratch(self):
+        """Determine the scratch directory from executable, server, or user settings.
+
+        Resolution order for the scratch **path** (when scratch mode is on):
+
+        1. Explicit ``scratch_dir`` already set on the runner
+        2. Executable ENVARS (for example ``SCRATCH`` export)
+        3. ``server.scratch_dir`` (``SERVER.SCRATCH_DIR``)
+        4. User settings ``SCRATCH``
+
+        If no path can be resolved, or the resolved path is missing or not a
+        directory, scratch mode is disabled with a warning.
+        """
+        if self._scratch_dir is not None:
+            return self._scratch_dir  # Use explicitly set directory
+
         scratch_dir = None
         if self.executable is not None:
-            logger.info(f"Setting scratch dir for {self} from executable.")
             scratch_dir = self.executable.scratch_dir
-            logger.info(f"Scratch dir set to: {scratch_dir}")
+            logger.debug(f"Setting scratch dir from executable: {scratch_dir}")
         # (2) then try to get from server specific environment variable
         if scratch_dir is None:
             scratch_dir = self.server.scratch_dir
+            logger.debug(
+                f"Setting scratch dir from server specific env: {scratch_dir}"
+            )
 
         # (3) then try to get from user settings
         if scratch_dir is None:
             scratch_dir = user_settings.scratch
+            logger.debug(
+                f"Setting scratch dir from user settings: {scratch_dir}"
+            )
 
-        if scratch_dir is not None:
-            # check that the scratch folder exists
-            scratch_dir = os.path.expanduser(scratch_dir)
-            if not os.path.exists(scratch_dir):
-                raise FileNotFoundError(
-                    f"Specified scratch dir does not exist: {scratch_dir}"
-                )
-            return scratch_dir
+        # (4) finally, if scratch_dir is still None, then disable scratch
+        if scratch_dir is None:
+            logger.warning(
+                f"Could not determine scratch dir for {self}. Not using scratch."
+            )
+            self.scratch = False
         else:
-            return None
+            scratch_dir = os.path.expanduser(scratch_dir)
+            if not os.path.isdir(scratch_dir):
+                logger.warning(
+                    f"Scratch dir {scratch_dir!r} is missing or not a "
+                    f"directory for {self}. Not using scratch."
+                )
+                self.scratch = False
+                scratch_dir = None
+        return scratch_dir
 
     def __repr__(self):
         return f"{self.__class__.__qualname__}<server={self.server}>"
@@ -138,12 +364,27 @@ class JobRunner(RegistryMixin):
         process.communicate()
         return process.poll()
 
-    def _postrun(self, job):
+    def _postrun(self, job, **kwargs):
         # Subclasses can implement
         pass
 
+    def _postrun_cleanup(self, job):
+        """Perform cleanup tasks after job completion.
+        This includes removing error files for successful jobs and
+        deleting scratch directories if applicable."""
+        if job.is_complete():
+            logger.debug("Job completed successfully, deleting .err files")
+            self._remove_err_files(job)
+
+            # Delete scratch directory if requested and scratch was used
+            if self.scratch and self.delete_scratch:
+                logger.debug(
+                    "Job completed successfully and delete_scratch is enabled"
+                )
+                self._delete_scratch_directory()
+
     @abstractmethod
-    def _get_command(self):
+    def _get_command(self, job):
         raise NotImplementedError
 
     @abstractmethod
@@ -152,7 +393,7 @@ class JobRunner(RegistryMixin):
 
     def _update_os_environ(self, job):
         env = os.environ.copy()
-        env_vars = self.executable.env
+        env_vars = self.executable.env if self.executable else None
         if not env_vars:
             return env
         logger.debug(f"Environment variables to update: \n{env_vars}")
@@ -163,35 +404,199 @@ class JobRunner(RegistryMixin):
         return env
 
     def run(self, job, **kwargs):
+        """Main method to run a job. The run consists of
+        several steps: prerun, write input, get command,
+        create process, run process, postrun, and postrun cleanup.
+        prerun and postrun are hooks for subclasses to implement.
+        prerun consist of any setup needed before running the job,
+        such as creating scratch directories or copying additional
+        files into scratch (e.g., in ORCA copying .xyz files).
+        postrun consist of e.g., copying files back from scratch to job
+        folder (this may be different in different subclasses).
+        Args:
+            job: Job instance to run.
+            **kwargs: Additional keyword arguments for the run method.
+        """
+        logger.debug(f"Running job {job} with runner {self}")
+        logger.debug(f"Prerunning job: {job}")
         self._prerun(job)
+        logger.debug(f"Writing input for job: {job}")
         self._write_input(job)
-        command = self._get_command()
+        logger.debug(f"Obtaining command for job: {job}")
+        command = self._get_command(job)
+        logger.debug(f"Command obtained for job {job}: {command}")
+        logger.debug(f"Obtaining environment for job: {job}")
         env = self._update_os_environ(job)
+        logger.debug(f"Environment obtained for job {job}: {env}")
+        logger.debug(f"Creating process for job: {job}")
         process = self._create_process(job, command=command, env=env)
+        logger.debug(f"Process created for job {job}: {process}")
+        logger.debug(f"Running process for job: {job}")
         self._run(process, **kwargs)
+        logger.debug(f"Postrunning job: {job}")
         self._postrun(job)
+        logger.debug(f"Postrun cleanup for job: {job}")
+        self._postrun_cleanup(job)
 
     def copy(self):
         return copy.copy(self)
 
     @classmethod
     def from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+        """Select and construct a typed job runner for ``job``.
+
+        **When the CLI omits ``--scratch``/``--no-scratch``**
+
+        ``scratch`` arrives as ``None``. It is resolved here, in order:
+
+        1. Explicit ``True``/``False`` from ``--scratch`` or ``--no-scratch``
+        2. Program ``SCRATCH`` in server YAML for executable-backed runners
+        3. The selected runner's class ``SCRATCH`` default
+
+        The typed runner is then constructed with that resolved ``bool``.
+
+        **When calling a typed runner constructor directly**
+
+        ``scratch=None`` does not pass through ``from_job``. It means "use the
+        class ``SCRATCH`` default" and YAML is not read. That can differ from
+        step 2 above when YAML would override the class default.
+
+        Args:
+            job: Job instance whose ``TYPE`` selects the runner.
+            server: Server name or ``Server`` instance.
+            scratch (bool or None): ``True``/``False`` from CLI flags, or
+                ``None`` when both flags were omitted.
+            fake (bool): Prefer a fake runner when one is registered.
+            **kwargs: Forwarded to the typed runner constructor.
+
+        Returns:
+            JobRunner: Typed runner instance for ``job``.
+
+        Raises:
+            ValueError: If no registered runner supports ``job.TYPE``.
+        """
         runners = cls.subclasses()
+        logger.debug(f"Available runners: {runners}")
         jobtype = job.TYPE
+        candidate_runners = []
 
         for runner in runners:
+            logger.debug(f"Checking runner: {runner} for job: {job}")
             runner_jobtypes = runner.JOBTYPES
             logger.debug(f"Runner jobtypes: {runner_jobtypes}")
 
             if runner_jobtypes is NotImplemented:
                 runner_jobtypes = []
 
-            if jobtype in runner_jobtypes and fake == runner.FAKE:
-                logger.info(f"Using job runner: {runner} for job: {job}")
-                return runner(server=server, scratch=scratch, **kwargs)
+            if jobtype in runner_jobtypes:
+                candidate_runners.append(runner)
+
+        if candidate_runners:
+            selected_runner = None
+            for runner in candidate_runners:
+                if runner.FAKE == fake:
+                    selected_runner = runner
+                    break
+
+            if selected_runner is None:
+                selected_runner = candidate_runners[0]
+
+            logger.info(f"Using job runner: {selected_runner} for job: {job}")
+
+            # CLI True/False wins; omit → YAML program SCRATCH if set;
+            # otherwise runner class SCRATCH.
+            scratch = _resolve_scratch(scratch, selected_runner, server)
+            logger.info(
+                f"Using scratch={scratch} for job runner: {selected_runner}"
+            )
+
+            return selected_runner(
+                server=server, scratch=scratch, fake=fake, **kwargs
+            )
 
         raise ValueError(
             f"Could not find any runners for job: {job}. \n"
             f"Runners in registry: {runners}. \n "
             f"Fake: {fake}"
         )
+
+    def _remove_err_files(self, job):
+        """Remove error files associated with the job.
+        Files that end with .err, .pbserr, .slurmerr are removed."""
+
+        basefilepath = self._get_base_filepath_to_remove(job)
+        patterns = [".err", ".pbserr", ".slurmerr"]
+
+        files_to_be_removed = [
+            basefilepath.with_suffix(pattern) for pattern in patterns
+        ]
+
+        for file in files_to_be_removed:
+            with suppress(FileNotFoundError):
+                logger.info(f"Removing file {file}.")
+                os.remove(file)
+
+    def _get_base_filepath_to_remove(self, job):
+        """Get the base filepath for the job to assist in file removal."""
+        return Path(job.folder) / job.label
+
+    def _append_suffix_to_job_label(self, job, suffix):
+        """Append ``suffix`` to ``job.label`` once."""
+        if suffix and not job.label.endswith(suffix):
+            job.label = f"{job.label}{suffix}"
+        logger.debug(f"Job label: {job.label}")
+
+    def _delete_scratch_directory(self):
+        """
+        Delete the scratch directory if it exists.
+
+        This method safely removes the scratch directory and all its contents
+        after the job has completed successfully. Only deletes if the
+        running_directory is actually within the scratch_dir.
+        """
+        if (
+            hasattr(self, "running_directory")
+            and hasattr(self, "scratch_dir")
+            and self.scratch_dir
+            and os.path.exists(self.running_directory)
+        ):
+
+            # Check if running_directory is actually within scratch_dir
+            # to avoid accidentally deleting non-scratch directories
+            # use resolve() to handle .. and symlinks
+            rd = Path(self.running_directory).resolve()
+            sd = Path(self.scratch_dir).resolve()
+
+            # Basic sanity checks
+            if not sd.exists() or not sd.is_dir():
+                logger.error(
+                    f"scratch_dir {sd} doesn't exist or is not a directory; "
+                    "refusing to proceed."
+                )
+            elif rd == sd:
+                logger.warning(
+                    f"Refusing to delete the scratch root itself: {sd}"
+                )
+            # Python 3.9+: Path.is_relative_to
+            elif rd.is_relative_to(sd):
+                try:
+                    logger.info(
+                        f"Deleting scratch directory: {self.running_directory}"
+                    )
+                    rmtree(self.running_directory)
+                    logger.info(
+                        f"Successfully deleted scratch directory: {self.running_directory}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to delete scratch directory {self.running_directory}: {e}"
+                    )
+            else:
+                logger.debug(
+                    f"Running directory {self.running_directory} is not in scratch, "
+                    f"skipping deletion."
+                )
+        else:
+            logger.debug(
+                "No scratch directory to delete or directory does not exist."
+            )
