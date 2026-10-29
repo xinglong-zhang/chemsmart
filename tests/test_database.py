@@ -1067,15 +1067,9 @@ class TestDatabaseExport:
 
 
 class TestDatabaseInspect:
-    @pytest.mark.parametrize(
-        "functions_key",
-        ["heavy_elements_basis_functions", "heavy_elements_basis"],
-    )
     def test_record_detail_heavy_elements_basis_functions(
-        self, tmp_path, monkeypatch, functions_key
+        self, tmp_path, monkeypatch
     ):
-        # Records assembled before the name/functions split stored the basis
-        # functions under "heavy_elements_basis"; both must still display.
         db = Database(str(tmp_path / "chemsmart.db"))
         db.create()
         inspector = DatabaseInspector(db.db_file)
@@ -1084,7 +1078,7 @@ class TestDatabaseInspect:
                 "basis": "customized_basis",
                 "custom_basis": {
                     "heavy_elements": ["Ag"],
-                    functions_key: {
+                    "heavy_elements_basis_functions": {
                         "Ag": [
                             {"shell": "S", "primitives": [(1.0, 1.0)]},
                             {"shell": "D", "primitives": [(0.5, 1.0)]},

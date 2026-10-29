@@ -304,11 +304,6 @@ class DatabaseInspector:
             heavy_elems = custom_basis.get("heavy_elements")
             heavy_basis_name = custom_basis.get("heavy_elements_basis")
             heavy_basis = custom_basis.get("heavy_elements_basis_functions")
-            if isinstance(heavy_basis_name, dict):
-                # Records assembled before the name/functions split stored
-                # the basis functions under "heavy_elements_basis".
-                heavy_basis = heavy_basis or heavy_basis_name
-                heavy_basis_name = None
             heavy_ecp = custom_basis.get("heavy_elements_ecp")
             if light_elems:
                 light_str = ", ".join(light_elems)

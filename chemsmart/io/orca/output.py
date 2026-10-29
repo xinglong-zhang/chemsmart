@@ -393,19 +393,19 @@ class ORCAOutput(ORCAFileMixin):
         """
         Name of the basis set assigned to the heavy elements with
         ``NewGTO`` in the %basis block (consistent with
-        Gaussian16Input.heavy_elements_basis).  Returns None if no
-        element-specific basis is given or if the heavy elements use
-        different basis sets.
+        Gaussian16Input.heavy_elements_basis).  When the heavy elements use
+        different basis sets, their names are joined in the order of
+        `heavy_elements`, e.g. 'def2-TZVP, def2-QZVP'.  Returns None if no
+        element-specific basis is given.
         """
-        basis_names = set(self._element_basis_names.values())
-        if len(basis_names) != 1:
-            if len(basis_names) > 1:
-                logger.debug(
-                    f"Heavy elements use different basis sets: "
-                    f"{self._element_basis_names}"
-                )
+        if not self._element_basis_names:
             return None
-        return basis_names.pop()
+        basis_names = []
+        for element in self.heavy_elements:
+            basis_name = self._element_basis_names[element]
+            if basis_name not in basis_names:
+                basis_names.append(basis_name)
+        return ", ".join(basis_names)
 
     @property
     def num_atoms(self):
