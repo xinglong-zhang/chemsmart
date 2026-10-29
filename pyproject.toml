@@ -73,6 +73,14 @@ docs = [
     "rstcheck",
     "rstfmt",
 ]
+chat = [
+    "openai>=1.0.0",
+]
+train = [
+    "transformers>=4.37.0",
+    "torch",
+    "datasets",
+]
 
 [project.urls]
 ##"Documentation" = "https://documentation_url"
