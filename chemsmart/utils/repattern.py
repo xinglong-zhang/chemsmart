@@ -212,14 +212,18 @@ query_logic_split_pattern = r"\s+(AND|OR)\s+"
 
 
 # Gaussian gen/genecp explicit basis patterns
-# Matches a shell header line, e.g. "S 8 1.00" or "P 4 1.00"
-# Group 1: angular-momentum letter (S/P/D/F/G/H)
-basis_shell_header_pattern = r"^([SPDFGH])\s+\d+\s+[\d.]+$"
+# Matches a shell header line, e.g. "S 8 1.00", "P 4 1.00" or "SP 3 1.00"
+# Group 1: angular-momentum label (SP/S/P/D/F/G/H/I)
+basis_shell_header_pattern = r"^(SP|[SPDFGHI])\s+\d+\s+[\d.]+$"
 
 # Matches an exponent/coefficient line printed by Gaussian in verbose mode
 # e.g. "Exponent=  5.6507325256D+05 Coefficients=  2.3660314690D-04"
-# Group 1: exponent string (Fortran D-notation); Group 2: coefficient string
-basis_primitive_line_pattern = r"Exponent=\s*(\S+)\s+Coefficients=\s*(\S+)"
+# or, for an SP shell, "Exponent=  ... Coefficients=  <S coef>  <P coef>"
+# Group 1: exponent string (Fortran D-notation); Group 2: coefficient string;
+# Group 3: P coefficient string of an SP shell (None otherwise)
+basis_primitive_line_pattern = (
+    r"Exponent=\s*(\S+)\s+Coefficients=\s*(\S+)(?:\s+(\S+))?"
+)
 
 # Gaussian Pseudopotential Parameters section (genecp)
 # Matches a center-header line, e.g. "1   47   19" or "2   17"

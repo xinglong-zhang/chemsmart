@@ -106,12 +106,55 @@ class Gaussian16Output(GaussianFileMixin):
     @property
     def heavy_elements_basis(self):
         """
-        Name of the basis set for heavy elements (consistent with
-        Gaussian16Input.heavy_elements_basis).  Gaussian does not print the
-        name of an explicitly defined gen/genecp basis, so this is None; see
-        `heavy_elements_basis_functions` for the printed basis functions.
+        Name of the basis set for heavy elements (lowercase, consistent with
+        Gaussian16Input.heavy_elements_basis).
+        Gaussian does not print the name of an explicitly defined gen/genecp
+        basis, so the name is identified by matching
+        `heavy_elements_basis_functions` against the Basis Set Exchange
+        library (see `heavy_elements_basis_candidates`).  When several BSE
+        basis sets are identical for all heavy elements (e.g. def2-TZVP and
+        def2-TZVPD for Ag), the shortest name is returned.
+        Returns None when the basis functions are unavailable (no #p) or no
+        single BSE basis set matches all heavy elements.
         """
-        return None
+        candidates = self.heavy_elements_basis_candidates
+        if not candidates:
+            return None
+        common_names = set.intersection(
+            *(set(names) for names in candidates.values())
+        )
+        if not common_names:
+            logger.debug(
+                f"No Basis Set Exchange basis set matches all heavy "
+                f"elements: {candidates}"
+            )
+            return None
+        names = sorted(common_names, key=lambda name: (len(name), name))
+        if len(names) > 1:
+            logger.debug(
+                f"Heavy elements basis functions are identical in "
+                f"{names}; using {names[0]}."
+            )
+        return names[0]
+
+    @cached_property
+    def heavy_elements_basis_candidates(self):
+        """
+        Basis Set Exchange basis set names (lowercase) whose functions are
+        identical to `heavy_elements_basis_functions`, keyed by element
+        symbol, e.g. {'Ag': ['def2-tzvp', 'def2-tzvpd']}.
+        Returns None when the basis functions are unavailable.
+        """
+        heavy_elements_basis_functions = self.heavy_elements_basis_functions
+        if not heavy_elements_basis_functions:
+            return None
+        from chemsmart.io.gaussian import BSEMetadata
+
+        bse_metadata = BSEMetadata()
+        return {
+            element: bse_metadata.basis_names_matching(element, shells)
+            for element, shells in heavy_elements_basis_functions.items()
+        }
 
     @property
     def heavy_elements_basis_functions(self):
@@ -129,6 +172,7 @@ class Gaussian16Output(GaussianFileMixin):
                     {'shell': 'F', 'primitives': [(exp, coef)]},
                 ],
             }
+        Primitives of an SP shell are (exp, s_coef, p_coef).
         Returns None when the information is unavailable.
         """
         return self._genecp_info["heavy_elements_basis_functions"]
@@ -272,8 +316,9 @@ class Gaussian16Output(GaussianFileMixin):
         Parse lines of an explicitly printed Gaussian basis block into a
         list of shell dictionaries.
         Each dict has the keys:
-            shell – angular-momentum letter ('S', 'P', 'D', 'F', 'H')
-            primitives – list of (exponent, coefficient) float tuples
+            shell – angular-momentum label ('S', 'SP', 'P', 'D', 'F', ...)
+            primitives – list of (exponent, coefficient) float tuples, or
+                (exponent, S coefficient, P coefficient) for an SP shell
         """
         shell_header = re.compile(basis_shell_header_pattern)
         primitive_line = re.compile(basis_primitive_line_pattern)
@@ -288,9 +333,14 @@ class Gaussian16Output(GaussianFileMixin):
                     shells.append(current_shell)
                 current_shell = {"shell": m_shell.group(1), "primitives": []}
             elif m_prim and current_shell is not None:
-                exp = float(m_prim.group(1).upper().replace("D", "E"))
-                coef = float(m_prim.group(2).upper().replace("D", "E"))
-                current_shell["primitives"].append((exp, coef))
+                # (exponent, coefficient), or (exponent, S coefficient,
+                # P coefficient) for an SP shell
+                primitive = tuple(
+                    float(value.upper().replace("D", "E"))
+                    for value in m_prim.groups()
+                    if value is not None
+                )
+                current_shell["primitives"].append(primitive)
         if current_shell is not None:
             shells.append(current_shell)
         return shells
