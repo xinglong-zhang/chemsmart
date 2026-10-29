@@ -12,8 +12,11 @@ This module consolidates the assembler pipeline:
 - build_provenance: provenance metadata builder
 """
 
+import hashlib
 import logging
 from functools import cached_property
+
+from ase.units import Hartree
 
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.database.records import AssembledRecord
@@ -40,7 +43,78 @@ from chemsmart.utils.io import get_program_type_from_file
 logger = logging.getLogger(__name__)
 
 
-class BaseAssembler:
+class MoleculeInfoAssemblerMixin:
+    """Shared conversion from a molecule to database fields."""
+
+    def get_molecule_info(self, mol):
+        molecule_info = {
+            "molecule_label": mol.molecule_label,
+            "molecule_id": mol.molecule_id,
+            "structure_index_in_file": mol.structure_index_in_file,
+            "is_optimized_structure": mol.is_optimized_structure,
+            "charge": mol.charge,
+            "multiplicity": mol.multiplicity,
+            "structure_id": mol.structure_id,
+            "structure_label": mol.structure_label,
+            "chemical_symbols": mol.chemical_symbols,
+            "positions": mol.positions,
+            "empirical_formula": mol.empirical_formula,
+            "chemical_formula": mol.chemical_formula,
+            "number_of_atoms": mol.num_atoms,
+            "mass": mol.mass,
+            "elements": mol.elements,
+            "element_counts": mol.element_counts,
+            "center_of_mass": mol.center_of_mass,
+            "is_chiral": mol.is_chiral,
+            "is_ring": mol.is_ring,
+            "is_aromatic": mol.is_aromatic,
+            "is_monoatomic": mol.is_monoatomic,
+            "is_diatomic": mol.is_diatomic,
+            "is_linear": mol.is_linear,
+            "is_multicomponent": mol.is_multicomponent,
+            "num_components": mol.num_components,
+            "smiles": mol.smiles,
+            "inchi": mol.inchi,
+            "chiral_centers": mol.chiral_centers,
+            "moments_of_inertia": mol.moments_of_inertia,
+            "frozen_atoms": mol.frozen_atoms,
+            "energy": mol.energy,
+            "forces": mol.forces,
+        }
+        if mol.mulliken_atomic_charges is not None:
+            molecule_info["mulliken_atomic_charges"] = (
+                mol.mulliken_atomic_charges
+            )
+        if mol.mulliken_spin_densities is not None:
+            molecule_info["mulliken_spin_densities"] = (
+                mol.mulliken_spin_densities
+            )
+        if mol.rotational_symmetry_number is not None:
+            molecule_info["rotational_symmetry_number"] = (
+                mol.rotational_symmetry_number
+            )
+        if mol.rotational_constants is not None:
+            molecule_info["rotational_constants"] = mol.rotational_constants
+        if mol.point_group is not None:
+            molecule_info["point_group"] = mol.point_group
+        if mol.dipole_moment is not None:
+            molecule_info["dipole_moment"] = mol.dipole_moment
+        if mol.dipole_moment_magnitude is not None:
+            molecule_info["dipole_moment_magnitude"] = (
+                mol.dipole_moment_magnitude
+            )
+        if mol.has_vibrations:
+            molecule_info.update(
+                {
+                    "num_vibrational_modes": mol.num_vib_modes,
+                    "vibrational_frequencies": mol.vibrational_frequencies,
+                    "vibrational_modes": mol.vibrational_modes,
+                }
+            )
+        return molecule_info
+
+
+class BaseAssembler(MoleculeInfoAssemblerMixin):
     OUTPUT_CLASS = None  # To be defined in subclasses
     PROGRAM = "unknown"  # To be defined in subclasses
     FOLDER_BASED = False
@@ -192,73 +266,6 @@ class BaseAssembler:
             )
         return meta_data
 
-    def get_molecule_info(self, mol):
-        molecule_info = {
-            "molecule_label": mol.molecule_label,
-            "molecule_id": mol.molecule_id,
-            "structure_index_in_file": mol.structure_index_in_file,
-            "is_optimized_structure": mol.is_optimized_structure,
-            "charge": mol.charge,
-            "multiplicity": mol.multiplicity,
-            "structure_id": mol.structure_id,
-            "structure_label": mol.structure_label,
-            "chemical_symbols": mol.chemical_symbols,
-            "positions": mol.positions,
-            "empirical_formula": mol.empirical_formula,
-            "chemical_formula": mol.chemical_formula,
-            "number_of_atoms": mol.num_atoms,
-            "mass": mol.mass,
-            "elements": mol.elements,
-            "element_counts": mol.element_counts,
-            "center_of_mass": mol.center_of_mass,
-            "is_chiral": mol.is_chiral,
-            "is_ring": mol.is_ring,
-            "is_aromatic": mol.is_aromatic,
-            "is_monoatomic": mol.is_monoatomic,
-            "is_diatomic": mol.is_diatomic,
-            "is_linear": mol.is_linear,
-            "is_multicomponent": mol.is_multicomponent,
-            "num_components": mol.num_components,
-            "smiles": mol.smiles,
-            "inchi": mol.inchi,
-            "chiral_centers": mol.chiral_centers,
-            "moments_of_inertia": mol.moments_of_inertia,
-            "frozen_atoms": mol.frozen_atoms,
-            "energy": mol.energy,
-            "forces": mol.forces,
-        }
-        if mol.mulliken_atomic_charges is not None:
-            molecule_info["mulliken_atomic_charges"] = (
-                mol.mulliken_atomic_charges
-            )
-        if mol.mulliken_spin_densities is not None:
-            molecule_info["mulliken_spin_densities"] = (
-                mol.mulliken_spin_densities
-            )
-        if mol.rotational_symmetry_number is not None:
-            molecule_info["rotational_symmetry_number"] = (
-                mol.rotational_symmetry_number
-            )
-        if mol.rotational_constants is not None:
-            molecule_info["rotational_constants"] = mol.rotational_constants
-        if mol.point_group is not None:
-            molecule_info["point_group"] = mol.point_group
-        if mol.dipole_moment is not None:
-            molecule_info["dipole_moment"] = mol.dipole_moment
-        if mol.dipole_moment_magnitude is not None:
-            molecule_info["dipole_moment_magnitude"] = (
-                mol.dipole_moment_magnitude
-            )
-        if mol.has_vibrations:
-            molecule_info.update(
-                {
-                    "num_vibrational_modes": mol.num_vib_modes,
-                    "vibrational_frequencies": mol.vibrational_frequencies,
-                    "vibrational_modes": mol.vibrational_modes,
-                }
-            )
-        return molecule_info
-
     def get_calculation_results(self):
         calculation_results = {
             "total_energy": (
@@ -396,6 +403,119 @@ class XTBAssembler(BaseAssembler):
             }
         )
         return calculation_results
+
+
+class NPZAssembler(MoleculeInfoAssemblerMixin):
+    """Build one database record per NPZ structure."""
+
+    def __init__(self, filename, index=":"):
+        self.filename = filename
+        self.index = index
+
+    def assemble(self):
+        digest = hashlib.sha256()
+        with open(self.filename, "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        source_hash = digest.hexdigest()
+        source_size = file_size(self.filename)
+        molecules = Molecule.from_filepath(
+            self.filename, index=self.index, return_list=True
+        )
+        for molecule in molecules:
+            index = molecule.structure_index_in_file
+            record_id = hashlib.sha256(
+                f"npz|{source_hash}|{index}".encode()
+            ).hexdigest()
+            results = {"total_energy": molecule.energy}
+            fields = (
+                {
+                    "id": None,
+                    "A": "GHz",
+                    "B": "GHz",
+                    "C": "GHz",
+                    "mu": "Debye",
+                    "alpha": "bohr^3",
+                    "homo": "eV",
+                    "lumo": "eV",
+                    "gap": "eV",
+                    "r2": "bohr^2",
+                    "zpve": "eV",
+                    "U0": "eV",
+                    "U": "eV",
+                    "H": "eV",
+                    "G": "eV",
+                    "Cv": "cal/(mol K)",
+                }
+                if molecule.dataset_source == "qm9_eV"
+                else {
+                    "inds": None,
+                    "atomization": None,
+                    "homo": None,
+                    "lumo": None,
+                    "dipole": None,
+                }
+            )
+            dataset_properties = {
+                key: {"value": getattr(molecule, key), "unit": unit}
+                for key, unit in fields.items()
+                if getattr(molecule, key) is not None
+            }
+            if molecule.dataset_source == "revQM9":
+                for key in ("atomization", "homo", "lumo"):
+                    if key in dataset_properties:
+                        dataset_properties[key]["suggested_unit"] = "Hartree"
+                        dataset_properties[key]["unit_status"] = "inferred"
+                if "dipole" in dataset_properties:
+                    dataset_properties["dipole"]["suggested_unit"] = "Debye"
+                    dataset_properties["dipole"]["unit_status"] = "inferred"
+            if molecule.dataset_source == "qm9_eV":
+                results.update(
+                    homo_energy=molecule.homo,
+                    lumo_energy=molecule.lumo,
+                    fmo_gap=molecule.gap,
+                )
+            else:
+                if molecule.homo is not None:
+                    results["homo_energy"] = molecule.homo * Hartree
+                if molecule.lumo is not None:
+                    results["lumo_energy"] = molecule.lumo * Hartree
+                if molecule.homo is not None and molecule.lumo is not None:
+                    results["fmo_gap"] = (
+                        molecule.lumo - molecule.homo
+                    ) * Hartree
+            molecule_info = self.get_molecule_info(molecule)
+            if (
+                molecule.dataset_source == "revQM9"
+                and molecule.dipole is not None
+            ):
+                molecule_info["dipole_moment_magnitude"] = molecule.dipole
+            yield AssembledRecord(
+                record_id=record_id,
+                meta=(
+                    {"method": "aPBE0", "basis": "cc-pVTZ"}
+                    if molecule.dataset_source == "revQM9"
+                    else {}
+                ),
+                results=results,
+                molecules=[
+                    {
+                        "index": 1,
+                        **molecule_info,
+                        "dataset_properties": dataset_properties,
+                    }
+                ],
+                provenance={
+                    "source": self.filename,
+                    "source_file_hash": source_hash,
+                    "source_size": source_size,
+                    "program": molecule.dataset_source,
+                    "parser": "NPZFile",
+                    "chemsmart_version": chemsmart_version,
+                    "assembled_at": utcnow_iso(),
+                    "normal_termination": None,
+                },
+            )
 
 
 class SingleFileAssembler:

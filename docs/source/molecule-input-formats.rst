@@ -84,20 +84,25 @@ The supported dataset layouts are DGL QM9 (``R``, ``Z``, ``N``) and official rev
 ``elements``). In revQM9, ``charges`` are atomic numbers, not partial charges. If additional element identities are
 provided, they must agree. Coordinates must be in Angstrom.
 
+Dataset downloads:
+
+-  `qm9_eV.npz <https://data.dgl.ai/dataset/qm9_eV.npz>`_ (download hosted by DGL).
+-  `revQM9.npz <https://zenodo.org/records/10689884>`_ (dataset authors' Zenodo page).
+
 .. code:: bash
 
    chemsmart sub -s server gaussian -p project -f revQM9.npz -i 1 -c 0 -m 1 opt
 
 The reader imports atomic species and coordinates. When present, revQM9's total energy is assigned to
 ``molecule.energy``. DGL QM9's ``U0`` is assigned to ``molecule.U0`` because it is an atom-reference-adjusted 0 K
-energy, rather than the total molecular energy represented by ``molecule.energy``. Molecular charge and multiplicity are
-supplied separately with ``-c`` and ``-m``. The Python API defaults to the last structure. Other NPZ schemas and zero
-padding are not supported. Object arrays are read using restricted NumPy reconstruction.
+energy, rather than the total molecular energy represented by ``molecule.energy``. For the supported QM9 and revQM9
+layouts, the reader assigns charge 0 and multiplicity 1. The Python API defaults to the last structure. Other NPZ
+schemas and zero padding are not supported. Object arrays are read using restricted NumPy reconstruction.
 
 Supported per-molecule dataset properties are available as ``molecule.homo``, ``molecule.lumo``, and similar attributes,
 using original field names and values without unit conversion. ``molecule.dataset_source`` identifies the layout. The
-``atomization_test`` array in revQM9 has a different length from the structure arrays and is not imported. These
-additional properties are not currently stored in the database.
+``atomization_test`` array in revQM9 has a different length from the structure arrays and is not imported. The NPZ
+database import preserves supported per-molecule properties with source units where confirmed.
 
 SDF Files
 ---------

@@ -225,6 +225,8 @@ class NPZFile(FileMixin):
                     symbols=symbols,
                     positions=xyz,
                     energy=energy,
+                    charge=0,
+                    multiplicity=1,
                     structure_index_in_file=int(i) + 1,
                 )
                 molecule.dataset_source = (

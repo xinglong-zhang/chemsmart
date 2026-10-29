@@ -2,6 +2,7 @@
 
 import os
 import pickle
+import sqlite3
 from importlib import import_module
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -9,6 +10,7 @@ from zipfile import ZipFile
 
 import numpy as np
 import pytest
+from ase.units import Hartree
 from click.testing import CliRunner
 from numpy.lib.format import write_array_header_1_0
 
@@ -30,6 +32,61 @@ def _write_revqm9(path):
 
 
 class TestNPZStructures:
+    @pytest.mark.parametrize(
+        "filename", ["revQM9_subset.npz", "qm9_eV_subset.npz"]
+    )
+    def test_npz_database_import(self, tmp_path, filename):
+        from chemsmart.cli.database.assemble import assemble
+        from chemsmart.database.database import Database
+
+        source = Path(__file__).parent / "data" / "IOTests" / filename
+        output = tmp_path / "dataset.db"
+        args = ["-f", str(source), "-i", "3,1", "-o", str(output)]
+        result = CliRunner().invoke(assemble, args, obj={})
+        assert result.exit_code == 0, (result.output, result.exception)
+        with sqlite3.connect(output) as conn:
+            rows = conn.execute(
+                "SELECT r.program, r.total_energy, r.homo_energy, "
+                "r.normal_termination, rs.structure_index_in_file, rs.energy "
+                "FROM records r JOIN record_structures rs USING (record_id) "
+                "ORDER BY r.record_index"
+            ).fetchall()
+        assert len(rows) == 2
+        assert [row[4] for row in rows] == [3, 1]
+        assert all(row[3] is None for row in rows)
+        record = Database(str(output)).get_record(record_index=2)
+        properties = record["molecules"][0]["dataset_properties"]
+        restored = Molecule.from_filepath(str(output), record_index=2)
+        assert (restored.charge, restored.multiplicity) == (0, 1)
+        assert restored.structure_index_in_file == 1
+        if filename.startswith("rev"):
+            assert rows[1][1] == pytest.approx(-40.47574250955533)
+            assert rows[1][5] == pytest.approx(rows[1][1])
+            assert rows[1][2] == pytest.approx(-0.4093204819908599 * Hartree)
+            assert properties["homo"]["value"] == pytest.approx(-0.40932048)
+            assert properties["homo"]["unit"] is None
+            assert restored.homo == pytest.approx(-0.40932048)
+            assert restored.atomization == pytest.approx(-0.66538218)
+            assert restored.dataset_source == "revQM9"
+            assert properties["homo"]["unit_status"] == "inferred"
+            assert properties["dipole"]["suggested_unit"] == "Debye"
+            assert record["molecules"][0][
+                "dipole_moment_magnitude"
+            ] == pytest.approx(1.2762092032023672e-05)
+            assert record["results"]["lumo_energy"] == pytest.approx(
+                0.06115874826417237 * Hartree
+            )
+            assert properties["atomization"]["value"] == pytest.approx(
+                -0.66538218
+            )
+        else:
+            assert rows[1][1] is None
+            assert rows[1][2] == pytest.approx(-10.54985436)
+            assert properties["U0"]["value"] == pytest.approx(-17.17218053)
+            assert properties["U0"]["unit"] == "eV"
+            assert restored.U0 == pytest.approx(-17.17218053)
+            assert restored.dataset_source == "qm9_eV"
+
     def test_revqm9_subset_fixture(self):
         # First five entries from the official revQM9 dataset.
         path = Path(__file__).parent / "data" / "IOTests" / "revQM9_subset.npz"
@@ -84,7 +141,8 @@ class TestNPZStructures:
         molecules = Molecule.from_filepath(path, index=":", return_list=True)
         assert [list(m.symbols) for m in molecules] == [["He"], ["H", "H"]]
         assert [m.structure_index_in_file for m in molecules] == [1, 2]
-        assert molecules[0].charge is None and molecules[0].energy is None
+        assert molecules[0].charge == 0 and molecules[0].multiplicity == 1
+        assert molecules[0].energy is None
         np.testing.assert_array_equal(molecules[1].positions, coords[1])
         assert list(Molecule.from_filepath(path, index="-1").symbols) == [
             "H",
