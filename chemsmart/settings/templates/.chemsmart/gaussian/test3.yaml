@@ -1,11 +1,13 @@
 # Default Gaussian settings for calculations for project ring strain (rs)
 gas:
+  dieze_tag: p  # comment/remove if not using
   functional: mn15
   basis: genecp
   heavy_elements: ['Rh','Ag','Br','Cu', 'Pd']
   heavy_elements_basis: def2tzvpd
   light_elements_basis: def2svp
-solv: 
+solv:
+  dieze_tag: p  # comment/remove if not using
   functional: mn15
   basis: def2qzvp
   freq: False
