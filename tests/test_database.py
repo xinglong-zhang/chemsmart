@@ -1100,6 +1100,30 @@ class TestDatabaseInspect:
         assert "S, D" in formatted
         assert "unavailable" not in formatted
 
+    def test_record_detail_heavy_elements_basis_name(
+        self, tmp_path, monkeypatch
+    ):
+        db = Database(str(tmp_path / "chemsmart.db"))
+        db.create()
+        inspector = DatabaseInspector(db.db_file)
+        record = {
+            "meta": {
+                "basis": "customized_basis",
+                "custom_basis": {
+                    "heavy_elements": ["Ag"],
+                    "heavy_elements_basis": "def2-TZVP",
+                    "heavy_elements_basis_functions": {
+                        "Ag": [{"shell": "S", "primitives": [(1.0, 1.0)]}]
+                    },
+                },
+            },
+            "provenance": {"source": "ag.log"},
+        }
+        monkeypatch.setattr(inspector, "record_detail", lambda: record)
+        formatted = inspector.format_record_detail()
+        assert "Ag  [def2-TZVP]" in formatted
+        assert "Ag Shells" in formatted
+
     def test_inspect_overview_and_record(
         self,
         tmp_path,

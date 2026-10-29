@@ -302,13 +302,13 @@ class DatabaseInspector:
             light_elems = custom_basis.get("light_elements")
             light_basis = custom_basis.get("light_elements_basis")
             heavy_elems = custom_basis.get("heavy_elements")
+            heavy_basis_name = custom_basis.get("heavy_elements_basis")
             heavy_basis = custom_basis.get("heavy_elements_basis_functions")
-            if heavy_basis is None and isinstance(
-                custom_basis.get("heavy_elements_basis"), dict
-            ):
+            if isinstance(heavy_basis_name, dict):
                 # Records assembled before the name/functions split stored
                 # the basis functions under "heavy_elements_basis".
-                heavy_basis = custom_basis["heavy_elements_basis"]
+                heavy_basis = heavy_basis or heavy_basis_name
+                heavy_basis_name = None
             heavy_ecp = custom_basis.get("heavy_elements_ecp")
             if light_elems:
                 light_str = ", ".join(light_elems)
@@ -316,9 +316,10 @@ class DatabaseInspector:
                     light_str += f"  [{light_basis}]"
                 lines.append(format_kv("  Light Elements", light_str))
             if heavy_elems:
-                lines.append(
-                    format_kv("  Heavy Elements", ", ".join(heavy_elems))
-                )
+                heavy_str = ", ".join(heavy_elems)
+                if heavy_basis_name:
+                    heavy_str += f"  [{heavy_basis_name}]"
+                lines.append(format_kv("  Heavy Elements", heavy_str))
             if heavy_basis:
                 for elem, shells in heavy_basis.items():
                     shell_types = ", ".join(s["shell"] for s in shells)
