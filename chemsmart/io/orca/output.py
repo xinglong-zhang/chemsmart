@@ -352,6 +352,61 @@ class ORCAOutput(ORCAFileMixin):
                 return line.lower().split("> ")[-1]
         return None
 
+    @cached_property
+    def _element_basis_names(self):
+        """
+        Element-specific basis set names assigned in the %basis block of the
+        echoed input file via ``NewGTO <element> "<basis name>" end``.
+        Returns a dict keyed by element symbol, e.g. {'Pd': 'def2-TZVP'}.
+        """
+        input_lines = []
+        for line in self.contents:
+            if "****END OF INPUT****" in line:
+                break
+            match = re.match(r"^\|\s*\d+>(.*)$", line)
+            if match:
+                input_lines.append(match.group(1))
+        input_text = " ".join(input_lines)
+        basis_names = {}
+        for element, basis_name in re.findall(
+            r"(?i)\bNewGTO\s+([A-Za-z]{1,2})\s+\"([^\"]+)\"", input_text
+        ):
+            element = element.capitalize()
+            if element in p.PERIODIC_TABLE:
+                basis_names[element] = basis_name
+        return basis_names
+
+    @property
+    def heavy_elements(self):
+        """
+        List of element symbols assigned an element-specific basis set
+        with ``NewGTO`` in the %basis block, or None if there are none.
+        """
+        if not self._element_basis_names:
+            return None
+        return p.sorted_periodic_table_list(
+            list(self._element_basis_names.keys())
+        )
+
+    @property
+    def heavy_elements_basis(self):
+        """
+        Name of the basis set assigned to the heavy elements with
+        ``NewGTO`` in the %basis block (consistent with
+        Gaussian16Input.heavy_elements_basis).  Returns None if no
+        element-specific basis is given or if the heavy elements use
+        different basis sets.
+        """
+        basis_names = set(self._element_basis_names.values())
+        if len(basis_names) != 1:
+            if len(basis_names) > 1:
+                logger.debug(
+                    f"Heavy elements use different basis sets: "
+                    f"{self._element_basis_names}"
+                )
+            return None
+        return basis_names.pop()
+
     @property
     def num_atoms(self):
         """
