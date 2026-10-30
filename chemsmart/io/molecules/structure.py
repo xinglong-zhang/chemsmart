@@ -3005,7 +3005,7 @@ class Molecule:
     @property
     def soap_descriptors(self):
         """
-        Return SOAP descriptors for the molecule.
+        Return default SOAP descriptors for the molecule.
         """
         return self.calculate_soap()
 

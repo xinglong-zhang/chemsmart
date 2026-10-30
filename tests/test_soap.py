@@ -48,6 +48,13 @@ class TestCalculateSoapBasics:
             via_method, via_module, rtol=RTOL, atol=ATOL
         )
 
+    def test_molecule_property_matches_method(self, water_molecule):
+        via_property = water_molecule.soap_descriptors
+        via_method = water_molecule.calculate_soap()
+        np.testing.assert_allclose(
+            via_property, via_method, rtol=RTOL, atol=ATOL
+        )
+
     def test_parity_with_golden_reference(
         self, water_molecule, soap_reference_data
     ):
