@@ -55,6 +55,7 @@ from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.jobs.xtb.settings import XTBJobSettings
+from chemsmart.settings.crest import CRESTProjectSettings
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
 
@@ -3343,6 +3344,15 @@ def legacy_server_yaml(tmp_path):
 @pytest.fixture()
 def crest_settings():
     return CRESTJobSettings.default()
+
+
+@pytest.fixture()
+def my_crest_project_settings():
+    class MyCRESTProjectSettings(CRESTProjectSettings):
+        PROJECT_NAME = "my_project"
+        gfn_version = "gfnff"
+
+    return MyCRESTProjectSettings()
 
 
 @pytest.fixture()
