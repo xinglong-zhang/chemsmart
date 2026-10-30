@@ -410,6 +410,49 @@ def run_orca_and_capture_settings():
     return _run
 
 
+@pytest.fixture()
+def run_crest_and_capture_settings():
+    """Run the crest CLI with a patched job class and capture settings.
+
+    Unlike the other ``run_*_and_capture_settings`` fixtures, this also
+    returns the mock job class itself, since several crest CLI tests
+    need to inspect other constructor kwargs (e.g. ``label``) in
+    addition to ``settings``.
+
+    Usage in tests::
+
+        def test_something(run_crest_and_capture_settings):
+            result, settings, mock_job_cls = run_crest_and_capture_settings(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+                ["-p", "test", "-f", filename, "-c", "0", "-m", "1",
+                 "conformers"],
+            )
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.crest.crest import crest as crest_cli
+
+    def _run(job_class_path, cli_args, ctx_obj=None):
+        if ctx_obj is None:
+            ctx_obj = {"jobrunner": MagicMock()}
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                crest_cli,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings, mock_job_cls
+
+    return _run
+
+
 @pytest.fixture
 def invoke_mol_with_visualize():
     """Invoke ``mol … visualize`` with all PyMOL job execution mocked out."""
@@ -1799,6 +1842,31 @@ def orca_yaml_settings_custom_solv_cosmors_project_name(
     orca_yaml_settings_directory,
 ):
     return os.path.join(orca_yaml_settings_directory, "custom_solv_cosmors")
+
+
+@pytest.fixture
+def orca_td_project_name(orca_yaml_settings_directory):
+    return os.path.join(orca_yaml_settings_directory, "orca_td")
+
+
+@pytest.fixture
+def orca_td_extras_project_name(orca_yaml_settings_directory):
+    """Project name whose ``td:`` block sets ``additional_route_parameters``."""
+    return os.path.join(orca_yaml_settings_directory, "orca_td_extras")
+
+
+@pytest.fixture
+def orca_td_numfreq_project_name(orca_yaml_settings_directory):
+    """Project name whose ``td:`` block requests ``NumFreq`` via YAML."""
+    return os.path.join(orca_yaml_settings_directory, "orca_td_numfreq")
+
+
+@pytest.fixture
+def orca_td_inherited_project_name(orca_yaml_settings_directory):
+    """Project name whose ``td:`` block omits ``freq``; combined with the
+    ``ORCAJobSettings`` defaults this yields ``freq=True`` inherited into the
+    TD settings, without any ``additional_route_parameters``."""
+    return os.path.join(orca_yaml_settings_directory, "orca_td_inherited")
 
 
 # master xTB test directory

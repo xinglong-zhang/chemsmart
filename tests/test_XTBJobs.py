@@ -1,7 +1,35 @@
 from pathlib import Path
 
+import pytest
+
 from chemsmart.jobs.xtb.opt import XTBOptJob
 from chemsmart.jobs.xtb.settings import XTBJobSettings
+
+
+class TestXTBJobConstructionValidation:
+    def test_rejects_non_xtb_job_settings(self, water_molecule):
+        with pytest.raises(ValueError, match="Settings must be instance"):
+            XTBOptJob(
+                molecule=water_molecule,
+                settings="not-a-settings-object",
+                label="water_opt",
+            )
+
+    def test_rejects_non_molecule(self):
+        settings = XTBJobSettings(charge=0, multiplicity=1, jobtype="opt")
+        with pytest.raises(ValueError, match="Molecule must be instance"):
+            XTBOptJob(
+                molecule="not-a-molecule",
+                settings=settings,
+                label="water_opt",
+            )
+
+    def test_label_defaults_to_empirical_chemical_formula(
+        self, water_molecule
+    ):
+        settings = XTBJobSettings(charge=0, multiplicity=1, jobtype="opt")
+        job = XTBOptJob(molecule=water_molecule, settings=settings, label=None)
+        assert job.label == water_molecule.get_chemical_formula(empirical=True)
 
 
 class TestXTBJobs:

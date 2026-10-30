@@ -26,6 +26,9 @@ class PyMOLMOJob(PyMOLJob):
         homo (bool | None): Whether to visualize the HOMO.
         lumo (bool | None): Whether to visualize the LUMO.
         mo_basename (str): Basename for MO-related artifacts (cube, pml, pse).
+        swap (bool): Swap positive and negative phase colors.
+        color_positive (str | None): PyMOL color for the positive phase.
+        color_negative (str | None): PyMOL color for the negative phase.
         jobrunner (JobRunner): Execution backend for running the job.
         skip_completed (bool): If True, completed jobs are not rerun.
     """
@@ -40,6 +43,9 @@ class PyMOLMOJob(PyMOLJob):
         homo=None,
         lumo=None,
         mo_basename=None,
+        swap=False,
+        color_positive=None,
+        color_negative=None,
         **kwargs,
     ):
         """
@@ -58,6 +64,12 @@ class PyMOLMOJob(PyMOLJob):
             lumo (bool, optional): Visualize LUMO if True.
             mo_basename (str, optional): Base name for output files
                 (auto-generated if not provided).
+            swap (bool, optional): Swap positive and negative phase
+                colors if True.
+            color_positive (str, optional): PyMOL color for the positive
+                phase isosurface.
+            color_negative (str, optional): PyMOL color for the negative
+                phase isosurface.
             **kwargs: Additional arguments passed to parent PyMOLJob.
 
         Raises:
@@ -85,6 +97,10 @@ class PyMOLMOJob(PyMOLJob):
         )
 
         self.mo_basename = mo_basename
+
+        self.swap = swap
+        self.color_positive = color_positive
+        self.color_negative = color_negative
 
     def _get_job_basename(self):
         """

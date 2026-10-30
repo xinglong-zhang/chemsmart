@@ -576,14 +576,26 @@ class GaussianFileMixin(FileMixin):
         """
         Check if file contains a Gaussian link job.
 
-        Searches for link job indicators such as 'stable=opt' in
-        route lines to determine if this is a multi-step job.
+        Searches for link job indicators such as ``stable=opt`` in complete
+        route blocks. Gaussian may wrap a route across multiple lines.
 
         Returns:
             bool: True if link job detected, False otherwise.
         """
-        for line in self.contents:
-            if line.startswith("#") and "stable=opt" in line:
+        lines = self.contents
+        for i, line in enumerate(lines):
+            if not line.startswith("#"):
+                continue
+
+            route_lines = [line]
+            for continuation in lines[i + 1 :]:
+                if not continuation or continuation.startswith(
+                    ("------", "#")
+                ):
+                    break
+                route_lines.append(continuation)
+
+            if "stable=opt" in "".join(route_lines).lower():
                 return True
         return False
 
@@ -951,6 +963,16 @@ class GaussianFileMixin(FileMixin):
 
         title = f"Job prepared from Gaussian file {filename}"
 
+        # Gaussian output files expose custom SMD parameters as a dictionary
+        # for convenient programmatic inspection, whereas job settings use
+        # the free-form text that is written back to a Gaussian input file.
+        # Convert only at this boundary so both APIs keep their intended type.
+        custom_solvent = self.custom_solvent
+        if isinstance(custom_solvent, dict):
+            custom_solvent = "\n".join(
+                f"{key}={value}" for key, value in custom_solvent.items()
+            )
+
         return GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
@@ -975,7 +997,7 @@ class GaussianFileMixin(FileMixin):
             heavy_elements=self.heavy_elements,
             heavy_elements_basis=self.heavy_elements_basis,
             light_elements_basis=self.light_elements_basis,
-            custom_solvent=self.custom_solvent,
+            custom_solvent=custom_solvent,
             append_additional_info=None,
             forces=False,
         )

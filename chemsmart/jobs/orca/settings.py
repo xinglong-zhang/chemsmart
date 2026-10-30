@@ -620,6 +620,23 @@ class ORCAJobSettings(MolecularJobSettings):
                 route_string, self.solvent_model
             )
 
+        # Append additional route parameters (e.g. ``-r "Opt Freq"``) while
+        # avoiding duplicates that the structured fields already wrote.
+        if self.additional_route_parameters is not None:
+            extras = str(self.additional_route_parameters).strip()
+            if extras:
+                existing_lower = {
+                    tok.lower() for tok in re.findall(r"[^\s!]+", route_string)
+                }
+                remaining = []
+                for tok in extras.split():
+                    if tok.lower() in existing_lower:
+                        continue
+                    remaining.append(tok)
+                    existing_lower.add(tok.lower())
+                if remaining:
+                    route_string += " " + " ".join(remaining)
+
         return route_string
 
     def _get_level_of_theory(self):
@@ -2698,3 +2715,81 @@ class ORCANEBJobSettings(ORCAJobSettings):
             )
 
         return route_string
+
+
+class ORCATDDFTJobSettings(ORCAJobSettings):
+    """Settings for ORCA TDDFT / TDA excited-state jobs.
+
+    The writer emits ``%tddft`` (and an optional ``%rel`` block for SOC).
+    A bare TD calculation is vertical: neither ``Opt`` nor ``Freq`` /
+    ``NumFreq`` appears on the route.  Excited-state optimization and
+    frequencies are opt-in via the constructor flags below (or, in the CLI,
+    via ``-r "Opt"`` / ``-r "Freq"`` on the ``orca`` group); when enabled they
+    act on the target excited state selected by ``IRoot``/``IRootMult``, not on
+    the ground state.
+    """
+
+    def __init__(
+        self,
+        nroots=3,
+        triplets=None,
+        tda=False,
+        dosoc=None,
+        printlevel=None,
+        cpcmeq=None,
+        soc_type=None,
+        donto=None,
+        ntostates=None,
+        ntothresh=None,
+        td_maxiter=None,
+        td_maxdim=None,
+        td_etol=None,
+        td_rtol=None,
+        tprint=None,
+        opt_excited=False,
+        iroot=None,
+        iroot_mult=None,
+        follow_iroot=None,
+        **kwargs,
+    ):
+        # Default to TD if the caller does not override; explicit callers
+        # (Python API) may still pass another jobtype to control the route.
+        kwargs.setdefault("jobtype", "td")
+        super().__init__(**kwargs)
+
+        self.nroots = nroots
+        self.triplets = triplets
+        self.tda = tda
+        self.dosoc = dosoc
+        self.printlevel = printlevel
+        self.cpcmeq = cpcmeq
+        self.soc_type = soc_type
+        self.donto = donto
+        self.ntostates = ntostates
+        self.ntothresh = ntothresh
+        self.td_maxiter = td_maxiter
+        self.td_maxdim = td_maxdim
+        self.td_etol = td_etol
+        self.td_rtol = td_rtol
+        self.tprint = tprint
+        self.opt_excited = bool(opt_excited)
+        self.iroot = iroot
+        self.iroot_mult = iroot_mult
+        self.follow_iroot = follow_iroot
+
+    def _get_route_string_from_jobtype(self):
+        """Route generator for TD jobs.
+
+        Reuses the base logic but promotes ``opt_excited`` to a route-line
+        ``Opt`` keyword by temporarily masking ``jobtype`` as ``"opt"``. The
+        base method already appends ``Freq``/``NumFreq`` from the corresponding
+        flags and dedups ``additional_route_parameters``.
+        """
+        if not self.opt_excited:
+            return super()._get_route_string_from_jobtype()
+        original_jobtype = self.jobtype
+        self.jobtype = "opt"
+        try:
+            return super()._get_route_string_from_jobtype()
+        finally:
+            self.jobtype = original_jobtype
