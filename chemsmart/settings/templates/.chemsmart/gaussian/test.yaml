@@ -1,18 +1,21 @@
 # Default Gaussian settings for calculations 
 gas:
+  dieze_tag: p  # comment/remove if not using
   ab_initio: Null
   functional: m062x  # quotes required for string with spaces
   basis: def2svp
   semiempirical: Null
   solvent_model: smd
   solvent_id: dichloroethane
-solv: 
+solv:
+  dieze_tag: p  # comment/remove if not using
   functional: m062x
   basis: def2tzvp
   freq: False
   solvent_model: smd
   solvent_id: dichloroethane
 td:
+  dieze_tag: p  # comment/remove if not using
   functional: cam-b3lyp
   basis: genecp
   heavy_elements: ['I']

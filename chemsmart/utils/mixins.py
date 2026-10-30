@@ -576,14 +576,26 @@ class GaussianFileMixin(FileMixin):
         """
         Check if file contains a Gaussian link job.
 
-        Searches for link job indicators such as 'stable=opt' in
-        route lines to determine if this is a multi-step job.
+        Searches for link job indicators such as ``stable=opt`` in complete
+        route blocks. Gaussian may wrap a route across multiple lines.
 
         Returns:
             bool: True if link job detected, False otherwise.
         """
-        for line in self.contents:
-            if line.startswith("#") and "stable=opt" in line:
+        lines = self.contents
+        for i, line in enumerate(lines):
+            if not line.startswith("#"):
+                continue
+
+            route_lines = [line]
+            for continuation in lines[i + 1 :]:
+                if not continuation or continuation.startswith(
+                    ("------", "#")
+                ):
+                    break
+                route_lines.append(continuation)
+
+            if "stable=opt" in "".join(route_lines).lower():
                 return True
         return False
 
