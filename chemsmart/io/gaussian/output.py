@@ -113,9 +113,11 @@ class Gaussian16Output(GaussianFileMixin):
         `heavy_elements_basis_functions` against the Basis Set Exchange
         library (see `heavy_elements_basis_candidates`).  When several BSE
         basis sets are identical for all heavy elements (e.g. def2-TZVP and
-        def2-TZVPD for Ag), the shortest name is returned.
+        def2-TZVPD for Ag), the shortest name is returned. The ECP must also
+        match, including its absence, so the inferred name is safe to use
+        when reconstructing the basis section from BSE.
         Returns None when the basis functions are unavailable (no #p) or no
-        single BSE basis set matches all heavy elements.
+        single BSE basis set and ECP match all heavy elements.
         """
         candidates = self.heavy_elements_basis_candidates
         if not candidates:
@@ -128,6 +130,23 @@ class Gaussian16Output(GaussianFileMixin):
                 f"No Basis Set Exchange basis set matches all heavy "
                 f"elements: {candidates}"
             )
+            return None
+        from chemsmart.io.gaussian import BSEMetadata
+
+        bse_metadata = BSEMetadata()
+        ecps = self.heavy_elements_ecp or {}
+        common_names = {
+            name
+            for name in common_names
+            if all(
+                bse_metadata.basis_ecp_matches(
+                    element, name, ecps.get(element)
+                )
+                for element in candidates
+            )
+        }
+        if not common_names:
+            logger.debug("No matching BSE basis preserves the printed ECP.")
             return None
         names = sorted(common_names, key=lambda name: (len(name), name))
         if len(names) > 1:

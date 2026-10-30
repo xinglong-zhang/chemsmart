@@ -884,6 +884,18 @@ def gaussian_full_genecp_outfile(gaussian_outputs_test_directory):
     )
 
 
+@pytest.fixture()
+def gaussian_custom_ecp_outfile(tmp_path, gaussian_full_genecp_outfile):
+    """Keep the Ag orbital functions but use a different ECP coefficient."""
+    source = Path(gaussian_full_genecp_outfile).read_text(encoding="utf-8")
+    assert source.count("-33.68992012") == 1
+    output = tmp_path / "silver_chloride_custom_ecp.log"
+    output.write_text(
+        source.replace("-33.68992012", "-34.68992012", 1), encoding="utf-8"
+    )
+    return str(output)
+
+
 # Gaussian output file for frozen coordinates
 @pytest.fixture()
 def gaussian_frozen_opt_outfile(gaussian_outputs_test_directory):

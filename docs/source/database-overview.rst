@@ -139,6 +139,16 @@ A typical CHEMSMART database workflow is:
 -  **Idempotent assembly.** Re-running ``assemble`` on the same directory will not duplicate records. Entries with the
    same ``record_id`` are replaced, and the number of replaced duplicates is reported.
 
+-  **Custom basis identity.** ``heavy_elements_basis`` stores a basis-set name, while ``heavy_elements_basis_functions``
+   stores the printed orbital functions. For unchanged parsed functions and ECPs, record IDs remain compatible with the
+   earlier functions-only metadata format; choosing a different name for the same functions does not create a new
+   calculation record.
+
+-  **Gaussian basis reuse.** For verbose ``#p`` Gen/GenECP output, basis names are inferred from Basis Set Exchange only
+   when both the orbital functions and the ECP match, including the absence of an ECP. Orbital-only matches remain
+   available in ``heavy_elements_basis_candidates``. If no complete match exists, supply an explicit basis name or a
+   ``gen_genecp_file`` containing the intended basis and ECP before preparing another calculation.
+
 -  **Database validation.** Every database operation first verifies that the input is a valid CHEMSMART database with
    the expected schema. Foreign ``.db`` files are rejected with a clear error.
 

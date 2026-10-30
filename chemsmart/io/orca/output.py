@@ -24,7 +24,9 @@ from chemsmart.utils.periodictable import PeriodicTable
 from chemsmart.utils.repattern import (
     orca_constrained_coordinates_pattern,
     orca_frozen_atoms_output_pattern,
+    orca_input_comment_pattern,
     orca_input_coordinate_in_output,
+    orca_input_token_pattern,
     orca_nproc_used_line_pattern,
     standard_coord_pattern,
 )
@@ -366,14 +368,42 @@ class ORCAOutput(ORCAFileMixin):
             match = re.match(r"^\|\s*\d+>(.*)$", line)
             if match:
                 input_lines.append(match.group(1))
-        input_text = " ".join(input_lines)
+        # Keep line boundaries until comments have been removed. A comment
+        # may end at a second '#', and quoted strings may themselves contain
+        # '#', so the generic end-of-line comment stripper is insufficient.
+        input_text = re.sub(
+            orca_input_comment_pattern,
+            lambda match: (
+                "" if match.group().startswith("#") else match.group()
+            ),
+            "\n".join(input_lines),
+            flags=re.MULTILINE,
+        )
+        tokens = re.findall(orca_input_token_pattern, input_text)
         basis_names = {}
-        for element, basis_name in re.findall(
-            r"(?i)\bNewGTO\s+([A-Za-z]{1,2})\s+\"([^\"]+)\"", input_text
-        ):
-            element = element.capitalize()
-            if element in p.PERIODIC_TABLE:
-                basis_names[element] = basis_name
+        depth = 0
+        for index, token in enumerate(tokens):
+            keyword = token.casefold()
+            if keyword.startswith("%"):
+                depth = 1 if keyword == "%basis" else 0
+                continue
+            if not depth:
+                continue
+            if keyword == "end":
+                depth -= 1
+                continue
+            # Element-specific basis/ECP definitions are nested blocks.
+            # Their 'end' must not close the surrounding %basis block.
+            if keyword.startswith(("new", "add")) and (
+                keyword.endswith("gto") or keyword == "newecp"
+            ):
+                depth += 1
+            if keyword != "newgto" or index + 2 >= len(tokens):
+                continue
+            element = tokens[index + 1].capitalize()
+            basis_name = tokens[index + 2]
+            if element in p.PERIODIC_TABLE and basis_name.startswith('"'):
+                basis_names[element] = basis_name[1:-1]
         return basis_names
 
     @property
@@ -396,15 +426,18 @@ class ORCAOutput(ORCAFileMixin):
         Gaussian16Input.heavy_elements_basis).  When the heavy elements use
         different basis sets, their names are joined in the order of
         `heavy_elements`, e.g. 'def2-TZVP, def2-QZVP'.  Returns None if no
-        element-specific basis is given.
+        element-specific basis is given. Duplicate names are compared
+        without case, preserving the first spelling in element order.
         """
         if not self._element_basis_names:
             return None
         basis_names = []
+        seen = set()
         for element in self.heavy_elements:
             basis_name = self._element_basis_names[element]
-            if basis_name not in basis_names:
+            if basis_name.casefold() not in seen:
                 basis_names.append(basis_name)
+                seen.add(basis_name.casefold())
         return ", ".join(basis_names)
 
     @property

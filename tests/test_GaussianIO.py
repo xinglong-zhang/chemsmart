@@ -1,3 +1,4 @@
+import copy
 import os.path
 
 import numpy as np
@@ -5,6 +6,7 @@ import pytest
 from ase import units
 from ase.symbols import Symbols
 
+from chemsmart.io.gaussian import BSEMetadata
 from chemsmart.io.gaussian.cube import GaussianCubeFile
 from chemsmart.io.gaussian.input import Gaussian16Input, Gaussian16QMMMInput
 from chemsmart.io.gaussian.output import (
@@ -2016,8 +2018,6 @@ class TestGaussian16Output:
         # #p, parse it back and identify its name from the functions.
         import basis_set_exchange as bse
 
-        from chemsmart.io.gaussian import BSEMetadata
-
         g94 = bse.get_basis("6-31G*", elements=["Si"], fmt="gaussian94")
         block_lines = []
         for line in g94.splitlines():
@@ -2112,6 +2112,43 @@ class TestGaussian16Output:
         assert np.isclose(ag_last_exp, 10.21)
         assert np.isclose(ag_last_coef, 73.71926087)
         assert np.isclose(spin_orbit_coef, 0.0)
+
+    def test_custom_ecp_is_not_replaced_by_inferred_basis(
+        self, gaussian_custom_ecp_outfile
+    ):
+        out = Gaussian16Output(gaussian_custom_ecp_outfile)
+        assert out.heavy_elements_ecp["Ag"]["channels"][0]["terms"][0][2] == (
+            -34.68992012
+        )
+        # The orbital match is still useful information, but it is not a
+        # complete basis/ECP specification that settings can reconstruct.
+        assert "def2-tzvp" in out.heavy_elements_basis_candidates["Ag"]
+        assert out.heavy_elements_basis is None
+        settings = out.read_settings()
+        with pytest.raises(ValueError, match="explicit.*heavy_elements_basis"):
+            settings.get_genecp_section(out.molecule)
+
+    @pytest.mark.parametrize(
+        "mismatch", ["absent", "core", "exponent", "coefficient", "spin_orbit"]
+    )
+    def test_basis_name_requires_the_same_ecp(
+        self, gaussian_full_genecp_outfile, mismatch
+    ):
+        out = Gaussian16Output(gaussian_full_genecp_outfile)
+        ecp = copy.deepcopy(out.heavy_elements_ecp["Ag"])
+        metadata = BSEMetadata()
+        assert metadata.basis_ecp_matches("Ag", "def2-tzvp", ecp)
+        if mismatch == "absent":
+            ecp = None
+        elif mismatch == "core":
+            ecp["n_valence_electrons"] += 1
+        else:
+            term = list(ecp["channels"][0]["terms"][0])
+            term[
+                {"exponent": 1, "coefficient": 2, "spin_orbit": 3}[mismatch]
+            ] += 1
+            ecp["channels"][0]["terms"][0] = tuple(term)
+        assert not metadata.basis_ecp_matches("Ag", "def2-tzvp", ecp)
 
     def test_read_frozen_opt_outputfile(self, gaussian_frozen_opt_outfile):
         assert os.path.exists(gaussian_frozen_opt_outfile)
