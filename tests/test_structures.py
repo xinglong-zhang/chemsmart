@@ -4674,8 +4674,8 @@ class TestStructureEdgeCases:
         assert np.allclose(he.moments_of_inertia_weighted_mass, 0.0)
         assert np.allclose(he.moments_of_inertia_most_abundant_mass, 0.0)
 
-    def test_dihedral_rejects_coincident_central_points(self):
-        mol = self._water()
+    def test_dihedral_rejects_coincident_central_points(self, water_molecule):
+        mol = water_molecule
         with pytest.raises(
             ValueError, match="Points 2 and 3 must be distinct"
         ):
@@ -4781,23 +4781,27 @@ class TestStructureEdgeCases:
         with pytest.raises(ValueError, match="single conformer"):
             Molecule.from_rdkit_mol(mol)
 
-    def test_write_coordinates_defaults_to_gaussian(self):
-        mol = self._water()
+    def test_write_coordinates_defaults_to_gaussian(self, water_molecule):
+        mol = water_molecule
         default, gaussian = StringIO(), StringIO()
         mol.write_coordinates(default)
         mol.write_coordinates(gaussian, program="gaussian")
         assert default.getvalue() == gaussian.getvalue()
         assert default.getvalue().splitlines()[0].split()[0] == "O"
 
-    def test_write_extxyz_ignores_non_numeric_forces(self, tmp_path):
-        mol = self._water()
+    def test_write_extxyz_ignores_non_numeric_forces(
+        self, tmp_path, water_molecule
+    ):
+        mol = water_molecule
         mol.forces = [["a", "b", "c"]] * 3
         path = tmp_path / "w.extxyz"
         mol.write_extxyz(str(path))
         assert "forces" not in path.read_text()
 
-    def test_to_pdb_reraises_kekulize_error_without_bonds(self):
-        mol = self._water()
+    def test_to_pdb_reraises_kekulize_error_without_bonds(
+        self, water_molecule
+    ):
+        mol = water_molecule
         with patch(
             "chemsmart.io.molecules.structure.Chem.MolToPDBBlock",
             side_effect=Chem.KekulizeException("cannot kekulize"),
@@ -4805,30 +4809,30 @@ class TestStructureEdgeCases:
             with pytest.raises(Chem.KekulizeException):
                 mol.to_pdb(add_bonds=False)
 
-    def test_delete_atoms_keeps_mismatched_per_atom_data(self):
-        mol = self._water()
+    def test_delete_atoms_keeps_mismatched_per_atom_data(self, water_molecule):
+        mol = water_molecule
         mol.velocities = [[0.0, 0.0, 0.0]]  # not one entry per atom
         new = mol.delete_atoms_by_indices([3])
         assert new.symbols == ["O", "H"]
         assert new.velocities == [[0.0, 0.0, 0.0]]
 
-    def test_to_rdkit_without_hydrogen_adjustment(self):
-        mol = self._water()
+    def test_to_rdkit_without_hydrogen_adjustment(self, water_molecule):
+        mol = water_molecule
         rdkit_mol = mol.to_rdkit(adjust_H=False)
         assert rdkit_mol.GetNumBonds() == 2
 
-    def test_soap_descriptors_match_default_calculation(self):
-        mol = self._water()
+    def test_soap_descriptors_match_default_calculation(self, water_molecule):
+        mol = water_molecule
         assert np.allclose(mol.soap_descriptors, mol.calculate_soap())
 
-    def test_vibrationally_displaced_rejects_zero_mode(self):
-        mol = self._water()
+    def test_vibrationally_displaced_rejects_zero_mode(self, water_molecule):
+        mol = water_molecule
         mol.vibrational_modes = [np.zeros((3, 3))]
         with pytest.raises(ValueError, match="zero norm"):
             mol.vibrationally_displaced(mode_idx=1, normalize=True)
 
-    def test_inchi_requires_openbabel(self):
-        mol = self._water()
+    def test_inchi_requires_openbabel(self, water_molecule):
+        mol = water_molecule
         import builtins
 
         real = builtins.__import__
