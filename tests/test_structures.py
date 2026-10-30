@@ -9,6 +9,7 @@ import networkx as nx
 import numpy as np
 import pytest
 from ase import Atoms
+from ase.io.formats import UnknownFileTypeError
 from pymatgen.core.structure import Molecule as PMGMolecule
 from rdkit import Chem
 from rdkit.Chem import rdMolTransforms
@@ -4924,22 +4925,24 @@ class TestMoleculeMomentsOfInertia:
     def test_get_moments_of_inertia_monoatomic_internal(
         self, single_atom_molecule
     ):
-        result = single_atom_molecule._get_moments_of_inertia
-        assert np.allclose(result, np.zeros(3))
+        _, eigenvalues, _ = single_atom_molecule._moments_of_inertia
+        assert np.allclose(eigenvalues, np.zeros(3))
 
     def test_get_moments_of_inertia_weighted_mass_monoatomic_internal(
         self, single_atom_molecule
     ):
-        result = single_atom_molecule._get_moments_of_inertia_weighted_mass
-        assert np.allclose(result, np.zeros(3))
+        _, eigenvalues, _ = (
+            single_atom_molecule._moments_of_inertia_weighted_mass
+        )
+        assert np.allclose(eigenvalues, np.zeros(3))
 
     def test_get_moments_of_inertia_most_abundant_mass_monoatomic_internal(
         self, single_atom_molecule
     ):
-        result = (
-            single_atom_molecule._get_moments_of_inertia_most_abundant_mass
+        _, eigenvalues, _ = (
+            single_atom_molecule._moments_of_inertia_most_abundant_mass
         )
-        assert np.allclose(result, np.zeros(3))
+        assert np.allclose(eigenvalues, np.zeros(3))
 
     def test_rotational_temperatures_linear_molecule_has_infinite_axis(
         self, hydrogen_molecule
@@ -5097,19 +5100,18 @@ class TestMoleculeFilepathEdgeCases:
         with pytest.raises(ValueError, match="Failed to read Gaussian"):
             Molecule.from_filepath(str(bad_com))
 
-    def test_from_filepath_gro_extension_is_broken(self, tmp_path):
-        """`.gro`/`.trr` dispatch to `_read_gromacs_gro`/`_read_gromacs_trr`,
-        but those staticmethods are commented out in the source (dead
-        dispatch branch) -- see BUGS_FOUND.md."""
+    def test_from_filepath_gro_extension_falls_back_to_ase(self, tmp_path):
+        """`.gro`/`.trr` have no dedicated GROMACS reader (the dispatch is
+        commented out), so they fall through to ASE's generic reader."""
         gro_file = tmp_path / "structure.gro"
         gro_file.write_text("fake gro content\n")
-        with pytest.raises(AttributeError):
+        with pytest.raises(ValueError):
             Molecule.from_filepath(str(gro_file))
 
-    def test_from_filepath_trr_extension_is_broken(self, tmp_path):
+    def test_from_filepath_trr_extension_is_unsupported(self, tmp_path):
         trr_file = tmp_path / "structure.trr"
         trr_file.write_text("fake trr content\n")
-        with pytest.raises(AttributeError):
+        with pytest.raises(UnknownFileTypeError):
             Molecule.from_filepath(str(trr_file))
 
     def test_from_filepath_missing_file_raises(self, tmp_path):
@@ -5362,13 +5364,13 @@ class TestMoleculeMomentsOfInertiaNonMonoatomic:
     def test_get_moments_of_inertia_weighted_mass_nonmonoatomic_internal(
         self, water_molecule
     ):
-        result = water_molecule._get_moments_of_inertia_weighted_mass
+        result = water_molecule._moments_of_inertia_weighted_mass
         assert len(result[1]) == 3
 
     def test_get_moments_of_inertia_most_abundant_mass_nonmonoatomic_internal(
         self, water_molecule
     ):
-        result = water_molecule._get_moments_of_inertia_most_abundant_mass
+        result = water_molecule._moments_of_inertia_most_abundant_mass
         assert len(result[1]) == 3
 
     def test_moments_of_inertia_principal_axes(self, water_molecule):
@@ -7160,3 +7162,279 @@ H 1.0 0.0 0.0 L
         )
         assert q0.charge == 0
         assert q0.multiplicity == 1
+
+
+class TestStructureEdgeCases:
+    def test_monoatomic_moments_of_inertia_shapes(self):
+        he = Molecule(symbols=["He"], positions=[[1.0, 2.0, 3.0]])
+        assert he.moments_of_inertia_tensor.shape == (3, 3)
+        assert np.allclose(he.moments_of_inertia_tensor, 0.0)
+        assert np.shape(he.moments_of_inertia_principal_axes) == (3, 3)
+        assert np.allclose(he.moments_of_inertia, 0.0)
+        assert np.allclose(he.moments_of_inertia_weighted_mass, 0.0)
+        assert np.allclose(he.moments_of_inertia_most_abundant_mass, 0.0)
+
+    def test_dihedral_rejects_coincident_central_points(self, water_molecule):
+        mol = water_molecule
+        with pytest.raises(
+            ValueError, match="Points 2 and 3 must be distinct"
+        ):
+            mol.get_dihedral_from_positions(
+                [1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0, 1, 0]
+            )
+
+    def test_from_directorypath_errors(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            Molecule.from_directorypath(str(tmp_path / "missing"))
+        a_file = tmp_path / "a.xyz"
+        a_file.write_text("1\n\nH 0 0 0\n")
+        with pytest.raises(NotADirectoryError):
+            Molecule.from_directorypath(str(a_file))
+        with pytest.raises(ValueError, match="Unsupported program 'orca'"):
+            Molecule.from_directorypath(str(tmp_path), program="orca")
+
+    def test_extxyz_falls_back_to_xyz_parser(self, tmp_path):
+        path = tmp_path / "plain.extxyz"
+        path.write_text("2\nnot an extxyz header =\nH 0 0 0\nH 0 0 0.74\n")
+        with patch.object(
+            Molecule, "_read_other", side_effect=RuntimeError("ase failed")
+        ):
+            mol = Molecule.from_filepath(str(path))
+        assert list(mol.symbols) == ["H", "H"]
+
+    def test_trj_with_xyz_content(self, tmp_path):
+        path = tmp_path / "traj.trj"
+        path.write_text("1\nframe 1\nHe 0 0 0\n1\nframe 2\nHe 0 0 1\n")
+        mol = Molecule.from_filepath(str(path), index="-1")
+        assert mol.symbols == ["He"]
+        assert np.allclose(mol.positions[0], [0.0, 0.0, 1.0])
+
+    def test_read_gromacs_gro(self, tmp_path):
+        path = tmp_path / "water.gro"
+        path.write_text(
+            "water\n"
+            "    3\n"
+            "    1SOL     OW    1   0.000   0.000   0.000\n"
+            "    1SOL    HW1    2   0.096   0.000   0.000\n"
+            "    1SOL    HW2    3  -0.024   0.093   0.000\n"
+            "   1.0 1.0 1.0\n"
+        )
+        mol = Molecule.from_filepath(str(path))
+        assert mol.symbols == ["O", "H", "H"]
+        # .gro coordinates are in nm
+        assert np.allclose(mol.positions[1], [0.96, 0.0, 0.0])
+
+    @pytest.mark.parametrize("index", ["-1", ":"])
+    def test_empty_ase_database_raises(self, tmp_path, index):
+        from ase.db import connect
+
+        path = tmp_path / "empty_ase.db"
+        db = connect(str(path))
+        row_id = db.write(Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]]))
+        db.delete([row_id])
+        with pytest.raises(ValueError, match="neither a valid chemsmart"):
+            Molecule.from_filepath(str(path), index=index)
+
+    def test_invalid_gaussian_input_raises(self, tmp_path):
+        path = tmp_path / "bad.com"
+        path.write_text("# opt b3lyp/6-31g(d)\n\ntitle\n\n0 1\n\n")
+        with pytest.raises(ValueError, match="Failed to read Gaussian input"):
+            Molecule.from_filepath(str(path))
+
+    @pytest.mark.parametrize(
+        "xyz, match",
+        [
+            ("1\n", "empty or incomplete"),
+            ("x\ncomment\nH 0 0 0\n", "Unable to parse atom count"),
+            ("1\ncomment\nH 0 0\n", "coordinate line"),
+            ("2\ncomment\nH 0 0 0\n", "atom count mismatch"),
+        ],
+    )
+    def test_molecule_from_pybel_rejects_bad_xyz(self, xyz, match):
+        class FakePybelMol:
+            def write(self, fmt):
+                return xyz
+
+        with pytest.raises(ValueError, match=match):
+            Molecule._molecule_from_pybel(FakePybelMol())
+
+    def test_read_via_openbabel_errors(self, tmp_path):
+        pytest.importorskip("openbabel")
+        no_ext = tmp_path / "structure"
+        no_ext.write_text("")
+        with pytest.raises(ValueError, match="Cannot infer Open Babel format"):
+            Molecule._read_via_openbabel(str(no_ext))
+        empty = tmp_path / "empty.xyz"
+        empty.write_text("")
+        with pytest.raises(ValueError, match="found no molecules"):
+            Molecule._read_via_openbabel(str(empty))
+
+    def test_from_rdkit_mol_rejects_invalid_input(self):
+        with pytest.raises(ValueError, match="Invalid RDKit molecule"):
+            Molecule.from_rdkit_mol(None)
+        with pytest.raises(ValueError, match="no conformers"):
+            Molecule.from_rdkit_mol(Chem.MolFromSmiles("O"))
+        from rdkit.Chem import AllChem
+
+        mol = Chem.AddHs(Chem.MolFromSmiles("O"))
+        AllChem.EmbedMultipleConfs(mol, numConfs=2, randomSeed=42)
+        with pytest.raises(ValueError, match="single conformer"):
+            Molecule.from_rdkit_mol(mol)
+
+    def test_write_coordinates_defaults_to_gaussian(self, water_molecule):
+        mol = water_molecule
+        default, gaussian = StringIO(), StringIO()
+        mol.write_coordinates(default)
+        mol.write_coordinates(gaussian, program="gaussian")
+        assert default.getvalue() == gaussian.getvalue()
+        assert default.getvalue().splitlines()[0].split()[0] == "O"
+
+    def test_write_extxyz_ignores_non_numeric_forces(
+        self, tmp_path, water_molecule
+    ):
+        mol = water_molecule
+        mol.forces = [["a", "b", "c"]] * 3
+        path = tmp_path / "w.extxyz"
+        mol.write_extxyz(str(path))
+        assert "forces" not in path.read_text()
+
+    def test_to_pdb_reraises_kekulize_error_without_bonds(
+        self, water_molecule
+    ):
+        mol = water_molecule
+        with patch(
+            "chemsmart.io.molecules.structure.Chem.MolToPDBBlock",
+            side_effect=Chem.KekulizeException("cannot kekulize"),
+        ):
+            with pytest.raises(Chem.KekulizeException):
+                mol.to_pdb(add_bonds=False)
+
+    def test_delete_atoms_keeps_mismatched_per_atom_data(self, water_molecule):
+        mol = water_molecule
+        mol.velocities = [[0.0, 0.0, 0.0]]  # not one entry per atom
+        new = mol.delete_atoms_by_indices([3])
+        assert new.symbols == ["O", "H"]
+        assert new.velocities == [[0.0, 0.0, 0.0]]
+
+    def test_to_rdkit_without_hydrogen_adjustment(self, water_molecule):
+        mol = water_molecule
+        rdkit_mol = mol.to_rdkit(adjust_H=False)
+        assert rdkit_mol.GetNumBonds() == 2
+
+    def test_soap_descriptors_match_default_calculation(self, water_molecule):
+        mol = water_molecule
+        assert np.allclose(mol.soap_descriptors, mol.calculate_soap())
+
+    def test_vibrationally_displaced_rejects_zero_mode(self, water_molecule):
+        mol = water_molecule
+        mol.vibrational_modes = [np.zeros((3, 3))]
+        with pytest.raises(ValueError, match="zero norm"):
+            mol.vibrationally_displaced(mode_idx=1, normalize=True)
+
+    def test_inchi_requires_openbabel(self, water_molecule):
+        mol = water_molecule
+        import builtins
+
+        real = builtins.__import__
+
+        def fake(name, *a, **k):
+            if name == "openbabel" or name.startswith("openbabel."):
+                raise ImportError("no ob")
+            return real(name, *a, **k)
+
+        with patch("builtins.__import__", side_effect=fake):
+            with pytest.raises(ImportError, match="InChI requires Open Babel"):
+                _ = mol.inchi
+
+
+class TestCoordinateBlockEdgeCases:
+    def test_non_integer_numeric_atom_token(self):
+        cb = CoordinateBlock(coordinate_block=["6.5 0.0 0.0 0.0", "H 0 0 1"])
+        # The unparsable atom is skipped (and logged) when reading symbols,
+        # but parsing atomic numbers/positions fails loudly.
+        assert list(cb.symbols) == ["H"]
+        with pytest.raises(ValueError, match="Unable to parse element"):
+            _ = cb.positions
+
+    def test_block_without_atoms_raises(self):
+        cb = CoordinateBlock(coordinate_block=["TV 1.0 0.0 0.0"])
+        with pytest.raises(ValueError, match="No atomic numbers or positions"):
+            _ = cb.positions
+
+    def test_translation_vector_with_freeze_flag(self):
+        cb = CoordinateBlock(
+            coordinate_block=["C 0.0 0.0 0.0", "TV -1 5.0 0.0 0.0"]
+        )
+        assert cb.translation_vectors == [[5.0, 0.0, 0.0]]
+        assert cb.pbc_conditions == [1, 0, 0]
+
+
+class TestPKaAndQMMMEdgeCases:
+    @staticmethod
+    def _water():
+        return Molecule(
+            symbols=["O", "H", "H"],
+            positions=[
+                [0.0, 0.0, 0.0],
+                [0.96, 0.0, 0.0],
+                [-0.24, 0.93, 0.0],
+            ],
+        )
+
+    def test_pka_proton_index_out_of_range(self):
+        with pytest.raises(ValueError, match="out of range"):
+            PKaMolecule(molecule=self._water(), proton_index=4)
+
+    def test_qmmm_forwards_missing_attributes_to_molecule(self):
+        base = self._water()
+        qmmm = QMMMMolecule(molecule=base, high_level_atoms=[1])
+        base.added_later = "forwarded"
+        assert qmmm.added_later == "forwarded"
+        with pytest.raises(AttributeError, match="no attribute 'missing'"):
+            _ = qmmm.missing
+
+    def test_qmmm_without_any_layer_has_no_partition_strings(self):
+        qmmm = QMMMMolecule(molecule=self._water(), high_level_atoms=[])
+        assert qmmm.partition_level_strings is None
+
+    def test_qmmm_rejects_non_integer_index(self):
+        qmmm = QMMMMolecule(molecule=self._water(), high_level_atoms=["a"])
+        with pytest.raises(ValueError, match="Invalid atom index 'a'"):
+            _ = qmmm.partition_level_strings
+
+    def test_qmmm_rejects_high_low_overlap(self):
+        qmmm = QMMMMolecule(
+            molecule=self._water(),
+            high_level_atoms=[1],
+            low_level_atoms=[1, 2, 3],
+        )
+        with pytest.raises(ValueError, match="Overlap between high and low"):
+            _ = qmmm.partition_level_strings
+
+    def test_qmmm_scale_factors_for_lower_layer_atoms(self):
+        qmmm = QMMMMolecule(
+            molecule=self._water(),
+            high_level_atoms=[1],
+            medium_level_atoms=[2],
+            low_level_atoms=[3],
+            bonded_atoms=[],
+            scale_factors={(2, 3): [0.7], (3, 1): [0.8]},
+        )
+        f = StringIO()
+        qmmm._write_gaussian_coordinates(f)
+        lines = f.getvalue().splitlines()
+        # M-L pair scales the L atom; L-H pair scales the L atom
+        assert lines[2].split()[-3:] == ["L", "0.7", "0.8"]
+        assert lines[0].split()[-1] == "H"
+        assert lines[1].split()[-1] == "M"
+
+    def test_qmmm_scale_factors_same_level_raises(self):
+        qmmm = QMMMMolecule(
+            molecule=self._water(),
+            high_level_atoms=[1],
+            low_level_atoms=[2, 3],
+            bonded_atoms=[],
+            scale_factors={(2, 3): [0.7]},
+        )
+        with pytest.raises(ValueError, match="cannot be at the same level"):
+            qmmm._write_gaussian_coordinates(StringIO())

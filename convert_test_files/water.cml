@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<molecule id="id H2O" xmlns="http://www.xml-cml.org/schema">
+ <atomArray>
+  <atom id="a1" elementType="O" hydrogenCount="2" x3="0.000000" y3="0.000000" z3="0.000000"/>
+  <atom id="a2" elementType="H" hydrogenCount="0" x3="0.759000" y3="0.000000" z3="0.504000"/>
+  <atom id="a3" elementType="H" hydrogenCount="0" x3="-0.759000" y3="0.000000" z3="0.504000"/>
+ </atomArray>
+ <bondArray>
+  <bond atomRefs2="a1 a2" order="1"/>
+  <bond atomRefs2="a1 a3" order="1"/>
+ </bondArray>
+</molecule>

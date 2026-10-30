@@ -10,20 +10,6 @@ from chemsmart.cli.sub import sub
 from chemsmart.jobs.crest import CRESTConformerSearchJob
 
 
-def _invoke_crest_and_capture_settings(job_path, args):
-    runner = CliRunner()
-    mock_job = MagicMock()
-    with patch(job_path, return_value=mock_job) as mock_job_cls:
-        result = runner.invoke(
-            crest,
-            args,
-            obj={"jobrunner": MagicMock()},
-            catch_exceptions=False,
-        )
-        settings = mock_job_cls.call_args[1]["settings"]
-    return result, settings, mock_job_cls
-
-
 class TestCRESTHelp:
     def test_run_help_lists_crest(self):
         result = CliRunner().invoke(run, ["--help"])
@@ -42,8 +28,10 @@ class TestCRESTHelp:
 
 
 class TestCRESTCLISettings:
-    def test_conformers_settings_merge(self, single_molecule_xyz_file):
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+    def test_conformers_settings_merge(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -77,8 +65,10 @@ class TestCRESTCLISettings:
         assert settings.solvent_id == "water"
         assert settings.energy_window == 8.0
 
-    def test_conformers_default_settings(self, single_molecule_xyz_file):
-        result, settings, _ = _invoke_crest_and_capture_settings(
+    def test_conformers_default_settings(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -97,8 +87,10 @@ class TestCRESTCLISettings:
         assert settings.gfn_version == "gfn2"
         assert settings.constraints is None
 
-    def test_constrained_settings(self, single_molecule_xyz_file):
-        result, settings, _ = _invoke_crest_and_capture_settings(
+    def test_constrained_settings(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -119,6 +111,100 @@ class TestCRESTCLISettings:
         assert result.exit_code == 0, result.output
         assert settings.constraints == [[1, 2], [1, 3]]
         assert settings.force_constant == 0.5
+
+
+class TestCRESTCLILabelFallback:
+    """Covers the filename-less label fallback branches in the ``crest``
+    group callback (no -f/--filename, molecule obtained via --pubchem)."""
+
+    def test_pubchem_only_without_label_falls_back_to_crest_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                crest,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "conformers",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "crest_output_conformers"
+
+    def test_pubchem_only_with_append_label_falls_back_to_output(self):
+        pubchem_molecule = MagicMock(name="pubchem_molecule")
+        with (
+            patch(
+                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
+                return_value=[pubchem_molecule],
+            ),
+            patch(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
+            ) as mock_job_cls,
+        ):
+            mock_job_cls.return_value = MagicMock()
+            result = CliRunner().invoke(
+                crest,
+                [
+                    "-p",
+                    "test",
+                    "--pubchem",
+                    "222",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "-a",
+                    "suffix",
+                    "conformers",
+                ],
+                obj={"jobrunner": MagicMock()},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == "output_suffix"
+
+    def test_append_label_suffixes_filename_derived_label(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, _, mock_job_cls = run_crest_and_capture_settings(
+            "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+            [
+                "-p",
+                "test",
+                "-f",
+                single_molecule_xyz_file,
+                "-a",
+                "suffix",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "conformers",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        label = mock_job_cls.call_args[1]["label"]
+        assert label.endswith("_suffix")
 
 
 class TestCRESTJobClasses:
@@ -164,9 +250,11 @@ class TestCRESTCLIGroupValidation:
         assert result.exit_code != 0
         assert "mutually exclusive" in result.output
 
-    def test_structure_index_used_as_index(self, multiple_molecules_xyz_file):
+    def test_structure_index_used_as_index(
+        self, multiple_molecules_xyz_file, run_crest_and_capture_settings
+    ):
         """``--si`` is treated as an alias for ``-i`` when given alone."""
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -235,12 +323,12 @@ class TestCRESTCLIGroupValidation:
         assert "can only be used together with" in result.output
 
     def test_xtb_output_inherits_charge_and_multiplicity(
-        self, xtb_water_outfolder
+        self, xtb_water_outfolder, run_crest_and_capture_settings
     ):
         """A ``.out`` file detected as xTB should fall back to default
         CREST settings but inherit charge/multiplicity from xTB."""
         xtb_out = os.path.join(xtb_water_outfolder, "water_ohess.out")
-        result, settings, _ = _invoke_crest_and_capture_settings(
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             ["-p", "test", "-f", xtb_out, "conformers"],
         )
@@ -249,7 +337,9 @@ class TestCRESTCLIGroupValidation:
         assert settings.charge == 0
         assert settings.multiplicity == 1
 
-    def test_non_chemsmart_db_falls_back_to_defaults(self, database_ase_file):
+    def test_non_chemsmart_db_falls_back_to_defaults(
+        self, database_ase_file, run_crest_and_capture_settings
+    ):
         """A .db file that isn't a chemsmart database (e.g. a plain ASE
         db) falls back to default CREST settings entirely."""
         mock_molecule = MagicMock(name="ase_db_molecule")
@@ -257,7 +347,7 @@ class TestCRESTCLIGroupValidation:
             "chemsmart.io.molecules.structure.Molecule.from_filepath",
             return_value=[mock_molecule],
         ):
-            result, settings, _ = _invoke_crest_and_capture_settings(
+            result, settings, _ = run_crest_and_capture_settings(
                 "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
                 [
                     "-p",
@@ -330,9 +420,9 @@ class TestCRESTCLIGroupValidation:
         assert "not both" in str(result.exception)
 
     def test_append_label_suffixes_filename_derived_label(
-        self, single_molecule_xyz_file
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
     ):
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -351,38 +441,6 @@ class TestCRESTCLIGroupValidation:
         assert result.exit_code == 0, result.output
         label = mock_job_cls.call_args[1]["label"]
         assert label.endswith("_suffix")
-
-    def test_pubchem_only_without_label_falls_back_to_output(self):
-        pubchem_molecule = MagicMock(name="pubchem_molecule")
-        with (
-            patch(
-                "chemsmart.io.molecules.structure.Molecule.from_pubchem",
-                return_value=[pubchem_molecule],
-            ),
-            patch(
-                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob"
-            ) as mock_job_cls,
-        ):
-            mock_job_cls.return_value = MagicMock()
-            result = CliRunner().invoke(
-                crest,
-                [
-                    "-p",
-                    "test",
-                    "--pubchem",
-                    "222",
-                    "-c",
-                    "0",
-                    "-m",
-                    "1",
-                    "conformers",
-                ],
-                obj={"jobrunner": MagicMock()},
-                catch_exceptions=True,
-            )
-        assert result.exit_code == 0, result.output
-        label = mock_job_cls.call_args[1]["label"]
-        assert label == "output_conformers"
 
     def test_pubchem_only_with_append_label_falls_back_to_output(self):
         """Previously a bug native to crest.py (not merge-related): the
@@ -425,9 +483,9 @@ class TestCRESTCLIGroupValidation:
         assert label == "output_suffix"
 
     def test_default_label_suffixed_with_invoked_subcommand(
-        self, single_molecule_xyz_file
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
     ):
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -446,9 +504,9 @@ class TestCRESTCLIGroupValidation:
         assert label.endswith("_conformers")
 
     def test_chemsmart_db_loads_molecule_by_record_index(
-        self, database_chemsmart_file
+        self, database_chemsmart_file, run_crest_and_capture_settings
     ):
-        result, settings, _ = _invoke_crest_and_capture_settings(
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -464,9 +522,9 @@ class TestCRESTCLIGroupValidation:
         assert settings is not None
 
     def test_chemsmart_db_loads_molecule_by_structure_id(
-        self, database_chemsmart_file
+        self, database_chemsmart_file, run_crest_and_capture_settings
     ):
-        result, settings, _ = _invoke_crest_and_capture_settings(
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -482,9 +540,9 @@ class TestCRESTCLIGroupValidation:
         assert settings is not None
 
     def test_chemsmart_db_append_label_includes_structure_id_suffix(
-        self, database_chemsmart_file
+        self, database_chemsmart_file, run_crest_and_capture_settings
     ):
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -503,9 +561,9 @@ class TestCRESTCLIGroupValidation:
         assert "SID-f751bb2c27e2" in label
 
     def test_chemsmart_db_append_label_includes_record_index_suffix(
-        self, database_chemsmart_file
+        self, database_chemsmart_file, run_crest_and_capture_settings
     ):
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -524,11 +582,11 @@ class TestCRESTCLIGroupValidation:
         assert "RI-1" in label
 
     def test_chemsmart_db_append_label_includes_record_id_suffix(
-        self, database_chemsmart_file
+        self, database_chemsmart_file, run_crest_and_capture_settings
     ):
         """--rid (record_id, no structure_id) takes the elif branch for
         the append-label suffix."""
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -547,11 +605,11 @@ class TestCRESTCLIGroupValidation:
         assert "RID-6de213a0" in label
 
     def test_chemsmart_db_default_label_includes_record_id_suffix(
-        self, database_chemsmart_file
+        self, database_chemsmart_file, run_crest_and_capture_settings
     ):
         """--rid alone (no -a/-l) takes the default-label elif branch
         for the record_id suffix."""
-        result, settings, mock_job_cls = _invoke_crest_and_capture_settings(
+        result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -567,8 +625,10 @@ class TestCRESTCLIGroupValidation:
         label = mock_job_cls.call_args[1]["label"]
         assert "RID-6de213a0" in label
 
-    def test_nci_flag_enabled(self, single_molecule_xyz_file):
-        result, settings, _ = _invoke_crest_and_capture_settings(
+    def test_nci_flag_enabled(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -586,8 +646,10 @@ class TestCRESTCLIGroupValidation:
         assert result.exit_code == 0, result.output
         assert settings.nci is True
 
-    def test_additional_flags_option(self, single_molecule_xyz_file):
-        result, settings, _ = _invoke_crest_and_capture_settings(
+    def test_additional_flags_option(
+        self, single_molecule_xyz_file, run_crest_and_capture_settings
+    ):
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",
@@ -607,9 +669,12 @@ class TestCRESTCLIGroupValidation:
         assert settings.additional_flags == "--squick"
 
     def test_remove_solvent_clears_solvent_fields(
-        self, crest_yaml_settings_solv_project_name, single_molecule_xyz_file
+        self,
+        crest_yaml_settings_solv_project_name,
+        single_molecule_xyz_file,
+        run_crest_and_capture_settings,
     ):
-        result, settings, _ = _invoke_crest_and_capture_settings(
+        result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
                 "-p",

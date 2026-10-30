@@ -18,6 +18,7 @@ class CRESTJob(Job):
     def __init__(
         self, molecule, settings=None, label=None, jobrunner=None, **kwargs
     ):
+        """Initialize a CREST job with the given molecule and settings."""
         # Validated before self.label/folder are set (CRESTJob's
         # _determine_folder() depends on self.label, so it can't be
         # computed from an unvalidated molecule and self isn't yet
@@ -29,8 +30,7 @@ class CRESTJob(Job):
             )
         if not isinstance(molecule, Molecule):
             raise ValueError(
-                f"Molecule must be instance of Molecule, but is "
-                f"{molecule} instead!"
+                f"Molecule must be instance of Molecule, but is {molecule} instead!"
             )
 
         if label is None:

@@ -410,6 +410,49 @@ def run_orca_and_capture_settings():
     return _run
 
 
+@pytest.fixture()
+def run_crest_and_capture_settings():
+    """Run the crest CLI with a patched job class and capture settings.
+
+    Unlike the other ``run_*_and_capture_settings`` fixtures, this also
+    returns the mock job class itself, since several crest CLI tests
+    need to inspect other constructor kwargs (e.g. ``label``) in
+    addition to ``settings``.
+
+    Usage in tests::
+
+        def test_something(run_crest_and_capture_settings):
+            result, settings, mock_job_cls = run_crest_and_capture_settings(
+                "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
+                ["-p", "test", "-f", filename, "-c", "0", "-m", "1",
+                 "conformers"],
+            )
+            assert result.exit_code == 0
+    """
+    from chemsmart.cli.crest.crest import crest as crest_cli
+
+    def _run(job_class_path, cli_args, ctx_obj=None):
+        if ctx_obj is None:
+            ctx_obj = {"jobrunner": MagicMock()}
+        runner = CliRunner()
+        captured_settings = None
+
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = runner.invoke(
+                crest_cli,
+                cli_args,
+                obj=ctx_obj,
+                catch_exceptions=False,
+            )
+            if mock_job_cls.call_args is not None:
+                captured_settings = mock_job_cls.call_args[1].get("settings")
+
+        return result, captured_settings, mock_job_cls
+
+    return _run
+
+
 @pytest.fixture
 def invoke_mol_with_visualize():
     """Invoke ``mol … visualize`` with all PyMOL job execution mocked out."""
@@ -2583,6 +2626,45 @@ def capture_log(caplog):
     return caplog
 
 
+@pytest.fixture()
+def clean_root_logger():
+    """Snapshot and restore the root logger around each test.
+
+    create_logger() mutates the (global, shared) root logger's level,
+    handlers, and filters, so tests must not leak that state into the
+    rest of the suite.
+    """
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_filters = root.filters[:]
+    original_level = root.level
+    yield root
+    for handler in root.handlers:
+        if handler not in original_handlers:
+            handler.close()
+    root.handlers = original_handlers
+    root.filters = original_filters
+    root.level = original_level
+
+
+@pytest.fixture()
+def make_log_record():
+    """Factory fixture that builds an INFO-level logging.LogRecord."""
+
+    def _make_record(msg, args=None):
+        return logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg=msg,
+            args=args,
+            exc_info=None,
+        )
+
+    return _make_record
+
+
 ############ Iterate Fixtures ##################
 @pytest.fixture()
 def iterate_test_directory(test_data_directory):
@@ -3097,6 +3179,23 @@ def database_ase_file(database_test_directory):
 @pytest.fixture()
 def database_empty_file(database_test_directory):
     return os.path.join(database_test_directory, "empty.db")
+
+
+############ SOAP Fixtures ##################
+@pytest.fixture()
+def soap_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "SOAPTests")
+
+
+@pytest.fixture()
+def soap_reference_filepath(soap_test_directory):
+    return os.path.join(soap_test_directory, "soap_reference.npz")
+
+
+@pytest.fixture()
+def soap_reference_data(soap_reference_filepath):
+    """Fixture to load the SOAP reference data."""
+    return np.load(soap_reference_filepath)
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ class XTBJob(Job):
         # _determine_folder() depends on self.label, so it can't be
         # computed from an unvalidated molecule and self isn't yet
         # safely representable for an f-string).
+
         if not isinstance(settings, XTBJobSettings):
             raise ValueError(
                 f"Settings must be instance of {XTBJobSettings}, "

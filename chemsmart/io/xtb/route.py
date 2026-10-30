@@ -209,7 +209,8 @@ class XTBRoute:
         Returns:
             str: Job type ('opt', 'hess', 'md', 'path', 'modef', or 'sp')
         """
-        # Check for optimization keywords (including ohess and bhess which do opt first)
+        # Check for optimization keywords
+        # (including ohess and bhess which do opt first)
         if any(
             flag in self.route_inputs
             for flag in (

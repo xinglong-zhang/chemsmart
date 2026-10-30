@@ -368,7 +368,7 @@ def crest(
         if filename:
             label = os.path.splitext(os.path.basename(filename))[0]
         else:
-            label = "output"
+            label = "crest_output"
         if is_chemsmart_db:
             if structure_id is not None:
                 label = f"{label}_SID-{structure_id}"
