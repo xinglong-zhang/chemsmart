@@ -46,6 +46,12 @@ ORCA input files.
    h2 = mol.delete_atoms_by_indices(atom_indices=0, one_based=False)
    print("After deleting atom 0 (0-based):", h2.chemical_formula)   # H2
 
+   # Reorder atoms (1-based permutation: atom 1 stays, atoms 2 and 3 swap)
+   swapped = mol.reorder_atoms([1, 3, 2])
+   print(swapped.chemical_symbols)   # ['O', 'H', 'H'] with H positions swapped
+   # Same permutation with 0-based indices
+   swapped = mol.reorder_atoms([0, 2, 1], one_based=False)
+
 .. warning::
 
    CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.
@@ -63,6 +69,16 @@ index and return a new molecule.
    indexing.
 -  Returns: :class:`Molecule` — New molecule with the specified atoms removed.
 -  Raises: ``ValueError`` if any index is out of range or removing all atoms would leave an empty molecule.
+
+:meth:`~chemsmart.io.molecules.structure.Molecule.reorder_atoms(indices, one_based=True)` Return a new molecule with
+atoms permuted to the given order.
+
+-  ``indices`` (iterable of int) — Permutation of all atom indices. Default is **1-based**. Identity is ``range(1, n +
+   1)``.
+-  ``one_based`` (bool) — If ``True`` (default), indices are 1-based. Set to ``False`` for a 0-based permutation
+   (``range(n)``).
+-  Returns: :class:`Molecule` — New molecule with symbols, positions, and per-atom arrays in the new order.
+-  Raises: ``ValueError`` if *indices* is not a permutation of all atoms.
 
 ****************************
  Writing Molecules to Files

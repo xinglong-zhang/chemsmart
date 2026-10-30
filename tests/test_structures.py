@@ -3820,6 +3820,139 @@ class TestMoleculeAndStructureIdentifiers:
         assert mol_ch2o.molecule_label != mol_ch4.molecule_label
 
 
+class TestMoleculeReorderAtoms:
+    @staticmethod
+    def _water(**kwargs):
+        return Molecule(
+            symbols=["O", "H", "H"],
+            positions=np.array(
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.96, 0.0, 0.0],
+                    [-0.24, 0.93, 0.0],
+                ]
+            ),
+            charge=0,
+            multiplicity=1,
+            energy=-76.0,
+            **kwargs,
+        )
+
+    def test_one_based_swap_permutes_symbols_and_positions(self):
+        mol = self._water()
+        swapped = mol.reorder_atoms([1, 3, 2])
+        assert swapped.chemical_symbols == ["O", "H", "H"]
+        np.testing.assert_array_equal(
+            swapped.positions, mol.positions[[0, 2, 1]]
+        )
+        assert swapped is not mol
+        assert mol.chemical_symbols == ["O", "H", "H"]
+        np.testing.assert_array_equal(
+            mol.positions,
+            np.array([[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]]),
+        )
+
+    def test_zero_based_permutation_matches_one_based(self):
+        mol = self._water()
+        one_based = mol.reorder_atoms([2, 1, 3])
+        zero_based = mol.reorder_atoms([1, 0, 2], one_based=False)
+        assert one_based.chemical_symbols == ["H", "O", "H"]
+        assert zero_based.chemical_symbols == one_based.chemical_symbols
+        np.testing.assert_array_equal(
+            zero_based.positions, one_based.positions
+        )
+
+    def test_identity_permutation_copies_geometry(self):
+        mol = self._water()
+        same = mol.reorder_atoms(range(1, mol.num_atoms + 1))
+        assert same is not mol
+        assert same.chemical_symbols == mol.chemical_symbols
+        np.testing.assert_array_equal(same.positions, mol.positions)
+        assert same.charge == 0
+        assert same.multiplicity == 1
+        assert same.energy == -76.0
+
+    def test_inverse_permutation_restores_order(self):
+        mol = self._water()
+        perm = [2, 0, 1]
+        inverse = list(np.argsort(perm))
+        restored = mol.reorder_atoms(perm, one_based=False).reorder_atoms(
+            inverse, one_based=False
+        )
+        assert restored.chemical_symbols == mol.chemical_symbols
+        np.testing.assert_allclose(restored.positions, mol.positions)
+
+    def test_permutes_per_atom_arrays(self):
+        mol = self._water(
+            frozen_atoms=[-1, 0, 1],
+            forces=np.array(
+                [[1.0, 0.0, 0.0], [2.0, 0.0, 0.0], [3.0, 0.0, 0.0]]
+            ),
+            velocities=np.array(
+                [[0.1, 0.0, 0.0], [0.2, 0.0, 0.0], [0.3, 0.0, 0.0]]
+            ),
+        )
+        mode = np.array([[10.0, 0.0, 0.0], [20.0, 0.0, 0.0], [30.0, 0.0, 0.0]])
+        mol.vibrational_modes = [mode]
+        mol.vibrational_frequencies = [100.0]
+        reordered = mol.reorder_atoms([0, 2, 1], one_based=False)
+        assert reordered.frozen_atoms == [-1, 1, 0]
+        np.testing.assert_array_equal(reordered.forces, mol.forces[[0, 2, 1]])
+        np.testing.assert_array_equal(
+            reordered.velocities, mol.velocities[[0, 2, 1]]
+        )
+        np.testing.assert_array_equal(
+            reordered.vibrational_modes[0], mode[[0, 2, 1]]
+        )
+        assert reordered.vibrational_frequencies == [100.0]
+        np.testing.assert_array_equal(mode, mol.vibrational_modes[0])
+
+    def test_remaps_mulliken_keys_to_new_indices(self):
+        mol = self._water(
+            mulliken_atomic_charges={"O1": -0.8, "H2": 0.3, "H3": 0.5},
+            mulliken_spin_densities={"O1": 0.1, "H2": 0.0, "H3": -0.1},
+        )
+        reordered = mol.reorder_atoms([2, 1, 3])
+        assert reordered.mulliken_atomic_charges == {
+            "H1": 0.3,
+            "O2": -0.8,
+            "H3": 0.5,
+        }
+        assert reordered.mulliken_spin_densities == {
+            "H1": 0.0,
+            "O2": 0.1,
+            "H3": -0.1,
+        }
+        assert mol.mulliken_atomic_charges == {
+            "O1": -0.8,
+            "H2": 0.3,
+            "H3": 0.5,
+        }
+
+    def test_structure_id_invariant_to_reorder(self):
+        mol = self._water()
+        reordered = mol.reorder_atoms([3, 1, 2])
+        assert reordered.structure_id == mol.structure_id
+        assert reordered.chemical_formula == mol.chemical_formula
+
+    def test_rejects_invalid_permutations(self):
+        mol = self._water()
+        with pytest.raises(ValueError, match="must be provided"):
+            mol.reorder_atoms(None)
+        with pytest.raises(TypeError, match="iterable of ints"):
+            mol.reorder_atoms(object())
+        with pytest.raises(ValueError, match="not a valid integer"):
+            mol.reorder_atoms(["a", "b", "c"])
+        with pytest.raises(ValueError, match="exactly 3 entries"):
+            mol.reorder_atoms([1, 2])
+        with pytest.raises(ValueError, match="out of range"):
+            mol.reorder_atoms([1, 2, 4])
+        with pytest.raises(ValueError, match="duplicate index"):
+            mol.reorder_atoms([1, 2, 2])
+        with pytest.raises(ValueError, match="out of range"):
+            mol.reorder_atoms([0, 1, 3], one_based=False)
+
+
 class TestStructureCoverageBoost:
     def test_init_rejects_empty_symbols(self):
         with pytest.raises(ValueError, match="empty"):

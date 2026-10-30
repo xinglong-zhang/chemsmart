@@ -1,0 +1,5 @@
+crest: crest_project1
+
+steps:
+  - program: gaussian
+    job: opt

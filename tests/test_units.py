@@ -29,6 +29,11 @@ class TestUnits:
         assert amu_to_kg == 1 * units._amu
         assert np.isclose(amu_to_kg, 1.66053906660e-27, atol=1e-27)
 
+    def test_faraday_constant(self):
+        from chemsmart.utils.constants import FARADAY
+
+        assert FARADAY == units._e * units._Nav
+
 
 class TestGeometry:
     def test_is_collinear(self):

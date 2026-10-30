@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 
 import numpy as np
+
+from chemsmart.io.datasets import TabularDataset
 
 logger = logging.getLogger(__name__)
 
@@ -81,33 +82,8 @@ class PKaTableEntry:
             self._set_field(key, value)
 
     @staticmethod
-    def normalize_header(header):
-        """Normalize a table header into snake_case."""
-        header = str(header).strip().lower()
-        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
-        header = re.sub(r"_+", "_", header).strip("_")
-        return header
-
-    @staticmethod
-    def resolve_column(columns, candidates, required=True):
-        """Resolve a physical column name from logical candidates."""
-        normalized = {PKaTableEntry.normalize_header(c): c for c in columns}
-        for candidate in candidates:
-            key = PKaTableEntry.normalize_header(candidate)
-            if key in normalized:
-                return normalized[key]
-        if required:
-            raise ValueError(
-                "Could not resolve required column. Tried: "
-                + ", ".join(candidates)
-            )
-        return None
-
-    @staticmethod
     def parse_table(table_path, delimiter=None, comment="#"):
         """Backward-compatible shim for generic table parsing."""
-        from chemsmart.io.datasets import TabularDataset
-
         return TabularDataset.parse_table(
             table_path=table_path,
             delimiter=delimiter,
@@ -127,12 +103,12 @@ class PKaTableEntry:
 
     def _canonical_key(self, key):
         k = str(key)
-        nk = self.normalize_header(k)
+        nk = TabularDataset.normalize_header(k)
         for canonical, aliases in self._ALIASES.items():
-            if nk == self.normalize_header(canonical):
+            if nk == TabularDataset.normalize_header(canonical):
                 return canonical
             for alias in aliases:
-                if nk == self.normalize_header(alias):
+                if nk == TabularDataset.normalize_header(alias):
                     return canonical
         return None
 
@@ -292,8 +268,6 @@ class PKaTableEntry:
     @staticmethod
     def is_submission_table(table_path) -> bool:
         """Return True when *table_path* has pKa submission-table columns."""
-        from chemsmart.io.datasets import TabularDataset
-
         if not table_path:
             return False
         if str(table_path).lower().endswith((".cdx", ".cdxml")):
@@ -316,8 +290,6 @@ class PKaTableEntry:
         skip_header: bool = True,
     ) -> list:
         """Thin pKa adapter on top of the generic tabular parser layer."""
-        from chemsmart.io.datasets import TabularDataset
-
         dataset = TabularDataset.parse_table(
             table_path=table_path,
             delimiter=delimiter,
@@ -422,6 +394,225 @@ class PKaTableEntry:
             )
 
         return entries
+
+
+class ReactionTableEntry:
+    """Row abstraction for reaction job-submission tables.
+
+    Columns: reaction_id, filepath, role, charge, multiplicity.
+    """
+
+    ROLES = ("ts", "reactant", "product")
+    _ALIASES = {
+        "reaction_id": ["reaction_id", "reaction", "id", "name"],
+        "filepath": ["filepath", "file_path", "path"],
+        "role": ["role", "type"],
+        "charge": ["charge", "q"],
+        "multiplicity": ["multiplicity", "mult", "m"],
+    }
+    _ROLE_ALIASES = {
+        "ts": "ts",
+        "transition_state": "ts",
+        "ts_guess": "ts",
+        "reactant": "reactant",
+        "reactants": "reactant",
+        "r": "reactant",
+        "product": "product",
+        "products": "product",
+        "p": "product",
+    }
+
+    def __init__(self, data, row_number=None):
+        if not isinstance(data, dict):
+            raise TypeError(
+                "ReactionTableEntry requires a dict of row values."
+            )
+        self.row_number = row_number
+        self.reaction_id = None
+        self.filepath = None
+        self.role = None
+        self.charge = None
+        self.multiplicity = None
+        for key, value in data.items():
+            if key == "row_number":
+                continue
+            self._set_field(key, value)
+
+    def _canonical_key(self, key):
+        nk = TabularDataset.normalize_header(key)
+        for canonical, aliases in self._ALIASES.items():
+            if nk == TabularDataset.normalize_header(canonical):
+                return canonical
+            for alias in aliases:
+                if nk == TabularDataset.normalize_header(alias):
+                    return canonical
+        return None
+
+    def _canonical_role(self, value):
+        if value is None:
+            return None
+        key = TabularDataset.normalize_header(value)
+        return self._ROLE_ALIASES.get(key)
+
+    def _set_field(self, key, value):
+        value = normalize_table_cell(value)
+        canonical = self._canonical_key(key)
+        if canonical == "reaction_id":
+            self.reaction_id = str(value) if value is not None else None
+        elif canonical == "filepath":
+            self.filepath = value
+        elif canonical == "role":
+            self.role = self._canonical_role(value)
+            if self.role is None and value is not None:
+                self.role = str(value).strip().lower()
+        elif canonical == "charge":
+            self.charge = value
+        elif canonical == "multiplicity":
+            self.multiplicity = value
+
+    def validate(self, check_file_exists=True):
+        errors = []
+        row_info = f" (row {self.row_number})" if self.row_number else ""
+        if not self.reaction_id:
+            errors.append(f"Missing reaction_id{row_info}")
+        if not self.filepath:
+            errors.append(f"Empty filepath{row_info}")
+        elif check_file_exists and not os.path.exists(str(self.filepath)):
+            errors.append(f"File not found: {self.filepath}{row_info}")
+        if self.role not in self.ROLES:
+            errors.append(
+                f"Invalid role {self.role!r}{row_info}; "
+                f"expected one of {', '.join(self.ROLES)}"
+            )
+        if self.charge is None:
+            errors.append(f"Missing charge{row_info}")
+        else:
+            try:
+                int(self.charge)
+            except (TypeError, ValueError):
+                errors.append(f"Invalid charge: {self.charge!r}{row_info}")
+        if self.multiplicity is None:
+            errors.append(f"Missing multiplicity{row_info}")
+        else:
+            try:
+                multiplicity = int(self.multiplicity)
+                if multiplicity < 1:
+                    errors.append(
+                        f"multiplicity must be >= 1, got {multiplicity}{row_info}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(
+                    f"Invalid multiplicity: {self.multiplicity!r}{row_info}"
+                )
+        if errors:
+            raise ValueError("; ".join(errors))
+
+    @staticmethod
+    def is_submission_table(table_path) -> bool:
+        """Return True when *table_path* has reaction submission-table columns."""
+        if not table_path:
+            return False
+        try:
+            dataset = TabularDataset.parse_table(
+                table_path=table_path,
+                comment="#",
+            )
+            for aliases in ReactionTableEntry._ALIASES.values():
+                TabularDataset.resolve_column(dataset.columns, aliases)
+            return True
+        except (ValueError, FileNotFoundError, OSError):
+            return False
+
+    @staticmethod
+    def parse_reaction_table(table_path: str, delimiter: str = None) -> list:
+        """Parse a reaction submission table into :class:`ReactionTableEntry` rows."""
+        dataset = TabularDataset.parse_table(
+            table_path=table_path,
+            delimiter=delimiter,
+            comment="#",
+        )
+        try:
+            id_col = TabularDataset.resolve_column(
+                dataset.columns,
+                ReactionTableEntry._ALIASES["reaction_id"],
+            )
+            file_col = TabularDataset.resolve_column(
+                dataset.columns,
+                ReactionTableEntry._ALIASES["filepath"],
+            )
+            role_col = TabularDataset.resolve_column(
+                dataset.columns,
+                ReactionTableEntry._ALIASES["role"],
+            )
+            charge_col = TabularDataset.resolve_column(
+                dataset.columns,
+                ReactionTableEntry._ALIASES["charge"],
+            )
+            mult_col = TabularDataset.resolve_column(
+                dataset.columns,
+                ReactionTableEntry._ALIASES["multiplicity"],
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Invalid table format: expected columns "
+                "(reaction_id, filepath, role, charge, multiplicity)."
+            ) from exc
+
+        canonical_df = dataset.dataframe.rename(
+            columns={
+                id_col: "reaction_id",
+                file_col: "filepath",
+                role_col: "role",
+                charge_col: "charge",
+                mult_col: "multiplicity",
+            }
+        )[
+            [
+                "reaction_id",
+                "filepath",
+                "role",
+                "charge",
+                "multiplicity",
+            ]
+        ]
+        canonical_dataset = TabularDataset(
+            canonical_df, source_path=table_path
+        )
+        entries = canonical_dataset.to_entries(
+            entry_cls=ReactionTableEntry, row_offset=2
+        )
+        for entry in entries:
+            line_num = entry.row_number if entry.row_number is not None else 0
+            if entry.charge is not None:
+                try:
+                    entry.charge = int(entry.charge)
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Invalid charge at line {line_num}: "
+                        f"{entry.charge!r} is not an integer"
+                    )
+            if entry.multiplicity is not None:
+                try:
+                    entry.multiplicity = int(entry.multiplicity)
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Invalid multiplicity at line {line_num}: "
+                        f"{entry.multiplicity!r} is not an integer"
+                    )
+            entry.validate(check_file_exists=True)
+        if not entries:
+            raise ValueError(
+                f"No valid entries found in reaction table: {table_path}"
+            )
+        return entries
+
+    @staticmethod
+    def group_by_reaction_id(entries):
+        """Return an ordered mapping of reaction_id → row list."""
+        grouped = {}
+        for entry in entries:
+            grouped.setdefault(entry.reaction_id, []).append(entry)
+        return grouped
 
 
 class PKaOutputTableEntry:
@@ -558,20 +749,13 @@ class PKaOutputTableEntry:
 
         self._derive_helper_fields()
 
-    @staticmethod
-    def _normalize_header(header):
-        header = str(header).strip().lower()
-        header = re.sub(r"[^0-9a-zA-Z]+", "_", header)
-        header = re.sub(r"_+", "_", header).strip("_")
-        return header
-
     def _canonical_key(self, key):
-        nk = self._normalize_header(key)
+        nk = TabularDataset.normalize_header(key)
         for canonical, aliases in self._ALIASES.items():
-            if nk == self._normalize_header(canonical):
+            if nk == TabularDataset.normalize_header(canonical):
                 return canonical
             for alias in aliases:
-                if nk == self._normalize_header(alias):
+                if nk == TabularDataset.normalize_header(alias):
                     return canonical
         return None
 
@@ -851,8 +1035,6 @@ class PKaOutputTable:
     def parse_pka_output_table(table_path: str, delimiter: str = None) -> list:
         """Parse an output-table file into :class:`PKaOutputTableEntry` rows."""
         import pandas as pd
-
-        from chemsmart.io.datasets import TabularDataset
 
         dataset = TabularDataset.parse_table(
             table_path=table_path,
@@ -1302,6 +1484,109 @@ def discover_pka_reference_companion_outputs(href_gas_path, program=None):
         ),
         "ref_solv": discover_pka_output_path(
             basename, directory, "ref_sp", program=program
+        ),
+    }
+
+
+REDOX_OUTPUT_SUFFIX_CANDIDATES = {
+    "ox_gas": ["_redox_ox_opt", "_ox_opt"],
+    "red_gas": ["_redox_red_opt", "_red_opt"],
+    "ox_sp": ["_redox_ox_sp", "_ox_sp"],
+    "red_sp": ["_redox_red_sp", "_red_sp"],
+    "ref_ox_gas": ["_redox_RefOx_opt", "_RefOx_opt"],
+    "ref_red_gas": ["_redox_RefRed_opt", "_RefRed_opt"],
+    "ref_ox_sp": ["_redox_RefOx_sp", "_RefOx_sp"],
+    "ref_red_sp": ["_redox_RefRed_sp", "_RefRed_sp"],
+}
+
+REDOX_TARGET_SUFFIX_HELP = (
+    "  <basename>_redox_red_opt.<ext>  (reduced target gas-phase)\n"
+    "  <basename>_redox_ox_sp.<ext>     (oxidized target solvent SP)\n"
+    "  <basename>_redox_red_sp.<ext>    (reduced target solvent SP)"
+)
+
+REDOX_REFERENCE_SUFFIX_HELP = (
+    "  <basename>_redox_RefRed_opt.<ext>  (reduced reference gas-phase)\n"
+    "  <basename>_redox_RefOx_sp.<ext>    (oxidized reference solvent SP)\n"
+    "  <basename>_redox_RefRed_sp.<ext>   (reduced reference solvent SP)"
+)
+
+
+def redox_output_basename_from_path(filepath, role):
+    """Strip a known gas-phase suffix to recover the redox job basename."""
+    stem = os.path.splitext(os.path.basename(str(filepath)))[0]
+    for suffix in REDOX_OUTPUT_SUFFIX_CANDIDATES.get(role, []):
+        if stem.endswith(suffix):
+            return stem[: -len(suffix)]
+    return stem
+
+
+def discover_redox_output_path(
+    basename,
+    directory,
+    role,
+    program=None,
+    filepath_hint=None,
+):
+    """Return the first existing companion output path for *role*."""
+    from chemsmart.utils.io import (
+        get_program_output_extensions,
+        get_program_type_from_file,
+    )
+
+    if program is None and filepath_hint is not None:
+        program = get_program_type_from_file(filepath_hint)
+    extensions = get_program_output_extensions(program)
+    suffixes = REDOX_OUTPUT_SUFFIX_CANDIDATES[role]
+    directory = directory or "."
+    for suffix in suffixes:
+        for ext in extensions:
+            candidate = os.path.join(directory, f"{basename}{suffix}{ext}")
+            if os.path.isfile(candidate):
+                return candidate
+    return os.path.join(directory, f"{basename}{suffixes[0]}{extensions[0]}")
+
+
+def discover_redox_target_companion_outputs(ox_gas_path, program=None):
+    """Infer reduced target and solvent SP paths from an Ox gas-phase file."""
+    from chemsmart.utils.io import get_program_type_from_file
+
+    ox_gas_path = str(ox_gas_path)
+    directory = os.path.dirname(ox_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ox_gas_path)
+    basename = redox_output_basename_from_path(ox_gas_path, "ox_gas")
+    return {
+        "red_gas": discover_redox_output_path(
+            basename, directory, "red_gas", program=program
+        ),
+        "ox_solv": discover_redox_output_path(
+            basename, directory, "ox_sp", program=program
+        ),
+        "red_solv": discover_redox_output_path(
+            basename, directory, "red_sp", program=program
+        ),
+    }
+
+
+def discover_redox_reference_companion_outputs(ref_ox_gas_path, program=None):
+    """Infer Ref_red and reference solvent SP paths from a Ref_ox gas file."""
+    from chemsmart.utils.io import get_program_type_from_file
+
+    ref_ox_gas_path = str(ref_ox_gas_path)
+    directory = os.path.dirname(ref_ox_gas_path) or "."
+    if program is None:
+        program = get_program_type_from_file(ref_ox_gas_path)
+    basename = redox_output_basename_from_path(ref_ox_gas_path, "ref_ox_gas")
+    return {
+        "ref_red_gas": discover_redox_output_path(
+            basename, directory, "ref_red_gas", program=program
+        ),
+        "ref_ox_solv": discover_redox_output_path(
+            basename, directory, "ref_ox_sp", program=program
+        ),
+        "ref_red_solv": discover_redox_output_path(
+            basename, directory, "ref_red_sp", program=program
         ),
     }
 

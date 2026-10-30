@@ -2515,6 +2515,133 @@ class Molecule:
             info=self.info,
         )
 
+    def reorder_atoms(self, indices, *, one_based=True):
+        """Return a new :class:`Molecule` with atoms in the given order.
+
+        ``new[i]`` is the atom currently at ``indices[i]``. Per-atom arrays
+        (``frozen_atoms``, ``forces``, ``velocities``, ``vibrational_modes``)
+        and Mulliken charges/spin densities are permuted with the atoms.
+
+        Args:
+            indices (Iterable[int]): Permutation of all atom indices. By
+                default the values are **1-based** (matching Gaussian / ORCA
+                conventions). The identity permutation is ``range(1, n + 1)``.
+            one_based (bool): If ``True`` (default) the indices are 1-based.
+                Set to ``False`` for a 0-based permutation (``range(n)``).
+
+        Returns:
+            Molecule: A new molecule with the permuted atom order.
+
+        Raises:
+            ValueError: If *indices* is ``None``, any index is out of range,
+                or *indices* is not a permutation of all atoms.
+            TypeError: If *indices* is not iterable.
+        """
+        if indices is None:
+            raise ValueError("indices must be provided when reordering atoms")
+
+        try:
+            indices = list(indices)
+        except TypeError as exc:
+            raise TypeError("indices must be an iterable of ints") from exc
+
+        total_atoms = len(self.symbols)
+        perm = []
+        for idx in indices:
+            try:
+                idx_int = int(idx)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"Atom index '{idx}' is not a valid integer"
+                ) from exc
+            perm.append(idx_int - 1 if one_based else idx_int)
+
+        if len(perm) != total_atoms:
+            raise ValueError(
+                f"indices must contain exactly {total_atoms} entries "
+                f"(one per atom); got {len(perm)}"
+            )
+
+        seen = set()
+        for idx in perm:
+            if idx < 0 or idx >= total_atoms:
+                label = idx + 1 if one_based else idx
+                raise ValueError(
+                    f"Atom index {label} out of range for molecule "
+                    f"with {total_atoms} atoms"
+                )
+            if idx in seen:
+                label = idx + 1 if one_based else idx
+                raise ValueError(
+                    f"indices must be a permutation of all atom indices; "
+                    f"duplicate index {label}"
+                )
+            seen.add(idx)
+
+        def _permute(seq):
+            """Permute a per-atom list/array; return None if input is None."""
+            if seq is None:
+                return None
+            arr = np.asarray(seq)
+            if arr.shape[0] != total_atoms:
+                return seq
+            permuted = arr[perm]
+            return (
+                permuted.tolist() if isinstance(seq, list) else permuted.copy()
+            )
+
+        def _permute_mulliken(prop):
+            if prop is None:
+                return None
+            old_symbols = self.chemical_symbols
+            remapped = {}
+            for new_i, old_i in enumerate(perm):
+                old_key = f"{old_symbols[old_i]}{old_i + 1}"
+                if old_key in prop:
+                    remapped[f"{old_symbols[old_i]}{new_i + 1}"] = prop[
+                        old_key
+                    ]
+            return remapped
+
+        new_vib_modes = (
+            [np.asarray(m)[perm].copy() for m in self.vibrational_modes]
+            if self.vibrational_modes
+            else None
+        )
+
+        return Molecule(
+            symbols=[self.chemical_symbols[i] for i in perm],
+            positions=np.asarray(self.positions)[perm],
+            charge=self.charge,
+            multiplicity=self.multiplicity,
+            frozen_atoms=_permute(self.frozen_atoms),
+            pbc_conditions=self.pbc_conditions,
+            translation_vectors=self.translation_vectors,
+            energy=self.energy,
+            forces=_permute(self.forces),
+            velocities=_permute(self.velocities),
+            vibrational_frequencies=self.vibrational_frequencies,
+            vibrational_reduced_masses=self.vibrational_reduced_masses,
+            vibrational_force_constants=self.vibrational_force_constants,
+            vibrational_ir_intensities=self.vibrational_ir_intensities,
+            vibrational_mode_symmetries=self.vibrational_mode_symmetries,
+            vibrational_modes=new_vib_modes,
+            structure_index_in_file=self.structure_index_in_file,
+            rotational_symmetry_number=self.rotational_symmetry_number,
+            mulliken_atomic_charges=_permute_mulliken(
+                self.mulliken_atomic_charges
+            ),
+            mulliken_spin_densities=_permute_mulliken(
+                self.mulliken_spin_densities
+            ),
+            is_optimized_structure=self.is_optimized_structure,
+            dipole_moment=self.dipole_moment,
+            dipole_moment_magnitude=self.dipole_moment_magnitude,
+            rotational_constants=self.rotational_constants,
+            point_group=self.point_group,
+            info=self.info,
+        )
+
     def to_rdkit(
         self,
         add_bonds=True,

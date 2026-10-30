@@ -79,6 +79,13 @@ computational chemistry software.
    crest-cli-options
    crest-conformational-search
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Chain Workflows
+
+   chain-jobs
+   chain-cli-options
+
 ..
    .. toctree::
 
@@ -101,6 +108,18 @@ computational chemistry software.
    :caption: pKa Calculations
 
    pka-calculations
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Redox Calculations
+
+   redox-calculations
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reaction Workflow
+
+   reaction
 
 .. toctree::
    :maxdepth: 2

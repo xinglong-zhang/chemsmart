@@ -6,7 +6,8 @@ that complement ASE's units. Includes common pressure/length/mass factors
 and robust conversions among Hartree, eV, kcal/mol, kJ/mol, and J/mol.
 
 Highlights:
-- `atm_to_pa`, `R`, `bohr_to_meter`, `amu_to_kg`, `hartree_to_joules`.
+- `atm_to_pa`, `R`, `FARADAY`, `bohr_to_meter`, `amu_to_kg`,
+  `hartree_to_joules`.
 - `energy_conversion(from_unit, to_unit, value)` to convert between energy
   units (case-insensitive).
 """
@@ -32,6 +33,9 @@ kcal_per_mol_to_hartree = 1 / 627.509474  # 1 Hartree = 627.509474 kcal/mol
 # Energy conversion factors derived from ase.units for consistency
 hartree_to_kcal_mol = units.Hartree / (units.kcal / units.mol)
 HARTREE_TO_KCAL_MOL = hartree_to_kcal_mol
+
+# Faraday constant in C/mol (J/(V·mol)): elementary charge × Avogadro's number
+FARADAY = units._e * units._Nav
 
 # Conversion factors for energy units
 joule_per_mol_to_eV = 1.0364269574711572e-05  # J/mol to eV

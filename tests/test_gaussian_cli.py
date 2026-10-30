@@ -1272,3 +1272,35 @@ class TestGaussianQMMMCLI:
         settings = mock_job.call_args.kwargs["settings"]
         assert settings.mm_atom_info_file is None
         assert settings.mm_parameters_file is None
+
+
+class TestGaussianCLIFromORCAOutput:
+    def test_orca_out_supplies_geometry_and_charge(
+        self,
+        gaussian_jobrunner_no_scratch,
+        make_cli_ctx_obj,
+        orca_outputs_directory,
+    ):
+        from click.testing import CliRunner
+
+        from chemsmart.cli.gaussian.gaussian import gaussian as gaussian_cli
+        from chemsmart.io.molecules.structure import Molecule
+
+        out = os.path.join(orca_outputs_directory, "phenol_pka_B_sp.out")
+        expected = Molecule.from_filepath(out)
+        runner = CliRunner()
+        with patch("chemsmart.jobs.gaussian.opt.GaussianOptJob") as mock:
+            mock.return_value = MagicMock()
+            result = runner.invoke(
+                gaussian_cli,
+                ["-p", "gas_solv", "-f", out, "-i", "-1", "opt"],
+                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        settings = mock.call_args.kwargs["settings"]
+        molecule = mock.call_args.kwargs["molecule"]
+        assert settings.charge == expected.charge == -1
+        assert settings.multiplicity == expected.multiplicity
+        assert molecule.chemical_symbols == expected.chemical_symbols
