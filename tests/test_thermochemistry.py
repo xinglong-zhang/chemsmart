@@ -1,6 +1,9 @@
 import importlib
+import os
 import os.path
+import shutil
 from shutil import copyfile
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -11,18 +14,69 @@ from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
     Thermochemistry,
 )
+from chemsmart.cli.thermochemistry.thermochemistry import (
+    resolve_entropy_cutoff,
+    thermochemistry,
+)
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
-from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
+from chemsmart.jobs.thermochemistry.boltzmann import (
+    BoltzmannAverageThermochemistryJob,
+)
+from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
+from chemsmart.jobs.thermochemistry.runner import ThermochemistryJobRunner
+from chemsmart.jobs.thermochemistry.settings import (
+    ThermochemistryJobSettings,
+)
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.constants import (
     cal_to_joules,
     hartree_to_joules,
     joule_per_mol_to_hartree,
 )
+
+BOLTZMANN_JOB = "chemsmart.jobs.thermochemistry.boltzmann.BoltzmannAverageThermochemistryJob"
+
+
+def run_boltzmann_and_capture_kwargs(cli_args):
+    """Run the ``thermochemistry ... boltzmann`` CLI with a patched
+    job class and capture the constructor call kwargs, plus whether
+    compute_boltzmann_averages/show_results were invoked."""
+    runner = CliRunner()
+    with patch(BOLTZMANN_JOB) as mock_job_cls:
+        mock_instance = MagicMock()
+        mock_job_cls.return_value = mock_instance
+        result = runner.invoke(
+            thermochemistry,
+            cli_args,
+            obj={},
+            catch_exceptions=True,
+        )
+        call_kwargs = None
+        if mock_job_cls.call_args is not None:
+            call_kwargs = mock_job_cls.call_args.kwargs
+    return result, call_kwargs, mock_instance
+
+
+def run_thermochemistry_directory_mode(cli_args, obj=None):
+    """Invoke `thermochemistry ... boltzmann` with a patched Boltzmann
+    job class so the group's own directory/filename-resolution logic
+    runs (populating ctx.obj) without ever reaching the result
+    callback's real per-job computation."""
+    runner = CliRunner()
+    obj = obj if obj is not None else {}
+    with patch(BOLTZMANN_JOB) as mock_job_cls:
+        mock_job_cls.return_value = MagicMock()
+        result = runner.invoke(
+            thermochemistry,
+            [*cli_args, "boltzmann"],
+            obj=obj,
+            catch_exceptions=True,
+        )
+    return result, obj
 
 
 class TestThermochemistry:
@@ -4352,6 +4406,267 @@ class TestCleanedFrequencies:
             Thermochemistry.cleaned_frequencies.fget(mock)
 
 
+class TestThermochemistryFileObjectAndRotationalConstants:
+    """file_object, average_rotational_constant,
+    geometry/gaussian/effective_rotational_constants_in_Hz,
+    effective_rotational_temperatures, and vibrational/real/imaginary
+    frequencies had several branches never reached by the extensive
+    real-fixture tests elsewhere in this file (which all use normally
+    terminated, non-monoatomic, frequency-bearing Gaussian outputs).
+    """
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    @staticmethod
+    def _cached(name, mock):
+        return Thermochemistry.__dict__[name].func(mock)
+
+    def test_file_object_constructs_real_xtb_output(self, xtb_co2_outfolder):
+        """No test anywhere actually constructs a Thermochemistry from
+        an xTB output despite several tests being named as if they
+        did -- they only ever construct XTBOutput directly."""
+        main_out = os.path.join(xtb_co2_outfolder, "co2_ohess.out")
+        thermochem = Thermochemistry(filename=main_out, temperature=298.15)
+        assert thermochem.program == "xtb"
+        from chemsmart.io.xtb.output import XTBOutput
+
+        assert isinstance(thermochem.file_object, XTBOutput)
+        assert thermochem.gibbs_free_energy is not None
+
+    def test_file_object_unsupported_format_raises(self):
+        mock = self._mock_with(program="unknown", filename="some.xyz")
+        with pytest.raises(ValueError, match="Unsupported file format"):
+            self._cached("file_object", mock)
+
+    def test_file_object_abnormal_termination_raises(self):
+        mock = self._mock_with(program="gaussian", filename="some.log")
+        with patch(
+            "chemsmart.analysis.thermochemistry.Gaussian16Output"
+        ) as mock_g16:
+            mock_g16.return_value = MagicMock(normal_termination=False)
+            with pytest.raises(ValueError, match="did not terminate normally"):
+                self._cached("file_object", mock)
+
+    def test_average_rotational_constant_none_when_constants_none(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            effective_rotational_constants_in_Hz=None,
+        )
+        assert Thermochemistry.average_rotational_constant.fget(mock) is None
+
+    def test_average_rotational_constant_none_when_constants_empty(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            effective_rotational_constants_in_Hz=[],
+        )
+        assert Thermochemistry.average_rotational_constant.fget(mock) is None
+
+    def test_geometry_rotational_constants_none_for_monoatomic(self):
+        mock = self._mock_with(molecule=MagicMock(is_monoatomic=True))
+        assert (
+            self._cached("geometry_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_gaussian_rotational_constants_none_for_non_gaussian_output(self):
+        from chemsmart.io.orca.output import ORCAOutput
+
+        mock = self._mock_with(file_object=MagicMock(spec=ORCAOutput))
+        assert (
+            self._cached("gaussian_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_gaussian_rotational_constants_none_when_empty(self):
+        fake_g16 = MagicMock(spec=Gaussian16Output)
+        fake_g16.all_rotational_constants.return_value = []
+        mock = self._mock_with(file_object=fake_g16)
+        assert (
+            self._cached("gaussian_rotational_constants_in_Hz", mock) is None
+        )
+
+    def test_effective_rotational_constants_gaussian_mode_falls_back(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="gaussian",
+            gaussian_rotational_constants_in_Hz=None,
+            geometry_rotational_constants_in_Hz=np.array([1.0, 2.0]),
+        )
+        result = self._cached("effective_rotational_constants_in_Hz", mock)
+        assert list(result) == [1.0, 2.0]
+
+    def test_effective_rotational_constants_gaussian_mode_succeeds(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="gaussian",
+            gaussian_rotational_constants_in_Hz=np.array([1.0, 2.0]),
+        )
+        result = self._cached("effective_rotational_constants_in_Hz", mock)
+        assert list(result) == [1.0, 2.0]
+
+    def test_effective_rotational_constants_unsupported_mode_raises(self):
+        mock = self._mock_with(
+            molecule=MagicMock(is_monoatomic=False),
+            rotational_mode="bogus",
+        )
+        with pytest.raises(ValueError, match="Unsupported rotational"):
+            self._cached("effective_rotational_constants_in_Hz", mock)
+
+    def test_effective_rotational_temperatures_none(self):
+        mock = self._mock_with(effective_rotational_constants_in_Hz=None)
+        assert self._cached("effective_rotational_temperatures", mock) is None
+
+    def test_vibrational_frequencies_none_without_freq_job(self):
+        mock = self._mock_with(file_object=MagicMock(freq=False))
+        assert Thermochemistry.vibrational_frequencies.fget(mock) is None
+
+    def test_real_frequencies_none_without_vibrational_frequencies(self):
+        mock = self._mock_with(vibrational_frequencies=None)
+        assert Thermochemistry.real_frequencies.fget(mock) is None
+
+    def test_imaginary_frequencies_none_without_vibrational_frequencies(self):
+        mock = self._mock_with(vibrational_frequencies=None)
+        assert Thermochemistry.imaginary_frequencies.fget(mock) is None
+
+
+class TestThermochemistryNoFrequencyDataPropertyGuards:
+    """Every real fixture used elsewhere in this file has vibrational
+    frequency data, so the "no frequencies available" (theta/v/derived
+    property is None) branch of ~20 downstream properties was never
+    exercised. Calls each property's getter directly on a
+    MagicMock(spec=Thermochemistry) with only the specific upstream
+    attribute it checks set to None, bypassing the need to construct
+    a full Thermochemistry from a real (freq-less) output file."""
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    def test_vibrational_partition_function_bot_none(self):
+        mock = self._mock_with(vibrational_partition_function_by_mode_bot=None)
+        assert (
+            Thermochemistry.vibrational_partition_function_bot.fget(mock)
+            is None
+        )
+
+    def test_vibrational_partition_function_v0_none(self):
+        mock = self._mock_with(vibrational_partition_function_by_mode_v0=None)
+        assert (
+            Thermochemistry.vibrational_partition_function_v0.fget(mock)
+            is None
+        )
+
+    def test_vibrational_entropy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_entropy.fget(mock) is None
+
+    def test_zero_point_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.zero_point_energy.fget(mock) is None
+
+    def test_vibrational_internal_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_internal_energy.fget(mock) is None
+
+    def test_vibrational_heat_capacity_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.vibrational_heat_capacity.fget(mock) is None
+
+    def test_total_partition_function_none(self):
+        mock = self._mock_with(vibrational_partition_function_v0=None)
+        assert Thermochemistry.total_partition_function.fget(mock) is None
+
+    def test_total_entropy_none(self):
+        mock = self._mock_with(vibrational_entropy=None)
+        assert Thermochemistry.total_entropy.fget(mock) is None
+
+    def test_total_internal_energy_none(self):
+        mock = self._mock_with(vibrational_internal_energy=None)
+        assert Thermochemistry.total_internal_energy.fget(mock) is None
+
+    def test_total_heat_capacity_none(self):
+        mock = self._mock_with(vibrational_heat_capacity=None)
+        assert Thermochemistry.total_heat_capacity.fget(mock) is None
+
+    def test_calculate_damping_function_none_freq_cutoff(self):
+        mock = self._mock_with()
+        assert Thermochemistry._calculate_damping_function(mock, None) is None
+
+    def test_calculate_damping_function_none_v(self):
+        mock = self._mock_with(v=None)
+        assert Thermochemistry._calculate_damping_function(mock, 100.0) is None
+
+    def test_free_rotor_entropy_none_without_v(self):
+        mock = self._mock_with(v=None)
+        assert Thermochemistry.free_rotor_entropy.fget(mock) is None
+
+    def test_free_rotor_entropy_empty_list_without_bav(self):
+        mock = self._mock_with(v=[1.0, 2.0], Bav=None)
+        assert Thermochemistry.free_rotor_entropy.fget(mock) == []
+
+    def test_rrho_entropy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.rrho_entropy.fget(mock) is None
+
+    def test_rrho_internal_energy_none_without_theta(self):
+        mock = self._mock_with(theta=None)
+        assert Thermochemistry.rrho_internal_energy.fget(mock) is None
+
+    def test_enthalpy_none(self):
+        mock = self._mock_with(total_internal_energy=None)
+        assert Thermochemistry.enthalpy.fget(mock) is None
+
+    def test_qrrho_total_entropy_none(self):
+        mock = self._mock_with(qrrho_vibrational_entropy=None)
+        assert Thermochemistry.qrrho_total_entropy.fget(mock) is None
+
+    def test_entropy_times_temperature_none(self):
+        mock = self._mock_with(total_entropy=None)
+        assert Thermochemistry.entropy_times_temperature.fget(mock) is None
+
+    def test_qrrho_entropy_times_temperature_none(self):
+        mock = self._mock_with(qrrho_total_entropy=None)
+        assert (
+            Thermochemistry.qrrho_entropy_times_temperature.fget(mock) is None
+        )
+
+    def test_gibbs_free_energy_none(self):
+        mock = self._mock_with(entropy_times_temperature=None, enthalpy=1.0)
+        assert Thermochemistry.gibbs_free_energy.fget(mock) is None
+
+    def test_qrrho_total_internal_energy_none(self):
+        mock = self._mock_with(qrrho_vibrational_internal_energy=None)
+        assert Thermochemistry.qrrho_total_internal_energy.fget(mock) is None
+
+    def test_qrrho_enthalpy_none(self):
+        mock = self._mock_with(qrrho_total_internal_energy=None)
+        assert Thermochemistry.qrrho_enthalpy.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_none(self):
+        mock = self._mock_with(
+            qrrho_enthalpy=None, qrrho_entropy_times_temperature=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_qs_none(self):
+        mock = self._mock_with(
+            qrrho_entropy_times_temperature=None, enthalpy=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy_qs.fget(mock) is None
+
+    def test_qrrho_gibbs_free_energy_qh_none(self):
+        mock = self._mock_with(
+            qrrho_enthalpy=None, entropy_times_temperature=1.0
+        )
+        assert Thermochemistry.qrrho_gibbs_free_energy_qh.fget(mock) is None
+
+
 class TestThermochemistryCLI:
     """CLI option-propagation tests for the thermochemistry command."""
 
@@ -4577,3 +4892,1407 @@ class TestThermochemistryCLIFolderOptions:
             for call in mock_from_filename.call_args_list
         ]
         assert xtb_output in discovered_files
+
+
+class TestThermochemistryRemainingBranches:
+    """Covers a handful of remaining branches in Thermochemistry that the
+    extensive real-fixture tests elsewhere in this file never reach:
+    an infinite rotational constant inside effective_rotational_temperatures,
+    non-None real_frequencies, the "unknown entropy_method" fallthrough in
+    qrrho_vibrational_entropy, the check_imaginary_frequencies=False skip in
+    _compute_thermochemistry, check_frequencies' two error branches, and
+    Thermochemistry.__str__. Uses the same MagicMock(spec=Thermochemistry) +
+    unbound-method-call pattern established in
+    TestThermochemistryFileObjectAndRotationalConstants.
+    """
+
+    @staticmethod
+    def _mock_with(**attrs):
+        mock = MagicMock(spec=Thermochemistry)
+        for key, value in attrs.items():
+            setattr(mock, key, value)
+        return mock
+
+    @staticmethod
+    def _cached(name, mock):
+        return Thermochemistry.__dict__[name].func(mock)
+
+    def test_effective_rotational_temperatures_handles_infinite_constant(
+        self,
+    ):
+        mock = self._mock_with(
+            effective_rotational_constants_in_Hz=np.array([1e10, np.inf, 2e10])
+        )
+        result = self._cached("effective_rotational_temperatures", mock)
+        assert result[1] == np.inf
+        assert np.isfinite(result[0])
+        assert np.isfinite(result[2])
+
+    def test_real_frequencies_filters_negative_values(self):
+        mock = self._mock_with(
+            vibrational_frequencies=[-50.0, 100.0, 200.0, -10.0]
+        )
+        result = Thermochemistry.real_frequencies.fget(mock)
+        assert result == [100.0, 200.0]
+
+    def test_qrrho_vibrational_entropy_unknown_method_returns_zero(self):
+        """Real bug: if entropy_method is left at its default None (or set
+        to any value other than "grimme"/"truhlar") while s_freq_cutoff is
+        set, qrrho_vibrational_entropy silently returns 0.0 instead of
+        raising or warning. See BUGS_FOUND.md for details."""
+        mock = self._mock_with(
+            s_freq_cutoff=100.0,
+            v=[1e13, 2e13, 3e13],
+            entropy_method=None,
+        )
+        result = Thermochemistry.qrrho_vibrational_entropy.fget(mock)
+        assert result == 0
+
+    def test_compute_thermochemistry_skips_check_when_disabled(self):
+        mock = self._mock_with(
+            check_imaginary_frequencies=False,
+            filename="/tmp/some_structure.log",
+            energy_units="hartree",
+        )
+        mock.convert_energy_units.return_value = (1, 2, 3, 4, 5, 6, 7, 8)
+        result = Thermochemistry._compute_thermochemistry(mock)
+        assert result == ("some_structure", 1, 2, 3, 4, 5, 6, 7, 8)
+        mock.check_frequencies.assert_not_called()
+
+    def test_check_frequencies_ts_with_multiple_imaginary_raises(self):
+        mock = self._mock_with(
+            imaginary_frequencies=[-10.0, -20.0],
+            jobtype="ts",
+            filename="ts.log",
+        )
+        with pytest.raises(
+            ValueError, match="Invalid number of imaginary frequencies"
+        ):
+            Thermochemistry.check_frequencies(mock)
+
+    def test_check_frequencies_non_ts_with_imaginary_raises(self):
+        mock = self._mock_with(
+            imaginary_frequencies=[-10.0],
+            jobtype="opt",
+            filename="opt.log",
+        )
+        with pytest.raises(ValueError, match="Invalid geometry optimization"):
+            Thermochemistry.check_frequencies(mock)
+
+    def test_str_representation_of_thermochemistry(
+        self, gaussian_singlet_opt_outfile
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+        )
+        text = str(thermochem)
+        assert "Thermochemistry Results for" in text
+        assert "Temperature: 298.15 K" in text
+        assert "Pressure: 1.0 atm" in text
+        assert "Most Abundant Masses" in text
+        assert "Energy Unit: hartree" in text
+
+    def test_str_representation_with_concentration_and_weighted_mass(
+        self, gaussian_singlet_opt_outfile
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            concentration=1.0,
+            use_weighted_mass=True,
+        )
+        text = str(thermochem)
+        assert "Concentration: 1.0 mol/L" in text
+        assert "Natural Abundance Weighted Masses" in text
+
+
+class TestConvertEnergyUnitsBranches:
+    """convert_energy_units' four s_freq_cutoff/h_freq_cutoff combinations
+    were only ever exercised via the "neither" (default) combination in
+    TestThermochemistryBatchMode -- no test called compute_thermochemistry()
+    /convert_energy_units() with s_freq_cutoff and/or h_freq_cutoff set."""
+
+    def test_both_cutoffs_set(self, gaussian_singlet_opt_outfile):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=100,
+            h_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        result = thermochem.convert_energy_units()
+        assert result[-1] is not None
+        assert np.isclose(
+            result[-1],
+            thermochem.qrrho_gibbs_free_energy * joule_per_mol_to_hartree,
+        )
+
+    def test_s_freq_cutoff_only(self, gaussian_singlet_opt_outfile):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        result = thermochem.convert_energy_units()
+        assert result[-1] is not None
+        assert np.isclose(
+            result[-1],
+            thermochem.qrrho_gibbs_free_energy_qs * joule_per_mol_to_hartree,
+        )
+
+    def test_h_freq_cutoff_only(self, gaussian_singlet_opt_outfile):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            h_freq_cutoff=100,
+        )
+        result = thermochem.convert_energy_units()
+        assert result[-1] is not None
+        assert np.isclose(
+            result[-1],
+            thermochem.qrrho_gibbs_free_energy_qh * joule_per_mol_to_hartree,
+        )
+
+
+class TestLogResultsToFileHeaderAndRowBranches:
+    """build_header()/build_row() inside log_results_to_file adapt their
+    column layout depending on which of s_freq_cutoff/h_freq_cutoff are
+    set, and whether concentration vs pressure is in use. No existing test
+    ever called log_results_to_file with s_freq_cutoff and/or h_freq_cutoff
+    set, or with concentration set, so those branches were never
+    exercised; nor was the all-None "NO FREQ INFO" placeholder row, nor
+    the default (auto-derived) outputfile path."""
+
+    def test_both_cutoffs_and_concentration_grimme(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            concentration=1.0,
+            s_freq_cutoff=100,
+            h_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        result = thermochem.compute_thermochemistry()
+        outputfile = os.path.join(str(tmp_path), "both.dat")
+        thermochem.log_results_to_file(*result, outputfile=outputfile)
+
+        with open(outputfile) as f:
+            content = f.read()
+
+        assert "Concentration: 1.0 mol/L" in content
+        assert "Entropy Frequency Cut-off:" in content
+        assert "Enthalpy Frequency Cut-off:" in content
+        assert "Damping Function Exponent:" in content
+        assert "Grimme's quasi-RRHO entropy" in content
+        assert "Head-Gordon's quasi-RRHO enthalpy" in content
+        assert "Chai and Head-Gordon" in content
+        assert "qh-H" in content
+        assert "T.qh-S" in content
+        assert "qh-G(T)" in content
+
+    def test_s_freq_cutoff_only_truhlar(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            s_freq_cutoff=100,
+            entropy_method="truhlar",
+        )
+        result = thermochem.compute_thermochemistry()
+        outputfile = os.path.join(str(tmp_path), "s_only.dat")
+        thermochem.log_results_to_file(*result, outputfile=outputfile)
+
+        with open(outputfile) as f:
+            content = f.read()
+
+        assert "Entropy Frequency Cut-off:" in content
+        assert "Enthalpy Frequency Cut-off:" not in content
+        assert "Truhlar's quasi-RRHO entropy" in content
+        assert "Head-Gordon's quasi-RRHO enthalpy" not in content
+        assert "qh-H" not in content
+        assert "T.qh-S" in content
+        assert "qh-G(T)" in content
+
+    def test_h_freq_cutoff_only(self, gaussian_singlet_opt_outfile, tmp_path):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile,
+            temperature=298.15,
+            h_freq_cutoff=100,
+        )
+        result = thermochem.compute_thermochemistry()
+        outputfile = os.path.join(str(tmp_path), "h_only.dat")
+        thermochem.log_results_to_file(*result, outputfile=outputfile)
+
+        with open(outputfile) as f:
+            content = f.read()
+
+        assert "Enthalpy Frequency Cut-off:" in content
+        assert "Entropy Frequency Cut-off:" not in content
+        assert "Head-Gordon's quasi-RRHO enthalpy" in content
+        assert "Grimme's quasi-RRHO entropy" not in content
+        assert "Truhlar's quasi-RRHO entropy" not in content
+        assert "qh-H" in content
+        assert "T.qh-S" not in content
+        assert "qh-G(T)" in content
+
+    def test_all_none_writes_no_freq_placeholder(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        thermochem = Thermochemistry(
+            filename=gaussian_singlet_opt_outfile, temperature=298.15
+        )
+        outputfile = os.path.join(str(tmp_path), "none.dat")
+        thermochem.log_results_to_file(
+            "no_freq_structure",
+            -100.0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            outputfile=outputfile,
+        )
+        with open(outputfile) as f:
+            content = f.read()
+        assert "NO FREQ INFO" in content
+        assert "no_freq_structure" in content
+
+    def test_default_outputfile_derived_from_filename(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        copied = os.path.join(str(tmp_path), "copy_of_singlet.log")
+        copyfile(gaussian_singlet_opt_outfile, copied)
+        thermochem = Thermochemistry(filename=copied, temperature=298.15)
+        result = thermochem.compute_thermochemistry()
+        thermochem.log_results_to_file(*result)
+
+        expected_outputfile = os.path.splitext(copied)[0] + ".dat"
+        assert os.path.exists(expected_outputfile)
+
+
+class TestBoltzmannJobConstruction:
+    def test_label_actually_derives_from_filename_not_files(
+        self, gaussian_co2_opt_outfile
+    ):
+        """The boltzmann-specific "common prefix of ``files``" label logic
+        in ``BoltzmannAverageThermochemistryJob.__init__`` is dead code in
+        practice: ``ThermochemistryJob.__init__`` (called first via
+        ``super().__init__``) already derives ``self.label`` from
+        ``filename`` whenever one is given, so the child's own
+        ``if self.label is None`` branch never fires as long as the
+        (mandatory, see docstring) ``filename`` is supplied."""
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["conformer_c1.log", "conformer_c2.log"],
+            energy_type="gibbs",
+        )
+        assert job.label == "co2"
+
+    def test_custom_label_preserved(self, gaussian_co2_opt_outfile):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="my_boltzmann_job",
+        )
+        assert job.label == "my_boltzmann_job"
+
+    def test_default_energy_type_is_gibbs(self, gaussian_co2_opt_outfile):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="x",
+        )
+        assert job.energy_type == "gibbs"
+
+    def test_settings_class_returns_expected_type(self):
+        assert (
+            BoltzmannAverageThermochemistryJob.settings_class()
+            is ThermochemistryJobSettings
+        )
+
+
+class TestBoltzmannJobPaths:
+    def test_inputfile_is_absolute_path(self, gaussian_co2_opt_outfile):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="x",
+        )
+        assert job.inputfile == os.path.abspath(gaussian_co2_opt_outfile)
+
+    def test_inputfile_none_when_no_filename(self):
+        job = BoltzmannAverageThermochemistryJob.__new__(
+            BoltzmannAverageThermochemistryJob
+        )
+        job.filename = None
+        assert job.inputfile is None
+
+    def test_outputfile_and_errfile_use_label(self, gaussian_co2_opt_outfile):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="my_boltzmann_job",
+        )
+        assert job.outputfile == os.path.join(
+            job.folder, "my_boltzmann_job_boltzmann.dat"
+        )
+        assert job.errfile == os.path.join(
+            job.folder, "my_boltzmann_job_boltzmann.err"
+        )
+
+
+class TestBoltzmannJobFromFiles:
+    def test_from_files_requires_filename_workaround(self):
+        """Demonstrates the underlying bug (see BUGS_FOUND.md #1):
+        ``from_files`` alone (as used by the CLI) crashes because no
+        ``filename`` is ever supplied. ``ThermochemistryJob.__init__``
+        now guards against this explicitly, so the crash is a clear
+        ``ValueError`` rather than the previous confusing
+        ``AttributeError``, but the CLI still never passes ``filename``."""
+        with pytest.raises(ValueError, match="'filename' must be provided"):
+            BoltzmannAverageThermochemistryJob.from_files(
+                files=["a.log", "b.log"]
+            )
+
+    def test_from_files_builds_job_with_explicit_filename(
+        self, gaussian_co2_opt_outfile
+    ):
+        mock_jobrunner = MagicMock()
+        job = BoltzmannAverageThermochemistryJob.from_files(
+            files=["a.log", "b.log"],
+            filename=gaussian_co2_opt_outfile,
+            jobrunner=mock_jobrunner,
+        )
+        assert isinstance(job, BoltzmannAverageThermochemistryJob)
+        assert job.files == ["a.log", "b.log"]
+        assert job.jobrunner is mock_jobrunner
+
+    def test_from_files_creates_jobrunner_when_not_given(
+        self, gaussian_co2_opt_outfile
+    ):
+        mock_runner_instance = MagicMock()
+        with patch(
+            "chemsmart.jobs.thermochemistry.boltzmann.JobRunner.from_job",
+            return_value=mock_runner_instance,
+        ) as mock_from_job:
+            job = BoltzmannAverageThermochemistryJob.from_files(
+                files=["a.log", "b.log"],
+                filename=gaussian_co2_opt_outfile,
+            )
+
+        mock_from_job.assert_called_once()
+        assert job.jobrunner is mock_runner_instance
+
+
+class TestBoltzmannJobCompute:
+    def test_compute_requires_files(self, gaussian_co2_opt_outfile):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile, files=None, label="x"
+        )
+        with pytest.raises(ValueError, match="No input file provided"):
+            job.compute_boltzmann_averages()
+
+    def test_compute_calls_analysis_and_logs_results(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="x",
+        )
+        job.settings.outputfile = str(tmp_path / "out.dat")
+
+        mock_thermo = MagicMock()
+        mock_thermo.compute_boltzmann_averages.return_value = (
+            "structure",
+            -100.0,
+            0.01,
+            -99.9,
+            -99.9,
+            -0.02,
+            -0.02,
+            -99.92,
+            -99.92,
+        )
+        with patch(
+            "chemsmart.analysis.thermochemistry.BoltzmannAverageThermochemistry",
+            return_value=mock_thermo,
+        ) as mock_cls:
+            job.compute_boltzmann_averages()
+
+        mock_cls.assert_called_once()
+        assert mock_cls.call_args.kwargs["files"] == ["a.log", "b.log"]
+        mock_thermo.compute_boltzmann_averages.assert_called_once()
+        mock_thermo.log_results_to_file.assert_called_once()
+
+    def test_compute_defaults_outputfile_when_unset(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="x",
+        )
+        assert job.settings.outputfile is None
+
+        mock_thermo = MagicMock()
+        mock_thermo.compute_boltzmann_averages.return_value = (
+            "structure",
+            -100.0,
+            0.01,
+            -99.9,
+            -99.9,
+            -0.02,
+            -0.02,
+            -99.92,
+            -99.92,
+        )
+        with patch(
+            "chemsmart.analysis.thermochemistry.BoltzmannAverageThermochemistry",
+            return_value=mock_thermo,
+        ):
+            job.compute_boltzmann_averages()
+
+        assert job.settings.outputfile == job.outputfile
+
+    def test_compute_reraises_on_failure(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = BoltzmannAverageThermochemistryJob(
+            filename=gaussian_co2_opt_outfile,
+            files=["a.log", "b.log"],
+            label="x",
+        )
+        job.settings.outputfile = str(tmp_path / "out.dat")
+
+        with patch(
+            "chemsmart.analysis.thermochemistry.BoltzmannAverageThermochemistry",
+            side_effect=RuntimeError("boom"),
+        ):
+            with pytest.raises(RuntimeError, match="boom"):
+                job.compute_boltzmann_averages()
+
+
+class TestBoltzmannAverageThermochemistry:
+    """BoltzmannAverageThermochemistry.__init__'s validation branches,
+    compute_boltzmann_averages' check_imaginary_frequencies skip, the
+    s/h freq cutoff combinations inside _compute_boltzmann_averages, and a
+    few boltzmann_* properties/__str__ that no existing real-fixture test
+    happens to exercise directly.
+    """
+
+    def test_empty_files_raises_indexerror_before_reaching_guard(self):
+        """BUGS_FOUND.md: __init__ calls super().__init__(filename=
+        files[0], ...) before the `if not files: raise ValueError(...)`
+        guard further down, so an empty file list raises IndexError, not
+        the documented ValueError("List of files cannot be empty.")."""
+        with pytest.raises(IndexError):
+            BoltzmannAverageThermochemistry(files=[], temperature=298.15)
+
+    def test_unparseable_molecule_raises_value_error(
+        self, gaussian_singlet_opt_outfile, tmp_path
+    ):
+        empty_file = os.path.join(str(tmp_path), "empty.log")
+        open(empty_file, "w").close()
+        with pytest.raises(
+            ValueError,
+            match="Could not parse molecule from one or more files",
+        ):
+            BoltzmannAverageThermochemistry(
+                files=[gaussian_singlet_opt_outfile, empty_file],
+                temperature=298.15,
+            )
+
+    def test_mismatched_formulae_raises_value_error(
+        self, gaussian_singlet_opt_outfile, gaussian_triplet_opt_outfile
+    ):
+        with pytest.raises(
+            ValueError,
+            match="All files must contain the same molecular structure",
+        ):
+            BoltzmannAverageThermochemistry(
+                files=[
+                    gaussian_singlet_opt_outfile,
+                    gaussian_triplet_opt_outfile,
+                ],
+                temperature=298.15,
+            )
+
+    def test_invalid_energy_type_raises_value_error(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        with pytest.raises(
+            ValueError, match="energy_type must be 'electronic' or 'gibbs'"
+        ):
+            BoltzmannAverageThermochemistry(
+                files=[
+                    gaussian_conformer1_outfile,
+                    gaussian_conformer2_outfile,
+                ],
+                temperature=298.15,
+                energy_type="bogus",
+            )
+
+    def test_compute_boltzmann_averages_skips_check_when_disabled(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            check_imaginary_frequencies=False,
+        )
+        result = boltzmann.compute_boltzmann_averages()
+        assert result[0].endswith("_boltzmann_avg_by_gibbs")
+
+    def test_gibbs_weighting_h_freq_cutoff_only(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            h_freq_cutoff=100,
+            energy_type="gibbs",
+        )
+        boltzmann.compute_boltzmann_averages()
+        assert boltzmann.boltzmann_qrrho_gibbs_free_energy is not None
+
+    def test_gibbs_weighting_no_cutoffs(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            energy_type="gibbs",
+        )
+        boltzmann.compute_boltzmann_averages()
+        assert boltzmann.boltzmann_gibbs_free_energy is not None
+        assert boltzmann.boltzmann_qrrho_gibbs_free_energy is None
+
+    def test_compute_boltzmann_averages_raises_when_energy_missing(self):
+        mock_thermo = MagicMock(spec=Thermochemistry)
+        mock_thermo.gibbs_free_energy = None
+        mock_thermo.filename = "bad.log"
+        mock = MagicMock(spec=BoltzmannAverageThermochemistry)
+        mock.temperature = 298.15
+        mock.thermochemistries = [mock_thermo]
+        mock.energy_type = "gibbs"
+        mock.s_freq_cutoff = None
+        mock.h_freq_cutoff = None
+        with pytest.raises(ValueError, match="not available for file"):
+            BoltzmannAverageThermochemistry._compute_boltzmann_averages(mock)
+
+    def test_boltzmann_entropy_properties(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+            s_freq_cutoff=100,
+            entropy_method="grimme",
+        )
+        boltzmann.compute_boltzmann_averages()
+        assert boltzmann.boltzmann_entropy is not None
+        assert boltzmann.boltzmann_qrrho_entropy is not None
+
+    def test_str_representation(
+        self, gaussian_conformer1_outfile, gaussian_conformer2_outfile
+    ):
+        boltzmann = BoltzmannAverageThermochemistry(
+            files=[gaussian_conformer1_outfile, gaussian_conformer2_outfile],
+            temperature=298.15,
+        )
+        boltzmann.compute_boltzmann_averages()
+        text = str(boltzmann)
+        assert "Boltzmann-Averaged Thermochemistry" in text
+        assert "Temperature: 298.15 K" in text
+        assert "Gibbs Free Energy:" in text
+
+
+class TestThermochemistryJobConstruction:
+    def test_rejects_unsupported_file_extension(self):
+        with pytest.raises(ValueError, match="Unsupported file extension"):
+            ThermochemistryJob(filename="molecule.txt")
+
+    def test_rejects_invalid_settings_type(self, gaussian_co2_opt_outfile):
+        with pytest.raises(ValueError, match="Settings must be instance"):
+            ThermochemistryJob(
+                filename=gaussian_co2_opt_outfile, settings="not-a-settings"
+            )
+
+    def test_rejects_invalid_molecule_type(self, gaussian_co2_opt_outfile):
+        with pytest.raises(ValueError, match="Molecule must be instance"):
+            ThermochemistryJob(
+                filename=gaussian_co2_opt_outfile, molecule="not-a-molecule"
+            )
+
+    def test_label_defaults_to_filename_stem(self, gaussian_co2_opt_outfile):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        assert job.label == "co2"
+
+    def test_default_settings_used_when_none_given(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        assert isinstance(job.settings, ThermochemistryJobSettings)
+
+    def test_settings_from_dict_forwards_keys(self):
+        settings = ThermochemistryJobSettings.from_dict(
+            {"temperature": 350.0, "pressure": 2.0, "energy_units": "kcal/mol"}
+        )
+        assert isinstance(settings, ThermochemistryJobSettings)
+        assert settings.temperature == 350.0
+        assert settings.pressure == 2.0
+        assert settings.energy_units == "kcal/mol"
+
+    def test_settings_class_returns_expected_type(self):
+        assert (
+            ThermochemistryJob.settings_class() is ThermochemistryJobSettings
+        )
+
+
+class TestThermochemistryJobPaths:
+    def test_inputfile_is_absolute_path(self, gaussian_co2_opt_outfile):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        assert job.inputfile == os.path.abspath(gaussian_co2_opt_outfile)
+
+    def test_inputfile_none_when_no_filename(self):
+        job = ThermochemistryJob.__new__(ThermochemistryJob)
+        job.filename = None
+        assert job.inputfile is None
+
+    def test_outputfile_and_errfile_use_label_and_folder(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = ThermochemistryJob(
+            filename=gaussian_co2_opt_outfile, label="my_label"
+        )
+        assert job.outputfile == os.path.join(job.folder, "my_label.dat")
+        assert job.errfile == os.path.join(job.folder, "my_label.err")
+
+
+class TestThermochemistryJobCompletion:
+    def test_job_is_complete_false_when_missing(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        job.settings.outputfile = str(tmp_path / "does_not_exist.dat")
+        assert job._job_is_complete() is False
+
+    def test_job_is_complete_true_when_present(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        outfile = tmp_path / "exists.dat"
+        outfile.write_text("done")
+        job.settings.outputfile = str(outfile)
+        assert job._job_is_complete() is True
+
+    def test_output_returns_none_when_missing(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        job.settings.outputfile = str(tmp_path / "missing.dat")
+        assert job._output() is None
+
+    def test_output_returns_abspath_when_present(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        outfile = tmp_path / "present.dat"
+        outfile.write_text("done")
+        job.settings.outputfile = str(outfile)
+        assert job._output() == os.path.abspath(str(outfile))
+
+
+class TestThermochemistryJobRun:
+    def test_run_delegates_to_jobrunner(self, gaussian_co2_opt_outfile):
+        mock_runner = MagicMock()
+        job = ThermochemistryJob(
+            filename=gaussian_co2_opt_outfile, jobrunner=mock_runner
+        )
+        job._run()
+        mock_runner.run.assert_called_once_with(job)
+
+
+class TestThermochemistryJobBackupFiles:
+    def test_backup_files_uses_backup_folder_and_outputfile(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        with (
+            patch.object(
+                job, "_create_backup_folder_name", return_value="bk1"
+            ) as mock_folder,
+            patch.object(job, "backup_file") as mock_backup,
+        ):
+            job._backup_files()
+
+        mock_folder.assert_called_once_with()
+        mock_backup.assert_called_once_with(job.outputfile, folder="bk1")
+
+
+class TestThermochemistryJobComputeAndShow:
+    def test_compute_thermochemistry_requires_filename(self):
+        """See BUGS_FOUND.md #36: compute_thermochemistry's docstring
+        claims it raises ValueError for a missing filename, but that
+        check now lives entirely in __init__ (filename is guaranteed
+        non-None by the time compute_thermochemistry runs), so this
+        exercises the real, reachable guard instead."""
+        with pytest.raises(ValueError, match="'filename' must be provided"):
+            ThermochemistryJob(filename=None)
+
+    def test_compute_thermochemistry_calls_analysis_and_logs_results(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        job.settings.outputfile = str(tmp_path / "out.dat")
+
+        mock_thermo = MagicMock()
+        mock_thermo.compute_thermochemistry.return_value = (
+            "structure",
+            -100.0,
+            0.01,
+            -99.9,
+            -99.9,
+            -0.02,
+            -0.02,
+            -99.92,
+            -99.92,
+        )
+        with patch(
+            "chemsmart.jobs.thermochemistry.job.Thermochemistry",
+            return_value=mock_thermo,
+        ) as mock_cls:
+            job.compute_thermochemistry()
+
+        mock_cls.assert_called_once()
+        mock_thermo.compute_thermochemistry.assert_called_once()
+        mock_thermo.log_results_to_file.assert_called_once()
+
+    def test_compute_thermochemistry_defaults_outputfile_when_unset(
+        self, gaussian_co2_opt_outfile
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        assert job.settings.outputfile is None
+
+        mock_thermo = MagicMock()
+        mock_thermo.compute_thermochemistry.return_value = (
+            "structure",
+            -100.0,
+            0.01,
+            -99.9,
+            -99.9,
+            -0.02,
+            -0.02,
+            -99.92,
+            -99.92,
+        )
+        with patch(
+            "chemsmart.jobs.thermochemistry.job.Thermochemistry",
+            return_value=mock_thermo,
+        ):
+            job.compute_thermochemistry()
+
+        assert job.settings.outputfile == job.outputfile
+
+    def test_compute_thermochemistry_reraises_on_failure(
+        self, gaussian_co2_opt_outfile, tmp_path
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        job.settings.outputfile = str(tmp_path / "out.dat")
+
+        with patch(
+            "chemsmart.jobs.thermochemistry.job.Thermochemistry",
+            side_effect=RuntimeError("parse failed"),
+        ):
+            with pytest.raises(RuntimeError, match="parse failed"):
+                job.compute_thermochemistry()
+
+    def test_show_results_prints_output_file_contents(
+        self, gaussian_co2_opt_outfile, tmp_path, capsys
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        outfile = tmp_path / "results.dat"
+        outfile.write_text("some thermochemistry results\n")
+        job.settings.outputfile = str(outfile)
+
+        job.show_results()
+
+        captured = capsys.readouterr()
+        assert "some thermochemistry results" in captured.out
+
+    def test_show_results_no_op_when_outputfile_missing(
+        self, gaussian_co2_opt_outfile, tmp_path, capsys
+    ):
+        job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
+        job.settings.outputfile = str(tmp_path / "missing.dat")
+
+        job.show_results()
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+
+
+class TestThermochemistryJobFromFilename:
+    def test_from_filename_reads_molecule_and_builds_job(
+        self, gaussian_co2_opt_outfile
+    ):
+        mock_jobrunner = MagicMock()
+        job = ThermochemistryJob.from_filename(
+            filename=gaussian_co2_opt_outfile, jobrunner=mock_jobrunner
+        )
+        assert isinstance(job, ThermochemistryJob)
+        assert job.filename == gaussian_co2_opt_outfile
+        assert job.jobrunner is mock_jobrunner
+        assert job.label == "co2"
+
+    def test_from_filename_creates_jobrunner_when_not_given(
+        self, gaussian_co2_opt_outfile
+    ):
+        mock_runner_instance = MagicMock()
+        with patch(
+            "chemsmart.jobs.thermochemistry.job.JobRunner.from_job",
+            return_value=mock_runner_instance,
+        ) as mock_from_job:
+            job = ThermochemistryJob.from_filename(
+                filename=gaussian_co2_opt_outfile
+            )
+
+        mock_from_job.assert_called_once()
+        assert job.jobrunner is mock_runner_instance
+
+    def test_from_filename_uses_explicit_settings(
+        self, gaussian_co2_opt_outfile
+    ):
+        mock_jobrunner = MagicMock()
+        settings = ThermochemistryJobSettings(temperature=350.0)
+        job = ThermochemistryJob.from_filename(
+            filename=gaussian_co2_opt_outfile,
+            settings=settings,
+            jobrunner=mock_jobrunner,
+        )
+        assert job.settings.temperature == 350.0
+
+    def test_from_filename_uses_explicit_label(self, gaussian_co2_opt_outfile):
+        mock_jobrunner = MagicMock()
+        job = ThermochemistryJob.from_filename(
+            filename=gaussian_co2_opt_outfile,
+            label="custom_label",
+            jobrunner=mock_jobrunner,
+        )
+        assert job.label == "custom_label"
+
+
+class TestThermochemistryJobRunnerSetup:
+    def test_defaults_scratch_to_false(self, pbs_server):
+        runner = ThermochemistryJobRunner(server=pbs_server)
+        assert runner.scratch is False
+
+    def test_prerun_sets_up_job_directory_paths(self, pbs_server, thermo_job):
+        runner = ThermochemistryJobRunner(server=pbs_server, scratch=False)
+        runner._prerun(thermo_job)
+
+        assert runner.running_directory == thermo_job.folder
+        assert runner.job_inputfile == os.path.abspath(thermo_job.inputfile)
+        assert runner.job_outputfile == os.path.abspath(thermo_job.outputfile)
+        assert runner.job_errfile == os.path.abspath(thermo_job.errfile)
+
+    def test_prerun_sets_up_scratch_directory_paths(
+        self, pbs_server, thermo_job, tmp_path
+    ):
+        scratch_dir = tmp_path / "scratch"
+        runner = ThermochemistryJobRunner(
+            server=pbs_server, scratch=True, scratch_dir=str(scratch_dir)
+        )
+        runner._prerun(thermo_job)
+
+        expected_dir = os.path.join(
+            str(scratch_dir), thermo_job.execution_name
+        )
+        assert runner.running_directory == expected_dir
+        assert os.path.isdir(expected_dir)
+        assert runner.job_inputfile.startswith(expected_dir)
+        assert runner.job_outputfile.endswith("co2_thermo.dat")
+        assert runner.job_errfile.endswith("co2_thermo.err")
+
+    def test_get_command_and_executable_are_none(self, pbs_server, thermo_job):
+        runner = ThermochemistryJobRunner(server=pbs_server)
+        assert runner._get_command(thermo_job) is None
+        assert runner._get_executable() is None
+
+    def test_run_is_a_no_op(self, pbs_server):
+        runner = ThermochemistryJobRunner(server=pbs_server)
+        # Should not raise regardless of the "process" passed in.
+        runner._run(process=None)
+
+
+class TestThermochemistryJobRunnerWriteInput:
+    def test_write_input_copies_when_scratch_and_paths_differ(
+        self, pbs_server, thermo_job, tmp_path
+    ):
+        scratch_dir = tmp_path / "scratch"
+        runner = ThermochemistryJobRunner(
+            server=pbs_server, scratch=True, scratch_dir=str(scratch_dir)
+        )
+        runner._prerun(thermo_job)
+
+        with patch("chemsmart.jobs.thermochemistry.runner.copy") as mock_copy:
+            runner._write_input(thermo_job)
+
+        mock_copy.assert_called_once_with(
+            thermo_job.inputfile, runner.job_inputfile
+        )
+
+    def test_write_input_no_op_without_scratch(self, pbs_server, thermo_job):
+        runner = ThermochemistryJobRunner(server=pbs_server, scratch=False)
+        runner._prerun(thermo_job)
+
+        with patch("chemsmart.jobs.thermochemistry.runner.copy") as mock_copy:
+            runner._write_input(thermo_job)
+
+        mock_copy.assert_not_called()
+
+
+class TestThermochemistryJobRunnerCreateProcess:
+    def test_create_process_returns_zero_on_success(
+        self, pbs_server, thermo_job
+    ):
+        runner = ThermochemistryJobRunner(server=pbs_server)
+        runner._prerun(thermo_job)
+        thermo_job.compute_thermochemistry = MagicMock()
+
+        exit_code = runner._create_process(thermo_job, None, None)
+
+        assert exit_code == 0
+        thermo_job.compute_thermochemistry.assert_called_once()
+
+    def test_create_process_returns_one_and_writes_errfile_on_failure(
+        self, pbs_server, thermo_job
+    ):
+        runner = ThermochemistryJobRunner(server=pbs_server)
+        runner._prerun(thermo_job)
+        thermo_job.compute_thermochemistry = MagicMock(
+            side_effect=RuntimeError("boom")
+        )
+
+        exit_code = runner._create_process(thermo_job, None, None)
+
+        assert exit_code == 1
+        assert os.path.exists(runner.job_errfile)
+        with open(runner.job_errfile) as f:
+            assert "boom" in f.read()
+
+
+class TestThermochemistryJobRunnerPostrun:
+    def test_postrun_no_op_without_scratch(self, pbs_server, thermo_job):
+        runner = ThermochemistryJobRunner(server=pbs_server, scratch=False)
+        runner._prerun(thermo_job)
+        # Should not raise even though output/err files don't exist.
+        runner._postrun(thermo_job)
+
+    def test_postrun_copies_files_still_missing_in_scratch(
+        self, pbs_server, thermo_job, tmp_path
+    ):
+        """``_postrun`` copies whichever of outputfile/errfile is still
+        absent at the scratch location (only the errfile here, since the
+        outputfile was already produced there)."""
+        scratch_dir = tmp_path / "scratch"
+        runner = ThermochemistryJobRunner(
+            server=pbs_server, scratch=True, scratch_dir=str(scratch_dir)
+        )
+        runner._prerun(thermo_job)
+
+        # Simulate output produced in the scratch directory; errfile absent.
+        os.makedirs(os.path.dirname(runner.job_outputfile), exist_ok=True)
+        with open(runner.job_outputfile, "w") as f:
+            f.write("result")
+
+        with patch("chemsmart.jobs.thermochemistry.runner.copy") as mock_copy:
+            runner._postrun(thermo_job)
+
+        mock_copy.assert_called_once_with(
+            runner.job_errfile, thermo_job.folder
+        )
+
+
+class TestThermochemistryBoltzmannCommand:
+    """See BUGS_FOUND.md #1: the CLI now passes a real `filename` to
+    BoltzmannAverageThermochemistryJob (previously omitted entirely,
+    which crashed on every invocation)."""
+
+    def test_single_file_passes_it_as_filename(self, gaussian_co2_opt_outfile):
+        result, kwargs, instance = run_boltzmann_and_capture_kwargs(
+            ["-f", gaussian_co2_opt_outfile, "-T", "298.15", "boltzmann"]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["files"] == (gaussian_co2_opt_outfile,)
+        assert kwargs["filename"] == gaussian_co2_opt_outfile
+        assert kwargs["energy_type"] == "gibbs"
+        instance.compute_boltzmann_averages.assert_called_once()
+        instance.show_results.assert_called_once()
+
+    def test_multiple_files_uses_first_as_filename(
+        self, gaussian_co2_opt_outfile
+    ):
+        result, kwargs, _ = run_boltzmann_and_capture_kwargs(
+            [
+                "-f",
+                gaussian_co2_opt_outfile,
+                "-f",
+                gaussian_co2_opt_outfile,
+                "-T",
+                "298.15",
+                "boltzmann",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["files"] == (
+            gaussian_co2_opt_outfile,
+            gaussian_co2_opt_outfile,
+        )
+        assert kwargs["filename"] == gaussian_co2_opt_outfile
+
+    def test_energy_type_electronic_option(self, gaussian_co2_opt_outfile):
+        result, kwargs, _ = run_boltzmann_and_capture_kwargs(
+            [
+                "-f",
+                gaussian_co2_opt_outfile,
+                "-T",
+                "298.15",
+                "boltzmann",
+                "-w",
+                "electronic",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["energy_type"] == "electronic"
+
+    def test_rerun_completed_flag(self, gaussian_co2_opt_outfile):
+        result, kwargs, _ = run_boltzmann_and_capture_kwargs(
+            ["-f", gaussian_co2_opt_outfile, "-T", "298.15", "boltzmann", "-R"]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["skip_completed"] is False
+
+    def test_no_files_leaves_filename_none(self):
+        """No -f given at all: files is None, so the fixed
+        `filename=files[0] if files else None` guard falls back to
+        None rather than raising IndexError."""
+        result, kwargs, _ = run_boltzmann_and_capture_kwargs(
+            ["-T", "298.15", "boltzmann"]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["files"] is None
+        assert kwargs["filename"] is None
+
+    def test_no_files_real_job_class_raises(self):
+        """Without the patched job class, a no-files invocation still
+        surfaces the underlying ThermochemistryJob filename validation
+        (since Boltzmann needs at least one real file to average)."""
+        runner = CliRunner()
+        result = runner.invoke(
+            thermochemistry,
+            ["-T", "298.15", "boltzmann"],
+            obj={},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ValueError)
+        assert "'filename' must be provided" in str(result.exception)
+
+    def test_outputfile_parameter_is_always_none(
+        self, gaussian_co2_opt_outfile
+    ):
+        """Regression test for BUGS_FOUND.md #39: -o/--outputfile is
+        only defined at the thermochemistry group scope and is never
+        forwarded into boltzmann()'s own (option-less) `outputfile`
+        parameter."""
+        result, kwargs, _ = run_boltzmann_and_capture_kwargs(
+            [
+                "-f",
+                gaussian_co2_opt_outfile,
+                "-T",
+                "298.15",
+                "-o",
+                "custom_out.dat",
+                "boltzmann",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert kwargs["outputfile"] is None
+
+    def test_outputfile_option_not_recognized_on_subcommand(
+        self, gaussian_co2_opt_outfile
+    ):
+        runner = CliRunner()
+        result = runner.invoke(
+            thermochemistry,
+            [
+                "-f",
+                gaussian_co2_opt_outfile,
+                "-T",
+                "298.15",
+                "boltzmann",
+                "-o",
+                "custom_out.dat",
+            ],
+            obj={},
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert "No such option" in result.output
+
+
+class TestResolveEntropyCutoff:
+    """Direct unit tests for the pure resolve_entropy_cutoff helper."""
+
+    def test_both_given_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="Cannot specify both"):
+            resolve_entropy_cutoff(100.0, 100.0)
+
+    def test_truhlar_only(self):
+        assert resolve_entropy_cutoff(None, 100.0) == (100.0, "truhlar")
+
+    def test_grimme_only(self):
+        assert resolve_entropy_cutoff(100.0, None) == (100.0, "grimme")
+
+    def test_neither_given(self):
+        assert resolve_entropy_cutoff(None, None) == (None, None)
+
+
+class TestThermochemistryGroupDirectoryMode:
+    """Covers the `thermochemistry` group's own -d/--directory
+    handling: xTB per-subdirectory discovery (valid/empty/invalid
+    calculation dirs), program- and filetype-based file discovery, and
+    the invalid-file skip-and-continue behavior."""
+
+    def test_xtb_directory_discovers_valid_calculation_subdirs_only(
+        self, tmp_path, xtb_water_outfolder, xtb_test_directory
+    ):
+        shutil.copytree(xtb_water_outfolder, tmp_path / "valid")
+        (tmp_path / "empty").mkdir()
+        (tmp_path / "multi").mkdir()
+        shutil.copy(
+            os.path.join(xtb_water_outfolder, "water_ohess.out"),
+            tmp_path / "multi" / "water_ohess.out",
+        )
+        co2_out = os.path.join(
+            xtb_test_directory, "outputs", "co2_ohess", "co2_ohess.out"
+        )
+        shutil.copy(co2_out, tmp_path / "multi" / "co2_ohess.out")
+
+        result, obj = run_thermochemistry_directory_mode(
+            ["-d", str(tmp_path), "-p", "xtb", "-T", "298.15"]
+        )
+        assert result.exit_code == 0, result.output
+        assert obj["filenames"] == [
+            str(tmp_path / "valid" / "water_ohess.out")
+        ]
+
+    def test_xtb_directory_with_no_valid_calculations_raises(self, tmp_path):
+        (tmp_path / "empty").mkdir()
+        result, _ = run_thermochemistry_directory_mode(
+            ["-d", str(tmp_path), "-p", "xtb", "-T", "298.15"]
+        )
+        assert result.exit_code != 0
+        assert "No xTB output files found" in str(result.exception)
+
+    def test_directory_and_program_only(self, tmp_path):
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/co2.log", tmp_path / "co2.log"
+        )
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/he.log", tmp_path / "he.log"
+        )
+        result, obj = run_thermochemistry_directory_mode(
+            ["-d", str(tmp_path), "-p", "gaussian", "-T", "298.15"]
+        )
+        assert result.exit_code == 0, result.output
+        assert len(obj["filenames"]) == 2
+
+    def test_directory_and_filetype_only(self, tmp_path):
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/co2.log", tmp_path / "co2.log"
+        )
+        result, obj = run_thermochemistry_directory_mode(
+            ["-d", str(tmp_path), "-t", "log", "-T", "298.15"]
+        )
+        assert result.exit_code == 0, result.output
+        assert len(obj["filenames"]) == 1
+
+    def test_directory_and_program_and_filetype(self, tmp_path):
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/co2.log", tmp_path / "co2.log"
+        )
+        result, obj = run_thermochemistry_directory_mode(
+            [
+                "-d",
+                str(tmp_path),
+                "-p",
+                "gaussian",
+                "-t",
+                "log",
+                "-T",
+                "298.15",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert len(obj["filenames"]) == 1
+
+    def test_directory_without_program_or_filetype_raises(self, tmp_path):
+        result, _ = run_thermochemistry_directory_mode(
+            ["-d", str(tmp_path), "-T", "298.15"]
+        )
+        assert result.exit_code != 0
+        assert "Must specify --program or --filetype" in str(result.exception)
+
+    def test_directory_filetype_no_matches_raises(self, tmp_path):
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/co2.log", tmp_path / "co2.log"
+        )
+        result, _ = run_thermochemistry_directory_mode(
+            ["-d", str(tmp_path), "-t", "xyz", "-T", "298.15"]
+        )
+        assert result.exit_code != 0
+        assert "No output files matching" in str(result.exception)
+
+    def test_unsupported_filetype_in_filenames_mode_raises(
+        self, single_molecule_xyz_file
+    ):
+        result, _ = run_thermochemistry_directory_mode(
+            ["-f", single_molecule_xyz_file, "-T", "298.15"]
+        )
+        assert result.exit_code != 0
+        assert "Unsupported output file type" in str(result.exception)
+
+    def test_invalid_file_in_directory_is_skipped_not_fatal(self, tmp_path):
+        """One file in the directory fails ThermochemistryJob
+        construction; it should be logged and skipped rather than
+        aborting the whole directory scan."""
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/co2.log", tmp_path / "co2.log"
+        )
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/he.log", tmp_path / "he.log"
+        )
+        orig_from_filename = ThermochemistryJob.from_filename.__func__
+
+        def fake_from_filename(cls, filename, **kwargs):
+            if "he" in filename:
+                raise ValueError("simulated parse failure")
+            return orig_from_filename(cls, filename, **kwargs)
+
+        obj = {}
+        with patch.object(
+            ThermochemistryJob,
+            "from_filename",
+            classmethod(fake_from_filename),
+        ):
+            result, obj = run_thermochemistry_directory_mode(
+                ["-d", str(tmp_path), "-t", "log", "-T", "298.15"], obj=obj
+            )
+        assert result.exit_code == 0, result.output
+        assert len(obj["jobs"]) == 1
+        assert obj["jobs"][0].label == "co2"
+
+    def test_directory_and_filenames_both_given_raises(self, tmp_path):
+        result, _ = run_thermochemistry_directory_mode(
+            ["-d", str(tmp_path), "-f", "a.log", "-T", "298.15"]
+        )
+        assert result.exit_code != 0
+        assert "Cannot specify both --directory and --filenames" in str(
+            result.exception
+        )
+
+
+class TestThermochemistryResultCallback:
+    """Covers thermochemistry_process_pipeline's no-subcommand path:
+    running every created job's compute_thermochemistry(), then either
+    each job's own show_results() (no --outputfile) or only the first
+    job's show_results() (combined --outputfile)."""
+
+    def _make_directory(self, tmp_path):
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/co2.log", tmp_path / "co2.log"
+        )
+        shutil.copy(
+            "tests/data/GaussianTests/outputs/he.log", tmp_path / "he.log"
+        )
+
+    def test_no_outputfile_calls_show_results_on_every_job(self, tmp_path):
+        self._make_directory(tmp_path)
+        runner = CliRunner()
+        with (
+            patch.object(
+                ThermochemistryJob, "compute_thermochemistry"
+            ) as mock_compute,
+            patch.object(ThermochemistryJob, "show_results") as mock_show,
+        ):
+            result = runner.invoke(
+                thermochemistry,
+                ["-d", str(tmp_path), "-t", "log", "-T", "298.15"],
+                obj={},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_compute.call_count == 2
+        assert mock_show.call_count == 2
+
+    def test_outputfile_calls_show_results_once_on_first_job(self, tmp_path):
+        self._make_directory(tmp_path)
+        runner = CliRunner()
+        with (
+            patch.object(
+                ThermochemistryJob, "compute_thermochemistry"
+            ) as mock_compute,
+            patch.object(ThermochemistryJob, "show_results") as mock_show,
+        ):
+            result = runner.invoke(
+                thermochemistry,
+                [
+                    "-d",
+                    str(tmp_path),
+                    "-t",
+                    "log",
+                    "-T",
+                    "298.15",
+                    "-o",
+                    "combined.dat",
+                ],
+                obj={},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_compute.call_count == 2
+        assert mock_show.call_count == 1
+
+    def test_compute_thermochemistry_failure_is_logged_not_fatal(
+        self, tmp_path
+    ):
+        self._make_directory(tmp_path)
+        runner = CliRunner()
+        with (
+            patch.object(
+                ThermochemistryJob,
+                "compute_thermochemistry",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch.object(ThermochemistryJob, "show_results") as mock_show,
+        ):
+            result = runner.invoke(
+                thermochemistry,
+                ["-d", str(tmp_path), "-t", "log", "-T", "298.15"],
+                obj={},
+                catch_exceptions=True,
+            )
+        assert result.exit_code == 0, result.output
+        assert mock_show.call_count == 2

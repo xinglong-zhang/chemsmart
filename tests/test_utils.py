@@ -1,4 +1,11 @@
+import os
+import shlex
 import subprocess
+import sys
+import tempfile
+import time
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -14,20 +21,47 @@ from chemsmart.utils.io import (
     line_of_integer_followed_by_floats,
 )
 from chemsmart.utils.utils import (
+    OrderedSet,
+    check_charge_and_multiplicity,
     cmp_with_ignore,
     content_blocks_by_paragraph,
+    convert_list_to_gaussian_frozen_list,
+    convert_list_to_orca_frozen_list,
+    convert_modred_list_to_string,
     convert_string_index_from_1_based_to_0_based,
     deduplicate_string_keywords,
+    extract_number,
+    file_cache,
+    get_key_by_value_and_number,
     get_list_from_string_range,
+    get_prepend_string_for_modred,
+    get_prepend_string_list_from_modred_free_format,
     get_range_from_list,
+    get_value_by_number,
     is_float,
     iterative_compare,
+    kabsch_align,
+    kabsch_align2,
     naturally_sorted,
+    parse_qmmm_scale_factors,
+    prune_list_of_elements,
     return_objects_and_indices_from_string_index,
+    return_objects_from_string_index,
     run_command,
+    sdf2molecule,
     str_indices_range_to_list,
     string2index_1based,
+    strip_out_comments,
+    two_files_have_similar_contents,
+    two_lists_have_similar_contents,
+    update_dict_with_existing_keys,
+    write_list_of_lists_as_a_string_with_empty_line_between_lists,
 )
+
+
+def _make_executable(path):
+    path.write_text("#!/bin/sh\n")
+    os.chmod(str(path), 0o755)
 
 
 class TestUtils:
@@ -76,6 +110,21 @@ class TestUtils:
             gaussian_written_opt_file_with_route,
             ignore_string=["#", "job"],
         )
+
+    def test_cmp_with_ignore_invalid_type_raises_value_error(self, tmp_path):
+        f1 = tmp_path / "a.txt"
+        f2 = tmp_path / "b.txt"
+        f1.write_text("line1\n")
+        f2.write_text("line1\n")
+        with pytest.raises(ValueError, match="string or a list of strings"):
+            cmp_with_ignore(str(f1), str(f2), ignore_string=123)
+
+    def test_cmp_with_ignore_detects_real_difference(self, tmp_path):
+        f1 = tmp_path / "a.txt"
+        f2 = tmp_path / "b.txt"
+        f1.write_text("line1\nline2\n")
+        f2.write_text("line1\nDIFFERENT\n")
+        assert cmp_with_ignore(str(f1), str(f2)) is False
 
     def test_get_list_from_string_range(self):
         s1 = "1-3"
@@ -448,6 +497,172 @@ class TestGetListFromStringRange:
         s6_list = str_indices_range_to_list(str_indices=s6)
         assert s6_list == [2]
 
+    def test_comma_separated_list_with_a_range_part(self):
+        assert str_indices_range_to_list("1-3,7") == [1, 2, 3, 7]
+
+    def test_comma_separated_list_skips_empty_parts(self):
+        assert str_indices_range_to_list("1,,3") == [1, 3]
+
+    def test_bare_colon_returns_empty_list(self):
+        assert str_indices_range_to_list(":") == []
+
+    def test_open_ended_slice_returns_empty_list(self):
+        assert str_indices_range_to_list("5:") == []
+
+    def test_single_negative_index(self):
+        assert str_indices_range_to_list("-1") == [-1]
+
+    def test_comma_separated_negative_index(self):
+        assert str_indices_range_to_list("1,-1") == [1, -1]
+
+    def test_empty_string_returns_empty_list(self):
+        """No comma, no colon, no hyphen -- falls into the "single
+        index" branch, but the "if str_indices:" guard is False for
+        an empty string, so nothing is appended."""
+        assert str_indices_range_to_list("") == []
+
+    def test_simple_range(self):
+        """Test simple range string."""
+        result = get_list_from_string_range("1-3")
+        assert result == [1, 2, 3]
+
+    def test_comma_separated(self):
+        """Test comma-separated values."""
+        result = get_list_from_string_range("1,3,5")
+        assert result == [1, 3, 5]
+
+    def test_mixed_range_and_values(self):
+        """Test mixed ranges and values."""
+        result = get_list_from_string_range("1-3,5,7-9")
+        assert result == [1, 2, 3, 5, 7, 8, 9]
+
+    def test_with_brackets(self):
+        """Test range with brackets."""
+        result = get_list_from_string_range("[1-3,5]")
+        assert result == [1, 2, 3, 5]
+
+    def test_colon_and_whitespace(self):
+        """Test documented colon-range and space-separated form."""
+        result = get_list_from_string_range("1:15 20")
+        assert result == list(range(1, 16)) + [20]
+
+    def test_unicode_en_dash(self):
+        """Test typographic en-dash ranges copied from documents."""
+        result = get_list_from_string_range("397–469")
+        assert result == list(range(397, 470))
+
+    def test_unicode_em_dash_and_spaced_hyphen(self):
+        """Em-dash and spaced hyphens normalize to hyphen ranges."""
+        assert get_list_from_string_range("1—3") == [1, 2, 3]
+        assert get_list_from_string_range("1 - 3") == [1, 2, 3]
+        assert get_list_from_string_range("1−3") == [1, 2, 3]
+
+    def test_empty_string_raises(self):
+        """Empty string should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="empty string"):
+            get_list_from_string_range("")
+
+    def test_invalid_token_raises(self):
+        """Non-numeric tokens should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="Invalid atom index token"):
+            get_list_from_string_range("1-3,abc")
+
+    @pytest.mark.parametrize("value", ["0", "-1", "3-1", "5:2"])
+    def test_invalid_atom_indices_raise(self, value):
+        """Zero, negative, and reversed ranges are rejected."""
+        with pytest.raises(ValueError, match="Invalid atom index token"):
+            get_list_from_string_range(value)
+
+    def test_none_raises(self):
+        """None input should raise a clear ValueError."""
+        with pytest.raises(ValueError, match="None"):
+            get_list_from_string_range(None)
+
+    def test_non_string_raises(self):
+        """Non-string input should raise TypeError."""
+        with pytest.raises(TypeError, match="Expected a string"):
+            get_list_from_string_range(123)
+
+    def test_empty_tokens_and_empty_result(self):
+        """Blank tokens are skipped; all-blank token strings raise."""
+        assert get_list_from_string_range("1,,3") == [1, 3]
+        with pytest.raises(ValueError, match="Could not parse atom indices"):
+            get_list_from_string_range(",,")
+
+
+class TestSdf2Molecule:
+    _sdf_lines = [
+        "",
+        "  Some header",
+        "",
+        "  2  1  0  0  0  0  0  0  0  0999 V2000",
+        "    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0",
+        "    0.0000    0.0000    0.9600 H   0  0  0  0  0  0  0  0  0  0  0  0",
+        "M  END",
+    ]
+
+    def test_accepts_list_of_lines(self):
+        molecule = sdf2molecule(self._sdf_lines)
+        assert molecule.chemical_symbols == ["O", "H"]
+        assert molecule.positions[1][2] == pytest.approx(0.96)
+
+    def test_accepts_newline_joined_string(self):
+        molecule = sdf2molecule("\n".join(self._sdf_lines))
+        assert molecule.chemical_symbols == ["O", "H"]
+
+    def test_invalid_type_crashes_with_unboundlocalerror(self):
+        """Documents BUGS_FOUND.md #50: neither the list nor str branch
+        matches, so line_elements is never assigned."""
+        with pytest.raises(UnboundLocalError):
+            sdf2molecule(12345)
+
+
+class TestPruneListOfElements:
+    def test_returns_only_elements_present_in_molecule(self):
+        from types import SimpleNamespace
+
+        molecule = SimpleNamespace(chemical_symbols=["Pd", "C", "H"])
+        assert prune_list_of_elements(["Pd", "Ag", "Au"], molecule) == ["Pd"]
+
+    def test_returns_empty_when_no_overlap(self):
+        from types import SimpleNamespace
+
+        molecule = SimpleNamespace(chemical_symbols=["C", "H"])
+        assert prune_list_of_elements(["Pd", "Ag"], molecule) == []
+
+
+class TestCheckChargeAndMultiplicity:
+    def test_passes_when_both_set(self):
+        from types import SimpleNamespace
+
+        check_charge_and_multiplicity(
+            SimpleNamespace(charge=0, multiplicity=1)
+        )
+
+    def test_raises_when_charge_missing(self):
+        from types import SimpleNamespace
+
+        with pytest.raises(ValueError, match="must be set"):
+            check_charge_and_multiplicity(
+                SimpleNamespace(charge=None, multiplicity=1)
+            )
+
+    def test_raises_when_multiplicity_missing(self):
+        from types import SimpleNamespace
+
+        with pytest.raises(ValueError, match="must be set"):
+            check_charge_and_multiplicity(
+                SimpleNamespace(charge=0, multiplicity=None)
+            )
+
+    def test_raises_when_missing(self):
+        class _Settings:
+            charge = None
+            multiplicity = 1
+
+        with pytest.raises(ValueError, match="Charge and multiplicity"):
+            check_charge_and_multiplicity(_Settings())
+
 
 class TestString2Index1Based:
     def test_single_integer(self):
@@ -514,6 +729,32 @@ class TestString2Index1Based:
         # Mixed invalid formats
         with pytest.raises(ValueError):
             string2index_1based("1:x:2")
+
+    def test_negative_index_returned_as_is(self):
+        # negative indices are already 0-based-compatible from the end
+        assert string2index_1based("-1") == -1
+        assert string2index_1based("-3") == -3
+
+    def test_non_integer_numeric_string_returned_as_is(self):
+        """A unicode numeral that isnumeric() accepts but int() can't
+        parse (e.g. superscript two) falls back to being returned
+        unconverted rather than raising."""
+        assert string2index_1based("²") == "²"
+
+    def test_zero_start_slice_left_unadjusted(self):
+        """A slice starting at 0 isn't shifted to 0-based (0 is not >
+        0), unlike a plain "0" index which would raise via
+        adjust_to_0based."""
+        result = string2index_1based("0:5")
+        assert isinstance(result, slice)
+        assert result.start == 0
+        assert result.stop == 4
+
+    def test_zero_index_converts_to_negative_one(self):
+        """Test that zero index converts to -1 (0-1=-1)."""
+        # The function converts 0 to -1 (0-based conversion)
+        result = string2index_1based("0")
+        assert result == -1
 
 
 class TestParseIndexSpecification:
@@ -727,6 +968,102 @@ class TestParseIndexSpecification:
         # After normalization: [1-1=0, 5+(-5)=0]
         assert result == [0, 0]
 
+    def test_non_string_input_raises_value_error(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="must be a string"):
+            parse_index_specification(1)
+
+    def test_comma_list_skips_empty_parts(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,,3") == [0, 2]
+
+    def test_comma_list_range_part_with_zero_raises(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="cannot be 0"):
+            parse_index_specification("1,0-5")
+
+    def test_comma_list_range_part_mixed_sign(self):
+        """A range part like "1--1" (1 to -1) inside a comma list
+        appends the start and end separately rather than expanding a
+        range, since one side is negative."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1,1--1") == [0, 0, -1]
+
+    def test_comma_list_invalid_range_format_reraised(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="Invalid range format: 1-abc"):
+            parse_index_specification("1,1-abc")
+
+    def test_comma_list_with_total_count_and_boundary_disabled(self):
+        """total_count set with allow_out_of_range=False and every
+        index actually in range skips the filter step but still
+        normalizes negative indices."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1,3", total_count=5, allow_out_of_range=False
+        ) == [0, 2]
+
+    def test_hyphen_range_with_total_count_and_boundary_disabled(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1-3", total_count=5, allow_out_of_range=False
+        ) == [0, 1, 2]
+
+    def test_hyphen_range_start_zero_raises(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="cannot be 0"):
+            parse_index_specification("0-5")
+
+    def test_hyphen_range_end_zero_raises(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="cannot be 0"):
+            parse_index_specification("1-0")
+
+    def test_standalone_hyphen_range_mixed_sign_without_total_count(self):
+        """ "1--2" (1 to -2), with no commas, exercises the standalone
+        hyphen-range branch's mixed positive/negative sub-case
+        directly rather than via the comma-list parser."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1--2") == [0, -2]
+
+    def test_standalone_hyphen_range_mixed_sign_with_total_count(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("1--2", total_count=5) == [0, 3]
+
+    def test_standalone_hyphen_range_mixed_sign_boundary_disabled(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1--2", total_count=5, allow_out_of_range=False
+        ) == [0, 3]
+
+    def test_single_index_with_total_count_normalizes(self):
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification("3", total_count=5) == 2
+
+    def test_hyphen_range_fully_out_of_range_raises_even_when_allowed(self):
+        """allow_out_of_range=True filters *some* out-of-range indices,
+        but if every index in the range is out of bounds there is
+        nothing left, so this still raises."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        with pytest.raises(ValueError, match="out of range"):
+            parse_index_specification(
+                "100-101", total_count=10, allow_out_of_range=True
+            )
+
     def test_parse_index_boundary_detection_disabled(self):
         """Test boundary detection when allow_out_of_range=False."""
         from chemsmart.utils.utils import parse_index_specification
@@ -769,6 +1106,83 @@ class TestParseIndexSpecification:
             parse_index_specification(
                 "8,9,10", total_count=5, allow_out_of_range=True
             )
+
+    def test_duplicate_check_passes_when_no_duplicates_present(self):
+        """allow_duplicates=False with a genuinely duplicate-free list
+        should not raise -- exercises the "no duplicates found" arm of
+        the duplicate-detection block."""
+        from chemsmart.utils.utils import parse_index_specification
+
+        assert parse_index_specification(
+            "1,3", total_count=5, allow_duplicates=False
+        ) == [0, 2]
+
+
+class TestIndexValidationHelpers:
+    """Direct coverage for the private index-validation helpers behind
+    parse_index_specification: _validate_parsed_indices,
+    _filter_out_of_range_indices, _is_index_in_bounds,
+    _normalize_negative_indices, and _validate_single_index_bounds.
+    Some branches (e.g. the single-int path of
+    _filter_out_of_range_indices) are never reached through the public
+    parse_index_specification API, which always calls it with a list,
+    so they're exercised directly here."""
+
+    def test_validate_parsed_indices_int_branch_skips_when_allowed(self):
+        from chemsmart.utils.utils import _validate_parsed_indices
+
+        # allow_out_of_range=True means the int branch's bounds check
+        # is never invoked, regardless of whether idx is in range
+        _validate_parsed_indices(999, 5, True, True)
+
+    def test_validate_parsed_indices_non_list_non_int_is_noop(self):
+        """Neither the list nor the int branch matches (e.g. a slice),
+        so validation is a no-op -- slices are handled gracefully by
+        Python itself, per the function's own comment."""
+        from chemsmart.utils.utils import _validate_parsed_indices
+
+        assert _validate_parsed_indices(slice(1, 2), 5, True, False) is None
+
+    def test_validate_parsed_indices_int_branch_raises_when_disallowed(self):
+        from chemsmart.utils.utils import _validate_parsed_indices
+
+        with pytest.raises(ValueError, match="out of range"):
+            _validate_parsed_indices(999, 5, True, False)
+
+    def test_filter_out_of_range_indices_single_index_in_bounds(self):
+        from chemsmart.utils.utils import _filter_out_of_range_indices
+
+        assert _filter_out_of_range_indices(2, 5) == 2
+
+    def test_filter_out_of_range_indices_single_index_out_of_bounds(self):
+        from chemsmart.utils.utils import _filter_out_of_range_indices
+
+        with pytest.raises(ValueError, match="Index is out of range"):
+            _filter_out_of_range_indices(10, 5)
+
+    def test_is_index_in_bounds_non_int_always_valid(self):
+        from chemsmart.utils.utils import _is_index_in_bounds
+
+        assert _is_index_in_bounds(slice(1, 2), 5) is True
+        assert _is_index_in_bounds("not-an-int", 5) is True
+
+    def test_normalize_negative_indices_single_int(self):
+        from chemsmart.utils.utils import _normalize_negative_indices
+
+        assert _normalize_negative_indices(-1, 5) == 4
+        assert _normalize_negative_indices(2, 5) == 2
+
+    def test_normalize_negative_indices_slice_passthrough(self):
+        from chemsmart.utils.utils import _normalize_negative_indices
+
+        s = slice(1, 2)
+        assert _normalize_negative_indices(s, 5) is s
+
+    def test_validate_single_index_bounds_non_int_is_noop(self):
+        from chemsmart.utils.utils import _validate_single_index_bounds
+
+        # Should not raise for a non-int value
+        assert _validate_single_index_bounds("not-an-int", 5) is None
 
 
 class TestIOUtilities:
@@ -1098,6 +1512,24 @@ class TestRunCommand:
         )
 
 
+class TestQuotePath:
+    """quote_path had no test coverage at all."""
+
+    def test_non_windows_uses_shlex_quote(self):
+        from chemsmart.utils.utils import quote_path
+
+        assert quote_path("/some/plain/path") == "/some/plain/path"
+        assert quote_path("/a path/with space.txt") == shlex.quote(
+            "/a path/with space.txt"
+        )
+
+    def test_windows_double_quotes_posix_path(self, monkeypatch):
+        from chemsmart.utils.utils import quote_path
+
+        monkeypatch.setattr(sys, "platform", "win32")
+        assert quote_path("C:/some path/file.txt") == '"C:/some path/file.txt"'
+
+
 class TestReturnObjectsAndIndicesFromStringIndex:
     """Tests for the return_objects_and_indices_from_string_index
     utility function."""
@@ -1191,6 +1623,18 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         )
         assert result_objects == ["a", "c", "e", "g"]
         assert result_indices == [1, 3, 5, 7]
+
+    def test_slice_on_non_list_sequence_uses_single_object_branch(self):
+        """Slicing a non-list sequence (e.g. a tuple) doesn't produce a
+        `list`, so the function falls back to its "single object from
+        slice" branch and reports just the slice's start index rather
+        than one index per selected item."""
+        objects = ("a", "b", "c", "d")
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "2:4")
+        )
+        assert result_objects == ("b", "c")
+        assert result_indices == 2
 
     def test_user_defined_range(self):
         """Test user-defined range format (comma-separated)."""
@@ -1483,6 +1927,26 @@ class TestPKaTableParsing:
         with pytest.raises(ValueError, match="not an integer"):
             PKaTableEntry.parse_pka_table(str(table_file))
 
+    def test_parse_pka_table_invalid_charge(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "bad_charge.txt"
+        table_file.write_text(
+            "filepath proton_index charge multiplicity\nmol1.xyz 1 abc 1\n"
+        )
+        with pytest.raises(ValueError, match="Invalid charge"):
+            PKaTableEntry.parse_pka_table(str(table_file))
+
+    def test_parse_pka_table_invalid_multiplicity(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "bad_mult.txt"
+        table_file.write_text(
+            "filepath proton_index charge multiplicity\nmol1.xyz 1 0 abc\n"
+        )
+        with pytest.raises(ValueError, match="Invalid multiplicity"):
+            PKaTableEntry.parse_pka_table(str(table_file))
+
     def test_parse_pka_table_blank_proton_index_for_cdxml(
         self, tmp_path, colored_proton_cdxml_file
     ):
@@ -1581,6 +2045,105 @@ class TestPKaTableParsing:
         with pytest.raises(ValueError, match="multiplicity must be >= 1"):
             entry.validate()
 
+    def test_pka_table_entry_validate_empty_filepath(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        entry = PKaTableEntry(
+            filepath=None, proton_index=1, charge=0, multiplicity=1
+        )
+        with pytest.raises(ValueError, match="Empty filepath"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_missing_proton_index_non_cdxml(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=None,
+            charge=0,
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Missing proton_index"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_non_convertible_proton_index(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index="abc",
+            charge=0,
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Invalid proton_index"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_missing_charge(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge=None,
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Missing charge"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_non_convertible_charge(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge="abc",
+            multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="Invalid charge"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_missing_multiplicity(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge=0,
+            multiplicity=None,
+        )
+        with pytest.raises(ValueError, match="Missing multiplicity"):
+            entry.validate()
+
+    def test_pka_table_entry_validate_non_convertible_multiplicity(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        test_file = tmp_path / "test.xyz"
+        test_file.write_text("1\n\nH 0 0 0\n")
+        entry = PKaTableEntry(
+            filepath=str(test_file),
+            proton_index=1,
+            charge=0,
+            multiplicity="abc",
+        )
+        with pytest.raises(ValueError, match="Invalid multiplicity"):
+            entry.validate()
+
     def test_validate_pka_table_entries(self, tmp_path):
         """Test batch validation of PKaTableEntry list."""
         from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
@@ -1602,6 +2165,193 @@ class TestPKaTableParsing:
         )
         assert result == entries
 
+    def test_validate_pka_table_entries_without_file_check_success(self):
+        """check_file_exists=False skips actual file existence checks and
+        instead re-validates proton_index/charge/multiplicity directly
+        (no files need to exist for this to pass)."""
+        from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
+
+        entries = [
+            PKaTableEntry("does_not_exist.xyz", 1, 0, 1),
+            PKaTableEntry("also_missing.xyz", 2, -1, 2),
+        ]
+        result = PKaOutputTable.validate_pka_table_entries(
+            entries, check_file_exists=False
+        )
+        assert result == entries
+
+    def test_validate_pka_table_entries_without_file_check_cdxml_allows_none_proton_index(
+        self,
+    ):
+        """A None proton_index is only an error for non-CDXML filepaths;
+        CDXML entries are allowed to omit it (auto-detected later)."""
+        from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
+
+        entries = [PKaTableEntry("mol.cdxml", None, 0, 1)]
+        result = PKaOutputTable.validate_pka_table_entries(
+            entries, check_file_exists=False
+        )
+        assert result == entries
+
+    def test_validate_pka_table_entries_without_file_check_aggregates_errors(
+        self,
+    ):
+        from chemsmart.utils.datasets import PKaOutputTable, PKaTableEntry
+
+        entries = [
+            PKaTableEntry("a.xyz", None, 0, 1),  # missing proton_index
+            PKaTableEntry("b.xyz", 0, 0, 1),  # invalid proton_index (< 1)
+            PKaTableEntry("c.xyz", 1, None, 1),  # missing charge
+            PKaTableEntry("d.xyz", 1, 0, 0),  # invalid multiplicity (< 1)
+        ]
+        with pytest.raises(ValueError, match="pKa table validation failed"):
+            PKaOutputTable.validate_pka_table_entries(
+                entries, check_file_exists=False
+            )
+
+    def test_pka_output_table_validate_aggregates_entry_errors(self):
+        from chemsmart.utils.datasets import (
+            PKaOutputTable,
+            PKaOutputTableEntry,
+        )
+
+        good_entry = PKaOutputTableEntry(
+            {
+                "basename": "sys1",
+                "ha_gas": "a.log",
+                "a_gas": "b.log",
+                "href_gas": "c.log",
+                "ref_gas": "d.log",
+                "ha_sp": "e.log",
+                "a_sp": "f.log",
+                "href_sp": "g.log",
+                "ref_sp": "h.log",
+                "pka_ref": 6.75,
+            },
+            row_number=2,
+        )
+        bad_entry = PKaOutputTableEntry({"basename": ""}, row_number=3)
+        table = PKaOutputTable(
+            entries=[good_entry, bad_entry], source_path="table.csv"
+        )
+        with pytest.raises(ValueError, match="Output table validation failed"):
+            table.validate(check_file_exists=False)
+
+    def test_normalize_table_cell_pandas_na_and_whitespace(self):
+        """normalize_table_cell had no direct coverage for pandas.NA,
+        NaN, whitespace-only strings, or plain pass-through values."""
+        import pandas as pd
+
+        from chemsmart.utils.datasets import normalize_table_cell
+
+        assert normalize_table_cell(pd.NA) is None
+        assert normalize_table_cell(float("nan")) is None
+        assert normalize_table_cell(None) is None
+        assert normalize_table_cell("   ") is None
+        assert normalize_table_cell("  hi  ") == "hi"
+        assert normalize_table_cell(5) == 5
+
+    def test_normalize_table_cell_pandas_isna_type_error_falls_through(self):
+        """If pd.isna() itself raises (e.g. unsupported pandas
+        version/type), the exception is swallowed and processing
+        continues to the plain-value branches."""
+        from unittest.mock import patch
+
+        from chemsmart.utils.datasets import normalize_table_cell
+
+        with patch("pandas.isna", side_effect=TypeError("boom")):
+            assert normalize_table_cell("hello") == "hello"
+
+    def test_resolve_column_optional_and_required_branches(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        assert (
+            PKaTableEntry.resolve_column(
+                ["Total Energy"], ["energy", "total_energy"]
+            )
+            == "Total Energy"
+        )
+        assert (
+            PKaTableEntry.resolve_column(["a"], ["missing"], required=False)
+            is None
+        )
+        with pytest.raises(ValueError, match="Could not resolve"):
+            PKaTableEntry.resolve_column(["a"], ["missing"])
+
+    def test_parse_table_shim_delegates_to_tabular_dataset(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        csv_path = tmp_path / "data.csv"
+        csv_path.write_text(
+            "filepath,proton_index,charge,multiplicity\nmol.xyz,1,0,1\n"
+        )
+        dataset = PKaTableEntry.parse_table(str(csv_path))
+        assert dataset.columns == [
+            "filepath",
+            "proton_index",
+            "charge",
+            "multiplicity",
+        ]
+
+    def test_constructor_rejects_invalid_positional_args(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        with pytest.raises(TypeError, match="accepts either"):
+            PKaTableEntry(1, 2, 3)
+
+    def test_from_headers_and_row_length_mismatch_raises(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        with pytest.raises(ValueError, match="Header/value length mismatch"):
+            PKaTableEntry.from_headers_and_row(["a", "b"], [1])
+
+    def test_dict_like_interface(self, tmp_path):
+        """__getitem__/__contains__/get/get_canonical/keys/items/values
+        had no direct coverage at all."""
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        entry = PKaTableEntry(
+            {
+                "filepath": "mol.xyz",
+                "charge": 0,
+                "multiplicity": 1,
+                "extra": "x",
+            }
+        )
+
+        # __getitem__
+        assert entry["filepath"] == "mol.xyz"
+        assert entry["q"] == 0  # alias resolves to canonical "charge"
+        with pytest.raises(KeyError):
+            entry["nonexistent"]
+
+        # __contains__
+        assert "filepath" in entry
+        assert "q" in entry  # alias
+        assert "nonexistent" not in entry
+
+        # get
+        assert entry.get("filepath") == "mol.xyz"
+        assert entry.get("q") == 0
+        assert entry.get("nonexistent", "default") == "default"
+
+        # get_canonical
+        assert entry.get_canonical("filepath") == "mol.xyz"
+        assert entry.get_canonical("proton_index", default="none") == "none"
+        assert entry.get_canonical("charge") == 0
+        assert entry.get_canonical("multiplicity") == 1
+        assert entry.get_canonical("extra") == "x"
+
+        # keys/items/values
+        assert set(entry.keys()) == {
+            "filepath",
+            "charge",
+            "multiplicity",
+            "extra",
+        }
+        assert dict(entry.items())["extra"] == "x"
+        assert "x" in list(entry.values())
+
     def test_pka_table_entry_repr(self):
         """Test PKaTableEntry string representation."""
         from chemsmart.utils.datasets import PKaTableEntry
@@ -1619,6 +2369,23 @@ class TestPKaTableParsing:
         assert "'proton_index': 10" in repr_str
         assert "'charge': 0" in repr_str
         assert "'multiplicity': 1" in repr_str
+
+    def test_constructor_skips_row_number_key_inside_data_dict(self):
+        """row_number embedded in the data dict itself (as opposed to
+        the separate row_number= kwarg) is skipped, not stored as an
+        extra field."""
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        entry = PKaTableEntry(
+            {
+                "row_number": 99,
+                "filepath": "x.xyz",
+                "charge": 0,
+                "multiplicity": 1,
+            }
+        )
+        assert entry.row_number is None
+        assert "row_number" not in entry._data
 
     def test_pka_table_entry_from_headers_and_row_dynamic(self):
         from chemsmart.utils.datasets import PKaTableEntry
@@ -1958,6 +2725,66 @@ class TestPKaTableParsing:
             tmp_path / "collidine_pka_Ref_sp.log"
         )
 
+    def test_discover_pka_reference_companion_outputs_explicit_program(
+        self, tmp_path
+    ):
+        """Passing program explicitly skips the auto-detection branch."""
+        from chemsmart.utils.datasets import (
+            discover_pka_reference_companion_outputs,
+        )
+
+        href_gas = tmp_path / "collidine_pka_HRef_opt.log"
+        href_gas.write_text("Gaussian, Inc.\n")
+
+        discovered = discover_pka_reference_companion_outputs(
+            str(href_gas), program="gaussian"
+        )
+        assert discovered["ref"].endswith("collidine_pka_Ref_opt.log")
+
+    def test_pka_output_basename_from_path_matches_later_suffix(self):
+        """A filename that doesn't match the first candidate suffix but
+        does match a later one exercises the loop's continue arc."""
+        from chemsmart.utils.datasets import pka_output_basename_from_path
+
+        # role "ha_gas" suffixes: ["_pka_HA_opt", "_pka_HA", "_pka"]
+        # "mol_pka_HA" doesn't end with "_pka_HA_opt" but does end
+        # with "_pka_HA".
+        assert (
+            pka_output_basename_from_path("mol_pka_HA.log", "ha_gas") == "mol"
+        )
+
+    def test_pka_output_basename_from_path_no_suffix_match(self):
+        from chemsmart.utils.datasets import pka_output_basename_from_path
+
+        assert (
+            pka_output_basename_from_path("random_name.log", "ha_gas")
+            == "random_name"
+        )
+
+    def test_discover_pka_output_path_uses_filepath_hint_for_detection(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import discover_pka_output_path
+
+        hint_file = tmp_path / "hint.log"
+        hint_file.write_text("Gaussian, Inc.\n")
+        (tmp_path / "mol_pka_A_opt.log").write_text("Gaussian, Inc.\n")
+
+        result = discover_pka_output_path(
+            "mol", str(tmp_path), "a_gas", filepath_hint=str(hint_file)
+        )
+        assert result == str(tmp_path / "mol_pka_A_opt.log")
+
+    def test_discover_pka_output_path_falls_back_when_nothing_found(
+        self, tmp_path
+    ):
+        from chemsmart.utils.datasets import discover_pka_output_path
+
+        result = discover_pka_output_path(
+            "mol", str(tmp_path), "a_gas", program="gaussian"
+        )
+        assert result == str(tmp_path / "mol_pka_A_opt.log")
+
     def test_pka_output_table_entry_resolve_filenames_gaussian_log(
         self, tmp_path, monkeypatch
     ):
@@ -2176,6 +3003,107 @@ class TestPKaTableParsing:
         with pytest.raises(ValueError, match="Missing basename"):
             entry.validate(check_file_exists=False)
 
+    def test_pka_output_table_entry_validate_unsupported_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry(
+            {"basename": "test", "pka_ref": 6.75}, row_number=1
+        )
+        with pytest.raises(ValueError, match="Unsupported pKa analysis"):
+            entry.validate(check_file_exists=False, scheme="bogus")
+
+    def test_pka_output_table_entry_validate_direct_scheme_missing_files(
+        self,
+    ):
+        """Direct scheme requires only the 4 direct-comparison files.
+        (basename left unset so _resolve_filenames doesn't auto-fill
+        the required fields with guessed paths.)"""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry({}, row_number=1)
+        with pytest.raises(ValueError, match="Missing ha_gas"):
+            entry.validate(check_file_exists=False, scheme="direct")
+
+    def test_pka_output_table_entry_validate_missing_pka_ref(self, tmp_path):
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        for name in ["a", "b", "c", "d", "e", "f", "g", "h"]:
+            (tmp_path / f"{name}.log").write_text("dummy")
+
+        entry = PKaOutputTableEntry(
+            {
+                "basename": "test",
+                "ha_gas": str(tmp_path / "a.log"),
+                "a_gas": str(tmp_path / "b.log"),
+                "href_gas": str(tmp_path / "c.log"),
+                "ref_gas": str(tmp_path / "d.log"),
+                "ha_sp": str(tmp_path / "e.log"),
+                "a_sp": str(tmp_path / "f.log"),
+                "href_sp": str(tmp_path / "g.log"),
+                "ref_sp": str(tmp_path / "h.log"),
+                "pka_ref": None,
+            },
+            row_number=2,
+        )
+        with pytest.raises(ValueError, match="Missing pka_ref"):
+            entry.validate(check_file_exists=True)
+
+    def test_pka_output_table_entry_validate_invalid_pka_ref(self, tmp_path):
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        for name in ["a", "b", "c", "d", "e", "f", "g", "h"]:
+            (tmp_path / f"{name}.log").write_text("dummy")
+
+        entry = PKaOutputTableEntry(
+            {
+                "basename": "test",
+                "ha_gas": str(tmp_path / "a.log"),
+                "a_gas": str(tmp_path / "b.log"),
+                "href_gas": str(tmp_path / "c.log"),
+                "ref_gas": str(tmp_path / "d.log"),
+                "ha_sp": str(tmp_path / "e.log"),
+                "a_sp": str(tmp_path / "f.log"),
+                "href_sp": str(tmp_path / "g.log"),
+                "ref_sp": str(tmp_path / "h.log"),
+                "pka_ref": "not-a-number",
+            },
+            row_number=2,
+        )
+        with pytest.raises(ValueError, match="Invalid pka_ref"):
+            entry.validate(check_file_exists=True)
+
+    def test_pka_output_table_entry_detect_output_program_skips_unsupported(
+        self, tmp_path
+    ):
+        """A single consistently-detected program that isn't gaussian or
+        orca (e.g. xtb) is skipped by _detect_output_program, falling
+        through to the next path_group / eventually None."""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        xtb_file = tmp_path / "a.log"
+        xtb_file.write_text("xtb version 6.6.0\n")
+
+        entry = PKaOutputTableEntry(
+            {"basename": "test", "ha_gas": str(xtb_file)}, row_number=1
+        )
+        suffix_candidates = {
+            key: PKaOutputTableEntry._OUTPUT_SUFFIX_CANDIDATES[key]
+            for key in PKaOutputTableEntry._TARGET_AUTO_DISCOVER_FIELDS
+        }
+        assert entry._detect_output_program(suffix_candidates) is None
+
+    def test_pka_output_table_entry_ignores_row_number_key_in_data(self):
+        """A "row_number" key inside the data dict itself (as opposed to
+        the separate row_number= constructor kwarg) is skipped, not
+        treated as a regular field."""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry(
+            {"basename": "sys1", "row_number": 999}, row_number=3
+        )
+        assert entry.row_number == 3
+        assert "row_number" not in entry.to_dict()
+
     def test_pka_output_table_entry_repr(self):
         """Test PKaOutputTableEntry string representation."""
         from chemsmart.utils.datasets import PKaOutputTableEntry
@@ -2200,6 +3128,41 @@ class TestPKaTableParsing:
         assert d["basename"] == "sys"
         assert d["ha_gas"] == "a.log"
         assert d["pka_ref"] == 6.75
+
+    def test_pka_output_table_entry_dict_like_interface(self):
+        """__getitem__/__setitem__/__contains__/get/keys/items for
+        PKaOutputTableEntry had no direct coverage beyond canonical-key
+        __getitem__ lookups elsewhere in this file."""
+        from chemsmart.utils.datasets import PKaOutputTableEntry
+
+        entry = PKaOutputTableEntry(
+            {"basename": "mol", "ha_gas": "mol_HA.log", "extra_col": "x"}
+        )
+
+        # __getitem__: canonical, alias, and missing
+        assert entry["ha_gas"] == "mol_HA.log"
+        assert entry["ha_opt"] == "mol_HA.log"  # alias for ha_gas
+        with pytest.raises(KeyError):
+            entry["nonexistent"]
+
+        # __contains__: canonical, alias, and missing
+        assert "ha_gas" in entry
+        assert "ha_opt" in entry
+        assert "nonexistent" not in entry
+
+        # __setitem__ updates both the attribute and derived fields
+        entry["a_gas"] = "mol_A.log"
+        assert entry.a_gas == "mol_A.log"
+        assert entry["a_gas"] == "mol_A.log"
+
+        # get: canonical, alias, default
+        assert entry.get("ha_gas") == "mol_HA.log"
+        assert entry.get("ha_opt") == "mol_HA.log"
+        assert entry.get("nonexistent", "default") == "default"
+
+        # keys/items
+        assert "extra_col" in entry.keys()
+        assert dict(entry.items())["extra_col"] == "x"
 
     def test_export_pka_results_table_matches_stdout_format(self, tmp_path):
         """-O output should match the formatted batch table printed to stdout."""
@@ -2337,6 +3300,49 @@ class TestPKaTableParsing:
         assert stdout_text == out_path.read_text(encoding="utf-8").rstrip("\n")
         assert "phenol" in stdout_text
         assert "10.12" in stdout_text
+
+    def test_echo_pka_output_table_results_without_output_file(self):
+        """output_results=None skips the export_results() file-writing
+        step entirely, only returning the formatted table text."""
+        from chemsmart.utils.datasets import (
+            PKaOutputTable,
+            PKaOutputTableEntry,
+        )
+
+        entries = [
+            PKaOutputTableEntry(
+                {
+                    "basename": "phenol",
+                    "ha_gas": "a.log",
+                    "a_gas": "b.log",
+                    "href_gas": "c.log",
+                    "ref_gas": "d.log",
+                    "ha_sp": "e.log",
+                    "a_sp": "f.log",
+                    "href_sp": "g.log",
+                    "ref_sp": "h.log",
+                    "pka_ref": 6.75,
+                }
+            ),
+        ]
+        results = [
+            {
+                "pKa": 10.12,
+                "delta_G_soln_kcal_mol": 13.4567,
+                "basename": "phenol",
+            },
+        ]
+        table = PKaOutputTable(entries)
+
+        stdout_text = table.echo_pka_output_table_results(
+            results=results,
+            output_results=None,
+            temperature=298.15,
+            pressure=1.0,
+            scheme="proton exchange",
+        )
+
+        assert "phenol" in stdout_text
 
     def test_parse_and_resolve_multi_row_table(self, tmp_path):
         """End-to-end test: parse → resolve → validate on a multi-row table."""
@@ -2490,3 +3496,1112 @@ class TestPKaTableParsing:
                 "basename": "sys1",
             }
         ]
+
+    def test_parse_pka_output_table_missing_basename_column(self, tmp_path):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        table_file = tmp_path / "output_table.csv"
+        table_file.write_text("ha_gas,a_gas\na.log,b.log\n")
+
+        with pytest.raises(
+            ValueError, match="missing required column: basename"
+        ):
+            PKaOutputTable.parse_pka_output_table(str(table_file))
+
+    def test_compute_pka_from_output_table_direct_requires_delta_g_proton(
+        self,
+    ):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        with pytest.raises(ValueError, match="delta_G_proton is required"):
+            PKaOutputTable.compute_pka_from_output_table(
+                entries=[],
+                output_cls=lambda **kwargs: {},
+                scheme="direct",
+                delta_G_proton=None,
+            )
+
+    def test_compute_pka_from_output_table_unsupported_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        entry = {
+            "ha_gas": "a.log",
+            "a_gas": "b.log",
+            "ha_sp": "c.log",
+            "a_sp": "d.log",
+            "basename": "sys1",
+        }
+        with pytest.raises(ValueError, match="Unsupported pKa analysis"):
+            PKaOutputTable.compute_pka_from_output_table(
+                entries=[entry],
+                output_cls=lambda **kwargs: {},
+                scheme="bogus",
+            )
+
+    def test_pka_scheme_delta_g_key_none_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        assert PKaOutputTable.pka_scheme_delta_g_key(None) is None
+
+    def test_pka_scheme_delta_g_value_falls_back_to_soln_key(self):
+        """When neither an explicit scheme nor a "scheme" key on the
+        result resolves to a known ΔG key, falls back to trying
+        delta_G_diss_kcal_mol then delta_G_soln_kcal_mol directly."""
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        result = {"delta_G_soln_kcal_mol": 7.2}
+        assert (
+            PKaOutputTable.pka_scheme_delta_g_value(result, scheme=None) == 7.2
+        )
+
+    def test_format_pka_batch_results_table_infers_scheme_from_results(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        entries = [{"basename": "sys1"}]
+        results = [
+            {
+                "scheme": "direct",
+                "pKa": 4.5,
+                "delta_G_diss_kcal_mol": 6.1,
+            }
+        ]
+        table_text = PKaOutputTable.format_pka_batch_results_table(
+            entries, results, temperature=298.15, pressure=1.0, scheme=None
+        )
+        assert "Direct Dissociation" in table_text
+
+    def test_scheme_batch_header_none_scheme(self):
+        from chemsmart.utils.datasets import PKaOutputTable
+
+        assert PKaOutputTable._scheme_batch_header(None) == "Batch pKa Results"
+
+    def test_is_submission_table_false_for_falsy_path(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        assert PKaTableEntry.is_submission_table(None) is False
+        assert PKaTableEntry.is_submission_table("") is False
+
+    def test_is_submission_table_false_for_cdx_extension(self):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        assert PKaTableEntry.is_submission_table("mol.cdx") is False
+        assert PKaTableEntry.is_submission_table("mol.cdxml") is False
+
+    def test_is_submission_table_true_for_valid_table(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "molecules.txt"
+        table_file.write_text(
+            "filepath proton_index charge multiplicity\n" "mol1.xyz 10 0 1\n"
+        )
+        assert PKaTableEntry.is_submission_table(str(table_file)) is True
+
+    def test_is_submission_table_false_on_parse_failure(self, tmp_path):
+        from chemsmart.utils.datasets import PKaTableEntry
+
+        table_file = tmp_path / "nonexistent.txt"
+        assert PKaTableEntry.is_submission_table(str(table_file)) is False
+
+    def test_pka_output_table_iter(self):
+        from chemsmart.utils.datasets import (
+            PKaOutputTable,
+            PKaOutputTableEntry,
+        )
+
+        entry = PKaOutputTableEntry({"basename": "sys1"})
+        table = PKaOutputTable(entries=[entry], source_path="table.csv")
+        assert list(iter(table)) == [entry]
+
+
+class TestFileCache:
+    """file_cache had no existing coverage anywhere."""
+
+    def test_no_file_arguments_bypasses_caching(self):
+        calls = []
+
+        @file_cache()
+        def add(a, b):
+            calls.append((a, b))
+            return a + b
+
+        assert add(1, 2) == 3
+        assert add(1, 2) == 3
+        # every call actually invokes the function since there are no
+        # file-path arguments to key the cache on
+        assert len(calls) == 2
+
+    def test_caches_result_for_unchanged_file(self, tmp_path):
+        calls = []
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+
+        @file_cache()
+        def read_it(filepath):
+            calls.append(filepath)
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path)) == "hello"
+        assert read_it(str(path)) == "hello"
+        assert len(calls) == 1
+
+    def test_copy_result_true_prevents_cache_pollution(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+
+        @file_cache(copy_result=True)
+        def get_list(filepath):
+            return [1, 2, 3]
+
+        first = get_list(str(path))
+        first.append(999)
+        second = get_list(str(path))
+        assert second == [1, 2, 3]
+
+    def test_copy_result_false_leaks_mutations_into_cache(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+
+        @file_cache(copy_result=False)
+        def get_list(filepath):
+            return [1, 2, 3]
+
+        first = get_list(str(path))
+        first.append(999)
+        second = get_list(str(path))
+        assert second == [1, 2, 3, 999]
+
+    def test_unwraps_staticmethod(self, tmp_path):
+        path = tmp_path / "f.txt"
+        path.write_text("x")
+        calls = []
+
+        class Foo:
+            @file_cache()
+            @staticmethod
+            def bar(filepath):
+                calls.append(filepath)
+                return "result"
+
+        assert Foo.bar(str(path)) == "result"
+        assert Foo.bar(str(path)) == "result"
+        assert len(calls) == 1
+
+    def test_rejects_classmethod(self):
+        with pytest.raises(
+            ValueError, match="Unable to use this with classmethod"
+        ):
+
+            class Baz:
+                @file_cache()
+                @classmethod
+                def qux(cls, x):
+                    return x
+
+    def test_recently_modified_integer_mtime_uses_content_hash(self, tmp_path):
+        """When a file's mtime is a whole number of seconds and was
+        modified recently, the cache key falls back to a content hash
+        instead of the raw mtime (guards against low-resolution
+        filesystem timestamps within the same second)."""
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+        # force an integer mtime so the hash-based branch is taken
+        now_int = int(time.time())
+        os.utime(str(path), (now_int, now_int))
+        calls = []
+
+        @file_cache()
+        def read_it(filepath):
+            calls.append(filepath)
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path)) == "hello"
+        assert read_it(str(path)) == "hello"
+        assert len(calls) == 1
+
+        # changing the content (same integer mtime) invalidates the cache
+        os.utime(str(path), (now_int, now_int))
+        path.write_text("changed")
+        os.utime(str(path), (now_int, now_int))
+        assert read_it(str(path)) == "changed"
+        assert len(calls) == 2
+
+    def test_non_file_string_argument_is_ignored_for_cache_key(self, tmp_path):
+        """A plain string argument that is not an existing file path
+        (e.g. a mode flag) must be skipped when collecting
+        cache-key filenames, not treated as a file."""
+        path = tmp_path / "f.txt"
+        path.write_text("hello")
+        calls = []
+
+        @file_cache()
+        def read_it(filepath, mode):
+            calls.append((filepath, mode))
+            with open(filepath) as f:
+                return f.read()
+
+        assert read_it(str(path), "text") == "hello"
+        assert read_it(str(path), "text") == "hello"
+        assert len(calls) == 1
+
+
+class TestConvertListToFrozenList:
+    def test_gaussian_frozen_list_is_1_indexed(self):
+        molecule = SimpleNamespace(chemical_symbols=["C", "H", "H", "H"])
+        assert convert_list_to_gaussian_frozen_list([1, 3], molecule) == [
+            -1,
+            0,
+            -1,
+            0,
+        ]
+
+    def test_orca_frozen_list_is_0_indexed(self):
+        molecule = SimpleNamespace(chemical_symbols=["C", "H", "H", "H"])
+        assert convert_list_to_orca_frozen_list([0, 2], molecule) == [
+            -1,
+            0,
+            -1,
+            0,
+        ]
+
+
+class TestOrderedSet:
+    """Tests for the OrderedSet class."""
+
+    def test_empty_initialization(self):
+        """Test that empty OrderedSet initializes correctly."""
+        os_empty = OrderedSet()
+        assert len(os_empty) == 0
+        assert list(os_empty) == []
+
+    def test_initialization_with_iterable(self):
+        """Test initialization with an iterable."""
+        os_init = OrderedSet([1, 2, 3])
+        assert len(os_init) == 3
+        assert list(os_init) == [1, 2, 3]
+
+    def test_initialization_removes_duplicates(self):
+        """Test that initialization removes duplicates."""
+        os_dup = OrderedSet([1, 2, 2, 3, 1])
+        assert len(os_dup) == 3
+        assert list(os_dup) == [1, 2, 3]
+
+    def test_add_new_item(self):
+        """Test adding a new item."""
+        os_add = OrderedSet()
+        os_add.add(1)
+        os_add.add(2)
+        assert list(os_add) == [1, 2]
+
+    def test_add_duplicate_item(self):
+        """Test adding a duplicate item."""
+        os_add = OrderedSet([1, 2])
+        os_add.add(1)
+        assert list(os_add) == [1, 2]
+
+    def test_remove_existing_item(self):
+        """Test removing an existing item."""
+        os_rem = OrderedSet([1, 2, 3])
+        os_rem.remove(2)
+        assert list(os_rem) == [1, 3]
+
+    def test_remove_non_existing_item(self):
+        """Test removing a non-existing item does nothing."""
+        os_rem = OrderedSet([1, 2, 3])
+        os_rem.remove(5)  # Should not raise error
+        assert list(os_rem) == [1, 2, 3]
+
+    def test_contains(self):
+        """Test __contains__ method."""
+        os_con = OrderedSet([1, 2, 3])
+        assert 1 in os_con
+        assert 5 not in os_con
+
+    def test_len(self):
+        """Test __len__ method."""
+        os_len = OrderedSet([1, 2, 3, 4, 5])
+        assert len(os_len) == 5
+
+    def test_iteration(self):
+        """Test iteration preserves order."""
+        items = [3, 1, 4, 1, 5, 9, 2, 6]
+        os_iter = OrderedSet(items)
+        expected = [3, 1, 4, 5, 9, 2, 6]  # Duplicates removed
+        assert list(os_iter) == expected
+
+
+class TestIsFloat:
+    """Tests for the is_float function."""
+
+    def test_float_string(self):
+        """Test that float strings are recognized."""
+        assert is_float("3.14") is True
+        assert is_float("-2.5") is True
+        assert is_float("1e-10") is True
+        assert is_float("1.5E+3") is True
+
+    def test_integer_string_not_float(self):
+        """Test that integer strings are not recognized as floats."""
+        assert is_float("123") is False
+        assert is_float("-456") is False
+        assert is_float("0") is False
+
+    def test_non_numeric_string(self):
+        """Test that non-numeric strings return False."""
+        assert is_float("abc") is False
+        assert is_float("1.2.3") is False
+        assert is_float("") is False
+
+
+class TestStripOutComments:
+    """Tests for the strip_out_comments function."""
+
+    def test_single_line_with_comment(self):
+        """Test stripping comment from single line."""
+        result = strip_out_comments("code # comment")
+        assert result == "code"
+
+    def test_multiple_lines_with_comments(self):
+        """Test stripping comments from multiple lines."""
+        input_str = "line1 # comment1\nline2 # comment2\nline3"
+        result = strip_out_comments(input_str)
+        assert result == "line1\nline2\nline3"
+
+    def test_no_comments(self):
+        """Test string without comments."""
+        input_str = "no comments here"
+        result = strip_out_comments(input_str)
+        assert result == "no comments here"
+
+    def test_empty_string(self):
+        """Test empty string."""
+        assert strip_out_comments("") == ""
+
+    def test_only_comment(self):
+        """Test line with only a comment."""
+        result = strip_out_comments("# only comment")
+        assert result == ""
+
+
+class TestContentBlocksByParagraph:
+    """Tests for the content_blocks_by_paragraph function."""
+
+    def test_single_block(self):
+        """Test single block without empty lines."""
+        string_list = ["line1", "line2", "line3"]
+        result = content_blocks_by_paragraph(string_list)
+        assert result == [["line1", "line2", "line3"]]
+
+    def test_two_blocks(self):
+        """Test two blocks separated by empty line."""
+        string_list = ["line1", "line2", "", "line3", "line4"]
+        result = content_blocks_by_paragraph(string_list)
+        assert result == [["line1", "line2"], ["line3", "line4"]]
+
+    def test_multiple_empty_lines(self):
+        """Test multiple consecutive empty lines."""
+        string_list = ["line1", "", "", "line2"]
+        result = content_blocks_by_paragraph(string_list)
+        assert result == [["line1"], ["line2"]]
+
+    def test_empty_list(self):
+        """Test empty input list."""
+        result = content_blocks_by_paragraph([])
+        assert result == []
+
+
+class TestWriteListOfListsAsString:
+    """Tests for
+    write_list_of_lists_as_a_string_with_empty_line_between_lists."""
+
+    def test_single_list(self):
+        """Test single list."""
+        list_of_lists = [["a", "b"]]
+        result = write_list_of_lists_as_a_string_with_empty_line_between_lists(
+            list_of_lists
+        )
+        assert result == "a\nb\n"
+
+    def test_two_lists(self):
+        """Test two lists with empty line between."""
+        list_of_lists = [["a", "b"], ["c", "d"]]
+        result = write_list_of_lists_as_a_string_with_empty_line_between_lists(
+            list_of_lists
+        )
+        assert result == "a\nb\n\nc\nd\n"
+
+    def test_empty_list_of_lists(self):
+        """Test empty list of lists."""
+        result = write_list_of_lists_as_a_string_with_empty_line_between_lists(
+            []
+        )
+        assert result == ""
+
+
+class TestParseQMMMScaleFactors:
+    def test_list_and_tuple_keys(self):
+        assert parse_qmmm_scale_factors("{[3, 4]: [0.709]}") == {
+            (3, 4): [0.709]
+        }
+        assert parse_qmmm_scale_factors("{(3, 4): [0.709, 0.709]}") == {
+            (3, 4): [0.709, 0.709]
+        }
+        existing = {(5, 6): [0.7]}
+        assert parse_qmmm_scale_factors(existing) is existing
+
+
+class TestConvertStringIndex:
+    """Tests for convert_string_index_from_1_based_to_0_based."""
+
+    def test_positive_integer(self):
+        """Test positive integer conversion."""
+        result = convert_string_index_from_1_based_to_0_based("5")
+        assert result == 4
+
+    def test_negative_integer(self):
+        """Test negative integer stays the same."""
+        result = convert_string_index_from_1_based_to_0_based("-1")
+        assert result == -1
+
+    def test_zero_raises_error(self):
+        """Test that zero raises error."""
+        with pytest.raises(ValueError):
+            convert_string_index_from_1_based_to_0_based("0")
+
+    def test_actual_int_positive_converted(self):
+        """Passing a real int (not a numeric string) takes the direct
+        int branch rather than the string parser."""
+        assert convert_string_index_from_1_based_to_0_based(5) == 4
+
+    def test_actual_int_negative_returned_as_is(self):
+        assert convert_string_index_from_1_based_to_0_based(-2) == -2
+
+    def test_actual_int_zero_raises_error(self):
+        with pytest.raises(ValueError, match="out of range"):
+            convert_string_index_from_1_based_to_0_based(0)
+
+    def test_slice_passed_through_unchanged(self):
+        s = slice(1, 5, 2)
+        assert convert_string_index_from_1_based_to_0_based(s) is s
+
+    def test_invalid_type_raises_value_error(self):
+        with pytest.raises(ValueError, match="Invalid index type"):
+            convert_string_index_from_1_based_to_0_based(1.5)
+
+
+class TestReturnObjectsFromStringIndex:
+    """Tests for the return_objects_from_string_index function."""
+
+    def test_single_index(self):
+        """Test single index."""
+        objects = ["a", "b", "c", "d"]
+        result = return_objects_from_string_index(objects, "2")
+        assert result == "b"  # 2 -> index 1 (0-based)
+
+    def test_negative_index(self):
+        """Test negative index."""
+        objects = ["a", "b", "c", "d"]
+        result = return_objects_from_string_index(objects, "-1")
+        assert result == "d"
+
+    def test_slice_index(self):
+        """Test slice index."""
+        objects = ["a", "b", "c", "d"]
+        result = return_objects_from_string_index(objects, "1:3")
+        assert result == ["a", "b"]
+
+    def test_list_index(self):
+        """A comma-separated index string resolves to a list of
+        indices, selecting multiple objects at once."""
+        objects = ["a", "b", "c", "d"]
+        result = return_objects_from_string_index(objects, "1,3")
+        assert result == ["a", "c"]
+
+
+class TestGetPrependStringForModred:
+    """Tests for the get_prepend_string_for_modred function."""
+
+    def test_bond_two_atoms(self):
+        """Test bond (2 atoms) returns 'B'."""
+        result = get_prepend_string_for_modred([1, 2])
+        assert result == "B"
+
+    def test_angle_three_atoms(self):
+        """Test angle (3 atoms) returns 'A'."""
+        result = get_prepend_string_for_modred([1, 2, 3])
+        assert result == "A"
+
+    def test_dihedral_four_atoms(self):
+        """Test dihedral (4 atoms) returns 'D'."""
+        result = get_prepend_string_for_modred([1, 2, 3, 4])
+        assert result == "D"
+
+    def test_invalid_length_raises_error(self):
+        """Test invalid length raises error."""
+        with pytest.raises(ValueError):
+            get_prepend_string_for_modred([1])
+        with pytest.raises(ValueError):
+            get_prepend_string_for_modred([1, 2, 3, 4, 5])
+
+
+class TestConvertModredListToString:
+    """Tests for the convert_modred_list_to_string function."""
+
+    def test_simple_list(self):
+        """Test simple list conversion."""
+        result = convert_modred_list_to_string([1, 2, 3])
+        assert result == "1 2 3"
+
+    def test_single_item(self):
+        """Test single item list."""
+        result = convert_modred_list_to_string([5])
+        assert result == "5"
+
+
+class TestGetPrependStringListFromModredFreeFormat:
+    """Tests for get_prepend_string_list_from_modred_free_format."""
+
+    def test_list_of_lists(self):
+        """Test list of lists input."""
+        result = get_prepend_string_list_from_modred_free_format(
+            [[1, 2], [3, 4, 5]], program="gaussian"
+        )
+        assert result == ["B 1 2", "A 3 4 5"]
+
+    def test_single_list(self):
+        """Test single list input."""
+        result = get_prepend_string_list_from_modred_free_format(
+            [1, 2, 3, 4], program="gaussian"
+        )
+        assert result == ["D 1 2 3 4"]
+
+    def test_orca_program_0_indexed(self):
+        """Test ORCA uses 0-indexed."""
+        result = get_prepend_string_list_from_modred_free_format(
+            [1, 2], program="orca"
+        )
+        assert result == ["B 0 1"]
+
+    def test_invalid_input_raises_error(self):
+        """Test invalid input raises error."""
+        with pytest.raises(ValueError):
+            get_prepend_string_list_from_modred_free_format("not a list")
+
+    def test_list_of_lists_orca_program_0_indexed(self):
+        result = get_prepend_string_list_from_modred_free_format(
+            [[1, 2], [3, 4]], program="orca"
+        )
+        assert result == ["B 0 1", "B 2 3"]
+
+    def test_list_of_lists_invalid_program_raises_value_error(self):
+        with pytest.raises(ValueError, match="Program type should be"):
+            get_prepend_string_list_from_modred_free_format(
+                [[1, 2]], program="invalid"
+            )
+
+    def test_single_list_invalid_program_crashes_with_unboundlocalerror(self):
+        """Documents BUGS_FOUND.md #49: unlike the list-of-lists branch,
+        the single-list branch has no final else-raise for an
+        unrecognized program, so it crashes with UnboundLocalError
+        instead of a clear ValueError."""
+        with pytest.raises(UnboundLocalError):
+            get_prepend_string_list_from_modred_free_format(
+                [1, 2], program="invalid"
+            )
+
+    def test_neither_list_of_lists_nor_int_list_returns_empty(self):
+        """Neither the list-of-lists nor single-int-list branch
+        matches (e.g. a list of strings), so nothing is appended."""
+        assert (
+            get_prepend_string_list_from_modred_free_format(["a", "b"]) == []
+        )
+
+
+class TestGetValueByNumber:
+    def test_returns_value_for_matching_key_number(self):
+        data = {"atom1": "C", "atom2": "H", "atom10": "O"}
+        assert get_value_by_number(2, data) == "H"
+        assert get_value_by_number(10, data) == "O"
+
+    def test_returns_none_when_no_key_matches(self):
+        data = {"atom1": "C", "atom2": "H"}
+        assert get_value_by_number(99, data) is None
+
+
+class TestGetKeyByValueAndNumber:
+    def test_returns_key_matching_both_value_and_number(self):
+        data = {"charge1": 0, "charge2": 1, "charge3": 0}
+        assert get_key_by_value_and_number(1, 2, data) == "charge2"
+
+    def test_returns_none_when_value_does_not_match(self):
+        data = {"charge1": 0, "charge2": 1}
+        assert get_key_by_value_and_number(99, 2, data) is None
+
+    def test_returns_none_when_number_does_not_match(self):
+        data = {"charge1": 0, "charge2": 1}
+        assert get_key_by_value_and_number(1, 99, data) is None
+
+    def test_skips_keys_with_no_trailing_number(self):
+        data = {"nonumberkey": 0, "charge2": 1}
+        assert get_key_by_value_and_number(1, 2, data) == "charge2"
+
+
+class TestTwoFilesHaveSimilarContents:
+    """Tests for the two_files_have_similar_contents function."""
+
+    def test_identical_files(self):
+        """Test identical files return True."""
+        with (
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f1,
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f2,
+        ):
+            f1.write("line1\nline2\n")
+            f2.write("line1\nline2\n")
+            f1.flush()
+            f2.flush()
+            temp_name1 = f1.name
+            temp_name2 = f2.name
+
+        result = two_files_have_similar_contents(temp_name1, temp_name2)
+        assert result is True
+
+        os.unlink(temp_name1)
+        os.unlink(temp_name2)
+
+    def test_different_files(self):
+        """Test different files return False."""
+        with (
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f1,
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f2,
+        ):
+            f1.write("line1\nline2\n")
+            f2.write("line1\nline3\n")
+            f1.flush()
+            f2.flush()
+            temp_name1 = f1.name
+            temp_name2 = f2.name
+
+        result = two_files_have_similar_contents(temp_name1, temp_name2)
+        assert result is False
+
+        os.unlink(temp_name1)
+        os.unlink(temp_name2)
+
+    def test_with_ignored_string(self):
+        """Test with ignored string."""
+        with (
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f1,
+            tempfile.NamedTemporaryFile(mode="w", delete=False) as f2,
+        ):
+            f1.write("line1\ntimestamp: 12345\n")
+            f2.write("line1\ntimestamp: 67890\n")
+            f1.flush()
+            f2.flush()
+            temp_name1 = f1.name
+            temp_name2 = f2.name
+
+        result = two_files_have_similar_contents(
+            temp_name1, temp_name2, ignored_string="timestamp"
+        )
+        assert result is True
+
+        os.unlink(temp_name1)
+        os.unlink(temp_name2)
+
+
+class TestTwoListsHaveSimilarContents:
+    """Tests for the two_lists_have_similar_contents function."""
+
+    def test_identical_lists(self):
+        """Test identical lists return True."""
+        list1 = ["a", "b", "c"]
+        list2 = ["a", "b", "c"]
+        assert two_lists_have_similar_contents(list1, list2) is True
+
+    def test_different_lists(self):
+        """Test different lists return False."""
+        list1 = ["a", "b", "c"]
+        list2 = ["a", "b", "d"]
+        assert two_lists_have_similar_contents(list1, list2) is False
+
+    def test_different_lengths(self):
+        """Test lists with different lengths return False."""
+        list1 = ["a", "b"]
+        list2 = ["a", "b", "c"]
+        assert two_lists_have_similar_contents(list1, list2) is False
+
+    def test_with_ignore_string(self):
+        """Test with ignored string."""
+        list1 = ["a", "timestamp: 123", "c"]
+        list2 = ["a", "timestamp: 456", "c"]
+        assert (
+            two_lists_have_similar_contents(
+                list1, list2, ignore_string="timestamp"
+            )
+            is True
+        )
+
+
+class TestUpdateDictWithExistingKeys:
+    """Tests for the update_dict_with_existing_keys function."""
+
+    def test_update_existing_keys(self):
+        """Test updating existing keys."""
+        dict1 = {"a": 1, "b": 2}
+        dict2 = {"a": 10}
+        result = update_dict_with_existing_keys(dict1, dict2)
+        assert result == {"a": 10, "b": 2}
+
+    def test_non_existing_key_raises_error(self):
+        """Test non-existing key raises error."""
+        dict1 = {"a": 1}
+        dict2 = {"b": 2}
+        with pytest.raises(ValueError):
+            update_dict_with_existing_keys(dict1, dict2)
+
+
+class TestIterativeCompare:
+    """Tests for the iterative_compare function."""
+
+    def test_removes_duplicates(self):
+        """Test that duplicates are removed."""
+        result = iterative_compare([1, 2, 2, 3, 1])
+        assert result == [1, 2, 3]
+
+    def test_preserves_order(self):
+        """Test that order is preserved."""
+        result = iterative_compare([3, 1, 4, 1, 5])
+        assert result == [3, 1, 4, 5]
+
+    def test_empty_list(self):
+        """Test empty list returns empty."""
+        result = iterative_compare([])
+        assert result == []
+
+    def test_non_list_truthy_input_returns_none(self):
+        """A truthy but non-list input (e.g. a tuple) skips the
+        isinstance(list) guard entirely, implicitly returning None."""
+        assert iterative_compare((1, 2, 3)) is None
+        assert iterative_compare("abc") is None
+
+
+class TestKabschAlign:
+    """Tests for the kabsch_align function."""
+
+    def test_identical_structures(self):
+        """Test alignment of identical structures."""
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        Q = P.copy()
+        p_aligned, q_aligned, R, t, rmsd = kabsch_align(P, Q)
+        assert np.isclose(rmsd, 0, atol=1e-10)
+
+    def test_translated_structure(self):
+        """Test alignment of translated structure."""
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        Q = P + np.array([5, 5, 5])
+        p_aligned, q_aligned, R, t, rmsd = kabsch_align(P, Q)
+        assert np.isclose(rmsd, 0, atol=1e-10)
+
+    def test_rotated_structure(self):
+        """Test alignment of rotated structure."""
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        # 90 degree rotation around z-axis
+        R_rot = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+        Q = np.dot(P, R_rot.T)
+        p_aligned, q_aligned, R, t, rmsd = kabsch_align(P, Q)
+        assert np.isclose(rmsd, 0, atol=1e-5)
+
+    def test_dimension_mismatch_raises_error(self):
+        """Test that dimension mismatch raises error."""
+        P = np.array([[0, 0, 0], [1, 0, 0]])
+        Q = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]])
+        with pytest.raises(AssertionError):
+            kabsch_align(P, Q)
+
+    def test_reflected_structure_corrects_to_proper_rotation(self):
+        """When P and Q are mirror images of each other, the raw SVD
+        solution is an improper rotation (det < 0); the function must
+        flip the last row of Vt to recover a proper (det == 1)
+        rotation matrix."""
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+        Q = P.copy()
+        Q[:, 2] *= -1
+        _, _, R, _, _ = kabsch_align(P, Q)
+        assert np.isclose(np.linalg.det(R), 1.0)
+
+
+class TestKabschAlign2:
+    """Tests for the kabsch_align2 function."""
+
+    def test_identical_structures(self):
+        """Test alignment of identical structures."""
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=float)
+        Q = P.copy()
+        aligned_P, Q_out, R, t, rmsd = kabsch_align2(P, Q)
+        assert np.isclose(rmsd, 0, atol=1e-10)
+
+    def test_reflected_structure_corrects_to_proper_rotation(self):
+        P = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=float)
+        Q = P.copy()
+        Q[:, 2] *= -1
+        _, _, R, _, _ = kabsch_align2(P, Q)
+        assert np.isclose(np.linalg.det(R), 1.0)
+
+
+class TestSearchFile:
+    """search_file had no test coverage at all."""
+
+    def test_finds_existing_file(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import search_file
+
+        monkeypatch.chdir(tmp_path)
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        (subdir / "myfile.txt").write_text("hello")
+
+        path, directory = search_file("myfile.txt")
+        assert path == "./subdir/myfile.txt"
+        assert directory == "./subdir"
+
+    def test_returns_none_none_when_not_found(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import search_file
+
+        monkeypatch.chdir(tmp_path)
+        assert search_file("nonexistent.txt") == (None, None)
+
+    def test_returns_none_none_on_called_process_error(self, monkeypatch):
+        import subprocess
+
+        from chemsmart.utils.utils import search_file
+
+        def _raise(*args, **kwargs):
+            raise subprocess.CalledProcessError(1, "find")
+
+        monkeypatch.setattr("chemsmart.utils.utils.subprocess.run", _raise)
+        assert search_file("anything.txt") == (None, None)
+
+
+class TestExtractNumber:
+    """Tests for the extract_number function."""
+
+    def test_extract_simple_number(self):
+        """Test extracting simple number."""
+        assert extract_number("c123") == 123
+        assert extract_number("c1") == 1
+
+    def test_extract_number_with_asterisk(self):
+        """Test extracting number with asterisk."""
+        assert extract_number("c456*") == 456
+
+    def test_no_number_returns_inf(self):
+        """Test no number returns infinity."""
+        assert extract_number("abc") == float("inf")
+
+
+class TestFindIrmsdCommand:
+    """find_irmsd_command had no direct unit coverage of its own --
+    only used as a skip-condition/mocked target elsewhere. Covers its
+    IRMSD_PATH / IRMSD_CONDA_ENV / PATH-fallback priority chain."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_irmsd_env(self, monkeypatch):
+        for key in (
+            "IRMSD_PATH",
+            "IRMSD_CONDA_ENV",
+            "CONDA_PREFIX",
+            "CONDA_PREFIX_1",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+    def test_irmsd_path_env_var_takes_priority(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        exe = tmp_path / "irmsd"
+        _make_executable(exe)
+        monkeypatch.setenv("IRMSD_PATH", str(exe))
+
+        assert find_irmsd_command() == str(exe)
+
+    def test_irmsd_path_invalid_falls_through(self, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_PATH", "/no/such/irmsd")
+        with patch("shutil.which", return_value=None):
+            assert find_irmsd_command() is None
+
+    def test_conda_env_found_via_conda_prefix_with_envs_segment(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        envs_dir = tmp_path / "envs"
+        exe = envs_dir / "myenv" / "bin" / "irmsd"
+        exe.parent.mkdir(parents=True)
+        _make_executable(exe)
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        # CONDA_PREFIX pointing at a sibling env under the same envs/ dir
+        monkeypatch.setenv("CONDA_PREFIX", str(envs_dir / "base_env"))
+
+        assert find_irmsd_command() == str(exe)
+
+    def test_conda_env_found_via_conda_prefix_without_envs_segment(
+        self, tmp_path, monkeypatch
+    ):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        conda_base = tmp_path / "myconda"
+        conda_base.mkdir()
+        exe = tmp_path / "envs" / "myenv" / "bin" / "irmsd"
+        exe.parent.mkdir(parents=True)
+        _make_executable(exe)
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        monkeypatch.setenv("CONDA_PREFIX", str(conda_base))
+
+        assert find_irmsd_command() == str(exe)
+
+    def test_conda_run_fallback_succeeds(self, tmp_path, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        exe = tmp_path / "irmsd"
+        _make_executable(exe)
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "somenv")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = str(exe) + "\n"
+            assert find_irmsd_command() == str(exe)
+
+    def test_conda_run_timeout_falls_through_to_path(self, monkeypatch):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "somenv")
+        with patch(
+            "chemsmart.utils.utils.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="x", timeout=10),
+        ):
+            with patch("shutil.which", return_value="/usr/bin/irmsd"):
+                assert find_irmsd_command() == "/usr/bin/irmsd"
+
+    def test_falls_back_to_path_when_no_env_vars_set(self):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        with patch("shutil.which", return_value="/usr/bin/irmsd"):
+            assert find_irmsd_command() == "/usr/bin/irmsd"
+
+    def test_returns_none_when_nothing_found(self):
+        from chemsmart.utils.utils import find_irmsd_command
+
+        with patch("shutil.which", return_value=None):
+            assert find_irmsd_command() is None
+
+    def test_conda_prefix_path_missing_falls_through_to_common_locations(
+        self, monkeypatch
+    ):
+        """CONDA_PREFIX resolves to a real directory, but the irmsd
+        executable is not actually there -- falls through to the
+        hardcoded common conda locations list, which is then also
+        exhausted without a match."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        monkeypatch.setenv("CONDA_PREFIX", "/some/envs/base_env")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stdout = ""
+            with patch("shutil.which", return_value=None):
+                assert find_irmsd_command() is None
+
+    def test_conda_run_succeeds_but_path_not_executable_falls_through(
+        self, monkeypatch
+    ):
+        """conda run reports success and prints a path, but that path
+        does not actually exist/is not executable -- falls through to
+        the PATH fallback instead of returning it."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "somenv")
+        with patch("chemsmart.utils.utils.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "/no/such/irmsd\n"
+            with patch("shutil.which", return_value=None):
+                assert find_irmsd_command() is None
+
+    def test_found_via_common_conda_locations_list(self, monkeypatch):
+        """No CONDA_PREFIX set, but the irmsd executable happens to
+        exist under one of the hardcoded common conda install
+        locations."""
+        from chemsmart.utils.utils import find_irmsd_command
+
+        monkeypatch.setenv("IRMSD_CONDA_ENV", "myenv")
+        target = os.path.join(
+            os.path.expanduser("~/anaconda3"), "envs", "myenv", "bin", "irmsd"
+        )
+
+        def fake_isfile(path):
+            return path == target
+
+        def fake_access(path, mode):
+            return path == target
+
+        with patch("os.path.isfile", side_effect=fake_isfile):
+            with patch("os.access", side_effect=fake_access):
+                assert find_irmsd_command() == target
+
+
+class TestSplineData:
+    def test_interpolates_and_sorts_by_x(self):
+        from chemsmart.utils.utils import spline_data
+
+        # deliberately out of order to exercise the sort-by-x-value step
+        x = [3, 0, 1, 4, 2]
+        y = [9, 0, 1, 16, 4]
+        new_x, new_y = spline_data(x, y, new_length=5)
+        assert len(new_x) == 5
+        assert new_x[0] == 0
+        assert new_x[-1] == 4
+        # y = x^2, so the spline should closely reproduce known points
+        assert new_y[0] == pytest.approx(0, abs=1e-6)
+        assert new_y[-1] == pytest.approx(16, abs=1e-6)
+
+
+class TestToGraphWrapper:
+    def test_delegates_to_molecule_to_graph(self):
+        from unittest.mock import MagicMock
+
+        from chemsmart.utils.utils import to_graph_wrapper
+
+        mol = MagicMock()
+        mol.to_graph.return_value = "graph-result"
+        result = to_graph_wrapper(mol, bond_cutoff_buffer=0.1, adjust_H=False)
+        assert result == "graph-result"
+        mol.to_graph.assert_called_once_with(
+            bond_cutoff_buffer=0.1, adjust_H=False
+        )
+
+
+class TestSafeMinLengths:
+    def test_returns_minimum_length_ignoring_none(self):
+        from chemsmart.utils.utils import safe_min_lengths
+
+        assert safe_min_lengths([1, 2, 3], [1, 2], None) == 2
+
+    def test_returns_zero_when_all_none(self):
+        from chemsmart.utils.utils import safe_min_lengths
+
+        assert safe_min_lengths(None, None) == 0
+
+
+class TestConvertStringToSlices:
+    def test_mixed_ranges_and_single_indices(self):
+        from chemsmart.utils.utils import convert_string_to_slices
+
+        result = convert_string_to_slices("[1-3, 6-9, 7, 8, 10]")
+        assert result == ["0:3", "5:9", 6, 7, 9]
+
+    def test_single_index_only(self):
+        from chemsmart.utils.utils import convert_string_to_slices
+
+        assert convert_string_to_slices("5") == [4]

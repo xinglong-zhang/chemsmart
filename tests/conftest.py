@@ -1,8 +1,10 @@
 import importlib
 import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
+from shutil import copyfile
 from textwrap import dedent
 from unittest.mock import MagicMock, patch
 
@@ -11,16 +13,28 @@ import numpy as np
 import pytest
 import rdkit.Chem.rdDistGeom as rdDistGeom
 import yaml
+from ase import Atoms
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from rdkit import Chem
 
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
+from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
+from chemsmart.cli.update import DependencyUpdater, VersionUpdater
+from chemsmart.database.database import Database
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.jobs.crest.runner import FakeCRESTJobRunner
+from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.runner import FakeGaussianJobRunner
+from chemsmart.jobs.gaussian.settings import (
+    GaussianIRCJobSettings,
+    GaussianJobSettings,
+    GaussianLinkJobSettings,
+)
+from chemsmart.jobs.grouper.base import MatrixGrouper
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
@@ -31,10 +45,19 @@ from chemsmart.jobs.mol.runner import (
     PyMOLScientificStyleVisualizationJobRunner,
     PyMOLVisualizationJobRunner,
 )
+from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
+from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
+from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+from chemsmart.jobs.orca.settings import ORCAJobSettings
+from chemsmart.jobs.runner import JobRunner
+from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
+from chemsmart.jobs.xtb.settings import XTBJobSettings
+from chemsmart.settings.crest import CRESTProjectSettings
 from chemsmart.settings.server import Server
+from chemsmart.settings.user import CHEMSMARTUserSettings
 
 thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
@@ -114,7 +137,8 @@ def make_cli_ctx_obj():
 
 @pytest.fixture()
 def invoke_config_server():
-    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+    """Return a callable that invokes 'chemsmart config server'
+    via Click's CliRunner.
 
     Usage in tests::
 
@@ -159,7 +183,8 @@ def write_server_yaml():
 
 @pytest.fixture()
 def invoke_update_configs():
-    """Return a callable that invokes 'chemsmart update configs' via Click's CliRunner.
+    """Return a callable that invokes 'chemsmart update configs'
+    via Click's CliRunner.
 
     Usage in tests::
 
@@ -408,6 +433,48 @@ def run_orca_and_capture_settings():
         return result, captured_settings
 
     return _run
+
+
+@pytest.fixture()
+def build_orca_td_args(orca_td_project_name):
+    """Build ``orca ... td ...`` CLI argv, defaulting to the ``td`` project.
+
+    ``pre_td`` holds orca-group options placed before ``td`` (e.g.
+    ``-r Opt`` or ``-i 1-2``); ``project_name`` overrides the project YAML.
+
+    Usage in tests::
+
+        def test_something(build_orca_td_args, single_molecule_xyz_file):
+            args = build_orca_td_args(
+                single_molecule_xyz_file, "--nroots", "5",
+                pre_td=("-i", "1-2"),
+            )
+    """
+
+    def _build(
+        xyz_file,
+        *td_args,
+        pre_td=(),
+        charge=0,
+        multiplicity=1,
+        project_name=None,
+    ):
+        project_name = project_name or orca_td_project_name
+        return [
+            "-p",
+            os.path.basename(project_name),
+            "-f",
+            xyz_file,
+            "-c",
+            str(charge),
+            "-m",
+            str(multiplicity),
+            *pre_td,
+            "td",
+            *td_args,
+        ]
+
+    return _build
 
 
 @pytest.fixture()
@@ -1490,10 +1557,17 @@ def water_opt_input_path(inpfile_path):
 
 
 @pytest.fixture()
-def sdf_file(test_data_directory):
-    return os.path.join(
-        test_data_directory, "AtomsWrapperTest", "structure.sdf"
-    )
+def water_sdf_file(structure_test_directory):
+    """Single-molecule SDF (V2000 molfile) for water."""
+    return os.path.join(structure_test_directory, "sdf", "water.sdf")
+
+
+@pytest.fixture()
+def water_sdf_file_content(water_sdf_file):
+    """Returns the content of the water.sdf file as a string."""
+    with open(water_sdf_file, "r") as f:
+        content = f.read()
+    return content
 
 
 # orca input files path and associated files
@@ -2520,6 +2594,36 @@ def conformers_from_rdkit():
     return conformers_from_rdkit
 
 
+############ Grouper Fixtures ##################
+class _ConcreteMatrixGrouper(MatrixGrouper):
+    """Matrix-capable concrete grouper so ``center``/``top3`` are allowed.
+
+    ``group()`` just returns singleton groups; tests use it to exercise
+    the shared ``MatrixGrouper``/``MoleculeGrouper`` helpers directly.
+    """
+
+    def group(self):
+        return self._build_singleton_groups()
+
+
+@pytest.fixture
+def make_matrix_grouper():
+    """Factory for a minimal concrete :class:`MatrixGrouper`.
+
+    Usage in tests::
+
+        def test_something(make_matrix_grouper, methanol_molecules):
+            grouper = make_matrix_grouper(
+                methanol_molecules, representative_strategy="center"
+            )
+    """
+
+    def _make(molecules, **kwargs):
+        return _ConcreteMatrixGrouper(molecules, **kwargs)
+
+    return _make
+
+
 @pytest.fixture()
 def io_test_directory(test_data_directory):
     return os.path.join(test_data_directory, "IOTests")
@@ -2551,27 +2655,18 @@ def temp_text_file():
 
 @pytest.fixture()
 def dummy_yaml_file():
-    class DummyYAMLFile:
+    from chemsmart.utils.mixins import YAMLFileMixin
+
+    class DummyYAMLFile(YAMLFileMixin):
         def __init__(self):
             self.filename = "dummy.yaml"
-            self.content_lines_string = yaml.dump(
+            self._content_lines_string = yaml.dump(
                 {"key1": "value1", "key2": "value2"}
             )
 
         @property
-        def yaml_contents_dict(self):
-            return yaml.safe_load(self.content_lines_string)
-
-        @property
-        def yaml_contents_keys(self):
-            return self.yaml_contents_dict.keys()
-
-        @property
-        def yaml_contents_values(self):
-            return self.yaml_contents_dict.values()
-
-        def yaml_contents_by_key(self, key):
-            return self.yaml_contents_dict.get(key)
+        def content_lines_string(self):
+            return self._content_lines_string
 
     return DummyYAMLFile()
 
@@ -2633,6 +2728,45 @@ def capture_log(caplog):
     """
     caplog.set_level(logging.DEBUG, logger="")  # "" for root logger
     return caplog
+
+
+@pytest.fixture()
+def clean_root_logger():
+    """Snapshot and restore the root logger around each test.
+
+    create_logger() mutates the (global, shared) root logger's level,
+    handlers, and filters, so tests must not leak that state into the
+    rest of the suite.
+    """
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_filters = root.filters[:]
+    original_level = root.level
+    yield root
+    for handler in root.handlers:
+        if handler not in original_handlers:
+            handler.close()
+    root.handlers = original_handlers
+    root.filters = original_filters
+    root.level = original_level
+
+
+@pytest.fixture()
+def make_log_record():
+    """Factory fixture that builds an INFO-level logging.LogRecord."""
+
+    def _make_record(msg, args=None):
+        return logging.LogRecord(
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg=msg,
+            args=args,
+            exc_info=None,
+        )
+
+    return _make_record
 
 
 ############ Iterate Fixtures ##################
@@ -3204,3 +3338,321 @@ def legacy_server_yaml(tmp_path):
     yaml_path = tmp_path / "legacy_server.yaml"
     yaml_path.write_text(_LEGACY_SERVER_YAML)
     return str(yaml_path)
+
+
+############ Job Settings Fixtures ##################
+@pytest.fixture()
+def crest_settings():
+    return CRESTJobSettings.default()
+
+
+@pytest.fixture()
+def my_crest_project_settings():
+    class MyCRESTProjectSettings(CRESTProjectSettings):
+        PROJECT_NAME = "my_project"
+        gfn_version = "gfnff"
+
+    return MyCRESTProjectSettings()
+
+
+@pytest.fixture()
+def gaussian_irc_settings():
+    return GaussianIRCJobSettings.default()
+
+
+@pytest.fixture()
+def gaussian_settings():
+    return GaussianJobSettings.default()
+
+
+@pytest.fixture()
+def orca_settings():
+    return ORCAJobSettings.default()
+
+
+@pytest.fixture()
+def xtb_settings():
+    return XTBJobSettings.default()
+
+
+@pytest.fixture()
+def nciplot_settings():
+    return NCIPLOTJobSettings()
+
+
+@pytest.fixture()
+def orca_qrc_settings():
+    settings = ORCAJobSettings.default()
+    settings.jobtype = "qrc"
+    return settings
+
+
+@pytest.fixture
+def gaussian_qrc_settings():
+    # Use a real settings object to pass isinstance checks
+    settings = GaussianJobSettings()
+    settings.jobtype = "qrc"
+    return settings
+
+
+@pytest.fixture()
+def gaussian_link_irc_settings():
+    return GaussianLinkJobSettings(jobtype="irc", direction=None)
+
+
+@pytest.fixture()
+def gaussian_link_opt_settings():
+    return GaussianLinkJobSettings(jobtype="opt")
+
+
+############ Molecule and Structure Fixtures ##################
+@pytest.fixture()
+def a_molecule(single_molecule_xyz_file):
+    return Molecule.from_filepath(single_molecule_xyz_file)
+
+
+@pytest.fixture()
+def ethanol_conformers(ethanol_molecule):
+    return [ethanol_molecule.copy() for _ in range(4)]
+
+
+@pytest.fixture()
+def ethanol_irc_molecules(ethanol_molecule):
+    # A short synthetic "IRC trajectory": 5 copies of the same
+    # 9-atom ethanol geometry, standing in for points along a path.
+    return [ethanol_molecule.copy() for _ in range(5)]
+
+
+@pytest.fixture()
+def ethanol_traj_molecules(ethanol_molecule):
+    mols = []
+    for i in range(20):
+        mol = ethanol_molecule.copy()
+        mol.energy = float(i)
+        mols.append(mol)
+    return mols
+
+
+@pytest.fixture()
+def simple_ase_atoms():
+    return Atoms("Ar2", positions=[(0.0, 0.0, 0.0), (3.5, 0.0, 0.0)])
+
+
+@pytest.fixture()
+def water_with_vib_modes():
+    """Water molecule with a single synthetic mass-weighted mode."""
+    mol = Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [
+                [0.0000, 0.0000, 0.1173],
+                [0.0000, 0.7572, -0.4692],
+                [0.0000, -0.7572, -0.4692],
+            ]
+        ),
+        vibrational_modes=[
+            np.array(
+                [
+                    [0.0, 0.0, 0.1],
+                    [0.0, 0.2, -0.1],
+                    [0.0, -0.2, -0.1],
+                ]
+            )
+        ],
+    )
+    return mol
+
+
+@pytest.fixture()
+def crest_molecules(xyz_directory):
+    xyz_file = XYZFile(
+        filename=os.path.join(xyz_directory, "crest_conformers.xyz")
+    )
+    return xyz_file.get_molecules(index=":", return_list=True)
+
+
+@pytest.fixture
+def minimal_struct_dict():
+    return {
+        "chemical_symbols": ["H", "H"],
+        "positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]],
+        "charge": 0,
+        "multiplicity": 1,
+        "energy": -1.0,
+    }
+
+
+############ Mock Fixtures ##################
+@pytest.fixture()
+def mock_molecule():
+    mol = MagicMock(spec=Molecule)
+    mol.has_vibrations = True
+    mol.copy.return_value = mol
+    mol.vibrationally_displaced.return_value = mol
+    mol.get_chemical_formula.return_value = "C1H4"
+    return mol
+
+
+@pytest.fixture()
+def mock_jobrunner():
+    return MagicMock(spec=JobRunner)
+
+
+############ File, Database and Server Fixtures ##################
+@pytest.fixture
+def raw_rows_db(tmp_path):
+    """Database with two records and two molecules sharing ID prefixes,
+    and no structures linked to either record."""
+    db = Database(str(tmp_path / "raw_rows.db"))
+    db.create()
+    conn = db.get_connection()
+    for record_id, program in (("rec111", "Gaussian"), ("rec222", "ORCA")):
+        conn.execute(
+            "INSERT INTO records (record_id, program) VALUES (?, ?)",
+            (record_id, program),
+        )
+    for molecule_id in ("mol111", "mol222"):
+        conn.execute(
+            "INSERT INTO molecules (molecule_id) VALUES (?)",
+            (molecule_id,),
+        )
+    conn.commit()
+    conn.close()
+    return db
+
+
+@pytest.fixture()
+def water_sp_inp_copy(tmp_path, water_sp_input_path):
+    target = tmp_path / "water_sp.inp"
+    copyfile(water_sp_input_path, target)
+    return str(target)
+
+
+@pytest.fixture()
+def valid_iterate_config_toml(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text("[[skeletons]]\nfile = 'a.xyz'\n")
+    return str(path)
+
+
+@pytest.fixture
+def make_dummy_files(tmp_path):
+    def _make(*names):
+        for name in names:
+            (tmp_path / name).write_text("dummy content\n")
+        return tmp_path
+
+    return _make
+
+
+@pytest.fixture()
+def pbs_test_server():
+    return Server(
+        "custom-pbs",
+        SCHEDULER="PBS",
+        NUM_CORES=8,
+        MEM_GB=24,
+        NUM_GPUS=0,
+        NUM_HOURS=24,
+        QUEUE_NAME="normal",
+    )
+
+
+@pytest.fixture()
+def slurm_test_server():
+    return Server(
+        "custom-slurm",
+        SCHEDULER="SLURM",
+        NUM_CORES=8,
+        MEM_GB=24,
+        NUM_GPUS=0,
+        NUM_HOURS=24,
+        QUEUE_NAME="normal",
+    )
+
+
+############ Job, Runner and CLI-Context Fixtures ##################
+@pytest.fixture()
+def nciplot_job_from_files(
+    single_molecule_xyz_file, nciplot_settings, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    return NCIPLOTJob(
+        filenames=[single_molecule_xyz_file],
+        settings=nciplot_settings,
+        label="ncitest",
+    )
+
+
+@pytest.fixture()
+def orca_job(single_molecule_xyz_file, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    molecule = Molecule.from_filepath(single_molecule_xyz_file)
+    settings = ORCAJobSettings.default()
+    return ORCAJob(molecule=molecule, settings=settings, label="orcatest")
+
+
+@pytest.fixture()
+def thermo_job(gaussian_co2_opt_outfile, tmp_path):
+    job = ThermochemistryJob(
+        filename=gaussian_co2_opt_outfile, label="co2_thermo"
+    )
+    job.folder = str(tmp_path)
+    return job
+
+
+@pytest.fixture()
+def run_ctx():
+    server = Server(name="dummy")
+    ctx = click.Context(run)
+    ctx.ensure_object(dict)
+    ctx.obj["jobrunner"] = JobRunner(server=server, fake=True)
+    return ctx
+
+
+@pytest.fixture
+def user_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(tmp_path))
+    return CHEMSMARTUserSettings()
+
+
+@pytest.fixture()
+def dependency_updater(tmp_path):
+    u = DependencyUpdater()
+    u._package_path = tmp_path
+    u._pyproject_path = tmp_path / "pyproject.toml"
+    return u
+
+
+@pytest.fixture()
+def version_updater(tmp_path):
+    u = VersionUpdater("0.0.0")
+    u._pyproject_path = tmp_path / "pyproject.toml"
+    u._version_file_path = tmp_path / "VERSION"
+    u._docs_conf_file_path = tmp_path / "conf.py"
+    return u
+
+
+@pytest.fixture
+def center_matrix_grouper(make_matrix_grouper, methanol_molecules):
+    return make_matrix_grouper(
+        methanol_molecules, representative_strategy="center"
+    )
+
+
+############ PyMOL Fixtures ##################
+@pytest.fixture(scope="session")
+def skip_if_no_pymol():
+    if shutil.which("pymol") is None:
+        pytest.skip("PyMOL not installed")
+
+
+@pytest.fixture()
+def loaded_1_mer(visualized_1_mer_xyz_file):
+    """Load ``1-mer.xyz`` into a fresh, real PyMOL session (PyMOL required)."""
+    from pymol import cmd
+
+    cmd.reinitialize()
+    cmd.load(visualized_1_mer_xyz_file, "mol1mer")
+    yield "mol1mer"
+    cmd.delete("all")
