@@ -11,41 +11,6 @@ RTOL = 1e-6
 ATOL = 1e-8
 
 
-@pytest.fixture
-def water_molecule():
-    """Simple water geometry in Å."""
-    return Molecule(
-        symbols=["O", "H", "H"],
-        positions=np.array(
-            [
-                [0.00000, 0.00000, 0.11779],
-                [0.00000, 0.75545, -0.47116],
-                [0.00000, -0.75545, -0.47116],
-            ],
-            dtype=float,
-        ),
-    )
-
-
-@pytest.fixture
-def methanol_molecule():
-    """Methanol geometry with C/H/O species."""
-    return Molecule(
-        symbols=["C", "O", "H", "H", "H", "H"],
-        positions=np.array(
-            [
-                [-0.6626, 0.0000, 0.0000],
-                [0.6626, 0.0000, 0.0000],
-                [-1.0280, 1.0280, 0.0000],
-                [-1.0280, -0.5140, 0.8900],
-                [-1.0280, -0.5140, -0.8900],
-                [1.0280, 0.0000, 0.0000],
-            ],
-            dtype=float,
-        ),
-    )
-
-
 def _rotation_matrix(axis, angle_rad):
     """Rodrigues rotation matrix for a unit axis."""
     axis = np.asarray(axis, dtype=float)
@@ -172,9 +137,9 @@ class TestCalculateSoapBasics:
             symbols=["O", "H", "H", "He"],
             positions=np.array(
                 [
-                    [0.00000, 0.00000, 0.11779],
-                    [0.00000, 0.75545, -0.47116],
-                    [0.00000, -0.75545, -0.47116],
+                    [0.0000, 0.0000, 0.1173],
+                    [0.0000, 0.7572, -0.4692],
+                    [0.0000, -0.7572, -0.4692],
                     [8.0, 0.0, 0.11779],
                 ],
                 dtype=float,
