@@ -1,4 +1,5 @@
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -8,14 +9,39 @@ from chemsmart.io.molecules.structure import Molecule, QMMMMolecule
 from chemsmart.jobs.gaussian.opt import GaussianOptJob
 from chemsmart.jobs.gaussian.pka import GaussianpKaJob
 from chemsmart.jobs.gaussian.settings import (
+    GaussianIRCJobSettings,
     GaussianJobSettings,
     GaussianLinkJobSettings,
     GaussianpKaJobSettings,
     GaussianQMMMJobSettings,
 )
 from chemsmart.jobs.settings import (
+    MolecularJobSettings,
     read_molecular_job_yaml,
 )
+
+
+def _mol_with_h(charge=None, multiplicity=None, frozen_atoms=None):
+    mol = Molecule(
+        symbols=["C", "H", "H", "H", "H"],
+        positions=[
+            [0.0, 0.0, 0.0],
+            [0.63, 0.63, 0.63],
+            [0.63, -0.63, -0.63],
+            [-0.63, 0.63, -0.63],
+            [-0.63, -0.63, 0.63],
+        ],
+        frozen_atoms=frozen_atoms,
+    )
+    mol.charge = charge
+    mol.multiplicity = multiplicity
+    return mol
+
+
+def _mol(symbols=("H", "H"), positions=None):
+    if positions is None:
+        positions = [[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]]
+    return Molecule(symbols=list(symbols), positions=positions)
 
 
 class TestGaussianJobSettings:
@@ -1966,3 +1992,1448 @@ class TestGaussianLinkJobSettingsGuess:
         route = self._route(" (mix,always) ")
         assert "guess=(mix,always)" in route
         assert "guess=((mix,always))" not in route
+
+
+class TestInitValidation:
+    def test_expands_user_home_in_gen_genecp_file(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            gen_genecp_file="~/genecp.txt",
+        )
+        assert "~" not in settings.gen_genecp_file
+
+    def test_forces_and_freq_both_true_raises(self):
+        with pytest.raises(ValueError, match="Frequency and Force"):
+            GaussianJobSettings(
+                functional="b3lyp", basis="sto-3g", forces=True, freq=True
+            )
+
+
+class TestMerge:
+    def test_merge_with_none_keywords_merges_everything(self):
+        base = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        other = GaussianJobSettings(functional="wb97xd", basis="def2-tzvp")
+        merged = base.merge(other, keywords=None)
+        assert merged.functional == "wb97xd"
+        assert merged.basis == "def2-tzvp"
+
+
+class TestDunderMethods:
+    def test_getitem_returns_attribute(self):
+        settings = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        assert settings["functional"] == "b3lyp"
+
+    def test_eq_different_types_returns_not_implemented(self):
+        settings = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        assert settings.__eq__(object()) is NotImplemented
+
+    def test_eq_equal_settings(self):
+        s1 = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        s2 = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        assert s1 == s2
+
+    def test_eq_unequal_settings_logs_diff(self, caplog):
+        s1 = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        s2 = GaussianJobSettings(functional="wb97xd", basis="def2-tzvp")
+        with caplog.at_level("INFO"):
+            assert not (s1 == s2)
+        assert "not equal" in caplog.text
+
+
+class TestAlternateConstructors:
+    def test_from_outfile_merges_orca_settings(self):
+        mock_orca_settings = GaussianJobSettings(
+            functional="wb97xd", basis="def2-tzvp"
+        )
+        with patch(
+            "chemsmart.io.orca.output.ORCAOutput.read_settings",
+            return_value=mock_orca_settings,
+        ):
+            settings = GaussianJobSettings.from_outfile("fake.out")
+        assert settings.functional == "wb97xd"
+        assert settings.basis == "def2-tzvp"
+
+    def test_from_logfile_falls_back_to_pbc_on_value_error(self):
+        mock_pbc_settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g"
+        )
+        with (
+            patch(
+                "chemsmart.io.gaussian.output.Gaussian16Output.read_settings",
+                side_effect=ValueError("not a valid non-PBC log"),
+            ),
+            patch(
+                "chemsmart.io.gaussian.output.Gaussian16OutputWithPBC.read_settings",
+                return_value=mock_pbc_settings,
+            ),
+        ):
+            settings = GaussianJobSettings.from_logfile("fake.log")
+        assert settings.functional == "b3lyp"
+
+    def test_from_filepath_inp_extension(self):
+        from unittest.mock import MagicMock
+
+        mock_orca_settings = GaussianJobSettings(
+            functional="wb97xd", basis="def2-tzvp"
+        )
+        mock_orca_input = MagicMock()
+        mock_orca_input.read_settings.return_value = mock_orca_settings
+        with patch(
+            "chemsmart.io.orca.input.ORCAInput",
+            return_value=mock_orca_input,
+        ):
+            settings = GaussianJobSettings.from_filepath("fake.inp")
+        assert settings.functional == "wb97xd"
+
+    def test_from_filepath_unsupported_extension_raises(self):
+        with pytest.raises(ValueError, match="Could not create"):
+            GaussianJobSettings.from_filepath("fake.xyz")
+
+
+class TestRouteStringSetterAndUserInput:
+    def test_route_string_setter(self):
+        settings = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        settings.route_string = "# custom route"
+        assert settings._route_string == "# custom route"
+
+    def test_user_input_route_without_dieze_tag(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            route_to_be_written="opt freq",
+        )
+        assert settings.route_string == "# opt freq"
+
+    def test_user_input_route_with_dieze_tag(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            dieze_tag="p",
+            route_to_be_written="opt freq",
+        )
+        assert settings.route_string == "#p opt freq"
+
+    def test_user_input_route_already_prefixed(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            route_to_be_written="#p opt freq",
+        )
+        assert settings.route_string == "#p opt freq"
+
+
+class TestGetLightElements:
+    def test_returns_none_without_heavy_elements(self):
+        settings = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        assert settings.get_light_elements(_mol()) is None
+
+
+class TestDiezeTagAndOptFreq:
+    def test_custom_dieze_tag(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="sp", dieze_tag="p"
+        )
+        assert settings._get_dieze_tag().startswith("#p")
+
+    @pytest.mark.parametrize(
+        "jobtype,expected",
+        [
+            ("opt", "opt=(maxstep=5)"),
+            ("modred", "opt=(modredundant,maxstep=5)"),
+            ("scan", "opt=(modredundant,maxstep=5)"),
+            ("sp", ""),
+        ],
+    )
+    def test_additional_opt_options_by_jobtype(self, jobtype, expected):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype=jobtype,
+            additional_opt_options_in_route="maxstep=5",
+        )
+        route = settings._get_dieze_tag()
+        if expected:
+            assert expected in route
+        if jobtype in ("modred",):
+            assert settings.freq is True
+        if jobtype in ("scan", "sp"):
+            assert settings.freq is False
+
+    def test_ts_additional_opt_options_without_calcall(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ts",
+            additional_opt_options_in_route="maxstep=5",
+        )
+        route = settings._get_dieze_tag()
+        assert "opt=(ts,calcfc,noeigentest,maxstep=5)" in route
+
+    def test_ts_additional_opt_options_with_calcall(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ts",
+            additional_opt_options_in_route="calcall",
+        )
+        route = settings._get_dieze_tag()
+        assert "opt=(ts,noeigentest,calcall)" in route
+
+    def test_jobtype_not_matching_any_branch_falls_through(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="nci",
+            additional_opt_options_in_route=None,
+        )
+        route = settings._get_dieze_tag()
+        assert "opt" not in route
+
+    def test_jobtype_not_matching_any_branch_with_additional_opt_options(
+        self,
+    ):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="nci",
+            additional_opt_options_in_route="maxstep=5",
+        )
+        route = settings._get_dieze_tag()
+        assert "opt" not in route
+
+    def test_numfreq_without_freq(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="sp",
+            freq=False,
+            numfreq=True,
+        )
+        route = settings._get_dieze_tag()
+        assert "freq=numer" in route
+
+    def test_freq_and_numfreq_both_true_raises(self):
+        # jobtype="sp" would itself force freq=False as a side effect of
+        # _get_dieze_tag(), so use a jobtype that doesn't touch freq/numfreq
+        # to let the manually-set combination reach the final check.
+        settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="nci"
+        )
+        settings.freq = True
+        settings.numfreq = True
+        with pytest.raises(ValueError, match="cannot be True at the same"):
+            settings._get_dieze_tag()
+
+
+class TestLevelOfTheoryString:
+    def test_semiempirical_with_basis_warns(self, caplog):
+        settings = GaussianJobSettings(
+            semiempirical="PM6", basis="sto-3g", jobtype="sp"
+        )
+        with caplog.at_level("WARNING"):
+            route = settings._get_level_of_theory_string()
+        assert "PM6" in route
+        assert "not required" in caplog.text
+
+    def test_semiempirical_without_basis_no_warning(self, caplog):
+        settings = GaussianJobSettings(semiempirical="PM6", jobtype="sp")
+        with caplog.at_level("WARNING"):
+            route = settings._get_level_of_theory_string()
+        assert "PM6" in route
+        assert "not required" not in caplog.text
+
+    def test_ab_initio_with_basis_succeeds(self):
+        settings = GaussianJobSettings(
+            ab_initio="MP2", basis="sto-3g", jobtype="sp"
+        )
+        route = settings._get_level_of_theory_string()
+        assert "MP2 sto-3g" in route
+
+    def test_ab_initio_without_basis_raises(self):
+        settings = GaussianJobSettings(ab_initio="MP2", jobtype="sp")
+        with pytest.raises(ValueError, match="ab initio methods"):
+            settings._get_level_of_theory_string()
+
+    def test_functional_without_basis_raises(self):
+        settings = GaussianJobSettings(functional="b3lyp", jobtype="sp")
+        with pytest.raises(ValueError, match="DFT methods"):
+            settings._get_level_of_theory_string()
+
+    def test_both_ab_initio_and_functional_raises(self):
+        settings = GaussianJobSettings(
+            ab_initio="MP2",
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="sp",
+        )
+        with pytest.raises(ValueError, match="Both ab initio and DFT"):
+            settings._get_level_of_theory_string()
+
+    def test_no_method_provided_raises(self):
+        settings = GaussianJobSettings(jobtype="sp")
+        with pytest.raises(ValueError, match="No computational method"):
+            settings._get_level_of_theory_string()
+
+    def test_forces_keyword_added(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="sp", forces=True
+        )
+        route = settings._get_level_of_theory_string()
+        assert " force" in route
+
+    def test_custom_solvent_without_model_or_id_uses_pcm_default(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="sp",
+            custom_solvent="SolventName=custom",
+        )
+        route = settings._get_level_of_theory_string()
+        assert "scrf=(pcm,read" in route
+
+    def test_incomplete_solvation_spec_raises(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="sp",
+            solvent_model="SMD",
+        )
+        with pytest.raises(ValueError, match="Both solvent model"):
+            settings._get_level_of_theory_string()
+
+    def test_nci_jobtype_adds_output_wfn(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="nci"
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "output=wfn" in route
+
+    def test_wbi_jobtype_adds_pop_nboread(self):
+        settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="wbi"
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "pop=nboread" in route
+
+
+class TestGenecpSection:
+    def test_raises_when_neither_elements_nor_file_specified(self):
+        settings = GaussianJobSettings(functional="b3lyp", basis="genecp")
+        with pytest.raises(ValueError, match="Could not get GenECPSection"):
+            settings.get_genecp_section(_mol())
+
+
+class TestDetermineBasisKeyword:
+    def test_no_heavy_elements_in_structure_without_light_basis_returns_basis(
+        self,
+    ):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="genecp",
+            heavy_elements=["Fe"],
+            light_elements_basis=None,
+        )
+        # Molecule contains no Fe, so no heavy elements are present.
+        result = settings.determine_basis_keyword(_mol(symbols=["H", "H"]))
+        assert result == "genecp"
+
+
+class TestCheckSolvent:
+    def test_unsupported_solvent_model_raises(self):
+        settings = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        with pytest.raises(ValueError, match="not in"):
+            settings._check_solvent("totally_bogus_solvent_model")
+
+
+class TestBackwardsCompatThermodynamicCycle:
+    def test_thermodynamic_cycle_kwarg_maps_to_scheme(self, caplog):
+        with caplog.at_level("WARNING"):
+            settings = GaussianpKaJobSettings(
+                proton_index=2, thermodynamic_cycle="direct"
+            )
+        assert settings.scheme == "direct"
+        assert "deprecated" in caplog.text
+
+
+class TestTitleAndDelegatingMethods:
+    def test_explicit_title_is_not_overridden(self):
+        settings = GaussianpKaJobSettings(proton_index=2, title="My Title")
+        assert settings.title == "My Title"
+
+    def test_default_title_applied_when_falsy(self):
+        settings = GaussianpKaJobSettings(proton_index=2, title=None)
+        assert settings.title == "Gaussian pKa calculation job"
+
+    def test_reference_pair_molecules_delegates(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            reference_file="ref.xyz",
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        from unittest.mock import patch
+
+        with patch.object(
+            settings, "get_reference_molecule", return_value=_mol_with_h()
+        ):
+            acid, base = settings.reference_pair_molecules()
+        assert acid is not None
+        assert base.charge == -1
+
+    def test_reference_pair_job_settings_delegates(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            reference_file="ref.xyz",
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+            functional="b3lyp",
+            basis="sto-3g",
+        )
+        acid, base = settings.reference_pair_job_settings()
+        assert acid.jobtype == "opt"
+        assert base.jobtype == "opt"
+
+    def test_reference_pair_sp_job_settings_delegates(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            reference_file="ref.xyz",
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+            functional="b3lyp",
+            basis="sto-3g",
+        )
+        acid, base = settings.reference_pair_sp_job_settings()
+        assert acid.jobtype == "sp"
+        assert base.jobtype == "sp"
+
+    def test_conjugate_pair_sp_job_settings_delegates(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2, functional="b3lyp", basis="sto-3g"
+        )
+        mol = _mol_with_h(charge=0, multiplicity=1)
+        prot, base = settings.conjugate_pair_sp_job_settings(mol)
+        assert prot.jobtype == "sp"
+        assert base.jobtype == "sp"
+
+
+class TestValidateReferenceSettings:
+    def test_no_reference_file_is_a_no_op(self):
+        settings = GaussianpKaJobSettings(proton_index=2)
+        settings.validate_reference_settings()  # should not raise
+
+    def test_missing_reference_charge_raises(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            reference_file="ref.xyz",
+            reference_proton_index=1,
+            reference_multiplicity=1,
+        )
+        with pytest.raises(ValueError, match="reference_charge"):
+            settings.validate_reference_settings()
+
+    def test_missing_reference_multiplicity_raises(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            reference_file="ref.xyz",
+            reference_proton_index=1,
+            reference_charge=0,
+        )
+        with pytest.raises(ValueError, match="reference_multiplicity"):
+            settings.validate_reference_settings()
+
+
+class TestGetReferenceMolecule:
+    def test_raises_without_reference_file(self):
+        settings = GaussianpKaJobSettings(proton_index=2)
+        with pytest.raises(ValueError, match="Reference file not provided"):
+            settings.get_reference_molecule()
+
+
+class TestCreateReferenceConjugateBaseMolecule:
+    def _settings(self, **overrides):
+        kwargs = dict(
+            proton_index=2,
+            reference_file="ref.xyz",
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+        )
+        kwargs.update(overrides)
+        return GaussianpKaJobSettings(**kwargs)
+
+    def test_missing_reference_proton_index_raises(self):
+        settings = self._settings(reference_proton_index=None)
+        with pytest.raises(
+            ValueError, match="reference_proton_index must be specified"
+        ):
+            settings._create_reference_conjugate_base_molecule(_mol_with_h())
+
+    def test_out_of_range_reference_proton_index_raises(self):
+        settings = self._settings(reference_proton_index=999)
+        with pytest.raises(ValueError, match="out of range"):
+            settings._create_reference_conjugate_base_molecule(_mol_with_h())
+
+    def test_non_hydrogen_reference_proton_index_raises(self):
+        settings = self._settings(reference_proton_index=1)  # index 1 = C
+        with pytest.raises(ValueError, match="not hydrogen"):
+            settings._create_reference_conjugate_base_molecule(_mol_with_h())
+
+    def test_frozen_atoms_are_filtered(self):
+        settings = self._settings(reference_proton_index=2)
+        mol = _mol_with_h(frozen_atoms=[0, 0, 0, 0, 0])
+        result = settings._create_reference_conjugate_base_molecule(mol)
+        assert len(result.frozen_atoms) == 4
+
+    def test_explicit_reference_conjugate_base_charge_and_multiplicity(self):
+        settings = self._settings(
+            reference_proton_index=2,
+            reference_conjugate_base_charge=-5,
+            reference_conjugate_base_multiplicity=3,
+        )
+        result = settings._create_reference_conjugate_base_molecule(
+            _mol_with_h()
+        )
+        assert result.charge == -5
+        assert result.multiplicity == 3
+
+    def test_default_reference_conjugate_base_charge_and_multiplicity(self):
+        settings = self._settings(reference_proton_index=2)
+        result = settings._create_reference_conjugate_base_molecule(
+            _mol_with_h()
+        )
+        assert result.charge == -1  # reference_charge - 1
+        assert result.multiplicity == 1  # reference_multiplicity
+
+
+class TestReferenceGasPhaseAndSolutionPhaseSettings:
+    def _settings(self, **overrides):
+        kwargs = dict(
+            proton_index=2,
+            reference_file="ref.xyz",
+            reference_proton_index=2,
+            reference_charge=0,
+            reference_multiplicity=1,
+            functional="b3lyp",
+            basis="sto-3g",
+        )
+        kwargs.update(overrides)
+        return GaussianpKaJobSettings(**kwargs)
+
+    def test_gas_phase_default_conjugate_base_charge_and_mult(self):
+        settings = self._settings()
+        acid, base = settings._create_reference_gas_phase_job_settings()
+        assert acid.charge == 0
+        assert base.charge == -1
+        assert base.multiplicity == 1
+
+    def test_gas_phase_explicit_conjugate_base_charge_and_mult(self):
+        settings = self._settings(
+            reference_conjugate_base_charge=-7,
+            reference_conjugate_base_multiplicity=2,
+        )
+        _, base = settings._create_reference_gas_phase_job_settings()
+        assert base.charge == -7
+        assert base.multiplicity == 2
+
+    def test_solution_phase_default_conjugate_base_charge_and_mult(self):
+        settings = self._settings()
+        acid, base = settings._create_reference_solution_phase_sp_settings()
+        assert acid.charge == 0
+        assert base.charge == -1
+        assert base.multiplicity == 1
+
+    def test_solution_phase_explicit_conjugate_base_charge_and_mult(self):
+        settings = self._settings(
+            reference_conjugate_base_charge=-7,
+            reference_conjugate_base_multiplicity=2,
+        )
+        _, base = settings._create_reference_solution_phase_sp_settings()
+        assert base.charge == -7
+        assert base.multiplicity == 2
+
+
+class TestProtonatedMolecule:
+    def test_explicit_settings_charge_and_multiplicity_used(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2, charge=2, multiplicity=3
+        )
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        result = settings.protonated_molecule(mol)
+        assert result.charge == 2
+        assert result.multiplicity == 3
+
+    def test_falls_back_to_molecule_charge_and_multiplicity(self):
+        settings = GaussianpKaJobSettings(proton_index=2)
+        settings.charge = None
+        settings.multiplicity = None
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        result = settings.protonated_molecule(mol)
+        assert result.charge == 0
+        assert result.multiplicity == 1
+
+
+class TestCreateGasPhaseJobSettings:
+    def test_explicit_settings_charge_and_multiplicity_used(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            functional="b3lyp",
+            basis="sto-3g",
+            charge=1,
+            multiplicity=2,
+        )
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        prot, _ = settings._create_gas_phase_job_settings(mol)
+        assert prot.charge == 1
+        assert prot.multiplicity == 2
+
+    def test_explicit_conjugate_base_charge_and_multiplicity(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            functional="b3lyp",
+            basis="sto-3g",
+            charge=0,
+            multiplicity=1,
+            conjugate_base_charge=-9,
+            conjugate_base_multiplicity=4,
+        )
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        _, base = settings._create_gas_phase_job_settings(mol)
+        assert base.charge == -9
+        assert base.multiplicity == 4
+
+
+class TestCreateMolecules:
+    def test_explicit_settings_charge_and_multiplicity_used(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2, charge=3, multiplicity=2
+        )
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        prot, _ = settings._create_molecules(mol)
+        assert prot.charge == 3
+        assert prot.multiplicity == 2
+
+    def test_falls_back_to_defaults_when_molecule_charge_none(self):
+        settings = GaussianpKaJobSettings(proton_index=2)
+        settings.charge = None
+        settings.multiplicity = None
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        prot, _ = settings._create_molecules(mol)
+        assert prot.charge == 0
+        assert prot.multiplicity == 1
+
+
+class TestCreateSolutionPhaseSpSettings:
+    def test_explicit_settings_charge_and_multiplicity_used(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            functional="b3lyp",
+            basis="sto-3g",
+            charge=1,
+            multiplicity=2,
+        )
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        prot, _ = settings._create_solution_phase_sp_settings(mol)
+        assert prot.charge == 1
+        assert prot.multiplicity == 2
+
+    def test_explicit_conjugate_base_charge_and_multiplicity(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2,
+            functional="b3lyp",
+            basis="sto-3g",
+            charge=0,
+            multiplicity=1,
+            conjugate_base_charge=-9,
+            conjugate_base_multiplicity=4,
+        )
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        _, base = settings._create_solution_phase_sp_settings(mol)
+        assert base.charge == -9
+        assert base.multiplicity == 4
+
+    def test_falls_back_to_defaults_when_molecule_charge_none(self):
+        settings = GaussianpKaJobSettings(
+            proton_index=2, functional="b3lyp", basis="sto-3g"
+        )
+        settings.charge = None
+        settings.multiplicity = None
+        mol = _mol_with_h(charge=None, multiplicity=None)
+        prot, _ = settings._create_solution_phase_sp_settings(mol)
+        assert prot.charge == 0
+        assert prot.multiplicity == 1
+
+
+class TestLegacyChargeMultiplicityFallback:
+    def test_canonical_charge_intermediate_used_directly(self):
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            charge_intermediate=5,
+            mult_intermediate=6,
+        )
+        assert settings.charge_intermediate == 5
+        assert settings.mult_intermediate == 6
+        assert settings.int_charge == 5
+        assert settings.int_multiplicity == 6
+
+
+class TestRouteStringDiezeTagAndIrc:
+    def test_dieze_tag_prepended(self):
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            parent_jobtype="sp",
+            dieze_tag="p",
+        )
+        assert settings.route_string.startswith("#p")
+
+    def test_irc_parent_jobtype_adds_irc_keyword(self):
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            parent_jobtype="irc",
+        )
+        assert " irc" in settings.route_string
+
+
+class TestOniomStringBranches:
+    def test_medium_only_level_specified(self):
+        # medium_level_atoms must be set for the medium layer to count --
+        # a medium level of theory with no atoms assigned to it is treated
+        # as absent (see _get_oniom_string's `and self.medium_level_atoms`
+        # guard).
+        settings = GaussianQMMMJobSettings(
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            medium_level_atoms=[2],
+            charge_total=0,
+            mult_total=1,
+        )
+        oniom_string = settings._get_oniom_string()
+        assert oniom_string == " oniom(b3lyp/6-31g(d))"
+
+    def test_low_only_level_specified(self):
+        settings = GaussianQMMMJobSettings(
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+        )
+        oniom_string = settings._get_oniom_string()
+        assert oniom_string == " oniom(uff)"
+
+    def test_no_levels_specified_bare_oniom(self):
+        settings = GaussianQMMMJobSettings(charge_total=0, mult_total=1)
+        assert settings._get_oniom_string() == " oniom"
+
+
+class TestChargeAndMultiplicityErrors:
+    def test_two_layer_inconsistent_specification_raises(self):
+        # Only model_charge given (not model_multiplicity) for a 2-layer
+        # job (no medium level) -- doesn't match any of the "fill from
+        # a single reference level" patterns, so it must raise.
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            model_charge=-1,
+        )
+        with pytest.raises(ValueError, match="cannot override"):
+            settings.charge_and_multiplicity_string
+
+    def test_three_layer_fills_from_intermediate_when_only_real_and_int_set(
+        self,
+    ):
+        # This is the only reachable "partial fill" branch other than
+        # "only real specified": see BUGS_FOUND.md for why the
+        # "int_med only" and "model_high only" fill branches are dead
+        # code (int_med/int_low and model_high/model_med/model_low are
+        # always equal, since they all derive from the same single
+        # int_charge/int_multiplicity and model_charge/model_multiplicity
+        # constructor parameters respectively).
+        # medium_level_atoms must be set, otherwise this is treated as a
+        # 2-layer job regardless of int_charge/int_multiplicity (see the
+        # `not self.medium_level_atoms` guard in _get_charge_and_multiplicity).
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            medium_level_atoms=[2],
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            int_charge=-1,
+            int_multiplicity=2,
+        )
+        assert (
+            settings.charge_and_multiplicity_string
+            == "0 1 -1 2 -1 2 -1 2 -1 2 -1 2"
+        )
+
+    def test_three_layer_inconsistent_specification_raises(self):
+        # int_charge set without int_multiplicity, and model_charge set
+        # without model_multiplicity: doesn't match any single-level
+        # fill pattern, so it must raise.
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="mn15",
+            high_level_basis="def2svp",
+            medium_level_functional="b3lyp",
+            medium_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+            int_charge=1,
+            model_charge=0,
+        )
+        with pytest.raises(ValueError, match="cannot override"):
+            settings.charge_and_multiplicity_string
+
+
+class TestEquality:
+    def test_different_types_returns_not_implemented(self):
+        settings = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+        )
+        assert settings.__eq__(object()) is NotImplemented
+
+    def test_equal_settings(self):
+        kwargs = dict(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+        )
+        s1 = GaussianQMMMJobSettings(**kwargs)
+        s2 = GaussianQMMMJobSettings(**kwargs)
+        assert s1 == s2
+
+    def test_unequal_settings_logs_diff(self, caplog):
+        s1 = GaussianQMMMJobSettings(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g(d)",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+        )
+        s2 = GaussianQMMMJobSettings(
+            high_level_functional="wb97xd",
+            high_level_basis="def2-tzvp",
+            low_level_force_field="uff",
+            charge_total=0,
+            mult_total=1,
+        )
+        with caplog.at_level("INFO"):
+            assert not (s1 == s2)
+        assert "not equal" in caplog.text
+
+
+class TestIRCRouteString:
+    def test_jobtype_neither_ircf_nor_ircr_leaves_direction_unset(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="irc",
+            predictor="LQA",
+            recorrect="never",
+            direction="forward",
+        )
+        settings._get_route_string_from_jobtype()
+        # direction is untouched by the ircf/ircr-specific branches
+        assert settings.direction == "forward"
+
+    def test_predictor_and_recorrect_both_specified(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            predictor="LQA",
+            recorrect="never",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "irc(LQA,calcfc,recorrect=never" in route
+        assert "forward" in route
+        assert settings.direction == "forward"
+
+    def test_ircr_sets_reverse_direction(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircr",
+            predictor="LQA",
+            recorrect="never",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "reverse" in route
+        assert settings.direction == "reverse"
+
+    def test_neither_predictor_nor_recorrect_uses_basic_route(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="ircf"
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "irc(calcfc,recalc=" in route
+        assert "LQA" not in route
+
+    def test_only_predictor_specified_raises(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            predictor="LQA",
+        )
+        with pytest.raises(ValueError, match="Only one of predictor"):
+            settings._get_route_string_from_jobtype()
+
+    def test_only_recorrect_specified_raises(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            recorrect="never",
+        )
+        with pytest.raises(ValueError, match="Only one of predictor"):
+            settings._get_route_string_from_jobtype()
+
+    def test_flat_irc_applies_defaults(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            flat_irc=True,
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert settings.predictor == "LQA"
+        assert settings.recorrect == "never"
+        assert settings.recalc_step == -5
+        assert "irc(LQA,calcfc,recorrect=never" in route
+
+    def test_flat_irc_does_not_override_explicit_recalc_step(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            flat_irc=True,
+            recalc_step=3,
+        )
+        settings._get_route_string_from_jobtype()
+        assert settings.recalc_step == 3
+
+    def test_additional_route_parameters_appended_once(self):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            additional_route_parameters="scf=qc",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert route.count("scf=qc") == 1
+
+    def test_additional_route_parameters_not_duplicated_if_present(self):
+        # The base class (via super()._get_route_string_from_jobtype())
+        # unconditionally appends additional_route_parameters once
+        # already; IRC's own duplicate-check at the end of the method
+        # then correctly recognizes it's already present and skips
+        # re-appending it, so it still only shows up once overall.
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            additional_route_parameters="iop(1/8=3)",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert route.count("iop(1/8=3)") == 1
+
+
+class TestLinkRouteString:
+    def test_link_route_string_uses_custom_link_route(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="opt",
+            link_route="#p opt",
+        )
+        result = settings.link_route_string
+        assert "b3lyp" in result
+        assert "sto-3g" in result
+        assert "geom=check" in result
+        assert "guess=read" in result
+
+    def test_link_route_string_skips_already_present_tokens(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="opt",
+            link_route="#p opt b3lyp sto-3g geom=check guess=read",
+        )
+        result = settings.link_route_string
+        assert result.count("b3lyp") == 1
+        assert result.count("sto-3g") == 1
+        assert result.count("geom=check") == 1
+        assert result.count("guess=read") == 1
+
+    def test_link_route_string_falls_back_to_jobtype_logic(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="opt"
+        )
+        result = settings.link_route_string
+        assert "geom=check" in result
+        assert "guess=read" in result
+
+    def test_stability_route_removes_opt_and_freq_keywords(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="opt",
+            freq=True,
+            stable="opt",
+            guess="mix",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "opt" not in route.replace("stable=opt", "")
+        assert "freq" not in route
+        assert "stable=opt" in route
+        assert "guess=mix" in route
+
+    def test_guess_with_comma_gets_parenthesized(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="opt",
+            guess="mix,always",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "guess=(mix,always)" in route
+
+    def test_guess_with_surrounding_parens_normalized(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="opt",
+            guess="(mix,always)",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "guess=(mix,always)" in route
+        assert "guess=((mix,always))" not in route
+
+    def test_no_stable_or_guess_omits_both(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="opt",
+            stable=None,
+            guess=None,
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "stable=" not in route
+        assert "guess=" not in route
+
+    def test_link_route_for_non_irc_jobtype(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp", basis="sto-3g", jobtype="opt"
+        )
+        route = settings._get_link_route_string_from_jobtype()
+        assert "geom=check" in route
+        assert "guess=read" in route
+
+    def test_link_route_for_irc_jobtype_delegates_to_irc_settings(self):
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            predictor="LQA",
+            recorrect="never",
+        )
+        route = settings._get_link_route_string_from_jobtype()
+        assert "irc(LQA" in route
+        assert "geom=check" in route
+        assert "guess=read" in route
+
+    def test_link_route_for_irc_does_not_duplicate_existing_tokens(self):
+        # If the IRC-generated route already ends up containing
+        # "geom=check"/"guess=read" (unlikely in practice, but the guard
+        # exists), the method must not duplicate them. We simulate this
+        # by checking the guard directly via the additional_route_parameters
+        # channel, which is appended by the underlying IRC settings.
+        settings = GaussianLinkJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            jobtype="ircf",
+            predictor="LQA",
+            recorrect="never",
+            additional_route_parameters="geom=check guess=read",
+        )
+        route = settings._get_link_route_string_from_jobtype()
+        assert route.count("geom=check") == 1
+        assert route.count("guess=read") == 1
+
+
+class TestBuildGaussianPkaSettings:
+    def test_builds_settings_with_defaults(self):
+        opt_settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g", charge=0, multiplicity=1
+        )
+        shared = {
+            "reference": "ref.log",
+            "delta_g_proton": -270.3,
+            "reference_color_code": "red",
+            "skip_completed": True,
+        }
+        settings = GaussianpKaJobSettings.build_gaussian_pka_settings(
+            proton_index=1, shared=shared, opt_settings=opt_settings
+        )
+        assert settings.proton_index == 1
+        assert settings.reference_file == "ref.log"
+        assert settings.delta_G_proton == -270.3
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "sto-3g"
+        # cli_only keys must not leak into the constructed settings kwargs
+        assert not hasattr(settings, "reference_color_code")
+        # Defaults applied since neither pka_kwargs nor opt/sp settings
+        # specify solvent info.
+        assert settings.solvent_model == "SMD"
+        assert settings.solvent_id == "water"
+
+    def test_solvent_settings_prefer_explicit_shared_values(self):
+        opt_settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            solvent_model="PCM",
+            solvent_id="dmso",
+        )
+        shared = {"solvent_model": "SMD", "solvent_id": "acetonitrile"}
+        settings = GaussianpKaJobSettings.build_gaussian_pka_settings(
+            proton_index=2, shared=shared, opt_settings=opt_settings
+        )
+        assert settings.solvent_model == "SMD"
+        assert settings.solvent_id == "acetonitrile"
+
+    def test_solvent_settings_from_opt_settings_crashes(self):
+        # Documents a real bug: when opt_settings carries a non-None
+        # solvent_model/solvent_id and `shared` doesn't override it, the
+        # resolved value ends up in both `pka_kwargs` (via the
+        # solvent_model/solvent_id fallback resolution) and `opt_kwargs`
+        # (via the vars(opt_settings) passthrough, since at the time
+        # opt_kwargs is built pka_kwargs doesn't contain solvent_model/
+        # solvent_id yet). Passing both dicts as **kwargs to the same
+        # call then raises "got multiple values for keyword argument".
+        # See BUGS_FOUND.md.
+        opt_settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            solvent_model="PCM",
+            solvent_id="dmso",
+        )
+        with pytest.raises(TypeError, match="multiple values"):
+            GaussianpKaJobSettings.build_gaussian_pka_settings(
+                proton_index=2, shared={}, opt_settings=opt_settings
+            )
+
+    def test_solvent_settings_fall_back_to_sp_settings(self):
+        opt_settings = GaussianJobSettings(functional="b3lyp", basis="sto-3g")
+        sp_settings = GaussianJobSettings(
+            functional="wb97xd",
+            basis="def2-tzvp",
+            solvent_model="SMD",
+            solvent_id="methanol",
+        )
+        settings = GaussianpKaJobSettings.build_gaussian_pka_settings(
+            proton_index=3,
+            shared={},
+            opt_settings=opt_settings,
+            sp_settings=sp_settings,
+        )
+        assert settings.solvent_model == "SMD"
+        assert settings.solvent_id == "methanol"
+
+    def test_opt_kwargs_do_not_override_explicit_pka_kwargs(self):
+        opt_settings = GaussianJobSettings(
+            functional="b3lyp", basis="sto-3g", charge=5
+        )
+        shared = {"charge": 0}
+        settings = GaussianpKaJobSettings.build_gaussian_pka_settings(
+            proton_index=1, shared=shared, opt_settings=opt_settings
+        )
+        assert settings.charge == 0
+
+
+class TestTDDFTRouteString:
+    def test_eqsolv_none_omits_eqsolv_option(self):
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        settings = GaussianTDDFTJobSettings(
+            functional="cam-b3lyp",
+            basis="def2svp",
+            jobtype="sp",
+            eqsolv=None,
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "TD(singlets,nstates=3,root=1)" in route
+
+    def test_valid_eqsolv_option_included(self):
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        settings = GaussianTDDFTJobSettings(
+            functional="cam-b3lyp",
+            basis="def2svp",
+            jobtype="sp",
+            eqsolv="noneqsolv",
+        )
+        route = settings._get_route_string_from_jobtype()
+        assert "TD(singlets,nstates=3,root=1,noneqsolv)" in route
+
+    def test_invalid_eqsolv_option_raises_assertion(self):
+        from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
+
+        settings = GaussianTDDFTJobSettings(
+            functional="cam-b3lyp",
+            basis="def2svp",
+            jobtype="sp",
+            eqsolv="bogus",
+        )
+        with pytest.raises(AssertionError, match="equilibrium solvation"):
+            settings._get_route_string_from_jobtype()
+
+
+class TestBaseCheckSolvent:
+    def test_check_solvent_is_a_no_op_on_the_base_class(self):
+        # GaussianJobSettings/ORCAJobSettings override _check_solvent with
+        # real validation; the base MolecularJobSettings implementation is
+        # a deliberate no-op hook for subclasses that don't need it.
+        settings = MolecularJobSettings()
+        assert settings._check_solvent("anything") is None
+        settings.update_solvent(solvent_model="pcm")
+        assert settings.solvent_model == "pcm"
+
+
+class TestCustomSolventValidation:
+    def test_rejects_non_string_custom_solvent(self):
+        with pytest.raises(ValueError, match="must be a string"):
+            GaussianJobSettings(custom_solvent=123)
+
+    def test_custom_solvent_free_text_stored_with_trailing_newline(self):
+        settings = GaussianJobSettings(custom_solvent="eps=78.4")
+        assert settings.custom_solvent == "eps=78.4\n"
+
+    def test_custom_solvent_free_text_preserves_existing_newline(self):
+        settings = GaussianJobSettings(custom_solvent="eps=78.4\n")
+        assert settings.custom_solvent == "eps=78.4\n"
+
+    def test_custom_solvent_from_file(self, tmp_path):
+        solvent_file = tmp_path / "solvent.txt"
+        solvent_file.write_text("eps=78.4\nrsolv=1.0\n")
+        settings = GaussianJobSettings(custom_solvent=str(solvent_file))
+        assert settings.custom_solvent == "eps=78.4\nrsolv=1.0\n"
+
+    def test_set_custom_solvent_via_file_missing_raises(self):
+        settings = GaussianJobSettings()
+        with pytest.raises(ValueError, match="does not exist"):
+            settings.set_custom_solvent_via_file("/no/such/file.txt")
+
+    def test_custom_solvent_defaults_to_none(self):
+        settings = GaussianJobSettings()
+        assert settings.custom_solvent is None
+
+
+class TestSolventHelpers:
+    def test_remove_solvent_clears_all_solvent_fields(self):
+        settings = GaussianJobSettings(solvent_model="smd", solvent_id="water")
+        settings.custom_solvent = "eps=78.4\n"
+        settings.remove_solvent()
+        assert settings.solvent_model is None
+        assert settings.solvent_id is None
+        assert settings.custom_solvent is None
+
+    def test_update_solvent_only_updates_given_fields(self):
+        settings = GaussianJobSettings(solvent_model="smd", solvent_id="water")
+        settings.update_solvent(solvent_id="toluene")
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "toluene"
+
+    def test_update_solvent_no_op_when_nothing_given(self):
+        settings = GaussianJobSettings(solvent_model="smd", solvent_id="water")
+        settings.update_solvent()
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+
+    def test_modify_solvent_remove_flag_removes(self):
+        settings = GaussianJobSettings(solvent_model="smd", solvent_id="water")
+        settings.modify_solvent(remove_solvent=True)
+        assert settings.solvent_model is None
+
+    def test_modify_solvent_without_remove_updates(self):
+        settings = GaussianJobSettings()
+        settings.modify_solvent(
+            remove_solvent=False, solvent_model="cpcm", solvent_id="dmso"
+        )
+        assert settings.solvent_model == "cpcm"
+        assert settings.solvent_id == "dmso"
+
+
+class TestFromDict:
+    def test_from_dict_constructs_settings(self):
+        settings = GaussianJobSettings.from_dict(
+            {"functional": "b3lyp", "basis": "6-31g(d)"}
+        )
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "6-31g(d)"
+
+
+class TestFromDatabase:
+    def test_raises_when_file_missing(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match="Database file not"):
+            GaussianJobSettings.from_database(
+                filepath=str(tmp_path / "nope.db")
+            )
+
+    def test_structure_id_and_record_selector_mutually_exclusive(
+        self, tmp_path
+    ):
+        db_file = tmp_path / "test.db"
+        db_file.write_text("")
+        with patch("chemsmart.database.database.Database"):
+            with pytest.raises(ValueError, match="not both"):
+                GaussianJobSettings.from_database(
+                    filepath=str(db_file),
+                    structure_id="abc123",
+                    record_index=1,
+                )
+
+    def test_structure_id_not_found_raises(self, tmp_path):
+        db_file = tmp_path / "test.db"
+        db_file.write_text("")
+        mock_db = MagicMock()
+        mock_db.get_structure_by_partial_id.return_value = "full-sid"
+        mock_db.get_structure.return_value = None
+        with patch(
+            "chemsmart.database.database.Database", return_value=mock_db
+        ):
+            with pytest.raises(ValueError, match="No structure found"):
+                GaussianJobSettings.from_database(
+                    filepath=str(db_file), structure_id="abc"
+                )
+
+    def test_structure_id_populates_charge_and_multiplicity(self, tmp_path):
+        db_file = tmp_path / "test.db"
+        db_file.write_text("")
+        mock_db = MagicMock()
+        mock_db.get_structure_by_partial_id.return_value = "full-sid"
+        mock_db.get_structure.return_value = {
+            "charge": 1,
+            "multiplicity": 2,
+        }
+        with patch(
+            "chemsmart.database.database.Database", return_value=mock_db
+        ):
+            settings = GaussianJobSettings.from_database(
+                filepath=str(db_file), structure_id="abc"
+            )
+        assert settings.charge == 1
+        assert settings.multiplicity == 2
+        assert "chemsmart database" in settings.title
+
+    def test_record_not_found_returns_none(self, tmp_path):
+        db_file = tmp_path / "test.db"
+        db_file.write_text("")
+        with (
+            patch("chemsmart.database.database.Database"),
+            patch(
+                "chemsmart.database.utils.resolve_record", return_value=None
+            ),
+        ):
+            result = GaussianJobSettings.from_database(
+                filepath=str(db_file), record_index=1
+            )
+        assert result is None
+
+    def test_record_selector_populates_settings_from_meta_and_structure(
+        self, tmp_path
+    ):
+        db_file = tmp_path / "test.db"
+        db_file.write_text("")
+        fake_record = {
+            "meta": {
+                "method": "b3lyp",
+                "basis": "6-31g(d)",
+                "jobtype": "opt",
+                "solvent_model": "smd",
+                "solvent_id": "water",
+                "custom_solvent": None,
+            },
+            "molecules": [{"charge": 0, "multiplicity": 1}],
+        }
+        with (
+            patch("chemsmart.database.database.Database"),
+            patch(
+                "chemsmart.database.utils.resolve_record",
+                return_value=fake_record,
+            ),
+        ):
+            settings = GaussianJobSettings.from_database(
+                filepath=str(db_file), record_index=1, structure_index="-1"
+            )
+
+        assert settings.charge == 0
+        assert settings.multiplicity == 1
+        assert settings.functional == "b3lyp"
+        assert settings.basis == "6-31g(d)"
+        assert settings.jobtype == "opt"
+        assert settings.solvent_model == "smd"
+        assert settings.solvent_id == "water"
+
+    def test_record_with_slice_structure_index_raises(self, tmp_path):
+        db_file = tmp_path / "test.db"
+        db_file.write_text("")
+        fake_record = {"meta": {}, "molecules": [{}]}
+        with (
+            patch("chemsmart.database.database.Database"),
+            patch(
+                "chemsmart.database.utils.resolve_record",
+                return_value=fake_record,
+            ),
+        ):
+            with pytest.raises(ValueError, match="one structure at a time"):
+                GaussianJobSettings.from_database(
+                    filepath=str(db_file),
+                    record_index=1,
+                    structure_index=":",
+                )
+
+    def test_record_structure_index_out_of_range_raises(self, tmp_path):
+        db_file = tmp_path / "test.db"
+        db_file.write_text("")
+        fake_record = {"meta": {}, "molecules": [{"charge": 0}]}
+        with (
+            patch("chemsmart.database.database.Database"),
+            patch(
+                "chemsmart.database.utils.resolve_record",
+                return_value=fake_record,
+            ),
+        ):
+            with pytest.raises(ValueError, match="out of range"):
+                GaussianJobSettings.from_database(
+                    filepath=str(db_file),
+                    record_index=1,
+                    structure_index="5",
+                )

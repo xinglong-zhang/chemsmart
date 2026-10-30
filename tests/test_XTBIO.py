@@ -23,6 +23,93 @@ from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.io.xtb.route import XTBRoute
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
 
+_MALFORMED_GROUPS = {
+    "chrg": ["notanumber"],
+    "spin": ["notanumber"],
+    "cube": [
+        "step=notanumber",
+        "pthr=notanumber",
+        "boff=notanumber",
+        "cal=notanumber",
+    ],
+    "embedding": ["at=notanumber"],
+    "gfn": ["dispscale=notanumber"],
+    "hess": [
+        "sccacc=notanumber",
+        "step=notanumber",
+        "scale=notanumber",
+    ],
+    "md": [
+        "temp=notanumber",
+        "time=notanumber",
+        "dump=notanumber",
+        "skip=notanumber",
+        "step=notanumber",
+        "hmass=notanumber",
+        "shake=notanumber",
+        "sccacc=notanumber",
+    ],
+    "modef": [
+        "n=notanumber",
+        "step=notanumber",
+        "updat=notanumber",
+        "local=notanumber",
+        "vthr=notanumber",
+        "prj=notanumber",
+        "mode=notanumber",
+    ],
+    "opt": [
+        "optlevel=notanumber",
+        "microcycle=notanumber",
+        "maxcycle=notanumber",
+        "maxdispl=notanumber",
+        "hlow=notanumber",
+        "s6=notanumber",
+        "kstretch=notanumber",
+        "kbend=notanumber",
+        "ktorsion=notanumber",
+        "koutofp=notanumber",
+        "kvdw=notanumber",
+        "kes=notanumber",
+        "rcut=notanumber",
+    ],
+    "path": [
+        "nrun=notanumber",
+        "npoint=notanumber",
+        "anopt=notanumber",
+        "kpush=notanumber",
+        "kpull=notanumber",
+        "alp=notanumber",
+    ],
+    "scc": [
+        "maxiterations=notanumber",
+        "temp=notanumber",
+        "broydamp=notanumber",
+    ],
+    "symmetry": ["desy=notanumber", "maxat=notanumber"],
+    "thermo": [
+        "temp=notanumber",
+        "sthr=notanumber",
+        "imagthr=notanumber",
+        "scale=notanumber",
+    ],
+    "wall": [
+        "alpha=notanumber",
+        "beta=notanumber",
+        "temp=notanumber",
+        "autoscale=notanumber",
+        "axisshift=notanumber",
+    ],
+}
+
+
+def _make_malformed_input():
+    """Bare XTBInput with every numeric key set to a non-numeric
+    string, to force every ValueError-fallback branch at once."""
+    inp = XTBInput.__new__(XTBInput)
+    inp.__dict__["content_groups"] = _MALFORMED_GROUPS
+    return inp
+
 
 class TestXTBRoute:
     """Tests for XTBRoute class."""
@@ -2524,7 +2611,7 @@ class TestXTBOutputReadGeometryFile:
 
     @pytest.mark.parametrize(
         ("fixture_name", "expected_cls"),
-        (("sdf_file", SDFFile), ("single_model_pdb_file", PDBFile)),
+        (("water_sdf_file", SDFFile), ("single_model_pdb_file", PDBFile)),
     )
     @pytest.mark.parametrize(
         ("path_property", "file_property"),
@@ -2720,3 +2807,483 @@ class TestXTBOutputGetMolecule:
         ):
             with pytest.raises(ValueError, match="No molecule could be found"):
                 output.get_molecule()
+
+
+class TestXTBRouteInit:
+    def test_lowercases_and_splits_route_string(self):
+        route = XTBRoute("XTB Coord.xyz --GFN 2 --Opt Tight")
+        assert route.route_string == "xtb coord.xyz --gfn 2 --opt tight"
+        assert route.route_inputs == [
+            "xtb",
+            "coord.xyz",
+            "--gfn",
+            "2",
+            "--opt",
+            "tight",
+        ]
+
+
+class TestXTBRouteGfnVersionAndMethod:
+    @pytest.mark.parametrize(
+        "flag,expected",
+        [
+            ("--gfn0", "gfn0"),
+            ("--gfn1", "gfn1"),
+            ("--gfn2", "gfn2"),
+            ("--gfnff", "gfnff"),
+        ],
+    )
+    def test_explicit_gfn_flags(self, flag, expected):
+        route = XTBRoute(f"xtb coord.xyz {flag}")
+        assert route.gfn_version == expected
+        assert route.method == expected
+
+    def test_gff_alias_for_gfnff(self):
+        route = XTBRoute("xtb coord.xyz --gff")
+        assert route.gfn_version == "gfnff"
+
+    @pytest.mark.parametrize(
+        "num,expected",
+        [("0", "gfn0"), ("1", "gfn1"), ("2", "gfn2")],
+    )
+    def test_gfn_int_format(self, num, expected):
+        route = XTBRoute(f"xtb coord.xyz --gfn {num}")
+        assert route.gfn_version == expected
+
+    def test_gfn_int_out_of_supported_range_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --gfn 3")
+        assert route.gfn_version is None
+
+    def test_gfn_non_integer_value_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --gfn abc")
+        assert route.gfn_version is None
+
+    def test_gfn_flag_at_end_of_route_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --gfn")
+        assert route.gfn_version is None
+
+    def test_no_method_specified_returns_none(self):
+        route = XTBRoute("xtb coord.xyz")
+        assert route.gfn_version is None
+        assert route.method is None
+
+
+class TestXTBRouteBasis:
+    def test_basis_always_default(self):
+        assert XTBRoute("xtb coord.xyz").basis == "default"
+
+
+class TestXTBRouteOptimizationLevel:
+    @pytest.mark.parametrize(
+        "flag", ["--opt", "-o", "--optlevel", "--metaopt"]
+    )
+    def test_each_flag_reads_following_level(self, flag):
+        route = XTBRoute(f"xtb coord.xyz {flag} tight")
+        assert route.optimization_level == "tight"
+
+    def test_verytight_normalized_to_vtight(self):
+        route = XTBRoute("xtb coord.xyz --opt verytight")
+        assert route.optimization_level == "vtight"
+
+    def test_unknown_level_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --opt bogus_level")
+        assert route.optimization_level is None
+
+    def test_flag_at_end_of_route_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --opt")
+        assert route.optimization_level is None
+
+    def test_no_opt_flag_returns_none(self):
+        route = XTBRoute("xtb coord.xyz")
+        assert route.optimization_level is None
+
+
+class TestXTBRouteChargeAndUhf:
+    @pytest.mark.parametrize("flag", ["--chrg", "-c"])
+    def test_charge_flags(self, flag):
+        route = XTBRoute(f"xtb coord.xyz {flag} -1")
+        assert route.charge == -1
+
+    def test_charge_invalid_value_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --chrg notanumber")
+        assert route.charge is None
+
+    def test_charge_flag_at_end_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --chrg")
+        assert route.charge is None
+
+    def test_no_charge_flag_returns_none(self):
+        assert XTBRoute("xtb coord.xyz").charge is None
+
+    @pytest.mark.parametrize("flag", ["--uhf", "-u"])
+    def test_uhf_flags(self, flag):
+        route = XTBRoute(f"xtb coord.xyz {flag} 2")
+        assert route.uhf == 2
+
+    def test_uhf_invalid_value_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --uhf notanumber")
+        assert route.uhf is None
+
+    def test_uhf_flag_at_end_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --uhf")
+        assert route.uhf is None
+
+    def test_no_uhf_flag_returns_none(self):
+        assert XTBRoute("xtb coord.xyz").uhf is None
+
+
+class TestXTBRouteJobtype:
+    @pytest.mark.parametrize(
+        "flag",
+        ["--opt", "-o", "--omd", "--metaopt", "--ohess", "--bhess"],
+    )
+    def test_opt_keywords(self, flag):
+        route = XTBRoute(f"xtb coord.xyz {flag}")
+        assert route.jobtype == "opt"
+        assert route.get_jobtype() == "opt"
+
+    def test_hess_keyword(self):
+        assert XTBRoute("xtb coord.xyz --hess").jobtype == "hess"
+
+    @pytest.mark.parametrize("flag", ["--md", "--metadyn"])
+    def test_md_keywords(self, flag):
+        assert XTBRoute(f"xtb coord.xyz {flag}").jobtype == "md"
+
+    def test_path_keyword(self):
+        assert XTBRoute("xtb coord.xyz --path").jobtype == "path"
+
+    def test_modef_keyword(self):
+        assert XTBRoute("xtb coord.xyz --modef").jobtype == "modef"
+
+    def test_default_is_sp(self):
+        assert XTBRoute("xtb coord.xyz").jobtype == "sp"
+
+    def test_opt_takes_precedence_over_hess(self):
+        """--ohess/--bhess do an optimization first, so they resolve to
+        'opt' even though they also imply a Hessian calculation."""
+        assert XTBRoute("xtb coord.xyz --ohess").jobtype == "opt"
+        assert XTBRoute("xtb coord.xyz --bhess").jobtype == "opt"
+
+
+class TestXTBRouteFreqAndGrad:
+    @pytest.mark.parametrize("flag", ["--hess", "--ohess", "--bhess"])
+    def test_freq_true_for_hessian_flags(self, flag):
+        assert XTBRoute(f"xtb coord.xyz {flag}").freq is True
+
+    def test_freq_false_without_hessian_flags(self):
+        assert XTBRoute("xtb coord.xyz --opt").freq is False
+
+    def test_grad_true(self):
+        assert XTBRoute("xtb coord.xyz --grad").grad is True
+
+    def test_grad_false(self):
+        assert XTBRoute("xtb coord.xyz").grad is False
+
+
+class TestXTBRouteSolventModelAndId:
+    @pytest.mark.parametrize(
+        "model", ["gbsa", "alpb", "cosmo", "tmcosmo", "cpcmx"]
+    )
+    def test_each_solvent_model_flag(self, model):
+        route = XTBRoute(f"xtb coord.xyz --{model} water")
+        assert route.solvent_model == model
+        assert route.get_solvent_model() == model
+
+    def test_g_alias_for_gbsa(self):
+        route = XTBRoute("xtb coord.xyz -g water")
+        assert route.solvent_model == "gbsa"
+
+    def test_no_solvent_model_returns_none(self):
+        assert XTBRoute("xtb coord.xyz").solvent_model is None
+
+    def test_solvent_id_extracted_when_model_present(self):
+        route = XTBRoute("xtb coord.xyz --alpb toluene")
+        assert route.solvent_id == "toluene"
+
+    def test_solvent_id_none_when_no_solvent_model(self):
+        route = XTBRoute("xtb coord.xyz toluene")
+        assert route.solvent_id is None
+
+    def test_solvent_id_none_when_model_present_but_no_matching_token(self):
+        route = XTBRoute("xtb coord.xyz --alpb")
+        assert route.solvent_id is None
+
+
+class TestXTBRouteAccuracyAndElectronicTemperature:
+    @pytest.mark.parametrize("flag", ["--acc", "-a"])
+    def test_accuracy_flags(self, flag):
+        route = XTBRoute(f"xtb coord.xyz {flag} 0.5")
+        assert route.accuracy == pytest.approx(0.5)
+
+    def test_accuracy_invalid_value_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --acc notanumber")
+        assert route.accuracy is None
+
+    def test_accuracy_flag_at_end_returns_none(self):
+        assert XTBRoute("xtb coord.xyz --acc").accuracy is None
+
+    def test_no_accuracy_flag_returns_none(self):
+        assert XTBRoute("xtb coord.xyz").accuracy is None
+
+    def test_electronic_temperature(self):
+        route = XTBRoute("xtb coord.xyz --etemp 500")
+        assert route.electronic_temperature == pytest.approx(500.0)
+
+    def test_electronic_temperature_invalid_value_returns_none(self):
+        route = XTBRoute("xtb coord.xyz --etemp notanumber")
+        assert route.electronic_temperature is None
+
+    def test_electronic_temperature_flag_at_end_returns_none(self):
+        assert XTBRoute("xtb coord.xyz --etemp").electronic_temperature is None
+
+    def test_no_electronic_temperature_flag_returns_none(self):
+        assert XTBRoute("xtb coord.xyz").electronic_temperature is None
+
+
+class TestXTBRouteBooleanFlags:
+    """Every simple "--flag in route_inputs" boolean property."""
+
+    @pytest.mark.parametrize(
+        "attr,flag",
+        [
+            ("ptb", "--ptb"),
+            ("spin_polarization", "--spinpol"),
+            ("charge_extended_hueckel", "--ceh"),
+            ("mulliken_population", "--pop"),
+            ("wbo", "--wbo"),
+            ("dipole", "--dipole"),
+            ("molden_file", "--molden"),
+            ("localized_molecular_orbitals", "--lmo"),
+            ("fractional_occupation_density", "--fod"),
+            ("electrostatic_potential", "--esp"),
+            ("stm_image", "--stm"),
+            ("vertical_ionization_potential", "--vip"),
+            ("vertical_electron_affinity", "--vea"),
+            ("vertical_ionization_and_affinity", "--vipea"),
+            ("fukui_indices", "--vfukui"),
+            ("electrophilicity_index", "--vomega"),
+            ("polarizability", "--alpha"),
+            ("center_of_mass_transform", "--cma"),
+        ],
+    )
+    def test_flag_true_when_present(self, attr, flag):
+        route = XTBRoute(f"xtb coord.xyz {flag}")
+        assert getattr(route, attr) is True
+
+    @pytest.mark.parametrize(
+        "attr",
+        [
+            "ptb",
+            "spin_polarization",
+            "charge_extended_hueckel",
+            "mulliken_population",
+            "wbo",
+            "dipole",
+            "molden_file",
+            "localized_molecular_orbitals",
+            "fractional_occupation_density",
+            "electrostatic_potential",
+            "stm_image",
+            "vertical_ionization_potential",
+            "vertical_electron_affinity",
+            "vertical_ionization_and_affinity",
+            "fukui_indices",
+            "electrophilicity_index",
+            "polarizability",
+            "center_of_mass_transform",
+        ],
+    )
+    def test_flag_false_when_absent(self, attr):
+        route = XTBRoute("xtb coord.xyz")
+        assert getattr(route, attr) is False
+
+
+class TestXTBInputFileNotFound:
+    def test_missing_file_raises(self):
+        with pytest.raises(FileNotFoundError, match="not found"):
+            XTBInput(filename="/no/such/xtb/input/file.inp")
+
+
+class TestXTBInputGetKey:
+    def test_group_not_present_returns_default(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {}
+        assert inp._get_key("cube", "step", "0.4") == "0.4"
+
+    def test_key_not_present_in_group_returns_default(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {"cube": ["boff=3.0"]}
+        assert inp._get_key("cube", "step", "0.4") == "0.4"
+
+
+class TestXTBInputContentGroups:
+    def test_lines_before_any_group_marker_are_ignored(self):
+        """A stray non-'$'-prefixed line before any group has been
+        opened has no current_group to append to."""
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["contents"] = [
+            "stray line with no group yet",
+            "$cube",
+            "step=0.4",
+        ]
+        assert inp.content_groups == {"cube": ["step=0.4"]}
+
+
+class TestXTBInputChargeAndSpin:
+    def test_charge_falls_back_to_zero_on_malformed_value(self):
+        assert _make_malformed_input().charge == 0
+
+    def test_spin_falls_back_to_zero_on_malformed_value(self):
+        assert _make_malformed_input().spin == 0
+
+    def test_charge_default_when_group_absent(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {}
+        assert inp.charge == 0
+
+    def test_spin_default_when_group_absent(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {}
+        assert inp.spin == 0
+
+
+class TestXTBInputNoneOnInvalidRatherThanNumericDefault:
+    """atom_type, modef_n, and mode_following return None (rather
+    than falling back to a numeric default) when the key is present
+    but not a valid integer."""
+
+    def test_atom_type_none_on_malformed_value(self):
+        assert _make_malformed_input().atom_type is None
+
+    def test_atom_type_none_when_key_absent(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {}
+        assert inp.atom_type is None
+
+    def test_modef_n_none_on_malformed_value(self):
+        assert _make_malformed_input().modef_n is None
+
+    def test_modef_n_none_when_key_absent(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {}
+        assert inp.modef_n is None
+
+    def test_mode_following_none_on_malformed_value(self):
+        assert _make_malformed_input().mode_following is None
+
+    def test_mode_following_none_when_key_absent(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {}
+        assert inp.mode_following is None
+
+
+class TestXTBInputOptimizationLevelFallback:
+    def test_unrecognized_string_and_non_integer_falls_back_to_normal(self):
+        assert _make_malformed_input().optimization_level == "normal"
+
+    @pytest.mark.parametrize(
+        "int_level,expected",
+        [
+            ("-3", "crude"),
+            ("-2", "sloppy"),
+            ("-1", "loose"),
+            ("0", "normal"),
+            ("1", "tight"),
+            ("2", "verytight"),
+            ("3", "extreme"),
+        ],
+    )
+    def test_integer_optlevel_maps_to_keyword(self, int_level, expected):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {"opt": [f"optlevel={int_level}"]}
+        assert inp.optimization_level == expected
+
+    def test_out_of_range_integer_falls_back_to_normal(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {"opt": ["optlevel=99"]}
+        assert inp.optimization_level == "normal"
+
+
+class TestXTBInputBooleanKeywordProperties:
+    """isotropic_electrostatic/scc/periodic/exact_rational_function/
+    average_convergence all compare `_get_key(...).lower() == "true"`,
+    so any non-"true" string (not just a literal "false") yields
+    False -- confirmed here rather than assumed."""
+
+    def test_non_true_string_is_falsy(self):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = {
+            "embedding": ["es=nonsense"],
+            "gfn": ["scc=nonsense", "periodic=nonsense"],
+            "opt": ["exact rf=nonsense", "average conv=nonsense"],
+        }
+        assert inp.isotropic_electrostatic is False
+        assert inp.scc is False
+        assert inp.periodic is False
+        assert inp.exact_rational_function is False
+        assert inp.average_convergence is False
+
+
+@pytest.mark.parametrize(
+    "attr,expected_default",
+    [
+        ("cube_step", 0.4),
+        ("density_matrix_threshold", 0.05),
+        ("boundary_offset", 3.0),
+        ("cube_output", 1),
+        ("dispersion_energy_scale", 1.0),
+        ("hess_scc_accuracy", 0.3),
+        ("hess_step", 0.005),
+        ("hess_scale", 1.0),
+        ("md_temperature", 298.15),
+        ("md_time", 50.0),
+        ("dump_structure", 50.0),
+        ("skip_interval", 500),
+        ("md_step", 4.0),
+        ("hydrogen_mass", 4),
+        ("shake_algorithm", 2),
+        ("md_scc_accuracy", 2.0),
+        ("modef_step", 1.0),
+        ("modef_update", 0.2),
+        ("modef_local", 0),
+        ("modef_threshold", 0.0),
+        ("projected_mode", 0),
+        ("anc_microcycles", 20),
+        ("max_optcycles", 0),
+        ("max_displacement", 1.0),
+        ("low_frequency_cutoff", 0.01),
+        ("s6_in_model_hessian", 20.0),
+        ("stretch_force_constant", 0.4),
+        ("bend_force_constant", 0.13),
+        ("torsion_force_constant", 0.0075),
+        ("out_of_plane_force_constant", 0.0),
+        ("additional_vdw_contribution", 0.0),
+        ("electrostatic_contribution", 0.0),
+        ("distance_cutoff", 8.366600265340756),
+        ("pathfinder_runs", 3),
+        ("path_points", 50),
+        ("path_optimization_steps", 3),
+        ("rmsd_push_factor", 0.05),
+        ("rmsd_pull_factor", -0.04),
+        ("rmsd_width", 0.7),
+        ("max_iterations", 250),
+        ("electronic_temperature", 300.0),
+        ("broyden_damping", 0.4),
+        ("symmetry_threshold", 0.1),
+        ("symmetry_max_atoms", 200),
+        ("thermo_temperature", 298.15),
+        ("rotor_cutoff", 50.0),
+        ("imaginary_frequency_cutoff", -20.0),
+        ("scaling_factor", 1.0),
+        ("wall_potential_exponent", 30),
+        ("logfermi_bias_exponent", 6.0),
+        ("wall_temperature", 300.0),
+        ("auto_scale", 1.0),
+        ("axis_shift", 3.5),
+    ],
+)
+def test_numeric_property_falls_back_to_default_on_malformed_value(
+    attr, expected_default
+):
+    inp = _make_malformed_input()
+    assert getattr(inp, attr) == expected_default

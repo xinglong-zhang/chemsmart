@@ -1,12 +1,15 @@
 import csv
 import json
 import sqlite3
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
 from chemsmart.database.assemble import (
+    BaseAssembler,
+    GaussianAssembler,
     SingleFileAssembler,
     SingleFolderAssembler,
 )
@@ -72,6 +75,65 @@ RECORD_ID_XTB_HE = (
 RECORD_ID_XTB_P_BENZYNE_OPT = (
     "e213b34b678f7682ed077c0088dd97e9d229e721bf546321bc35003030f8558a"
 )
+
+
+def _make_inspector(**kwargs):
+    with patch("chemsmart.database.inspect.Database") as mock_db_cls:
+        mock_db_cls.return_value = MagicMock()
+        inspector = DatabaseInspector("fake.db", **kwargs)
+    return inspector
+
+
+class FakeMolecule:
+    def __init__(
+        self,
+        forces=None,
+        num_atoms=2,
+        chemical_formula="H2",
+        chemical_symbols=("H", "H"),
+        positions=None,
+    ):
+        self.forces = forces
+        self.num_atoms = num_atoms
+        self.chemical_formula = chemical_formula
+        self.chemical_symbols = list(chemical_symbols)
+        self.positions = (
+            positions
+            if positions is not None
+            else np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]])
+        )
+
+
+def _make_exporter(output="out.xyz", **kwargs):
+    with patch("chemsmart.database.export.Database") as mock_db_cls:
+        mock_db_cls.return_value = MagicMock()
+        exporter = DatabaseExporter("fake.db", output, **kwargs)
+    return exporter
+
+
+def _patch_database_file(build_molecule=None):
+    """Patch DatabaseFile at its definition site (frames_from_* methods
+    import it locally, so patching chemsmart.database.export wouldn't
+    affect the fresh import)."""
+    mock_db_file_cls = MagicMock()
+    mock_db_file_instance = MagicMock()
+    if build_molecule is not None:
+        mock_db_file_instance.build_molecule_from_database.side_effect = (
+            build_molecule
+        )
+    mock_db_file_cls.return_value = mock_db_file_instance
+    return patch("chemsmart.io.database.DatabaseFile", mock_db_file_cls)
+
+
+def _make_base_assembler(output, include_failed=False):
+    assembler = BaseAssembler.__new__(BaseAssembler)
+    assembler.filename = "some_file.log"
+    assembler.folder = None
+    assembler.index = ":"
+    assembler.include_failed = include_failed
+    assembler.target = assembler.filename
+    assembler.output = output
+    return assembler
 
 
 class TestDatabaseUtilities:
@@ -1900,3 +1962,1838 @@ class TestStaticDatabaseContent:
         db = Database(database_chemsmart_xtb_file)
         resolved = db.get_record_by_partial_id(RECORD_ID_XTB_GFN2_WATER[:12])
         assert resolved == RECORD_ID_XTB_GFN2_WATER
+
+
+class TestAssembleFailedTermination:
+    def test_failed_termination_without_include_failed_returns_none(self):
+        output = MagicMock()
+        output.normal_termination = False
+        assembler = _make_base_assembler(output, include_failed=False)
+        assert assembler.assemble() is None
+
+    def test_failed_termination_with_include_failed_still_assembles(self):
+        """include_failed=True logs a different warning but still
+        proceeds to assemble partial data instead of bailing out."""
+        output = MagicMock()
+        output.normal_termination = False
+        output.route_string = "opt"
+        output.method = "b3lyp"
+        output.basis = "def2svp"
+        output.jobtype = "opt"
+        output.solvent_model = None
+        output.solvent_id = None
+        output.solvent_on = False
+        output.freq = False
+        output.num_basis_functions = 10
+        output.spin = "singlet"
+        molecule = SimpleNamespace(structure_id="mol-1")
+        assembler = _make_base_assembler(output, include_failed=True)
+        with (
+            patch.object(
+                BaseAssembler,
+                "molecules_list",
+                new_callable=property,
+                fget=lambda self: [molecule],
+            ),
+            patch.object(
+                BaseAssembler,
+                "get_calculation_results",
+                return_value={},
+            ),
+            patch.object(
+                BaseAssembler,
+                "get_molecule_info",
+                return_value={},
+            ),
+            patch.object(
+                BaseAssembler,
+                "build_provenance",
+                return_value={"program": "Gaussian"},
+            ),
+        ):
+            record = assembler.assemble()
+        assert record is not None
+
+
+class TestAssembleEmptyMolecules:
+    def test_empty_molecules_list_returns_none(self):
+        output = MagicMock()
+        output.normal_termination = True
+        assembler = _make_base_assembler(output)
+        with patch.object(
+            BaseAssembler,
+            "molecules_list",
+            new_callable=property,
+            fget=lambda self: [],
+        ):
+            assert assembler.assemble() is None
+
+
+class TestGetMetaDataCustomBasisAndSolvent:
+    def _make_output_for_meta(self, **overrides):
+        output = MagicMock()
+        output.basis = "6-31g(d)"
+        output.method = "b3lyp"
+        output.num_basis_functions = 50
+        output.spin = "singlet"
+        output.jobtype = "opt"
+        output.solvent_on = False
+        output.solvent_model = None
+        output.solvent_id = None
+        output.custom_solvent = None
+        output.route_string = "opt b3lyp/6-31g(d)"
+        output.freq = False
+        for key, value in overrides.items():
+            setattr(output, key, value)
+        return output
+
+    def test_custom_basis_uses_customized_basis_label(self):
+        output = self._make_output_for_meta(basis="gen")
+        assembler = _make_base_assembler(output)
+        with patch(
+            "chemsmart.database.assemble.is_custom_basis", return_value=True
+        ):
+            meta = assembler.get_meta_data()
+        assert meta["basis"] == "customized_basis"
+
+    def test_standard_basis_is_standardized_not_customized(self):
+        output = self._make_output_for_meta(basis="6-31g(d)")
+        assembler = _make_base_assembler(output)
+        with patch(
+            "chemsmart.database.assemble.is_custom_basis", return_value=False
+        ):
+            meta = assembler.get_meta_data()
+        assert meta["basis"] != "customized_basis"
+
+    def test_custom_solvent_uses_customized_solvent_label(self):
+        output = self._make_output_for_meta(
+            basis="6-31g(d)",
+            solvent_on=True,
+            solvent_model="smd",
+            solvent_id="mysolvent",
+            custom_solvent="eps=5.0",
+        )
+        assembler = _make_base_assembler(output)
+        with (
+            patch(
+                "chemsmart.database.assemble.is_custom_basis",
+                return_value=False,
+            ),
+            patch(
+                "chemsmart.database.assemble.is_custom_solvent",
+                return_value=True,
+            ),
+        ):
+            meta = assembler.get_meta_data()
+        assert meta["solvent_id"] == "customized_solvent"
+
+    def test_standard_solvent_keeps_solvent_id(self):
+        output = self._make_output_for_meta(
+            basis="6-31g(d)",
+            solvent_on=True,
+            solvent_model="smd",
+            solvent_id="water",
+            custom_solvent=None,
+        )
+        assembler = _make_base_assembler(output)
+        with (
+            patch(
+                "chemsmart.database.assemble.is_custom_basis",
+                return_value=False,
+            ),
+            patch(
+                "chemsmart.database.assemble.is_custom_solvent",
+                return_value=False,
+            ),
+        ):
+            meta = assembler.get_meta_data()
+        assert meta["solvent_id"] == "water"
+
+
+class TestGetMoleculeInfoMullikenSpinDensities:
+    def test_non_none_spin_densities_are_included(self):
+        assembler = _make_base_assembler(MagicMock())
+        mol = MagicMock()
+        mol.mulliken_atomic_charges = None
+        mol.mulliken_spin_densities = [0.1, -0.1]
+        mol.rotational_symmetry_number = None
+        mol.rotational_constants = None
+        mol.point_group = None
+        mol.vibrational_frequencies = None
+        mol.dipole_moment = None
+        mol.dipole_moment_magnitude = None
+
+        info = assembler.get_molecule_info(mol)
+        assert info["mulliken_spin_densities"] == [0.1, -0.1]
+
+
+class TestGaussianAssemblerMetaDataBranches:
+    def _make_gaussian_assembler(self, **overrides):
+        assembler = GaussianAssembler.__new__(GaussianAssembler)
+        output = MagicMock()
+        output.basis = "6-31g(d)"
+        output.method = "b3lyp"
+        output.num_basis_functions = 50
+        output.spin = "singlet"
+        output.jobtype = "opt"
+        output.solvent_on = False
+        output.solvent_model = None
+        output.solvent_id = None
+        output.custom_solvent = None
+        output.route_string = "opt b3lyp/6-31g(d)"
+        output.freq = False
+        output.num_primitive_gaussians = 100
+        output.num_cartesian_basis_functions = 60
+        output.modredundant_group = None
+        for key, value in overrides.items():
+            setattr(output, key, value)
+        assembler.output = output
+        assembler.filename = "some_file.log"
+        assembler.target = assembler.filename
+        assembler.include_failed = False
+        return assembler
+
+    def test_modredundant_group_included_when_present(self):
+        assembler = self._make_gaussian_assembler(modredundant_group="1 2 3 F")
+        with patch(
+            "chemsmart.database.assemble.is_custom_basis", return_value=False
+        ):
+            meta = assembler.get_meta_data()
+        assert meta["modredundant_group"] == "1 2 3 F"
+
+    def test_modredundant_group_absent_when_none(self):
+        assembler = self._make_gaussian_assembler(modredundant_group=None)
+        with patch(
+            "chemsmart.database.assemble.is_custom_basis", return_value=False
+        ):
+            meta = assembler.get_meta_data()
+        assert "modredundant_group" not in meta
+
+    def test_custom_basis_includes_heavy_and_light_element_details(self):
+        assembler = self._make_gaussian_assembler(
+            basis="gen",
+            heavy_elements="Fe",
+            heavy_elements_basis="lanl2dz",
+            heavy_elements_ecp="lanl2dz",
+            light_elements="C,H,O",
+            light_elements_basis="6-31g(d)",
+        )
+        with patch(
+            "chemsmart.database.assemble.is_custom_basis", return_value=True
+        ):
+            meta = assembler.get_meta_data()
+        assert meta["custom_basis"]["heavy_elements"] == "Fe"
+        assert meta["custom_basis"]["light_elements"] == "C,H,O"
+
+
+class TestSingleFileAssemblerErrorHandling:
+    def test_assemble_data_returns_none_and_logs_on_exception(self):
+        single = SingleFileAssembler(filename="broken.log")
+        broken_assembler = MagicMock()
+        broken_assembler.assemble.side_effect = RuntimeError("parse failed")
+        with patch.object(
+            SingleFileAssembler,
+            "_get_assembler",
+            return_value=broken_assembler,
+        ):
+            assert single.assemble_data is None
+
+    def test_unsupported_file_type_raises(self):
+        single = SingleFileAssembler(filename="mystery.txt")
+        with patch(
+            "chemsmart.database.assemble.get_program_type_from_file",
+            return_value="unknown",
+        ):
+            with pytest.raises(ValueError, match="Unsupported file"):
+                single._get_assembler("mystery.txt")
+
+
+class TestSingleFolderAssemblerErrorHandling:
+    def test_assemble_data_returns_none_and_logs_on_exception(self):
+        single = SingleFolderAssembler(folder="broken_folder")
+        broken_assembler = MagicMock()
+        broken_assembler.assemble.side_effect = RuntimeError("parse failed")
+        with patch.object(
+            SingleFolderAssembler,
+            "_get_assembler",
+            return_value=broken_assembler,
+        ):
+            assert single.assemble_data is None
+
+    def test_mixed_program_folder_raises(self):
+        single = SingleFolderAssembler(folder="mixed_folder")
+        with patch(
+            "chemsmart.database.assemble.BaseFolder"
+        ) as mock_base_folder_cls:
+            mock_base_folder_cls.return_value.get_program_type_from_folder.return_value = (
+                "mixed"
+            )
+            with pytest.raises(ValueError, match="multiple programs"):
+                single._get_assembler("mixed_folder")
+
+    def test_unsupported_folder_type_raises(self):
+        single = SingleFolderAssembler(folder="gaussian_folder")
+        with patch(
+            "chemsmart.database.assemble.BaseFolder"
+        ) as mock_base_folder_cls:
+            mock_base_folder_cls.return_value.get_program_type_from_folder.return_value = (
+                "gaussian"
+            )
+            with pytest.raises(ValueError, match="Unsupported folder"):
+                single._get_assembler("gaussian_folder")
+
+
+class TestValidateForces:
+    def test_none_forces_invalid(self):
+        exporter = _make_exporter()
+        assert exporter._validate_forces(FakeMolecule(forces=None)) is False
+
+    def test_correct_shape_valid(self):
+        exporter = _make_exporter()
+        forces = [[0.0, 0.0, 0.0], [0.1, 0.1, 0.1]]
+        assert (
+            exporter._validate_forces(FakeMolecule(forces=forces, num_atoms=2))
+            is True
+        )
+
+    def test_wrong_shape_invalid(self):
+        exporter = _make_exporter()
+        forces = [[0.0, 0.0, 0.0]]  # only 1 row, but num_atoms=2
+        assert (
+            exporter._validate_forces(FakeMolecule(forces=forces, num_atoms=2))
+            is False
+        )
+
+    def test_unconvertible_forces_invalid(self):
+        exporter = _make_exporter()
+        forces = "not-an-array"
+        assert exporter._validate_forces(FakeMolecule(forces=forces)) is False
+
+
+class TestWriteExtxyzFrame:
+    def test_writes_forces_and_energy_when_present(self):
+        exporter = _make_exporter(output="out.extxyz")
+        mol = FakeMolecule(
+            forces=[[0.0, 0.0, 0.0], [0.1, 0.2, 0.3]], num_atoms=2
+        )
+        frame = {
+            "molecule": mol,
+            "structure_id": "abc123def456",
+            "energies": [("b3lyp", "def2-svp", -1.234567890123)],
+            "primary_energy": -1.234567890123,
+            "primary_method": "b3lyp",
+            "primary_basis": "def2-svp",
+        }
+        import io
+
+        buf = io.StringIO()
+        exporter._write_extxyz_frame(buf, frame)
+        content = buf.getvalue()
+        assert "forces:R:3" in content
+        assert 'energy_units="Hartree"' in content
+        assert "SID: abc123def456" in content
+        assert "formula=H2" in content
+        assert "E(b3lyp/def2-svp)=" in content
+
+    def test_writes_without_forces_or_energy(self):
+        exporter = _make_exporter(output="out.extxyz")
+        mol = FakeMolecule(forces=None, chemical_formula=None)
+        frame = {
+            "molecule": mol,
+            "structure_id": None,
+            "energies": [],
+            "primary_energy": None,
+            "primary_method": None,
+            "primary_basis": None,
+        }
+        import io
+
+        buf = io.StringIO()
+        exporter._write_extxyz_frame(buf, frame)
+        content = buf.getvalue()
+        assert "forces:R:3" not in content
+        assert "energy=" not in content
+        assert "SID:" not in content
+
+    def test_multiple_energies_use_indexed_tags(self):
+        exporter = _make_exporter(output="out.extxyz")
+        mol = FakeMolecule()
+        frame = {
+            "molecule": mol,
+            "structure_id": "sid1",
+            "energies": [
+                ("b3lyp", "def2-svp", -1.0),
+                ("wb97xd", "def2-tzvp", -1.1),
+            ],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "def2-svp",
+        }
+        import io
+
+        buf = io.StringIO()
+        exporter._write_extxyz_frame(buf, frame)
+        content = buf.getvalue()
+        assert "E(b3lyp/def2-svp)=" in content
+        assert "E1(wb97xd/def2-tzvp)=" in content
+
+    def test_malformed_forces_shape_falls_back_to_no_forces(self):
+        exporter = _make_exporter(output="out.extxyz")
+        # Forces present but wrong shape for the molecule's atom count.
+        mol = FakeMolecule(forces=[[0.0, 0.0, 0.0]], num_atoms=2)
+        frame = {
+            "molecule": mol,
+            "structure_id": "sid",
+            "energies": [],
+            "primary_energy": None,
+            "primary_method": None,
+            "primary_basis": None,
+        }
+        import io
+
+        buf = io.StringIO()
+        exporter._write_extxyz_frame(buf, frame)
+        assert "forces:R:3" not in buf.getvalue()
+
+    def test_unconvertible_forces_falls_back_to_no_forces(self):
+        exporter = _make_exporter(output="out.extxyz")
+        # Ragged/non-numeric forces raise inside np.asarray(..., dtype=float).
+        mol = FakeMolecule(forces=[[0.0, "bad", 0.0], [0.1, 0.2]])
+        frame = {
+            "molecule": mol,
+            "structure_id": "sid",
+            "energies": [],
+            "primary_energy": None,
+            "primary_method": None,
+            "primary_basis": None,
+        }
+        import io
+
+        buf = io.StringIO()
+        exporter._write_extxyz_frame(buf, frame)
+        assert "forces:R:3" not in buf.getvalue()
+
+
+class TestToExtxyzEndToEnd:
+    def test_to_extxyz_writes_frames_via_collect_frames(self, tmp_path):
+        exporter = _make_exporter(
+            output=str(tmp_path / "out.extxyz"), record_index=1
+        )
+        mol = FakeMolecule(
+            forces=[[0.0, 0.0, 0.0], [0.1, 0.1, 0.1]], num_atoms=2
+        )
+        frame = {
+            "molecule": mol,
+            "structure_id": "sid1",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        with patch.object(exporter, "_collect_frames", return_value=[frame]):
+            exporter.to_extxyz()
+        content = (tmp_path / "out.extxyz").read_text()
+        assert "forces:R:3" in content
+
+
+class TestExportDispatch:
+    @pytest.mark.parametrize(
+        "output,method_name",
+        [
+            ("out.json", "to_json"),
+            ("out.csv", "to_csv"),
+            ("out.xyz", "to_xyz"),
+            ("out.extxyz", "to_extxyz"),
+        ],
+    )
+    def test_export_dispatches_to_correct_handler(self, output, method_name):
+        exporter = _make_exporter(output=output)
+        with patch.object(exporter, method_name) as mock_handler:
+            exporter.export()
+        mock_handler.assert_called_once()
+
+
+class TestCollectFramesSelectorValidation:
+    def test_no_selector_raises(self):
+        exporter = _make_exporter()
+        with pytest.raises(ValueError, match="requires exactly one"):
+            exporter._collect_frames()
+
+    def test_empty_frames_raises(self):
+        exporter = _make_exporter(record_index=1)
+        with patch.object(exporter, "frames_from_record", return_value=[]):
+            with pytest.raises(ValueError, match="No structures found"):
+                exporter._collect_frames()
+
+    def test_include_forces_without_effective_primary_raises(self):
+        exporter = _make_exporter(record_index=1)
+        frame = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid",
+            "energies": [],
+            "primary_energy": None,
+            "primary_method": None,
+            "primary_basis": None,
+        }
+        with patch.object(
+            exporter, "frames_from_record", return_value=[frame]
+        ):
+            with pytest.raises(ValueError, match="energy and forces at"):
+                exporter._collect_frames(include_forces=True)
+
+    def test_include_forces_filters_frames_lacking_valid_forces(self):
+        exporter = _make_exporter(record_index=1)
+        good_mol = FakeMolecule(
+            forces=[[0.0, 0.0, 0.0], [0.1, 0.1, 0.1]], num_atoms=2
+        )
+        bad_mol = FakeMolecule(forces=None)
+        frames = [
+            {
+                "molecule": good_mol,
+                "structure_id": "sid-good",
+                "energies": [("b3lyp", "sto-3g", -1.0)],
+                "primary_energy": -1.0,
+                "primary_method": "b3lyp",
+                "primary_basis": "sto-3g",
+            },
+            {
+                "molecule": bad_mol,
+                "structure_id": "sid-bad",
+                "energies": [],
+                "primary_energy": None,
+                "primary_method": None,
+                "primary_basis": None,
+            },
+        ]
+        with patch.object(exporter, "frames_from_record", return_value=frames):
+            result = exporter._collect_frames(include_forces=True)
+        assert len(result) == 1
+        assert result[0]["structure_id"] == "sid-good"
+
+    def test_include_forces_raises_when_all_frames_filtered_out(self):
+        exporter = _make_exporter(record_index=1)
+        bad_mol = FakeMolecule(forces=None)
+        frame = {
+            "molecule": bad_mol,
+            "structure_id": "sid-bad",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        with patch.object(
+            exporter, "frames_from_record", return_value=[frame]
+        ):
+            with pytest.raises(ValueError, match="energy and forces at"):
+                exporter._collect_frames(include_forces=True)
+
+    def test_include_forces_reports_more_than_five_skipped(self):
+        exporter = _make_exporter(record_index=1)
+        good_mol = FakeMolecule(
+            forces=[[0.0, 0.0, 0.0], [0.1, 0.1, 0.1]], num_atoms=2
+        )
+        good_frame = {
+            "molecule": good_mol,
+            "structure_id": "sid-good",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        bad_frames = [
+            {
+                "molecule": FakeMolecule(forces=None),
+                "structure_id": f"sid-bad-{i}",
+                "energies": [],
+                "primary_energy": None,
+                "primary_method": None,
+                "primary_basis": None,
+            }
+            for i in range(7)
+        ]
+        with patch.object(
+            exporter,
+            "frames_from_record",
+            return_value=[good_frame] + bad_frames,
+        ):
+            result = exporter._collect_frames(include_forces=True)
+        assert len(result) == 1
+
+    def test_xyz_user_primary_mb_filters_frames_without_matching_energy(
+        self,
+    ):
+        exporter = _make_exporter(
+            record_index=1, method="b3lyp", basis="sto-3g"
+        )
+        matching_frame = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid1",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        non_matching_frame = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid2",
+            "energies": [("wb97xd", "def2-tzvp", -2.0)],
+            "primary_energy": -2.0,
+            "primary_method": "wb97xd",
+            "primary_basis": "def2-tzvp",
+        }
+        with patch.object(
+            exporter,
+            "frames_from_record",
+            return_value=[matching_frame, non_matching_frame],
+        ):
+            result = exporter._collect_frames(include_forces=False)
+        assert len(result) == 1
+        assert result[0]["structure_id"] == "sid1"
+
+    def test_xyz_user_primary_mb_raises_when_none_match(self):
+        exporter = _make_exporter(
+            record_index=1, method="b3lyp", basis="sto-3g"
+        )
+        frame = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid1",
+            "energies": [("wb97xd", "def2-tzvp", -2.0)],
+            "primary_energy": -2.0,
+            "primary_method": "wb97xd",
+            "primary_basis": "def2-tzvp",
+        }
+        with patch.object(
+            exporter, "frames_from_record", return_value=[frame]
+        ):
+            with pytest.raises(
+                ValueError, match="No structures found at the given"
+            ):
+                exporter._collect_frames(include_forces=False)
+
+    def test_molecule_id_path_sorts_frames_by_energy(self):
+        exporter = _make_exporter(molecule_id="mid123")
+        frame1 = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid1",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        frame2 = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid2",
+            "energies": [("b3lyp", "sto-3g", -2.0)],
+            "primary_energy": -2.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        with (
+            patch.object(
+                exporter,
+                "frames_from_molecule_id",
+                return_value=([frame1, frame2], ("b3lyp", "sto-3g")),
+            ),
+            patch(
+                "chemsmart.database.export.sort_frames_by_energy",
+                return_value=[frame2, frame1],
+            ) as mock_sort,
+        ):
+            result = exporter._collect_frames(include_forces=False)
+        mock_sort.assert_called_once()
+        assert result == [frame2, frame1]
+
+    def test_structure_id_path_infers_effective_primary_from_frame(self):
+        exporter = _make_exporter(structure_id="sid123")
+        frame = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid123",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        with patch.object(
+            exporter, "frames_from_structure_id", return_value=[frame]
+        ):
+            result = exporter._collect_frames(include_forces=False)
+        assert result == [frame]
+
+    def test_structure_id_path_skips_inference_when_user_primary_set(self):
+        # With method/basis already user-specified, effective_primary is
+        # non-None before the structure_id branch runs, so the frame-based
+        # inference block is skipped entirely.
+        exporter = _make_exporter(
+            structure_id="sid123", method="b3lyp", basis="sto-3g"
+        )
+        frame = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid123",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        with patch.object(
+            exporter, "frames_from_structure_id", return_value=[frame]
+        ):
+            result = exporter._collect_frames(include_forces=False)
+        assert result == [frame]
+
+    def test_molecule_id_path_skips_inference_when_user_primary_set(self):
+        exporter = _make_exporter(
+            molecule_id="mid123", method="b3lyp", basis="sto-3g"
+        )
+        frame = {
+            "molecule": FakeMolecule(),
+            "structure_id": "sid1",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        with (
+            patch.object(
+                exporter,
+                "frames_from_molecule_id",
+                return_value=([frame], None),
+            ),
+            patch(
+                "chemsmart.database.export.sort_frames_by_energy",
+                return_value=[frame],
+            ),
+        ):
+            result = exporter._collect_frames(include_forces=False)
+        assert result == [frame]
+
+    def test_include_forces_no_skipped_frames_omits_warning(self, caplog):
+        exporter = _make_exporter(record_index=1)
+        good_mol = FakeMolecule(
+            forces=[[0.0, 0.0, 0.0], [0.1, 0.1, 0.1]], num_atoms=2
+        )
+        frame = {
+            "molecule": good_mol,
+            "structure_id": "sid-good",
+            "energies": [("b3lyp", "sto-3g", -1.0)],
+            "primary_energy": -1.0,
+            "primary_method": "b3lyp",
+            "primary_basis": "sto-3g",
+        }
+        with patch.object(
+            exporter, "frames_from_record", return_value=[frame]
+        ):
+            result = exporter._collect_frames(include_forces=True)
+        assert len(result) == 1
+        assert "Skipped" not in caplog.text
+
+
+class TestToCsvWithoutKeys:
+    def test_to_csv_without_parsed_keys_uses_default_columns_only(
+        self, tmp_path
+    ):
+        exporter = _make_exporter(output=str(tmp_path / "out.csv"))
+        exporter.db.get_all_records.return_value = [
+            {
+                "record_index": 1,
+                "record_id": "r1",
+                "molecules": [{"chemical_formula": "H2O"}],
+            }
+        ]
+        exporter.to_csv()
+        import csv
+
+        with open(tmp_path / "out.csv", newline="") as f:
+            rows = list(csv.DictReader(f))
+        assert list(rows[0].keys()) == [
+            "record_index",
+            "record_id",
+            "chemical_formula",
+        ]
+
+
+class TestParseCsvKeys:
+    def test_keys_that_are_only_commas_and_whitespace_yield_empty_list(self):
+        exporter = _make_exporter(keys=" , , ")
+        assert exporter.parsed_keys == []
+
+
+class TestFramesFromRecord:
+    def test_record_index_not_found_raises(self):
+        exporter = _make_exporter(record_index=5)
+        exporter.db.get_record.return_value = None
+        with pytest.raises(ValueError, match="No record found at index"):
+            exporter.frames_from_record()
+
+    def test_record_id_not_found_raises(self):
+        exporter = _make_exporter(record_id="abc123")
+        exporter.db.get_record_by_partial_id.return_value = "abc123full"
+        exporter.db.get_record.return_value = None
+        with pytest.raises(ValueError, match="No record found with ID"):
+            exporter.frames_from_record()
+
+    def test_record_id_path_resolves_full_id(self):
+        exporter = _make_exporter(record_id="abc123")
+        exporter.db.get_record_by_partial_id.return_value = "abc123full"
+        exporter.db.get_record.return_value = {
+            "record_id": "abc123full",
+            "meta": {"method": "b3lyp", "basis": "sto-3g"},
+            "molecules": [{"structure_id": "sid1", "energy": -1.0}],
+        }
+        with _patch_database_file(build_molecule=lambda d: FakeMolecule()):
+            frames = exporter.frames_from_record()
+        assert len(frames) == 1
+        assert frames[0]["primary_method"] == "b3lyp"
+        exporter.db.get_record.assert_called_with(record_id="abc123full")
+
+    def test_slice_structure_index_selects_multiple_structures(self):
+        exporter = _make_exporter(record_index=1, structure_index=":")
+        exporter.db.get_record.return_value = {
+            "record_id": "rid1",
+            "meta": {"method": "b3lyp", "basis": "sto-3g"},
+            "molecules": [
+                {"structure_id": "sid1", "energy": -1.0},
+                {"structure_id": "sid2", "energy": -2.0},
+            ],
+        }
+        with _patch_database_file(build_molecule=lambda d: FakeMolecule()):
+            frames = exporter.frames_from_record()
+        assert len(frames) == 2
+
+    def test_include_forces_queries_forces_for_record_structure(self):
+        exporter = _make_exporter(record_index=1)
+        exporter.db.get_record.return_value = {
+            "record_id": "rid1",
+            "meta": {"method": "b3lyp", "basis": "sto-3g"},
+            "molecules": [{"structure_id": "sid1", "energy": -1.0}],
+        }
+        exporter.db.get_forces_for_record_structure_at.return_value = (
+            [[0.0, 0.0, 0.0]],
+            -1.5,
+        )
+        with _patch_database_file(build_molecule=lambda d: FakeMolecule()):
+            frames = exporter.frames_from_record(include_forces=True)
+        assert frames[0]["primary_energy"] == -1.5
+        assert frames[0]["primary_method"] == "b3lyp"
+
+    def test_include_forces_with_no_energy_from_forces_omits_primary(self):
+        exporter = _make_exporter(record_index=1)
+        exporter.db.get_record.return_value = {
+            "record_id": "rid1",
+            "meta": {"method": "b3lyp", "basis": "sto-3g"},
+            "molecules": [{"structure_id": "sid1", "energy": -1.0}],
+        }
+        exporter.db.get_forces_for_record_structure_at.return_value = (
+            None,
+            None,
+        )
+        with _patch_database_file(build_molecule=lambda d: FakeMolecule()):
+            frames = exporter.frames_from_record(include_forces=True)
+        assert frames[0]["primary_energy"] is None
+        assert frames[0]["primary_method"] is None
+        assert frames[0]["energies"] == []
+
+
+class TestFramesFromStructureId:
+    def test_struct_not_found_raises(self):
+        exporter = _make_exporter(structure_id="sid123")
+        exporter.db.get_structure_by_partial_id.return_value = "sid123full"
+        exporter.db.get_structure.return_value = None
+        with pytest.raises(ValueError, match="No structure found with ID"):
+            exporter.frames_from_structure_id()
+
+    def test_include_forces_uses_user_primary_mb(self):
+        exporter = _make_exporter(
+            structure_id="sid123", method="b3lyp", basis="sto-3g"
+        )
+        exporter.db.get_structure_by_partial_id.return_value = "sid123full"
+        exporter.db.get_structure.return_value = {"structure_id": "sid123full"}
+        exporter.db.get_forces_for_structure_at.return_value = (
+            [[0.0, 0.0, 0.0]],
+            -1.0,
+        )
+
+        def fake_energies(db_file, sid):
+            return [("b3lyp", "sto-3g", -1.0)]
+
+        with (
+            _patch_database_file(build_molecule=lambda d: FakeMolecule()),
+            patch(
+                "chemsmart.database.export.collect_energies_for_structure",
+                side_effect=fake_energies,
+            ),
+        ):
+            frames = exporter.frames_from_structure_id(include_forces=True)
+        assert len(frames) == 1
+        exporter.db.pick_primary_forces_method_basis.assert_not_called()
+
+    def test_include_forces_auto_picks_primary_mb(self):
+        exporter = _make_exporter(structure_id="sid123")
+        exporter.db.get_structure_by_partial_id.return_value = "sid123full"
+        exporter.db.get_structure.return_value = {"structure_id": "sid123full"}
+        exporter.db.pick_primary_forces_method_basis.return_value = (
+            "wb97xd",
+            "def2-tzvp",
+        )
+        exporter.db.get_forces_for_structure_at.return_value = (None, None)
+        with (
+            _patch_database_file(build_molecule=lambda d: FakeMolecule()),
+            patch(
+                "chemsmart.database.export.collect_energies_for_structure",
+                return_value=[],
+            ),
+        ):
+            exporter.frames_from_structure_id(include_forces=True)
+        exporter.db.pick_primary_forces_method_basis.assert_called_once_with(
+            ["sid123full"]
+        )
+
+
+class TestFramesFromMoleculeId:
+    def test_no_structures_raises(self):
+        exporter = _make_exporter(molecule_id="mid123")
+        exporter.db.get_molecule_by_partial_id.return_value = "mid123full"
+        exporter.db.get_structures_for_molecule.return_value = []
+        with pytest.raises(ValueError, match="No structures found for"):
+            exporter.frames_from_molecule_id()
+
+    def test_user_primary_mb_used_directly(self):
+        exporter = _make_exporter(
+            molecule_id="mid123", method="b3lyp", basis="sto-3g"
+        )
+        exporter.db.get_molecule_by_partial_id.return_value = "mid123full"
+        exporter.db.get_structures_for_molecule.return_value = [
+            {"structure_id": "sid1"}
+        ]
+        exporter.db.get_forces_for_structure_at.return_value = (None, None)
+        with (
+            _patch_database_file(build_molecule=lambda d: FakeMolecule()),
+            patch(
+                "chemsmart.database.export.collect_energies_for_structure",
+                return_value=[],
+            ),
+        ):
+            frames, sort_primary = exporter.frames_from_molecule_id(
+                include_forces=True
+            )
+        assert sort_primary == ("b3lyp", "sto-3g")
+        exporter.db.pick_primary_forces_method_basis.assert_not_called()
+
+    def test_auto_pick_finds_no_forces_logs_info(self):
+        exporter = _make_exporter(molecule_id="mid123")
+        exporter.db.get_molecule_by_partial_id.return_value = "mid123full"
+        exporter.db.get_structures_for_molecule.return_value = [
+            {"structure_id": "sid1"}
+        ]
+        exporter.db.pick_primary_forces_method_basis.return_value = (
+            None,
+            None,
+        )
+        with (
+            _patch_database_file(build_molecule=lambda d: FakeMolecule()),
+            patch(
+                "chemsmart.database.export.collect_energies_for_structure",
+                return_value=[],
+            ),
+        ):
+            frames, sort_primary = exporter.frames_from_molecule_id(
+                include_forces=True
+            )
+        assert sort_primary is None
+
+    def test_auto_pick_finds_forces_logs_info_and_sets_sort_primary(self):
+        exporter = _make_exporter(molecule_id="mid123")
+        exporter.db.get_molecule_by_partial_id.return_value = "mid123full"
+        exporter.db.get_structures_for_molecule.return_value = [
+            {"structure_id": "sid1"}
+        ]
+        exporter.db.pick_primary_forces_method_basis.return_value = (
+            "wb97xd",
+            "def2-tzvp",
+        )
+        exporter.db.get_forces_for_structure_at.return_value = (None, None)
+        with (
+            _patch_database_file(build_molecule=lambda d: FakeMolecule()),
+            patch(
+                "chemsmart.database.export.collect_energies_for_structure",
+                return_value=[],
+            ),
+        ):
+            frames, sort_primary = exporter.frames_from_molecule_id(
+                include_forces=True
+            )
+        assert sort_primary == ("wb97xd", "def2-tzvp")
+
+    def test_without_forces_sort_primary_is_none(self):
+        exporter = _make_exporter(molecule_id="mid123")
+        exporter.db.get_molecule_by_partial_id.return_value = "mid123full"
+        exporter.db.get_structures_for_molecule.return_value = [
+            {"structure_id": "sid1"}
+        ]
+        with (
+            _patch_database_file(build_molecule=lambda d: FakeMolecule()),
+            patch(
+                "chemsmart.database.export.collect_energies_for_structure",
+                return_value=[],
+            ),
+        ):
+            frames, sort_primary = exporter.frames_from_molecule_id(
+                include_forces=False
+            )
+        assert sort_primary is None
+
+
+class TestBuildFrame:
+    def test_build_frame_with_forces(self):
+        exporter = _make_exporter()
+        exporter.db.get_forces_for_structure_at.return_value = (
+            [[0.0, 0.0, 0.0]],
+            -1.0,
+        )
+        mock_db_file = MagicMock()
+        mock_db_file.build_molecule_from_database.return_value = FakeMolecule()
+        with patch(
+            "chemsmart.database.export.collect_energies_for_structure",
+            return_value=[],
+        ):
+            frame = exporter._build_frame(
+                mock_db_file,
+                {"structure_id": "sid1"},
+                "b3lyp",
+                "sto-3g",
+                True,
+            )
+        assert frame["primary_energy"] == -1.0
+        assert frame["primary_method"] == "b3lyp"
+        assert frame["primary_basis"] == "sto-3g"
+
+    def test_build_frame_without_forces_flag(self):
+        exporter = _make_exporter()
+        mock_db_file = MagicMock()
+        mock_db_file.build_molecule_from_database.return_value = FakeMolecule()
+        with patch(
+            "chemsmart.database.export.collect_energies_for_structure",
+            return_value=[],
+        ):
+            frame = exporter._build_frame(
+                mock_db_file, {"structure_id": "sid1"}, None, None, False
+            )
+        assert frame["primary_energy"] is None
+        exporter.db.get_forces_for_structure_at.assert_not_called()
+
+
+class TestWriteXyzFrame:
+    def test_writes_sid_and_formula_and_energies(self):
+        exporter = _make_exporter(output="out.xyz")
+        mol = FakeMolecule(chemical_formula="H2O")
+        frame = {
+            "molecule": mol,
+            "structure_id": "sid123456789",
+            "energies": [("b3lyp", "sto-3g", -1.5)],
+        }
+        import io
+
+        buf = io.StringIO()
+        exporter._write_xyz_frame(buf, frame)
+        content = buf.getvalue()
+        assert "SID: sid123456789" in content
+        assert "Empirical formula: H2O" in content
+        assert "Energy(b3lyp/sto-3g):" in content
+
+    def test_writes_without_sid_or_formula_or_energies(self):
+        exporter = _make_exporter(output="out.xyz")
+        mol = FakeMolecule(chemical_formula=None)
+        frame = {"molecule": mol, "structure_id": None, "energies": []}
+        import io
+
+        buf = io.StringIO()
+        exporter._write_xyz_frame(buf, frame)
+        content = buf.getvalue()
+        assert "SID:" not in content
+        assert "Empirical formula:" not in content
+        assert "Energy(" not in content
+
+
+class TestResolveId:
+    def test_index_not_found_raises(self):
+        inspector = _make_inspector(index=3)
+        inspector.db.get_record.return_value = None
+        with pytest.raises(ValueError, match="No record found with index"):
+            inspector.resolve_id()
+
+    def test_index_found_returns_record_id(self):
+        inspector = _make_inspector(index=3)
+        inspector.db.get_record.return_value = {"record_id": "rid123"}
+        assert inspector.resolve_id() == "rid123"
+
+    def test_record_id_path_delegates_to_partial_id_lookup(self):
+        inspector = _make_inspector(record_id="abc")
+        inspector.db.get_record_by_partial_id.return_value = "abcfull"
+        assert inspector.resolve_id() == "abcfull"
+
+    def test_neither_index_nor_record_id_raises(self):
+        inspector = _make_inspector()
+        with pytest.raises(ValueError, match="Either index or record_id"):
+            inspector.resolve_id()
+
+
+class TestRecordDetail:
+    def test_record_not_found_raises(self):
+        inspector = _make_inspector(index=1)
+        inspector.db.get_record.side_effect = [
+            {"record_id": "rid1"},  # resolve_id's lookup
+            None,  # record_detail's own lookup
+        ]
+        with pytest.raises(ValueError, match="Record not found"):
+            inspector.record_detail()
+
+
+class TestFormatOverview:
+    def _base_stats(self, **overrides):
+        stats = {
+            "db_file": "my.db",
+            "db_size": 2048,
+            "num_records": 2,
+            "num_molecules": 1,
+            "num_structures": 3,
+            "programs": [("gaussian", 2)],
+            "methods": [],
+            "basis_sets": [],
+            "assembled_first": "2024-01-01T00:00:00",
+            "assembled_last": "2024-01-02T00:00:00",
+            "gas_phase_records": 2,
+            "solvated_records": 0,
+            "solvents": [],
+            "jobtypes": [("opt", 2)],
+            "energy_count": 2,
+            "forces_count": 0,
+            "thermo_count": 1,
+        }
+        stats.update(overrides)
+        return stats
+
+    def test_empty_methods_and_basis_sets_show_null(self):
+        inspector = _make_inspector()
+        with patch.object(
+            inspector, "overview", return_value=self._base_stats()
+        ):
+            text = inspector.format_overview()
+        assert "Methods" in text
+        assert "NULL" in text
+        assert "Basis Sets" in text
+
+    def test_methods_basis_and_solvents_present(self):
+        inspector = _make_inspector()
+        stats = self._base_stats(
+            methods=[("b3lyp", 2)],
+            basis_sets=[("sto-3g", 2)],
+            solvents=[("water", 1)],
+            solvated_records=1,
+        )
+        with patch.object(inspector, "overview", return_value=stats):
+            text = inspector.format_overview()
+        assert "b3lyp (2)" in text
+        assert "sto-3g (2)" in text
+        assert "water (1)" in text
+
+
+class TestFormatRecordDetail:
+    def _base_record(self, **overrides):
+        record = {
+            "record_index": 1,
+            "record_id": "rid123456789",
+            "meta": {
+                "method": "b3lyp",
+                "basis": "sto-3g",
+                "spin": "restricted",
+                "jobtype": "opt",
+                "solvent_on": False,
+                "route_string": "#p b3lyp/sto-3g opt",
+            },
+            "results": {
+                "total_energy": -1.0,
+                "num_unpaired_electrons": 0,
+                "homo_energy": -5.0,
+                "lumo_energy": 1.0,
+                "fmo_gap": 6.0,
+            },
+            "provenance": {
+                "source": "/tmp/job.log",
+                "program": "gaussian",
+                "program_version": "16",
+                "parser": "cclib",
+                "chemsmart_version": "1.0",
+                "source_file_hash": "abc",
+                "source_size": 1024,
+                "source_date": "2024-01-01",
+                "assembled_at": "2024-01-01T00:00:00",
+            },
+            "molecules": [],
+        }
+        record["meta"].update(overrides.pop("meta", {}))
+        record["results"].update(overrides.pop("results", {}))
+        record["provenance"].update(overrides.pop("provenance", {}))
+        record.update(overrides)
+        return record
+
+    def _run(self, inspector, record):
+        with patch.object(inspector, "record_detail", return_value=record):
+            return inspector.format_record_detail()
+
+    def test_closed_shell_basic_fields(self):
+        inspector = _make_inspector()
+        text = self._run(inspector, self._base_record())
+        assert "HOMO Energy (eV)" in text
+        assert "LUMO Energy (eV)" in text
+        assert "α-HOMO" not in text
+
+    def test_open_shell_shows_alpha_beta_and_somo(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            results={
+                "num_unpaired_electrons": 1,
+                "alpha_homo_energy": -5.0,
+                "beta_homo_energy": -4.5,
+                "alpha_lumo_energy": 1.0,
+                "beta_lumo_energy": 1.5,
+                "alpha_fmo_gap": 6.0,
+                "beta_fmo_gap": 6.0,
+                "somo_energies": [-4.8],
+            }
+        )
+        text = self._run(inspector, record)
+        assert "α-HOMO Energy (eV)" in text
+        assert "β-HOMO Energy (eV)" in text
+        assert "SOMO Energies (eV)" in text
+
+    def test_open_shell_without_somo_energies(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            results={
+                "num_unpaired_electrons": 1,
+                "alpha_homo_energy": -5.0,
+                "beta_homo_energy": -4.5,
+                "alpha_lumo_energy": 1.0,
+                "beta_lumo_energy": 1.5,
+                "alpha_fmo_gap": 6.0,
+                "beta_fmo_gap": 6.0,
+            }
+        )
+        text = self._run(inspector, record)
+        assert "SOMO Energies (eV)" not in text
+
+    def test_customized_basis_without_detail_shows_unavailable_note(self):
+        inspector = _make_inspector()
+        record = self._base_record(meta={"basis": "customized_basis"})
+        text = self._run(inspector, record)
+        assert "unavailable" in text
+
+    def test_customized_basis_with_full_detail(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            meta={
+                "basis": "customized_basis",
+                "custom_basis": {
+                    "light_elements": ["H", "C"],
+                    "light_elements_basis": "6-31G",
+                    "heavy_elements": ["Fe"],
+                    "heavy_elements_basis": {
+                        "Fe": [{"shell": "S"}, {"shell": "P"}]
+                    },
+                    "heavy_elements_ecp": {"Fe": "def2-ecp"},
+                },
+            }
+        )
+        text = self._run(inspector, record)
+        assert "Light Elements" in text
+        assert "[6-31G]" in text
+        assert "Heavy Elements" in text
+        assert "Fe Shells" in text
+        assert "S, P" in text
+        assert "Heavy Elements ECP" in text
+
+    def test_customized_basis_light_elements_only_no_light_basis(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            meta={
+                "basis": "customized_basis",
+                "custom_basis": {
+                    "light_elements": ["H", "C"],
+                    "light_elements_basis": None,
+                },
+            }
+        )
+        text = self._run(inspector, record)
+        assert "Light Elements" in text
+        assert "[" not in text.split("Light Elements")[1].split("\n")[0]
+        assert "Heavy Elements" not in text
+
+    def test_customized_basis_heavy_elements_only_no_light_elements(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            meta={
+                "basis": "customized_basis",
+                "custom_basis": {
+                    "light_elements": None,
+                    "heavy_elements": ["Fe"],
+                },
+            }
+        )
+        text = self._run(inspector, record)
+        assert "Light Elements" not in text
+        assert "Heavy Elements" in text
+
+    def test_solvent_on_with_custom_solvent_detail(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            meta={
+                "solvent_on": True,
+                "solvent_model": "PCM",
+                "solvent_id": "water",
+                "custom_solvent": {
+                    "SolventName": "MySolvent",
+                    "Eps": 78.0,
+                    "EpsInf": 1.8,
+                    "HbondAcidity": 0.1,
+                    "HbondBasicity": 0.2,
+                    "SurfaceTensionAtInterface": 0.3,
+                    "CarbonAromaticity": 0.4,
+                    "ElectronegativeHalogenicity": 0.5,
+                },
+            }
+        )
+        text = self._run(inspector, record)
+        assert "Solvent Model" in text
+        assert "Custom Solvent Name" in text
+        assert "Eps" in text
+
+    def test_solvent_on_custom_solvent_generic_name_is_skipped(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            meta={
+                "solvent_on": True,
+                "solvent_model": "PCM",
+                "solvent_id": "water",
+                "custom_solvent": {"SolventName": "Generic"},
+            }
+        )
+        text = self._run(inspector, record)
+        assert "Custom Solvent Name" not in text
+
+    def test_solvent_on_without_custom_solvent_dict(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            meta={
+                "solvent_on": True,
+                "solvent_model": "PCM",
+                "solvent_id": "water",
+                "custom_solvent": None,
+            }
+        )
+        text = self._run(inspector, record)
+        assert "Solvent Model" in text
+        assert "Custom Solvent Name" not in text
+
+    def test_performance_section_shown_when_core_hours_present(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            results={
+                "total_core_hours": 12.5,
+                "total_elapsed_walltime": 3.2,
+            }
+        )
+        text = self._run(inspector, record)
+        assert "Core Hours" in text
+        assert "Elapsed Walltime" in text
+
+    def test_thermochemistry_section_shown_when_gibbs_present(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            meta={"temperature_in_K": 298.15, "pressure_in_atm": 1.0},
+            results={
+                "gibbs_free_energy": -1.5,
+                "zero_point_energy": 0.01,
+                "internal_energy": -1.4,
+                "enthalpy": -1.3,
+                "entropy": 0.002,
+            },
+        )
+        text = self._run(inspector, record)
+        assert "Thermochemistry" in text
+        assert "Gibbs Free Energy" in text
+
+    def test_normal_termination_shown_when_present(self):
+        inspector = _make_inspector()
+        record = self._base_record(provenance={"normal_termination": True})
+        text = self._run(inspector, record)
+        assert "Normal Termination" in text
+
+    def test_uniform_structures_table(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            molecules=[
+                {
+                    "index": 1,
+                    "structure_id": "sid1",
+                    "chemical_formula": "H2O",
+                    "charge": 0,
+                    "multiplicity": 1,
+                    "number_of_atoms": 3,
+                    "energy": -1.0,
+                    "is_optimized_structure": True,
+                },
+                {
+                    "index": 2,
+                    "structure_id": "sid2",
+                    "chemical_formula": "H2O",
+                    "charge": 0,
+                    "multiplicity": 1,
+                    "number_of_atoms": 3,
+                    "energy": None,
+                    "is_optimized_structure": None,
+                },
+            ]
+        )
+        text = self._run(inspector, record)
+        assert "Formula" in text
+        assert "H2O" in text
+
+    def test_non_uniform_structures_table(self):
+        inspector = _make_inspector()
+        record = self._base_record(
+            molecules=[
+                {
+                    "index": 1,
+                    "structure_id": "sid1",
+                    "chemical_formula": "H2O",
+                    "charge": 0,
+                    "multiplicity": 1,
+                    "number_of_atoms": 3,
+                    "energy": -1.0,
+                },
+                {
+                    "index": 2,
+                    "structure_id": "sid2",
+                    "chemical_formula": "H2O+",
+                    "charge": 1,
+                    "multiplicity": 2,
+                    "number_of_atoms": 3,
+                    "energy": None,
+                },
+            ]
+        )
+        text = self._run(inspector, record)
+        assert "Idx" in text
+        assert "H2O+" in text
+
+
+class TestFormatStructureDetail:
+    def _base_record_and_struct(self, **struct_overrides):
+        struct = {
+            "structure_index_in_file": 5,
+            "energy": -1.0,
+            "is_optimized_structure": True,
+            "structure_id": "sid123",
+            "charge": 0,
+            "multiplicity": 1,
+            "molecule_id": "mid123",
+            "chemical_formula": "H2O",
+            "mass": 18.0153,
+            "smiles": "O",
+            "chemical_symbols": ["O", "H", "H"],
+            "positions": [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.76, 0.59],
+                [0.0, -0.76, 0.59],
+            ],
+        }
+        struct.update(struct_overrides)
+        record = {
+            "record_index": 1,
+            "record_id": "rid123",
+            "provenance": {"source": "/tmp/job.log"},
+        }
+        return record, struct
+
+    def _run(self, inspector, record, struct):
+        with patch.object(
+            inspector, "structure_detail", return_value=(record, struct)
+        ):
+            return inspector.format_structure_detail()
+
+    def test_full_detail_with_all_optional_sections(self):
+        inspector = _make_inspector()
+        record, struct = self._base_record_and_struct(
+            frozen_atoms=[1, 2],
+            center_of_mass=[0.0, 0.0, 0.1],
+            moments_of_inertia=[1.0, 2.0, 3.0],
+            rotational_symmetry_number=2,
+            rotational_constants=[1.0e9, 2.0e9, 3.0e9],
+            point_group="C2v",
+            dipole_moment=[0.0, 0.0, 1.5],
+            dipole_moment_magnitude=1.5,
+            mulliken_atomic_charges={"O1": -0.5, "H2": 0.25, "H3": 0.25},
+            mulliken_spin_densities={"O1": 0.0, "H2": 0.0, "H3": 0.0},
+            num_vibrational_modes=3,
+            vibrational_frequencies=[100.0, 200.0, 300.0],
+        )
+        text = self._run(inspector, record, struct)
+        assert "Optimized" in text
+        assert "Coordinates" in text
+        assert "Frozen Atoms" in text
+        assert "Point Group" in text
+        assert "Rotational Symmetry Number" in text
+        assert "Center of Mass" in text
+        assert "Moments of Inertia" in text
+        assert "Rotational Constants" in text
+        assert "Dipole Moment" in text
+        assert "Mulliken Population Analysis" in text
+        assert "Vibrational Frequencies" in text
+
+    def test_physical_properties_point_group_only(self):
+        inspector = _make_inspector()
+        record, struct = self._base_record_and_struct(point_group="C2v")
+        text = self._run(inspector, record, struct)
+        assert "Point Group" in text
+        assert "Center of Mass" not in text
+        assert "Moments of Inertia" not in text
+        assert "Rotational Constants" not in text
+        assert "Rotational Symmetry Number" not in text
+
+    def test_mulliken_charges_only(self):
+        inspector = _make_inspector()
+        record, struct = self._base_record_and_struct(
+            mulliken_atomic_charges={"O1": -0.5}
+        )
+        text = self._run(inspector, record, struct)
+        assert "Charge" in text
+
+    def test_mulliken_spin_only(self):
+        inspector = _make_inspector()
+        record, struct = self._base_record_and_struct(
+            mulliken_spin_densities={"O1": 0.1}
+        )
+        text = self._run(inspector, record, struct)
+        assert "Spin" in text
+
+    def test_vibrational_modes_without_frequencies_list(self):
+        inspector = _make_inspector()
+        record, struct = self._base_record_and_struct(
+            num_vibrational_modes=0, vibrational_frequencies=[]
+        )
+        text = self._run(inspector, record, struct)
+        assert "Vibrational Frequencies" in text
+
+    def test_minimal_fields_skip_optional_sections(self):
+        inspector = _make_inspector()
+        record, struct = self._base_record_and_struct(
+            is_optimized_structure=None,
+            chemical_symbols=[],
+            positions=[],
+        )
+        text = self._run(inspector, record, struct)
+        assert "Coordinates" not in text
+        assert "Frozen Atoms" not in text
+        assert "Physical Properties" not in text
+        assert "Dipole Moment" not in text
+        assert "Mulliken Population Analysis" not in text
+
+
+class TestFormatMoleculeDetail:
+    def _base_molecule(self, **overrides):
+        molecule = {
+            "molecule_id": "mid123",
+            "chemical_formula": "H2O",
+            "mass": 18.0153,
+            "is_aromatic": False,
+            "is_chiral": False,
+            "is_linear": False,
+            "is_multicomponent": False,
+            "smiles": "O",
+            "inchi": "InChI=1S/H2O/h1H2",
+        }
+        molecule.update(overrides)
+        return molecule
+
+    def test_molecule_not_found_raises(self):
+        inspector = _make_inspector(molecule_id="mid123")
+        inspector.db.get_molecule_by_partial_id.return_value = "mid123full"
+        inspector.db.get_molecule.return_value = None
+        with pytest.raises(ValueError, match="Molecule not found"):
+            inspector.molecule_detail()
+
+    def test_no_structures_shows_none(self):
+        inspector = _make_inspector()
+        molecule = self._base_molecule()
+        with patch.object(
+            inspector, "molecule_detail", return_value=(molecule, [], [])
+        ):
+            text = inspector.format_molecule_detail()
+        assert "(none)" in text
+
+    def test_element_counts_shown(self):
+        inspector = _make_inspector()
+        molecule = self._base_molecule(
+            element_counts={"O": 1, "H": 2}, number_of_atoms=3
+        )
+        with patch.object(
+            inspector, "molecule_detail", return_value=(molecule, [], [])
+        ):
+            text = inspector.format_molecule_detail()
+        assert "Composition" in text
+        assert "H 2" in text
+
+    def test_all_tags_active(self):
+        inspector = _make_inspector()
+        molecule = self._base_molecule(
+            is_aromatic=True,
+            is_chiral=True,
+            is_linear=True,
+            is_multicomponent=True,
+        )
+        with patch.object(
+            inspector, "molecule_detail", return_value=(molecule, [], [])
+        ):
+            text = inspector.format_molecule_detail()
+        assert "aromatic" in text
+        assert "chiral" in text
+
+    def test_uniform_structures_with_primary_mb(self):
+        inspector = _make_inspector()
+        molecule = self._base_molecule()
+        structures = [
+            {
+                "structure_id": "sid1",
+                "charge": 0,
+                "multiplicity": 1,
+                "primary_method_basis": ("b3lyp", "sto-3g"),
+                "primary_energy": -2.0,
+            },
+            {
+                "structure_id": "sid2",
+                "charge": 0,
+                "multiplicity": 1,
+                "primary_method_basis": ("b3lyp", "sto-3g"),
+                "primary_energy": -1.0,
+            },
+        ]
+        with (
+            patch.object(
+                inspector,
+                "molecule_detail",
+                return_value=(molecule, structures, []),
+            ),
+            patch(
+                "chemsmart.database.inspect.sort_structure_dicts_by_energy",
+                return_value=structures,
+            ),
+        ):
+            text = inspector.format_molecule_detail()
+        assert "Energy[b3lyp/sto-3g]" in text
+        assert "ΔE (kcal/mol)" in text
+
+    def test_structures_without_primary_mb_uses_default_header(self):
+        inspector = _make_inspector()
+        molecule = self._base_molecule()
+        structures = [
+            {
+                "structure_id": "sid1",
+                "charge": 0,
+                "multiplicity": 1,
+                "primary_method_basis": None,
+                "primary_energy": None,
+            }
+        ]
+        with (
+            patch.object(
+                inspector,
+                "molecule_detail",
+                return_value=(molecule, structures, []),
+            ),
+            patch(
+                "chemsmart.database.inspect.sort_structure_dicts_by_energy",
+                return_value=structures,
+            ),
+        ):
+            text = inspector.format_molecule_detail()
+        assert "Energy (Eh)" in text
+        assert "N/A" in text
+
+    def test_structures_present_but_sorted_structures_empty(self):
+        # sort_structure_dicts_by_energy could in principle return an
+        # empty list even though `structures` itself is non-empty; the
+        # `if sorted_structures:` guard exists specifically for that.
+        inspector = _make_inspector()
+        molecule = self._base_molecule()
+        structures = [
+            {
+                "structure_id": "sid1",
+                "charge": 0,
+                "multiplicity": 1,
+                "primary_method_basis": None,
+                "primary_energy": None,
+            }
+        ]
+        with (
+            patch.object(
+                inspector,
+                "molecule_detail",
+                return_value=(molecule, structures, []),
+            ),
+            patch(
+                "chemsmart.database.inspect.sort_structure_dicts_by_energy",
+                return_value=[],
+            ),
+        ):
+            text = inspector.format_molecule_detail()
+        assert "Energy (Eh)" in text
+
+    def test_mixed_electronic_states_note(self):
+        inspector = _make_inspector()
+        molecule = self._base_molecule()
+        structures = [
+            {
+                "structure_id": "sid1",
+                "charge": 0,
+                "multiplicity": 1,
+                "primary_method_basis": None,
+                "primary_energy": -1.0,
+            },
+            {
+                "structure_id": "sid2",
+                "charge": 1,
+                "multiplicity": 2,
+                "primary_method_basis": None,
+                "primary_energy": -0.5,
+            },
+        ]
+        with (
+            patch.object(
+                inspector,
+                "molecule_detail",
+                return_value=(molecule, structures, []),
+            ),
+            patch(
+                "chemsmart.database.inspect.sort_structure_dicts_by_energy",
+                return_value=structures,
+            ),
+        ):
+            text = inspector.format_molecule_detail()
+        assert "ΔE (—)" in text
+        assert "Mixed electronic states detected" in text
+
+    def test_related_records_table_populated(self):
+        inspector = _make_inspector()
+        molecule = self._base_molecule()
+        records = [
+            {
+                "record_id": "rid123456789",
+                "jobtype": "opt",
+                "program": "gaussian",
+                "method": "b3lyp",
+                "basis": "sto-3g",
+                "total_energy": -1.0,
+            }
+        ]
+        with patch.object(
+            inspector,
+            "molecule_detail",
+            return_value=(molecule, [], records),
+        ):
+            text = inspector.format_molecule_detail()
+        assert "rid123456789"[:12] in text
+        assert "gaussian" in text
+
+
+class TestStandaloneStructureDetail:
+    def test_structure_not_found_raises(self):
+        inspector = _make_inspector(structure_id="sid123")
+        inspector.db.get_structure_by_partial_id.return_value = "sid123full"
+        inspector.db.get_structure.return_value = None
+        with pytest.raises(ValueError, match="Structure not found"):
+            inspector.standalone_structure_detail()
+
+
+class TestFormatStandaloneStructureDetail:
+    def _base_struct(self, **overrides):
+        struct = {
+            "structure_id": "sid123",
+            "charge": 0,
+            "multiplicity": 1,
+            "molecule_id": "mid123",
+            "chemical_formula": "H2O",
+            "mass": 18.0153,
+            "smiles": "O",
+            "chemical_symbols": ["O", "H", "H"],
+            "positions": [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.76, 0.59],
+                [0.0, -0.76, 0.59],
+            ],
+        }
+        struct.update(overrides)
+        return struct
+
+    def _run(self, inspector, struct, records=None):
+        with patch.object(
+            inspector,
+            "standalone_structure_detail",
+            return_value=(struct, records or []),
+        ):
+            return inspector.format_standalone_structure_detail()
+
+    def test_coordinates_and_no_physical_properties(self):
+        inspector = _make_inspector()
+        text = self._run(inspector, self._base_struct())
+        assert "Coordinates" in text
+        assert "Physical Properties" not in text
+
+    def test_com_only(self):
+        inspector = _make_inspector()
+        struct = self._base_struct(center_of_mass=[0.0, 0.0, 0.1])
+        text = self._run(inspector, struct)
+        assert "Physical Properties" in text
+        assert "Center of Mass" in text
+        assert "Moments of Inertia" not in text
+
+    def test_moi_only(self):
+        inspector = _make_inspector()
+        struct = self._base_struct(moments_of_inertia=[1.0, 2.0, 3.0])
+        text = self._run(inspector, struct)
+        assert "Moments of Inertia" in text
+        assert "Center of Mass" not in text
+
+    def test_no_coordinates(self):
+        inspector = _make_inspector()
+        struct = self._base_struct(chemical_symbols=[], positions=[])
+        text = self._run(inspector, struct)
+        assert "Coordinates" not in text
+
+    def test_related_records_included(self):
+        inspector = _make_inspector()
+        records = [
+            {
+                "record_id": "rid987654321",
+                "jobtype": "sp",
+                "program": "orca",
+                "method": "wb97xd",
+                "basis": "def2tzvp",
+                "total_energy": -2.0,
+            }
+        ]
+        text = self._run(inspector, self._base_struct(), records)
+        assert "orca" in text
+
+
+class TestFormatRelatedRecordsTable:
+    def test_empty_records_shows_none(self):
+        inspector = _make_inspector()
+        lines = inspector._format_related_records_table([])
+        assert any("(none)" in line for line in lines)
+
+    def test_records_with_missing_optional_fields(self):
+        inspector = _make_inspector()
+        lines = inspector._format_related_records_table(
+            [{"record_id": "rid1"}]
+        )
+        text = "\n".join(lines)
+        assert "rid1" in text

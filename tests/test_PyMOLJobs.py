@@ -1,8 +1,10 @@
 import io
+import os
 import os.path
 import shutil
 import subprocess
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,6 +12,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol import PyMOLHybridVisualizationJob
 from chemsmart.jobs.mol.align import PyMOLAlignJob
 from chemsmart.jobs.mol.irc import PyMOLIRCMovieJob
+from chemsmart.jobs.mol.job import PyMOLJob
 from chemsmart.jobs.mol.mo import PyMOLMOJob
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
 from chemsmart.jobs.mol.nci import PyMOLNCIJob
@@ -45,11 +48,23 @@ from chemsmart.jobs.mol.visualize import (
     PyMOLScientificStyleVisualizationJob,
     PyMOLVisualizationJob,
 )
+from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.cluster import (
     is_pubchem_api_available,
     is_pubchem_network_available,
 )
 from chemsmart.utils.utils import quote_path
+
+
+def cls_molecule_stub():
+    from chemsmart.io.molecules.structure import Molecule
+
+    return Molecule(
+        symbols=["O", "H", "H"],
+        positions=[[0, 0, 0], [0, 0, 1], [0, 1, 0]],
+        charge=0,
+        multiplicity=1,
+    )
 
 
 @pytest.mark.usefixtures("skip_if_no_pymol")
@@ -3605,3 +3620,285 @@ class TestPyMOLScientificStyleDefensiveExceptionBranches:
         # xyz2idx stays empty since `iterate_state` is mocked out, so the
         # unmatched_obj's points can never resolve to an atom index.
         assert ScientificStyle.pairs_from_distance_objects("all") == []
+
+
+class TestPyMOLJobInitDefaults:
+    def test_defaults_applied_when_values_omitted(self, ethanol_molecule):
+        job = PyMOLJob(molecule=ethanol_molecule, label="test")
+        assert job.isosurface_value == 0.05
+        assert job.transparency_value == 0.2
+        assert job.surface_quality == 3
+        assert job.antialias_value == 3
+        assert job.ray_trace_mode == 1
+
+    def test_explicit_values_are_not_overridden(self, ethanol_molecule):
+        job = PyMOLJob(
+            molecule=ethanol_molecule,
+            label="test",
+            isosurface_value=0.1,
+            transparency_value=0.5,
+            surface_quality=1,
+            antialias_value=2,
+            ray_trace_mode=0,
+        )
+        assert job.isosurface_value == 0.1
+        assert job.transparency_value == 0.5
+        assert job.surface_quality == 1
+        assert job.antialias_value == 2
+        assert job.ray_trace_mode == 0
+
+    def test_source_basename_defaults_to_label(self, ethanol_molecule):
+        job = PyMOLJob(molecule=ethanol_molecule, label="mylabel")
+        assert job.source_basename == "mylabel"
+
+
+class TestPyMOLJobFilePaths:
+    def test_file_paths_derived_from_label_and_folder(
+        self, ethanol_molecule, tmp_path
+    ):
+        job = PyMOLJob(molecule=ethanol_molecule, label="test")
+        job.folder = str(tmp_path)
+        assert job.inputfile == str(tmp_path / "test.xyz")
+        assert job.logfile == str(tmp_path / "log.test")
+        assert job.outputfile == str(tmp_path / "test.pse")
+        assert job.errfile == str(tmp_path / "test.err")
+
+
+class TestPyMOLJobOutputAndCompletion:
+    def test_output_is_none_when_file_missing(
+        self, ethanol_molecule, tmp_path
+    ):
+        job = PyMOLJob(molecule=ethanol_molecule, label="test")
+        job.folder = str(tmp_path)
+        assert job._output() is None
+        assert job._job_is_complete() is False
+
+    def test_output_returns_path_when_file_exists(
+        self, ethanol_molecule, tmp_path
+    ):
+        job = PyMOLJob(molecule=ethanol_molecule, label="test")
+        job.folder = str(tmp_path)
+        (tmp_path / "test.pse").write_text("dummy session")
+        assert job._output() == os.path.abspath(job.outputfile)
+        assert job._job_is_complete() is True
+
+
+class TestPyMOLJobBackupFiles:
+    def test_backup_files_noop_when_nothing_exists(
+        self, ethanol_molecule, tmp_path
+    ):
+        """backup_file() no-ops for files that don't exist, so this
+        just exercises the folder-name/backup_file call sequence."""
+        job = PyMOLJob(molecule=ethanol_molecule, label="test")
+        job.folder = str(tmp_path)
+        job._backup_files()  # should not raise
+
+    def test_backup_files_copies_existing_input_and_output(
+        self, ethanol_molecule, tmp_path
+    ):
+        job = PyMOLJob(molecule=ethanol_molecule, label="test")
+        job.folder = str(tmp_path)
+        (tmp_path / "test.xyz").write_text("3\n\nO 0 0 0\n")
+        (tmp_path / "test.pse").write_text("dummy session")
+
+        job._backup_files()
+
+        backup_dirs = [
+            p
+            for p in tmp_path.iterdir()
+            if p.is_dir() and p.name.startswith("bk.")
+        ]
+        assert len(backup_dirs) == 1
+        assert (backup_dirs[0] / "test.xyz").exists()
+        assert (backup_dirs[0] / "test.pse").exists()
+
+    def test_backup_chk_crashes_since_pymol_jobs_have_no_chkfile(
+        self, ethanol_molecule, tmp_path
+    ):
+        """PyMOLJob (and its subclasses) never define a chkfile
+        property -- backup_chk=True unconditionally accesses
+        self.chkfile, which doesn't exist for any PyMOL job."""
+        job = PyMOLJob(molecule=ethanol_molecule, label="test")
+        job.folder = str(tmp_path)
+        with pytest.raises(AttributeError, match="chkfile"):
+            job._backup_files(backup_chk=True)
+
+
+class TestPyMOLJobFromFilename:
+    """These classmethods are inherited from PyMOLJob but exercised
+    here via a concrete subclass, since the base class's own TYPE has
+    no matching registered runner for JobRunner.from_job to find."""
+
+    def test_from_filename_uses_explicit_label(
+        self, tmp_path, single_molecule_xyz_file
+    ):
+        job = PyMOLVisualizationJob.from_filename(
+            filename=single_molecule_xyz_file,
+            label="explicit_label",
+            jobrunner=object(),
+        )
+        assert job.label == "explicit_label"
+
+    def test_from_filename_creates_jobrunner_when_omitted(
+        self, single_molecule_xyz_file
+    ):
+        job = PyMOLVisualizationJob.from_filename(
+            filename=single_molecule_xyz_file
+        )
+        assert isinstance(job.jobrunner, JobRunner)
+
+
+class TestPyMOLJobFromPubchem:
+    def test_from_pubchem_creates_jobrunner_when_omitted(self, monkeypatch):
+        from chemsmart.io.molecules.structure import Molecule
+
+        monkeypatch.setattr(
+            Molecule,
+            "from_pubchem",
+            classmethod(lambda cls, identifier: cls_molecule_stub()),
+        )
+        job = PyMOLVisualizationJob.from_pubchem(
+            identifier="water", label="pubchem_test"
+        )
+        assert isinstance(job.jobrunner, JobRunner)
+        assert job.label == "pubchem_test"
+
+
+class TestPyMOLIRCMovieJobFromFiles:
+    def test_no_files_provided_raises(self):
+        with pytest.raises(ValueError, match="No reactant or product"):
+            PyMOLIRCMovieJob.from_files(
+                reactant_file=None,
+                product_file=None,
+                all_file=None,
+                label="x",
+            )
+
+    def test_all_three_files_provided_raises(self):
+        with pytest.raises(ValueError, match="only provide reactant"):
+            PyMOLIRCMovieJob.from_files(
+                reactant_file="r.log",
+                product_file="p.log",
+                all_file="full.log",
+                label="x",
+            )
+
+    def test_only_reactant_file_builds_job(self):
+        # Providing only the reactant-side trajectory is a supported
+        # shortcut (e.g. for a product-side-only movie), not an error.
+        reactant_mols = [MagicMock(name="r1"), MagicMock(name="r2")]
+        mock_jobrunner = MagicMock()
+
+        with patch(
+            "chemsmart.jobs.mol.irc.Molecule.from_filepath",
+            return_value=reactant_mols,
+        ) as mock_from_filepath:
+            job = PyMOLIRCMovieJob.from_files(
+                reactant_file="path/to/r.log",
+                product_file=None,
+                all_file=None,
+                label="ignored_label",
+                jobrunner=mock_jobrunner,
+            )
+
+        mock_from_filepath.assert_called_once_with("r.log", index="::-1")
+        assert job.molecule == reactant_mols
+        assert job.label.startswith("r")
+
+    def test_reactant_and_product_files_build_job(self):
+        reactant_mols = [MagicMock(name="r1"), MagicMock(name="r2")]
+        product_mols = [MagicMock(name="p1"), MagicMock(name="p2")]
+        mock_jobrunner = MagicMock()
+
+        with patch(
+            "chemsmart.jobs.mol.irc.Molecule.from_filepath"
+        ) as mock_from_filepath:
+            mock_from_filepath.side_effect = [reactant_mols, product_mols]
+            job = PyMOLIRCMovieJob.from_files(
+                reactant_file="path/to/reactant_ircr.log",
+                product_file="path/to/reactant_ircf.log",
+                all_file=None,
+                label="ignored_label",
+                jobrunner=mock_jobrunner,
+            )
+
+        assert isinstance(job, PyMOLIRCMovieJob)
+        assert job.jobrunner is mock_jobrunner
+        assert job.molecule == reactant_mols + product_mols
+        # label derived from common prefix of the two basenames, not the
+        # explicitly passed "ignored_label"
+        assert job.label.startswith("reactant_irc")
+
+    def test_reactant_and_product_files_read_in_correct_order_and_index(
+        self,
+    ):
+        with patch(
+            "chemsmart.jobs.mol.irc.Molecule.from_filepath"
+        ) as mock_from_filepath:
+            mock_from_filepath.side_effect = [[], []]
+            PyMOLIRCMovieJob.from_files(
+                reactant_file="reactant.log",
+                product_file="product.log",
+                all_file=None,
+                label="x",
+                jobrunner=MagicMock(),
+            )
+
+        assert mock_from_filepath.call_args_list[0].args[0] == "reactant.log"
+        assert mock_from_filepath.call_args_list[0].kwargs["index"] == "::-1"
+        assert mock_from_filepath.call_args_list[1].args[0] == "product.log"
+        assert mock_from_filepath.call_args_list[1].kwargs["index"] == ":"
+
+    def test_all_file_builds_job(self):
+        all_mols = [MagicMock(name="m1"), MagicMock(name="m2")]
+        mock_jobrunner = MagicMock()
+
+        with patch(
+            "chemsmart.jobs.mol.irc.Molecule.from_filepath",
+            return_value=all_mols,
+        ) as mock_from_filepath:
+            job = PyMOLIRCMovieJob.from_files(
+                reactant_file=None,
+                product_file=None,
+                all_file="path/to/full_irc.log",
+                label="ignored_label",
+                jobrunner=mock_jobrunner,
+            )
+
+        mock_from_filepath.assert_called_once_with(
+            "path/to/full_irc.log", index=":"
+        )
+        assert job.molecule == all_mols
+        assert job.label == "full_irc_movie"
+
+    def test_from_files_creates_jobrunner_when_not_given(self):
+        mock_runner_instance = MagicMock()
+        with (
+            patch(
+                "chemsmart.jobs.mol.irc.Molecule.from_filepath",
+                return_value=[],
+            ),
+            patch(
+                "chemsmart.jobs.runner.JobRunner.from_job",
+                return_value=mock_runner_instance,
+            ) as mock_from_job,
+        ):
+            job = PyMOLIRCMovieJob.from_files(
+                reactant_file=None,
+                product_file=None,
+                all_file="full.log",
+                label="x",
+            )
+
+        mock_from_job.assert_called_once()
+        assert job.jobrunner is mock_runner_instance
+
+
+class TestPyMOLIRCMovieJobConstruction:
+    def test_label_suffixed_with_movie(self):
+        job = PyMOLIRCMovieJob(molecules=[MagicMock()], label="irc_run")
+        assert job.label == "irc_run_movie"
+
+    def test_type_identifier(self):
+        job = PyMOLIRCMovieJob(molecules=[MagicMock()], label="irc_run")
+        assert job.TYPE == "pymol_ircmovie"

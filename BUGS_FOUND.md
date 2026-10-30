@@ -31,7 +31,7 @@ provided.` raised earlier, directly from `__init__`.
 `filename=files[0] if files else None` to
 `BoltzmannAverageThermochemistryJob`, so
 `chemsmart sub thermochemistry boltzmann -f a.log -f b.log ...` no longer
-crashes. See `tests/test_thermochemistry_cli.py::TestThermochemistryBoltzmannCommand`
+crashes. See `tests/test_thermochemistry.py::TestThermochemistryBoltzmannCommand`
 for CLI-level regression tests covering this fix.
 
 **Impact (historical):** `chemsmart sub thermochemistry boltzmann ...`
@@ -56,7 +56,7 @@ runs, because `ThermochemistryJob.__init__` already sets `self.label` from
 ## 2. `GaussianJob.from_jobtype("g16", ..., jobrunner=<provided>)` wrongly raises
 
 **File:** `chemsmart/jobs/gaussian/job.py:410-435`
-**Test:** `tests/test_gaussian_job_base_unit.py::TestGaussianJobFactories::test_from_jobtype_g16_with_explicit_jobrunner_is_buggy`
+**Test:** `tests/test_GaussianJobs.py::TestGaussianJobFactories::test_from_jobtype_g16_with_explicit_jobrunner_is_buggy`
 
 ```python
 elif jobtype.lower() == "g16":
@@ -101,7 +101,7 @@ whether a jobrunner was already supplied.
 ## 3. `GaussianJob.from_jobtype(<unrecognized type>, ...)` silently returns `None`
 
 **File:** `chemsmart/jobs/gaussian/job.py:357-435`
-**Test:** `tests/test_gaussian_job_base_unit.py::TestGaussianJobFactories::test_from_jobtype_invalid_silently_returns_none`
+**Test:** `tests/test_GaussianJobs.py::TestGaussianJobFactories::test_from_jobtype_invalid_silently_returns_none`
 
 Closely related to bug #2. The only `raise ValueError("Invalid job type...")`
 in this method lives inside the `elif jobtype.lower() == "g16":` branch (see
@@ -113,7 +113,7 @@ function implicitly returns `None` instead of raising.
 Contrast with the equivalent `ORCAJob.from_jobtype` in
 `chemsmart/jobs/orca/job.py:292-403`, which correctly has a top-level
 `else: raise ValueError(f"Invalid job type: {jobtype}")` and behaves as
-expected (see `tests/test_orca_job_base_unit.py::TestORCAJobFactories::test_from_jobtype_invalid_raises`).
+expected (see `tests/test_orca_job.py::TestORCAJobFactories::test_from_jobtype_invalid_raises`).
 
 **Reproduce:**
 ```python
@@ -131,7 +131,7 @@ own `raise` (if kept) doesn't shadow the real error for valid jobtypes.
 ## 4. `GaussianComJob.from_filename(...)` always crashes
 
 **File:** `chemsmart/jobs/gaussian/job.py:463-528`
-**Test:** `tests/test_gaussian_job_base_unit.py::TestGaussianComJob::test_from_filename_crashes_on_none_molecule`
+**Test:** `tests/test_GaussianJobs.py::TestGaussianComJob::test_from_filename_crashes_on_none_molecule`
 
 ```python
 @classmethod
@@ -273,7 +273,7 @@ probably should be `user_settings.data["PROJECT"]` or a dedicated
 
 **File:** `chemsmart/settings/server.py:296-310`,
 `chemsmart/utils/mixins.py:1483-1501`
-**Test:** `tests/test_server_class_unit.py::TestServerRegisterBug::test_register_crashes_on_unrelated_registry_entries`
+**Test:** `tests/test_server.py::TestServerRegisterBug::test_register_crashes_on_unrelated_registry_entries`
 
 ```python
 def register(self):
@@ -332,7 +332,7 @@ for dispatch vs. registered *instances* for caching/dedup).
 ## 8. `SLURMServer()` always crashes (wrong kwarg name to parent `__init__`)
 
 **File:** `chemsmart/settings/server.py:865-872`
-**Test:** `tests/test_yaml_server_settings_unit.py::TestSLURMServerBug::test_construction_raises_type_error`
+**Test:** `tests/test_server.py::TestSLURMServerBug::test_construction_raises_type_error`
 
 ```python
 class SLURMServer(YamlServerSettings):
@@ -381,7 +381,7 @@ matching `PBSServer`/`LSFServer`/`SGE_Server`.
 ## 9. `GaussianDIASJob._sample_molecules` duplicates the endpoint molecule
 
 **File:** `chemsmart/jobs/gaussian/dias.py:183-200`
-**Test:** `tests/test_gaussian_dias_job_unit.py::TestSampleMolecules::test_samples_every_n_points_and_appends_last_again`
+**Test:** `tests/test_GaussianJobs.py::TestSampleMolecules::test_samples_every_n_points_and_appends_last_again`
 
 ```python
 def _sample_molecules(self, molecules):
@@ -492,7 +492,7 @@ the regex to a single alternative with an optional non-capturing
 ## 11. `GaussianUVVISJob.__init__` always crashes
 
 **File:** `chemsmart/jobs/gaussian/uvvis.py:59`
-**Test:** `tests/test_gaussian_uvvis_job_unit.py::TestGaussianUVVISJobInitCrash::test_init_always_raises_typeerror`
+**Test:** `tests/test_GaussianJobs.py::TestGaussianUVVISJobInitCrash::test_init_always_raises_typeerror`
 
 ```python
 def __init__(self, folder, atoms, settings):
@@ -525,7 +525,7 @@ basic possible use.
 ## 12. `ORCAQMMMJobSettings` intermediate-layer validation has a silent gap
 
 **File:** `chemsmart/jobs/orca/settings.py:1898-1965`
-**Test:** `tests/test_orca_qmmm_neb_settings_unit.py::TestQMMMIntermediateValidation::test_intermediate_params_for_non_qm2_jobtype_without_low_level_is_silently_accepted`
+**Test:** `tests/test_orca_settings.py::TestQMMMIntermediateValidation::test_intermediate_params_for_non_qm2_jobtype_without_low_level_is_silently_accepted`
 
 `_validate_intermediate_parameters` is meant to reject intermediate-level
 (QM2) parameters supplied for a job type that doesn't use a QM2 layer
@@ -578,7 +578,7 @@ message's stated intent.
 ## 13. `GaussianCrestJob` empty/non-list `molecules` bypasses its own validation
 
 **File:** `chemsmart/jobs/gaussian/crest.py:81-82`
-**Test:** `tests/test_gaussian_crest_job_unit.py::TestGaussianCrestJobConstruction::test_empty_molecules_list_bypasses_validation_and_crashes`
+**Test:** `tests/test_GaussianJobs.py::TestGaussianCrestJobConstruction::test_empty_molecules_list_bypasses_validation_and_crashes`
 
 ```python
 if not isinstance(molecules, list) and len(molecules) == 0:
@@ -612,7 +612,7 @@ GaussianCrestJob(molecules=[])
 ## 14. `GaussianLinkJob.backup_files` is unreachable dead code
 
 **File:** `chemsmart/jobs/gaussian/link.py:183-193`
-**Test:** `tests/test_gaussian_link_job_unit.py::TestBackupFilesIsDeadCode::test_backup_files_is_not_the_method_invoked_by_backup`
+**Test:** `tests/test_GaussianJobs.py::TestBackupFilesIsDeadCode::test_backup_files_is_not_the_method_invoked_by_backup`
 
 `Job.backup(**kwargs)` (the only call site for backups in the codebase)
 invokes the private, underscore-prefixed hook:
@@ -704,7 +704,7 @@ other job classes use for optional settings.
 ## 16. `GaussianNCIJob.__init__` ignores its `jobrunner` argument
 
 **File:** `chemsmart/jobs/gaussian/nci.py:32-51`
-**Test:** `tests/test_gaussian_small_job_wrappers_unit.py::TestGaussianNCIJob::test_jobrunner_argument_is_ignored_and_class_used_instead`
+**Test:** `tests/test_GaussianJobs.py::TestGaussianNCIJob::test_jobrunner_argument_is_ignored_and_class_used_instead`
 
 ```python
 from chemsmart.jobs.runner import JobRunner
@@ -747,7 +747,7 @@ every other Gaussian job class does: `jobrunner=jobrunner`.
 ## 17. `EnergyGrouper._merge_groups_to_target`'s "no connections" fallback is unreachable dead code
 
 **File:** `chemsmart/jobs/grouper/energy.py:428-458`
-**Test:** `tests/test_energy_grouper_unit.py::TestMergeGroupsToTargetDirect::test_merges_into_the_most_connected_group`
+**Test:** `tests/test_groupers.py::TestMergeGroupsToTargetDirect::test_merges_into_the_most_connected_group`
 (see the docstring note; the fallback itself has no reachable test because it cannot execute)
 
 ```python
@@ -802,7 +802,7 @@ largest" branch.
 `RMSDGrouper._merge_groups_to_target` (around line 382-442) has the
 exact same `best_connection_count = -1` / `connection_count = 0` pattern
 and is subject to the identical dead-code fallback. See
-`tests/test_rmsd_grouper_base_unit.py::TestMergeGroupsToTarget::test_merge_reduces_group_count_and_prefers_connected_group`.
+`tests/test_groupers.py::TestMergeGroupsToTarget::test_merge_reduces_group_count_and_prefers_connected_group`.
 `TorsionFingerprintGrouper._merge_groups_to_target` in
 `chemsmart/jobs/grouper/tfd.py` is unaffected — it merges purely by
 group size and has no connection-counting fallback.
@@ -884,7 +884,7 @@ user-facing `ValueError`).
 ## 20. `GaussianpKaJobSettings.build_gaussian_pka_settings` crashes when `opt_settings` carries solvent info not overridden by `shared`
 
 **File:** `chemsmart/jobs/gaussian/settings.py:1187-1252`
-**Test:** `tests/test_gaussian_settings_route_strings_unit.py::TestBuildGaussianPkaSettings::test_solvent_settings_from_opt_settings_crashes`
+**Test:** `tests/test_GaussianSettings.py::TestBuildGaussianPkaSettings::test_solvent_settings_from_opt_settings_crashes`
 
 ```python
 opt_kwargs = {
@@ -947,7 +947,7 @@ from `opt_kwargs` once resolved.
 ## 21. `GaussianQMMMJobSettings._get_charge_and_multiplicity`'s per-sub-level fill branches are dead code
 
 **File:** `chemsmart/jobs/gaussian/settings.py:2791-2944`
-**Test:** `tests/test_gaussian_qmmm_settings_unit.py::TestChargeAndMultiplicityErrors`
+**Test:** `tests/test_GaussianSettings.py::TestChargeAndMultiplicityErrors`
 (see the docstring notes on `test_three_layer_fills_from_intermediate_when_only_real_and_int_set`;
 the unreachable branches themselves have no test since they cannot execute)
 
@@ -1347,7 +1347,7 @@ chemsmart run orca -p <project> -f mol.xyz opt qmmm -h "{1: 1.1}"
 # Error: Invalid value for '-h' / '--high-level-h-bond-length': {1: 1.1}
 ```
 (also reproduced via
-`tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_option_is_unusable`)
+`tests/test_orca_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_option_is_unusable`)
 
 **Impact:** The `-h/--high-level-h-bond-length` CLI option can never
 be used to actually set custom high-level-H bond lengths — every
@@ -1799,7 +1799,7 @@ job.compute_thermochemistry()
 # AttributeError: 'ThermochemistryJob' object has no attribute 'label'
 # (not the docstring's claimed ValueError)
 ```
-`tests/test_thermochemistry_job_unit.py::TestThermochemistryJobComputeAndShow::test_compute_thermochemistry_requires_filename`
+`tests/test_thermochemistry.py::TestThermochemistryJobComputeAndShow::test_compute_thermochemistry_requires_filename`
 was rewritten to instead test the real, reachable guard — that
 `ThermochemistryJob(filename=None)` raises `ValueError` from
 `__init__` — since that is the only place this validation can actually
@@ -2010,7 +2010,7 @@ There is currently no way to specify a custom output path for the
 Boltzmann-averaged result specifically — the job falls back entirely
 to its own `outputfile` property (`{label}.dat`).
 
-**Reproduce:** `tests/test_thermochemistry_cli.py::TestThermochemistryBoltzmannCommand::test_outputfile_parameter_is_always_none`
+**Reproduce:** `tests/test_thermochemistry.py::TestThermochemistryBoltzmannCommand::test_outputfile_parameter_is_always_none`
 confirms `outputfile` in the constructed job's kwargs is `None` even
 when the group-level `-o` is supplied before the `boltzmann` subcommand
 token (since it's consumed by the group, not forwarded).
@@ -2507,7 +2507,7 @@ job = PyMOLJob(molecule=some_molecule, label="test")
 job._backup_files(backup_chk=True)
 # AttributeError: 'PyMOLJob' object has no attribute 'chkfile'
 ```
-See `tests/test_pymol_job_base_unit.py::TestPyMOLJobBackupFiles::test_backup_chk_crashes_since_pymol_jobs_have_no_chkfile`.
+See `tests/test_PyMOLJobs.py::TestPyMOLJobBackupFiles::test_backup_chk_crashes_since_pymol_jobs_have_no_chkfile`.
 
 **Impact:** Low -- `backup_chk` is only meaningful for Gaussian jobs
 (which do define `chkfile`), so this would only surface if a caller
@@ -2552,7 +2552,7 @@ from chemsmart.utils.utils import get_prepend_string_list_from_modred_free_forma
 get_prepend_string_list_from_modred_free_format([1, 2], program="invalid")
 # UnboundLocalError: local variable 'modred_string' referenced before assignment
 ```
-See `tests/test_utils_extended.py::TestGetPrependStringListFromModredFreeFormat::test_single_list_invalid_program_crashes_with_unboundlocalerror`.
+See `tests/test_utils.py::TestGetPrependStringListFromModredFreeFormat::test_single_list_invalid_program_crashes_with_unboundlocalerror`.
 
 **Impact:** Low -- only triggered by an invalid `program` argument
 combined with the single-list (not list-of-lists) input shape, which
@@ -2675,7 +2675,7 @@ chemsmart/cli/gaussian/qmmm.py:385:def _populate_charge_and_multiplicity_on_sett
 chemsmart/cli/orca/qmmm.py:418:        _populate_charge_and_multiplicity_on_settings(qmmm_settings)
 chemsmart/cli/orca/qmmm.py:460:def _populate_charge_and_multiplicity_on_settings(qs):
 ```
-See `tests/test_gaussian_qmmm_cli.py::TestPopulateChargeAndMultiplicityOnSettings`,
+See `tests/test_gaussian_cli.py::TestPopulateChargeAndMultiplicityOnSettings`,
 which unit-tests the function directly since no code path reaches it.
 
 **Impact:** Low -- dead code with no behavioral effect (the inline
@@ -2846,7 +2846,7 @@ leftover from before the options were inlined into `qmmm.py`.
 $ grep -rn "click_gaussian_qmmm_options" chemsmart/
 chemsmart/cli/gaussian/gaussian.py:361:def click_gaussian_qmmm_options(f):
 ```
-See `tests/test_gaussian_qmmm_cli.py::TestClickGaussianQmmmOptionsIsUnusedDeadCode`,
+See `tests/test_gaussian_cli.py::TestClickGaussianQmmmOptionsIsUnusedDeadCode`,
 which applies the decorator directly to a throwaway command purely to
 exercise it, since no real command does.
 
@@ -2910,7 +2910,7 @@ Two separate defects in this block:
    ```
 
 **Reproduce:** see
-`tests/test_gaussian_qmmm_cli.py::TestQmmmMoleculeConversionBlockInGaussianGroup`,
+`tests/test_gaussian_cli.py::TestQmmmMoleculeConversionBlockInGaussianGroup`,
 which forces `ctx.invoked_subcommand = "qmmm"` directly (a state Click
 itself can never produce) to exercise the block's logic in isolation,
 including a demonstration that the dict-based fallback needs a
@@ -3010,7 +3010,7 @@ instead of raising. Any caller that then does
 mode" message the other two properties give for the exact same input.
 
 **Reproduce:** see
-`tests/test_gaussian_dias_job_unit.py::TestAllMoleculesJobsInvalidMode::test_invalid_mode_silently_returns_none`,
+`tests/test_GaussianJobs.py::TestAllMoleculesJobsInvalidMode::test_invalid_mode_silently_returns_none`,
 which constructs a `GaussianDIASJob` with `mode="bogus"` and confirms
 `job.all_molecules_jobs is None` (whereas the equivalent
 `fragment1_jobs`/`fragment2_jobs` calls raise `ValueError`).
@@ -3259,7 +3259,7 @@ if label is None:
 
 `__init__` raises `ValueError: 'filename' must be provided.` a few lines earlier (line 72-73, see bug #1) whenever `filename is None`, so by the time this block runs `filename` is guaranteed truthy. The `elif molecule is not None:` and `else:` arms can never execute through any real construction path -- `if filename is not None:` always matches.
 
-**Reproduce:** confirmed empirically -- there is no way to call `ThermochemistryJob(...)` with `molecule` set and `filename=None` without hitting the earlier `ValueError` first. See `tests/test_thermochemistry_job_unit.py::TestThermochemistryJobConstruction` for the reachable label-from-filename behavior.
+**Reproduce:** confirmed empirically -- there is no way to call `ThermochemistryJob(...)` with `molecule` set and `filename=None` without hitting the earlier `ValueError` first. See `tests/test_thermochemistry.py::TestThermochemistryJobConstruction` for the reachable label-from-filename behavior.
 
 **Impact:** None -- purely redundant defensive code; consistent with bug #1, which already documents that the `filename` guard was added later and makes this fallback chain moot.
 
@@ -3369,7 +3369,7 @@ def get_additional_solvent_options(self):
     return rw.GetMol()                                   # <-- line 924, dead
 ```
 
-**Reproduce:** confirmed by code inspection (an unconditional `return` at the same indentation level unconditionally exits the function) and empirically by the coverage-improvement agent that found it while adding tests for this file -- no test input can reach lines 879-924 through the public `remove_phantom_metal_carbons` API. See `tests/test_io_utils_organometallic.py` (added while raising this file from 77% to 98% coverage) for the reachable behavior of this function.
+**Reproduce:** confirmed by code inspection (an unconditional `return` at the same indentation level unconditionally exits the function) and empirically by the coverage-improvement agent that found it while adding tests for this file -- no test input can reach lines 879-924 through the public `remove_phantom_metal_carbons` API. See `tests/test_io_utils.py` (added while raising this file from 77% to 98% coverage) for the reachable behavior of this function.
 
 **Impact:** None on current behavior (dead code, no effect), but the *intended* Cp-dearomatization logic itself never runs anywhere in the codebase -- if some other caller was meant to invoke this as a separate helper (e.g., to handle ChemDraw's neutral-aromatic-Cp drawing convention before `attach_eta_bonds_for_cp_rings` runs), that functionality is effectively missing/silently absent.
 
@@ -3648,7 +3648,7 @@ if successful_labels or timed_out_labels or failed_labels:
 
 An early guard at the top of `run_combinations` already returns `[]` when `combinations` is empty, so by the time the summary-printing block runs, `combinations` is guaranteed non-empty -- at least one `IterateCombination` exists. For every combination, the bookkeeping loop guarantees its label ends up in exactly one of three buckets: `successful_labels` (built from any `results_dict` entry with a non-`None` molecule), `timed_out_labels` (populated directly by the watchdog when a worker is killed for exceeding its timeout), or `failed_labels` (populated either when the label never appears in `results_dict` at all -- a crashed worker -- or when it maps to an explicit `None` and wasn't a timeout). There is no path for a combination to avoid all three: a timeout always adds to `timed_out_labels`; a missing/crashed result always adds to `failed_labels`; an explicit `None` result either adds to `failed_labels` or (if a duplicate label already added it) leaves `failed_labels` non-empty regardless. So `successful_labels or timed_out_labels or failed_labels` is always `True` when this line is reached, and the branch where all three are falsy (skipping the summary block entirely) can never execute.
 
-**Reproduce:** confirmed by reasoning through every code path that appends to `results_dict`/`successful_labels`/`timed_out_labels`/`failed_labels` -- combined with the `if not combinations: return []` early guard, no combination can reach the summary check without having landed in one of the three lists. See `tests/test_iterate_run_combinations_unit.py` for direct coverage of each of the three population paths (timeout, missing/crashed, explicit-None-not-timed-out) using fake `multiprocessing.Process`/`Manager` objects.
+**Reproduce:** confirmed by reasoning through every code path that appends to `results_dict`/`successful_labels`/`timed_out_labels`/`failed_labels` -- combined with the `if not combinations: return []` early guard, no combination can reach the summary check without having landed in one of the three lists. See `tests/test_iterate_runner.py` for direct coverage of each of the three population paths (timeout, missing/crashed, explicit-None-not-timed-out) using fake `multiprocessing.Process`/`Manager` objects.
 
 **Impact:** None -- purely redundant defensive code with no behavioral effect.
 
@@ -3688,7 +3688,7 @@ Two independent invariants make these guards' False arms unreachable:
 1. `job_settings = ctx.obj["job_settings"]` (line 273) is always populated by the parent `orca` group's callback (`chemsmart/cli/orca/orca.py`) before any subcommand -- including `qmmm` -- ever runs; every code path in that callback assigns a real `ORCAJobSettings` instance to `job_settings` (default, from-file, or from-database), never `None`. So the `else: qmmm_merged = qmmm_settings` branch (line 296-297, guarded by `job_settings is not None`'s False arm) can never execute.
 2. `create_orca_qmmm_subcommand` is attached to exactly seven parent groups: `opt`, `ts`, `sp` (singlepoint), `scan`, `qrc`, `modred`, and `neb` (`grep -rn "create_orca_qmmm_subcommand" chemsmart/cli/orca/*.py`). Every one of these seven groups' own callback sets both `ctx.obj["parent_settings"]` and `ctx.obj["parent_jobtype"]` to a real (non-`None`) value immediately before Click dispatches to the `qmmm` subcommand (e.g. `chemsmart/cli/orca/opt.py:95-96`: `ctx.obj["parent_settings"] = opt_settings; ctx.obj["parent_jobtype"] = "opt"`). Since `qmmm` has no other attachment point, `parent_jobtype` and `parent_settings` are always non-`None` whenever the `qmmm()` callback runs through the real CLI, making both `if parent_jobtype is not None:` (317-318) and `if parent_settings is not None:` (394-395) always take their True arm.
 
-**Reproduce:** `tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand` exercises the *reachable* neighboring branches (the `qmmm_merged`/`qmmm_settings` exception-fallback paths when `job_settings is not None`, via `test_qmmm_merge_failure_falls_back_to_settings_reconstruction` and related tests); confirmed unreachability for the three branches above by exhaustively checking all seven `create_orca_qmmm_subcommand` call sites and the `orca` group's `job_settings` assignment paths.
+**Reproduce:** `tests/test_orca_cli.py::TestOrcaQmmmSubcommand` exercises the *reachable* neighboring branches (the `qmmm_merged`/`qmmm_settings` exception-fallback paths when `job_settings is not None`, via `test_qmmm_merge_failure_falls_back_to_settings_reconstruction` and related tests); confirmed unreachability for the three branches above by exhaustively checking all seven `create_orca_qmmm_subcommand` call sites and the `orca` group's `job_settings` assignment paths.
 
 **Impact:** None -- purely redundant defensive code with no behavioral effect through any real CLI invocation.
 
@@ -3700,9 +3700,9 @@ Two independent invariants make these guards' False arms unreachable:
 
 **Location:** `chemsmart/cli/orca/qmmm.py:438-442`
 
-Bug #28 already documents that Click's `type=dict` declaration for `-h` rejects any non-empty CLI value before the callback body ever runs. This entry adds the missing piece: the *one* value that does survive Click's `dict(value)` conversion -- the empty string `""`, which becomes `{}` -- still can't reach a successful `ast.literal_eval` call. `high_level_h_bond_length` ends up as the dict `{}` (not a string), and `ast.literal_eval({})` raises `ValueError: malformed node or string: {}` (confirmed via `tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_empty_string_crashes_differently`). So line 442 (`molecule.scale_factors = high_level_h_bond_length_dict`, reached only after a *successful* `ast.literal_eval`) is unreachable for literally any value `-h` can take through the real CLI -- not just the "typical" values bug #28 already covers, but even the one edge case that gets past Click's broken converter.
+Bug #28 already documents that Click's `type=dict` declaration for `-h` rejects any non-empty CLI value before the callback body ever runs. This entry adds the missing piece: the *one* value that does survive Click's `dict(value)` conversion -- the empty string `""`, which becomes `{}` -- still can't reach a successful `ast.literal_eval` call. `high_level_h_bond_length` ends up as the dict `{}` (not a string), and `ast.literal_eval({})` raises `ValueError: malformed node or string: {}` (confirmed via `tests/test_orca_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_empty_string_crashes_differently`). So line 442 (`molecule.scale_factors = high_level_h_bond_length_dict`, reached only after a *successful* `ast.literal_eval`) is unreachable for literally any value `-h` can take through the real CLI -- not just the "typical" values bug #28 already covers, but even the one edge case that gets past Click's broken converter.
 
-**Reproduce:** `tests/test_orca_qmmm_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_empty_string_crashes_differently` -- `-h ""` reaches `chemsmart/cli/orca/qmmm.py:439` (`ast.literal_eval(high_level_h_bond_length)`) and raises `ValueError: malformed node or string: {}` rather than completing.
+**Reproduce:** `tests/test_orca_cli.py::TestOrcaQmmmSubcommand::test_high_level_h_bond_length_empty_string_crashes_differently` -- `-h ""` reaches `chemsmart/cli/orca/qmmm.py:439` (`ast.literal_eval(high_level_h_bond_length)`) and raises `ValueError: malformed node or string: {}` rather than completing.
 
 **Impact:** Same as bug #28 -- the `-h` option is completely unusable for its documented purpose through any real CLI input, not just typical ones.
 
@@ -3732,7 +3732,7 @@ def _write_scf_convergence(self, f):
 
 The f-string building the `ValueError` message references `self.scf_convergence` -- an attribute of the *writer* (`ORCAInputWriter`), which has no such attribute (the writer only exposes `self.settings.scf_convergence`, used correctly two lines above). Evaluating `self.scf_convergence` inside the f-string raises `AttributeError: 'ORCAInputWriter' object has no attribute 'scf_convergence'` before the `ValueError` can even be constructed, so callers get an unrelated, confusing crash instead of the intended "SCF convergence X is not supported by ORCA" message.
 
-**Reproduce:** `tests/test_orca_writer_blocks_unit.py::TestScfBlock::test_invalid_convergence_raises` -- calling `_write_scf_convergence` with `scf_convergence="bogusSCF"` (a value with a valid `...scf` suffix but not in `ORCA_SCF_CONVERGENCE` once stripped) raises `AttributeError`, not `ValueError`.
+**Reproduce:** `tests/test_ORCAWriter.py::TestScfBlock::test_invalid_convergence_raises` -- calling `_write_scf_convergence` with `scf_convergence="bogusSCF"` (a value with a valid `...scf` suffix but not in `ORCA_SCF_CONVERGENCE` once stripped) raises `AttributeError`, not `ValueError`.
 
 **Impact:** Low-to-moderate -- functionally the input is still rejected (the job still fails to write), but the error message is actively misleading: a user who mistypes an SCF convergence keyword sees an unrelated `AttributeError` about a missing writer attribute instead of the helpful "not supported by ORCA" message with the list of valid options.
 
@@ -3750,7 +3750,7 @@ Three separate `if`/`elif` chains in this file check a value against a fixed, sm
 2. Similarly, `_write_mdci_block`'s nested `mdci_density` chain is preceded by `assert mdci_density.lower() in ["none", "unrelaxed", "relaxed"]`.
 3. `_write_modred_if_dict`'s `prepend_string.lower().startswith(...)` chain (`"b"`/`"a"`/`"d"`, else `scan_var = "variable"`) processes `prepend_string` values produced exclusively by `get_prepend_string_for_modred` (`chemsmart/utils/utils.py:1221-1243`), which raises `ValueError` for any coordinate list not of length 2, 3, or 4 and otherwise returns exactly `"B"`, `"A"`, or `"D"` -- so `prepend_string.lower()` can only ever be `"b"`, `"a"`, or `"d"`, and the `else: scan_var = "variable"; scan_unit = "unit"` fallback can never execute.
 
-**Reproduce:** confirmed by reading the guarding `assert`s (cases 1-2) and `get_prepend_string_for_modred`'s exhaustive 3-value return domain (case 3); `tests/test_orca_writer_blocks_unit.py::TestMdciBlock::test_cutoff_levels`/`test_density_levels` and `TestModredBlock` already cover the reachable branches of all three chains.
+**Reproduce:** confirmed by reading the guarding `assert`s (cases 1-2) and `get_prepend_string_for_modred`'s exhaustive 3-value return domain (case 3); `tests/test_ORCAWriter.py::TestMdciBlock::test_cutoff_levels`/`test_density_levels` and `TestModredBlock` already cover the reachable branches of all three chains.
 
 **Impact:** None -- purely redundant code paths with no behavioral effect (each `elif`'s condition is always true whenever control reaches it, and the `else` case in #3 can never be entered at all).
 
@@ -3832,7 +3832,7 @@ if not route_string.startswith("!"):
 
 In both methods, `route_string` is assigned the literal `""` on the line immediately before this guard, and no code path modifies it in between. An empty string never starts with `"!"`, so `not route_string.startswith("!")` is always `True` and the body always executes -- the `if` is unconditionally true every time either method runs. The guard can never take its "false" arc (i.e. `route_string` already starting with `"!"`) because there is no way to reach the check with a non-empty `route_string`.
 
-**Reproduce:** Coverage of `tests/test_orca_settings_unit.py` and `tests/test_orca_qmmm_neb_settings_unit.py` (all `route_string`/`_get_neb_route_string` tests) leaves the `if`'s false branch (`527->532` and `2620->2625` in `coverage report -m`) permanently unreached no matter what settings are exercised, confirming the guard is tautological.
+**Reproduce:** Coverage of `tests/test_orca_settings.py` and `tests/test_orca_settings.py` (all `route_string`/`_get_neb_route_string` tests) leaves the `if`'s false branch (`527->532` and `2620->2625` in `coverage report -m`) permanently unreached no matter what settings are exercised, confirming the guard is tautological.
 
 **Impact:** None -- purely dead/defensive code; every call always takes the same path, so behavior is unaffected. It looks like a copy-paste of the pattern used in `_get_route_string_from_user_input` (where the check *is* meaningful, since there `route_string = self.route_to_be_written` can legitimately already start with `"!"`), applied to a context where it can't ever be false.
 
@@ -3856,7 +3856,7 @@ elif self.basis is None:
 
 The `elif` branch is only ever evaluated when the preceding `if self.basis is not None` was `False`, i.e. exactly when `self.basis is None`. At that point `elif self.basis is None` is guaranteed to be `True` -- it can never be reached and evaluate to `False`, since that would require `self.basis` to be simultaneously not-None (to fail the `if`) and None (to fail the `elif`), which is impossible. The `elif`'s condition is therefore redundant; it is functionally an `else`.
 
-**Reproduce:** In `coverage report -m --include="*jobs/orca/settings.py"`, branch `667->673` (jumping from the `elif` line straight past its body to the `aux_basis` check that follows the whole `if/elif`) never appears as covered no matter what `basis`/`jobtype` combinations `tests/test_orca_settings_unit.py::TestGetLevelOfTheory` exercises, because that arc requires the impossible "basis is not None and also None" state.
+**Reproduce:** In `coverage report -m --include="*jobs/orca/settings.py"`, branch `667->673` (jumping from the `elif` line straight past its body to the `aux_basis` check that follows the whole `if/elif`) never appears as covered no matter what `basis`/`jobtype` combinations `tests/test_orca_settings.py::TestGetLevelOfTheory` exercises, because that arc requires the impossible "basis is not None and also None" state.
 
 **Impact:** None -- purely a redundant/tautological condition; behavior is identical to writing a plain `else:`.
 
@@ -3884,7 +3884,7 @@ if self.low_level_of_theory is not None:
 
 `validate_and_assign_level` is always called with `level_name="low_level"` from this call site, and the `if level_name == "low_level": level_of_theory = "MM"` line unconditionally overwrites whatever the earlier `built_in_method`/`functional`/`basis` branches computed (including the `""` default), regardless of whether `self.low_level_method` was actually provided. So `self.low_level_of_theory` is always the string `"MM"`, never `None` or falsy, and the subsequent `if self.low_level_of_theory is not None:` check on line 2094 can never take its false branch.
 
-**Reproduce:** `coverage report -m --include="*jobs/orca/settings.py"` shows arc `2094->2106` (skipping the entire QM/QMMM-labeling block) as unreachable across all of `tests/test_orca_qmmm_neb_settings_unit.py::TestQMMMLevelOfTheoryString`, including jobs with no `low_level_method` set at all (plain `QM/QM2` jobs).
+**Reproduce:** `coverage report -m --include="*jobs/orca/settings.py"` shows arc `2094->2106` (skipping the entire QM/QMMM-labeling block) as unreachable across all of `tests/test_orca_settings.py::TestQMMMLevelOfTheoryString`, including jobs with no `low_level_method` set at all (plain `QM/QM2` jobs).
 
 **Impact:** None observed -- the *actual* decision about whether to append an `"/MM"` suffix is separately (and correctly) gated a few lines later by `if self.low_level_method is not None:` (line 2104), which checks the real attribute rather than the always-`"MM"` `low_level_of_theory`. So a plain `QM/QM2` job (no MM layer) still produces the correct `"QM/<intermediate>"` route string without an erroneous `"/MM"` suffix, because that second, correct guard saves it. The outer `if self.low_level_of_theory is not None:` is simply vestigial dead code that happens not to matter because of the redundant, correctly-guarded check inside it.
 
@@ -3913,7 +3913,7 @@ def _write_crystal_qmmm_subblock(self):
 
 `_write_crystal_qmmm_subblock` initializes `crystal_qmmm_subblock = ""` and only ever appends to it; every code path returns this (possibly-still-empty) string, never `None`. So `crystal_sub` is always a `str` (falsy-but-not-None when no crystal fields are set), and `if crystal_sub is not None:` is always `True`. Appending an empty string to `full_qm_block` is a no-op anyway, so the check has no observable effect either way.
 
-**Reproduce:** `coverage report -m --include="*jobs/orca/settings.py"` shows arc `2428->2431` (skipping the `full_qm_block += crystal_sub` append) as unreachable across all of `tests/test_orca_qmmm_neb_settings_unit.py::TestQmmmBlockGeneration`, including non-crystal `QMMM`/`QM/QM2` jobs where the subblock is empty.
+**Reproduce:** `coverage report -m --include="*jobs/orca/settings.py"` shows arc `2428->2431` (skipping the `full_qm_block += crystal_sub` append) as unreachable across all of `tests/test_orca_settings.py::TestQmmmBlockGeneration`, including non-crystal `QMMM`/`QM/QM2` jobs where the subblock is empty.
 
 **Impact:** None -- appending `""` is a no-op, so whether the `if` guard is "true but appends nothing" or hypothetically "false and skips the append" produces byte-identical output. Purely dead/defensive code.
 
