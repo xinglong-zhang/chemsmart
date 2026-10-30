@@ -872,12 +872,9 @@ class Molecule:
         Calculate the moments of inertia of the molecule.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros((3, 3)), np.zeros(3), np.eye(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(self.masses, self.positions)
+        return calculate_moments_of_inertia(self.masses, self.positions)
 
     @cached_property
     def _get_moments_of_inertia_weighted_mass(self):
@@ -886,14 +883,11 @@ class Molecule:
         molecule. Use natural abundance weighted masses.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros((3, 3)), np.zeros(3), np.eye(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(
-                self.natural_abundance_weighted_masses, self.positions
-            )
+        return calculate_moments_of_inertia(
+            self.natural_abundance_weighted_masses, self.positions
+        )
 
     @cached_property
     def _get_moments_of_inertia_most_abundant_mass(self):
@@ -902,14 +896,11 @@ class Molecule:
         the molecule. Use most abundant masses.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros((3, 3)), np.zeros(3), np.eye(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(
-                self.most_abundant_masses, self.positions
-            )
+        return calculate_moments_of_inertia(
+            self.most_abundant_masses, self.positions
+        )
 
     @cached_property
     def rotational_temperatures(self):
