@@ -136,7 +136,8 @@ def make_cli_ctx_obj():
 
 @pytest.fixture()
 def invoke_config_server():
-    """Return a callable that invokes 'chemsmart config server' via Click's CliRunner.
+    """Return a callable that invokes 'chemsmart config server'
+    via Click's CliRunner.
 
     Usage in tests::
 
@@ -181,7 +182,8 @@ def write_server_yaml():
 
 @pytest.fixture()
 def invoke_update_configs():
-    """Return a callable that invokes 'chemsmart update configs' via Click's CliRunner.
+    """Return a callable that invokes 'chemsmart update configs'
+    via Click's CliRunner.
 
     Usage in tests::
 
@@ -1554,9 +1556,17 @@ def water_opt_input_path(inpfile_path):
 
 
 @pytest.fixture()
-def sdf_file(structure_test_directory):
+def water_sdf_file(structure_test_directory):
     """Single-molecule SDF (V2000 molfile) for water."""
     return os.path.join(structure_test_directory, "sdf", "water.sdf")
+
+
+@pytest.fixture()
+def water_sdf_file_content(water_sdf_file):
+    """Returns the content of the water.sdf file as a string."""
+    with open(water_sdf_file, "r") as f:
+        content = f.read()
+    return content
 
 
 # orca input files path and associated files
