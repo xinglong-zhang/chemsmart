@@ -3002,6 +3002,13 @@ class Molecule:
 
         return X
 
+    @property
+    def soap_descriptors(self):
+        """
+        Return SOAP descriptors for the molecule.
+        """
+        return self.calculate_soap()
+
     def calculate_soap(
         self,
         *,
