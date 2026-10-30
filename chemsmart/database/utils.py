@@ -179,6 +179,24 @@ def canonical_json_hash(obj):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def canonical_custom_basis_hash(custom_basis):
+    """Hash basis functions/ECPs using the pre-split identity format.
+
+    New metadata keeps the name and functions in separate fields. Only
+    the functions belong in the legacy hash slot: a derived name or alias
+    must not change a calculation's ID. This projection is for hashing
+    only and does not change the public metadata or stored JSON.
+    """
+    if not custom_basis:
+        return None
+    identity = dict(custom_basis)
+    if "heavy_elements_basis_functions" in identity:
+        identity["heavy_elements_basis"] = identity.pop(
+            "heavy_elements_basis_functions"
+        )
+    return canonical_json_hash(identity)
+
+
 def compute_trajectory_id(structure_ids):
     """Compute a trajectory ID from an ordered list of structure_id."""
     return hashlib.sha256("|".join(structure_ids).encode("utf-8")).hexdigest()

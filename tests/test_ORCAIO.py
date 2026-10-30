@@ -462,6 +462,62 @@ END
 
 
 class TestORCAOutput:
+    @pytest.mark.parametrize(
+        "comment",
+        [
+            '# NewGTO Pd "def2-QZVP" end',
+            'NewGTO I "def2-TZVP" end # NewGTO Pd "def2-QZVP" end',
+            '# NewGTO Pd "def2-QZVP" end # NewGTO I "def2-TZVP" end',
+        ],
+    )
+    def test_commented_newgto_does_not_override_basis(self, tmp_path, comment):
+        out_file = tmp_path / "commented_newgto.out"
+        out_file.write_text(
+            "|  1> ! PBE0 def2-SVP\n"
+            "|  2> %basis\n"
+            '|  3> NewGTO Pd "def2-TZVP" end\n'
+            f"|  4> {comment}\n"
+            "|  5> end\n"
+            "|  6> ****END OF INPUT****\n"
+        )
+        out = ORCAOutput(str(out_file))
+        assert out.heavy_elements_basis == "def2-TZVP"
+        if '# NewGTO Pd "def2-QZVP" end #' in comment:
+            assert out.heavy_elements == ["Pd", "I"]
+
+    def test_heavy_elements_basis_names_are_case_insensitive(self, tmp_path):
+        out_file = tmp_path / "case_variants.out"
+        out_file.write_text(
+            "|  1> ! PBE0 def2-SVP\n"
+            "|  2> %basis\n"
+            '|  3> NewGTO I "def2-tzvp" end\n'
+            '|  4> NewGTO Pd "def2-TZVP" end\n'
+            "|  5> end\n"
+            "|  6> ****END OF INPUT****\n"
+        )
+        out = ORCAOutput(str(out_file))
+        assert out.heavy_elements == ["Pd", "I"]
+        assert out.heavy_elements_basis == "def2-TZVP"
+
+    def test_newgto_is_scoped_to_basis_block(self, tmp_path):
+        out_file = tmp_path / "scoped_newgto.out"
+        out_file.write_text(
+            "|  1> ! PBE0 def2-SVP\n"
+            "|  2> %basis\n"
+            '|  3> NewAuxJGTO Cl "def2/J" end\n'
+            '|  4> NewGTO Cl "6-31G*" end\n'
+            '|  5> NewGTO Br "6-31G*" end\n'
+            "|  6> end\n"
+            '|  7> # old alternative: NewGTO Cl "def2-QZVP" end\n'
+            "|  8> * xyz 0 1\n"
+            '|  9> Cl 0 0 0 NewGTO "def2-QZVP" end\n'
+            "| 10> *\n"
+            "| 11> ****END OF INPUT****\n"
+        )
+        out = ORCAOutput(str(out_file))
+        assert out.heavy_elements == ["Cl", "Br"]
+        assert out.heavy_elements_basis == "6-31G*"
+
     def test_heavy_elements_basis_from_echoed_input(self, tmp_path):
         out_file = tmp_path / "pd_newgto.out"
         out_file.write_text(

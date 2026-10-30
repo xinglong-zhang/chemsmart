@@ -18,6 +18,7 @@ from functools import cached_property
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
+    canonical_custom_basis_hash,
     canonical_json_hash,
     canonicalize_route_string,
     compute_trajectory_id,
@@ -123,7 +124,9 @@ class BaseAssembler:
             [m.structure_id for m in self.molecules_list]
         )
         meta = {**meta, "trajectory_id": trajectory_id}
-        custom_basis_hash = canonical_json_hash(meta.get("custom_basis"))
+        custom_basis_hash = canonical_custom_basis_hash(
+            meta.get("custom_basis")
+        )
         custom_solvent_hash = canonical_json_hash(meta.get("custom_solvent"))
         route_tokens = canonicalize_route_string(
             self.output.route_string,

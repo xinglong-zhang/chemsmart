@@ -849,7 +849,11 @@ class GaussianJobSettings(MolecularJobSettings):
                 genecp_path=self.gen_genecp_file
             )
         else:
-            raise ValueError("Could not get GenECPSection")
+            raise ValueError(
+                "Could not get GenECPSection. Supply an explicit "
+                "heavy_elements_basis or gen_genecp_file; an unmatched "
+                "basis/ECP cannot be reconstructed from a basis name."
+            )
         return genecp_section
 
     def prune_heavy_elements(self, molecule):

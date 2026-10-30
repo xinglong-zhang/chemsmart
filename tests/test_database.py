@@ -1,3 +1,4 @@
+import copy
 import csv
 import json
 import sqlite3
@@ -17,6 +18,8 @@ from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
     SCHEMA_VERSION,
     bool_to_str,
+    canonical_custom_basis_hash,
+    canonical_json_hash,
     canonicalize_route_string,
     check_schema_version,
     compute_trajectory_id,
@@ -74,6 +77,51 @@ RECORD_ID_XTB_P_BENZYNE_OPT = (
 
 
 class TestDatabaseUtilities:
+    @pytest.mark.parametrize(
+        "functions",
+        [None, {"Ag": [{"shell": "S", "primitives": [(1.0, 1.0)]}]}],
+    )
+    def test_custom_basis_hash_preserves_legacy_identity(self, functions):
+        legacy = {
+            "heavy_elements": ["Ag"],
+            "heavy_elements_basis": functions,
+            "heavy_elements_ecp": None,
+            "light_elements": ["Cl"],
+            "light_elements_basis": "def2svp",
+        }
+        modern = {
+            **legacy,
+            "heavy_elements_basis": "def2-tzvp",
+            "heavy_elements_basis_functions": functions,
+        }
+        snapshot = copy.deepcopy(modern)
+        expected = canonical_json_hash(legacy)
+        assert canonical_custom_basis_hash(legacy) == expected
+        assert canonical_custom_basis_hash(modern) == expected
+        assert (
+            canonical_custom_basis_hash(
+                {**modern, "heavy_elements_basis": "def2-tzvpd"}
+            )
+            == expected
+        )
+        assert modern == snapshot
+        assert (
+            canonical_custom_basis_hash(
+                {**modern, "heavy_elements_basis_functions": {"Ag": []}}
+            )
+            != expected
+        )
+        assert (
+            canonical_custom_basis_hash(
+                {
+                    **modern,
+                    "heavy_elements_ecp": {"Ag": {"n_valence_electrons": 19}},
+                }
+            )
+            != expected
+        )
+        assert canonical_custom_basis_hash(None) is None
+
     def test_is_chemsmart_database(
         self, database_chemsmart_file, database_ase_file, database_empty_file
     ):
@@ -1231,6 +1279,46 @@ class TestDatabaseInspect:
 
 
 class TestDatabaseAssembler:
+    @pytest.mark.parametrize(
+        "fixture_name, legacy_id",
+        [
+            (
+                "gaussian_full_gen_outfile",
+                "5594cd909d66f02001a99ce3cb17e2d15d0dea8487eff222fd469df34f553614",
+            ),
+            (
+                "gaussian_full_genecp_outfile",
+                "1f713325607cf86403497d1d4a38b8d41be6cf29cbc6e43b3b2f2dabfa8ae98b",
+            ),
+        ],
+    )
+    def test_custom_basis_reassembly_preserves_record_id(
+        self, request, tmp_path, fixture_name, legacy_id
+    ):
+        record = SingleFileAssembler(
+            request.getfixturevalue(fixture_name)
+        ).assemble_data
+        assert record.record_id == legacy_id
+        custom_basis = record.meta["custom_basis"]
+        assert isinstance(custom_basis["heavy_elements_basis"], str)
+        legacy = copy.deepcopy(Database.record_to_dict(record))
+        legacy_basis = legacy["meta"]["custom_basis"]
+        legacy_basis["heavy_elements_basis"] = legacy_basis.pop(
+            "heavy_elements_basis_functions"
+        )
+        db = Database(str(tmp_path / "upgrade.db"))
+        db.create()
+        db.insert_record(legacy)
+        db.insert_record(record)
+        with db.get_connection() as conn:
+            assert (
+                conn.execute("SELECT COUNT(*) FROM records").fetchone()[0] == 1
+            )
+        stored_basis = db.get_record(record_id=legacy_id)["meta"][
+            "custom_basis"
+        ]
+        assert stored_basis == json.loads(json.dumps(custom_basis))
+
     def test_assembler_builds_records(
         self,
         gaussian_mp2_outputfile,

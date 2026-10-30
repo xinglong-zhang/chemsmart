@@ -211,6 +211,12 @@ query_condition_pattern = (
 query_logic_split_pattern = r"\s+(AND|OR)\s+"
 
 
+# ORCA comments run to the end of the line or to a second '#'. Quoted
+# strings are matched first so '#' inside a basis name is preserved.
+orca_input_comment_pattern = r'"(?:[^"\\]|\\.)*"|#[^#\n]*(?:#|$)'
+orca_input_token_pattern = r'"(?:[^"\\]|\\.)*"|%[A-Za-z]\w*|[A-Za-z_][\w-]*|\S'
+
+
 # Gaussian gen/genecp explicit basis patterns
 # Matches a shell header line, e.g. "S 8 1.00", "P 4 1.00" or "SP 3 1.00"
 # Group 1: angular-momentum label (SP/S/P/D/F/G/H/I)

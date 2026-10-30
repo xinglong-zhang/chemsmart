@@ -1,4 +1,5 @@
 import functools
+from math import isclose
 
 
 class GaussianRefs:
@@ -228,6 +229,72 @@ class BSEMetadata:
         return list(
             _bse_basis_names_matching(element, _basis_shells_key(shells))
         )
+
+    def basis_ecp_matches(self, element, basis_name, ecp):
+        """Check that rebuilding a BSE basis preserves the printed ECP.
+
+        ``ecp`` is one element's Gaussian16Output.heavy_elements_ecp entry,
+        or None when that element has no ECP. Orbital functions alone do
+        not establish which potential was used with an explicit basis.
+        """
+        atomic_number = self.bse.lut.element_Z_from_sym(element)
+        data = self.bse.get_basis(basis_name, elements=[element])["elements"][
+            str(atomic_number)
+        ]
+        potentials = data.get("ecp_potentials", [])
+        if not potentials:
+            return ecp is None
+        if ecp is None:
+            return False
+        if ecp["n_valence_electrons"] != (
+            atomic_number - data["ecp_electrons"]
+        ):
+            return False
+
+        # The Gaussian writer represents scalar ECPs with one coefficient
+        # column; reject unsupported potentials instead of replacing them.
+        if any(
+            potential["ecp_type"] != "scalar_ecp"
+            or len(potential["angular_momentum"]) != 1
+            or len(potential["coefficients"]) != 1
+            for potential in potentials
+        ):
+            return False
+        local_am = max(p["angular_momentum"][0] for p in potentials)
+        local_label = self.bse.lut.amint_to_char([local_am], hij=True).upper()
+        expected = {}
+        for potential in potentials:
+            am = potential["angular_momentum"][0]
+            label = self.bse.lut.amint_to_char([am], hij=True).upper()
+            name = (
+                f"{local_label} AND UP"
+                if am == local_am
+                else f"{label} - {local_label}"
+            )
+            expected[name] = sorted(
+                (power, float(exponent), float(coefficient), 0.0)
+                for power, exponent, coefficient in zip(
+                    potential["r_exponents"],
+                    potential["gaussian_exponents"],
+                    potential["coefficients"][0],
+                )
+            )
+        actual = {
+            " ".join(channel["name"].upper().split()): sorted(channel["terms"])
+            for channel in ecp["channels"]
+        }
+        if expected.keys() != actual.keys():
+            return False
+        for name, terms in expected.items():
+            if len(terms) != len(actual[name]):
+                return False
+            for expected_term, actual_term in zip(terms, actual[name]):
+                if len(actual_term) != 4 or any(
+                    not isclose(a, b, rel_tol=1e-8, abs_tol=5e-8)
+                    for a, b in zip(expected_term, actual_term)
+                ):
+                    return False
+        return True
 
 
 def _significant(value, digits=8):
