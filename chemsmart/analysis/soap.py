@@ -530,16 +530,9 @@ def calculate_soap(
     )
 
     logger.debug(
-        "Computing SOAP for %d atoms (species=%s, r_cut=%s, n_max=%s, "
-        "l_max=%s, sigma=%s, centers=%s, aggregation=%s)",
-        len(symbols),
-        species_list,
-        r_cut,
-        n_max,
-        l_max,
-        sigma,
-        centers,
-        aggregation,
+        f"Computing SOAP for {len(symbols)} atoms (species={species_list}, r_cut={r_cut}, "
+        f"n_max={n_max}, l_max={l_max}, sigma={sigma}, centers={centers},"
+        f" aggregation={aggregation})",
     )
 
     features = _soap_gto_features(
