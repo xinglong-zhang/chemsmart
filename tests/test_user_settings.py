@@ -2,15 +2,7 @@
 
 import os
 
-import pytest
-
 from chemsmart.settings.user import CHEMSMARTUserSettings
-
-
-@pytest.fixture
-def user_settings(tmp_path, monkeypatch):
-    monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(tmp_path))
-    return CHEMSMARTUserSettings()
 
 
 class TestResolveConfigDir:

@@ -12,7 +12,6 @@ unit tests).
 import importlib
 from unittest.mock import MagicMock
 
-import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.iterate.iterate import iterate
@@ -25,13 +24,6 @@ from chemsmart.cli.iterate.iterate import iterate
 # AttributeError. Look the submodule up via ``sys.modules`` (through
 # ``importlib.import_module``) and patch attributes on that object.
 iterate_module = importlib.import_module("chemsmart.cli.iterate.iterate")
-
-
-@pytest.fixture()
-def valid_config_toml(tmp_path):
-    path = tmp_path / "config.toml"
-    path.write_text("[[skeletons]]\nfile = 'a.xyz'\n")
-    return str(path)
 
 
 def _patch_job(mocker, run_return="out.xyz"):
@@ -63,7 +55,7 @@ class TestGenerateTemplateOption:
 
 class TestOutputModeValidation:
     def test_outputfile_forbidden_with_separate_outputs(
-        self, mocker, valid_config_toml
+        self, mocker, valid_iterate_config_toml
     ):
         _patch_job(mocker)
         runner = CliRunner()
@@ -71,7 +63,7 @@ class TestOutputModeValidation:
             iterate,
             [
                 "-f",
-                valid_config_toml,
+                valid_iterate_config_toml,
                 "--separate-outputs",
                 "-o",
                 "custom_out",
@@ -81,19 +73,19 @@ class TestOutputModeValidation:
         assert "not allowed when '--separate-outputs'" in result.output
 
     def test_directory_defaults_to_cwd_with_separate_outputs(
-        self, mocker, valid_config_toml
+        self, mocker, valid_iterate_config_toml
     ):
         mock_job = _patch_job(mocker)
         runner = CliRunner()
         result = runner.invoke(
             iterate,
-            ["-f", valid_config_toml, "--separate-outputs"],
+            ["-f", valid_iterate_config_toml, "--separate-outputs"],
         )
         assert result.exit_code == 0
         mock_job.run.assert_called_once()
 
     def test_directory_explicitly_given_with_separate_outputs(
-        self, mocker, valid_config_toml, tmp_path
+        self, mocker, valid_iterate_config_toml, tmp_path
     ):
         mock_job = _patch_job(mocker)
         runner = CliRunner()
@@ -101,7 +93,7 @@ class TestOutputModeValidation:
             iterate,
             [
                 "-f",
-                valid_config_toml,
+                valid_iterate_config_toml,
                 "--separate-outputs",
                 "-d",
                 str(tmp_path),
@@ -111,13 +103,13 @@ class TestOutputModeValidation:
         mock_job.run.assert_called_once()
 
     def test_directory_forbidden_without_separate_outputs(
-        self, mocker, valid_config_toml, tmp_path
+        self, mocker, valid_iterate_config_toml, tmp_path
     ):
         _patch_job(mocker)
         runner = CliRunner()
         result = runner.invoke(
             iterate,
-            ["-f", valid_config_toml, "-d", str(tmp_path)],
+            ["-f", valid_iterate_config_toml, "-d", str(tmp_path)],
         )
         assert result.exit_code != 0
         assert "not allowed when '--no-separate-outputs'" in result.output
@@ -167,7 +159,7 @@ class TestEmptyConfigFile:
         assert called_raw_config == {}
 
     def test_none_unwrap_result_becomes_empty_dict(
-        self, mocker, valid_config_toml
+        self, mocker, valid_iterate_config_toml
     ):
         # tomlkit's TOMLDocument.unwrap() always returns a dict, never
         # None, even for an empty file -- but the CLI defensively
@@ -187,7 +179,7 @@ class TestEmptyConfigFile:
             iterate_module.tomlkit, "load", return_value=mock_doc
         )
         runner = CliRunner()
-        result = runner.invoke(iterate, ["-f", valid_config_toml])
+        result = runner.invoke(iterate, ["-f", valid_iterate_config_toml])
         assert result.exit_code == 0
         called_raw_config = mock_validate.call_args[0][0]
         assert called_raw_config == {}
@@ -195,28 +187,30 @@ class TestEmptyConfigFile:
 
 class TestResultCallback:
     def test_successful_run_reports_output_path(
-        self, mocker, valid_config_toml, tmp_path
+        self, mocker, valid_iterate_config_toml, tmp_path
     ):
         out_path = tmp_path / "result.xyz"
         out_path.write_text("dummy")
         _patch_job(mocker, run_return=str(out_path))
         runner = CliRunner()
-        result = runner.invoke(iterate, ["-f", valid_config_toml])
+        result = runner.invoke(iterate, ["-f", valid_iterate_config_toml])
         assert result.exit_code == 0
         assert "Output saved to:" in result.output
 
-    def test_no_structures_generated_warns(self, mocker, valid_config_toml):
+    def test_no_structures_generated_warns(
+        self, mocker, valid_iterate_config_toml
+    ):
         _patch_job(mocker, run_return=None)
         runner = CliRunner()
-        result = runner.invoke(iterate, ["-f", valid_config_toml])
+        result = runner.invoke(iterate, ["-f", valid_iterate_config_toml])
         assert result.exit_code == 0
 
     def test_job_run_exception_becomes_click_exception(
-        self, mocker, valid_config_toml
+        self, mocker, valid_iterate_config_toml
     ):
         mock_job = _patch_job(mocker)
         mock_job.run.side_effect = RuntimeError("boom")
         runner = CliRunner()
-        result = runner.invoke(iterate, ["-f", valid_config_toml])
+        result = runner.invoke(iterate, ["-f", valid_iterate_config_toml])
         assert result.exit_code != 0
         assert "boom" in str(result.exception) or "boom" in result.output

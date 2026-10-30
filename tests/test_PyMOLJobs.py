@@ -52,12 +52,6 @@ from chemsmart.utils.cluster import (
 from chemsmart.utils.utils import quote_path
 
 
-@pytest.fixture(scope="session")
-def skip_if_no_pymol():
-    if shutil.which("pymol") is None:
-        pytest.skip("PyMOL not installed")
-
-
 @pytest.mark.usefixtures("skip_if_no_pymol")
 class TestPyMOLJobs:
     def test_pymol_visualization_job_on_gaussian_com_file(
@@ -3214,17 +3208,6 @@ class TestPyMOLScientificStyleVisualizationJobs:
             )
             == f"quasi_chemdraw_bold {job.label}"
         )
-
-
-@pytest.fixture()
-def loaded_1_mer(visualized_1_mer_xyz_file):
-    """Load ``1-mer.xyz`` into a fresh, real PyMOL session (PyMOL required)."""
-    from pymol import cmd
-
-    cmd.reinitialize()
-    cmd.load(visualized_1_mer_xyz_file, "mol1mer")
-    yield "mol1mer"
-    cmd.delete("all")
 
 
 @pytest.mark.usefixtures("skip_if_no_pymol")

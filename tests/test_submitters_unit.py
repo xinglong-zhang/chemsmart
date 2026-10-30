@@ -38,32 +38,6 @@ def make_job(label="job1", program="Gaussian", complete=False, folder="."):
     return job
 
 
-@pytest.fixture()
-def pbs_test_server():
-    return Server(
-        "custom-pbs",
-        SCHEDULER="PBS",
-        NUM_CORES=8,
-        MEM_GB=24,
-        NUM_GPUS=0,
-        NUM_HOURS=24,
-        QUEUE_NAME="normal",
-    )
-
-
-@pytest.fixture()
-def slurm_test_server():
-    return Server(
-        "custom-slurm",
-        SCHEDULER="SLURM",
-        NUM_CORES=8,
-        MEM_GB=24,
-        NUM_GPUS=0,
-        NUM_HOURS=24,
-        QUEUE_NAME="normal",
-    )
-
-
 class TestRunScript:
     def test_write_creates_file_with_expected_content(
         self, tmp_path, monkeypatch

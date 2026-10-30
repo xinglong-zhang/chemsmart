@@ -17,9 +17,14 @@ from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 
 
-@pytest.fixture()
-def nciplot_settings():
-    return NCIPLOTJobSettings()
+class TestNCIPLOTJobSettingsFromDict:
+    def test_from_dict_forwards_keys_to_constructor(self):
+        settings = NCIPLOTJobSettings.from_dict(
+            {"rthres": 0.2, "fragments": {1: [1, 2]}}
+        )
+        assert isinstance(settings, NCIPLOTJobSettings)
+        assert settings.rthres == 0.2
+        assert settings.fragments == {1: [1, 2]}
 
 
 class TestNCIPLOTJobSettingsDefaultCrashes:

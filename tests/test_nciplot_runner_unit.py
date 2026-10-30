@@ -19,24 +19,6 @@ from chemsmart.jobs.nciplot.runner import (
     FakeNCIPLOTJobRunner,
     NCIPLOTJobRunner,
 )
-from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
-
-
-@pytest.fixture()
-def nciplot_settings():
-    return NCIPLOTJobSettings()
-
-
-@pytest.fixture()
-def nciplot_job_from_files(
-    single_molecule_xyz_file, nciplot_settings, tmp_path, monkeypatch
-):
-    monkeypatch.chdir(tmp_path)
-    return NCIPLOTJob(
-        filenames=[single_molecule_xyz_file],
-        settings=nciplot_settings,
-        label="ncitest",
-    )
 
 
 class TestNCIPLOTJobRunnerSetup:

@@ -22,47 +22,28 @@ from chemsmart.cli.update import (
     ConfigUpdateError,
     ConfigUpdateReport,
     ConfigurationUpdater,
-    DependencyUpdater,
     ProjectsUpdater,
     ProjectUpdateError,
     Updater,
-    VersionUpdater,
     _PreparedConfig,
     update,
 )
 
 
-@pytest.fixture()
-def updater(tmp_path):
-    u = DependencyUpdater()
-    u._package_path = tmp_path
-    u._pyproject_path = tmp_path / "pyproject.toml"
-    return u
-
-
-@pytest.fixture()
-def version_updater(tmp_path):
-    u = VersionUpdater("0.0.0")
-    u._pyproject_path = tmp_path / "pyproject.toml"
-    u._version_file_path = tmp_path / "VERSION"
-    u._docs_conf_file_path = tmp_path / "conf.py"
-    return u
-
-
 class TestUpdaterAbstractBase:
-    def test_base_update_is_a_no_op_pass(self, updater):
+    def test_base_update_is_a_no_op_pass(self, dependency_updater):
         # Updater.update() is @abstractmethod with a `pass` body; concrete
         # subclasses always override it, so this only runs by calling the
         # base implementation directly against a subclass instance.
-        assert Updater.update(updater) is None
+        assert Updater.update(dependency_updater) is None
 
 
 class TestUpdaterPathProperties:
     def test_dependency_updater_properties_expose_private_attrs(
-        self, updater, tmp_path
+        self, dependency_updater, tmp_path
     ):
-        assert updater.package_path == tmp_path
-        assert updater.pyproject_path == tmp_path / "pyproject.toml"
+        assert dependency_updater.package_path == tmp_path
+        assert dependency_updater.pyproject_path == tmp_path / "pyproject.toml"
 
     def test_version_updater_properties_expose_private_attrs(
         self, version_updater, tmp_path
@@ -73,39 +54,56 @@ class TestUpdaterPathProperties:
 
 
 class TestGetExistingDependenciesFromPyproject:
-    def test_missing_file_returns_empty_set(self, updater):
-        assert updater._get_existing_dependencies_from_pyproject() == set()
+    def test_missing_file_returns_empty_set(self, dependency_updater):
+        assert (
+            dependency_updater._get_existing_dependencies_from_pyproject()
+            == set()
+        )
 
-    def test_reads_dependencies_from_project_table(self, updater):
-        updater.pyproject_path.write_text(
+    def test_reads_dependencies_from_project_table(self, dependency_updater):
+        dependency_updater.pyproject_path.write_text(
             '[project]\ndependencies = ["numpy>=1.0", "click"]\n'
         )
-        deps = updater._get_existing_dependencies_from_pyproject()
+        deps = dependency_updater._get_existing_dependencies_from_pyproject()
         assert deps == {"numpy>=1.0", "click"}
 
-    def test_missing_dependencies_key_returns_empty_set(self, updater):
-        updater.pyproject_path.write_text('[project]\nname = "chemsmart"\n')
-        assert updater._get_existing_dependencies_from_pyproject() == set()
+    def test_missing_dependencies_key_returns_empty_set(
+        self, dependency_updater
+    ):
+        dependency_updater.pyproject_path.write_text(
+            '[project]\nname = "chemsmart"\n'
+        )
+        assert (
+            dependency_updater._get_existing_dependencies_from_pyproject()
+            == set()
+        )
 
 
 class TestGetExistingDependenciesFromEnvironmentYml:
     def test_missing_file_returns_empty_set(
-        self, updater, tmp_path, monkeypatch
+        self, dependency_updater, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
         assert (
-            updater._get_existing_dependencies_from_environment_yml() == set()
+            dependency_updater._get_existing_dependencies_from_environment_yml()
+            == set()
         )
 
-    def test_reads_plain_string_deps(self, updater, tmp_path, monkeypatch):
+    def test_reads_plain_string_deps(
+        self, dependency_updater, tmp_path, monkeypatch
+    ):
         monkeypatch.chdir(tmp_path)
         (tmp_path / "environment.yml").write_text(
             "dependencies:\n  - numpy\n  - pandas\n"
         )
-        deps = updater._get_existing_dependencies_from_environment_yml()
+        deps = (
+            dependency_updater._get_existing_dependencies_from_environment_yml()
+        )
         assert deps == {"numpy", "pandas"}
 
-    def test_reads_pip_subsection_deps(self, updater, tmp_path, monkeypatch):
+    def test_reads_pip_subsection_deps(
+        self, dependency_updater, tmp_path, monkeypatch
+    ):
         monkeypatch.chdir(tmp_path)
         (tmp_path / "environment.yml").write_text(
             "dependencies:\n"
@@ -114,65 +112,69 @@ class TestGetExistingDependenciesFromEnvironmentYml:
             "    - click>=8.0\n"
             "    - requests\n"
         )
-        deps = updater._get_existing_dependencies_from_environment_yml()
+        deps = (
+            dependency_updater._get_existing_dependencies_from_environment_yml()
+        )
         assert deps == {"numpy", "click>=8.0", "requests"}
 
 
 class TestGetExistingDependencies:
     def test_combines_pyproject_and_environment_yml(
-        self, updater, tmp_path, monkeypatch
+        self, dependency_updater, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        updater.pyproject_path.write_text(
+        dependency_updater.pyproject_path.write_text(
             '[project]\ndependencies = ["numpy"]\n'
         )
         (tmp_path / "environment.yml").write_text(
             "dependencies:\n  - pandas\n"
         )
-        deps = updater._get_existing_dependencies()
+        deps = dependency_updater._get_existing_dependencies()
         assert deps == {"numpy", "pandas"}
 
 
 class TestGetMissingDependenciesFileHandling:
     def test_missing_requirements_file_returns_empty_set(
-        self, updater, tmp_path
+        self, dependency_updater, tmp_path
     ):
-        missing = updater._get_missing_dependencies(
+        missing = dependency_updater._get_missing_dependencies(
             tmp_path / "does_not_exist.txt"
         )
         assert missing == set()
 
 
 class TestUpdateToml:
-    def test_no_missing_dependencies_is_noop(self, updater, tmp_path):
-        updater.pyproject_path.write_text(
+    def test_no_missing_dependencies_is_noop(
+        self, dependency_updater, tmp_path
+    ):
+        dependency_updater.pyproject_path.write_text(
             '[project]\ndependencies = ["numpy"]\n'
         )
         req_file = tmp_path / "requirements.txt"
         req_file.write_text("numpy\n")
 
-        original_text = updater.pyproject_path.read_text()
-        updater._update_toml(req_file)
-        assert updater.pyproject_path.read_text() == original_text
+        original_text = dependency_updater.pyproject_path.read_text()
+        dependency_updater._update_toml(req_file)
+        assert dependency_updater.pyproject_path.read_text() == original_text
 
     def test_appends_missing_dependency_with_gte_normalized(
-        self, updater, tmp_path
+        self, dependency_updater, tmp_path
     ):
-        updater.pyproject_path.write_text(
+        dependency_updater.pyproject_path.write_text(
             '[project]\ndependencies = ["numpy"]\n'
         )
         req_file = tmp_path / "requirements.txt"
         req_file.write_text("Click==8.1.0\n")
 
-        updater._update_toml(req_file)
+        dependency_updater._update_toml(req_file)
 
-        new_text = updater.pyproject_path.read_text()
+        new_text = dependency_updater.pyproject_path.read_text()
         assert "click>=8.1.0" in new_text
         assert "numpy" in new_text
 
 
 class TestGenerateRequirements:
-    def test_returns_none_on_pipreqs_failure(self, updater):
+    def test_returns_none_on_pipreqs_failure(self, dependency_updater):
         mock_process = MagicMock()
         mock_process.communicate.return_value = (b"", b"pipreqs error")
         mock_process.returncode = 1
@@ -180,10 +182,10 @@ class TestGenerateRequirements:
             "chemsmart.cli.update.subprocess.Popen",
             return_value=mock_process,
         ):
-            result = updater._generate_requirements()
+            result = dependency_updater._generate_requirements()
         assert result is None
 
-    def test_returns_tmp_path_on_success(self, updater):
+    def test_returns_tmp_path_on_success(self, dependency_updater):
         mock_process = MagicMock()
         mock_process.communicate.return_value = (b"done", b"")
         mock_process.returncode = 0
@@ -191,51 +193,65 @@ class TestGenerateRequirements:
             "chemsmart.cli.update.subprocess.Popen",
             return_value=mock_process,
         ):
-            result = updater._generate_requirements()
+            result = dependency_updater._generate_requirements()
         assert isinstance(result, Path)
 
 
 class TestDependencyUpdaterUpdateEntryPoint:
-    def test_update_delegates_to_update_pyproject_toml(self, updater):
+    def test_update_delegates_to_update_pyproject_toml(
+        self, dependency_updater
+    ):
         with patch.object(
-            updater, "update_pyproject_toml"
+            dependency_updater, "update_pyproject_toml"
         ) as mock_update_pyproject:
-            updater.update()
+            dependency_updater.update()
         mock_update_pyproject.assert_called_once_with()
 
 
 class TestUpdateTomlNoVersionSpecifier:
     def test_dependency_without_version_specifier_normalized_lowercase(
-        self, updater, tmp_path
+        self, dependency_updater, tmp_path
     ):
-        updater.pyproject_path.write_text("[project]\ndependencies = []\n")
+        dependency_updater.pyproject_path.write_text(
+            "[project]\ndependencies = []\n"
+        )
         req_file = tmp_path / "requirements.txt"
         req_file.write_text("SomePackage\n")
 
-        updater._update_toml(req_file)
+        dependency_updater._update_toml(req_file)
 
-        new_text = updater.pyproject_path.read_text()
+        new_text = dependency_updater.pyproject_path.read_text()
         assert "somepackage" in new_text
 
 
 class TestUpdatePyprojectToml:
-    def test_no_requirements_path_skips_toml_update(self, updater):
+    def test_no_requirements_path_skips_toml_update(self, dependency_updater):
         with (
-            patch.object(updater, "_generate_requirements", return_value=None),
-            patch.object(updater, "_update_toml") as mock_update_toml,
+            patch.object(
+                dependency_updater, "_generate_requirements", return_value=None
+            ),
+            patch.object(
+                dependency_updater, "_update_toml"
+            ) as mock_update_toml,
         ):
-            updater.update_pyproject_toml()
+            dependency_updater.update_pyproject_toml()
         mock_update_toml.assert_not_called()
 
-    def test_requirements_path_triggers_toml_update(self, updater, tmp_path):
+    def test_requirements_path_triggers_toml_update(
+        self, dependency_updater, tmp_path
+    ):
         req_path = tmp_path / "req.txt"
         with (
             patch.object(
-                updater, "_generate_requirements", return_value=req_path
+                dependency_updater,
+                "_generate_requirements",
+                return_value=req_path,
             ),
-            patch.object(updater, "_update_toml") as mock_update_toml,
+            patch.object(
+                dependency_updater, "_update_toml"
+            ) as mock_update_toml,
         ):
-            updater.update_pyproject_toml()
+            dependency_updater.update_pyproject_toml()
         mock_update_toml.assert_called_once_with(req_path)
 
 

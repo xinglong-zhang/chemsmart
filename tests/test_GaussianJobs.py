@@ -4,13 +4,10 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.qrc import GaussianQRCJob
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.gaussian import GaussianProjectSettings
 
 
@@ -140,38 +137,22 @@ class TestGaussianJobs:
 
 
 class TestGaussianQRCJobs:
-    @pytest.fixture
-    def mock_molecule(self):
-        mol = MagicMock(spec=Molecule)
-        mol.has_vibrations = True
-        mol.copy.return_value = mol
-        mol.vibrationally_displaced.return_value = mol
-        mol.get_chemical_formula.return_value = "C1H4"
-        return mol
 
-    @pytest.fixture
-    def real_settings(self):
-        # Use a real settings object to pass isinstance checks
-        settings = GaussianJobSettings()
-        settings.jobtype = "qrc"
-        return settings
-
-    @pytest.fixture
-    def mock_jobrunner(self):
-        runner = MagicMock(spec=JobRunner)
-        return runner
-
-    def test_init_raises_if_no_vibrations(self, mock_molecule, real_settings):
+    def test_init_raises_if_no_vibrations(
+        self, mock_molecule, gaussian_qrc_settings
+    ):
         mock_molecule.has_vibrations = False
         with pytest.raises(ValueError, match="no vibrational modes"):
-            GaussianQRCJob(molecule=mock_molecule, settings=real_settings)
+            GaussianQRCJob(
+                molecule=mock_molecule, settings=gaussian_qrc_settings
+            )
 
     def test_run_both_jobs_runs_forward_and_reverse_jobs(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, gaussian_qrc_settings, mock_jobrunner
     ):
         job = GaussianQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=gaussian_qrc_settings,
             jobrunner=mock_jobrunner,
             label="test_qrc",
         )
@@ -190,11 +171,11 @@ class TestGaussianQRCJobs:
             reverse_job.run.assert_called_once()
 
     def test_run_delegates_to_run_both_jobs(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, gaussian_qrc_settings, mock_jobrunner
     ):
         job = GaussianQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=gaussian_qrc_settings,
             jobrunner=mock_jobrunner,
             label="test_qrc",
         )
@@ -203,11 +184,11 @@ class TestGaussianQRCJobs:
         mock_run_both.assert_called_once()
 
     def test_is_complete_checks_both_qrc_jobs(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, gaussian_qrc_settings, mock_jobrunner
     ):
         job = GaussianQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=gaussian_qrc_settings,
             jobrunner=mock_jobrunner,
             label="test_qrc",
         )
@@ -224,12 +205,12 @@ class TestGaussianQRCJobs:
             assert job.is_complete() is False
 
     def test_label_no_jobtype_suffix_when_jobtype_none(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, gaussian_qrc_settings, mock_jobrunner
     ):
-        real_settings.jobtype = None
+        gaussian_qrc_settings.jobtype = None
         job = GaussianQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=gaussian_qrc_settings,
             jobrunner=mock_jobrunner,
             label="test_qrc",
         )

@@ -17,55 +17,51 @@ from chemsmart.jobs.gaussian.link import GaussianLinkJob
 from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 
 
-@pytest.fixture()
-def irc_settings():
-    return GaussianLinkJobSettings(jobtype="irc", direction=None)
-
-
-@pytest.fixture()
-def opt_settings():
-    return GaussianLinkJobSettings(jobtype="opt")
-
-
 class TestSettingsClass:
     def test_returns_gaussian_link_job_settings(self):
         assert GaussianLinkJob.settings_class() is GaussianLinkJobSettings
 
 
 class TestIsIrcJob:
-    def test_true_for_irc_jobtype(self, ethanol_molecule, irc_settings):
+    def test_true_for_irc_jobtype(
+        self, ethanol_molecule, gaussian_link_irc_settings
+    ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         assert job._is_irc_job() is True
 
-    def test_false_for_non_irc_jobtype(self, ethanol_molecule, opt_settings):
+    def test_false_for_non_irc_jobtype(
+        self, ethanol_molecule, gaussian_link_opt_settings
+    ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=opt_settings,
+            settings=gaussian_link_opt_settings,
             label="link_test",
         )
         assert job._is_irc_job() is False
 
 
 class TestCreateIrcSubjob:
-    def test_raises_for_non_irc_job(self, ethanol_molecule, opt_settings):
+    def test_raises_for_non_irc_job(
+        self, ethanol_molecule, gaussian_link_opt_settings
+    ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=opt_settings,
+            settings=gaussian_link_opt_settings,
             label="link_test",
         )
         with pytest.raises(ValueError, match="only for IRC link jobs"):
             job._create_irc_subjob("f")
 
     def test_forward_subjob_has_ircf_jobtype(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         subjob = job._create_irc_subjob("f")
@@ -73,11 +69,11 @@ class TestCreateIrcSubjob:
         assert subjob.label == "link_test_f"
 
     def test_reverse_subjob_has_ircr_jobtype(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         subjob = job._create_irc_subjob("r")
@@ -85,11 +81,11 @@ class TestCreateIrcSubjob:
         assert subjob.label == "link_test_r"
 
     def test_irc_link_label_pattern_is_rewritten_in_place(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="mymol_irc_link",
         )
         subjob = job._create_irc_subjob("f")
@@ -118,11 +114,11 @@ class TestCreateIrcSubjob:
         assert subjob.label == "mymol_ircr_flat_link"
 
     def test_none_label_skips_label_derivation(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         job.label = None
@@ -134,11 +130,11 @@ class TestCreateIrcSubjob:
 
 class TestGetIrcJobs:
     def test_non_irc_job_returns_empty_list(
-        self, ethanol_molecule, opt_settings
+        self, ethanol_molecule, gaussian_link_opt_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=opt_settings,
+            settings=gaussian_link_opt_settings,
             label="link_test",
         )
         assert job._get_irc_jobs() == []
@@ -161,10 +157,12 @@ class TestGetIrcJobs:
         assert len(jobs) == 1
         assert jobs[0].settings.jobtype == "ircr"
 
-    def test_no_direction_returns_both(self, ethanol_molecule, irc_settings):
+    def test_no_direction_returns_both(
+        self, ethanol_molecule, gaussian_link_irc_settings
+    ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         jobs = job._get_irc_jobs()
@@ -173,11 +171,11 @@ class TestGetIrcJobs:
 
 class TestRunAndCompletion:
     def test_run_delegates_to_super_for_non_irc(
-        self, ethanol_molecule, opt_settings
+        self, ethanol_molecule, gaussian_link_opt_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=opt_settings,
+            settings=gaussian_link_opt_settings,
             label="link_test",
         )
         with patch(
@@ -186,10 +184,12 @@ class TestRunAndCompletion:
             job._run()
         mock_super_run.assert_called_once()
 
-    def test_run_runs_each_irc_subjob(self, ethanol_molecule, irc_settings):
+    def test_run_runs_each_irc_subjob(
+        self, ethanol_molecule, gaussian_link_irc_settings
+    ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         fwd, rev = MagicMock(), MagicMock()
@@ -201,11 +201,11 @@ class TestRunAndCompletion:
         rev.run.assert_called_once()
 
     def test_job_is_complete_non_irc_delegates_to_super(
-        self, ethanol_molecule, opt_settings
+        self, ethanol_molecule, gaussian_link_opt_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=opt_settings,
+            settings=gaussian_link_opt_settings,
             label="link_test",
         )
         with patch(
@@ -216,11 +216,11 @@ class TestRunAndCompletion:
         mock_super_complete.assert_called_once()
 
     def test_job_is_complete_irc_requires_all_subjobs_complete(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         fwd, rev = MagicMock(), MagicMock()
@@ -237,7 +237,7 @@ class TestRunAndCompletion:
 
 class TestBackupFilesIsDeadCode:
     def test_backup_files_is_not_the_method_invoked_by_backup(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         """Documents a bug: ``GaussianLinkJob`` defines a public
         ``backup_files(self, backup_chk=False)`` method with IRC-aware
@@ -251,11 +251,11 @@ class TestBackupFilesIsDeadCode:
         assert "backup_files" in vars(GaussianLinkJob)
 
     def test_backup_files_method_itself_works_when_called_directly(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         fwd, rev = MagicMock(), MagicMock()
@@ -280,11 +280,11 @@ class TestBackupFilesIsDeadCode:
         mock_backup_file.assert_any_call("rev.chk")
 
     def test_backup_files_with_backup_chk_false_skips_chk(
-        self, ethanol_molecule, irc_settings
+        self, ethanol_molecule, gaussian_link_irc_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=irc_settings,
+            settings=gaussian_link_irc_settings,
             label="link_test",
         )
         fwd = MagicMock()
@@ -304,11 +304,11 @@ class TestBackupFilesIsDeadCode:
         assert called_paths == ["fwd.com", "fwd.log"]
 
     def test_backup_files_non_irc_delegates_to_super_backup_files(
-        self, ethanol_molecule, opt_settings
+        self, ethanol_molecule, gaussian_link_opt_settings
     ):
         job = GaussianLinkJob(
             molecule=ethanol_molecule,
-            settings=opt_settings,
+            settings=gaussian_link_opt_settings,
             label="link_test",
         )
         with patch.object(

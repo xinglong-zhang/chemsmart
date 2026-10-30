@@ -372,6 +372,121 @@ class TestGrouperCliRunner:
         with pytest.raises(RuntimeError, match="irmsd is not available"):
             IRMSDGrouper(methanol_molecules[:2])
 
+    def test_irmsd_initialization_falls_back_when_api_not_callable(
+        self, monkeypatch, methanol_molecules
+    ):
+        from types import SimpleNamespace
+
+        from chemsmart.jobs.grouper import rmsd as rmsd_module
+
+        monkeypatch.setattr(
+            rmsd_module.importlib,
+            "import_module",
+            lambda name: SimpleNamespace(get_irmsd=None),
+        )
+        monkeypatch.setattr(
+            rmsd_module, "find_irmsd_command", lambda: "/bin/irmsd"
+        )
+        grouper = IRMSDGrouper(methanol_molecules[:2])
+        assert grouper._use_direct_api is False
+        assert grouper._irmsd_cmd == "/bin/irmsd"
+
+    @pytest.mark.parametrize(
+        ("backend_value", "expected"), ((0.25, 0.25), (np.nan, np.inf))
+    )
+    def test_irmsd_direct_api_success_records_inversion(
+        self, monkeypatch, methanol_molecules, backend_value, expected
+    ):
+        from types import SimpleNamespace
+
+        from chemsmart.jobs.grouper import rmsd as rmsd_module
+
+        calls = []
+
+        def fake_get_irmsd(numbers1, positions1, numbers2, positions2, **kw):
+            calls.append((len(numbers1), len(numbers2), kw))
+            return backend_value, None, None, None, None
+
+        monkeypatch.setattr(
+            rmsd_module.importlib,
+            "import_module",
+            lambda name: SimpleNamespace(get_irmsd=fake_get_irmsd),
+        )
+        grouper = IRMSDGrouper(methanol_molecules[:2], inversion="off")
+        assert grouper._use_direct_api is True
+
+        # Dispatches to the direct API and returns (rmsd, inversion) payload.
+        payload = grouper._calculate_pair_payload((0, 1))
+        assert payload[0] == expected
+        assert payload[1] == "off"
+        # All atoms are passed when ignore_hydrogens is False.
+        n_atoms = len(methanol_molecules[0].chemical_symbols)
+        assert calls == [(n_atoms, n_atoms, {"iinversion": 2})]
+
+        # A later call keeps the already-resolved inversion.
+        grouper.inversion = "on"
+        assert grouper._calculate_rmsd((0, 1)) == expected
+        assert grouper._actual_inversion == "off"
+
+    def test_irmsd_direct_api_mismatched_atoms_returns_inf(
+        self, monkeypatch, caplog, methanol_and_ethanol
+    ):
+        from types import SimpleNamespace
+
+        from chemsmart.jobs.grouper import rmsd as rmsd_module
+
+        def must_not_be_called(*args, **kwargs):
+            raise AssertionError("get_irmsd should not be called")
+
+        monkeypatch.setattr(
+            rmsd_module.importlib,
+            "import_module",
+            lambda name: SimpleNamespace(get_irmsd=must_not_be_called),
+        )
+        grouper = IRMSDGrouper(methanol_and_ethanol, ignore_hydrogens=True)
+        with caplog.at_level("WARNING"):
+            assert np.isinf(grouper._calculate_rmsd((0, 1)))
+        assert "Molecules 0 and 1 have different atom types" in caplog.text
+
+    def test_irmsd_consume_payload_keeps_first_resolved_inversion(self):
+        grouper = object.__new__(IRMSDGrouper)
+        grouper._actual_inversion = None
+
+        assert grouper._consume_pair_payload((0, 1), (0.5, None)) == 0.5
+        assert grouper._actual_inversion is None
+        assert grouper._consume_pair_payload((0, 2), (0.7, "on")) == 0.7
+        assert grouper._actual_inversion == "on"
+        assert grouper._consume_pair_payload((1, 2), (0.9, "off")) == 0.9
+        assert grouper._actual_inversion == "on"
+
+    def test_parse_irmsd_output_can_skip_inversion_line(self):
+        grouper = object.__new__(IRMSDGrouper)
+        value, inversion = grouper._parse_irmsd_output(
+            "Inversion check: on\niRMSD: 0.42", parse_inversion=False
+        )
+        assert value == pytest.approx(0.42)
+        assert inversion is None
+
+    def test_calculate_pair_chunk_returns_payload_per_pair(
+        self, methanol_molecules
+    ):
+        grouper = BasicRMSDGrouper(methanol_molecules)
+        chunk = grouper._calculate_pair_chunk([(0, 1), (0, 2)])
+        assert chunk == [
+            pytest.approx(grouper._calculate_rmsd((0, 1))),
+            pytest.approx(grouper._calculate_rmsd((0, 2))),
+        ]
+
+    def test_pymol_init_reports_missing_pymol(self, monkeypatch):
+        import sys
+
+        monkeypatch.setitem(sys.modules, "pymol", None)
+        grouper = object.__new__(PymolRMSDGrouper)
+        grouper.cmd = None
+        grouper._temp_dir = None
+        with pytest.raises(ImportError, match="PyMOL not available"):
+            grouper._init_pymol()
+
     def test_irmsd_cli_handles_failure_and_timeout(
         self, monkeypatch, methanol_molecules
     ):
@@ -2375,6 +2490,66 @@ class TestFactory:
             f"Parameter '{parameter}={value}' is only effective for 'tfd' "
             "strategy, ignored for 'rmsd'." in caplog.messages
         )
+
+    @pytest.mark.parametrize(
+        ("parameter", "value", "owner"),
+        (
+            ("inversion", "on", "irmsd"),
+            ("fingerprint_type", "morgan", "tanimoto"),
+        ),
+    )
+    def test_strategy_only_parameter_warns_and_is_dropped(
+        self, caplog, methanol_molecules, parameter, value, owner
+    ):
+        caplog.set_level("WARNING")
+
+        grouper = StructureGrouperFactory.create(
+            methanol_molecules,
+            strategy="rmsd",
+            **{parameter: value},
+        )
+
+        assert isinstance(grouper, BasicRMSDGrouper)
+        assert not hasattr(grouper, parameter)
+        assert (
+            f"Parameter '{parameter}={value}' is only effective for "
+            f"'{owner}' strategy, ignored for 'rmsd'." in caplog.messages
+        )
+
+    def test_none_strategy_defaults_to_rmsd(self, methanol_molecules):
+        grouper = StructureGrouperFactory.create(
+            methanol_molecules, strategy=None
+        )
+        assert isinstance(grouper, BasicRMSDGrouper)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        (
+            ({"strategy": "bogus"}, "Unknown grouping strategy: 'bogus'"),
+            (
+                {"strategy": "rmsd", "threshold": 0.5, "num_groups": 2},
+                "Cannot specify both threshold (-T) and num_groups (-N)",
+            ),
+            (
+                {"strategy": "formula", "threshold": 0.5},
+                "Strategy 'formula' does not support threshold parameter",
+            ),
+            (
+                {"strategy": "formula", "num_groups": 2},
+                "Strategy 'formula' does not support num_groups parameter",
+            ),
+            (
+                {"strategy": "energy", "ignore_hydrogens": True},
+                "Strategy 'energy' does not support ignore_hydrogens",
+            ),
+        ),
+    )
+    def test_invalid_parameter_combinations_raise(
+        self, methanol_molecules, kwargs, message
+    ):
+        with pytest.raises(ValueError) as excinfo:
+            StructureGrouperFactory.create(methanol_molecules, **kwargs)
+        assert message in str(excinfo.value)
 
     def test_structure_grouper_factory_energy(
         self, multiple_molecules_xyz_file
@@ -4406,21 +4581,11 @@ class TestMultiprocessingSupport:
         assert len(index_groups) == 1
         assert index_groups == [[0]]
 
-    def test_matrix_grouper_log_progress(self, caplog):
+    def test_matrix_grouper_log_progress(self, caplog, make_matrix_grouper):
         """Test functionality of MatrixGrouper._log_progress method."""
         import logging
 
-        from chemsmart.jobs.grouper.base import MatrixGrouper
-
-        class DummyGrouper(MatrixGrouper):
-            def _calculate_rmsd(self, idx_pair):
-                return 0.0
-
-            def group(self):
-                return [], []
-
-        # Create dummy grouper
-        grouper = DummyGrouper([], threshold=0.1)
+        grouper = make_matrix_grouper([], threshold=0.1)
         with caplog.at_level(logging.INFO):
             # Initial call, 0% complete, next_progress threshold at 10%
             next_progress = 10

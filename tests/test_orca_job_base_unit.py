@@ -22,16 +22,6 @@ from chemsmart.jobs.orca.job import (
 from chemsmart.jobs.orca.settings import ORCAJobSettings
 
 
-@pytest.fixture()
-def orca_settings():
-    return ORCAJobSettings.default()
-
-
-@pytest.fixture()
-def a_molecule(single_molecule_xyz_file):
-    return Molecule.from_filepath(single_molecule_xyz_file)
-
-
 class TestORCAJobConstruction:
     def test_rejects_invalid_settings_type(self, a_molecule):
         with pytest.raises(ValueError, match="Settings must be instance"):

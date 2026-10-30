@@ -186,6 +186,23 @@ class TestIsXYZFile:
         path.write_text("Entering Gaussian System\nsome more text\n")
         assert is_xyzfile(str(path)) is False
 
+    def test_false_for_missing_file(self, tmp_path):
+        assert is_xyzfile(str(tmp_path / "does_not_exist.trj")) is False
+
+    @pytest.mark.parametrize(
+        "content",
+        (
+            "0\ncomment\nC 0.0 0.0 0.0\n",  # non-positive atom count
+            "1\ncomment\nC 0.0 0.0\n",  # fewer than four columns
+            "1\ncomment\nC 0.0 abc 0.0\n",  # non-numeric coordinate
+        ),
+        ids=("zero_atoms", "too_few_columns", "non_numeric_coordinate"),
+    )
+    def test_false_for_malformed_first_atom_line(self, tmp_path, content):
+        path = tmp_path / "malformed.trj"
+        path.write_text(content)
+        assert is_xyzfile(str(path)) is False
+
 
 class TestCleanDuplicateStructure:
     """Tests for the clean_duplicate_structure function."""

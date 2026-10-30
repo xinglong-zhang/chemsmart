@@ -10,19 +10,7 @@ handling — none of which are reached by the CLI-propagation tests in
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.runner import ThermochemistryJobRunner
-
-
-@pytest.fixture()
-def thermo_job(gaussian_co2_opt_outfile, tmp_path):
-    job = ThermochemistryJob(
-        filename=gaussian_co2_opt_outfile, label="co2_thermo"
-    )
-    job.folder = str(tmp_path)
-    return job
 
 
 class TestThermochemistryJobRunnerSetup:

@@ -11,44 +11,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.orca.qrc import ORCAQRCJob
-from chemsmart.jobs.orca.settings import ORCAJobSettings
-from chemsmart.jobs.runner import JobRunner
-
-
-@pytest.fixture()
-def mock_molecule():
-    mol = MagicMock(spec=Molecule)
-    mol.has_vibrations = True
-    mol.copy.return_value = mol
-    mol.vibrationally_displaced.return_value = mol
-    mol.get_chemical_formula.return_value = "C1H4"
-    return mol
-
-
-@pytest.fixture()
-def real_settings():
-    settings = ORCAJobSettings.default()
-    settings.jobtype = "qrc"
-    return settings
-
-
-@pytest.fixture()
-def mock_jobrunner():
-    return MagicMock(spec=JobRunner)
 
 
 class TestORCAQRCJobConstruction:
-    def test_init_raises_if_no_vibrations(self, mock_molecule, real_settings):
+    def test_init_raises_if_no_vibrations(
+        self, mock_molecule, orca_qrc_settings
+    ):
         mock_molecule.has_vibrations = False
         with pytest.raises(ValueError, match="no vibrational modes"):
-            ORCAQRCJob(molecule=mock_molecule, settings=real_settings)
+            ORCAQRCJob(molecule=mock_molecule, settings=orca_qrc_settings)
 
-    def test_init_stores_qrc_parameters(self, mock_molecule, real_settings):
+    def test_init_stores_qrc_parameters(
+        self, mock_molecule, orca_qrc_settings
+    ):
         job = ORCAQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=orca_qrc_settings,
             label="test_qrc",
             mode_idx=2,
             amp=1.2,
@@ -66,10 +45,10 @@ class TestORCAQRCJobConstruction:
 
 class TestORCAQRCJobDisplacedMolecules:
     def test_qrcf_molecule_uses_positive_amplitude(
-        self, mock_molecule, real_settings
+        self, mock_molecule, orca_qrc_settings
     ):
         job = ORCAQRCJob(
-            molecule=mock_molecule, settings=real_settings, amp=0.5
+            molecule=mock_molecule, settings=orca_qrc_settings, amp=0.5
         )
         _ = job.qrcf_molecule
         mock_molecule.vibrationally_displaced.assert_called_with(
@@ -82,10 +61,10 @@ class TestORCAQRCJobDisplacedMolecules:
         )
 
     def test_qrcr_molecule_uses_negative_amplitude(
-        self, mock_molecule, real_settings
+        self, mock_molecule, orca_qrc_settings
     ):
         job = ORCAQRCJob(
-            molecule=mock_molecule, settings=real_settings, amp=0.5
+            molecule=mock_molecule, settings=orca_qrc_settings, amp=0.5
         )
         _ = job.qrcr_molecule
         mock_molecule.vibrationally_displaced.assert_called_with(
@@ -100,11 +79,11 @@ class TestORCAQRCJobDisplacedMolecules:
 
 class TestORCAQRCJobBothJobs:
     def test_prepare_both_qrc_jobs_creates_forward_and_reverse(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, orca_qrc_settings, mock_jobrunner
     ):
         job = ORCAQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=orca_qrc_settings,
             jobrunner=mock_jobrunner,
             label="test_qrc",
         )
@@ -122,11 +101,11 @@ class TestORCAQRCJobBothJobs:
         assert labels == ["test_qrcf_qrc", "test_qrcr_qrc"]
 
     def test_run_both_jobs_runs_forward_and_reverse(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, orca_qrc_settings, mock_jobrunner
     ):
         job = ORCAQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=orca_qrc_settings,
             jobrunner=mock_jobrunner,
             label="test_qrc",
         )
@@ -142,11 +121,11 @@ class TestORCAQRCJobBothJobs:
         reverse_job.run.assert_called_once()
 
     def test_run_delegates_to_run_both_jobs(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, orca_qrc_settings, mock_jobrunner
     ):
         job = ORCAQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=orca_qrc_settings,
             jobrunner=mock_jobrunner,
         )
         job._run_both_jobs = MagicMock()
@@ -154,11 +133,11 @@ class TestORCAQRCJobBothJobs:
         job._run_both_jobs.assert_called_once()
 
     def test_is_complete_true_when_both_jobs_complete(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, orca_qrc_settings, mock_jobrunner
     ):
         job = ORCAQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=orca_qrc_settings,
             jobrunner=mock_jobrunner,
         )
         job1 = MagicMock()
@@ -170,11 +149,11 @@ class TestORCAQRCJobBothJobs:
         assert job.is_complete() is True
 
     def test_is_complete_false_when_one_job_incomplete(
-        self, mock_molecule, real_settings, mock_jobrunner
+        self, mock_molecule, orca_qrc_settings, mock_jobrunner
     ):
         job = ORCAQRCJob(
             molecule=mock_molecule,
-            settings=real_settings,
+            settings=orca_qrc_settings,
             jobrunner=mock_jobrunner,
         )
         job1 = MagicMock()

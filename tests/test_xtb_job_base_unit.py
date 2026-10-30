@@ -12,19 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.xtb.job import XTBJob
 from chemsmart.jobs.xtb.settings import XTBJobSettings
-
-
-@pytest.fixture()
-def xtb_settings():
-    return XTBJobSettings.default()
-
-
-@pytest.fixture()
-def a_molecule(single_molecule_xyz_file):
-    return Molecule.from_filepath(single_molecule_xyz_file)
 
 
 class TestXTBJobConstruction:

@@ -5,15 +5,9 @@ Direct unit tests for :class:`AtomsChargeMultiplicity` in
 
 import numpy as np
 import pytest
-from ase import Atoms
 from ase.constraints import FixAtoms
 
 from chemsmart.io.molecules.atoms import AtomsChargeMultiplicity
-
-
-@pytest.fixture()
-def simple_ase_atoms():
-    return Atoms("Ar2", positions=[(0.0, 0.0, 0.0), (3.5, 0.0, 0.0)])
 
 
 class TestChargeSetter:

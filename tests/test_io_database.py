@@ -6,17 +6,6 @@ import pytest
 from chemsmart.io.database import DatabaseFile
 
 
-@pytest.fixture
-def minimal_struct_dict():
-    return {
-        "chemical_symbols": ["H", "H"],
-        "positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]],
-        "charge": 0,
-        "multiplicity": 1,
-        "energy": -1.0,
-    }
-
-
 class TestBuildMoleculeFromDatabase:
     """Tests for DatabaseFile.build_molecule_from_database."""
 

@@ -901,6 +901,64 @@ class TestDatabaseRecordMoleculeStructureQueries:
         with pytest.raises(ValueError, match="Ambiguous ID prefix"):
             db.get_structure_by_partial_id("abc")
 
+    @pytest.mark.parametrize(
+        ("lookup", "prefix", "message"),
+        (
+            ("get_record_by_partial_id", "zzz", "No record found"),
+            ("get_record_by_partial_id", "rec", "matches 2 records"),
+            ("get_molecule_by_partial_id", "zzz", "No molecule found"),
+            ("get_molecule_by_partial_id", "mol", "matches 2 molecules"),
+        ),
+    )
+    def test_record_and_molecule_partial_id_errors(
+        self, raw_rows_db, lookup, prefix, message
+    ):
+        with pytest.raises(ValueError, match=message):
+            getattr(raw_rows_db, lookup)(prefix)
+
+    def test_record_summary_lookups_without_structures(self, raw_rows_db):
+        by_index = raw_rows_db.get_record_summary(record_index=1)
+        assert by_index["record_id"] == "rec111"
+        assert by_index["program"] == "Gaussian"
+        # No linked structure, so molecule fields are not merged in.
+        assert "chemical_formula" not in by_index
+
+        assert raw_rows_db.get_record_summary() is None
+        assert raw_rows_db.get_record_summary(record_index=99) is None
+        assert raw_rows_db.get_record_summary(record_id="missing") is None
+
+        summaries = raw_rows_db.get_all_record_summaries()
+        assert [s["record_id"] for s in summaries] == ["rec111", "rec222"]
+        assert all("chemical_formula" not in s for s in summaries)
+
+    def test_row_helpers_handle_optional_fields(self):
+        meta = Database._extract_meta(
+            {"custom_basis_json": '{"Pd": "def2-TZVP"}'}
+        )
+        assert meta["custom_basis"] == {"Pd": "def2-TZVP"}
+        assert meta["solvent_on"] is False
+
+        provenance = Database._extract_provenance({})
+        assert "normal_termination" not in provenance
+
+        structure = Database._record_structure_row_to_dict(
+            {"mulliken_spin_densities_json": "[0.5, -0.5]"}
+        )
+        assert structure["mulliken_spin_densities"] == [0.5, -0.5]
+        assert "mulliken_atomic_charges" not in structure
+
+    def test_pick_primary_forces_method_basis_without_forces(
+        self, raw_rows_db
+    ):
+        assert raw_rows_db.pick_primary_forces_method_basis([]) == (
+            None,
+            None,
+        )
+        assert raw_rows_db.pick_primary_forces_method_basis(["missing"]) == (
+            None,
+            None,
+        )
+
 
 class TestDatabaseForcesQueries:
     """pick_primary_forces_method_basis, resolve_method_basis,

@@ -10,20 +10,9 @@ auto-threshold grouping strategy (including the "more groups requested
 than molecules" and merge-to-target branches), and ``__repr__``.
 """
 
-import os
-
 import pytest
 
-from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.jobs.grouper.tanimoto import TanimotoSimilarityGrouper
-
-
-@pytest.fixture()
-def crest_molecules(xyz_directory):
-    xyz_file = XYZFile(
-        filename=os.path.join(xyz_directory, "crest_conformers.xyz")
-    )
-    return xyz_file.get_molecules(index=":", return_list=True)
 
 
 @pytest.mark.usefixtures("temporary_working_dir")

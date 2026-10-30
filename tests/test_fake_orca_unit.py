@@ -5,18 +5,10 @@ coverage existed for this class at all.
 """
 
 import os
-from shutil import copyfile
 
 import pytest
 
 from chemsmart.jobs.orca.runner import FakeORCA
-
-
-@pytest.fixture()
-def water_sp_inp_copy(tmp_path, water_sp_input_path):
-    target = tmp_path / "water_sp.inp"
-    copyfile(water_sp_input_path, target)
-    return str(target)
 
 
 class TestFakeORCAConstruction:

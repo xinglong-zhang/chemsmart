@@ -9,22 +9,10 @@ subcommands.
 import importlib
 from unittest.mock import patch
 
-import click
 import pytest
 
 import chemsmart.cli.run as run_module
-from chemsmart.cli.run import process_pipeline, run
-from chemsmart.jobs.runner import JobRunner
-from chemsmart.settings.server import Server
-
-
-@pytest.fixture()
-def run_ctx():
-    server = Server(name="dummy")
-    ctx = click.Context(run)
-    ctx.ensure_object(dict)
-    ctx.obj["jobrunner"] = JobRunner(server=server, fake=True)
-    return ctx
+from chemsmart.cli.run import process_pipeline
 
 
 class TestProcessPipelineBranches:

@@ -401,6 +401,64 @@ class TestORCATDDFTWriterOptionalParams:
         # no %scf block because scf_maxiter/scf_convergence are unset
         assert "%scf" not in content
 
+    def test_solver_and_print_options_written_in_tddft_block(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_td_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Verify that ``printlevel``, ``td_maxdim``, ``td_etol``,
+        ``td_rtol``, ``tprint`` and ``follow_iroot`` each map to their
+        ``%tddft`` keyword."""
+        settings = _base_td_settings(orca_td_project_name)
+        settings.printlevel = 3
+        settings.td_maxdim = 50
+        settings.td_etol = 1e-6
+        settings.td_rtol = 1e-5
+        settings.tprint = 0.01
+        settings.iroot = 2
+        settings.follow_iroot = True
+        content = _write_td_input(
+            tmpdir,
+            single_molecule_xyz_file,
+            orca_jobrunner_no_scratch,
+            settings,
+        )
+        tddft_match = re.search(r"%tddft\s*\n(.*?)\nend", content, re.DOTALL)
+        assert tddft_match is not None
+        block = tddft_match.group(1).splitlines()
+        for expected in (
+            "PrintLevel 3",
+            "MaxDim 50",
+            "ETol 1e-06",
+            "RTol 1e-05",
+            "TPrint 0.01",
+            "IRoot 2",
+            "FollowIRoot true",
+        ):
+            assert f"  {expected}" in block
+
+    def test_no_tddft_block_when_every_option_is_unset(
+        self,
+        tmpdir,
+        single_molecule_xyz_file,
+        orca_td_project_name,
+        orca_jobrunner_no_scratch,
+    ):
+        """Verify that clearing every TD option (including the ``NRoots``
+        and ``TDA`` defaults) omits the ``%tddft`` block entirely."""
+        settings = _base_td_settings(orca_td_project_name)
+        settings.nroots = None
+        settings.tda = None
+        content = _write_td_input(
+            tmpdir,
+            single_molecule_xyz_file,
+            orca_jobrunner_no_scratch,
+            settings,
+        )
+        assert "%tddft" not in content
+
 
 class TestORCATDCLI:
     """CLI-level tests exercised through the ``orca td`` command.
@@ -422,7 +480,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``orca td --nroots 10`` constructs an
         ``ORCATDDFTJobSettings`` with ``nroots=10``, ``tda=False``, ``freq=False``
@@ -433,19 +491,7 @@ class TestORCATDCLI:
         )
         mock_job.return_value = mocker.MagicMock()
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-                "--nroots",
-                "10",
-            ]
+            build_orca_td_args(single_molecule_xyz_file, "--nroots", "10")
         )
         assert result.exit_code == 0, result.output
         assert mock_job.called
@@ -463,7 +509,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``--dosoc`` without ``--triplets`` implicitly enables
         triplet excitations and that ``--printlevel`` is propagated, while
@@ -474,20 +520,9 @@ class TestORCATDCLI:
         )
         mock_job.return_value = mocker.MagicMock()
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-                "--dosoc",
-                "--printlevel",
-                "3",
-            ]
+            build_orca_td_args(
+                single_molecule_xyz_file, "--dosoc", "--printlevel", "3"
+            )
         )
         assert result.exit_code == 0, result.output
         settings = mock_job.call_args.kwargs["settings"]
@@ -500,7 +535,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``--dosoc`` combined with an explicit ``--no-triplets``
         aborts the CLI with a non-zero exit code and an error mentioning
@@ -512,19 +547,9 @@ class TestORCATDCLI:
         runner = CliRunner()
         result = runner.invoke(
             orca_cli,
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-                "--dosoc",
-                "--no-triplets",
-            ],
+            build_orca_td_args(
+                single_molecule_xyz_file, "--dosoc", "--no-triplets"
+            ),
             obj={},
         )
         assert result.exit_code != 0
@@ -534,7 +559,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that supplying ``--nto-states`` without ``--nto`` implicitly
         sets ``donto=True`` and parses the comma list into ``[1, 2, 3]``."""
@@ -544,19 +569,9 @@ class TestORCATDCLI:
         )
         mock_job.return_value = mocker.MagicMock()
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-                "--nto-states",
-                "1,2,3",
-            ]
+            build_orca_td_args(
+                single_molecule_xyz_file, "--nto-states", "1,2,3"
+            )
         )
         assert result.exit_code == 0, result.output
         settings = mock_job.call_args.kwargs["settings"]
@@ -567,7 +582,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that combining ``--no-nto`` with ``--nto-states`` aborts the
         CLI with a non-zero exit code and an error mentioning ``--no-nto``."""
@@ -578,20 +593,9 @@ class TestORCATDCLI:
         runner = CliRunner()
         result = runner.invoke(
             orca_cli,
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-                "--no-nto",
-                "--nto-states",
-                "1,2",
-            ],
+            build_orca_td_args(
+                single_molecule_xyz_file, "--no-nto", "--nto-states", "1,2"
+            ),
             obj={},
         )
         assert result.exit_code != 0
@@ -602,6 +606,7 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         orca_yaml_settings_gas_solv_project_name,
+        build_orca_td_args,
     ):
         """Verify that running ``orca td`` against a project YAML that has no
         ``td:`` section aborts with a non-zero exit code and an error that
@@ -613,17 +618,10 @@ class TestORCATDCLI:
         runner = CliRunner()
         result = runner.invoke(
             orca_cli,
-            [
-                "-p",
-                os.path.basename(orca_yaml_settings_gas_solv_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-            ],
+                project_name=orca_yaml_settings_gas_solv_project_name,
+            ),
             obj={},
         )
         assert result.exit_code != 0
@@ -636,6 +634,7 @@ class TestORCATDCLI:
         orca_td_inherited_project_name,
         orca_jobrunner_no_scratch,
         tmpdir,
+        build_orca_td_args,
     ):
         """Verify that a bare ``orca td`` clears Opt/Freq/NumFreq that would
         otherwise be inherited: the ``orca_td_inherited`` YAML omits ``freq``
@@ -675,17 +674,10 @@ class TestORCATDCLI:
         )
 
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_inherited_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-            ]
+                project_name=orca_td_inherited_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
 
@@ -719,6 +711,7 @@ class TestORCATDCLI:
         orca_td_inherited_project_name,
         orca_jobrunner_no_scratch,
         tmpdir,
+        build_orca_td_args,
     ):
         """Same guarantee as the previous test, but with an inherited
         ``numfreq=True`` (e.g. from parsing an ORCA job that used numerical
@@ -751,17 +744,10 @@ class TestORCATDCLI:
         )
 
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_inherited_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-            ]
+                project_name=orca_td_inherited_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
 
@@ -794,11 +780,11 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
         extras,
         expected_opt,
         expected_freq,
         expected_numfreq,
+        build_orca_td_args,
     ):
         """Verify that ``-r Opt|Freq|Opt Freq|opt numfreq`` on the ``orca``
         group flips the TD job into an excited-state task, populates a
@@ -810,19 +796,7 @@ class TestORCATDCLI:
         )
         mock_job.return_value = mocker.MagicMock()
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                extras,
-                "td",
-            ]
+            build_orca_td_args(single_molecule_xyz_file, pre_td=("-r", extras))
         )
         assert result.exit_code == 0, result.output
         settings = mock_job.call_args.kwargs["settings"]
@@ -839,7 +813,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that requesting both ``Freq`` and ``NumFreq`` in
         ``-r`` aborts the CLI."""
@@ -848,19 +822,9 @@ class TestORCATDCLI:
             autospec=True,
         )
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "Freq NumFreq",
-                "td",
-            ]
+            build_orca_td_args(
+                single_molecule_xyz_file, pre_td=("-r", "Freq NumFreq")
+            )
         )
         assert result.exit_code != 0
         assert "Freq" in result.output
@@ -869,7 +833,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``-r Opt`` combined with ``--dosoc`` is refused with
         a clear message pointing to ``SOCGrad`` / ``orca inp``."""
@@ -878,20 +842,9 @@ class TestORCATDCLI:
             autospec=True,
         )
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "Opt",
-                "td",
-                "--dosoc",
-            ]
+            build_orca_td_args(
+                single_molecule_xyz_file, "--dosoc", pre_td=("-r", "Opt")
+            )
         )
         assert result.exit_code != 0
         assert "SOCGrad" in result.output or "orca inp" in result.output
@@ -900,7 +853,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``--root`` exceeding ``--nroots`` aborts the CLI."""
         mocker.patch(
@@ -908,23 +861,14 @@ class TestORCATDCLI:
             autospec=True,
         )
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "Opt",
-                "td",
                 "--nroots",
                 "3",
                 "--root",
                 "5",
-            ]
+                pre_td=("-r", "Opt"),
+            )
         )
         assert result.exit_code != 0
         assert "--root" in result.output
@@ -933,7 +877,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``--root-mult triplet`` sets ``iroot_mult`` and
         implicitly enables triplet excitations."""
@@ -943,21 +887,12 @@ class TestORCATDCLI:
         )
         mock_job.return_value = mocker.MagicMock()
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "Opt",
-                "td",
                 "--root-mult",
                 "triplet",
-            ]
+                pre_td=("-r", "Opt"),
+            )
         )
         assert result.exit_code == 0, result.output
         settings = mock_job.call_args.kwargs["settings"]
@@ -968,7 +903,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``--root-mult triplet`` + ``--no-triplets`` aborts."""
         mocker.patch(
@@ -976,22 +911,13 @@ class TestORCATDCLI:
             autospec=True,
         )
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "Opt",
-                "td",
                 "--root-mult",
                 "triplet",
                 "--no-triplets",
-            ]
+                pre_td=("-r", "Opt"),
+            )
         )
         assert result.exit_code != 0
         assert "triplet" in result.output.lower()
@@ -1000,7 +926,7 @@ class TestORCATDCLI:
         self,
         mocker,
         single_molecule_xyz_file,
-        orca_td_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``--follow-root`` without ``-r Opt``/``-r Freq``
         aborts (it only makes sense during excited-state optimizations)."""
@@ -1009,18 +935,7 @@ class TestORCATDCLI:
             autospec=True,
         )
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_project_name),
-                "-f",
-                single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-                "--follow-root",
-            ]
+            build_orca_td_args(single_molecule_xyz_file, "--follow-root")
         )
         assert result.exit_code != 0
         assert "--follow-root" in result.output
@@ -1080,23 +995,17 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         orca_td_extras_project_name,
+        build_orca_td_args,
     ):
         """Verify that YAML ``additional_route_parameters: "Opt Freq
         TightSCF"`` on the ``td:`` section drives ``opt_excited``/``freq``
         and leaves ``TightSCF`` as the remaining extra, without ``-r``."""
         captured = self._capture_td_settings(mocker)
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_extras_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-            ]
+                project_name=orca_td_extras_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
         settings = captured["settings"]
@@ -1113,24 +1022,17 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         orca_td_extras_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``-r Opt`` fully replaces the YAML value: no ``Freq``
         or ``TightSCF`` leaks through."""
         captured = self._capture_td_settings(mocker)
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_extras_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "Opt",
-                "td",
-            ]
+                pre_td=("-r", "Opt"),
+                project_name=orca_td_extras_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
         settings = captured["settings"]
@@ -1144,25 +1046,18 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         orca_td_extras_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``-r TightSCF`` keeps the calculation vertical (no
         inherited ``Opt``/``Freq`` from the YAML) and only propagates
         ``TightSCF`` as an extra route token."""
         captured = self._capture_td_settings(mocker)
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_extras_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "TightSCF",
-                "td",
-            ]
+                pre_td=("-r", "TightSCF"),
+                project_name=orca_td_extras_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
         settings = captured["settings"]
@@ -1176,24 +1071,17 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         orca_td_extras_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``-r ""`` explicitly clears the YAML value; the
         resulting job is a vertical TD with no route extras."""
         captured = self._capture_td_settings(mocker)
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_extras_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "",
-                "td",
-            ]
+                pre_td=("-r", ""),
+                project_name=orca_td_extras_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
         settings = captured["settings"]
@@ -1207,22 +1095,16 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         orca_td_numfreq_project_name,
+        build_orca_td_args,
     ):
         """Verify that ``NumFreq`` from the YAML activates ``numfreq`` and
         keeps ``freq``/``opt_excited`` off."""
         captured = self._capture_td_settings(mocker)
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_numfreq_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
-            ]
+                project_name=orca_td_numfreq_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
         settings = captured["settings"]
@@ -1237,6 +1119,7 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         orca_td_numfreq_project_name,
+        build_orca_td_args,
     ):
         """Verify that if the effective ``additional_route_parameters``
         (whether from YAML or ``-r``) contains both ``Freq`` and ``NumFreq``,
@@ -1248,19 +1131,11 @@ class TestORCATDCLI:
         # -r replaces the YAML value; supplying both keywords through -r is
         # sufficient to exercise the same guard used against a bad YAML.
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_numfreq_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "-r",
-                "Freq NumFreq",
-                "td",
-            ]
+                pre_td=("-r", "Freq NumFreq"),
+                project_name=orca_td_numfreq_project_name,
+            )
         )
         assert result.exit_code != 0
         assert "Freq" in result.output
@@ -1272,6 +1147,7 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_extras_project_name,
         orca_jobrunner_no_scratch,
+        build_orca_td_args,
     ):
         """CLI → writer integration: YAML supplies ``Opt Freq TightSCF``; the
         CLI must produce settings that write a route line with ``Opt``,
@@ -1281,19 +1157,12 @@ class TestORCATDCLI:
         """
         captured = self._capture_td_settings(mocker)
         result = self._invoke(
-            [
-                "-p",
-                os.path.basename(orca_td_extras_project_name),
-                "-f",
+            build_orca_td_args(
                 single_molecule_xyz_file,
-                "-c",
-                "0",
-                "-m",
-                "1",
-                "td",
                 "--nroots",
                 "5",
-            ]
+                project_name=orca_td_extras_project_name,
+            )
         )
         assert result.exit_code == 0, result.output
         settings = captured["settings"]
@@ -1326,6 +1195,127 @@ class TestORCATDCLI:
         assert "TDA false" in block
         assert "IRoot 1" in block
         assert "IRootMult singlet" in block
+
+    @pytest.mark.parametrize(
+        ("td_args", "message"),
+        (
+            (("--nto-states", "a-b"), "Invalid --nto-states value"),
+            (("--nto-states", "0"), "Invalid --nto-states value '0'"),
+            (("--nroots", "0"), "--nroots must be a positive integer"),
+            (("--root", "0"), "--root must be a positive integer"),
+        ),
+    )
+    def test_td_rejects_non_positive_or_malformed_values(
+        self,
+        mocker,
+        single_molecule_xyz_file,
+        build_orca_td_args,
+        td_args,
+        message,
+    ):
+        """Verify that malformed ``--nto-states`` and non-positive
+        ``--nroots``/``--root``/state indices abort with a BadParameter."""
+        mock_job = mocker.patch(
+            "chemsmart.jobs.orca.tddft.ORCATDDFTJob",
+            autospec=True,
+        )
+        result = CliRunner().invoke(
+            orca_cli,
+            build_orca_td_args(single_molecule_xyz_file, *td_args),
+            obj={},
+        )
+        assert result.exit_code != 0
+        assert message in result.output
+        mock_job.assert_not_called()
+
+    def test_td_subcommand_solvent_options_and_filename(
+        self,
+        mocker,
+        tmp_path,
+        single_molecule_xyz_file,
+        build_orca_td_args,
+    ):
+        """Verify that td-level ``--solvent-options`` and
+        ``--solventfilename`` are copied onto the TDDFT settings."""
+        solvent_file = tmp_path / "my_solvent"
+        solvent_file.write_text("")
+        captured = self._capture_td_settings(mocker)
+        result = self._invoke(
+            build_orca_td_args(
+                single_molecule_xyz_file,
+                "--solvent-options",
+                "orbs_vac false",
+                "--solventfilename",
+                str(solvent_file),
+            )
+        )
+        assert result.exit_code == 0, result.output
+        settings = captured["settings"]
+        assert settings.additional_solvent_options == "orbs_vac false"
+        assert settings.solventfilename == str(solvent_file)
+
+    def test_td_root_mult_triplet_keeps_explicit_triplets(
+        self,
+        mocker,
+        single_molecule_xyz_file,
+        build_orca_td_args,
+    ):
+        """Verify that ``--root-mult triplet`` with an explicit
+        ``--triplets`` leaves triplets enabled (no implicit override)."""
+        captured = self._capture_td_settings(mocker)
+        result = self._invoke(
+            build_orca_td_args(
+                single_molecule_xyz_file,
+                "--triplets",
+                "--root-mult",
+                "triplet",
+            )
+        )
+        assert result.exit_code == 0, result.output
+        settings = captured["settings"]
+        assert settings.triplets is True
+        assert settings.iroot_mult == "triplet"
+
+    def test_td_multiple_molecules_with_indices_creates_one_job_each(
+        self,
+        mocker,
+        multiple_molecules_xyz_file,
+        build_orca_td_args,
+    ):
+        """Verify that ``-i`` with several molecules returns one
+        ``ORCATDDFTJob`` per selected structure, labelled by index."""
+        mock_job = mocker.patch(
+            "chemsmart.jobs.orca.tddft.ORCATDDFTJob",
+            autospec=True,
+        )
+        result = self._invoke(
+            build_orca_td_args(
+                multiple_molecules_xyz_file,
+                pre_td=("-i", "1-2"),
+            )
+        )
+        assert result.exit_code == 0, result.output
+        assert mock_job.call_count == 2
+        labels = [c.kwargs["label"] for c in mock_job.call_args_list]
+        assert labels[0].endswith("_idx1")
+        assert labels[1].endswith("_idx2")
+        settings = {id(c.kwargs["settings"]) for c in mock_job.call_args_list}
+        assert len(settings) == 1
+
+
+@pytest.mark.parametrize("parsed", ([], [0, 2]))
+def test_parse_nto_states_rejects_empty_or_non_positive_result(mocker, parsed):
+    """Defensive guard: ``_parse_nto_states`` refuses an empty or
+    non-positive list even if the range parser were to return one."""
+    import click
+
+    from chemsmart.cli.orca import tddft as td_cli
+
+    mocker.patch.object(
+        td_cli, "get_list_from_string_range", return_value=parsed
+    )
+    with pytest.raises(click.BadParameter, match="positive 1-based"):
+        td_cli._parse_nto_states("anything")
 
 
 def test_tddft_module_exports_the_same_class():

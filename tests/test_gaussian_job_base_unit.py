@@ -23,16 +23,6 @@ from chemsmart.jobs.gaussian.job import (
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 
 
-@pytest.fixture()
-def gaussian_settings():
-    return GaussianJobSettings.default()
-
-
-@pytest.fixture()
-def a_molecule(single_molecule_xyz_file):
-    return Molecule.from_filepath(single_molecule_xyz_file)
-
-
 class TestGaussianJobConstruction:
     def test_rejects_invalid_settings_type(self, a_molecule):
         with pytest.raises(ValueError, match="Settings must be instance"):

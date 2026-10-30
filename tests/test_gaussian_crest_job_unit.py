@@ -12,39 +12,28 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from chemsmart.jobs.gaussian.crest import GaussianCrestJob
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-
-
-@pytest.fixture()
-def gaussian_settings():
-    return GaussianJobSettings.default()
-
-
-@pytest.fixture()
-def conformers(ethanol_molecule):
-    return [ethanol_molecule.copy() for _ in range(4)]
 
 
 class TestGaussianCrestJobConstruction:
     def test_defaults_num_confs_to_opt_to_all_conformers(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
         job = GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
         )
         assert job.num_conformers == 4
         assert job.num_confs_to_opt == 4
-        assert job.all_conformers == conformers
+        assert job.all_conformers == ethanol_conformers
         assert job.grouper is None
 
     def test_num_confs_to_run_is_respected(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
         job = GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
@@ -56,17 +45,17 @@ class TestGaussianCrestJobConstruction:
         assert job.num_conformers == 4
 
     def test_uses_first_molecule_for_base_job_construction(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
         job = GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
         )
         assert (
             job.molecule.get_chemical_formula()
-            == conformers[0].get_chemical_formula()
+            == ethanol_conformers[0].get_chemical_formula()
         )
 
     def test_empty_molecules_list_bypasses_validation_and_crashes(self):
@@ -110,9 +99,9 @@ class TestGaussianCrestJobConstruction:
 
 
 class TestGaussianCrestJobProperties:
-    def _job(self, conformers, gaussian_settings, **kwargs):
+    def _job(self, ethanol_conformers, gaussian_settings, **kwargs):
         return GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
@@ -120,9 +109,9 @@ class TestGaussianCrestJobProperties:
         )
 
     def test_all_conformers_jobs_builds_one_job_per_conformer_with_indexed_labels(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
-        job = self._job(conformers, gaussian_settings)
+        job = self._job(ethanol_conformers, gaussian_settings)
         sub_jobs = job.all_conformers_jobs
         assert len(sub_jobs) == 4
         assert [j.label for j in sub_jobs] == [
@@ -133,9 +122,9 @@ class TestGaussianCrestJobProperties:
         ]
 
     def test_incomplete_conformers_jobs_filters_by_is_complete(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
-        job = self._job(conformers, gaussian_settings)
+        job = self._job(ethanol_conformers, gaussian_settings)
         statuses = [True, False, True, False]
         fake_jobs = []
         for status in statuses:
@@ -152,9 +141,9 @@ class TestGaussianCrestJobProperties:
         assert incomplete == [fake_jobs[1], fake_jobs[3]]
 
     def test_last_run_job_index_returns_first_incomplete(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
-        job = self._job(conformers, gaussian_settings)
+        job = self._job(ethanol_conformers, gaussian_settings)
         statuses = [True, True, False, False]
         fake_jobs = []
         for status in statuses:
@@ -170,9 +159,9 @@ class TestGaussianCrestJobProperties:
             assert job.last_run_job_index == 2
 
     def test_last_run_job_index_is_total_count_when_all_complete(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
-        job = self._job(conformers, gaussian_settings)
+        job = self._job(ethanol_conformers, gaussian_settings)
         fake_jobs = [MagicMock(is_complete=lambda: True) for _ in range(4)]
 
         with patch.object(
@@ -185,10 +174,10 @@ class TestGaussianCrestJobProperties:
 
 class TestGaussianCrestJobRunAndCompletion:
     def test_run_all_jobs_only_runs_up_to_num_confs_to_opt(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
         job = GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
@@ -209,10 +198,10 @@ class TestGaussianCrestJobRunAndCompletion:
         fake_jobs[3].run.assert_not_called()
 
     def test_run_delegates_to_run_all_jobs(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
         job = GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
@@ -222,10 +211,10 @@ class TestGaussianCrestJobRunAndCompletion:
         mock_run_all.assert_called_once()
 
     def test_is_complete_true_only_when_all_within_limit_are_complete(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
         job = GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
@@ -247,10 +236,10 @@ class TestGaussianCrestJobRunAndCompletion:
             assert job.is_complete() is True
 
     def test_is_complete_false_when_a_required_job_is_incomplete(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
         job = GaussianCrestJob(
-            molecules=conformers,
+            molecules=ethanol_conformers,
             settings=gaussian_settings,
             label="crest_test",
             jobrunner=None,
@@ -273,9 +262,9 @@ class TestGaussianCrestJobRunAndCompletion:
 
 class TestGaussianCrestJobGrouping:
     def test_grouping_strategy_replaces_all_conformers_with_uniques(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
-        unique_subset = conformers[:2]
+        unique_subset = ethanol_conformers[:2]
         mock_grouper = MagicMock()
         mock_grouper.unique.return_value = unique_subset
 
@@ -284,7 +273,7 @@ class TestGaussianCrestJobGrouping:
             return_value=mock_grouper,
         ) as mock_create:
             job = GaussianCrestJob(
-                molecules=conformers,
+                molecules=ethanol_conformers,
                 settings=gaussian_settings,
                 label="crest_test",
                 jobrunner=None,
@@ -301,9 +290,9 @@ class TestGaussianCrestJobGrouping:
         assert job.grouper is mock_grouper
 
     def test_grouping_strategy_without_num_groups_uses_threshold_mode(
-        self, conformers, gaussian_settings
+        self, ethanol_conformers, gaussian_settings
     ):
-        unique_subset = conformers[:3]
+        unique_subset = ethanol_conformers[:3]
         mock_grouper = MagicMock()
         mock_grouper.unique.return_value = unique_subset
         with patch(
@@ -311,7 +300,7 @@ class TestGaussianCrestJobGrouping:
             return_value=mock_grouper,
         ) as mock_create:
             job = GaussianCrestJob(
-                molecules=conformers,
+                molecules=ethanol_conformers,
                 settings=gaussian_settings,
                 label="crest_test",
                 jobrunner=None,

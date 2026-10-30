@@ -5823,31 +5823,6 @@ class TestMoleculeDeleteAtomsByIndicesExtra:
         assert result.vibrational_modes[0].shape == (2, 3)
 
 
-@pytest.fixture()
-def water_with_vib_modes():
-    """Water molecule with a single synthetic mass-weighted mode."""
-    mol = Molecule(
-        symbols=["O", "H", "H"],
-        positions=np.array(
-            [
-                [0.0000, 0.0000, 0.1173],
-                [0.0000, 0.7572, -0.4692],
-                [0.0000, -0.7572, -0.4692],
-            ]
-        ),
-        vibrational_modes=[
-            np.array(
-                [
-                    [0.0, 0.0, 0.1],
-                    [0.0, 0.2, -0.1],
-                    [0.0, -0.2, -0.1],
-                ]
-            )
-        ],
-    )
-    return mol
-
-
 class TestVibrationallyDisplaced:
     def test_positive_index_single_frame(self, water_with_vib_modes):
         displaced = water_with_vib_modes.vibrationally_displaced(mode_idx=1)

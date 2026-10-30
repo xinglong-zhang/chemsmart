@@ -2562,6 +2562,22 @@ class TestOpenBabelReadFallback:
         assert xyz_path in files
         assert extxyz_path not in files
 
+    def test_xyz_folder_current_folder_only_skips_subfolders(
+        self, tmpdir, single_molecule_xyz_file
+    ):
+        from chemsmart.io.xyz.folder import XYZFolder
+
+        top_level = os.path.join(str(tmpdir), "top.xyz")
+        nested_dir = os.path.join(str(tmpdir), "nested")
+        os.makedirs(nested_dir)
+        nested = os.path.join(nested_dir, "nested.xyz")
+        copy(single_molecule_xyz_file, top_level)
+        copy(single_molecule_xyz_file, nested)
+
+        folder = XYZFolder(folder=str(tmpdir))
+        assert set(folder.all_xyzfiles) == {top_level, nested}
+        assert folder.all_xyzfiles_in_current_folder == [top_level]
+
     def test_make3d_failure_logs_warning(self, tmpdir, caplog):
         pytest.importorskip("openbabel")
         import logging

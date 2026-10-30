@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import numpy as np
 import pytest
 
+from chemsmart.io.file import SDFFile
+from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xtb.file import (
     XTBChargesFile,
     XTBEnergyFile,
@@ -2519,6 +2521,41 @@ class TestXTBOutputReadGeometryFile:
         path = output.folder.input_geometry_filepath
         assert path.endswith(".coord")
         assert output._read_geometry_file(path) is None
+
+    @pytest.mark.parametrize(
+        ("fixture_name", "expected_cls"),
+        (("sdf_file", SDFFile), ("single_model_pdb_file", PDBFile)),
+    )
+    @pytest.mark.parametrize(
+        ("path_property", "file_property"),
+        (
+            ("xtbopt_geometry_filepath", "xtbopt_geometry_file"),
+            ("input_geometry_filepath", "input_geometry_file"),
+        ),
+    )
+    def test_sdf_and_pdb_geometry_files_are_parsed(
+        self,
+        request,
+        xtb_co2_outfolder,
+        fixture_name,
+        expected_cls,
+        path_property,
+        file_property,
+    ):
+        """Geometry files with .sdf/.pdb extensions use the matching
+        parser, both for the cached file wrapper and the Molecule read."""
+        path = request.getfixturevalue(fixture_name)
+        output = XTBOutput(folder=xtb_co2_outfolder)
+        with patch.object(
+            type(output.folder),
+            path_property,
+            new_callable=PropertyMock,
+            return_value=path,
+        ):
+            assert isinstance(getattr(output, file_property), expected_cls)
+        molecule = output._read_geometry_file(path)
+        assert molecule is not None
+        assert sorted(molecule.chemical_symbols) == ["H", "H", "O"]
 
     def test_input_geometry_none_for_unsupported_format(
         self, xtb_cyclopentadienyl_anion_outfolder

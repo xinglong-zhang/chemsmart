@@ -12,19 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.crest.job import CRESTJob
 from chemsmart.jobs.crest.settings import CRESTJobSettings
-
-
-@pytest.fixture()
-def crest_settings():
-    return CRESTJobSettings.default()
-
-
-@pytest.fixture()
-def a_molecule(single_molecule_xyz_file):
-    return Molecule.from_filepath(single_molecule_xyz_file)
 
 
 class TestCRESTJobConstruction:

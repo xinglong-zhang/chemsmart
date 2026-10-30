@@ -14,18 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.orca.job import ORCAJob
 from chemsmart.jobs.orca.runner import ORCAJobRunner
-from chemsmart.jobs.orca.settings import ORCAJobSettings
-
-
-@pytest.fixture()
-def orca_job(single_molecule_xyz_file, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    molecule = Molecule.from_filepath(single_molecule_xyz_file)
-    settings = ORCAJobSettings.default()
-    return ORCAJob(molecule=molecule, settings=settings, label="orcatest")
 
 
 class TestORCAJobRunnerSetup:

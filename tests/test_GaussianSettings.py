@@ -96,6 +96,16 @@ class TestGaussianJobSettings:
         )
         assert all_project_settings["opt"]["functional"] == "m062x"
 
+    def test_get_settings_from_yaml_no_defaults_file_xtb(self, tmp_path):
+        project_yaml = tmp_path / "project.yaml"
+        project_yaml.write_text(yaml.safe_dump({"gas": {}, "solv": {}}))
+        all_project_settings = read_molecular_job_yaml(
+            str(project_yaml), program="xtb"
+        )
+        # Falls back to XTBJobSettings.default() when no defaults.yaml.
+        assert all_project_settings["opt"]["gfn_version"] == "gfn2"
+        assert all_project_settings["opt"]["jobtype"] == "opt"
+
     def test_get_settings_from_yaml_no_defaults_file_other_program(
         self, tmp_path
     ):

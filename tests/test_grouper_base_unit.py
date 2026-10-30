@@ -407,3 +407,89 @@ class TestMoleculeGrouperUnique:
         content = open(group_file).read()
         assert "Original_Index: confA" in content
         assert "N/A" in content
+
+
+class TestMoleculeGrouperClusteringHelpers:
+    """Guard branches of the shared complete-linkage helpers."""
+
+    def test_build_singleton_groups(
+        self, center_matrix_grouper, methanol_molecules
+    ):
+        groups, index_groups = center_matrix_grouper._build_singleton_groups()
+        assert index_groups == [[0], [1], [2]]
+        assert groups == [[mol] for mol in methanol_molecules]
+
+    def test_linkage_tree_is_none_for_single_structure(
+        self, center_matrix_grouper
+    ):
+        assert (
+            center_matrix_grouper._build_complete_linkage_tree(
+                np.zeros((1, 1))
+            )
+            is None
+        )
+
+    def test_linkage_tree_rejects_infinite_distances(
+        self, center_matrix_grouper
+    ):
+        matrix = np.array([[0.0, np.inf], [np.inf, 0.0]])
+        with pytest.raises(ValueError, match="must be finite"):
+            center_matrix_grouper._build_complete_linkage_tree(matrix)
+
+    def test_groups_from_labels_default_to_positional_indices(
+        self, center_matrix_grouper, methanol_molecules
+    ):
+        groups, index_groups = (
+            center_matrix_grouper._build_groups_from_cluster_labels(
+                np.array([2, 1, 2])
+            )
+        )
+        assert index_groups == [[0, 2], [1]]
+        assert groups[0] == [methanol_molecules[0], methanol_molecules[2]]
+
+    def test_order_groups_defaults_matrix_indices(self, center_matrix_grouper):
+        matrix = np.array([[0.0, 0.1, 0.5], [0.1, 0.0, 0.1], [0.5, 0.1, 0.0]])
+        _, ordered = (
+            center_matrix_grouper._order_groups_by_representative_strategy(
+                [[0, 1, 2]], matrix
+            )
+        )
+        # Index 1 is closest to the other two, so it becomes the centre.
+        assert ordered == [[1, 0, 2]]
+
+    @pytest.mark.parametrize(
+        "normalize",
+        (
+            "_normalize_output_matrix_for_threshold",
+            "_normalize_output_matrix_for_num_groups",
+        ),
+    )
+    def test_normalize_output_matrix_rejects_size_mismatch(
+        self, center_matrix_grouper, normalize
+    ):
+        with pytest.raises(ValueError, match="Matrix dimensions must match"):
+            getattr(center_matrix_grouper, normalize)(np.zeros((2, 2)), 1)
+
+    def test_num_groups_clustering_with_empty_matrix(
+        self, center_matrix_grouper
+    ):
+        center_matrix_grouper._auto_threshold = 0.3
+        assert center_matrix_grouper._cluster_distance_matrix_by_num_groups(
+            np.zeros((0, 0)), 2
+        ) == ([], [])
+        assert center_matrix_grouper._auto_threshold is None
+
+    def test_num_groups_clustering_with_one_finite_structure(
+        self, center_matrix_grouper, methanol_molecules
+    ):
+        center_matrix_grouper._auto_threshold = 0.3
+        matrix = np.array([[0.0, np.inf], [np.inf, 0.0]])
+        groups, index_groups = (
+            center_matrix_grouper._cluster_distance_matrix_by_num_groups(
+                matrix, 2, original_indices=[1, 2]
+            )
+        )
+        assert len(index_groups) == 1
+        assert index_groups[0][0] in (1, 2)
+        assert groups == [[methanol_molecules[index_groups[0][0]]]]
+        assert center_matrix_grouper._auto_threshold is None

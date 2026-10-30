@@ -47,6 +47,15 @@ class TestThermochemistryJobConstruction:
         job = ThermochemistryJob(filename=gaussian_co2_opt_outfile)
         assert isinstance(job.settings, ThermochemistryJobSettings)
 
+    def test_settings_from_dict_forwards_keys(self):
+        settings = ThermochemistryJobSettings.from_dict(
+            {"temperature": 350.0, "pressure": 2.0, "energy_units": "kcal/mol"}
+        )
+        assert isinstance(settings, ThermochemistryJobSettings)
+        assert settings.temperature == 350.0
+        assert settings.pressure == 2.0
+        assert settings.energy_units == "kcal/mol"
+
     def test_settings_class_returns_expected_type(self):
         assert (
             ThermochemistryJob.settings_class() is ThermochemistryJobSettings

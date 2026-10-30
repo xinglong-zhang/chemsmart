@@ -8,23 +8,13 @@ it forwards the ``JobRunner`` *class* to the parent constructor instead
 of the caller-supplied ``jobrunner`` argument.
 """
 
-import pytest
-
 from chemsmart.jobs.gaussian.custom import GaussianCustomJob
 from chemsmart.jobs.gaussian.nci import GaussianNCIJob
 from chemsmart.jobs.gaussian.resp import GaussianRESPJob
-from chemsmart.jobs.gaussian.settings import (
-    GaussianJobSettings,
-    GaussianTDDFTJobSettings,
-)
+from chemsmart.jobs.gaussian.settings import GaussianTDDFTJobSettings
 from chemsmart.jobs.gaussian.tddft import GaussianTDDFTJob
 from chemsmart.jobs.gaussian.wbi import GaussianWBIJob
 from chemsmart.jobs.runner import JobRunner
-
-
-@pytest.fixture()
-def gaussian_settings():
-    return GaussianJobSettings.default()
 
 
 class TestGaussianWBIJob:

@@ -14,27 +14,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from chemsmart.jobs.gaussian.dias import GaussianDIASJob
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
-
-
-@pytest.fixture()
-def gaussian_settings():
-    return GaussianJobSettings.default()
-
-
-@pytest.fixture()
-def irc_molecules(ethanol_molecule):
-    # A short synthetic "IRC trajectory": 5 copies of the same
-    # 9-atom ethanol geometry, standing in for points along a path.
-    return [ethanol_molecule.copy() for _ in range(5)]
 
 
 class TestGaussianDIASJobConstruction:
     def test_uses_first_molecule_as_placeholder(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -43,12 +30,14 @@ class TestGaussianDIASJobConstruction:
             mode="irc",
         )
         assert job.num_molecules == 5
-        assert job.all_molecules == irc_molecules
+        assert job.all_molecules == ethanol_irc_molecules
 
-    def test_freq_disabled_on_settings(self, irc_molecules, gaussian_settings):
+    def test_freq_disabled_on_settings(
+        self, ethanol_irc_molecules, gaussian_settings
+    ):
         gaussian_settings.freq = True
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -59,10 +48,10 @@ class TestGaussianDIASJobConstruction:
         assert job.settings.freq is False
 
     def test_fragment_charge_and_multiplicity_overrides(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -80,12 +69,12 @@ class TestGaussianDIASJobConstruction:
         assert job.fragment2_settings.multiplicity == 3
 
     def test_fragment_settings_default_to_base_charge(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         gaussian_settings.charge = 0
         gaussian_settings.multiplicity = 1
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -99,10 +88,10 @@ class TestGaussianDIASJobConstruction:
 
 class TestFragmentStructure:
     def test_fragment_structure_splits_by_indices(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -110,16 +99,16 @@ class TestFragmentStructure:
             every_n_points=2,
             mode="ts",
         )
-        f1, f2 = job._fragment_structure(irc_molecules[0])
+        f1, f2 = job._fragment_structure(ethanol_irc_molecules[0])
         assert len(f1) == 3
         assert len(f2) == 6
-        assert len(f1) + len(f2) == len(irc_molecules[0])
+        assert len(f1) + len(f2) == len(ethanol_irc_molecules[0])
 
     def test_fragment1_atoms_and_fragment2_atoms_properties(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -127,15 +116,15 @@ class TestFragmentStructure:
             every_n_points=2,
             mode="ts",
         )
-        assert len(job.fragment1_atoms) == len(irc_molecules)
-        assert len(job.fragment2_atoms) == len(irc_molecules)
+        assert len(job.fragment1_atoms) == len(ethanol_irc_molecules)
+        assert len(job.fragment2_atoms) == len(ethanol_irc_molecules)
         assert all(len(f1) == 3 for f1 in job.fragment1_atoms)
         assert all(len(f2) == 6 for f2 in job.fragment2_atoms)
 
 
 class TestSampleMolecules:
     def test_samples_every_n_points_and_appends_last_again(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         """``_sample_molecules`` slices every ``every_n_points``-th
         molecule (``[0::n]``), then *unconditionally* appends the last
@@ -145,7 +134,7 @@ class TestSampleMolecules:
         (index 4) appears twice: once from the slice ``[0, 2, 4]`` and
         once more from the unconditional append."""
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -153,22 +142,22 @@ class TestSampleMolecules:
             every_n_points=2,
             mode="ts",
         )
-        sampled = job._sample_molecules(irc_molecules)
+        sampled = job._sample_molecules(ethanol_irc_molecules)
         assert sampled == [
-            irc_molecules[0],
-            irc_molecules[2],
-            irc_molecules[4],
-            irc_molecules[4],
+            ethanol_irc_molecules[0],
+            ethanol_irc_molecules[2],
+            ethanol_irc_molecules[4],
+            ethanol_irc_molecules[4],
         ]
 
 
 class TestFragmentJobsIRCMode:
     def test_all_molecules_jobs_irc_mode_creates_one_per_sample(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         mock_jobrunner = MagicMock()
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=mock_jobrunner,
@@ -188,10 +177,12 @@ class TestFragmentJobsIRCMode:
             "dias_test_p3",
         ]
 
-    def test_fragment1_jobs_irc_mode(self, irc_molecules, gaussian_settings):
+    def test_fragment1_jobs_irc_mode(
+        self, ethanol_irc_molecules, gaussian_settings
+    ):
         mock_jobrunner = MagicMock()
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=mock_jobrunner,
@@ -203,10 +194,12 @@ class TestFragmentJobsIRCMode:
         assert len(jobs) == 4
         assert jobs[0].label == "dias_test_p0_f1"
 
-    def test_fragment2_jobs_irc_mode(self, irc_molecules, gaussian_settings):
+    def test_fragment2_jobs_irc_mode(
+        self, ethanol_irc_molecules, gaussian_settings
+    ):
         mock_jobrunner = MagicMock()
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=mock_jobrunner,
@@ -221,11 +214,11 @@ class TestFragmentJobsIRCMode:
 
 class TestFragmentJobsTSMode:
     def test_all_molecules_jobs_ts_mode_uses_last_only(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         mock_jobrunner = MagicMock()
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=mock_jobrunner,
@@ -237,10 +230,12 @@ class TestFragmentJobsTSMode:
         assert len(jobs) == 1
         assert jobs[0].label == "dias_test_p1"
 
-    def test_fragment1_jobs_ts_mode(self, irc_molecules, gaussian_settings):
+    def test_fragment1_jobs_ts_mode(
+        self, ethanol_irc_molecules, gaussian_settings
+    ):
         mock_jobrunner = MagicMock()
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=mock_jobrunner,
@@ -252,10 +247,12 @@ class TestFragmentJobsTSMode:
         assert len(jobs) == 1
         assert jobs[0].label == "dias_test_p1_f1"
 
-    def test_fragment2_jobs_ts_mode(self, irc_molecules, gaussian_settings):
+    def test_fragment2_jobs_ts_mode(
+        self, ethanol_irc_molecules, gaussian_settings
+    ):
         mock_jobrunner = MagicMock()
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=mock_jobrunner,
@@ -270,10 +267,10 @@ class TestFragmentJobsTSMode:
 
 class TestFragmentJobsInvalidMode:
     def test_fragment1_jobs_invalid_mode_raises(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -285,10 +282,10 @@ class TestFragmentJobsInvalidMode:
             _ = job.fragment1_jobs
 
     def test_fragment2_jobs_invalid_mode_raises(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=None,
@@ -302,10 +299,10 @@ class TestFragmentJobsInvalidMode:
 
 class TestRunAndIsComplete:
     def test_run_executes_all_three_job_sets_in_order(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=MagicMock(),
@@ -324,10 +321,10 @@ class TestRunAndIsComplete:
         job._run_fragment2_jobs.assert_called_once()
 
     def test_is_complete_true_when_all_job_sets_complete(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=MagicMock(),
@@ -342,10 +339,10 @@ class TestRunAndIsComplete:
         assert job.is_complete() is True
 
     def test_is_complete_false_when_one_set_incomplete(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=MagicMock(),
@@ -366,9 +363,9 @@ class TestRunHelpersAndCompletionChecksDirect:
     call) are never exercised. These call the real methods directly,
     mocking only GaussianGeneralJob so no actual calculation runs."""
 
-    def _make_job(self, irc_molecules, gaussian_settings, mode="ts"):
+    def _make_job(self, ethanol_irc_molecules, gaussian_settings, mode="ts"):
         return GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=MagicMock(),
@@ -378,9 +375,9 @@ class TestRunHelpersAndCompletionChecksDirect:
         )
 
     def test_run_all_molecules_jobs_runs_each_job(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
-        job = self._make_job(irc_molecules, gaussian_settings)
+        job = self._make_job(ethanol_irc_molecules, gaussian_settings)
         mock_job = MagicMock()
         with patch(
             "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
@@ -390,9 +387,9 @@ class TestRunHelpersAndCompletionChecksDirect:
         mock_job.run.assert_called_once()
 
     def test_run_fragment1_jobs_runs_each_job(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
-        job = self._make_job(irc_molecules, gaussian_settings)
+        job = self._make_job(ethanol_irc_molecules, gaussian_settings)
         mock_job = MagicMock()
         with patch(
             "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
@@ -402,9 +399,9 @@ class TestRunHelpersAndCompletionChecksDirect:
         mock_job.run.assert_called_once()
 
     def test_run_fragment2_jobs_runs_each_job(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
-        job = self._make_job(irc_molecules, gaussian_settings)
+        job = self._make_job(ethanol_irc_molecules, gaussian_settings)
         mock_job = MagicMock()
         with patch(
             "chemsmart.jobs.gaussian.dias.GaussianGeneralJob",
@@ -414,9 +411,9 @@ class TestRunHelpersAndCompletionChecksDirect:
         mock_job.run.assert_called_once()
 
     def test_run_all_molecules_jobs_are_complete_reflects_job_state(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
-        job = self._make_job(irc_molecules, gaussian_settings)
+        job = self._make_job(ethanol_irc_molecules, gaussian_settings)
         mock_job = MagicMock()
         mock_job.is_complete.return_value = True
         with patch(
@@ -426,9 +423,9 @@ class TestRunHelpersAndCompletionChecksDirect:
             assert job._run_all_molecules_jobs_are_complete() is True
 
     def test_run_fragment1_jobs_are_complete_reflects_job_state(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
-        job = self._make_job(irc_molecules, gaussian_settings)
+        job = self._make_job(ethanol_irc_molecules, gaussian_settings)
         mock_job = MagicMock()
         mock_job.is_complete.return_value = False
         with patch(
@@ -438,9 +435,9 @@ class TestRunHelpersAndCompletionChecksDirect:
             assert job._run_fragment1_jobs_are_complete() is False
 
     def test_run_fragment2_jobs_are_complete_reflects_job_state(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
-        job = self._make_job(irc_molecules, gaussian_settings)
+        job = self._make_job(ethanol_irc_molecules, gaussian_settings)
         mock_job = MagicMock()
         mock_job.is_complete.return_value = True
         with patch(
@@ -472,7 +469,7 @@ class TestSampleMoleculesSingleMolecule:
 
 class TestAllMoleculesJobsInvalidMode:
     def test_invalid_mode_silently_returns_none(
-        self, irc_molecules, gaussian_settings
+        self, ethanol_irc_molecules, gaussian_settings
     ):
         """Unlike fragment1_jobs/fragment2_jobs, which raise
         ValueError for an unrecognized mode, all_molecules_jobs has no
@@ -480,7 +477,7 @@ class TestAllMoleculesJobsInvalidMode:
         None instead of raising -- an inconsistency worth flagging
         (see BUGS_FOUND.md)."""
         job = GaussianDIASJob(
-            molecules=irc_molecules,
+            molecules=ethanol_irc_molecules,
             settings=gaussian_settings,
             label="dias_test",
             jobrunner=MagicMock(),

@@ -11,23 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.gaussian.traj import GaussianTrajJob
-
-
-@pytest.fixture()
-def gaussian_settings():
-    return GaussianJobSettings.default()
-
-
-@pytest.fixture()
-def traj_molecules(ethanol_molecule):
-    mols = []
-    for i in range(20):
-        mol = ethanol_molecule.copy()
-        mol.energy = float(i)
-        mols.append(mol)
-    return mols
 
 
 class TestGaussianTrajJobValidation:
@@ -61,17 +45,17 @@ class TestGaussianTrajJobValidation:
 
 class TestGaussianTrajJobTailExtraction:
     def test_default_proportion_extracts_tail_fraction(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = GaussianTrajJob(
-            molecules=traj_molecules,
+            molecules=ethanol_traj_molecules,
             settings=gaussian_settings,
             label="traj",
             jobrunner=None,
         )
         # 20 * 0.1 = 2.0 -> last 2 structures
         assert job.num_structures == 2
-        assert job.molecules == traj_molecules[-2:]
+        assert job.molecules == ethanol_traj_molecules[-2:]
 
     def test_small_trajectory_clamps_to_at_least_one(
         self, ethanol_molecule, gaussian_settings
@@ -91,23 +75,23 @@ class TestGaussianTrajJobTailExtraction:
         assert job.molecules == mols[-1:]
 
     def test_proportion_one_uses_entire_trajectory(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = GaussianTrajJob(
-            molecules=traj_molecules,
+            molecules=ethanol_traj_molecules,
             settings=gaussian_settings,
             label="traj",
             jobrunner=None,
             proportion_structures_to_use=1.0,
         )
         assert job.num_structures == 20
-        assert job.molecules == traj_molecules
+        assert job.molecules == ethanol_traj_molecules
 
     def test_original_conformer_ids_track_1_based_source_indices(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = GaussianTrajJob(
-            molecules=traj_molecules,
+            molecules=ethanol_traj_molecules,
             settings=gaussian_settings,
             label="traj",
             jobrunner=None,
@@ -117,9 +101,9 @@ class TestGaussianTrajJobTailExtraction:
 
 
 class TestGaussianTrajJobEnergySorting:
-    def _job(self, traj_molecules, gaussian_settings):
+    def _job(self, ethanol_traj_molecules, gaussian_settings):
         return GaussianTrajJob(
-            molecules=traj_molecules,
+            molecules=ethanol_traj_molecules,
             settings=gaussian_settings,
             label="traj",
             jobrunner=None,
@@ -127,9 +111,9 @@ class TestGaussianTrajJobEnergySorting:
         )
 
     def test_all_energies_matches_molecule_order(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
-        job = self._job(traj_molecules, gaussian_settings)
+        job = self._job(ethanol_traj_molecules, gaussian_settings)
         assert job.all_energies == [float(i) for i in range(20)]
 
     def test_sorted_energies_ascending(
@@ -157,10 +141,10 @@ class TestGaussianTrajJobEnergySorting:
 
 class TestGaussianTrajJobUniqueStructures:
     def test_no_grouper_returns_all_molecules(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = GaussianTrajJob(
-            molecules=traj_molecules,
+            molecules=ethanol_traj_molecules,
             settings=gaussian_settings,
             label="traj",
             jobrunner=None,
@@ -169,9 +153,9 @@ class TestGaussianTrajJobUniqueStructures:
         assert job.num_unique_structures == job.num_structures
 
     def test_grouping_strategy_delegates_to_grouper(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
-        unique_subset = traj_molecules[-2:][:1]
+        unique_subset = ethanol_traj_molecules[-2:][:1]
         mock_grouper = MagicMock()
         mock_grouper.unique.return_value = unique_subset
 
@@ -180,7 +164,7 @@ class TestGaussianTrajJobUniqueStructures:
             return_value=mock_grouper,
         ) as mock_create:
             job = GaussianTrajJob(
-                molecules=traj_molecules,
+                molecules=ethanol_traj_molecules,
                 settings=gaussian_settings,
                 label="traj",
                 jobrunner=None,
@@ -202,10 +186,10 @@ class TestGaussianTrajJobUniqueStructures:
 
 class TestGaussianTrajJobPrepareAndRun:
     def _job_with_fake_uniques(
-        self, traj_molecules, gaussian_settings, n_unique
+        self, ethanol_traj_molecules, gaussian_settings, n_unique
     ):
         job = GaussianTrajJob(
-            molecules=traj_molecules,
+            molecules=ethanol_traj_molecules,
             settings=gaussian_settings,
             label="traj",
             jobrunner=None,
@@ -216,19 +200,19 @@ class TestGaussianTrajJobPrepareAndRun:
         return job
 
     def test_prepare_all_jobs_builds_indexed_labels(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = self._job_with_fake_uniques(
-            traj_molecules, gaussian_settings, n_unique=2
+            ethanol_traj_molecules, gaussian_settings, n_unique=2
         )
         jobs = job._prepare_all_jobs()
         assert [j.label for j in jobs] == ["traj_c1", "traj_c2"]
 
     def test_run_all_jobs_runs_everything_when_no_limit(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = self._job_with_fake_uniques(
-            traj_molecules, gaussian_settings, n_unique=2
+            ethanol_traj_molecules, gaussian_settings, n_unique=2
         )
         fake_jobs = [MagicMock(), MagicMock()]
         with patch.object(
@@ -241,10 +225,10 @@ class TestGaussianTrajJobPrepareAndRun:
             fj.run.assert_called_once()
 
     def test_run_all_jobs_limits_to_incomplete_subset(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = self._job_with_fake_uniques(
-            traj_molecules, gaussian_settings, n_unique=2
+            ethanol_traj_molecules, gaussian_settings, n_unique=2
         )
         job.num_structures_to_run = 1
         complete_job = MagicMock()
@@ -267,10 +251,10 @@ class TestGaussianTrajJobPrepareAndRun:
         incomplete_job_2.run.assert_not_called()
 
     def test_run_delegates_to_run_all_jobs(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
         job = self._job_with_fake_uniques(
-            traj_molecules, gaussian_settings, n_unique=2
+            ethanol_traj_molecules, gaussian_settings, n_unique=2
         )
         with patch.object(job, "_run_all_jobs") as mock_run_all:
             job._run()
@@ -278,18 +262,18 @@ class TestGaussianTrajJobPrepareAndRun:
 
 
 class TestGaussianTrajJobCompletion:
-    def _job(self, traj_molecules, gaussian_settings):
+    def _job(self, ethanol_traj_molecules, gaussian_settings):
         return GaussianTrajJob(
-            molecules=traj_molecules,
+            molecules=ethanol_traj_molecules,
             settings=gaussian_settings,
             label="traj",
             jobrunner=None,
         )
 
     def test_is_complete_checks_all_jobs_when_no_limit(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
-        job = self._job(traj_molecules, gaussian_settings)
+        job = self._job(ethanol_traj_molecules, gaussian_settings)
         fake_jobs = [
             MagicMock(is_complete=lambda: True),
             MagicMock(is_complete=lambda: True),
@@ -302,9 +286,9 @@ class TestGaussianTrajJobCompletion:
             assert job.is_complete() is True
 
     def test_is_complete_false_when_a_required_job_incomplete(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
-        job = self._job(traj_molecules, gaussian_settings)
+        job = self._job(ethanol_traj_molecules, gaussian_settings)
         job.num_structures_to_run = 1
         fake_jobs = [
             MagicMock(is_complete=lambda: False),
@@ -318,9 +302,9 @@ class TestGaussianTrajJobCompletion:
             assert job.is_complete() is False
 
     def test_last_run_job_index_returns_first_incomplete(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
-        job = self._job(traj_molecules, gaussian_settings)
+        job = self._job(ethanol_traj_molecules, gaussian_settings)
         fake_jobs = [
             MagicMock(is_complete=lambda: True),
             MagicMock(is_complete=lambda: False),
@@ -333,9 +317,9 @@ class TestGaussianTrajJobCompletion:
             assert job.last_run_job_index == 1
 
     def test_incomplete_structure_run_jobs_filters(
-        self, traj_molecules, gaussian_settings
+        self, ethanol_traj_molecules, gaussian_settings
     ):
-        job = self._job(traj_molecules, gaussian_settings)
+        job = self._job(ethanol_traj_molecules, gaussian_settings)
         complete = MagicMock(is_complete=lambda: True)
         incomplete = MagicMock(is_complete=lambda: False)
         fake_jobs = [complete, incomplete]
