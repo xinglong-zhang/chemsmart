@@ -873,7 +873,7 @@ class Molecule:
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
-            return np.zeros(3)
+            return np.zeros((3, 3))
         else:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
@@ -887,7 +887,7 @@ class Molecule:
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
-            return np.zeros(3)
+            return np.zeros((3, 3))
         else:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
@@ -903,7 +903,7 @@ class Molecule:
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
-            return np.zeros(3)
+            return np.zeros((3, 3))
         else:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
@@ -1227,11 +1227,11 @@ class Molecule:
                 "Only Gaussian, ORCA, and xTB are currently supported."
             )
 
-        if basename.endswith(".gro"):
-            return cls._read_gromacs_gro(filepath, index, **kwargs)
+        # if basename.endswith(".gro"):
+        #     return cls._read_gromacs_gro(filepath, index, **kwargs)
 
-        if basename.endswith(".trr"):
-            return cls._read_gromacs_trr(filepath, index, **kwargs)
+        # if basename.endswith(".trr"):
+        #     return cls._read_gromacs_trr(filepath, index, **kwargs)
 
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
