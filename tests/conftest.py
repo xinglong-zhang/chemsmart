@@ -3151,6 +3151,23 @@ def database_empty_file(database_test_directory):
     return os.path.join(database_test_directory, "empty.db")
 
 
+############ SOAP Fixtures ##################
+@pytest.fixture()
+def soap_test_directory(test_data_directory):
+    return os.path.join(test_data_directory, "SOAPTests")
+
+
+@pytest.fixture()
+def soap_reference_filepath(soap_test_directory):
+    return os.path.join(soap_test_directory, "soap_reference.npz")
+
+
+@pytest.fixture()
+def soap_reference_data(soap_reference_filepath):
+    """Fixture to load the SOAP reference data."""
+    return np.load(soap_reference_filepath)
+
+
 # ---------------------------------------------------------------------------
 # Reusable fixture: minimal server YAML without XTB/CREST sections
 # (simulates a pre-xTB CHEMSMART install)

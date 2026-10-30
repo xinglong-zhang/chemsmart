@@ -1,7 +1,5 @@
 """Tests for SOAP descriptor calculations on Molecule objects."""
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -11,51 +9,6 @@ from chemsmart.io.molecules.structure import Molecule
 # Cross-platform numerical tolerances for dense float64 SOAP vectors.
 RTOL = 1e-6
 ATOL = 1e-8
-
-_REFERENCE_PATH = (
-    Path(__file__).resolve().parent / "data" / "soap_reference.npz"
-)
-
-
-@pytest.fixture(scope="module")
-def soap_reference():
-    """Golden SOAP vectors generated once from DScribe 2.1.2 GTO SOAP."""
-    return np.load(_REFERENCE_PATH)
-
-
-@pytest.fixture
-def water_molecule():
-    """Simple water geometry in Å."""
-    return Molecule(
-        symbols=["O", "H", "H"],
-        positions=np.array(
-            [
-                [0.00000, 0.00000, 0.11779],
-                [0.00000, 0.75545, -0.47116],
-                [0.00000, -0.75545, -0.47116],
-            ],
-            dtype=float,
-        ),
-    )
-
-
-@pytest.fixture
-def methanol_molecule():
-    """Methanol geometry with C/H/O species."""
-    return Molecule(
-        symbols=["C", "O", "H", "H", "H", "H"],
-        positions=np.array(
-            [
-                [-0.6626, 0.0000, 0.0000],
-                [0.6626, 0.0000, 0.0000],
-                [-1.0280, 1.0280, 0.0000],
-                [-1.0280, -0.5140, 0.8900],
-                [-1.0280, -0.5140, -0.8900],
-                [1.0280, 0.0000, 0.0000],
-            ],
-            dtype=float,
-        ),
-    )
 
 
 def _rotation_matrix(axis, angle_rad):
@@ -95,11 +48,18 @@ class TestCalculateSoapBasics:
             via_method, via_module, rtol=RTOL, atol=ATOL
         )
 
+    def test_molecule_property_matches_method(self, water_molecule):
+        via_property = water_molecule.soap_descriptors
+        via_method = water_molecule.calculate_soap()
+        np.testing.assert_allclose(
+            via_property, via_method, rtol=RTOL, atol=ATOL
+        )
+
     def test_parity_with_golden_reference(
-        self, water_molecule, soap_reference
+        self, water_molecule, soap_reference_data
     ):
         features = calculate_soap(water_molecule, n_max=4, l_max=2, sigma=0.5)
-        expected = soap_reference["water_sigma_0_5"]
+        expected = soap_reference_data["water_sigma_0_5"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
     def test_deterministic(self, water_molecule):
@@ -114,12 +74,12 @@ class TestCalculateSoapBasics:
         assert features.shape == (1, features.shape[1])
 
     def test_centers_1based_order_preserved(
-        self, methanol_molecule, soap_reference
+        self, methanol_molecule, soap_reference_data
     ):
         features = calculate_soap(
             methanol_molecule, centers=[2, 1], n_max=4, l_max=2
         )
-        expected = soap_reference["methanol_centers_2_1"]
+        expected = soap_reference_data["methanol_centers_2_1"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
     def test_duplicate_centers_preserved_and_bias_mean(self, water_molecule):
@@ -146,45 +106,47 @@ class TestCalculateSoapBasics:
         np.testing.assert_allclose(mean_dup, single, rtol=RTOL, atol=ATOL)
         assert not np.allclose(mean_dup, mean_all, rtol=RTOL, atol=ATOL)
 
-    def test_explicit_species_basis(self, water_molecule, soap_reference):
+    def test_explicit_species_basis(self, water_molecule, soap_reference_data):
         species = ["H", "C", "O", "N"]
         features = calculate_soap(
             water_molecule, species=species, n_max=4, l_max=2
         )
-        expected = soap_reference["water_species_HCON"]
+        expected = soap_reference_data["water_species_HCON"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
         # Shared basis yields a larger feature space than inferred H/O.
         inferred = calculate_soap(water_molecule, n_max=4, l_max=2)
         assert features.shape[1] > inferred.shape[1]
 
-    def test_parity_public_defaults(self, water_molecule, soap_reference):
+    def test_parity_public_defaults(self, water_molecule, soap_reference_data):
         features = calculate_soap(water_molecule)
-        expected = soap_reference["water_defaults"]
+        expected = soap_reference_data["water_defaults"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
     def test_parity_lmax4_covers_lpmv_path(
-        self, water_molecule, soap_reference
+        self, water_molecule, soap_reference_data
     ):
         features = calculate_soap(water_molecule, n_max=4, l_max=4, sigma=1.0)
-        expected = soap_reference["water_lmax4_sigma1"]
+        expected = soap_reference_data["water_lmax4_sigma1"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
-    def test_parity_methanol_sigma1(self, methanol_molecule, soap_reference):
+    def test_parity_methanol_sigma1(
+        self, methanol_molecule, soap_reference_data
+    ):
         features = calculate_soap(
             methanol_molecule, n_max=4, l_max=2, sigma=1.0
         )
-        expected = soap_reference["methanol_sigma1"]
+        expected = soap_reference_data["methanol_sigma1"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
-    def test_parity_padding_shell_neighbor(self, soap_reference):
+    def test_parity_padding_shell_neighbor(self, soap_reference_data):
         # He at 8 Å from O sits in DScribe's r_cut+~3.72σ padding shell.
         mol = Molecule(
             symbols=["O", "H", "H", "He"],
             positions=np.array(
                 [
-                    [0.00000, 0.00000, 0.11779],
-                    [0.00000, 0.75545, -0.47116],
-                    [0.00000, -0.75545, -0.47116],
+                    [0.0000, 0.0000, 0.1173],
+                    [0.0000, 0.7572, -0.4692],
+                    [0.0000, -0.7572, -0.4692],
                     [8.0, 0.0, 0.11779],
                 ],
                 dtype=float,
@@ -198,7 +160,7 @@ class TestCalculateSoapBasics:
             sigma=1.0,
             r_cut=6.0,
         )
-        expected = soap_reference["padding_shell_He"]
+        expected = soap_reference_data["padding_shell_He"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
     def test_padding_shell_changes_descriptor(self, water_molecule):
@@ -551,7 +513,7 @@ class TestValidation:
         assert np.isfinite(features).all()
 
     def test_uses_live_symbols_not_cached(
-        self, water_molecule, soap_reference
+        self, water_molecule, soap_reference_data
     ):
         # Warm any caches that might exist, then mutate symbols in place.
         _ = water_molecule.chemical_symbols
@@ -560,7 +522,7 @@ class TestValidation:
         features = calculate_soap(
             water_molecule, species=species, n_max=4, l_max=2
         )
-        expected = soap_reference["sulfur_species_HOS"]
+        expected = soap_reference_data["sulfur_species_HOS"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
     def test_mixed_case_molecule_symbols_match_canonical(self, water_molecule):
