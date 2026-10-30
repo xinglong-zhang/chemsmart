@@ -816,7 +816,7 @@ class Molecule:
         """
         Calculate the moment of inertia tensor of the molecule.
         """
-        moi_tensor, _, _ = self._get_moments_of_inertia
+        moi_tensor, _, _ = self._moments_of_inertia
         return np.array(moi_tensor)
 
     @property
@@ -828,7 +828,7 @@ class Molecule:
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
-            _, eigenvalues, _ = self._get_moments_of_inertia
+            _, eigenvalues, _ = self._moments_of_inertia
             return eigenvalues
 
     @property
@@ -839,7 +839,7 @@ class Molecule:
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
-            _, eigenvalues, _ = self._get_moments_of_inertia_weighted_mass
+            _, eigenvalues, _ = self._moments_of_inertia_weighted_mass
             logger.debug(f"Moments of inertia (weighted mass): {eigenvalues}.")
             return eigenvalues
 
@@ -851,7 +851,7 @@ class Molecule:
         if self.is_monoatomic:
             return [0.0, 0.0, 0.0]
         else:
-            _, eigenvalues, _ = self._get_moments_of_inertia_most_abundant_mass
+            _, eigenvalues, _ = self._moments_of_inertia_most_abundant_mass
             logger.debug(
                 f"Moments of inertia (most abundant mass): {eigenvalues}."
             )
@@ -863,53 +863,44 @@ class Molecule:
         Obtain moments of inertia along
         principal axes from molecular structure.
         """
-        _, _, eigenvectors = self._get_moments_of_inertia
+        _, _, eigenvectors = self._moments_of_inertia
         return eigenvectors
 
     @cached_property
-    def _get_moments_of_inertia(self):
+    def _moments_of_inertia(self):
         """
         Calculate the moments of inertia of the molecule.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(self.masses, self.positions)
+        return calculate_moments_of_inertia(self.masses, self.positions)
 
     @cached_property
-    def _get_moments_of_inertia_weighted_mass(self):
+    def _moments_of_inertia_weighted_mass(self):
         """
-        Calculate the moments of inertia of the
-        molecule. Use natural abundance weighted masses.
+        Calculate the moments of inertia of the molecule using
+        the natural abundance weighted masses.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(
-                self.natural_abundance_weighted_masses, self.positions
-            )
+        return calculate_moments_of_inertia(
+            self.natural_abundance_weighted_masses, self.positions
+        )
 
     @cached_property
-    def _get_moments_of_inertia_most_abundant_mass(self):
+    def _moments_of_inertia_most_abundant_mass(self):
         """
-        Calculate the moments of inertia of
-        the molecule. Use most abundant masses.
+        Calculate the moments of inertia of the molecule using
+        the most abundant masses.
         Units of amu Å^2.
         """
-        if self.num_atoms == 1:
-            return np.zeros(3)
-        else:
-            from chemsmart.utils.geometry import calculate_moments_of_inertia
+        from chemsmart.utils.geometry import calculate_moments_of_inertia
 
-            return calculate_moments_of_inertia(
-                self.most_abundant_masses, self.positions
-            )
+        return calculate_moments_of_inertia(
+            self.most_abundant_masses, self.positions
+        )
 
     @cached_property
     def rotational_temperatures(self):
@@ -917,9 +908,10 @@ class Molecule:
         Obtain the rotational temperatures of the molecule in K.
         Θ_r,i = h^2 / (8 * pi^2 * I_i * k_B) for i = x, y, z
 
-        For linear molecules the moment of inertia along the molecular axis is
-         (effectively) zero, so the axial rotational temperature is infinite. For
-         linear molecules this property returns only the finite perpendicular-axis value.
+        For linear molecules the moment of inertia along the molecular axis
+        is (effectively) zero, so the axial rotational temperature is infinite.
+        For linear molecules this property returns only the finite
+        perpendicular-axis value.
         """
         moi_in_SI_units = [
             float(i) * units._amu * (1 / units.m) ** 2
@@ -1227,11 +1219,11 @@ class Molecule:
                 "Only Gaussian, ORCA, and xTB are currently supported."
             )
 
-        if basename.endswith(".gro"):
-            return cls._read_gromacs_gro(filepath, index, **kwargs)
+        # if basename.endswith(".gro"):
+        #     return cls._read_gromacs_gro(filepath, index, **kwargs)
 
-        if basename.endswith(".trr"):
-            return cls._read_gromacs_trr(filepath, index, **kwargs)
+        # if basename.endswith(".trr"):
+        #     return cls._read_gromacs_trr(filepath, index, **kwargs)
 
         # if basename.endswith(".traj"):
         #     return cls._read_traj_file(filepath, index, **kwargs)
