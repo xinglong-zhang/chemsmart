@@ -873,7 +873,7 @@ class Molecule:
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
-            return np.zeros((3, 3))
+            return np.zeros((3, 3)), np.zeros(3), np.eye(3)
         else:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
@@ -887,7 +887,7 @@ class Molecule:
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
-            return np.zeros((3, 3))
+            return np.zeros((3, 3)), np.zeros(3), np.eye(3)
         else:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
@@ -903,7 +903,7 @@ class Molecule:
         Units of amu Å^2.
         """
         if self.num_atoms == 1:
-            return np.zeros((3, 3))
+            return np.zeros((3, 3)), np.zeros(3), np.eye(3)
         else:
             from chemsmart.utils.geometry import calculate_moments_of_inertia
 
