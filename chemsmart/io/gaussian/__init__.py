@@ -1,3 +1,6 @@
+import functools
+
+
 class GaussianRefs:
     """Reference data for Gaussian quantum chemistry calculations.
 
@@ -205,6 +208,84 @@ class BSEMetadata:
             list: List of format keys
         """
         return list(self.all_formats().keys())
+
+    def basis_names_matching(self, element, shells):
+        """Find the basis sets whose functions for an element are identical
+        to the given shells (inverse of retrieving a basis set by name).
+
+        The BSE basis sets are laid out the way their Gaussian (gaussian94)
+        format is written, i.e. as the shells Gaussian reads from a gen/genecp
+        section, and compared independently of shell order.
+
+        Args:
+            element (str): Element symbol, e.g. 'Ag'.
+            shells (list): Shell dicts as given by
+                Gaussian16Output.heavy_elements_basis_functions[element].
+
+        Returns:
+            list: Sorted lowercase BSE basis set names; empty if none match.
+        """
+        return list(
+            _bse_basis_names_matching(element, _basis_shells_key(shells))
+        )
+
+
+def _significant(value, digits=8):
+    """Round to significant digits so that values printed by Gaussian
+    compare equal to the BSE values they were read from."""
+    return float(f"{value:.{digits - 1}e}")
+
+
+def _basis_shells_key(shells):
+    """Order-independent, hashable key for a list of shell dicts."""
+    return tuple(
+        sorted(
+            (
+                shell["shell"],
+                tuple(
+                    tuple(_significant(value) for value in primitive)
+                    for primitive in shell["primitives"]
+                ),
+            )
+            for shell in shells
+        )
+    )
+
+
+@functools.lru_cache(maxsize=None)
+def _bse_basis_names_matching(element, shells_key):
+    """Scan all BSE basis sets containing the element for ones whose
+    shells give `shells_key`.  Cached because a scan takes seconds."""
+    import basis_set_exchange as bse
+
+    z = str(bse.lut.element_Z_from_sym(element))
+    matches = []
+    for name, metadata in bse.get_metadata().items():
+        latest = metadata["versions"][metadata["latest_version"]]
+        if z not in latest["elements"]:
+            continue
+        basis = bse.get_basis(name, elements=[element])
+        # Same shell layout as BSE's gaussian94 writer
+        basis = bse.manip.uncontract_general(basis, False)
+        basis = bse.manip.uncontract_spdf(basis, 1, False)
+        bse_shells = []
+        for shell in basis["elements"][z].get("electron_shells", []):
+            label = bse.lut.amint_to_char(
+                shell["angular_momentum"], hij=True
+            ).upper()
+            primitives = [
+                (
+                    float(exponent),
+                    *(float(c[i]) for c in shell["coefficients"]),
+                )
+                for i, exponent in enumerate(shell["exponents"])
+            ]
+            bse_shells.append({"shell": label, "primitives": primitives})
+        if bse_shells and _basis_shells_key(bse_shells) == shells_key:
+            # Display name, as accepted by bse.get_basis and listed by
+            # all_bases_names (metadata keys are mangled, e.g. 6-31g_st_)
+            matches.append(metadata["display_name"].lower())
+    return tuple(sorted(matches))
 
 
 # Initialize Gaussian reference data

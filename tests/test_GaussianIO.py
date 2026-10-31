@@ -1942,7 +1942,14 @@ class TestGaussian16Output:
         assert g16.light_elements_basis == "6-31g(d)"
         # Heavy elements has explicit orbital basis
         assert g16.heavy_elements == ["Cl", "Br"]
-        heavy_basis = g16.heavy_elements_basis
+        # Basis name is identified by matching the printed functions
+        # against the Basis Set Exchange library
+        assert g16.heavy_elements_basis_candidates == {
+            "Cl": ["6-311g"],
+            "Br": ["6-311g"],
+        }
+        assert g16.heavy_elements_basis == "6-311g"
+        heavy_basis = g16.heavy_elements_basis_functions
 
         cl_shells = heavy_basis["Cl"]
         assert [shell["shell"] for shell in cl_shells] == [
@@ -2004,6 +2011,35 @@ class TestGaussian16Output:
         assert np.isclose(br_last_exp, 1.5350000000e00)
         assert np.isclose(br_last_coeff, 1.0000000000e00)
 
+    def test_heavy_elements_basis_name_round_trip_with_sp_shells(self):
+        # Write a BSE basis with SP shells the way Gaussian prints it under
+        # #p, parse it back and identify its name from the functions.
+        import basis_set_exchange as bse
+
+        from chemsmart.io.gaussian import BSEMetadata
+
+        g94 = bse.get_basis("6-31G*", elements=["Si"], fmt="gaussian94")
+        block_lines = []
+        for line in g94.splitlines():
+            tokens = line.split()
+            if not tokens or tokens[0] in ("Si", "****") or line[0] == "!":
+                continue
+            if tokens[0].isalpha():
+                block_lines.append(line)
+            else:
+                values = [v.replace("E", "D") for v in tokens]
+                block_lines.append(
+                    f"Exponent= {values[0]} Coefficients= "
+                    + " ".join(values[1:])
+                )
+        shells = Gaussian16Output._parse_explicit_basis_block(block_lines)
+        assert [s["shell"] for s in shells] == ["S", "SP", "SP", "SP", "D"]
+        assert all(len(p) == 3 for p in shells[1]["primitives"])
+
+        names = BSEMetadata().basis_names_matching("Si", shells)
+        assert "6-31g*" in names
+        assert "6-31g" not in names
+
     def test_read_full_genecp_outputfile(self, gaussian_full_genecp_outfile):
         assert os.path.exists(gaussian_full_genecp_outfile)
         g16 = Gaussian16Output(filename=gaussian_full_genecp_outfile)
@@ -2014,8 +2050,14 @@ class TestGaussian16Output:
         assert g16.light_elements_basis == "def2svp"
         # Heavy element (Ag) has explicit orbital basis
         assert g16.heavy_elements == ["Ag"]
+        # def2-TZVP and def2-TZVPD are identical for Ag; the shorter
+        # name is reported
+        assert g16.heavy_elements_basis_candidates == {
+            "Ag": ["def2-tzvp", "def2-tzvpd"]
+        }
+        assert g16.heavy_elements_basis == "def2-tzvp"
 
-        ag_shells = g16.heavy_elements_basis["Ag"]
+        ag_shells = g16.heavy_elements_basis_functions["Ag"]
         assert [s["shell"] for s in ag_shells] == [
             "S",
             "S",

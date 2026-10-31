@@ -462,6 +462,46 @@ END
 
 
 class TestORCAOutput:
+    def test_heavy_elements_basis_from_echoed_input(self, tmp_path):
+        out_file = tmp_path / "pd_newgto.out"
+        out_file.write_text(
+            "                                       INPUT FILE\n"
+            "NAME = pd_newgto.inp\n"
+            "|  1> ! PBE0 def2-SVP\n"
+            "|  2> %basis\n"
+            '|  3>   NewGTO Pd "def2-TZVP" end\n'
+            '|  4>   newgto I "def2-TZVP" end\n'
+            "|  5> end\n"
+            "|  6> * xyz 0 1\n"
+            '|  7> Pd 0.0 0.0 0.0 NewGTO "def2-QZVP" end\n'
+            "|  8> I 0.0 0.0 2.6\n"
+            "|  9> *\n"
+            "| 10>                          ****END OF INPUT****\n"
+        )
+        orca_out = ORCAOutput(filename=str(out_file))
+        assert orca_out.heavy_elements == ["Pd", "I"]
+        assert orca_out.heavy_elements_basis == "def2-TZVP"
+
+    def test_heavy_elements_basis_mixed_or_absent(self, tmp_path):
+        out_file = tmp_path / "mixed_newgto.out"
+        out_file.write_text(
+            "|  1> ! PBE0 def2-SVP\n"
+            '|  2> %basis NewGTO Pd "def2-TZVP" end NewGTO I "def2-QZVP" end'
+            " end\n"
+            "|  3>                          ****END OF INPUT****\n"
+        )
+        orca_out = ORCAOutput(filename=str(out_file))
+        assert orca_out.heavy_elements == ["Pd", "I"]
+        assert orca_out.heavy_elements_basis == "def2-TZVP, def2-QZVP"
+
+        out_file.write_text(
+            "|  1> ! PBE0 def2-SVP\n"
+            "|  2>                          ****END OF INPUT****\n"
+        )
+        orca_out = ORCAOutput(filename=str(out_file))
+        assert orca_out.heavy_elements is None
+        assert orca_out.heavy_elements_basis is None
+
     def test_read_water_output(self, water_output_gas_path):
         orca_out = ORCAOutput(filename=water_output_gas_path)
         assert orca_out.version == "5.0.3"
