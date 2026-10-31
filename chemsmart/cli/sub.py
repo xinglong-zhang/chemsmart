@@ -33,6 +33,13 @@ logger = logging.getLogger(__name__)
 )
 @click.option("-q", "--queue", type=str, help="Queue name for job submission.")
 @click.option(
+    "-N",
+    "--num-nodes",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Enable node-limited batch submission using this maximum node count.",
+)
+@click.option(
     "-v/",
     "--verbose/--no-verbose",
     default=False,
@@ -62,6 +69,7 @@ def sub(
     stream,
     time_hours,
     queue,
+    num_nodes,
     verbose,
     test,
     print_command,
@@ -88,11 +96,11 @@ def sub(
         server.num_hours = time_hours
     if queue is not None:
         server.queue_name = queue
-    if num_cores is not None:
+    if num_cores is not None and num_nodes is None:
         server.kwargs["NUM_CORES"] = num_cores
-    if num_gpus is not None:
+    if num_gpus is not None and num_nodes is None:
         server.kwargs["NUM_GPUS"] = num_gpus
-    if mem_gb is not None:
+    if mem_gb is not None and num_nodes is None:
         server.kwargs["MEM_GB"] = mem_gb
 
     jobrunner = JobRunner(
@@ -147,6 +155,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             keywords_not_in_run = [
                 "time_hours",
                 "queue",
+                "num_nodes",
                 "verbose",
                 "test",
                 "print_command",
@@ -298,7 +307,22 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
         return args
 
-    def _reconstruct_cli_args(ctx, job):
+    def _replace_batch_structure_index(cli_args, structure_index):
+        args = list(cli_args)
+        for option in (
+            "-i",
+            "--index",
+            "--structure-index",
+            "--si",
+        ):
+            if option in args:
+                args[args.index(option) + 1] = str(structure_index)
+                break
+        return args
+
+    def _reconstruct_cli_args(
+        ctx, job, structure_index=None, batch_mode=False
+    ):
         """
         Get cli args that reconstruct the command line.
 
@@ -313,6 +337,12 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         cli_args = _replace_batch_table_tokens(
             cli_args, getattr(job, "_batch_entry", None)
         )
+        if structure_index is not None:
+            cli_args = _replace_batch_structure_index(
+                cli_args, structure_index
+            )
+        if batch_mode:
+            cli_args = ["--batch-label", str(job.label), *cli_args]
 
         if kwargs.get("print_command"):
             print(cli_args)
@@ -333,6 +363,39 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     ctx = _clean_command(ctx)
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
+
+    num_nodes = kwargs.get("num_nodes")
+    if num_nodes is not None:
+        jobs = job if isinstance(job, list) else [job]
+        if not jobs:
+            logger.warning("No jobs to submit")
+            return
+
+        molecule_indices = ctx.obj.get("molecule_indices")
+        batch_cli_args = []
+        for index, single_job in enumerate(jobs):
+            structure_index = None
+            if isinstance(molecule_indices, list) and len(
+                molecule_indices
+            ) == len(jobs):
+                structure_index = molecule_indices[index]
+            batch_cli_args.append(
+                _reconstruct_cli_args(
+                    ctx,
+                    single_job,
+                    structure_index=structure_index,
+                    batch_mode=True,
+                )
+            )
+            single_job.jobrunner = jobrunner
+
+        jobrunner.server.submit_batch_job(
+            jobs=jobs,
+            num_nodes=num_nodes,
+            test=kwargs.get("test"),
+            cli_args=batch_cli_args,
+        )
+        return
 
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
