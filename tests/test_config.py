@@ -926,9 +926,9 @@ class TestAddLinesInYamlFilesFunction:
         """A file that fails to open/process shouldn't abort the whole
         directory scan; unexpected errors (generic Exception) are
         caught and logged. Note the `except yaml.YAMLError` clause
-        (see BUGS_FOUND.md #40) can never actually trigger, since this
-        function only ever does plain text I/O (readlines/write) --
-        no yaml.safe_load or similar parsing call exists in its body."""
+        can never actually trigger, since this function only ever
+        does plain text I/O (readlines/write) -- no yaml.safe_load
+        or similar parsing call exists in its body."""
         (tmp_path / "broken.yaml").write_text("some: content\n")
         with patch(
             "builtins.open", side_effect=OSError("simulated read failure")

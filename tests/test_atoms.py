@@ -121,8 +121,8 @@ class TestFromAtomsSingleFixAtomsConstraint:
         `Atoms.constraints` setter (aliased to set_constraint) always
         wraps a bare constraint in a list
         (`self._constraints = [constraint]`), so `atoms.constraints`
-        can never actually be a bare FixAtoms instance -- see
-        BUGS_FOUND.md. The only way to reach this branch at all is by
+        can never actually be a bare FixAtoms instance.
+        The only way to reach this branch at all is by
         writing the private `_constraints` attribute directly,
         bypassing the public property entirely, as done here.
         """
