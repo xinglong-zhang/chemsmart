@@ -1240,6 +1240,32 @@ class TestDatabaseQuery:
         rows = dq._format_table([{"record_index": 1}])
         assert any("" in row for row in rows[2:])
 
+    def test_condition_regex_operators_match_supported_operators(self):
+        """The operators accepted by query_condition_pattern must be
+        exactly SUPPORTED_OPERATORS (BUGS_FOUND.md #60). The operator is
+        interpolated into SQL, so the `Unsupported operator` guard in
+        parse_query relies on this invariant; fail here if one list is
+        edited without the other."""
+        import re
+
+        from chemsmart.database.query import (
+            _CONDITION_RE,
+            SUPPORTED_OPERATORS,
+        )
+        from chemsmart.utils.repattern import query_condition_pattern
+
+        # Every supported operator is matched and captured verbatim.
+        for operator in SUPPORTED_OPERATORS:
+            match = _CONDITION_RE.fullmatch(f"total_energy {operator} 1")
+            assert match is not None, operator
+            assert match.group(2) == operator
+
+        # The regex's operator alternation has no extras.
+        alternation = re.search(
+            r"\\s\*\(([^()]*)\)\\s\*", query_condition_pattern
+        ).group(1)
+        assert set(alternation.split("|")) == SUPPORTED_OPERATORS
+
     def test_parse_query_empty_clause_parts_is_unreachable_defensively(
         self, tmp_path, monkeypatch
     ):
