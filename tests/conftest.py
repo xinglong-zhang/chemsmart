@@ -127,10 +127,39 @@ def make_thermochemistry_mock():
 ############ CLI Fixtures ##################
 @pytest.fixture
 def make_cli_ctx_obj():
-    """Factory for the minimal Click context object."""
+    """Factory for the minimal Click context object.
 
-    def _make(jobrunner):
-        return {"jobrunner": jobrunner}
+    Extra keyword arguments (e.g. ``molecules``, ``label``) are merged
+    into the returned dict.
+    """
+
+    def _make(jobrunner, **extra):
+        return {"jobrunner": jobrunner, **extra}
+
+    return _make
+
+
+@pytest.fixture
+def make_cli_ctx(make_cli_ctx_obj):
+    """Factory for a lightweight stand-in for a Click context.
+
+    Returns an object exposing only ``.obj``, which is sufficient for
+    helpers such as ``chemsmart.cli.utils.build_jobs`` that read state
+    from ``ctx.obj``. A ``MagicMock`` jobrunner is used when none is given.
+    """
+    from types import SimpleNamespace
+
+    def _make(molecules, molecule_indices, label, jobrunner=None):
+        if jobrunner is None:
+            jobrunner = MagicMock(name="jobrunner")
+        return SimpleNamespace(
+            obj=make_cli_ctx_obj(
+                jobrunner,
+                molecules=molecules,
+                molecule_indices=molecule_indices,
+                label=label,
+            )
+        )
 
     return _make
 
