@@ -1,5 +1,9 @@
 import inspect
+import json
 import logging
+import os
+import re
+import shlex
 from abc import abstractmethod
 from typing import Optional
 
@@ -33,7 +37,7 @@ class RunScript:
         cli_args: Command line arguments to pass to the job.
     """
 
-    def __init__(self, filename, cli_args, batch=False):
+    def __init__(self, filename, cli_args, batch=False, num_cores=1):
         """
         Initialize the run script generator.
 
@@ -45,6 +49,7 @@ class RunScript:
         self.filename = filename
         self.batch = batch
         self.cli_args = cli_args
+        self.num_cores = num_cores
 
     def write(self):
         """
@@ -69,7 +74,7 @@ class RunScript:
         contents = f"""\
         #!/usr/bin/env python
         import os
-        os.environ['OMP_NUM_THREADS'] = '1'
+        os.environ['OMP_NUM_THREADS'] = {str(self.num_cores)!r}
         
         from chemsmart.cli.run import run
 
@@ -314,6 +319,12 @@ class Submitter(RegistryMixin):
 
         # Write array submit script
         self._write_array_submitscript(num_nodes)
+
+    def write_batch_job(self, jobs, num_nodes, cli_args=None):
+        """Write scripts for independent subtasks in one scheduler allocation."""
+        raise NotImplementedError(
+            f"{self.NAME} does not support node-limited batch jobs."
+        )
 
     def _write_array_runscripts(self, jobs, cli_args):
         """
@@ -847,6 +858,120 @@ class SLURMSubmitter(Submitter):
                 f.write("#SBATCH --mail-type=END,FAIL\n")
         f.write("\n")
         f.write("\n")
+
+    @property
+    def batch_prefix(self):
+        label = self.job.execution_name or "batch"
+        label = re.sub(r"[^A-Za-z0-9_.-]+", "_", os.path.basename(label))
+        return f"chemsmart_batch_{label[:100]}"
+
+    @property
+    def batch_submit_script(self):
+        return f"{self.batch_prefix}.sh"
+
+    @property
+    def batch_driver_script(self):
+        return f"{self.batch_prefix}.py"
+
+    @property
+    def batch_manifest(self):
+        return f"{self.batch_prefix}.json"
+
+    def write_batch_job(self, jobs, num_nodes, cli_args=None):
+        if not jobs:
+            logger.warning("No jobs provided for batch job")
+            return
+        self.jobs = jobs
+        self.num_nodes = num_nodes
+        task_runner = jobs[0].jobrunner
+        task_cores = task_runner.num_cores
+        task_memory = task_runner.mem_gb
+        task_gpus = task_runner.num_gpus
+        if num_nodes <= 0 or task_cores <= 0 or task_memory <= 0:
+            raise ValueError(
+                "Batch node, core, and memory allocations must be positive."
+            )
+        if task_gpus < 0:
+            raise ValueError("A subtask GPU count cannot be negative.")
+        if task_cores > self.server.num_cores:
+            raise ValueError(
+                "A subtask cannot request more cores than one node."
+            )
+        if task_memory > self.server.mem_gb:
+            raise ValueError(
+                "A subtask cannot request more memory than one node."
+            )
+        if task_gpus > self.server.num_gpus:
+            raise ValueError(
+                "A subtask cannot request more GPUs than one node."
+            )
+
+        tasks = []
+        for index, job in enumerate(jobs, start=1):
+            task_args = cli_args
+            if isinstance(cli_args, (list, tuple)) and len(cli_args) == len(
+                jobs
+            ):
+                task_args = cli_args[index - 1]
+            runscript = f"{self.batch_prefix}_run_{index:05d}.py"
+            RunScript(runscript, task_args, num_cores=task_cores).write()
+            tasks.append({"label": job.label, "runscript": runscript})
+
+        with open(self.batch_manifest, "w") as manifest_file:
+            json.dump(
+                {
+                    "num_nodes": num_nodes,
+                    "cores_per_node": self.server.num_cores,
+                    "memory_per_node_gb": self.server.mem_gb,
+                    "gpus_per_node": self.server.num_gpus,
+                    "task_cores": task_cores,
+                    "task_memory_gb": task_memory,
+                    "task_gpus": task_gpus,
+                    "tasks": tasks,
+                },
+                manifest_file,
+            )
+
+        with open(self.batch_driver_script, "w") as driver_file:
+            driver_file.write(
+                "from chemsmart.jobs.batch import run_slurm_batch\n\n"
+                "if __name__ == '__main__':\n"
+                f"    raise SystemExit(run_slurm_batch("
+                f"{self.batch_manifest!r}))\n"
+            )
+
+        with open(self.batch_submit_script, "w") as submit_file:
+            self._write_bash_header(submit_file)
+            self._write_batch_scheduler_options(submit_file)
+            self._write_program_specifics(submit_file)
+            self._write_extra_commands(submit_file)
+            self._write_change_to_job_directory(submit_file)
+            submit_file.write(
+                f"python {shlex.quote(self.batch_driver_script)}\n"
+            )
+
+    def _write_batch_scheduler_options(self, f):
+        f.write(f"#SBATCH --job-name={self.batch_prefix}\n")
+        f.write(f"#SBATCH --output={self.batch_prefix}.slurmout\n")
+        f.write(f"#SBATCH --error={self.batch_prefix}.slurmerr\n")
+        if self.server.queue_name:
+            f.write(f"#SBATCH --partition={self.server.queue_name}\n")
+        if self.server.num_hours:
+            f.write(f"#SBATCH --time={self.server.num_hours}:00:00\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
+                f.write("#SBATCH --mail-type=END,FAIL\n")
+        self._write_extra_scheduler_directives(f)
+        if self.server.num_gpus:
+            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
+        f.write(f"#SBATCH --nodes={self.num_nodes}\n")
+        f.write(
+            f"#SBATCH --ntasks-per-node={self.server.num_cores}\n"
+            f"#SBATCH --mem={self.server.mem_gb}G\n\n"
+        )
 
     def _write_change_to_job_directory(self, f):
         """

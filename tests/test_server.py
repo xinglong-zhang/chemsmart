@@ -1,5 +1,7 @@
+import json
 import os
 from io import StringIO
+from types import SimpleNamespace
 
 import pytest
 
@@ -179,6 +181,96 @@ conda activate ~/anaconda3/envs/chemsmart
         submitter._write_scheduler_options(buffer)
         assert "#SBATCH --reservation=xlzhang_1\n" in buffer.getvalue()
         assert "#SBATCH --job-name=orca_job1\n" in buffer.getvalue()
+
+    def test_slurm_batch_submission_writes_single_node_limited_job(
+        self, tmp_path, monkeypatch
+    ):
+        server = Server(
+            "custom-slurm",
+            SCHEDULER="SLURM",
+            NUM_CORES=8,
+            MEM_GB=24,
+            NUM_GPUS=0,
+        )
+        jobs = [
+            SimpleNamespace(
+                label=f"structure_{i}",
+                execution_name=f"xtb_structure_{i}",
+                jobrunner=SimpleNamespace(num_cores=2, mem_gb=2, num_gpus=0),
+            )
+            for i in range(2)
+        ]
+        submitter = SLURMSubmitter(job=jobs[0], server=server)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            submitter, "_write_program_specifics", lambda stream: None
+        )
+
+        submitter.write_batch_job(
+            jobs=jobs, num_nodes=3, cli_args=[["xtb"], ["xtb", "opt"]]
+        )
+
+        script = (tmp_path / submitter.batch_submit_script).read_text()
+        assert "#SBATCH --nodes=3\n" in script
+        assert "#SBATCH --ntasks-per-node=8\n" in script
+        assert "#SBATCH --array=" not in script
+        assert f"python {submitter.batch_driver_script}" in script
+        manifest = json.loads(
+            (tmp_path / submitter.batch_manifest).read_text()
+        )
+        assert [task["label"] for task in manifest["tasks"]] == [
+            "structure_0",
+            "structure_1",
+        ]
+        assert manifest["task_cores"] == 2
+        assert manifest["task_memory_gb"] == 2
+        runscript = (tmp_path / manifest["tasks"][0]["runscript"]).read_text()
+        assert "os.environ['OMP_NUM_THREADS'] = '2'" in runscript
+        assert (tmp_path / manifest["tasks"][1]["runscript"]).is_file()
+
+    def test_server_submits_one_batch_allocation(self, mocker):
+        server = Server("custom-slurm", SCHEDULER="SLURM")
+        jobs = [
+            SimpleNamespace(
+                label="structure_1", execution_name="xtb_structure_1"
+            ),
+            SimpleNamespace(
+                label="structure_2", execution_name="xtb_structure_2"
+            ),
+        ]
+        cluster_helper = mocker.patch(
+            "chemsmart.utils.cluster.ClusterHelper"
+        ).return_value
+        cluster_helper.get_running_jobs.return_value = ([], [])
+        submitter = mocker.Mock()
+        mocker.patch.object(server, "get_submitter", return_value=submitter)
+        submit_batch = mocker.patch.object(server, "_submit_batch_job")
+
+        server.submit_batch_job(
+            jobs, num_nodes=2, cli_args=[["xtb"], ["xtb", "opt"]]
+        )
+
+        cluster_helper.get_running_jobs.assert_called_once_with()
+        submitter.write_batch_job.assert_called_once_with(
+            jobs=jobs,
+            num_nodes=2,
+            cli_args=[["xtb"], ["xtb", "opt"]],
+        )
+        submit_batch.assert_called_once_with(jobs[0], submitter)
+
+    def test_server_rejects_duplicate_batch_master_name(self, mocker):
+        server = Server("custom-slurm", SCHEDULER="SLURM")
+        jobs = [SimpleNamespace(label="structure_1", execution_name="xtb_1")]
+        mocker.patch(
+            "chemsmart.utils.cluster.ClusterHelper"
+        ).return_value.get_running_jobs.return_value = ([], ["batch_name"])
+        submitter = mocker.Mock(batch_prefix="batch_name")
+        mocker.patch.object(server, "get_submitter", return_value=submitter)
+
+        with pytest.raises(SystemExit, match="Duplicate job NOT submitted"):
+            server.submit_batch_job(jobs, num_nodes=2)
+
+        submitter.write_batch_job.assert_not_called()
 
     def test_pbs_submitter_writes_extra_scheduler_directives(self):
         server = Server(

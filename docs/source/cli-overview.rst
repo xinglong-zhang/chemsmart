@@ -157,6 +157,11 @@ These options are only available with ``chemsmart sub``:
       -  string
       -  HPC queue name
 
+   -  -  ``-N, --num-nodes``
+      -  int
+      -  Enable node-limited batch submission in one SLURM allocation. The value is the maximum node count; each subtask
+         uses ``-n`` cores and pending subtasks start as resources become available.
+
    -  -  ``-v, --verbose/--no-verbose``
       -  bool
       -  Enable verbose output and debug logging (default: disabled)
@@ -168,6 +173,9 @@ These options are only available with ``chemsmart sub``:
    -  -  ``--print-command/--no-print-command``
       -  bool
       -  Print the generated command (default: disabled)
+
+When ``-N`` is omitted, jobs are submitted using the existing per-job behavior. Batch task output and status are
+recorded separately, with a final count of successful, failed, and unfinished tasks.
 
 ********************
  Available Commands

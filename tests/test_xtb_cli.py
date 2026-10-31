@@ -36,6 +36,12 @@ class TestXTBHelp:
         result = CliRunner().invoke(sub, ["--help"])
         assert result.exit_code == 0, result.output
         assert "xtb" in result.output
+        assert "-N, --num-nodes" in result.output
+
+    def test_batch_node_and_core_options_require_positive_integers(self):
+        options = {option.name: option for option in sub.params}
+        assert options["num_nodes"].type.min == 1
+        assert options["num_cores"].type.min == 1
 
     def test_xtb_help_lists_jobs(self):
         result = CliRunner().invoke(run, ["xtb", "--help"])
