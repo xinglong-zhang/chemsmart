@@ -17,7 +17,6 @@ from chemsmart.io.gaussian.folder import (
     GaussianOutputFolder,
 )
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.pdb import pdbfile as pdbfile_module
 from chemsmart.io.pdb.pdbfile import PDBFile
 from chemsmart.io.xyz.folder import XYZFolder
 
@@ -733,40 +732,20 @@ class TestPDBFile:
         assert models[1].residue_numbers == [2]
 
     # ------------------------------------------------------------------
-    # Element inference: dead-code guards around PeriodicTable.to_element
+    # Element inference: unrecognized names must fail fast
     # ------------------------------------------------------------------
-    # PeriodicTable.to_element() never raises for non-empty alphabetic
-    # input (it falls back to a best-effort guess instead), so the
-    # except/raise branches below are unreachable through real usage.
-    # They are exercised here via mocking purely for coverage; see
-    # BUGS_FOUND.md #53.
+    # PeriodicTable.to_element() falls back to a best-effort guess for
+    # unknown symbols, so _infer_element_from_atom_name validates the
+    # result itself (BUGS_FOUND.md #53).
 
-    def test_infer_element_single_letter_lookup_failure_raises(self):
-        with patch.object(
-            pdbfile_module.p, "to_element", side_effect=Exception("boom")
-        ):
-            with pytest.raises(ValueError, match="Unable to infer"):
-                PDBFile._infer_element_from_atom_name("Q")
+    @pytest.mark.parametrize("atom_name", ["Q", "XY", "Zz", "X", "QQ"])
+    def test_infer_element_unrecognized_name_raises(self, atom_name):
+        with pytest.raises(ValueError, match="Unable to infer"):
+            PDBFile._infer_element_from_atom_name(atom_name)
 
-    def test_infer_element_two_letter_failure_falls_back_to_single(self):
-        real_to_element = pdbfile_module.p.to_element
-
-        def fake_to_element(candidate):
-            if len(candidate) == 2:
-                raise Exception("no two-letter match")
-            return real_to_element(candidate)
-
-        with patch.object(
-            pdbfile_module.p, "to_element", side_effect=fake_to_element
-        ):
-            assert PDBFile._infer_element_from_atom_name("XY") == "X"
-
-    def test_infer_element_two_and_single_letter_failure_raises(self):
-        with patch.object(
-            pdbfile_module.p, "to_element", side_effect=Exception("boom")
-        ):
-            with pytest.raises(ValueError, match="Unable to infer"):
-                PDBFile._infer_element_from_atom_name("XY")
+    def test_infer_element_unknown_two_letter_falls_back_to_single(self):
+        # "NQ" is not an element, but the leading "N" is.
+        assert PDBFile._infer_element_from_atom_name("NQ") == "N"
 
     # ------------------------------------------------------------------
     # format_pdb_block / _format_pdb_atom_line
