@@ -23,6 +23,33 @@ class DatabaseFile(FileMixin):
         if vibrational_modes is not None:
             vibrational_modes = [np.array(mode) for mode in vibrational_modes]
         positions = struct_dict.get("positions")
+        properties = struct_dict.get("dataset_properties", {})
+        fields = (
+            "id",
+            "A",
+            "B",
+            "C",
+            "mu",
+            "alpha",
+            "homo",
+            "lumo",
+            "gap",
+            "r2",
+            "zpve",
+            "U0",
+            "U",
+            "H",
+            "G",
+            "Cv",
+            "atomization",
+            "dipole",
+            "inds",
+        )
+        dataset_values = {
+            name: properties[name]["value"]
+            for name in fields
+            if name in properties
+        }
         return Molecule(
             symbols=struct_dict.get("chemical_symbols"),
             positions=(np.array(positions) if positions is not None else None),
@@ -56,6 +83,8 @@ class DatabaseFile(FileMixin):
                 else None
             ),
             point_group=struct_dict.get("point_group"),
+            dataset_source=struct_dict.get("dataset_source"),
+            **dataset_values,
         )
 
     def get_molecule_by_structure_id(self, structure_id, return_list=False):

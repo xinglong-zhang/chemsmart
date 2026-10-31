@@ -5,6 +5,7 @@ import click
 
 from chemsmart.cli.job import click_folder_options
 from chemsmart.database.assemble import (
+    NPZAssembler,
     SingleFileAssembler,
     SingleFolderAssembler,
 )
@@ -20,6 +21,13 @@ logger = logging.getLogger(__name__)
 
 @database.command(cls=MyCommand)
 @click_folder_options
+@click.option(
+    "-f",
+    "--file",
+    "input_file",
+    type=click.Path(exists=True, dir_okay=False),
+    help="Import molecular structures from an NPZ dataset.",
+)
 @click.option(
     "-i",
     "--index",
@@ -51,6 +59,7 @@ def assemble(
     index,
     output,
     include_failed,
+    input_file,
 ):
     """Assemble calculation output files into a chemsmart database.
 
@@ -66,6 +75,19 @@ def assemble(
     # Ensure the output filename ends with .db
     if not output.lower().endswith(".db"):
         output = output + ".db"
+
+    if input_file is not None:
+        if not input_file.lower().endswith(".npz"):
+            raise click.BadParameter(
+                "Expected an NPZ file.", param_hint="--file"
+            )
+        db = Database(db_file=output)
+        db.create()
+        count = db.insert_records(
+            NPZAssembler(input_file, index=index).assemble()
+        )
+        logger.info(f"Imported {count} NPZ record(s) into database: {output}")
+        return None
 
     if directory is None:
         directory = "./"

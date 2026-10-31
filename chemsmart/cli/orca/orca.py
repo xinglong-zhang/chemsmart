@@ -553,6 +553,11 @@ def orca(
     elif filename.endswith(".xyz"):
         job_settings = ORCAJobSettings.default()
         logger.info(f"Using default ORCA settings for XYZ file: {filename}")
+    elif filename.lower().endswith(".npz"):
+        job_settings = ORCAJobSettings.default()
+        logger.info(
+            f"Using default ORCA settings for geometry file: {filename}"
+        )
     elif filename.endswith(".db"):
         if is_chemsmart_db:
             job_settings = ORCAJobSettings.from_database(

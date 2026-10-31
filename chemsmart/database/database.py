@@ -205,6 +205,16 @@ class Database:
                 )
             """)
 
+            logger.debug("Creating dataset properties table...")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS dataset_properties (
+                    record_id TEXT NOT NULL,
+                    index_in_record INTEGER NOT NULL,
+                    properties_json TEXT NOT NULL,
+                    PRIMARY KEY (record_id, index_in_record),
+                    FOREIGN KEY (record_id) REFERENCES records(record_id)
+                )
+            """)
             logger.debug("Creating database indices...")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_record_id ON records(record_id)"
@@ -360,7 +370,11 @@ class Database:
                 provenance.get("parser"),
                 provenance.get("chemsmart_version"),
                 provenance.get("assembled_at"),
-                1 if provenance.get("normal_termination") else 0,
+                (
+                    int(bool(provenance["normal_termination"]))
+                    if provenance.get("normal_termination") is not None
+                    else None
+                ),
             ),
         )
 
@@ -380,8 +394,29 @@ class Database:
         conn.execute(
             "DELETE FROM record_structures WHERE record_id = ?", (record_id,)
         )
+        has_dataset_properties = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dataset_properties'"
+        ).fetchone()
+        if has_dataset_properties:
+            conn.execute(
+                "DELETE FROM dataset_properties WHERE record_id = ?",
+                (record_id,),
+            )
 
         for mol in molecules:
+            if mol.get("dataset_properties"):
+                if not has_dataset_properties:
+                    raise ValueError(
+                        "Create the dataset_properties table before importing NPZ data."
+                    )
+                conn.execute(
+                    "INSERT INTO dataset_properties VALUES (?, ?, ?)",
+                    (
+                        record_id,
+                        mol.get("index"),
+                        to_json(mol["dataset_properties"]),
+                    ),
+                )
             molecule_id = mol.get("molecule_id")
             structure_id = mol.get("structure_id")
 
@@ -583,15 +618,33 @@ class Database:
         )
         struct_rows = cursor.fetchall()
 
+        has_properties = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dataset_properties'"
+        ).fetchone()
+        properties = {}
+        if has_properties:
+            properties = {
+                row[0]: from_json(row[1])
+                for row in conn.execute(
+                    "SELECT index_in_record, properties_json FROM dataset_properties WHERE record_id = ?",
+                    (record_id,),
+                )
+            }
+
+        molecules = []
+        for row in struct_rows:
+            molecule = self._record_structure_row_to_dict(dict(row))
+            index = row["index_in_record"]
+            if index in properties:
+                molecule["dataset_properties"] = properties[index]
+            molecules.append(molecule)
+
         return {
             "record_index": record_row["record_index"],
             "record_id": record_id,
             "meta": self._extract_meta(record_row),
             "results": self._extract_results(record_row),
-            "molecules": [
-                self._record_structure_row_to_dict(dict(r))
-                for r in struct_rows
-            ],
+            "molecules": molecules,
             "provenance": self._extract_provenance(record_row),
         }
 

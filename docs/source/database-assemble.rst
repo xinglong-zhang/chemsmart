@@ -16,12 +16,20 @@ existing outputs have been updated.
 
 .. code:: text
 
-   chemsmart run database assemble [-d path/to/directory] [-p gaussian|orca|xtb]
+   chemsmart run database assemble [-d path/to/directory] [-p gaussian|orca|xtb] [-f dataset.npz]
                                    [-i index] [-o outfile.db] [--include-failed]
 
 *********
  Options
 *********
+
+To import a supported NPZ dataset, use ``chemsmart run database assemble -f revQM9.npz -o dataset.db``. Each selected
+structure becomes a separate record. For qm9_eV, orbital energies are stored in eV, while the atom-reference-adjusted U0
+is not stored as total energy. Per-molecule dataset properties are preserved as original values with units where
+confirmed, accessible through ``Database.get_record()`` in ``record["molecules"][0]["dataset_properties"]``. revQM9
+property units remain unspecified when unconfirmed. The dataset-level ``meta`` and unmatched ``atomization_test`` array
+are not imported. The supported QM9 and revQM9 layouts are treated as neutral closed-shell molecules (charge 0,
+multiplicity 1).
 
 .. list-table::
    :header-rows: 1
