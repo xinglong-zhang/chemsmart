@@ -38,8 +38,12 @@ class ConfigUpdateError(Exception):
     """Raised when a config update cannot be planned or written safely."""
 
 
+class ProgramUpdateError(Exception):
+    """Raised when program templates cannot be added safely."""
+
+
 class ProjectUpdateError(Exception):
-    """Raised when project templates cannot be added safely."""
+    """Raised when project YAML files cannot be updated safely."""
 
 
 @dataclass(frozen=True)
@@ -405,28 +409,28 @@ class VersionUpdater(Updater):
         logger.info(f"Version update to {version_number} completed.")
 
 
-class ProjectsUpdater(Updater):
-    """Add missing project template directories and files."""
+class ProgramsUpdater(Updater):
+    """Add missing program template directories and files."""
 
     def update(self) -> tuple[str, ...]:
-        """Copy missing project template content into the user config.
+        """Copy missing program template content into the user config.
 
         Existing files are never overwritten. Top-level template directories
         are discovered automatically, except ``server``, which is managed by
         :class:`ConfigurationUpdater`.
 
         Returns:
-            Names of project directories that received missing content.
+            Names of program directories that received missing content.
         """
         config_dir = self._config_dir()
-        updated_projects: list[str] = []
+        updated_programs: list[str] = []
 
         try:
             self._ensure_directory(config_dir)
             with resources.as_file(
                 self._template_config_dir()
             ) as template_dir:
-                project_templates = sorted(
+                program_templates = sorted(
                     (
                         path
                         for path in template_dir.iterdir()
@@ -434,17 +438,17 @@ class ProjectsUpdater(Updater):
                     ),
                     key=lambda path: path.name.casefold(),
                 )
-                for project_template in project_templates:
-                    destination = config_dir / project_template.name
-                    if self._copy_missing(project_template, destination):
-                        updated_projects.append(project_template.name)
+                for program_template in program_templates:
+                    destination = config_dir / program_template.name
+                    if self._copy_missing(program_template, destination):
+                        updated_programs.append(program_template.name)
         except OSError as exc:
             message = exc.strerror or str(exc)
-            raise ProjectUpdateError(
-                f"Could not update project templates: {message}"
+            raise ProgramUpdateError(
+                f"Could not update program templates: {message}"
             ) from exc
 
-        return tuple(updated_projects)
+        return tuple(updated_programs)
 
     @staticmethod
     def _config_dir() -> Path:
@@ -465,15 +469,15 @@ class ProjectsUpdater(Updater):
     def _ensure_directory(path: Path) -> None:
         """Create a missing directory and reject unsafe path conflicts."""
         if path.is_symlink():
-            raise ProjectUpdateError(f"Refusing to update symlink: {path}")
+            raise ProgramUpdateError(f"Refusing to update symlink: {path}")
         if path.exists() and not path.is_dir():
-            raise ProjectUpdateError(f"Expected a directory: {path}")
+            raise ProgramUpdateError(f"Expected a directory: {path}")
         path.mkdir(parents=True, exist_ok=True)
 
     def _copy_missing(self, source: Path, destination: Path) -> bool:
         """Recursively copy missing content without replacing destinations."""
         if source.is_symlink() or destination.is_symlink():
-            raise ProjectUpdateError(
+            raise ProgramUpdateError(
                 f"Refusing to update symlink: {destination}"
             )
 
@@ -490,12 +494,12 @@ class ProjectsUpdater(Updater):
             return changed
 
         if not source.is_file():
-            raise ProjectUpdateError(
-                f"Unsupported project template entry: {source}"
+            raise ProgramUpdateError(
+                f"Unsupported program template entry: {source}"
             )
         if destination.exists():
             if not destination.is_file():
-                raise ProjectUpdateError(f"Expected a file: {destination}")
+                raise ProgramUpdateError(f"Expected a file: {destination}")
             return False
 
         created = False
@@ -515,6 +519,199 @@ class ProjectsUpdater(Updater):
                     pass
             raise
         return True
+
+
+class ProjectsUpdater(Updater):
+    """Update existing project YAML files with newly added template keys."""
+
+    @staticmethod
+    def _config_dir() -> Path:
+        """Return the resolved user configuration directory."""
+        return ProgramsUpdater._config_dir()
+
+    @staticmethod
+    def _template_config_dir():
+        """Return the bundled ``.chemsmart`` template directory."""
+        return ProgramsUpdater._template_config_dir()
+
+    def update(self) -> tuple[str, ...]:
+        """Add missing template keys to matching project YAML files."""
+        config_dir = self._config_dir()
+        if config_dir.is_symlink():
+            raise ProjectUpdateError(
+                f"Refusing to update symlink: {config_dir}"
+            )
+        if config_dir.exists() and not config_dir.is_dir():
+            raise ProjectUpdateError(f"Expected a directory: {config_dir}")
+        if not config_dir.is_dir():
+            return ()
+
+        updated_projects: list[str] = []
+        try:
+            with resources.as_file(
+                self._template_config_dir()
+            ) as template_dir:
+                for program_template in sorted(
+                    (
+                        path
+                        for path in template_dir.iterdir()
+                        if path.name != "server" and path.is_dir()
+                    ),
+                    key=lambda path: path.name.casefold(),
+                ):
+                    project_dir = config_dir / program_template.name
+                    if project_dir.is_symlink():
+                        raise ProjectUpdateError(
+                            f"Refusing to update symlink: {project_dir}"
+                        )
+                    if not project_dir.is_dir():
+                        continue
+                    for template_file in sorted(program_template.rglob("*")):
+                        if (
+                            not template_file.is_file()
+                            or template_file.suffix.lower()
+                            not in {".yaml", ".yml"}
+                        ):
+                            continue
+                        relative_file = template_file.relative_to(
+                            program_template
+                        )
+                        project_file = project_dir / relative_file
+                        current_dir = project_dir
+                        for part in relative_file.parts[:-1]:
+                            current_dir /= part
+                            if current_dir.is_symlink():
+                                raise ProjectUpdateError(
+                                    "Refusing to update symlink: "
+                                    f"{current_dir}"
+                                )
+                            if (
+                                current_dir.exists()
+                                and not current_dir.is_dir()
+                            ):
+                                raise ProjectUpdateError(
+                                    f"Expected a directory: {current_dir}"
+                                )
+                        if not project_file.exists():
+                            continue
+                        if project_file.is_symlink():
+                            raise ProjectUpdateError(
+                                f"Refusing to update symlink: {project_file}"
+                            )
+                        if not project_file.is_file():
+                            raise ProjectUpdateError(
+                                f"Expected a file: {project_file}"
+                            )
+                        if self._update_yaml_file(
+                            template_file, project_file
+                        ):
+                            updated_projects.append(
+                                str(project_file.relative_to(config_dir))
+                            )
+        except ProjectUpdateError:
+            raise
+        except OSError as exc:
+            message = exc.strerror or str(exc)
+            raise ProjectUpdateError(
+                f"Could not update project YAML files: {message}"
+            ) from exc
+
+        return tuple(updated_projects)
+
+    @staticmethod
+    def _update_yaml_file(template_file: Path, project_file: Path) -> bool:
+        """Recursively add missing template entries; preserve user values."""
+        from ruamel.yaml import YAML
+        from ruamel.yaml.error import YAMLError
+
+        yaml_parser = YAML()
+        yaml_parser.preserve_quotes = True
+        yaml_parser.indent(mapping=4, sequence=4, offset=2)
+        try:
+            template_data = yaml_parser.load(
+                template_file.read_text(encoding="utf-8")
+            )
+            original_text = project_file.read_text(encoding="utf-8")
+            project_data = yaml_parser.load(original_text)
+        except YAMLError as exc:
+            raise ProjectUpdateError(
+                f"Could not parse project YAML {project_file}: {exc}"
+            ) from exc
+        except (OSError, UnicodeError) as exc:
+            raise ProjectUpdateError(
+                f"Could not read project YAML {project_file}: {exc}"
+            ) from exc
+
+        if not isinstance(template_data, Mapping):
+            raise ProjectUpdateError(
+                "Project template must contain a YAML mapping: "
+                f"{template_file}"
+            )
+        if not isinstance(project_data, MutableMapping):
+            raise ProjectUpdateError(
+                "Project YAML must contain a top-level mapping: "
+                f"{project_file}"
+            )
+
+        if not ProjectsUpdater._merge_missing(project_data, template_data):
+            return False
+
+        stream = io.StringIO()
+        try:
+            yaml_parser.dump(project_data, stream)
+        except YAMLError as exc:
+            raise ProjectUpdateError(
+                f"Could not serialize project YAML {project_file}: {exc}"
+            ) from exc
+        ProjectsUpdater._atomic_write_text(
+            project_file, stream.getvalue()
+        )
+        return True
+
+    @staticmethod
+    def _merge_missing(
+        project_data: MutableMapping, template_data: Mapping
+    ) -> bool:
+        """Add absent keys recursively without changing existing values."""
+        changed = False
+        for key, template_value in template_data.items():
+            if key not in project_data:
+                project_data[key] = copy.deepcopy(template_value)
+                changed = True
+            elif (
+                isinstance(project_data[key], MutableMapping)
+                and isinstance(template_value, Mapping)
+            ):
+                changed = (
+                    ProjectsUpdater._merge_missing(
+                        project_data[key], template_value
+                    )
+                    or changed
+                )
+        return changed
+
+    @staticmethod
+    def _atomic_write_text(path: Path, text: str) -> None:
+        """Replace a YAML file atomically while retaining its permissions."""
+        tmp_name: str | None = None
+        try:
+            mode = path.stat().st_mode
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+                tmp_file.write(text)
+            os.chmod(tmp_name, mode)
+            os.replace(tmp_name, path)
+        except OSError as exc:
+            if tmp_name is not None:
+                try:
+                    os.unlink(tmp_name)
+                except FileNotFoundError:
+                    pass
+            raise ProjectUpdateError(
+                f"Could not update {path}: {exc}"
+            ) from exc
 
 
 class ConfigurationUpdater(Updater):
@@ -899,21 +1096,46 @@ def version(version_number: str):
     logger.info("Update complete.")
 
 
+@update.command(name="programs")
+def programs():
+    """Add missing program directories and files from bundled templates."""
+
+    try:
+        updated_programs = ProgramsUpdater().update()
+    except ProgramUpdateError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if updated_programs:
+        click.echo("Updated program templates:")
+        for program in updated_programs:
+            click.echo(f"  added missing content: {program}")
+    else:
+        click.echo("Program templates are already up to date.")
+
+
 @update.command(name="projects")
 def projects():
-    """Add missing project directories and files from bundled templates."""
+    """Update existing project YAML files with bundled template keys."""
 
     try:
         updated_projects = ProjectsUpdater().update()
+    except ModuleNotFoundError as exc:
+        if exc.name in {"ruamel", "ruamel.yaml"}:
+            raise click.ClickException(
+                "ruamel.yaml is required for 'chemsmart update projects'.\n"
+                "Install it with `pip install 'ruamel.yaml>=0.18.16'`\n"
+                "or rerun `make env`."
+            ) from exc
+        raise
     except ProjectUpdateError as exc:
         raise click.ClickException(str(exc)) from exc
 
     if updated_projects:
-        click.echo("Updated project templates:")
+        click.echo("Updated project YAML files:")
         for project in updated_projects:
-            click.echo(f"  added missing content: {project}")
+            click.echo(f"  updated: {project}")
     else:
-        click.echo("Project templates are already up to date.")
+        click.echo("Project YAML files are already up to date.")
 
 
 @update.command(name="configs")
