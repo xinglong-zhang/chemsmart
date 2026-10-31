@@ -21,23 +21,17 @@ matplotlib.use("Agg", force=True)
 
 import numpy as np
 import pytest
-from ase import units
 
 from chemsmart.analysis.dias import (
     DIASOutputFolder,
     GaussianDIASLogFolder,
     ORCADIASOutFolder,
 )
+from chemsmart.utils.constants import hartree_to_kcal_mol
 
 
 def _touch(path):
     open(path, "w").close()
-
-
-def _to_kcal_per_mol(hartree_energy):
-    energy = hartree_energy * units.Hartree
-    energy /= units.kcal / units.mol
-    return energy
 
 
 class _FakeMolecule:
@@ -217,12 +211,12 @@ class TestGaussianDIASLogFolderEnergies:
             ["rxndias_p1.log", "rxndias_p2.log"]
         )
         assert energies == pytest.approx(
-            [_to_kcal_per_mol(-1.00), _to_kcal_per_mol(-1.10)]
+            [-1.00 * hartree_to_kcal_mol, -1.10 * hartree_to_kcal_mol]
         )
 
     def test_reactant_energies_list_order(self, gaussian_dias_folder):
         assert gaussian_dias_folder.reactant_energies_list == pytest.approx(
-            [_to_kcal_per_mol(-0.48), _to_kcal_per_mol(-0.39)]
+            [-0.48 * hartree_to_kcal_mol, -0.39 * hartree_to_kcal_mol]
         )
 
     def test_irc_points_matches_number_of_points(self, gaussian_dias_folder):
@@ -231,8 +225,8 @@ class TestGaussianDIASLogFolderEnergies:
     def test_relative_total_energies(self, gaussian_dias_folder):
         reactant_sum = sum(gaussian_dias_folder.reactant_energies_list)
         expected = [
-            _to_kcal_per_mol(-1.00) - reactant_sum,
-            _to_kcal_per_mol(-1.10) - reactant_sum,
+            -1.00 * hartree_to_kcal_mol - reactant_sum,
+            -1.10 * hartree_to_kcal_mol - reactant_sum,
         ]
         assert gaussian_dias_folder.list_rel_total_energies == pytest.approx(
             expected
@@ -317,7 +311,7 @@ class TestGaussianDIASLogFolderReactionCoordinates:
         )
         reactant_sum = sum(folder.reactant_energies_list)
         assert folder.ref_file_rel_energy == pytest.approx(
-            _to_kcal_per_mol(-1.00) - reactant_sum
+            -1.00 * hartree_to_kcal_mol - reactant_sum
         )
         assert folder.ref_file_rc == pytest.approx(1.0)
 
@@ -532,7 +526,7 @@ class TestORCADIASOutFolderEnergies:
             ["rxn_p1.out", "rxn_p2.out"]
         )
         assert energies == pytest.approx(
-            [_to_kcal_per_mol(-1.00), _to_kcal_per_mol(-1.10)]
+            [-1.00 * hartree_to_kcal_mol, -1.10 * hartree_to_kcal_mol]
         )
 
     def test_interaction_energies(self, orca_dias_folder):
