@@ -736,7 +736,7 @@ class TestPDBFile:
     # ------------------------------------------------------------------
     # PeriodicTable.to_element() falls back to a best-effort guess for
     # unknown symbols, so _infer_element_from_atom_name validates the
-    # result itself (BUGS_FOUND.md #53).
+    # result itself.
 
     @pytest.mark.parametrize("atom_name", ["Q", "XY", "Zz", "X", "QQ"])
     def test_infer_element_unrecognized_name_raises(self, atom_name):
