@@ -4828,6 +4828,86 @@ def slurm_test_server():
 
 
 ############ Job, Runner and CLI-Context Fixtures ##################
+class _ConcreteJob(Job):
+    """Minimal concrete subclass for exercising base ``Job`` behavior.
+
+    Overrides every hook, with ``complete``/``output`` controlling
+    ``_job_is_complete()``/``_output()`` and ``ran`` recording ``_run()``.
+    """
+
+    TYPE = "concrete"
+
+    def __init__(self, complete=False, output=None, **kwargs):
+        super().__init__(**kwargs)
+        self._complete = complete
+        self._output_obj = output
+        self.ran = False
+
+    def _run(self, **kwargs):
+        self.ran = True
+
+    def _job_is_complete(self):
+        return self._complete
+
+    def _output(self):
+        return self._output_obj
+
+    def _backup_files(self, **kwargs):
+        pass
+
+
+class _DefaultBehaviorJob(Job):
+    """Job subclass that keeps the base class's default ``_run``,
+    ``_backup_files`` and ``_job_is_complete``, overriding only ``_output``
+    (returns ``output``)."""
+
+    TYPE = "default_behavior"
+
+    def __init__(self, output=None, **kwargs):
+        super().__init__(**kwargs)
+        self._output_obj = output
+
+    def _run(self, **kwargs):
+        return super()._run(**kwargs)
+
+    def _output(self):
+        return self._output_obj
+
+
+@pytest.fixture()
+def make_concrete_job():
+    """Factory for :class:`_ConcreteJob` with no molecule or jobrunner, e.g.
+    ``make_concrete_job(label="j1", complete=True)``."""
+
+    def _make(label="x", molecule=None, jobrunner=None, **kwargs):
+        return _ConcreteJob(
+            molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
+        )
+
+    return _make
+
+
+@pytest.fixture()
+def concrete_job(tmp_path, monkeypatch, make_concrete_job):
+    """A ``skip_completed`` :class:`_ConcreteJob` labelled ``myjob``, created
+    from inside ``tmp_path`` (so its folder is ``tmp_path``)."""
+    monkeypatch.chdir(tmp_path)
+    return make_concrete_job(label="myjob", skip_completed=True)
+
+
+@pytest.fixture()
+def make_default_behavior_job():
+    """Factory for :class:`_DefaultBehaviorJob` with no molecule or
+    jobrunner, e.g. ``make_default_behavior_job(output=fake_output)``."""
+
+    def _make(label="myjob", molecule=None, jobrunner=None, **kwargs):
+        return _DefaultBehaviorJob(
+            molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
+        )
+
+    return _make
+
+
 @pytest.fixture()
 def nciplot_job_from_files(
     single_molecule_xyz_file, nciplot_settings, tmp_path, monkeypatch
