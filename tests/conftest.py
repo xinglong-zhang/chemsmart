@@ -63,6 +63,7 @@ from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.settings.crest import CRESTProjectSettings
 from chemsmart.settings.server import Server
 from chemsmart.settings.user import CHEMSMARTUserSettings
+from chemsmart.utils.mixins import RegistryMixin
 
 thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
@@ -3760,6 +3761,203 @@ def temp_folder_with_files():
         with open(file2, "w") as f:
             f.write("Test file 2")
         yield tmpdir, file1, file2
+
+
+_UNSET = object()
+
+
+@pytest.fixture()
+def make_mixin_instance():
+    """Factory for a stand-alone instance of a mixin class, for testing
+    the mixin without a real parser behind it.
+
+    ``contents`` and ``route_string`` (if given, ``None`` included) are
+    overridden as fixed read-only properties on a throwaway subclass; all
+    other keyword arguments become instance attributes. The mixin's own
+    ``__init__`` (if any) is not run::
+
+        stub = make_mixin_instance(
+            ORCAFileMixin, contents=["%cpcm", "%end"], filename="cpcm.inp"
+        )
+    """
+
+    def _make(mixin_cls, *, contents=_UNSET, route_string=_UNSET, **attrs):
+        namespace = {}
+        if contents is not _UNSET:
+            namespace["contents"] = property(lambda self: contents)
+        if route_string is not _UNSET:
+            namespace["route_string"] = property(lambda self: route_string)
+        stub_cls = type(f"_Stub{mixin_cls.__name__}", (mixin_cls,), namespace)
+        instance = object.__new__(stub_cls)
+        for name, value in attrs.items():
+            setattr(instance, name, value)
+        return instance
+
+    return _make
+
+
+@pytest.fixture()
+def make_dummy_file(make_mixin_instance):
+    """Factory for a :class:`FileMixin` reading ``filename`` from disk, with
+    two energies, no forces and no input coordinates block (overridable
+    by keyword)."""
+    from chemsmart.utils.mixins import FileMixin
+
+    def _make(filename, **attrs):
+        defaults = dict(
+            forces=None, energies=[1.0, 2.0], input_coordinates_block=None
+        )
+        defaults.update(attrs)
+        return make_mixin_instance(FileMixin, filename=filename, **defaults)
+
+    return _make
+
+
+@pytest.fixture()
+def make_frontier_orbital_file(make_dummy_file, temp_text_file):
+    """Factory for a :class:`FileMixin` with the given ``multiplicity``
+    (default 1) and alpha/beta occupied/virtual eigenvalue lists (default
+    ``None``), for the frontier-orbital properties."""
+
+    def _make(**overrides):
+        attrs = dict(
+            multiplicity=1,
+            alpha_occ_eigenvalues=None,
+            beta_occ_eigenvalues=None,
+            alpha_virtual_eigenvalues=None,
+            beta_virtual_eigenvalues=None,
+        )
+        attrs.update(overrides)
+        return make_dummy_file(temp_text_file, **attrs)
+
+    return _make
+
+
+@pytest.fixture()
+def make_dummy_gaussian_file(make_mixin_instance):
+    """Factory for a :class:`GaussianFileMixin` with ``%chk``/``%mem=32GB``/
+    ``%nproc=8`` link-0 lines, a modredundant group mixing a frozen and a
+    scan coordinate, and the given ``route_string`` (default ``"modred"``).
+    """
+    from chemsmart.utils.mixins import GaussianFileMixin
+
+    def _make(route_string="modred", filename="test.gjf", **attrs):
+        return make_mixin_instance(
+            GaussianFileMixin,
+            contents=[
+                "%chk=test.chk",
+                "%mem=32GB",
+                "%nproc=8",
+                "#p opt freq",
+                "modred",
+            ],
+            route_string=route_string,
+            filename=filename,
+            modredundant_group=["B 2 12 F", "B 9 2 S 10 0.05"],
+            **attrs,
+        )
+
+    return _make
+
+
+@pytest.fixture()
+def dummy_orca_file(make_mixin_instance):
+    """:class:`ORCAFileMixin` with ``%mdci`` (cutoff/density) and SMD water
+    ``%cpcm`` blocks, route ``! B3LYP def2-SVP``."""
+    from chemsmart.utils.mixins import ORCAFileMixin
+
+    return make_mixin_instance(
+        ORCAFileMixin,
+        contents=[
+            "%mdci",
+            "  cutoff 1e-5",
+            "  density 1e-6",
+            "%cpcm",
+            "  smd true",
+            '  solvent "water"',
+        ],
+        route_string="! B3LYP def2-SVP",
+        filename="test.inp",
+    )
+
+
+@pytest.fixture()
+def dummy_xtb_file(make_mixin_instance):
+    """:class:`XTBFileMixin` for a loose GFN2 ALPB(toluene) gradient opt."""
+    from chemsmart.utils.mixins import XTBFileMixin
+
+    return make_mixin_instance(
+        XTBFileMixin,
+        route_string=(
+            "xtb p_benzyne.xyz --opt loose --gfn 2 --alpb toluene "
+            "--chrg 0 --uhf 0 --grad"
+        ),
+        filename="test.out",
+    )
+
+
+@pytest.fixture()
+def dummy_crest_file(make_mixin_instance):
+    """:class:`CRESTFileMixin` for a constrained GFN2 tight conformer
+    search."""
+    from chemsmart.utils.mixins import CRESTFileMixin
+
+    return make_mixin_instance(
+        CRESTFileMixin,
+        route_string=(
+            "crest 1a.xyz --cinp constraints.inp --gfn2 --chrg 0 --uhf 0 "
+            "--optlev tight"
+        ),
+        filename="test.out",
+    )
+
+
+@pytest.fixture()
+def make_dummy_folder(make_mixin_instance):
+    """Factory for a :class:`FolderMixin` over ``folder``."""
+    from chemsmart.utils.mixins import FolderMixin
+
+    def _make(folder):
+        return make_mixin_instance(FolderMixin, folder=folder)
+
+    return _make
+
+
+@pytest.fixture()
+def make_dummy_folder_output(make_mixin_instance):
+    """Factory for a :class:`FolderOutputMixin` delegating, in order, to
+    the ``main_out`` and ``secondary_out`` parsers (either may be
+    ``None``)."""
+    from chemsmart.utils.mixins import FolderOutputMixin
+
+    def _make(main_out=None, secondary_out=None):
+        return make_mixin_instance(
+            FolderOutputMixin,
+            FILE_PARSERS=("main_out", "secondary_out"),
+            main_out=main_out,
+            secondary_out=secondary_out,
+        )
+
+    return _make
+
+
+class _BaseRegistry(RegistryMixin):
+    pass
+
+
+class _SubRegistry1(_BaseRegistry):
+    pass
+
+
+class _SubRegistry2(_BaseRegistry):
+    pass
+
+
+@pytest.fixture()
+def registry_mixin_hierarchy():
+    """``(base, sub1, sub2)``: a :class:`RegistryMixin` root class and two
+    registered subclasses."""
+    return _BaseRegistry, _SubRegistry1, _SubRegistry2
 
 
 # pytest fixtures for Popen
