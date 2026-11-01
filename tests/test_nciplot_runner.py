@@ -16,20 +16,20 @@ import pytest
 from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.jobs.nciplot.runner import (
     FakeNCIPLOT,
-    FakeNCIPLOTJobRunner,
     NCIPLOTJobRunner,
 )
+from tests.helpers import write_text_file
 
 
 class TestNCIPLOTJobRunnerSetup:
-    def test_defaults_scratch_to_true(self, pbs_server):
+    def test_defaults_scratch_to_true(self, nciplot_jobrunner):
         # Constructing with scratch left unset (None) would trigger the
         # real ``_set_scratch`` executable/scratch-dir resolution, which
         # the minimal test server fixture doesn't support. The relevant
         # behavior — falling back to the class default — is exercised via
         # the class attribute directly.
         assert NCIPLOTJobRunner.SCRATCH is True
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         assert runner.scratch is False
 
     def test_scratch_none_falls_back_to_class_default(self, pbs_server):
@@ -53,9 +53,9 @@ class TestNCIPLOTJobRunnerSetup:
         assert runner.scratch is True
 
     def test_prerun_job_directory_paths(
-        self, pbs_server, nciplot_job_from_files
+        self, nciplot_job_from_files, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
 
         assert runner.running_directory == nciplot_job_from_files.folder
@@ -107,8 +107,8 @@ class TestNCIPLOTJobRunnerSetup:
 
 
 class TestNCIPLOTJobRunnerExecutable:
-    def test_executable_success(self, pbs_server):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+    def test_executable_success(self, pbs_server, nciplot_jobrunner):
+        runner = nciplot_jobrunner
         mock_exe = MagicMock()
         with patch(
             "chemsmart.jobs.nciplot.runner.NCIPLOTExecutable.from_servername",
@@ -119,8 +119,8 @@ class TestNCIPLOTJobRunnerExecutable:
             servername=pbs_server.name
         )
 
-    def test_executable_raises_file_not_found(self, pbs_server):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+    def test_executable_raises_file_not_found(self, nciplot_jobrunner):
+        runner = nciplot_jobrunner
         with patch(
             "chemsmart.jobs.nciplot.runner.NCIPLOTExecutable.from_servername",
             side_effect=FileNotFoundError("no server file"),
@@ -128,8 +128,8 @@ class TestNCIPLOTJobRunnerExecutable:
             with pytest.raises(FileNotFoundError):
                 runner.executable
 
-    def test_get_executable_returns_path(self, pbs_server):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+    def test_get_executable_returns_path(self, nciplot_jobrunner):
+        runner = nciplot_jobrunner
         mock_exe = MagicMock()
         mock_exe.get_executable.return_value = "/path/to/nciplot"
         with patch.object(
@@ -142,42 +142,42 @@ class TestNCIPLOTJobRunnerExecutable:
 
 class TestNCIPLOTJobRunnerPrepareFiles:
     def test_prepare_files_requires_filenames_when_no_molecule(
-        self, pbs_server, nciplot_settings, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, nciplot_jobrunner
     ):
         monkeypatch.chdir(tmp_path)
         job = NCIPLOTJob.__new__(NCIPLOTJob)
         job.molecule = None
         job.filenames = None
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         with pytest.raises(AssertionError, match="No molecule provided"):
             runner._prepare_files(job)
 
     def test_prepare_files_rejects_non_list_filenames(
-        self, pbs_server, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, nciplot_jobrunner
     ):
         monkeypatch.chdir(tmp_path)
         job = NCIPLOTJob.__new__(NCIPLOTJob)
         job.molecule = None
         job.filenames = "not-a-list"
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         with pytest.raises(TypeError, match="Expected filenames"):
             runner._prepare_files(job)
 
     def test_prepare_files_rejects_empty_filenames(
-        self, pbs_server, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, nciplot_jobrunner
     ):
         monkeypatch.chdir(tmp_path)
         job = NCIPLOTJob.__new__(NCIPLOTJob)
         job.molecule = None
         job.filenames = []
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         with pytest.raises(ValueError, match="No filenames provided"):
             runner._prepare_files(job)
 
     def test_prepare_files_copies_supported_formats(
-        self, pbs_server, nciplot_job_from_files, single_molecule_xyz_file
+        self, nciplot_job_from_files, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
 
@@ -188,11 +188,11 @@ class TestNCIPLOTJobRunnerPrepareFiles:
 
     def test_prepare_files_converts_unsupported_formats(
         self,
-        pbs_server,
         gaussian_opt_inputfile,
         nciplot_settings,
         tmp_path,
         monkeypatch,
+        nciplot_jobrunner,
     ):
         monkeypatch.chdir(tmp_path)
         job = NCIPLOTJob(
@@ -200,7 +200,7 @@ class TestNCIPLOTJobRunnerPrepareFiles:
             settings=nciplot_settings,
             label="conv_test",
         )
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(job)
         os.makedirs(runner.running_directory, exist_ok=True)
 
@@ -211,20 +211,19 @@ class TestNCIPLOTJobRunnerPrepareFiles:
 
     def test_prepare_files_writes_xyz_from_pubchem_molecule(
         self,
-        pbs_server,
-        single_molecule_xyz_file,
         nciplot_settings,
         tmp_path,
         monkeypatch,
+        nciplot_jobrunner,
+        a_molecule,
     ):
         monkeypatch.chdir(tmp_path)
-        from chemsmart.io.molecules.structure import Molecule
-
-        molecule = Molecule.from_filepath(single_molecule_xyz_file)
         job = NCIPLOTJob(
-            molecule=molecule, settings=nciplot_settings, label="pubchem_test"
+            molecule=a_molecule,
+            settings=nciplot_settings,
+            label="pubchem_test",
         )
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(job)
         os.makedirs(runner.running_directory, exist_ok=True)
 
@@ -236,9 +235,9 @@ class TestNCIPLOTJobRunnerPrepareFiles:
 
 class TestNCIPLOTJobRunnerCopyInputFiles:
     def test_copy_input_files_raises_for_missing_file(
-        self, pbs_server, nciplot_job_from_files, tmp_path
+        self, nciplot_job_from_files, tmp_path, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
         nciplot_job_from_files.filenames = [
@@ -249,9 +248,12 @@ class TestNCIPLOTJobRunnerCopyInputFiles:
             runner._copy_input_files(nciplot_job_from_files)
 
     def test_copy_input_files_copies_existing_file(
-        self, pbs_server, nciplot_job_from_files, single_molecule_xyz_file
+        self,
+        nciplot_job_from_files,
+        single_molecule_xyz_file,
+        nciplot_jobrunner,
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
         nciplot_job_from_files.filenames = [single_molecule_xyz_file]
@@ -267,9 +269,9 @@ class TestNCIPLOTJobRunnerCopyInputFiles:
 
 class TestNCIPLOTJobRunnerWriteXyzFromInputFiles:
     def test_raises_for_missing_file(
-        self, pbs_server, nciplot_job_from_files, tmp_path
+        self, nciplot_job_from_files, tmp_path, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
         nciplot_job_from_files.filenames = [
@@ -280,20 +282,21 @@ class TestNCIPLOTJobRunnerWriteXyzFromInputFiles:
             runner._write_xyz_from_input_files(nciplot_job_from_files)
 
     def test_converts_and_copies_promolecular_xyz(
-        self, pbs_server, nciplot_job_from_files, tmp_path
+        self, nciplot_job_from_files, tmp_path, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
 
-        input_file = tmp_path / "molecule.com"
-        input_file.write_text("dummy input")
+        input_file = write_text_file(tmp_path / "molecule.com", "dummy input")
         nciplot_job_from_files.filenames = [str(input_file)]
 
         expected_xyz = tmp_path / "molecule.xyz"
 
         def _fake_convert_files(self):
-            expected_xyz.write_text("3\nmol\nC 0 0 0\nH 1 0 0\nH 0 1 0\n")
+            write_text_file(
+                expected_xyz, "3\nmol\nC 0 0 0\nH 1 0 0\nH 0 1 0\n"
+            )
 
         with patch(
             "chemsmart.jobs.nciplot.runner.FileConverter.convert_files",
@@ -307,14 +310,13 @@ class TestNCIPLOTJobRunnerWriteXyzFromInputFiles:
         assert os.path.exists(copied)
 
     def test_wraps_conversion_failure_as_value_error(
-        self, pbs_server, nciplot_job_from_files, tmp_path
+        self, nciplot_job_from_files, tmp_path, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
 
-        input_file = tmp_path / "molecule.com"
-        input_file.write_text("dummy input")
+        input_file = write_text_file(tmp_path / "molecule.com", "dummy input")
         nciplot_job_from_files.filenames = [str(input_file)]
 
         with patch(
@@ -327,9 +329,9 @@ class TestNCIPLOTJobRunnerWriteXyzFromInputFiles:
 
 class TestNCIPLOTJobRunnerWriteInput:
     def test_write_input_delegates_to_writer(
-        self, pbs_server, nciplot_job_from_files
+        self, nciplot_job_from_files, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
 
@@ -347,9 +349,9 @@ class TestNCIPLOTJobRunnerWriteInput:
 
 class TestNCIPLOTJobRunnerCreateProcess:
     def test_create_process_invokes_popen(
-        self, pbs_server, nciplot_job_from_files
+        self, nciplot_job_from_files, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
 
@@ -381,9 +383,9 @@ class TestNCIPLOTJobRunnerCreateProcess:
 
 class TestNCIPLOTJobRunnerWriteXyzFromPubchem:
     def test_write_xyz_from_pubchem_calls_molecule_write(
-        self, pbs_server, nciplot_job_from_files
+        self, nciplot_job_from_files, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         os.makedirs(runner.running_directory, exist_ok=True)
 
@@ -402,9 +404,9 @@ class TestNCIPLOTJobRunnerWriteXyzFromPubchem:
 
 class TestNCIPLOTJobRunnerCommand:
     def test_get_command_uses_executable_and_inputfile(
-        self, pbs_server, nciplot_job_from_files
+        self, nciplot_job_from_files, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
 
         with patch.object(
@@ -417,9 +419,9 @@ class TestNCIPLOTJobRunnerCommand:
 
 class TestNCIPLOTJobRunnerPostrun:
     def test_postrun_no_op_without_scratch(
-        self, pbs_server, nciplot_job_from_files
+        self, nciplot_job_from_files, nciplot_jobrunner
     ):
-        runner = NCIPLOTJobRunner(server=pbs_server, scratch=False)
+        runner = nciplot_jobrunner
         runner._assign_variables(nciplot_job_from_files)
         # Should not raise.
         runner._postrun(nciplot_job_from_files)
@@ -435,12 +437,12 @@ class TestNCIPLOTJobRunnerPostrun:
         os.makedirs(runner.running_directory, exist_ok=True)
         os.makedirs(nciplot_job_from_files.folder, exist_ok=True)
 
-        keep_file = os.path.join(runner.running_directory, "result.nciout")
-        with open(keep_file, "w") as f:
-            f.write("data")
-        tmp_file = os.path.join(runner.running_directory, "scratch.tmp")
-        with open(tmp_file, "w") as f:
-            f.write("temp")
+        write_text_file(
+            os.path.join(runner.running_directory, "result.nciout"), "data"
+        )
+        write_text_file(
+            os.path.join(runner.running_directory, "scratch.tmp"), "temp"
+        )
 
         runner._postrun(nciplot_job_from_files)
 
@@ -454,23 +456,11 @@ class TestNCIPLOTJobRunnerPostrun:
 
 class TestFakeNCIPLOTJobRunner:
     def test_run_writes_output_and_appends_fake_suffix_to_label(
-        self,
-        pbs_server,
-        single_molecule_xyz_file,
-        nciplot_settings,
-        tmp_path,
-        monkeypatch,
+        self, nciplot_jobrunner_no_scratch, nciplot_job_from_files
     ):
-        monkeypatch.chdir(tmp_path)
-        runner = FakeNCIPLOTJobRunner(
-            server=pbs_server, scratch=False, fake=True
-        )
-        job = NCIPLOTJob(
-            filenames=[single_molecule_xyz_file],
-            settings=nciplot_settings,
-            label="ncitest",
-            jobrunner=runner,
-        )
+        runner = nciplot_jobrunner_no_scratch
+        job = nciplot_job_from_files
+        job.jobrunner = runner
         original_label = job.label
 
         returncode = runner.run(job)
@@ -490,8 +480,7 @@ class TestFakeNCIPLOT:
             FakeNCIPLOT(str(tmp_path / "missing.nci"))
 
     def test_properties(self, tmp_path):
-        input_file = tmp_path / "job.nci"
-        input_file.write_text("&nciplot\n&end\n")
+        input_file = write_text_file(tmp_path / "job.nci", "&nciplot\n&end\n")
         fake = FakeNCIPLOT(str(input_file))
 
         assert fake.file_folder == str(tmp_path)
@@ -504,8 +493,9 @@ class TestFakeNCIPLOT:
     def test_run_writes_fake_output_with_header_and_input_contents(
         self, tmp_path
     ):
-        input_file = tmp_path / "job.nci"
-        input_file.write_text("&nciplot\ndensity job.wfn\n&end\n")
+        input_file = write_text_file(
+            tmp_path / "job.nci", "&nciplot\ndensity job.wfn\n&end\n"
+        )
         fake = FakeNCIPLOT(str(input_file))
 
         returncode = fake.run()

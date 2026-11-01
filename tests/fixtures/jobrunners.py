@@ -14,7 +14,10 @@ from chemsmart.jobs.mol.runner import (
     PyMOLScientificStyleVisualizationJobRunner,
     PyMOLVisualizationJobRunner,
 )
-from chemsmart.jobs.nciplot.runner import FakeNCIPLOTJobRunner
+from chemsmart.jobs.nciplot.runner import (
+    FakeNCIPLOTJobRunner,
+    NCIPLOTJobRunner,
+)
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
@@ -140,6 +143,13 @@ def pymol_scientific_style_visualization_jobrunner(pbs_server):
 @pytest.fixture()
 def pymol_movie_jobrunner(pbs_server):
     return PyMOLMovieJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def nciplot_jobrunner(pbs_server):
+    """Real (non-fake) :class:`NCIPLOTJobRunner` on ``pbs_server``, no
+    scratch."""
+    return NCIPLOTJobRunner(server=pbs_server, scratch=False)
 
 
 @pytest.fixture()

@@ -19,6 +19,7 @@ from click.testing import CliRunner
 
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
+from chemsmart.cli.nciplot.nciplot import nciplot
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
@@ -35,6 +36,10 @@ from chemsmart.utils.mixins import RegistryMixin
 
 _UNSET = object()
 mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
+# ``chemsmart.cli.nciplot`` re-exports the ``nciplot`` Click command under
+# the submodule's own name, so look the submodule up explicitly to patch
+# ``NCIPLOTJob`` on it.
+nciplot_cli_module = importlib.import_module("chemsmart.cli.nciplot.nciplot")
 thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
 )
@@ -1162,6 +1167,21 @@ def run_mol_and_capture_kwargs(job_class_path, cli_args):
     with patch(job_class_path) as mock_job_cls:
         mock_job_cls.return_value = MagicMock()
         result = invoke_mol_cli(cli_args)
+        call_kwargs = None
+        if mock_job_cls.call_args is not None:
+            call_kwargs = mock_job_cls.call_args.kwargs
+    return result, call_kwargs
+
+
+def run_nciplot_and_capture_kwargs(cli_args):
+    """Run the ``nciplot`` CLI with ``NCIPLOTJob`` patched and capture the
+    keyword arguments it was constructed with (``None`` if it never was)::
+
+        result, kwargs = run_nciplot_and_capture_kwargs(["-f", xyz_file])
+    """
+    with patch.object(nciplot_cli_module, "NCIPLOTJob") as mock_job_cls:
+        mock_job_cls.return_value = MagicMock()
+        result = CliRunner().invoke(nciplot, cli_args, catch_exceptions=False)
         call_kwargs = None
         if mock_job_cls.call_args is not None:
             call_kwargs = mock_job_cls.call_args.kwargs

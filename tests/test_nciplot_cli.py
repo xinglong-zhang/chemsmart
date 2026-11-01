@@ -6,34 +6,11 @@ command and :mod:`unittest.mock` to intercept the job constructor so that
 the call kwargs can be inspected without running an actual NCIPLOT job.
 """
 
-import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-from click.testing import CliRunner
 
-from chemsmart.cli.nciplot.nciplot import nciplot
-
-# ``chemsmart.cli.nciplot.__init__`` does ``from .nciplot import nciplot``,
-# which shadows the ``nciplot`` submodule attribute on the package with the
-# click Command object. Fetch the real submodule from ``sys.modules``
-# directly so we can patch ``NCIPLOTJob`` on it.
-nciplot_module = sys.modules["chemsmart.cli.nciplot.nciplot"]
-
-
-def run_nciplot_and_capture_kwargs(cli_args):
-    runner = CliRunner()
-    with patch.object(nciplot_module, "NCIPLOTJob") as mock_job_cls:
-        mock_job_cls.return_value = MagicMock()
-        result = runner.invoke(
-            nciplot,
-            cli_args,
-            catch_exceptions=False,
-        )
-        call_kwargs = None
-        if mock_job_cls.call_args is not None:
-            call_kwargs = mock_job_cls.call_args.kwargs
-    return result, call_kwargs
+from tests.helpers import run_nciplot_and_capture_kwargs, write_text_file
 
 
 class TestNciplotCLI:
@@ -117,8 +94,9 @@ class TestNciplotCLI:
         assert result.exit_code != 0
 
     def test_wfn_file_skips_promolecular_suffix(self, tmp_path):
-        wfn_file = tmp_path / "test.wfn"
-        wfn_file.write_text("dummy wavefunction data")
+        wfn_file = write_text_file(
+            tmp_path / "test.wfn", "dummy wavefunction data"
+        )
         result, kwargs = run_nciplot_and_capture_kwargs(["-f", str(wfn_file)])
         assert result.exit_code == 0, result.output
         assert not kwargs["label"].endswith("_promolecular")

@@ -15,6 +15,7 @@ import pytest
 
 from chemsmart.jobs.nciplot.job import NCIPLOTJob
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
+from tests.helpers import write_text_file
 
 
 class TestNCIPLOTJobSettingsFromDict:
@@ -105,26 +106,18 @@ class TestNCIPLOTJobLabelDerivation:
 
 
 class TestNCIPLOTJobFilePaths:
-    def test_inputfile_outputfile_errfile(self, nciplot_settings):
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci",
-        )
-        assert job.inputfile == f"{job.folder}/mynci.nci"
-        assert job.outputfile == f"{job.folder}/mynci.nciout"
-        assert job.errfile == f"{job.folder}/mynci.ncierr"
+    def test_inputfile_outputfile_errfile(self, nciplot_job_from_files):
+        job = nciplot_job_from_files
+        assert job.inputfile == f"{job.folder}/ncitest.nci"
+        assert job.outputfile == f"{job.folder}/ncitest.nciout"
+        assert job.errfile == f"{job.folder}/ncitest.ncierr"
 
 
 class TestNCIPLOTJobBackup:
     def test_backup_files_calls_backup_file_with_created_folder(
-        self, nciplot_settings
+        self, nciplot_job_from_files
     ):
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci",
-        )
+        job = nciplot_job_from_files
         with (
             patch.object(
                 job, "_create_backup_folder_name", return_value="/bk/folder"
@@ -139,90 +132,45 @@ class TestNCIPLOTJobBackup:
 
 
 class TestNCIPLOTJobOutput:
-    def test_output_returns_none_when_missing(self, nciplot_settings):
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci_missing",
-        )
-        assert job._output() is None
+    def test_output_returns_none_when_missing(self, nciplot_job_from_files):
+        assert nciplot_job_from_files._output() is None
 
-    def test_output_returns_abspath_when_present(
-        self, nciplot_settings, tmp_path, monkeypatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci_present",
-        )
-        with open(job.outputfile, "w") as f:
-            f.write("some output\n")
+    def test_output_returns_abspath_when_present(self, nciplot_job_from_files):
+        job = nciplot_job_from_files
+        write_text_file(job.outputfile, "some output\n")
         assert job._output() == os.path.abspath(job.outputfile)
 
 
 class TestNCIPLOTJobIsComplete:
-    def test_incomplete_when_file_missing(
-        self, nciplot_settings, tmp_path, monkeypatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci",
-        )
-        assert job._job_is_complete() is False
+    def test_incomplete_when_file_missing(self, nciplot_job_from_files):
+        assert nciplot_job_from_files._job_is_complete() is False
 
     def test_incomplete_when_file_present_but_no_end_marker(
-        self, nciplot_settings, tmp_path, monkeypatch
+        self, nciplot_job_from_files
     ):
-        monkeypatch.chdir(tmp_path)
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci",
-        )
-        with open(job.outputfile, "w") as f:
-            f.write("Some line\nAnother line\n")
+        job = nciplot_job_from_files
+        write_text_file(job.outputfile, "Some line\nAnother line\n")
         assert job._job_is_complete() is False
 
     def test_complete_when_last_line_starts_with_end(
-        self, nciplot_settings, tmp_path, monkeypatch
+        self, nciplot_job_from_files
     ):
-        monkeypatch.chdir(tmp_path)
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci",
-        )
-        with open(job.outputfile, "w") as f:
-            f.write("Some line\nEnd of NCIPLOT run\n")
+        job = nciplot_job_from_files
+        write_text_file(job.outputfile, "Some line\nEnd of NCIPLOT run\n")
         assert job._job_is_complete() is True
 
-    def test_incomplete_when_file_is_empty(
-        self, nciplot_settings, tmp_path, monkeypatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci",
-        )
-        open(job.outputfile, "w").close()
+    def test_incomplete_when_file_is_empty(self, nciplot_job_from_files):
+        job = nciplot_job_from_files
+        write_text_file(job.outputfile, "")
         assert job._job_is_complete() is False
 
 
 class TestNCIPLOTJobRun:
-    def test_run_delegates_to_jobrunner(self, nciplot_settings):
-        mock_runner = MagicMock()
-        job = NCIPLOTJob(
-            filenames=["complex.xyz"],
-            settings=nciplot_settings,
-            label="mynci",
-            jobrunner=mock_runner,
-        )
+    def test_run_delegates_to_jobrunner(self, nciplot_job_from_files):
+        job = nciplot_job_from_files
+        job.jobrunner = MagicMock()
         job._run(extra="kwarg")
-        mock_runner.run.assert_called_once_with(job, extra="kwarg")
+        job.jobrunner.run.assert_called_once_with(job, extra="kwarg")
 
     def test_settings_class_returns_nciplot_settings(self):
         assert NCIPLOTJob.settings_class() is NCIPLOTJobSettings
