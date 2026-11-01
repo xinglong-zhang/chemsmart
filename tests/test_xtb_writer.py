@@ -1,6 +1,5 @@
 import io
 import os
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -119,15 +118,18 @@ class TestXTBInputWriter:
         assert (nested / "xtb_water_constrain.inp").is_file()
 
     def test_write_uses_job_folder_when_no_target_directory(
-        self, water_molecule, monkeypatch
+        self, tmp_path, water_molecule, monkeypatch, dummy_job
     ):
         settings = XTBJobSettings(
             charge=0, multiplicity=1, jobtype="opt", constraints=[[1, 2]]
         )
-        job = MagicMock()
-        job.settings = settings
-        job.molecule = water_molecule
-        job.label = "mylabel"
+        job = dummy_job(
+            "xtb",
+            folder=tmp_path,
+            label="mylabel",
+            settings=settings,
+            molecule=water_molecule,
+        )
 
         captured = {}
 
@@ -137,7 +139,7 @@ class TestXTBInputWriter:
         monkeypatch.setattr(XTBInputWriter, "_write_inp", fake_write_inp)
         XTBInputWriter(job=job).write()
 
-        assert captured["folder"] == job.folder
+        assert captured["folder"] == str(tmp_path)
 
     def test_write_constraints_no_op_on_empty_constraints(
         self, water_molecule, xtb_jobrunner_no_scratch
