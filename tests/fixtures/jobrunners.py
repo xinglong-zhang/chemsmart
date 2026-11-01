@@ -27,6 +27,19 @@ from tests.helpers import (
 
 
 @pytest.fixture()
+def clear_scheduler_caches():
+    """Clear ``Server``'s cached scheduler detection and scheduler-type
+    lookup before and after the test, so results cached by one test (or
+    from the real host) can't leak into another. Apply with
+    ``@pytest.mark.usefixtures("clear_scheduler_caches")``."""
+    Server.detect_server_scheduler.cache_clear()
+    Server.from_scheduler_type.cache_clear()
+    yield
+    Server.detect_server_scheduler.cache_clear()
+    Server.from_scheduler_type.cache_clear()
+
+
+@pytest.fixture()
 def pbs_server(server_yaml_file):
     return Server.from_yaml(server_yaml_file)
 
