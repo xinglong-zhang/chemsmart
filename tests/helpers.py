@@ -1647,3 +1647,19 @@ def thermochemistry_cached_value(name, mock):
     from chemsmart.analysis.thermochemistry import Thermochemistry
 
     return Thermochemistry.__dict__[name].func(mock)
+
+
+# ── update / configuration-updater helpers ──
+class FakeYamlParser:
+    """Stand-in for the real ruamel.yaml.YAML() parser instance returned
+    by ConfigurationUpdater._yaml(), for exercising load()'s error and
+    not-a-Mapping branches without needing malformed real files."""
+
+    def __init__(self, load_result=None, load_error=None):
+        self._result = load_result
+        self._error = load_error
+
+    def load(self, text):
+        if self._error is not None:
+            raise self._error
+        return self._result
