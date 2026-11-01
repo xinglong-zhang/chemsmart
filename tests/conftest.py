@@ -750,6 +750,39 @@ def patched_sub_jobs(opt_factory, sp_factory):
         yield opt_factory, sp_factory
 
 
+############ ORCA pKa Settings Fixtures ##################
+@pytest.fixture()
+def orca_reference_xyz_file(tmp_path, ethanol_molecule):
+    """Ethanol written to ``tmp_path/href.xyz`` as a pKa reference file."""
+    path = tmp_path / "href.xyz"
+    ethanol_molecule.write(str(path))
+    return str(path)
+
+
+@pytest.fixture()
+def orca_pka_settings():
+    """Real ``ORCApKaJobSettings`` (ethanol O-H proton) without a reference."""
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+    return ORCApKaJobSettings(proton_index=4, charge=0, multiplicity=1)
+
+
+@pytest.fixture()
+def orca_pka_settings_with_reference(orca_reference_xyz_file):
+    """``ORCApKaJobSettings`` with an on-disk ethanol reference file."""
+    from chemsmart.jobs.orca.settings import ORCApKaJobSettings
+
+    return ORCApKaJobSettings(
+        proton_index=4,
+        charge=0,
+        multiplicity=1,
+        reference_file=orca_reference_xyz_file,
+        reference_proton_index=4,
+        reference_charge=0,
+        reference_multiplicity=1,
+    )
+
+
 @pytest.fixture()
 def run_orca_and_capture_settings():
     """Run the orca CLI with a patched job class and capture settings."""
