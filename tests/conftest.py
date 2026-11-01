@@ -37,7 +37,7 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianLinkJobSettings,
     GaussianpKaJobSettings,
 )
-from chemsmart.jobs.grouper.base import MatrixGrouper
+from chemsmart.jobs.grouper.base import MatrixGrouper, MoleculeGrouper
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.mol.runner import (
@@ -3322,6 +3322,219 @@ def make_matrix_grouper():
 
     def _make(molecules, **kwargs):
         return _ConcreteMatrixGrouper(molecules, **kwargs)
+
+    return _make
+
+
+class _ConcreteMoleculeGrouper(MoleculeGrouper):
+    """Minimal concrete subclass so the abstract base can be instantiated.
+
+    ``group()`` returns every molecule in a single group.
+    """
+
+    def group(self):
+        indices = list(range(len(self.molecules)))
+        return [self.molecules], [indices]
+
+
+@pytest.fixture
+def make_molecule_grouper():
+    """Factory for a minimal concrete :class:`MoleculeGrouper`, e.g.
+    ``make_molecule_grouper(molecules=[water_molecule], num_procs=2)``."""
+
+    def _make(molecules, **kwargs):
+        return _ConcreteMoleculeGrouper(molecules=molecules, **kwargs)
+
+    return _make
+
+
+@pytest.fixture()
+def make_hydrogen_molecule(hydrogen_molecule):
+    """Factory for copies of ``hydrogen_molecule`` (H₂), optionally
+    translated along x and/or carrying an energy.
+
+    Grouper tests need several distinct H₂ instances per test (e.g. two
+    nearly coincident ones for RMSD, or a series with different energies),
+    so this returns a fresh molecule on every call.
+    """
+
+    def _make(x_offset=0.0, energy=None):
+        return Molecule(
+            symbols=list(hydrogen_molecule.chemical_symbols),
+            positions=hydrogen_molecule.positions
+            + np.array([x_offset, 0.0, 0.0]),
+            energy=energy,
+        )
+
+    return _make
+
+
+@pytest.fixture()
+def ch_molecule(hydrogen_molecule):
+    """CH on ``hydrogen_molecule``'s geometry: same atom count as H₂ but
+    different elements, for element-mismatch tests."""
+    return Molecule(
+        symbols=["C", "H"], positions=hydrogen_molecule.positions.copy()
+    )
+
+
+@pytest.fixture()
+def make_formaldehyde_molecule():
+    """Factory for planar formaldehyde (H₂CO), optionally translated along
+    x, or with its two symmetric H atoms swapped (``swap_hydrogens``) to
+    force an atom-assignment search.
+
+    One C, one O, two H: exercises the Hungarian assignment's
+    single-atom-per-element shortcut (C and O) alongside the real
+    ``linear_sum_assignment`` path (the two H atoms).
+    """
+
+    def _make(x_offset=0.0, swap_hydrogens=False):
+        positions = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.2, 0.0, 0.0],
+                [-0.6, 0.9, 0.0],
+                [-0.6, -0.9, 0.0],
+            ]
+        ) + np.array([x_offset, 0.0, 0.0])
+        if swap_hydrogens:
+            positions = positions[[0, 1, 3, 2]]
+        return Molecule(symbols=["C", "O", "H", "H"], positions=positions)
+
+    return _make
+
+
+@pytest.fixture()
+def make_mock_molecules():
+    """Factory for ``n`` distinct ``MagicMock`` molecules, for job/runner
+    tests that never inspect the molecules themselves."""
+
+    def _make(n=3):
+        return [MagicMock(name=f"molecule{i}") for i in range(n)]
+
+    return _make
+
+
+@pytest.fixture()
+def grouper_job(tmp_path, monkeypatch, make_mock_molecules):
+    """An RMSD ``GrouperJob`` labelled ``mygrp`` over three mock molecules,
+    run from inside ``tmp_path``."""
+    from chemsmart.jobs.grouper.job import GrouperJob
+
+    monkeypatch.chdir(tmp_path)
+    return GrouperJob(
+        molecules=make_mock_molecules(3),
+        grouping_strategy="rmsd",
+        label="mygrp",
+        threshold=0.5,
+    )
+
+
+@pytest.fixture()
+def make_irmsd_grouper(make_hydrogen_molecule):
+    """Factory for an ``IRMSDGrouper`` that doesn't need the irmsd binary.
+
+    ``find_irmsd_command()`` is called at ``__init__`` time and raises
+    ``RuntimeError`` if no real irmsd binary is found. Mocking it lets
+    tests exercise the rest of IRMSDGrouper's logic (XYZ writing, output
+    parsing, subprocess error handling, and ``_record_results``) without
+    the external tool installed. Defaults to two nearly coincident H₂.
+    """
+    from chemsmart.jobs.grouper.rmsd import IRMSDGrouper
+
+    def _make(molecules=None, **kwargs):
+        if molecules is None:
+            molecules = [
+                make_hydrogen_molecule(),
+                make_hydrogen_molecule(0.001),
+            ]
+        with patch(
+            "chemsmart.jobs.grouper.rmsd.find_irmsd_command",
+            return_value="/fake/bin/irmsd",
+        ):
+            return IRMSDGrouper(molecules, **kwargs)
+
+    return _make
+
+
+def _cleanup_pymol_grouper(grouper):
+    """Neutralise a ``PymolRMSDGrouper`` so ``__del__`` can't call a real
+    ``cmd.quit()``: PyMOL's embedded session is process-wide, and quitting
+    it hangs every later PyMOL test."""
+    if getattr(grouper, "_temp_dir", None):
+        shutil.rmtree(grouper._temp_dir, ignore_errors=True)
+        grouper._temp_dir = None
+    grouper.cmd = None
+
+
+@pytest.fixture()
+def make_pymol_rmsd_grouper(make_hydrogen_molecule):
+    """Factory for real ``PymolRMSDGrouper`` instances, cleaned up at
+    teardown (see ``_cleanup_pymol_grouper``) even if the test fails.
+    Defaults to two nearly coincident H₂."""
+    from chemsmart.jobs.grouper.rmsd import PymolRMSDGrouper
+
+    created = []
+
+    def _make(molecules=None, **kwargs):
+        if molecules is None:
+            molecules = [
+                make_hydrogen_molecule(),
+                make_hydrogen_molecule(0.001),
+            ]
+        grouper = PymolRMSDGrouper(molecules, **kwargs)
+        created.append(grouper)
+        return grouper
+
+    yield _make
+    for grouper in created:
+        _cleanup_pymol_grouper(grouper)
+
+
+@pytest.fixture()
+def shared_pymol_grouper(make_pymol_rmsd_grouper):
+    """One default ``PymolRMSDGrouper`` for tests that only inspect it.
+
+    Constructing PyMOL's embedded, process-wide session is expensive and
+    (empirically) prone to hangs if done many times back-to-back, so tests
+    that don't need distinct construction arguments share this one.
+    """
+    return make_pymol_rmsd_grouper()
+
+
+@pytest.fixture()
+def results_recorder_args():
+    """Fresh ``(header_info, sheets_data, matrix_data)`` arguments for
+    ``ResultsRecorder.record_results``, with a 2x2 matrix containing
+    ``inf`` off-diagonals."""
+    import pandas as pd
+
+    header_info = [
+        ("Title", None),
+        ("", "Some Title Line"),
+        ("Key", ""),
+        ("Method", "RMSD"),
+    ]
+    sheets_data = {"Groups": pd.DataFrame({"Group": [1], "Members": ["1"]})}
+    matrix = np.array([[0.0, np.inf], [np.inf, 0.0]])
+    matrix_data = ("Matrix", matrix, ["1", "2"])
+    return header_info, sheets_data, matrix_data
+
+
+@pytest.fixture()
+def make_thermo_with_output():
+    """Factory for a mock thermochemistry object whose ``file_object``
+    carries the given attributes, e.g.
+    ``make_thermo_with_output(energies=[1.0, 2.0])``."""
+
+    def _make(**output_attrs):
+        thermo = MagicMock()
+        output = MagicMock()
+        for key, value in output_attrs.items():
+            setattr(output, key, value)
+        thermo.file_object = output
+        return thermo
 
     return _make
 
