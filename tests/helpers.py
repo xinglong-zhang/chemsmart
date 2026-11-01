@@ -1567,3 +1567,25 @@ def make_mock_job(
     job.folder = folder
     job.is_complete.return_value = complete
     return job
+
+
+# ── structure (InChI / CXSMILES) test helpers ──
+def load_last_molecule(filepath):
+    """Read ``filepath`` with ``Molecule.from_filepath``; if it yields a list
+    (multi-structure file), return its last molecule."""
+    mol = Molecule.from_filepath(filepath)
+    if isinstance(mol, list):
+        mol = mol[-1]
+    return mol
+
+
+def cxsmiles_core(cxsmiles):
+    """Extract the SMILES part before the CX coordinate extension."""
+    return cxsmiles.split(" |")[0]
+
+
+def read_stripped_text(filepath):
+    """Return the contents of ``filepath`` with surrounding whitespace
+    stripped (e.g. an expected-output reference file)."""
+    with open(filepath, "r") as f:
+        return f.read().strip()
