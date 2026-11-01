@@ -66,12 +66,13 @@ def click_ccdc_options(f):
     """
 
     @click.option(
-        "-C",
+        "-CC",
         "--ccdc",
         type=str,
         default=None,
         help="Queries structure from CCDC database using deposition number "
-        "(e.g., 1428476).",
+        "(e.g., 1428476). Note: the short flag is -CC, since -C is "
+        "already used for custom solvent input in Gaussian jobs.",
     )
     @functools.wraps(f)
     def wrapper_common_options(*args, **kwargs):

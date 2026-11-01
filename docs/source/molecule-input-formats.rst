@@ -319,7 +319,10 @@ CIF files contain crystallographic data including atomic coordinates and unit ce
 .. note::
 
    -  CIF files are commonly used for crystallographic data
-   -  Chemsmart uses ASE (Atomic Simulation Environment) to parse CIF files
+   -  Chemsmart uses ASE (Atomic Simulation Environment) to parse CIF files; ASE expands the crystal symmetry, so
+      the structure read from a CIF file is the **crystallographic unit cell**, not a discrete molecule. To obtain
+      the deposited discrete molecule from a CCDC deposition number, use ``Molecule.from_ccdc()`` with a licensed
+      local CSD Python API installation (see below).
    -  For multi-structure CIF files, use ``-i`` to select a specific structure
    -  Charge and multiplicity must be specified with ``-c`` and ``-m`` flags
 
@@ -385,13 +388,17 @@ deposition number.
 .. code:: bash
 
    # Gaussian optimization with CCDC structure
-   chemsmart sub -s server gaussian -p project -C 1428476 -c 0 -m 1 opt
+   chemsmart sub -s server gaussian -p project -CC 1428476 -c 0 -m 1 opt
 
    # ORCA single point with CCDC structure
-   chemsmart sub -s server orca -p project -C 1428476 -c 0 -m 1 sp
+   chemsmart sub -s server orca -p project -CC 1428476 -c 0 -m 1 sp
 
    # With custom label
-   chemsmart sub -s server gaussian -p project -C 1428476 -l complex -c 0 -m 1 opt
+   chemsmart sub -s server gaussian -p project -CC 1428476 -l complex -c 0 -m 1 opt
+
+.. note::
+
+   The short flag is ``-CC`` (not ``-C``), because ``-C`` is already used for ``--custom-solvent`` in Gaussian jobs.
 
 **Python API:**
 
@@ -405,35 +412,50 @@ deposition number.
    # With return_list option
    mols = Molecule.from_ccdc(1428476, return_list=True)
 
+**Retrieval routes:**
+
+Two retrieval routes are supported, tried in order:
+
+1. **Local CSD Python API (preferred).** If the licensed ``ccdc`` package (CSD Python API) is installed and activated,
+   the structure is retrieved directly from the local CSD installation and the deposited *discrete molecule* is
+   returned (e.g., one benzene molecule, C6H6, for CCDC 725244). This is the recommended route for users with a CSD
+   licence.
+2. **HTTP download (fallback).** Otherwise the CIF file is downloaded from the CCDC web service and parsed with ASE.
+   Note that this route returns the crystallographic structure read from the CIF (i.e., the symmetry-expanded unit
+   cell), not a discrete molecule.
+
 .. tip::
 
-   The CCDC option ``-C`` works similarly to the PubChem option ``-P``:
+   The CCDC option ``-CC`` works similarly to the PubChem option ``-P``:
 
    -  Use ``-l`` to specify a custom output filename
    -  Downloaded structures are automatically cached to avoid repeated downloads
-   -  Cache location: ``/tmp/chemsmart_ccdc_cache/``
+   -  Cache location: ``chemsmart_ccdc_cache`` inside the system temporary directory (e.g., ``/tmp`` on Linux/macOS,
+      ``%TEMP%`` on Windows)
 
 **Configuring CCDC URL:**
 
-The CCDC base URL can be configured via environment variable if you need to use a different endpoint:
+The CCDC base URL for the HTTP fallback route can be configured via environment variable if you need to use a
+different endpoint:
 
 .. code:: bash
 
    export CCDC_BASE_URL="https://your-ccdc-endpoint.com"
-   chemsmart sub -s server gaussian -p project -C 1428476 -c 0 -m 1 opt
+   chemsmart sub -s server gaussian -p project -CC 1428476 -c 0 -m 1 opt
 
 .. warning::
 
-   The default CCDC URL is a placeholder. Users should verify and configure the actual CCDC API endpoint based on their
-   institutional access and licensing requirements.
+   The default CCDC URL is a placeholder. Users should verify and configure the actual CCDC API endpoint based on
+   their institutional access and licensing requirements. Users with a CSD licence should rely on the local CSD
+   Python API route instead.
 
 **Caching:**
 
 CCDC structures are automatically cached to improve performance:
 
--  Default cache location: ``/tmp/chemsmart_ccdc_cache/``
+-  Default cache location: ``chemsmart_ccdc_cache`` inside the system temporary directory
 -  Cache files are named by deposition number (e.g., ``1428476.cif``)
--  Cached files are reused across sessions to minimize network requests
+-  Cached files are reused across sessions to minimize repeated queries
 
 **Error Handling:**
 
