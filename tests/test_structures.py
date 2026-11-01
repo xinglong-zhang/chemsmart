@@ -8020,6 +8020,88 @@ class TestCCDCIntegration:
         assert len(mols) == 1
         assert isinstance(mols[0], Molecule)
 
+    def test_configure_csd_environment_from_file(
+        self, tmp_path, monkeypatch
+    ):
+        """Test loading CSD environment variables from an envars file."""
+        from chemsmart.io.molecules.ccdc import configure_csd_environment
+
+        monkeypatch.setenv("CHEMSMART_CSD_TEST_BASE", "/some/base")
+        for var in (
+            "CHEMSMART_CSD_TEST_HOME",
+            "CHEMSMART_CSD_TEST_EXPAND",
+            "CHEMSMART_CSD_TEST_QUOTED",
+            "CHEMSMART_CSD_TEST_NOEXPORT",
+        ):
+            monkeypatch.delenv(var, raising=False)
+
+        envars_file = tmp_path / "ccdc.envars"
+        envars_file.write_text(
+            "# a comment line\n"
+            "export CHEMSMART_CSD_TEST_HOME=~/csd_data  # trailing comment\n"
+            "export CHEMSMART_CSD_TEST_EXPAND="
+            "$CHEMSMART_CSD_TEST_BASE/mogul\n"
+            'export CHEMSMART_CSD_TEST_QUOTED="/some/path with space"\n'
+            "CHEMSMART_CSD_TEST_NOEXPORT=plain_value\n"
+            "\n"
+        )
+
+        env = configure_csd_environment(envars_file=str(envars_file))
+
+        home = os.path.expanduser("~")
+        assert os.path.normpath(
+            env["CHEMSMART_CSD_TEST_HOME"]
+        ) == os.path.normpath(os.path.join(home, "csd_data"))
+        assert os.path.normpath(
+            env["CHEMSMART_CSD_TEST_EXPAND"]
+        ) == os.path.normpath("/some/base/mogul")
+        assert env["CHEMSMART_CSD_TEST_QUOTED"] == "/some/path with space"
+        assert env["CHEMSMART_CSD_TEST_NOEXPORT"] == "plain_value"
+
+        # variables are exported into the process environment
+        for key, value in env.items():
+            assert os.environ[key] == value
+
+    def test_configure_csd_environment_missing_file(self):
+        """Missing envars file is a no-op returning an empty dict."""
+        from chemsmart.io.molecules.ccdc import configure_csd_environment
+
+        env = configure_csd_environment(
+            envars_file="/nonexistent/path/ccdc.envars"
+        )
+        assert env == {}
+
+    def test_configure_csd_environment_does_not_overwrite(
+        self, tmp_path, monkeypatch
+    ):
+        """Existing shell environment variables take precedence."""
+        from chemsmart.io.molecules.ccdc import configure_csd_environment
+
+        monkeypatch.setenv("CHEMSMART_CSD_TEST_KEEP", "shell_value")
+
+        envars_file = tmp_path / "ccdc.envars"
+        envars_file.write_text(
+            "export CHEMSMART_CSD_TEST_KEEP=file_value\n"
+        )
+
+        env = configure_csd_environment(envars_file=str(envars_file))
+
+        # the file value is reported, but the environment is untouched
+        assert env["CHEMSMART_CSD_TEST_KEEP"] == "file_value"
+        assert os.environ["CHEMSMART_CSD_TEST_KEEP"] == "shell_value"
+
+    def test_user_settings_ccdc_paths(self):
+        """User settings expose the ccdc settings directory and envars."""
+        from chemsmart.settings.user import ChemsmartUserSettings
+
+        settings = ChemsmartUserSettings()
+        assert settings.user_ccdc_settings_dir == os.path.join(
+            settings.config_dir, "ccdc"
+        )
+        assert settings.user_ccdc_envars == os.path.join(
+            settings.user_ccdc_settings_dir, "ccdc.envars"
+        )
+
     def test_fetch_cif_validates_deposition_number(self):
         """Test that fetch_cif_from_ccdc validates deposition number."""
         from chemsmart.io.molecules.ccdc import fetch_cif_from_ccdc

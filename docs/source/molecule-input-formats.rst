@@ -424,6 +424,30 @@ Two retrieval routes are supported, tried in order:
    Note that this route returns the crystallographic structure read from the CIF (i.e., the symmetry-expanded unit
    cell), not a discrete molecule.
 
+**CSD Python API requirement and configuration:**
+
+Using CCDC deposition numbers requires the **licensed** `CSD Python API <https://www.ccdc.cam.ac.uk/solutions/csd-core/components/csd-python-api/>`_
+(the ``ccdc`` package) in the Python environment running chemsmart:
+
+1. Install ``csd-python-api`` into the chemsmart environment (a CSD licence is required).
+2. Activate the licence with the *CCDC Software Activation* tool.
+3. Depending on the installation, environment variables may be required so that the API can locate the CSD data and
+   files (see the `CSD Python API installation notes <https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html>`_).
+   These can be provided in ``~/.chemsmart/ccdc/ccdc.envars``; a template is shipped at
+   ``chemsmart/settings/templates/.chemsmart/ccdc/ccdc.envars``:
+
+.. code:: bash
+
+   # ~/.chemsmart/ccdc/ccdc.envars
+   export CSDHOME=/home/user/CCDC/ccdc-software
+   export CCDC_MOGUL_DATA=/home/user/CCDC/ccdc-data/mogul
+   export CCDC_ISOSTAR_DATA_DIRECTORY=/home/user/CCDC/ccdc-data/isostar
+   # ... other CSD variables as needed
+
+Chemsmart loads this file and exports the variables into the environment before importing the ``ccdc`` package;
+variables already set in the shell take precedence and are not overwritten. If the CSD Python API is not installed
+or not activated, chemsmart issues a warning explaining the requirement and falls back to the HTTP route.
+
 .. tip::
 
    The CCDC option ``-CC`` works similarly to the PubChem option ``-P``:

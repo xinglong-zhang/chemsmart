@@ -10,6 +10,16 @@ Two retrieval routes are supported, tried in order:
    ``ccdc_search()`` returns the deposited *discrete molecule*
    (e.g., one benzene molecule for CCDC 725244), which is what is
    normally needed as input for molecular quantum chemistry jobs.
+
+   The CSD Python API requires a valid CSD licence. Depending on the
+   installation, environment variables pointing to the CSD data and
+   software may be needed (see the CSD Python API installation notes:
+   https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html).
+   These can be provided to chemsmart in the file
+   ``~/.chemsmart/ccdc/ccdc.envars`` (a template is shipped in
+   ``chemsmart/settings/templates/.chemsmart/ccdc/ccdc.envars``); the
+   variables are exported into the environment before the ``ccdc``
+   package is imported.
 2. HTTP download (fallback): otherwise the CIF file is downloaded from
    the CCDC web service (base URL configurable via the ``CCDC_BASE_URL``
    environment variable) and parsed with ASE. Note that this route
@@ -41,6 +51,22 @@ logger = logging.getLogger(__name__)
 # encouraged to use the local CSD Python API instead (preferred route).
 CCDC_BASE_URL = os.environ.get(
     "CCDC_BASE_URL", "https://www.ccdc.cam.ac.uk/structures"
+)
+
+# Message shown when the licensed local CSD Python API is not usable.
+CSD_API_UNAVAILABLE_HINT = (
+    "The local CSD Python API (ccdc package) is not available in this "
+    "Python environment. Using a CCDC deposition number requires the "
+    "*licensed* CSD Python API: (1) install csd-python-api in the Python "
+    "environment running chemsmart, (2) activate your CSD licence with "
+    "the CCDC Software Activation tool, and (3) if your installation "
+    "needs them, set the CSD environment variables in "
+    "~/.chemsmart/ccdc/ccdc.envars (see the template in "
+    "chemsmart/settings/templates/.chemsmart/ccdc/ccdc.envars and "
+    "https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html). "
+    "Falling back to downloading the CIF file from the CCDC web service, "
+    "which returns the crystallographic unit cell rather than the "
+    "discrete molecule."
 )
 
 
@@ -79,20 +105,96 @@ def validate_deposition_number(deposition_number):
     return dep_num
 
 
+def configure_csd_environment(envars_file=None):
+    """
+    Configure environment variables required by the CSD Python API.
+
+    Reads environment variable definitions (``export KEY=VALUE`` lines)
+    from the chemsmart user configuration file
+    ``~/.chemsmart/ccdc/ccdc.envars`` and exports them into the process
+    environment, so that the licensed CSD Python API (``ccdc`` package)
+    can locate the CSD data and software. Variables that are already
+    defined in the shell environment take precedence and are NOT
+    overwritten.
+
+    Args:
+        envars_file (str, optional): Path to the environment variables
+            file. If None, the default chemsmart user configuration file
+            ``~/.chemsmart/ccdc/ccdc.envars`` is used.
+
+    Returns:
+        dict: Mapping of environment variables defined in the file
+            (empty dict if the file does not exist).
+    """
+    if envars_file is None:
+        from chemsmart.settings.user import ChemsmartUserSettings
+
+        envars_file = ChemsmartUserSettings().user_ccdc_envars
+
+    if not os.path.exists(envars_file):
+        logger.debug(
+            f"No CSD environment file found at {envars_file}; "
+            "using the current shell environment for the CSD Python API."
+        )
+        return {}
+
+    env = {}
+    with open(envars_file) as f:
+        for line in f:
+            line = line.split("#")[0].strip()  # remove comments
+            if not line:
+                continue
+            if line.startswith("export"):
+                line = line[len("export") :].strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            # strip surrounding quotes and expand ~ and $VARIABLES
+            value = value.strip().strip('"').strip("'")
+            value = os.path.expandvars(os.path.expanduser(value))
+            env[key] = value
+
+    for key, value in env.items():
+        if key in os.environ:
+            logger.debug(
+                f"Environment variable {key} is already set to "
+                f"{os.environ[key]}; not overwriting with value "
+                f"{value} from {envars_file}."
+            )
+        else:
+            os.environ[key] = value
+
+    if env:
+        logger.info(
+            f"Loaded {len(env)} CSD environment variable(s) "
+            f"from {envars_file}: {sorted(env)}"
+        )
+    return env
+
+
 def csd_api_available():
     """
     Check whether the local CSD Python API is installed and licensed.
+
+    Environment variables from the chemsmart user configuration
+    (``~/.chemsmart/ccdc/ccdc.envars``) are loaded before the check, see
+    :func:`configure_csd_environment`.
 
     Returns:
         bool: True if the ``ccdc`` package can be imported and its
             licence check passes, False otherwise.
     """
+    configure_csd_environment()
     try:
         import ccdc  # noqa: F401
-    except (ImportError, RuntimeError) as e:
-        # ImportError: csd-python-api not installed
-        # RuntimeError: CSD licence not activated
-        logger.debug(f"Local CSD Python API unavailable: {e}")
+    except ImportError as e:
+        # csd-python-api is not installed in this Python environment
+        logger.debug(f"CSD Python API (ccdc package) is not installed: {e}")
+        return False
+    except RuntimeError as e:
+        # csd-python-api is installed, but the CSD licence check failed
+        logger.debug(f"CSD Python API licence check failed: {e}")
         return False
     return True
 
@@ -380,10 +482,7 @@ def fetch_cif_from_ccdc(deposition_number, cache=True, timeout=30):
         return _export_cif_via_csd_api(dep_num, cached_file)
 
     # Fallback route: HTTP download from the CCDC web service
-    logger.debug(
-        "Local CSD Python API not available; falling back to HTTP "
-        "download for CCDC structure retrieval."
-    )
+    logger.debug(CSD_API_UNAVAILABLE_HINT)
     return _download_cif_via_http(
         dep_num, cached_file, cache=cache, timeout=timeout
     )
@@ -427,11 +526,7 @@ def ccdc_search(deposition_number, fail_silently=False, **kwargs):
             molecule = _molecule_from_csd_entry(entries[0])
         else:
             # Fallback route: CIF download + ASE parsing
-            logger.debug(
-                "Local CSD Python API not available; retrieving CIF "
-                "from CCDC web service. Note that the structure read "
-                "from the CIF is the crystallographic unit cell."
-            )
+            logger.warning(CSD_API_UNAVAILABLE_HINT)
             cif_path = fetch_cif_from_ccdc(deposition_number, **kwargs)
             molecule = Molecule.from_cif_file(cif_path)
 
