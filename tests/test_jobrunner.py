@@ -20,49 +20,6 @@ from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
 from chemsmart.settings.server import Server
 
 
-class DummyORCAJob:
-    PROGRAM = "ORCA"
-    execution_name = Job.execution_name
-
-    def __init__(self, folder, label):
-        self.folder = str(folder)
-        self.label = label
-
-    @property
-    def inputfile(self):
-        return str(Path(self.folder) / f"{self.label}.inp")
-
-    @property
-    def gbwfile(self):
-        return str(Path(self.folder) / f"{self.label}.gbw")
-
-    @property
-    def errfile(self):
-        return str(Path(self.folder) / f"{self.label}.err")
-
-    @property
-    def outputfile(self):
-        return str(Path(self.folder) / f"{self.label}.out")
-
-
-class DummyGaussianJob:
-    def __init__(self, folder, label):
-        self.folder = str(folder)
-        self.label = label
-
-    @property
-    def inputfile(self):
-        return str(Path(self.folder) / f"{self.label}.com")
-
-    @property
-    def chkfile(self):
-        return str(Path(self.folder) / f"{self.label}.chk")
-
-    @property
-    def errfile(self):
-        return str(Path(self.folder) / f"{self.label}.err")
-
-
 class TestProgramAwareNames:
     @pytest.mark.parametrize(
         "program,label,expected",
@@ -217,10 +174,10 @@ class TestJobRunnerSelection:
         assert runner.fake is True
 
     def test_fake_orca_appends_fake_suffix_in_job_directory(
-        self, pbs_server, tmp_path
+        self, pbs_server, tmp_path, dummy_job
     ):
         runner = FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
-        job = DummyORCAJob(folder=tmp_path, label="orca_opt")
+        job = dummy_job("orca", folder=tmp_path, label="orca_opt")
 
         runner._set_up_variables_in_job_directory(job)
 
@@ -231,7 +188,7 @@ class TestJobRunnerSelection:
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
 
     def test_fake_orca_appends_fake_suffix_in_scratch(
-        self, pbs_server, tmp_path
+        self, pbs_server, tmp_path, dummy_job
     ):
         runner = FakeORCAJobRunner(
             server=pbs_server,
@@ -239,7 +196,7 @@ class TestJobRunnerSelection:
             scratch_dir=str(tmp_path),
             fake=True,
         )
-        job = DummyORCAJob(folder=tmp_path, label="orca_opt")
+        job = dummy_job("orca", folder=tmp_path, label="orca_opt")
 
         runner._set_up_variables_in_scratch(job)
 
@@ -251,12 +208,12 @@ class TestJobRunnerSelection:
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
 
     def test_fake_gaussian_does_not_duplicate_fake_suffix(
-        self, pbs_server, tmp_path
+        self, pbs_server, tmp_path, dummy_job
     ):
         runner = FakeGaussianJobRunner(
             server=pbs_server, scratch=False, fake=True
         )
-        job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt_fake")
+        job = dummy_job("gaussian", folder=tmp_path, label="gaussian_opt_fake")
 
         runner._set_up_variables_in_job_directory(job)
 
@@ -266,10 +223,10 @@ class TestJobRunnerSelection:
         assert Path(runner.job_errfile).name == "gaussian_opt_fake.err"
 
     def test_fake_orca_does_not_duplicate_fake_suffix(
-        self, pbs_server, tmp_path
+        self, pbs_server, tmp_path, dummy_job
     ):
         runner = FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
-        job = DummyORCAJob(folder=tmp_path, label="orca_opt_fake")
+        job = dummy_job("orca", folder=tmp_path, label="orca_opt_fake")
 
         runner._set_up_variables_in_job_directory(job)
 
@@ -587,7 +544,7 @@ class TestScratchYamlOverride:
         assert runner.scratch is False
 
     def test_missing_scratch_dir_falls_back_to_job_folder(
-        self, pbs_server, tmp_path, monkeypatch
+        self, pbs_server, tmp_path, monkeypatch, dummy_job
     ):
         runner = FakeGaussianJobRunner(
             server=pbs_server, scratch=False, fake=True
@@ -605,7 +562,7 @@ class TestScratchYamlOverride:
             property(lambda self: fake_exe),
         )
         runner._set_scratch()
-        job = DummyGaussianJob(folder=tmp_path, label="gaussian_opt")
+        job = dummy_job("gaussian", folder=tmp_path, label="gaussian_opt")
         runner._assign_variables(job)
 
         assert runner.scratch is False

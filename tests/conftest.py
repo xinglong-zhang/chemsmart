@@ -39,6 +39,7 @@ from chemsmart.jobs.gaussian.settings import (
 )
 from chemsmart.jobs.grouper.base import MatrixGrouper
 from chemsmart.jobs.iterate.runner import IterateJobRunner
+from chemsmart.jobs.job import Job
 from chemsmart.jobs.mol.runner import (
     PyMOLAlignJobRunner,
     PyMOLHybridVisualizationJobRunner,
@@ -2893,6 +2894,89 @@ def crest_jobrunner_scratch(tmpdir, pbs_server):
     return FakeCRESTJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
+
+
+class _DummyJob:
+    """Minimal stand-in for a Job, exposing only the attributes the job
+    runners read. File paths are derived from the *current* label, so
+    runners that rename the job (e.g. appending ``_fake``) see the
+    updated paths."""
+
+    execution_name = Job.execution_name
+
+    def __init__(self, program, input_ext, folder, label, settings, molecule):
+        self.PROGRAM = program
+        self._input_ext = input_ext
+        self.folder = str(folder)
+        self.label = label
+        self.settings = settings
+        self.molecule = molecule if molecule is not None else MagicMock()
+
+    def _path(self, ext):
+        return str(Path(self.folder) / f"{self.label}{ext}")
+
+    @property
+    def inputfile(self):
+        return self._path(self._input_ext)
+
+    @property
+    def outputfile(self):
+        return self._path(".out")
+
+    @property
+    def errfile(self):
+        return self._path(".err")
+
+    @property
+    def xyzfile(self):
+        return self._path(".xyz")
+
+    @property
+    def chkfile(self):
+        return self._path(".chk")
+
+    @property
+    def gbwfile(self):
+        return self._path(".gbw")
+
+    def is_complete(self):
+        return False
+
+
+# program key -> (Job.PROGRAM, input file extension, default settings)
+_DUMMY_JOB_SPECS = {
+    "gaussian": ("Gaussian", ".com", lambda: None),
+    "orca": ("ORCA", ".inp", lambda: None),
+    "crest": (
+        "crest",
+        ".inp",
+        lambda: CRESTJobSettings(charge=0, multiplicity=1),
+    ),
+    "xtb": (
+        "xtb",
+        ".inp",
+        lambda: XTBJobSettings(charge=0, multiplicity=1),
+    ),
+}
+
+
+@pytest.fixture()
+def dummy_job():
+    """Factory for lightweight jobs used to unit-test job runners, e.g.
+    ``dummy_job("xtb", folder=tmp_path, label="myjob")``."""
+
+    def _make(program, folder, label, settings=None, molecule=None):
+        program_name, input_ext, default_settings = _DUMMY_JOB_SPECS[program]
+        return _DummyJob(
+            program=program_name,
+            input_ext=input_ext,
+            folder=folder,
+            label=label,
+            settings=settings if settings is not None else default_settings(),
+            molecule=molecule,
+        )
+
+    return _make
 
 
 @pytest.fixture()
