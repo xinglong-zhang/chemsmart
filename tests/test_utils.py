@@ -30,6 +30,7 @@ from chemsmart.utils.utils import (
     str_indices_range_to_list,
     string2index_1based,
 )
+from tests.helpers import make_cli_ctx
 
 
 class TestUtils:
@@ -384,7 +385,7 @@ class TestUtils:
 
 
 class TestBuildJobsSingleMolecule:
-    def test_single_molecule_returns_one_job_not_a_list(self, make_cli_ctx):
+    def test_single_molecule_returns_one_job_not_a_list(self):
         molecule = MagicMock(name="molecule")
         ctx = make_cli_ctx([molecule], None, "mylabel")
         job_cls = MagicMock(name="job_cls")
@@ -400,9 +401,7 @@ class TestBuildJobsSingleMolecule:
         )
         assert result is job_cls.return_value
 
-    def test_multiple_molecules_with_no_indices_uses_last_molecule(
-        self, make_cli_ctx
-    ):
+    def test_multiple_molecules_with_no_indices_uses_last_molecule(self):
         mol_a = MagicMock(name="mol_a")
         mol_b = MagicMock(name="mol_b")
         ctx = make_cli_ctx([mol_a, mol_b], None, "mylabel")
@@ -419,7 +418,7 @@ class TestBuildJobsSingleMolecule:
         )
         assert result is job_cls.return_value
 
-    def test_extra_kwargs_are_forwarded_to_job_cls(self, make_cli_ctx):
+    def test_extra_kwargs_are_forwarded_to_job_cls(self):
         molecule = MagicMock(name="molecule")
         ctx = make_cli_ctx([molecule], None, "mylabel")
         job_cls = MagicMock(name="job_cls")
@@ -437,9 +436,7 @@ class TestBuildJobsSingleMolecule:
 
 
 class TestBuildJobsMultipleMolecules:
-    def test_multiple_molecules_with_indices_returns_list_of_jobs(
-        self, make_cli_ctx
-    ):
+    def test_multiple_molecules_with_indices_returns_list_of_jobs(self):
         mol_a = MagicMock(name="mol_a")
         mol_b = MagicMock(name="mol_b")
         ctx = make_cli_ctx([mol_a, mol_b], [1, 3], "mylabel")
@@ -466,9 +463,7 @@ class TestBuildJobsMultipleMolecules:
             skip_completed=True,
         )
 
-    def test_multiple_molecules_with_indices_forwards_kwargs_to_each_job(
-        self, make_cli_ctx
-    ):
+    def test_multiple_molecules_with_indices_forwards_kwargs_to_each_job(self):
         mol_a = MagicMock(name="mol_a")
         mol_b = MagicMock(name="mol_b")
         ctx = make_cli_ctx([mol_a, mol_b], [0, 1], "mylabel")
@@ -479,9 +474,7 @@ class TestBuildJobsMultipleMolecules:
         for call in job_cls.call_args_list:
             assert call.kwargs["nprocs"] == 4
 
-    def test_indices_shorter_than_molecules_zips_to_shortest(
-        self, make_cli_ctx
-    ):
+    def test_indices_shorter_than_molecules_zips_to_shortest(self):
         # zip() stops at the shorter iterable, so a mismatched
         # molecule_indices list silently caps the number of jobs built
         # rather than raising.

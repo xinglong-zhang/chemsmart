@@ -13,6 +13,7 @@ import pytest
 from chemsmart.jobs.xtb.runner import FakeXTB, FakeXTBJobRunner, XTBJobRunner
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.settings.executable import XTBExecutable
+from tests.helpers import dummy_job
 
 
 class TestXTBJobRunnerInit:
@@ -60,7 +61,7 @@ class TestXTBJobRunnerExecutable:
 
 class TestAssignVariables:
     def test_assign_variables_dispatches_to_scratch_setup(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = XTBJobRunner(
             server=pbs_server,
@@ -104,7 +105,7 @@ class TestAssignVariables:
         assert os.path.isdir(job.folder)
 
     def test_assign_variables_dispatches_to_job_directory_setup(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = XTBJobRunner(server=pbs_server, scratch=False, fake=True)
         calls = []
@@ -142,7 +143,7 @@ class TestAssignVariables:
         assert job.local is True
 
     def test_assign_variables_scratch_true_but_no_scratch_dir_uses_job_directory(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         # scratch=True alone isn't enough -- scratch_dir must also be set.
         runner = XTBJobRunner(server=pbs_server, scratch=True, fake=True)
@@ -182,7 +183,7 @@ class TestAssignVariables:
 
 class TestSetUpVariablesInScratch:
     def test_creates_fresh_scratch_directory_and_sets_paths(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         scratch_root = tmp_path / "scratch_root"
         runner = XTBJobRunner(
@@ -205,9 +206,7 @@ class TestSetUpVariablesInScratch:
         )
         assert runner.job_errfile == os.path.abspath(job.errfile)
 
-    def test_reuses_existing_scratch_directory(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_reuses_existing_scratch_directory(self, pbs_server, tmp_path):
         scratch_root = tmp_path / "scratch_root2"
         job = dummy_job(
             "xtb", folder=tmp_path / "jobfolder2", label="existing"
@@ -226,7 +225,7 @@ class TestSetUpVariablesInScratch:
 
 
 class TestSetUpVariablesInJobDirectory:
-    def test_sets_paths_from_job_folder(self, pbs_server, tmp_path, dummy_job):
+    def test_sets_paths_from_job_folder(self, pbs_server, tmp_path):
         runner = XTBJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("xtb", folder=tmp_path, label="myjob")
         runner._set_up_variables_in_job_directory(job)
@@ -237,7 +236,7 @@ class TestSetUpVariablesInJobDirectory:
 
 
 class TestWriteInput:
-    def test_writes_xyz_via_molecule(self, pbs_server, tmp_path, dummy_job):
+    def test_writes_xyz_via_molecule(self, pbs_server, tmp_path):
         runner = XTBJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("xtb", folder=tmp_path, label="myjob")
         runner._set_up_variables_in_job_directory(job)
@@ -246,9 +245,7 @@ class TestWriteInput:
             runner.job_xyzfile, mode="w"
         )
 
-    def test_writes_constraints_input_when_present(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_writes_constraints_input_when_present(self, pbs_server, tmp_path):
         settings = XTBJobSettings(
             charge=0, multiplicity=1, constraints=[[1, 2]], force_constant=0.5
         )
@@ -268,9 +265,7 @@ class TestWriteInput:
             target_directory=runner.running_directory
         )
 
-    def test_no_constraints_skips_input_writer(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_no_constraints_skips_input_writer(self, pbs_server, tmp_path):
         job = dummy_job("xtb", folder=tmp_path, label="myjob")
         runner = XTBJobRunner(server=pbs_server, scratch=False, fake=True)
         runner._set_up_variables_in_job_directory(job)
@@ -283,7 +278,7 @@ class TestWriteInput:
 
 class TestGetCommand:
     def test_get_command_uses_executable_and_settings_args(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         settings = XTBJobSettings(charge=0, multiplicity=1, jobtype="sp")
         job = dummy_job(
@@ -468,7 +463,7 @@ class TestGfnArgs:
 
 class TestCreateProcess:
     def test_create_process_opens_files_and_calls_popen(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = XTBJobRunner(server=pbs_server, scratch=False, fake=True)
         runner.running_directory = str(tmp_path)
@@ -498,16 +493,14 @@ class TestCreateProcess:
 
 
 class TestPostrun:
-    def test_postrun_no_op_when_not_scratch(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_postrun_no_op_when_not_scratch(self, pbs_server, tmp_path):
         runner = XTBJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("xtb", folder=tmp_path, label="myjob")
         # Should return immediately without touching running_directory.
         runner._postrun(job)
 
     def test_postrun_copies_scratch_files_to_job_folder(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
@@ -529,7 +522,7 @@ class TestPostrun:
         assert (job_folder / "myjob.xyz").exists()
 
     def test_postrun_skips_file_already_at_destination(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         # running_directory == job.folder, so source and destination
         # resolve to the same path and the copy is skipped.
@@ -550,7 +543,7 @@ class TestPostrun:
         assert (job_folder / "myjob.xyz").exists()
 
     def test_postrun_suppresses_isadirectoryerror_for_subdirectories(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         scratch_dir = tmp_path / "scratch2"
         (scratch_dir / "subdir").mkdir(parents=True)
@@ -579,7 +572,7 @@ class TestFakeXTBJobRunner:
         assert executable.executable_folder is None
 
     def test_set_up_variables_in_scratch_appends_fake_suffix(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeXTBJobRunner(
             server=pbs_server,
@@ -600,7 +593,7 @@ class TestFakeXTBJobRunner:
         assert runner.job_errfile == os.path.abspath(job.errfile)
 
     def test_set_up_variables_in_scratch_reuses_existing_directory(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeXTBJobRunner(
             server=pbs_server,
@@ -616,7 +609,7 @@ class TestFakeXTBJobRunner:
         assert runner.running_directory == expected_dir
 
     def test_set_up_variables_in_job_directory_appends_fake_suffix(
-        self, tmp_path, dummy_job, xtb_jobrunner_no_scratch
+        self, tmp_path, xtb_jobrunner_no_scratch
     ):
         runner = xtb_jobrunner_no_scratch
         job = dummy_job("xtb", folder=tmp_path, label="myjob")
@@ -626,7 +619,7 @@ class TestFakeXTBJobRunner:
         assert runner.job_xyzfile == os.path.abspath(job.xyzfile)
 
     def test_run_executes_full_fake_pipeline(
-        self, tmp_path, dummy_job, xtb_jobrunner_no_scratch
+        self, tmp_path, xtb_jobrunner_no_scratch
     ):
         runner = xtb_jobrunner_no_scratch
         settings = XTBJobSettings(charge=0, multiplicity=1, jobtype="sp")

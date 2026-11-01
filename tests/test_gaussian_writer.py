@@ -23,6 +23,7 @@ from chemsmart.jobs.gaussian.settings import (
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.utils.utils import cmp_with_ignore
+from tests.helpers import make_gaussian_writer
 
 
 class TestGaussianInputWriter:
@@ -1367,7 +1368,7 @@ class TestGaussianInputWriterJobSpecificInfo:
     branches (nci/wbi/resp/other), bypassing the full write()
     pipeline since only settings.jobtype and job.label are used."""
 
-    def test_nci_jobtype_writes_wfn_file(self, make_gaussian_writer):
+    def test_nci_jobtype_writes_wfn_file(self):
         settings = GaussianJobSettings.default()
         settings.jobtype = "nci"
         writer = make_gaussian_writer(settings, label="mymol")
@@ -1375,7 +1376,7 @@ class TestGaussianInputWriterJobSpecificInfo:
         writer._append_job_specific_info(buf)
         assert buf.getvalue() == "mymol.wfn\n\n"
 
-    def test_wbi_jobtype_writes_nbo_directive(self, make_gaussian_writer):
+    def test_wbi_jobtype_writes_nbo_directive(self):
         settings = GaussianJobSettings.default()
         settings.jobtype = "wbi"
         writer = make_gaussian_writer(settings, label="mymol")
@@ -1383,7 +1384,7 @@ class TestGaussianInputWriterJobSpecificInfo:
         writer._append_job_specific_info(buf)
         assert buf.getvalue() == "$nbo bndidx $end\n\n"
 
-    def test_resp_jobtype_writes_gesp_file(self, make_gaussian_writer):
+    def test_resp_jobtype_writes_gesp_file(self):
         settings = GaussianJobSettings.default()
         settings.jobtype = "resp"
         writer = make_gaussian_writer(settings, label="mymol")
@@ -1391,7 +1392,7 @@ class TestGaussianInputWriterJobSpecificInfo:
         writer._append_job_specific_info(buf)
         assert buf.getvalue() == "mymol.gesp\n\n"
 
-    def test_other_jobtype_writes_nothing(self, make_gaussian_writer):
+    def test_other_jobtype_writes_nothing(self):
         settings = GaussianJobSettings.default()
         settings.jobtype = "opt"
         writer = make_gaussian_writer(settings, label="mymol")
@@ -1403,7 +1404,7 @@ class TestGaussianInputWriterJobSpecificInfo:
 class TestGaussianInputWriterModredundantValidation:
     """Direct tests for _append_modredundant's format validation."""
 
-    def test_invalid_modredundant_format_raises(self, make_gaussian_writer):
+    def test_invalid_modredundant_format_raises(self):
         settings = GaussianJobSettings.default()
         settings.modred = "not-a-list-or-dict"
         writer = make_gaussian_writer(settings)
@@ -1411,7 +1412,7 @@ class TestGaussianInputWriterModredundantValidation:
         with pytest.raises(ValueError, match="modredundant must be"):
             writer._append_modredundant(buf)
 
-    def test_none_modredundant_writes_nothing(self, make_gaussian_writer):
+    def test_none_modredundant_writes_nothing(self):
         settings = GaussianJobSettings.default()
         settings.modred = None
         writer = make_gaussian_writer(settings)
@@ -1425,7 +1426,7 @@ class TestGaussianInputWriterGenecpNoHeavyElements:
     and no user-specified gen_genecp_file" no-op branch."""
 
     def test_no_heavy_elements_and_no_gen_genecp_file_writes_nothing(
-        self, single_molecule_xyz_file, make_gaussian_writer
+        self, single_molecule_xyz_file
     ):
         molecule = Molecule.from_filepath(single_molecule_xyz_file)
         settings = GaussianJobSettings.default()
@@ -1508,9 +1509,7 @@ class TestGaussianInputWriterModredundantScanConstrainedCoordinates:
     'constrained_coordinates' branch, in addition to the plain
     num_steps/step_size coords already covered elsewhere."""
 
-    def test_scan_with_constrained_coordinates_writes_both_sections(
-        self, make_gaussian_writer
-    ):
+    def test_scan_with_constrained_coordinates_writes_both_sections(self):
         settings = GaussianJobSettings.default()
         settings.modred = {
             "coords": [[1, 2]],
@@ -1534,9 +1533,7 @@ class TestGaussianInputWriterGenecpAlwaysAppendsNewline:
     always written after the genecp section regardless of whether
     the source content already ends with one."""
 
-    def test_extra_blank_line_always_appended(
-        self, make_gaussian_writer, write_tmp_file
-    ):
+    def test_extra_blank_line_always_appended(self, write_tmp_file):
         genecp_file = write_tmp_file("genecp.txt", "C 0\nsto-3g\n****\n")
         settings = GaussianJobSettings.default()
         settings.basis = "genecp"
@@ -1558,9 +1555,7 @@ class TestGaussianInputWriterOtherAdditionalInfo:
     """Direct tests for _append_other_additional_info's file-path vs.
     free-string branches."""
 
-    def test_reads_from_existing_file_path(
-        self, make_gaussian_writer, write_tmp_file
-    ):
+    def test_reads_from_existing_file_path(self, write_tmp_file):
         info_file = write_tmp_file(
             "extra_info.txt", "extra line one\nextra line two\n"
         )
@@ -1571,9 +1566,7 @@ class TestGaussianInputWriterOtherAdditionalInfo:
         writer._append_other_additional_info(buf)
         assert buf.getvalue() == "extra line one\nextra line two\n"
 
-    def test_writes_free_string_when_not_a_file_path(
-        self, make_gaussian_writer
-    ):
+    def test_writes_free_string_when_not_a_file_path(self):
         settings = GaussianJobSettings.default()
         settings.append_additional_info = "some free\nform text"
         writer = make_gaussian_writer(settings)
@@ -1588,9 +1581,7 @@ class TestGaussianInputWriterLinkSection:
     section dispatch (line 124), and _write_link_section /
     _write_link_route (lines 585-600, 613-615)."""
 
-    def test_write_all_writes_link_section_for_link_job(
-        self, make_gaussian_writer
-    ):
+    def test_write_all_writes_link_section_for_link_job(self):
         from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 
         settings = GaussianLinkJobSettings.default()
@@ -1618,9 +1609,7 @@ class TestGaussianInputWriterLinkSection:
         assert "geom=check" in content
         assert "guess=read" in content
 
-    def test_write_link_section_no_op_when_link_is_false(
-        self, make_gaussian_writer
-    ):
+    def test_write_link_section_no_op_when_link_is_false(self):
         from chemsmart.jobs.gaussian.settings import GaussianLinkJobSettings
 
         settings = GaussianLinkJobSettings.default()
@@ -1641,9 +1630,7 @@ class TestGaussianInputWriterRouteSectionHeavyElementsBranches:
     has no heavy elements present, and gen/genecp keyword replacement
     when the determined basis differs from the configured one."""
 
-    def test_no_heavy_elements_in_structure_uses_light_basis(
-        self, make_gaussian_writer
-    ):
+    def test_no_heavy_elements_in_structure_uses_light_basis(self):
         settings = GaussianJobSettings.default()
         settings.functional = "b3lyp"
         settings.basis = "genecp"
@@ -1664,9 +1651,7 @@ class TestGaussianInputWriterRouteSectionHeavyElementsBranches:
         assert "def2svp" in buf.getvalue()
         assert "genecp" not in buf.getvalue()
 
-    def test_heavy_elements_present_replaces_with_determined_basis(
-        self, make_gaussian_writer
-    ):
+    def test_heavy_elements_present_replaces_with_determined_basis(self):
         settings = GaussianJobSettings.default()
         settings.functional = "b3lyp"
         settings.basis = "genecp"

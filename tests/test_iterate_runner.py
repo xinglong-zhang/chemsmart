@@ -14,6 +14,11 @@ from chemsmart.jobs.iterate.runner import (
     _run_combination_worker,
 )
 from chemsmart.jobs.iterate.settings import IterateJobSettings
+from tests.helpers import (
+    FakeIterateProcess,
+    FakeIterateQueue,
+    make_iterate_combination,
+)
 
 
 class TestRunCombinationTask:
@@ -23,7 +28,7 @@ class TestRunCombinationTask:
     success/failure/exception branches."""
 
     def test_success_returns_generated_molecule(
-        self, mock_iterate_molecule_pool, make_iterate_combination
+        self, mock_iterate_molecule_pool
     ):
         pool = mock_iterate_molecule_pool
         combo = make_iterate_combination()
@@ -50,7 +55,7 @@ class TestRunCombinationTask:
         assert result == "result-molecule"
 
     def test_analyzer_returning_none_is_reported_as_failure(
-        self, mock_iterate_molecule_pool, make_iterate_combination
+        self, mock_iterate_molecule_pool
     ):
         pool = mock_iterate_molecule_pool
         combo = make_iterate_combination()
@@ -68,7 +73,7 @@ class TestRunCombinationTask:
         assert result is None
 
     def test_exception_is_caught_and_returns_none(
-        self, mock_iterate_molecule_pool, make_iterate_combination
+        self, mock_iterate_molecule_pool
     ):
         pool = mock_iterate_molecule_pool
         combo = make_iterate_combination()
@@ -83,7 +88,7 @@ class TestRunCombinationTask:
 
 
 class TestRunCombinationWorker:
-    def test_puts_task_result_on_queue(self, make_iterate_combination):
+    def test_puts_task_result_on_queue(self):
         combo = make_iterate_combination()
         pool = IterateMoleculePool()
         result_queue = MagicMock()
@@ -96,9 +101,7 @@ class TestRunCombinationWorker:
 
         result_queue.put.assert_called_once_with((combo.label, "mol"))
 
-    def test_worker_panic_puts_none_result_on_queue(
-        self, make_iterate_combination
-    ):
+    def test_worker_panic_puts_none_result_on_queue(self):
         combo = make_iterate_combination()
         pool = IterateMoleculePool()
         result_queue = MagicMock()
@@ -113,7 +116,7 @@ class TestRunCombinationWorker:
 
 
 class TestIterateCombinationLabel:
-    def test_label_format(self, make_iterate_combination):
+    def test_label_format(self):
         combo = make_iterate_combination(
             skeleton_label="benzene",
             skeleton_link_index=5,
@@ -138,9 +141,7 @@ class TestIterateJobRunnerBasics:
 
 
 class TestRunSingleFakeMode:
-    def test_fake_mode_returns_none_without_running(
-        self, make_iterate_combination
-    ):
+    def test_fake_mode_returns_none_without_running(self):
         runner = IterateJobRunner(fake=True)
         combo = make_iterate_combination()
         pool = IterateMoleculePool()
@@ -148,9 +149,7 @@ class TestRunSingleFakeMode:
         assert label == combo.label
         assert result is None
 
-    def test_non_fake_mode_delegates_to_task_runner(
-        self, make_iterate_combination
-    ):
+    def test_non_fake_mode_delegates_to_task_runner(self):
         runner = IterateJobRunner(fake=False)
         combo = make_iterate_combination()
         pool = IterateMoleculePool()
@@ -169,9 +168,7 @@ class TestRunCombinationsEarlyReturns:
     returns don't touch multiprocessing at all, unlike the rest of the
     method (intentionally not exercised here, see module docstring)."""
 
-    def test_fake_mode_returns_none_results_without_running(
-        self, make_iterate_combination
-    ):
+    def test_fake_mode_returns_none_results_without_running(self):
         runner = IterateJobRunner(fake=True)
         combo = make_iterate_combination()
         result = runner.run_combinations(IterateMoleculePool(), [combo])
@@ -540,9 +537,6 @@ class TestRunCombinationsQueueDrainExceptions:
     def test_generic_exception_from_get_nowait_breaks_drain_loop(
         self,
         mock_iterate_molecule_pool,
-        make_iterate_combination,
-        make_fake_iterate_queue,
-        make_fake_iterate_process,
         patch_iterate_multiprocessing,
     ):
         """A non-Empty exception raised by the queue must be swallowed
@@ -552,12 +546,12 @@ class TestRunCombinationsQueueDrainExceptions:
         combo = make_iterate_combination()
         result_mol = MagicMock()
 
-        fake_queue = make_fake_iterate_queue(
+        fake_queue = FakeIterateQueue(
             get_nowait_plan=[RuntimeError("transient")]
         )
         fake_queue.put((combo.label, result_mol))
 
-        fake_process = make_fake_iterate_process(alive=False)
+        fake_process = FakeIterateProcess(alive=False)
 
         patch_iterate_multiprocessing(fake_queue, fake_process)
 
@@ -571,9 +565,6 @@ class TestRunCombinationsQueueDrainExceptions:
     def test_generic_exception_in_final_double_check_is_swallowed(
         self,
         mock_iterate_molecule_pool,
-        make_iterate_combination,
-        make_fake_iterate_queue,
-        make_fake_iterate_process,
         patch_iterate_multiprocessing,
     ):
         """Same as above, but for the final "double check queue one
@@ -587,10 +578,10 @@ class TestRunCombinationsQueueDrainExceptions:
         # main loop exits after one pass. Second call (the final
         # double-check): a generic exception, which must be swallowed
         # rather than propagated.
-        fake_queue = make_fake_iterate_queue(
+        fake_queue = FakeIterateQueue(
             get_nowait_plan=[queue.Empty(), RuntimeError("boom")]
         )
-        fake_process = make_fake_iterate_process(alive=False)
+        fake_process = FakeIterateProcess(alive=False)
 
         patch_iterate_multiprocessing(fake_queue, fake_process)
 
@@ -603,9 +594,6 @@ class TestRunCombinationsQueueDrainExceptions:
     def test_final_double_check_picks_up_late_arriving_result(
         self,
         mock_iterate_molecule_pool,
-        make_iterate_combination,
-        make_fake_iterate_queue,
-        make_fake_iterate_process,
         patch_iterate_multiprocessing,
     ):
         """A result that wasn't yet on the queue during the main loop's
@@ -618,8 +606,8 @@ class TestRunCombinationsQueueDrainExceptions:
 
         # First get_nowait() call (main loop's only pass): Empty.
         # Second call (final double-check): the real result.
-        fake_queue = make_fake_iterate_queue(get_nowait_plan=[queue.Empty()])
-        fake_process = make_fake_iterate_process(alive=False)
+        fake_queue = FakeIterateQueue(get_nowait_plan=[queue.Empty()])
+        fake_process = FakeIterateProcess(alive=False)
 
         def _late_put():
             fake_queue.put((combo.label, result_mol))
@@ -649,9 +637,6 @@ class TestRunCombinationsTimeoutWatchdog:
     def test_stuck_process_is_terminated_then_killed(
         self,
         mock_iterate_molecule_pool,
-        make_iterate_combination,
-        make_fake_iterate_queue,
-        make_fake_iterate_process,
         patch_iterate_multiprocessing,
     ):
         """A process still alive after both the timeout window and a
@@ -660,11 +645,11 @@ class TestRunCombinationsTimeoutWatchdog:
         pool = mock_iterate_molecule_pool
         combo = make_iterate_combination()
 
-        fake_queue = make_fake_iterate_queue()
+        fake_queue = FakeIterateQueue()
         # Always "alive": guarantees both is_alive() checks in the
         # watchdog branch (before terminate, and after terminate+join)
         # see a still-running process.
-        fake_process = make_fake_iterate_process(alive=True)
+        fake_process = FakeIterateProcess(alive=True)
 
         patch_iterate_multiprocessing(fake_queue, fake_process)
 
@@ -679,9 +664,6 @@ class TestRunCombinationsTimeoutWatchdog:
     def test_duplicate_label_explicit_none_not_appended_twice(
         self,
         mock_iterate_molecule_pool,
-        make_iterate_combination,
-        make_fake_iterate_queue,
-        make_fake_iterate_process,
         patch_iterate_multiprocessing,
     ):
         """Two combinations that happen to share the same label, both
@@ -693,9 +675,9 @@ class TestRunCombinationsTimeoutWatchdog:
         combo_b = make_iterate_combination()
         assert combo_a.label == combo_b.label
 
-        fake_queue = make_fake_iterate_queue()
+        fake_queue = FakeIterateQueue()
         fake_queue.put((combo_a.label, None))
-        fake_process = make_fake_iterate_process(alive=False)
+        fake_process = FakeIterateProcess(alive=False)
 
         patch_iterate_multiprocessing(fake_queue, fake_process)
 
@@ -710,9 +692,6 @@ class TestRunCombinationsResultBookkeeping:
     def test_missing_result_counts_as_crashed_worker(
         self,
         mock_iterate_molecule_pool,
-        make_iterate_combination,
-        make_fake_iterate_queue,
-        make_fake_iterate_process,
         patch_iterate_multiprocessing,
     ):
         """A process that exits without ever writing to the queue is
@@ -721,8 +700,8 @@ class TestRunCombinationsResultBookkeeping:
         pool = mock_iterate_molecule_pool
         combo = make_iterate_combination()
 
-        fake_queue = make_fake_iterate_queue()  # never gets anything put on it
-        fake_process = make_fake_iterate_process(alive=False)
+        fake_queue = FakeIterateQueue()  # never gets anything put on it
+        fake_process = FakeIterateProcess(alive=False)
 
         patch_iterate_multiprocessing(fake_queue, fake_process)
 
@@ -733,9 +712,6 @@ class TestRunCombinationsResultBookkeeping:
     def test_explicit_none_result_counts_as_failed_not_timed_out(
         self,
         mock_iterate_molecule_pool,
-        make_iterate_combination,
-        make_fake_iterate_queue,
-        make_fake_iterate_process,
         patch_iterate_multiprocessing,
     ):
         """A worker that legitimately finishes and reports None (e.g.
@@ -745,9 +721,9 @@ class TestRunCombinationsResultBookkeeping:
         pool = mock_iterate_molecule_pool
         combo = make_iterate_combination()
 
-        fake_queue = make_fake_iterate_queue()
+        fake_queue = FakeIterateQueue()
         fake_queue.put((combo.label, None))
-        fake_process = make_fake_iterate_process(alive=False)
+        fake_process = FakeIterateProcess(alive=False)
 
         patch_iterate_multiprocessing(fake_queue, fake_process)
 

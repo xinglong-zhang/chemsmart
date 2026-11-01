@@ -23,6 +23,11 @@ from chemsmart.utils.constants import (
     hartree_to_joules,
     joule_per_mol_to_hartree,
 )
+from tests.helpers import (
+    make_thermochemistry_mock,
+    run_thermochemistry_and_capture_settings,
+    run_thermochemistry_with_directory,
+)
 
 
 class TestThermochemistry:
@@ -4178,16 +4183,12 @@ class TestCleanedFrequencies:
     # Shared: None / no imaginary
     # ------------------------------------------------------------------
 
-    def test_none_vibrational_frequencies_returns_none(
-        self, make_thermochemistry_mock
-    ):
+    def test_none_vibrational_frequencies_returns_none(self):
         mock = make_thermochemistry_mock(vibrational_frequencies=None)
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result is None
 
-    def test_no_imaginary_frequencies_returns_unchanged(
-        self, make_thermochemistry_mock
-    ):
+    def test_no_imaginary_frequencies_returns_unchanged(self):
         freqs = [100.0, 200.0, 300.0]
         mock = make_thermochemistry_mock(vibrational_frequencies=freqs)
         result = Thermochemistry.cleaned_frequencies.fget(mock)
@@ -4197,9 +4198,7 @@ class TestCleanedFrequencies:
     # Non-TS strict mode
     # ------------------------------------------------------------------
 
-    def test_non_ts_strict_raises_on_imaginary(
-        self, make_thermochemistry_mock
-    ):
+    def test_non_ts_strict_raises_on_imaginary(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0, 200.0],
             jobtype="opt",
@@ -4213,7 +4212,7 @@ class TestCleanedFrequencies:
     # ------------------------------------------------------------------
 
     def test_non_ts_permissive_replaces_single_imaginary_with_default_cutoff(
-        self, make_thermochemistry_mock
+        self,
     ):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0, 200.0],
@@ -4224,7 +4223,7 @@ class TestCleanedFrequencies:
         assert result == [100.0, 100.0, 200.0]
 
     def test_non_ts_permissive_replaces_multiple_imaginary_with_default_cutoff(
-        self, make_thermochemistry_mock
+        self,
     ):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-80.0, 100.0, -30.0, 200.0],
@@ -4234,9 +4233,7 @@ class TestCleanedFrequencies:
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == [100.0, 100.0, 100.0, 200.0]
 
-    def test_non_ts_permissive_uses_s_freq_cutoff(
-        self, make_thermochemistry_mock
-    ):
+    def test_non_ts_permissive_uses_s_freq_cutoff(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-80.0, 100.0, 200.0],
             jobtype="opt",
@@ -4246,9 +4243,7 @@ class TestCleanedFrequencies:
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == [50.0, 100.0, 200.0]
 
-    def test_non_ts_permissive_uses_h_freq_cutoff_when_no_s_cutoff(
-        self, make_thermochemistry_mock
-    ):
+    def test_non_ts_permissive_uses_h_freq_cutoff_when_no_s_cutoff(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-80.0, 100.0, 200.0],
             jobtype="opt",
@@ -4263,9 +4258,7 @@ class TestCleanedFrequencies:
     # TS strict mode
     # ------------------------------------------------------------------
 
-    def test_ts_single_imaginary_strict_removes_it(
-        self, make_thermochemistry_mock
-    ):
+    def test_ts_single_imaginary_strict_removes_it(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, 100.0, 200.0],
             jobtype="ts",
@@ -4274,9 +4267,7 @@ class TestCleanedFrequencies:
         result = Thermochemistry.cleaned_frequencies.fget(mock)
         assert result == [100.0, 200.0]
 
-    def test_ts_multiple_imaginary_strict_raises(
-        self, make_thermochemistry_mock
-    ):
+    def test_ts_multiple_imaginary_strict_raises(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, -50.0, 100.0, 200.0],
             jobtype="ts",
@@ -4289,9 +4280,7 @@ class TestCleanedFrequencies:
     # TS permissive mode
     # ------------------------------------------------------------------
 
-    def test_ts_single_imaginary_permissive_removes_it(
-        self, make_thermochemistry_mock
-    ):
+    def test_ts_single_imaginary_permissive_removes_it(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, 100.0, 200.0],
             jobtype="ts",
@@ -4301,7 +4290,7 @@ class TestCleanedFrequencies:
         assert result == [100.0, 200.0]
 
     def test_ts_multiple_imaginary_permissive_removes_first_replaces_rest(
-        self, make_thermochemistry_mock
+        self,
     ):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, -50.0, 100.0, 200.0],
@@ -4312,9 +4301,7 @@ class TestCleanedFrequencies:
         # -300.0 removed as reaction coordinate; -50.0 replaced by 100.0
         assert result == [100.0, 100.0, 200.0]
 
-    def test_ts_multiple_imaginary_permissive_uses_custom_cutoff(
-        self, make_thermochemistry_mock
-    ):
+    def test_ts_multiple_imaginary_permissive_uses_custom_cutoff(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-300.0, -50.0, -20.0, 100.0],
             jobtype="ts",
@@ -4329,7 +4316,7 @@ class TestCleanedFrequencies:
     # Cutoff validation
     # ------------------------------------------------------------------
 
-    def test_zero_cutoff_raises_value_error(self, make_thermochemistry_mock):
+    def test_zero_cutoff_raises_value_error(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0],
             jobtype="opt",
@@ -4339,9 +4326,7 @@ class TestCleanedFrequencies:
         with pytest.raises(ValueError, match="must be positive"):
             Thermochemistry.cleaned_frequencies.fget(mock)
 
-    def test_negative_cutoff_raises_value_error(
-        self, make_thermochemistry_mock
-    ):
+    def test_negative_cutoff_raises_value_error(self):
         mock = make_thermochemistry_mock(
             vibrational_frequencies=[-50.0, 100.0],
             jobtype="opt",
@@ -4357,7 +4342,6 @@ class TestThermochemistryCLI:
 
     def test_weighted_flag_propagated(
         self,
-        run_thermochemistry_and_capture_settings,
     ):
         result, settings = run_thermochemistry_and_capture_settings(
             extra_args=["--weighted"]
@@ -4369,7 +4353,6 @@ class TestThermochemistryCLI:
 
     def test_no_weighted_flag_propagated(
         self,
-        run_thermochemistry_and_capture_settings,
     ):
         result, settings = run_thermochemistry_and_capture_settings(
             extra_args=["--no-weighted"]
@@ -4381,7 +4364,6 @@ class TestThermochemistryCLI:
 
     def test_check_imaginary_frequencies_flag_propagated(
         self,
-        run_thermochemistry_and_capture_settings,
     ):
         result, settings = run_thermochemistry_and_capture_settings(
             extra_args=["--check-imaginary-frequencies"]
@@ -4393,7 +4375,6 @@ class TestThermochemistryCLI:
 
     def test_no_check_imaginary_frequencies_flag_propagated(
         self,
-        run_thermochemistry_and_capture_settings,
     ):
         result, settings = run_thermochemistry_and_capture_settings(
             extra_args=["--no-check-imaginary-frequencies"]
@@ -4403,9 +4384,7 @@ class TestThermochemistryCLI:
         assert settings is not None
         assert settings.check_imaginary_frequencies is False
 
-    def test_xtb_output_file_is_accepted(
-        self, run_thermochemistry_and_capture_settings
-    ):
+    def test_xtb_output_file_is_accepted(self):
         result, settings = run_thermochemistry_and_capture_settings(
             filename="water_opt/water_opt.out",
             detected_program="xtb",
@@ -4418,9 +4397,7 @@ class TestThermochemistryCLI:
 class TestThermochemistryCLIFolderOptions:
     """Folder options are wired correctly into the ``thermochemistry`` CLI."""
 
-    def test_directory_with_program_accepted(
-        self, tmp_path, run_thermochemistry_with_directory
-    ):
+    def test_directory_with_program_accepted(self, tmp_path):
         """``-d dir -p gaussian -T 298.15`` is accepted without error."""
         result, mock_from_filename = run_thermochemistry_with_directory(
             [
@@ -4435,9 +4412,7 @@ class TestThermochemistryCLIFolderOptions:
         # Add your assertions here
         assert result.exit_code == 0, result.output
 
-    def test_directory_with_filetype_accepted(
-        self, tmp_path, run_thermochemistry_with_directory
-    ):
+    def test_directory_with_filetype_accepted(self, tmp_path):
         """``-d dir -t log -T 298.15`` is accepted without error."""
         result, mock_from_filename = run_thermochemistry_with_directory(
             [
@@ -4451,9 +4426,7 @@ class TestThermochemistryCLIFolderOptions:
         )
         assert result.exit_code == 0, result.output
 
-    def test_directory_without_program_or_filetype_raises(
-        self, tmp_path, run_thermochemistry_with_directory
-    ):
+    def test_directory_without_program_or_filetype_raises(self, tmp_path):
         """``-d dir`` alone (no ``-p`` / ``-t``) is rejected."""
         result, _ = run_thermochemistry_with_directory(
             ["-d", str(tmp_path), "-T", "298.15"],
@@ -4469,9 +4442,7 @@ class TestThermochemistryCLIFolderOptions:
             or "-t" in error_text
         )
 
-    def test_directory_and_filenames_mutually_exclusive(
-        self, tmp_path, run_thermochemistry_with_directory
-    ):
+    def test_directory_and_filenames_mutually_exclusive(self, tmp_path):
         """Providing both ``-d`` and ``-f`` raises a ``ValueError``."""
         result, _ = run_thermochemistry_with_directory(
             [
@@ -4489,9 +4460,7 @@ class TestThermochemistryCLIFolderOptions:
         assert isinstance(result.exception, ValueError)
         assert "Cannot specify both" in str(result.exception)
 
-    def test_directory_with_unsupported_program_raises(
-        self, tmp_path, run_thermochemistry_with_directory
-    ):
+    def test_directory_with_unsupported_program_raises(self, tmp_path):
         """``-d dir -p unsupported_prog`` raises a ``ValueError``."""
         result, _ = run_thermochemistry_with_directory(
             [
@@ -4510,7 +4479,6 @@ class TestThermochemistryCLIFolderOptions:
     def test_directory_with_program_calls_from_filename_for_each_file(
         self,
         tmp_path,
-        run_thermochemistry_with_directory,
         gaussian_co2_opt_outfile,
         gaussian_ozone_opt_outfile,
     ):

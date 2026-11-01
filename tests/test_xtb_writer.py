@@ -6,6 +6,7 @@ import pytest
 from chemsmart.jobs.xtb.opt import XTBOptJob
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.jobs.xtb.writer import XTBInputWriter
+from tests.helpers import dummy_job
 
 
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -118,7 +119,7 @@ class TestXTBInputWriter:
         assert (nested / "xtb_water_constrain.inp").is_file()
 
     def test_write_uses_job_folder_when_no_target_directory(
-        self, tmp_path, water_molecule, monkeypatch, dummy_job
+        self, tmp_path, water_molecule, monkeypatch
     ):
         settings = XTBJobSettings(
             charge=0, multiplicity=1, jobtype="opt", constraints=[[1, 2]]

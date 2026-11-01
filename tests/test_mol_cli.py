@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 import click
 import pytest
 
+from tests.helpers import invoke_mol_cli, run_mol_and_capture_kwargs
+
 NCI_JOB = "chemsmart.jobs.mol.nci.PyMOLNCIJob"
 
 
@@ -24,7 +26,7 @@ class TestMolCLIGroupValidation:
     independent of which subcommand is ultimately invoked."""
 
     def test_index_and_structure_index_mutually_exclusive(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         result, _ = run_mol_and_capture_kwargs(
             NCI_JOB,
@@ -41,9 +43,7 @@ class TestMolCLIGroupValidation:
         assert result.exit_code != 0
         assert "mutually exclusive" in result.output
 
-    def test_structure_index_used_as_index(
-        self, multiple_molecules_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_structure_index_used_as_index(self, multiple_molecules_xyz_file):
         """``--si`` alone is treated as an alias for ``-i``."""
         result, kwargs = run_mol_and_capture_kwargs(
             NCI_JOB,
@@ -53,7 +53,7 @@ class TestMolCLIGroupValidation:
         assert len(kwargs["molecule"]) == 1
 
     def test_chemsmart_db_requires_exactly_one_selector(
-        self, database_chemsmart_file, run_mol_and_capture_kwargs
+        self, database_chemsmart_file
     ):
         result, _ = run_mol_and_capture_kwargs(
             NCI_JOB, ["-f", database_chemsmart_file, "nci"]
@@ -62,7 +62,7 @@ class TestMolCLIGroupValidation:
         assert "select exactly one of" in result.output
 
     def test_chemsmart_db_rejects_multiple_selectors(
-        self, database_chemsmart_file, run_mol_and_capture_kwargs
+        self, database_chemsmart_file
     ):
         result, _ = run_mol_and_capture_kwargs(
             NCI_JOB,
@@ -80,7 +80,7 @@ class TestMolCLIGroupValidation:
         assert "select exactly one of" in result.output
 
     def test_chemsmart_db_index_requires_record_selector(
-        self, database_chemsmart_file, run_mol_and_capture_kwargs
+        self, database_chemsmart_file
     ):
         result, _ = run_mol_and_capture_kwargs(
             NCI_JOB,
@@ -97,27 +97,21 @@ class TestMolCLIGroupValidation:
         assert result.exit_code != 0
         assert "can only be used together with" in result.output
 
-    def test_directory_and_filetype_uses_auto_label(
-        self, tmp_path, run_mol_and_capture_kwargs
-    ):
+    def test_directory_and_filetype_uses_auto_label(self, tmp_path):
         result, kwargs = run_mol_and_capture_kwargs(
             NCI_JOB, ["-d", str(tmp_path), "-t", "xyz", "nci"]
         )
         assert result.exit_code == 0, result.output
         assert kwargs["label"] == f"all_xyz_files_in_{tmp_path.name}"
 
-    def test_directory_and_filetype_respects_explicit_label(
-        self, tmp_path, run_mol_and_capture_kwargs
-    ):
+    def test_directory_and_filetype_respects_explicit_label(self, tmp_path):
         result, kwargs = run_mol_and_capture_kwargs(
             NCI_JOB, ["-d", str(tmp_path), "-t", "xyz", "-l", "custom", "nci"]
         )
         assert result.exit_code == 0, result.output
         assert kwargs["label"] == "custom"
 
-    def test_directory_and_program_uses_auto_label(
-        self, tmp_path, run_mol_and_capture_kwargs
-    ):
+    def test_directory_and_program_uses_auto_label(self, tmp_path):
         result, kwargs = run_mol_and_capture_kwargs(
             NCI_JOB, ["-d", str(tmp_path), "-p", "gaussian", "nci"]
         )
@@ -127,9 +121,7 @@ class TestMolCLIGroupValidation:
             == f"all_output_files_from_gaussian_in_{tmp_path.name}"
         )
 
-    def test_directory_and_program_respects_explicit_label(
-        self, tmp_path, run_mol_and_capture_kwargs
-    ):
+    def test_directory_and_program_respects_explicit_label(self, tmp_path):
         result, kwargs = run_mol_and_capture_kwargs(
             NCI_JOB,
             ["-d", str(tmp_path), "-p", "gaussian", "-l", "custom", "nci"],
@@ -138,7 +130,7 @@ class TestMolCLIGroupValidation:
         assert kwargs["label"] == "custom"
 
     def test_filenames_and_pubchem_both_specified_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         with pytest.raises(ValueError, match="have been specified"):
             run_mol_and_capture_kwargs(
@@ -150,7 +142,6 @@ class TestMolCLIGroupValidation:
         self,
         single_molecule_xyz_file,
         two_rotated_molecules_xyz_file,
-        run_mol_and_capture_kwargs,
     ):
         with pytest.raises(ValueError, match="can only process one file"):
             run_mol_and_capture_kwargs(
@@ -165,7 +156,7 @@ class TestMolCLIGroupValidation:
             )
 
     def test_label_and_append_label_both_given_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         with pytest.raises(ValueError, match="not both"):
             run_mol_and_capture_kwargs(
@@ -181,9 +172,7 @@ class TestMolCLIGroupValidation:
                 ],
             )
 
-    def test_pubchem_only_without_label_crashes(
-        self, run_mol_and_capture_kwargs
-    ):
+    def test_pubchem_only_without_label_crashes(self):
         """Regression test: -P/--pubchem given without -l/--label
         crashes, since the default-label derivation unconditionally
         does os.path.basename(filenames) even though filenames stays
@@ -198,7 +187,7 @@ class TestMolCLIGroupValidation:
                 run_mol_and_capture_kwargs(NCI_JOB, ["-P", "water", "nci"])
 
     def test_append_label_non_chemsmart_db_file(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         """The is_chemsmart_db-specific suffix branches (SID/RID/RI/MID)
         are skipped entirely for an ordinary (non-database) file."""
@@ -209,7 +198,7 @@ class TestMolCLIGroupValidation:
         assert result.exit_code == 0, result.output
         assert kwargs["label"] == "crest_best_suffix"
 
-    def test_pubchem_with_label_succeeds(self, run_mol_and_capture_kwargs):
+    def test_pubchem_with_label_succeeds(self):
         with patch(
             "chemsmart.io.molecules.structure.Molecule.from_pubchem",
             return_value=[MagicMock()],
@@ -237,7 +226,6 @@ class TestMolCLIGroupValidation:
         database_chemsmart_file,
         selector_flag,
         selector_value,
-        run_mol_and_capture_kwargs,
     ):
         result, kwargs = run_mol_and_capture_kwargs(
             NCI_JOB,
@@ -266,7 +254,6 @@ class TestMolCLIGroupValidation:
         database_chemsmart_file,
         selector_flag,
         selector_value,
-        run_mol_and_capture_kwargs,
     ):
         result, kwargs = run_mol_and_capture_kwargs(
             NCI_JOB,
@@ -287,9 +274,7 @@ class TestMolCLIGroupValidation:
 class TestMolCLINciCommand:
     """CLI tests for the ``nci`` subcommand."""
 
-    def test_nci_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_nci_job_creation(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.nci.PyMOLNCIJob",
             ["-f", single_molecule_xyz_file, "nci"],
@@ -297,9 +282,7 @@ class TestMolCLINciCommand:
         assert result.exit_code == 0, result.output
         assert kwargs is not None, "PyMOLNCIJob was never instantiated"
 
-    def test_nci_coordinates_option(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_nci_coordinates_option(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.nci.PyMOLNCIJob",
             [
@@ -313,9 +296,7 @@ class TestMolCLINciCommand:
         assert result.exit_code == 0, result.output
         assert kwargs["coordinates"] == [[1, 2], [3, 4]]
 
-    def test_nci_invalid_coordinates_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_nci_invalid_coordinates_raises(self, single_molecule_xyz_file):
         with pytest.raises(ValueError, match="Invalid coordinates input"):
             run_mol_and_capture_kwargs(
                 "chemsmart.jobs.mol.nci.PyMOLNCIJob",
@@ -332,9 +313,7 @@ class TestMolCLINciCommand:
 class TestMolCLIMoCommand:
     """CLI tests for the ``mo`` (molecular orbital) subcommand."""
 
-    def test_mo_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_mo_job_creation(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.mo.PyMOLMOJob",
             ["-f", single_molecule_xyz_file, "mo"],
@@ -342,9 +321,7 @@ class TestMolCLIMoCommand:
         assert result.exit_code == 0, result.output
         assert kwargs is not None, "PyMOLMOJob was never instantiated"
 
-    def test_mo_homo_flag(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_mo_homo_flag(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.mo.PyMOLMOJob",
             ["-f", single_molecule_xyz_file, "mo", "--homo"],
@@ -352,9 +329,7 @@ class TestMolCLIMoCommand:
         assert result.exit_code == 0, result.output
         assert kwargs["homo"] is True
 
-    def test_mo_invalid_coordinates_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_mo_invalid_coordinates_raises(self, single_molecule_xyz_file):
         with pytest.raises(ValueError, match="Invalid coordinates input"):
             run_mol_and_capture_kwargs(
                 "chemsmart.jobs.mol.mo.PyMOLMOJob",
@@ -371,9 +346,7 @@ class TestMolCLIMoCommand:
 class TestMolCLIMovieCommand:
     """CLI tests for the ``movie`` subcommand."""
 
-    def test_movie_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_movie_job_creation(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.movie.PyMOLMovieJob",
             ["-f", single_molecule_xyz_file, "movie"],
@@ -381,9 +354,7 @@ class TestMolCLIMovieCommand:
         assert result.exit_code == 0, result.output
         assert kwargs is not None, "PyMOLMovieJob was never instantiated"
 
-    def test_movie_overwrite_flag(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_movie_overwrite_flag(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.movie.PyMOLMovieJob",
             ["-f", single_molecule_xyz_file, "movie", "-o"],
@@ -391,9 +362,7 @@ class TestMolCLIMovieCommand:
         assert result.exit_code == 0, result.output
         assert kwargs["overwrite"] is True
 
-    def test_movie_invalid_coordinates_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_movie_invalid_coordinates_raises(self, single_molecule_xyz_file):
         with pytest.raises(ValueError, match="Invalid coordinates input"):
             run_mol_and_capture_kwargs(
                 "chemsmart.jobs.mol.movie.PyMOLMovieJob",
@@ -410,7 +379,7 @@ class TestMolCLIMovieCommand:
 class TestMolCLIIrcCommand:
     """CLI tests for the ``irc`` subcommand."""
 
-    def test_irc_full_run_uses_all_file(self, invoke_mol_cli):
+    def test_irc_full_run_uses_all_file(self):
         with patch("chemsmart.jobs.mol.irc.PyMOLIRCMovieJob") as mock_job_cls:
             mock_job_cls.from_files.return_value = MagicMock()
             result = invoke_mol_cli(["irc", "-a", "full_irc.log"])
@@ -421,7 +390,7 @@ class TestMolCLIIrcCommand:
             == "full_irc.log"
         )
 
-    def test_irc_reactant_and_product_files(self, invoke_mol_cli):
+    def test_irc_reactant_and_product_files(self):
         with patch("chemsmart.jobs.mol.irc.PyMOLIRCMovieJob") as mock_job_cls:
             mock_job_cls.from_files.return_value = MagicMock()
             result = invoke_mol_cli(
@@ -443,7 +412,7 @@ class TestMolCLIIrcCommand:
             == "product.log"
         )
 
-    def test_irc_invalid_coordinates_raises(self, invoke_mol_cli):
+    def test_irc_invalid_coordinates_raises(self):
         with patch("chemsmart.jobs.mol.irc.PyMOLIRCMovieJob") as mock_job_cls:
             mock_job_cls.from_files.return_value = MagicMock()
             with pytest.raises(ValueError, match="Invalid coordinates input"):
@@ -455,9 +424,7 @@ class TestMolCLIIrcCommand:
 class TestMolCLISpinCommand:
     """CLI tests for the ``spin`` subcommand."""
 
-    def test_spin_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_spin_job_creation(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.spin.PyMOLSpinJob",
             ["-f", single_molecule_xyz_file, "spin"],
@@ -465,9 +432,7 @@ class TestMolCLISpinCommand:
         assert result.exit_code == 0, result.output
         assert kwargs is not None, "PyMOLSpinJob was never instantiated"
 
-    def test_spin_basename_uses_provided_label(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_spin_basename_uses_provided_label(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.spin.PyMOLSpinJob",
             [
@@ -482,9 +447,7 @@ class TestMolCLISpinCommand:
         assert kwargs["spin_basename"] == "custom_label"
         assert kwargs["label"] == "custom_label"
 
-    def test_spin_invalid_coordinates_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_spin_invalid_coordinates_raises(self, single_molecule_xyz_file):
         with pytest.raises(ValueError, match="Invalid coordinates input"):
             run_mol_and_capture_kwargs(
                 "chemsmart.jobs.mol.spin.PyMOLSpinJob",
@@ -501,7 +464,7 @@ class TestMolCLISpinCommand:
 class TestMolCLIAlignCommand:
     """CLI tests for the ``align`` subcommand."""
 
-    def test_align_requires_input_files(self, run_mol_and_capture_kwargs):
+    def test_align_requires_input_files(self):
         result, _ = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.align.PyMOLAlignJob",
             ["align"],
@@ -509,7 +472,7 @@ class TestMolCLIAlignCommand:
         assert result.exit_code != 0
 
     def test_align_multi_structure_single_file(
-        self, multiple_molecules_xyz_file, run_mol_and_capture_kwargs
+        self, multiple_molecules_xyz_file
     ):
         """A single multi-structure file with default index (``:``) aligns all structures."""
         result, kwargs = run_mol_and_capture_kwargs(
@@ -521,7 +484,7 @@ class TestMolCLIAlignCommand:
         assert len(kwargs["molecule"]) >= 2
 
     def test_align_directory_without_filetype_raises(
-        self, structure_test_directory, run_mol_and_capture_kwargs
+        self, structure_test_directory
     ):
         """Directory given via the -p/--program group path (so
         ctx.obj["directory"] is set but ctx.obj["filetype"] is not)
@@ -544,7 +507,6 @@ class TestMolCLIAlignCommand:
         tmp_path,
         single_molecule_xyz_file,
         two_rotated_molecules_xyz_file,
-        run_mol_and_capture_kwargs,
     ):
         """Directory + filetype: align loads and aligns one structure
         from each matched file in the directory."""
@@ -561,7 +523,6 @@ class TestMolCLIAlignCommand:
         self,
         single_molecule_xyz_file,
         two_rotated_molecules_xyz_file,
-        run_mol_and_capture_kwargs,
     ):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.align.PyMOLAlignJob",
@@ -582,7 +543,6 @@ class TestMolCLIAlignCommand:
         single_molecule_xyz_file,
         two_rotated_molecules_xyz_file,
         visualized_1_mer_xyz_file,
-        run_mol_and_capture_kwargs,
     ):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.align.PyMOLAlignJob",
@@ -604,7 +564,6 @@ class TestMolCLIAlignCommand:
         self,
         single_molecule_xyz_file,
         two_rotated_molecules_xyz_file,
-        run_mol_and_capture_kwargs,
     ):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.align.PyMOLAlignJob",
@@ -621,9 +580,7 @@ class TestMolCLIAlignCommand:
         assert result.exit_code == 0, result.output
         assert kwargs["label"] == "mycustom"
 
-    def test_align_not_enough_molecules_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_align_not_enough_molecules_raises(self, single_molecule_xyz_file):
         result, _ = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.align.PyMOLAlignJob",
             ["-f", single_molecule_xyz_file, "-i", "1", "align"],
@@ -633,7 +590,7 @@ class TestMolCLIAlignCommand:
         assert "may not select enough structures" in result.output
 
     def test_align_directory_no_files_found_for_filetype(
-        self, tmp_path, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, tmp_path, single_molecule_xyz_file
     ):
         shutil.copy(single_molecule_xyz_file, tmp_path / "a.xyz")
         result, _ = run_mol_and_capture_kwargs(
@@ -648,7 +605,6 @@ class TestMolCLIAlignCommand:
         tmp_path,
         single_molecule_xyz_file,
         two_rotated_molecules_xyz_file,
-        run_mol_and_capture_kwargs,
     ):
         """Covers the per-file ValueError -> click.BadParameter wrapping
         shared by both the directory and multi-filenames branches."""
@@ -663,7 +619,7 @@ class TestMolCLIAlignCommand:
         assert "out of range" in result.output
 
     def test_align_single_file_out_of_range_index_raises_bad_parameter(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         """Covers the single-file branch's own ValueError ->
         click.BadParameter wrapping (distinct from the per-file helper
@@ -680,7 +636,6 @@ class TestMolCLIAlignCommand:
         self,
         single_molecule_xyz_file,
         two_rotated_molecules_xyz_file,
-        run_mol_and_capture_kwargs,
     ):
         result, _ = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.align.PyMOLAlignJob",
@@ -788,9 +743,7 @@ class TestMolCLIAlignDirectInvocation:
 class TestMolCLIVisualizeCommand:
     """CLI tests for the ``visualize`` subcommand."""
 
-    def test_visualize_basic_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_visualize_basic_job_creation(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.visualize.PyMOLVisualizationJob",
             ["-f", single_molecule_xyz_file, "visualize"],
@@ -800,9 +753,7 @@ class TestMolCLIVisualizeCommand:
             kwargs is not None
         ), "PyMOLVisualizationJob was never instantiated"
 
-    def test_visualize_hybrid_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
-    ):
+    def test_visualize_hybrid_job_creation(self, single_molecule_xyz_file):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.visualize.PyMOLHybridVisualizationJob",
             [
@@ -821,7 +772,7 @@ class TestMolCLIVisualizeCommand:
         assert kwargs["groups"] == ("1,2-5",)
 
     def test_visualize_derived_style_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.visualize.PyMOLScientificStyleVisualizationJob",
@@ -840,7 +791,7 @@ class TestMolCLIVisualizeCommand:
         assert kwargs["style"] == "editorial_minimal"
 
     def test_visualize_hybrid_with_derived_style_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         result, _ = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.visualize.PyMOLHybridVisualizationJob",
@@ -856,7 +807,7 @@ class TestMolCLIVisualizeCommand:
         assert result.exit_code != 0
 
     def test_visualize_invalid_coordinates_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         with pytest.raises(ValueError, match="Invalid coordinates input"):
             run_mol_and_capture_kwargs(
@@ -871,7 +822,7 @@ class TestMolCLIVisualizeCommand:
             )
 
     def test_visualize_hybrid_only_option_without_hybrid_raises(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         result, _ = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.visualize.PyMOLVisualizationJob",
@@ -887,7 +838,7 @@ class TestMolCLIVisualizeCommand:
         assert "-H/--hybrid" in result.output
 
     def test_visualize_hybrid_only_option_with_hybrid_is_forwarded(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         result, kwargs = run_mol_and_capture_kwargs(
             "chemsmart.jobs.mol.visualize.PyMOLHybridVisualizationJob",
@@ -904,7 +855,7 @@ class TestMolCLIVisualizeCommand:
         assert kwargs["surface_color"] == "blue"
 
     def test_visualize_non_derived_style_job_creation(
-        self, single_molecule_xyz_file, run_mol_and_capture_kwargs
+        self, single_molecule_xyz_file
     ):
         """A -s value that isn't one of the derived
         zhang_group_scientific_styles.py styles (e.g. "cylview") is

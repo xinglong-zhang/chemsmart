@@ -12,6 +12,13 @@ from chemsmart.cli.update import (
     VersionUpdater,
     update,
 )
+from tests.helpers import (
+    invoke_update_configs,
+    invoke_update_projects,
+    read_yaml_file,
+    write_server_yaml,
+    write_text_file,
+)
 
 
 def test_dependency_cli_delegates_to_dependency_updater(monkeypatch):
@@ -237,9 +244,6 @@ class TestConfigsUpdater:
         self,
         tmp_path,
         monkeypatch,
-        write_server_yaml,
-        invoke_update_configs,
-        read_yaml_file,
     ):
         fake_home = tmp_path / "home"
         monkeypatch.setenv("HOME", str(fake_home))
@@ -365,7 +369,7 @@ class TestConfigsUpdater:
         assert unselected.read_text(encoding="utf-8") == unselected_before
 
     def test_update_config_missing_ruamel_shows_install_hint(
-        self, tmp_path, monkeypatch, invoke_update_configs
+        self, tmp_path, monkeypatch
     ):
         original_import = builtins.__import__
 
@@ -387,7 +391,7 @@ class TestConfigsUpdater:
 
 class TestProjectsUpdater:
     def test_update_projects_adds_missing_template_content_without_overwriting(
-        self, tmp_path, monkeypatch, write_text_file, invoke_update_projects
+        self, tmp_path, monkeypatch
     ):
         assert ProjectsUpdater._template_config_dir().is_dir()
 
@@ -470,7 +474,7 @@ class TestProjectsUpdater:
         assert files_after == files_before
 
     def test_update_projects_reports_errors_without_damaging_user_content(
-        self, tmp_path, monkeypatch, write_text_file, invoke_update_projects
+        self, tmp_path, monkeypatch
     ):
         template_root = tmp_path / "templates" / ".chemsmart"
         config_root = tmp_path / "user" / ".chemsmart"

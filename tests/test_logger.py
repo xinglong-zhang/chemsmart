@@ -13,14 +13,15 @@ import logging
 import sys
 
 from chemsmart.utils.logger import LogOnceFilter, create_logger
+from tests.helpers import make_log_record
 
 
 class TestLogOnceFilterFormatRecord:
-    def test_formats_message_with_args(self, make_log_record):
+    def test_formats_message_with_args(self):
         record = make_log_record("value is %s", args=("foo",))
         assert LogOnceFilter.format_record(record) == "value is foo"
 
-    def test_formats_message_without_args(self, make_log_record):
+    def test_formats_message_without_args(self):
         record = make_log_record("plain message")
         assert LogOnceFilter.format_record(record) == "plain message"
 
@@ -36,21 +37,21 @@ class TestLogOnceFilterRemoveTimestamp:
 
 
 class TestLogOnceFilterFilter:
-    def test_first_occurrence_passes(self, make_log_record):
+    def test_first_occurrence_passes(self):
         log_filter = LogOnceFilter()
         assert log_filter.filter(make_log_record("hello")) is True
 
-    def test_duplicate_message_is_filtered_out(self, make_log_record):
+    def test_duplicate_message_is_filtered_out(self):
         log_filter = LogOnceFilter()
         log_filter.filter(make_log_record("hello"))
         assert log_filter.filter(make_log_record("hello")) is False
 
-    def test_distinct_messages_both_pass(self, make_log_record):
+    def test_distinct_messages_both_pass(self):
         log_filter = LogOnceFilter()
         assert log_filter.filter(make_log_record("hello")) is True
         assert log_filter.filter(make_log_record("world")) is True
 
-    def test_formatted_args_are_deduplicated(self, make_log_record):
+    def test_formatted_args_are_deduplicated(self):
         # Two records with the same msg template and args collapse to
         # the same formatted string and are deduplicated accordingly.
         log_filter = LogOnceFilter()

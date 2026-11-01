@@ -11,12 +11,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from chemsmart.jobs.job import Job
+from tests.helpers import (
+    ConcreteJob,
+    make_concrete_job,
+    make_default_behavior_job,
+)
 
 
 class TestJobFolderHandling:
-    def test_folder_defaults_to_cwd(
-        self, tmp_path, monkeypatch, make_concrete_job
-    ):
+    def test_folder_defaults_to_cwd(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         job = make_concrete_job()
         assert job.folder == os.path.abspath(str(tmp_path))
@@ -45,7 +48,7 @@ class TestJobFolderHandling:
 
     def test_repr_contains_folder_label_jobrunner(self, concrete_job):
         text = repr(concrete_job)
-        assert type(concrete_job).__name__ in text
+        assert ConcreteJob.__name__ in text
         assert concrete_job.folder in text
         assert "myjob" in text
 
@@ -131,15 +134,13 @@ class TestJobOptimizedStructure:
 
 
 class TestJobRunnerPropagation:
-    def test_propagate_runner_returns_none_for_falsy_runner(
-        self, make_concrete_job
-    ):
+    def test_propagate_runner_returns_none_for_falsy_runner(self):
         job = make_concrete_job()
         result = Job._propagate_runner(None, job)
         assert result is None
         assert job.jobrunner is None
 
-    def test_propagate_runner_copies_and_assigns(self, make_concrete_job):
+    def test_propagate_runner_copies_and_assigns(self):
         job = make_concrete_job()
         parent_runner = MagicMock()
         child_copy = MagicMock()
@@ -151,7 +152,7 @@ class TestJobRunnerPropagation:
         assert result is child_copy
         assert job.jobrunner is child_copy
 
-    def test_propagate_runner_overrides_resources(self, make_concrete_job):
+    def test_propagate_runner_overrides_resources(self):
         job = make_concrete_job()
         parent_runner = MagicMock()
         child_copy = MagicMock()
@@ -171,7 +172,7 @@ class TestJobExecutePhaseJobs:
         # Should not raise.
         Job._execute_phase_jobs(parent_runner=None, jobs=None)
 
-    def test_runs_each_job_and_propagates_runner(self, make_concrete_job):
+    def test_runs_each_job_and_propagates_runner(self):
         parent_runner = MagicMock()
         child_copy = MagicMock()
         parent_runner.copy.return_value = child_copy
@@ -186,7 +187,7 @@ class TestJobExecutePhaseJobs:
         assert job1.jobrunner is child_copy
         assert job2.jobrunner is child_copy
 
-    def test_jobs_factory_used_when_provided(self, make_concrete_job):
+    def test_jobs_factory_used_when_provided(self):
         job1 = make_concrete_job(label="j1")
         factory = MagicMock(return_value=[job1])
 
@@ -197,7 +198,7 @@ class TestJobExecutePhaseJobs:
         factory.assert_called_once()
         assert job1.ran is True
 
-    def test_before_run_called_before_jobs(self, make_concrete_job):
+    def test_before_run_called_before_jobs(self):
         calls = []
         job1 = make_concrete_job(label="j1")
 
@@ -212,7 +213,7 @@ class TestJobExecutePhaseJobs:
         assert calls == ["before"]
         assert job1.ran is True
 
-    def test_stop_on_incomplete_breaks_loop(self, make_concrete_job):
+    def test_stop_on_incomplete_breaks_loop(self):
         job1 = make_concrete_job(label="j1", complete=False)
         job2 = make_concrete_job(label="j2", complete=True)
 
@@ -226,9 +227,7 @@ class TestJobExecutePhaseJobs:
         # job2 should never run since job1 stayed incomplete and broke the loop.
         assert job2.ran is False
 
-    def test_logger_obj_logs_running_and_incomplete_messages(
-        self, make_concrete_job
-    ):
+    def test_logger_obj_logs_running_and_incomplete_messages(self):
         job1 = make_concrete_job(label="j1", complete=False)
         mock_logger = MagicMock()
 
@@ -343,9 +342,7 @@ class TestJobDefaultRunBackupAndCompletion:
     never exercised there. These tests use a subclass that keeps the
     base defaults instead."""
 
-    def test_default_run_delegates_to_jobrunner(
-        self, tmp_path, monkeypatch, make_default_behavior_job
-    ):
+    def test_default_run_delegates_to_jobrunner(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         mock_jobrunner = MagicMock()
         job = make_default_behavior_job(jobrunner=mock_jobrunner)
@@ -355,7 +352,7 @@ class TestJobDefaultRunBackupAndCompletion:
         mock_jobrunner.run.assert_called_once_with(job, extra="kwarg")
 
     def test_default_backup_files_raises_not_implemented(
-        self, tmp_path, monkeypatch, make_default_behavior_job
+        self, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
         job = make_default_behavior_job()
@@ -363,14 +360,14 @@ class TestJobDefaultRunBackupAndCompletion:
             job.backup()
 
     def test_default_job_is_complete_false_without_output(
-        self, tmp_path, monkeypatch, make_default_behavior_job
+        self, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
         job = make_default_behavior_job(output=None)
         assert job._job_is_complete() is False
 
     def test_default_job_is_complete_reflects_normal_termination(
-        self, tmp_path, monkeypatch, make_default_behavior_job
+        self, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
         fake_output = MagicMock()
@@ -380,10 +377,9 @@ class TestJobDefaultRunBackupAndCompletion:
 
 
 class TestJobFromMolecule:
-    def test_from_molecule_constructs_job(self, make_concrete_job):
-        concrete_job_cls = type(make_concrete_job())
-        job = concrete_job_cls.from_molecule(
+    def test_from_molecule_constructs_job(self):
+        job = ConcreteJob.from_molecule(
             molecule=None, label="from_mol", jobrunner=None
         )
-        assert isinstance(job, concrete_job_cls)
+        assert isinstance(job, ConcreteJob)
         assert job.label == "from_mol"

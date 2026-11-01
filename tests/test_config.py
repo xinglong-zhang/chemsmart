@@ -14,6 +14,7 @@ from chemsmart.cli.config import (
     update_yaml_files,
 )
 from chemsmart.utils.io import update_powershell_profiles, update_windows_env
+from tests.helpers import invoke_config_server
 
 
 class TestConfig:
@@ -604,9 +605,7 @@ class TestConfigSetupEnvironment:
 class TestConfigServerCommand:
     """Tests for the config server Click command behavior."""
 
-    def test_server_skips_conda_update_when_conda_not_found(
-        self, invoke_config_server
-    ):
+    def test_server_skips_conda_update_when_conda_not_found(self):
         """When conda is not in PATH, update_yaml_files is not called."""
         with (
             patch("chemsmart.cli.config.update_yaml_files") as mock_update,
@@ -632,7 +631,7 @@ class TestConfigServerCommand:
             assert result.exit_code == 0
             mock_update.assert_not_called()
 
-    def test_server_updates_conda_path_on_linux(self, invoke_config_server):
+    def test_server_updates_conda_path_on_linux(self):
         """On Linux, update_yaml_files uses auto-detected conda."""
         with (
             patch(
@@ -662,7 +661,7 @@ class TestConfigServerCommand:
             assert call_args[1] == "~/miniconda3"
             assert call_args[2] == "/home/user/miniconda3"
 
-    def test_server_git_bash_auto_detects_conda(self, invoke_config_server):
+    def test_server_git_bash_auto_detects_conda(self):
         """On Windows Git Bash (SHELL set), conda is auto-detected and YAML files updated."""
         with (
             patch(
@@ -693,7 +692,7 @@ class TestConfigServerCommand:
             assert call_args[1] == "~/miniconda3"
             assert call_args[2] == "/c/Users/user/miniconda3"
 
-    def test_server_powershell_auto_detects_conda(self, invoke_config_server):
+    def test_server_powershell_auto_detects_conda(self):
         """On Windows Conda PowerShell (PSModulePath set), conda is auto-detected."""
         with (
             patch(

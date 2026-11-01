@@ -12,6 +12,7 @@ from chemsmart.jobs.orca.settings import ORCATDDFTJobSettings
 from chemsmart.jobs.orca.tddft import ORCATDDFTJob as _ORCATDDFTJob_alias
 from chemsmart.jobs.orca.writer import ORCAInputWriter
 from chemsmart.settings.orca import ORCAProjectSettings
+from tests.helpers import run_orca_and_capture_settings
 
 
 class TestORCATDDFTWriterDefaults:
@@ -333,7 +334,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``orca td --nroots 10`` constructs an
         ``ORCATDDFTJobSettings`` with ``nroots=10``, ``tda=False``, ``freq=False``
@@ -359,7 +359,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``--dosoc`` without ``--triplets`` implicitly enables
         triplet excitations and that ``--printlevel`` is propagated, while
@@ -382,7 +381,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``--dosoc`` combined with an explicit ``--no-triplets``
         aborts the CLI with a non-zero exit code and an error mentioning
@@ -403,7 +401,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that supplying ``--nto-states`` without ``--nto`` implicitly
         sets ``donto=True`` and parses the comma list into ``[1, 2, 3]``."""
@@ -423,7 +420,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that combining ``--no-nto`` with ``--nto-states`` aborts the
         CLI with a non-zero exit code and an error mentioning ``--no-nto``."""
@@ -444,7 +440,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_yaml_settings_gas_solv_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that running ``orca td`` against a project YAML that has no
         ``td:`` section aborts with a non-zero exit code and an error that
@@ -467,7 +462,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_inherited_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
         write_orca_td_input,
     ):
         """Verify that a bare ``orca td`` clears Opt/Freq/NumFreq that would
@@ -526,7 +520,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_inherited_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
         write_orca_td_input,
     ):
         """Same guarantee as the previous test, but with an inherited
@@ -585,7 +578,6 @@ class TestORCATDCLI:
         expected_freq,
         expected_numfreq,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``-r Opt|Freq|Opt Freq|opt numfreq`` on the ``orca``
         group flips the TD job into an excited-state task, populates a
@@ -613,7 +605,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that requesting both ``Freq`` and ``NumFreq`` in
         ``-r`` aborts the CLI."""
@@ -632,7 +623,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``-r Opt`` combined with ``--dosoc`` is refused with
         a clear message pointing to ``SOCGrad`` / ``orca inp``."""
@@ -651,7 +641,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``--root`` exceeding ``--nroots`` aborts the CLI."""
         result, _ = run_orca_and_capture_settings(
@@ -674,7 +663,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``--root-mult triplet`` sets ``iroot_mult`` and
         implicitly enables triplet excitations."""
@@ -697,7 +685,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``--root-mult triplet`` + ``--no-triplets`` aborts."""
         result, _ = run_orca_and_capture_settings(
@@ -719,7 +706,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``--follow-root`` without ``-r Opt``/``-r Freq``
         aborts (it only makes sense during excited-state optimizations)."""
@@ -759,7 +745,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_extras_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that YAML ``additional_route_parameters: "Opt Freq
         TightSCF"`` on the ``td:`` section drives ``opt_excited``/``freq``
@@ -787,7 +772,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_extras_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``-r Opt`` fully replaces the YAML value: no ``Freq``
         or ``TightSCF`` leaks through."""
@@ -812,7 +796,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_extras_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``-r TightSCF`` keeps the calculation vertical (no
         inherited ``Opt``/``Freq`` from the YAML) and only propagates
@@ -838,7 +821,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_extras_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``-r ""`` explicitly clears the YAML value; the
         resulting job is a vertical TD with no route extras."""
@@ -863,7 +845,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_numfreq_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``NumFreq`` from the YAML activates ``numfreq`` and
         keeps ``freq``/``opt_excited`` off."""
@@ -888,7 +869,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_numfreq_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that if the effective ``additional_route_parameters``
         (whether from YAML or ``-r``) contains both ``Freq`` and ``NumFreq``,
@@ -913,7 +893,6 @@ class TestORCATDCLI:
         single_molecule_xyz_file,
         orca_td_extras_project_name,
         build_orca_td_args,
-        run_orca_and_capture_settings,
         write_orca_td_input,
     ):
         """CLI → writer integration: YAML supplies ``Opt Freq TightSCF``; the
@@ -972,7 +951,6 @@ class TestORCATDCLI:
         build_orca_td_args,
         td_args,
         message,
-        run_orca_and_capture_settings,
     ):
         """Verify that malformed ``--nto-states`` and non-positive
         ``--nroots``/``--root``/state indices abort with a BadParameter."""
@@ -992,7 +970,6 @@ class TestORCATDCLI:
         tmp_path,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that td-level ``--solvent-options`` and
         ``--solventfilename`` are copied onto the TDDFT settings."""
@@ -1018,7 +995,6 @@ class TestORCATDCLI:
         mocker,
         single_molecule_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``--root-mult triplet`` with an explicit
         ``--triplets`` leaves triplets enabled (no implicit override)."""
@@ -1041,7 +1017,6 @@ class TestORCATDCLI:
         mocker,
         multiple_molecules_xyz_file,
         build_orca_td_args,
-        run_orca_and_capture_settings,
     ):
         """Verify that ``-i`` with several molecules returns one
         ``ORCATDDFTJob`` per selected structure, labelled by index."""

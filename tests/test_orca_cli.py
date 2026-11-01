@@ -15,6 +15,8 @@ the merged settings can be inspected without running an actual calculation.
 
 from unittest.mock import MagicMock
 
+from tests.helpers import run_orca_and_capture_settings
+
 
 class TestORCASolventCLISpCommand:
     """CLI solvent options propagated to the ``sp`` subcommand."""
@@ -22,7 +24,6 @@ class TestORCASolventCLISpCommand:
     def test_solvent_model_and_id_injected_into_sp_settings_group_level(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``-sm cpcm -si water`` at group level sets solvent on sp settings."""
         result, settings = run_orca_and_capture_settings(
@@ -54,7 +55,6 @@ class TestORCASolventCLISpCommand:
     def test_solvent_model_and_id_injected_into_sp_settings_subcommand_level(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``sp -sm cpcm -si water`` at subcommand level sets solvent on sp settings."""
         result, settings = run_orca_and_capture_settings(
@@ -86,7 +86,6 @@ class TestORCASolventCLISpCommand:
     def test_solvent_options_injected_into_sp_settings(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``-sm cpcm -si water -so 'Epsilon 78.36'`` sets additional options on sp."""
         result, settings = run_orca_and_capture_settings(
@@ -118,7 +117,6 @@ class TestORCASolventCLISpCommand:
     def test_remove_solvent_clears_solvent_from_sp(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``--remove-solvent`` nulls the solvent on a project that has one."""
         # The ``solv`` project sets solvent_model=smd and solvent_id=cyclohexane
@@ -147,7 +145,6 @@ class TestORCASolventCLISpCommand:
     def test_no_solvent_options_leaves_project_sp_settings_unchanged(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """No solvent CLI flags leave the project sp solvent settings intact."""
         # ``gas_solv`` project sp has smd/cyclohexane; no CLI flags → preserved.
@@ -177,7 +174,6 @@ class TestORCASolventCLIOptCommand:
     def test_solvent_model_and_id_injected_into_opt_settings(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``-sm cpcm -si water`` sets solvent on the opt job settings."""
         result, settings = run_orca_and_capture_settings(
@@ -207,7 +203,6 @@ class TestORCASolventCLIOptCommand:
     def test_solvent_options_injected_into_opt_settings(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``-sm cpcm -si water -so 'Epsilon 78.36'`` propagates to opt."""
         result, settings = run_orca_and_capture_settings(
@@ -239,7 +234,6 @@ class TestORCASolventCLIOptCommand:
     def test_remove_solvent_clears_solvent_from_opt(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``--remove-solvent`` nulls the solvent on a project that has one."""
         result, settings = run_orca_and_capture_settings(
@@ -265,7 +259,6 @@ class TestORCASolventCLIOptCommand:
     def test_subcommand_level_solvent_overrides_group_level(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """Subcommand-level ``-sm``/``-si`` overrides group-level solvent."""
         result, settings = run_orca_and_capture_settings(
@@ -303,7 +296,6 @@ class TestORCASolventCLITsCommand:
     def test_solvent_model_and_id_injected_into_ts_settings(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``-sm cpcm -si water`` sets solvent on the ts job settings."""
         result, settings = run_orca_and_capture_settings(
@@ -333,7 +325,6 @@ class TestORCASolventCLITsCommand:
     def test_remove_solvent_clears_solvent_from_ts(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``--remove-solvent`` removes solvent from ts job."""
         result, settings = run_orca_and_capture_settings(
@@ -363,7 +354,6 @@ class TestORCACpcmBlockOptions:
     def test_custom_epsilon_no_solvent_id(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """Custom dielectric via ``--remove-solvent`` + ``sp -sm cpcm -so 'Epsilon 78.36'``.
 
@@ -400,7 +390,6 @@ class TestORCACpcmBlockOptions:
     def test_custom_epsilon_and_refrac(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """Custom Epsilon + Refrac via ``--remove-solvent`` + ``sp -sm cpcm -so '...'``.
 
@@ -437,7 +426,6 @@ class TestORCACpcmBlockOptions:
     def test_smd_with_surface_type(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``-sm smd -si water -so 'SurfaceType gepol_ses'`` stores all options."""
         result, settings = run_orca_and_capture_settings(
@@ -470,7 +458,6 @@ class TestORCACpcmBlockOptions:
     def test_smd_with_rsolv(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """``-sm smd -si water -so 'Rsolv 1.30'`` stores Rsolv option."""
         result, settings = run_orca_and_capture_settings(
@@ -503,7 +490,6 @@ class TestORCACpcmBlockOptions:
     def test_solventfilename_injected_into_sp_settings(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
         write_tmp_file,
     ):
         """-sf /path/water.cosmorsxyz stores solventfilename on sp settings."""
@@ -540,7 +526,6 @@ class TestORCACpcmBlockOptions:
     def test_solventfilename_group_level_injected_into_sp_settings(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
         write_tmp_file,
     ):
         """-sf at the orca group level propagates solventfilename to sp settings."""
@@ -683,7 +668,6 @@ class TestORCAQMMMCLIjobtypeOverride:
     def test_cli_qm_qm2_uses_three_layer_yaml_lot(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """CLI -j QM/QM2 keeps YAML per-layer theory and drops the MM layer."""
         result, settings = run_orca_and_capture_settings(
@@ -732,7 +716,6 @@ class TestORCAQMMMCLIjobtypeOverride:
     def test_cli_qm_qm2_keeps_cli_intermediate_atoms(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         """Explicit -ia is kept when overriding QM/QM2/MM YAML to QM/QM2."""
         result, settings = run_orca_and_capture_settings(
@@ -773,7 +756,6 @@ class TestORCAQMMMCLIHighLevelHBondLength:
     def test_cli_accepts_dict_string(
         self,
         single_molecule_xyz_file,
-        run_orca_and_capture_settings,
     ):
         result, settings = run_orca_and_capture_settings(
             "chemsmart.jobs.orca.qmmm.ORCAQMMMJob",

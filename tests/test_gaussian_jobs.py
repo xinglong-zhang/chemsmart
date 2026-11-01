@@ -37,6 +37,7 @@ from chemsmart.jobs.gaussian.wbi import GaussianWBIJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.gaussian import GaussianProjectSettings
+from tests.helpers import make_uvvis_job
 
 
 class TestGaussianJobs:
@@ -3713,9 +3714,7 @@ class TestGaussianUVVISJobInitCrash:
 
 
 class TestGsGeomOpt:
-    def test_returns_gaussian_opt_job_with_copied_settings(
-        self, make_uvvis_job
-    ):
+    def test_returns_gaussian_opt_job_with_copied_settings(self):
         job = make_uvvis_job()
         with patch(
             "chemsmart.jobs.gaussian.uvvis.GaussianOptJob"
@@ -3731,7 +3730,7 @@ class TestGsGeomOpt:
         # settings passed in is a deepcopy, not the same object
         assert kwargs["settings"] is not job.settings
 
-    def test_run_gs_geom_opt_delegates_to_run(self, make_uvvis_job):
+    def test_run_gs_geom_opt_delegates_to_run(self):
         job = make_uvvis_job()
         mock_opt_job = MagicMock()
         with patch.object(job, "_gs_geom_opt", return_value=mock_opt_job):
@@ -3741,9 +3740,7 @@ class TestGsGeomOpt:
             jobrunner="runner", queue_manager="qm"
         )
 
-    def test_gs_geom_opt_complete_delegates_to_is_complete(
-        self, make_uvvis_job
-    ):
+    def test_gs_geom_opt_complete_delegates_to_is_complete(self):
         job = make_uvvis_job()
         mock_opt_job = MagicMock()
         mock_opt_job.is_complete.return_value = True
@@ -3753,14 +3750,12 @@ class TestGsGeomOpt:
 
 
 class TestVerticalExcitation:
-    def test_returns_none_when_gs_not_complete(self, make_uvvis_job):
+    def test_returns_none_when_gs_not_complete(self):
         job = make_uvvis_job()
         with patch.object(job, "_gs_geom_opt_complete", return_value=False):
             assert job._vertical_excitation() is None
 
-    def test_returns_sp_job_with_jobtype_sp_and_freq_false_when_complete(
-        self, make_uvvis_job
-    ):
+    def test_returns_sp_job_with_jobtype_sp_and_freq_false_when_complete(self):
         job = make_uvvis_job()
         job.settings.jobtype = "opt"
         job.settings.freq = True
@@ -3785,9 +3780,7 @@ class TestVerticalExcitation:
         assert job.settings.jobtype == "opt"
         assert job.settings.freq is True
 
-    def test_run_vertical_excitation_runs_then_reports_completion(
-        self, make_uvvis_job
-    ):
+    def test_run_vertical_excitation_runs_then_reports_completion(self):
         job = make_uvvis_job()
         mock_sp_job = MagicMock()
         mock_sp_job.is_complete.return_value = True
@@ -3806,7 +3799,7 @@ class TestVerticalExcitation:
 
 
 class TestRunWorkflow:
-    def test_run_executes_both_steps_in_order(self, make_uvvis_job):
+    def test_run_executes_both_steps_in_order(self):
         job = make_uvvis_job()
         calls = []
 

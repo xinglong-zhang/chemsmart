@@ -17,6 +17,7 @@ from chemsmart.jobs.crest.runner import (
 )
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.settings.executable import CRESTExecutable
+from tests.helpers import dummy_job
 
 
 class TestCRESTJobRunnerInit:
@@ -90,7 +91,7 @@ class TestAssignVariables:
         return calls
 
     def test_assign_variables_dispatches_to_scratch_setup(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = CRESTJobRunner(
             server=pbs_server,
@@ -108,7 +109,7 @@ class TestAssignVariables:
         assert os.path.isdir(job.folder)
 
     def test_assign_variables_dispatches_to_job_directory_setup(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = CRESTJobRunner(server=pbs_server, scratch=False, fake=True)
         calls = self._patched(runner, monkeypatch, local_run=True)
@@ -122,7 +123,7 @@ class TestAssignVariables:
 
 class TestSetUpVariablesInScratch:
     def test_creates_fresh_scratch_directory_and_sets_paths(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         scratch_root = tmp_path / "scratch_root"
         runner = CRESTJobRunner(
@@ -142,9 +143,7 @@ class TestSetUpVariablesInScratch:
         )
         assert runner.job_errfile == os.path.abspath(job.errfile)
 
-    def test_reuses_existing_scratch_directory(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_reuses_existing_scratch_directory(self, pbs_server, tmp_path):
         scratch_root = tmp_path / "scratch_root2"
         job = dummy_job(
             "crest", folder=tmp_path / "jobfolder2", label="existing"
@@ -163,7 +162,7 @@ class TestSetUpVariablesInScratch:
 
 
 class TestSetUpVariablesInJobDirectory:
-    def test_sets_paths_from_job_folder(self, pbs_server, tmp_path, dummy_job):
+    def test_sets_paths_from_job_folder(self, pbs_server, tmp_path):
         runner = CRESTJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("crest", folder=tmp_path, label="myjob")
         runner._set_up_variables_in_job_directory(job)
@@ -174,7 +173,7 @@ class TestSetUpVariablesInJobDirectory:
 
 class TestWriteInput:
     def test_writes_xyz_and_always_invokes_input_writer(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         job = dummy_job("crest", folder=tmp_path, label="myjob")
         runner = CRESTJobRunner(server=pbs_server, scratch=False, fake=True)
@@ -196,7 +195,7 @@ class TestWriteInput:
 
 class TestGetCommand:
     def test_get_command_uses_executable_and_settings_args(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         settings = CRESTJobSettings(charge=0, multiplicity=1)
         job = dummy_job(
@@ -399,7 +398,7 @@ class TestGfnArgs:
 
 class TestCreateProcess:
     def test_create_process_opens_files_and_calls_popen(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = CRESTJobRunner(server=pbs_server, scratch=False, fake=True)
         runner.running_directory = str(tmp_path)
@@ -430,15 +429,13 @@ class TestCreateProcess:
 
 
 class TestPostrun:
-    def test_postrun_no_op_when_not_scratch(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_postrun_no_op_when_not_scratch(self, pbs_server, tmp_path):
         runner = CRESTJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("crest", folder=tmp_path, label="myjob")
         runner._postrun(job)
 
     def test_postrun_copies_scratch_files_to_job_folder(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         scratch_dir = tmp_path / "scratch"
         scratch_dir.mkdir()
@@ -459,7 +456,7 @@ class TestPostrun:
         assert (job_folder / "myjob.xyz").exists()
 
     def test_postrun_skips_file_already_at_destination(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         job_folder = tmp_path / "jobfolder"
         job_folder.mkdir()
@@ -478,7 +475,7 @@ class TestPostrun:
         assert (job_folder / "myjob.xyz").exists()
 
     def test_postrun_suppresses_isadirectoryerror_for_subdirectories(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         scratch_dir = tmp_path / "scratch2"
         (scratch_dir / "subdir").mkdir(parents=True)
@@ -508,7 +505,7 @@ class TestFakeCRESTJobRunner:
         assert executable.executable_folder is None
 
     def test_set_up_variables_in_scratch_appends_fake_suffix(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeCRESTJobRunner(
             server=pbs_server,
@@ -525,7 +522,7 @@ class TestFakeCRESTJobRunner:
         assert runner.job_errfile == os.path.abspath(job.errfile)
 
     def test_set_up_variables_in_scratch_reuses_existing_directory(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeCRESTJobRunner(
             server=pbs_server,
@@ -543,7 +540,7 @@ class TestFakeCRESTJobRunner:
         assert runner.running_directory == expected_dir
 
     def test_set_up_variables_in_job_directory_appends_fake_suffix(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeCRESTJobRunner(
             server=pbs_server, scratch=False, fake=True
@@ -554,9 +551,7 @@ class TestFakeCRESTJobRunner:
         assert runner.running_directory == job.folder
         assert runner.job_xyzfile == os.path.abspath(job.xyzfile)
 
-    def test_run_executes_full_fake_pipeline(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_run_executes_full_fake_pipeline(self, pbs_server, tmp_path):
         runner = FakeCRESTJobRunner(
             server=pbs_server, scratch=False, fake=True
         )

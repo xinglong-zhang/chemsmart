@@ -27,6 +27,7 @@ from chemsmart.jobs.runner import (
 from chemsmart.jobs.thermochemistry.runner import ThermochemistryJobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner, XTBJobRunner
 from chemsmart.settings.server import Server
+from tests.helpers import ConcreteJobRunner, dummy_job
 
 
 class TestProgramAwareNames:
@@ -183,7 +184,7 @@ class TestJobRunnerSelection:
         assert runner.fake is True
 
     def test_fake_orca_appends_fake_suffix_in_job_directory(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("orca", folder=tmp_path, label="orca_opt")
@@ -197,7 +198,7 @@ class TestJobRunnerSelection:
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
 
     def test_fake_orca_appends_fake_suffix_in_scratch(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeORCAJobRunner(
             server=pbs_server,
@@ -217,7 +218,7 @@ class TestJobRunnerSelection:
         assert Path(runner.job_outputfile).name == "orca_opt_fake.out"
 
     def test_fake_gaussian_does_not_duplicate_fake_suffix(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeGaussianJobRunner(
             server=pbs_server, scratch=False, fake=True
@@ -232,7 +233,7 @@ class TestJobRunnerSelection:
         assert Path(runner.job_errfile).name == "gaussian_opt_fake.err"
 
     def test_fake_orca_does_not_duplicate_fake_suffix(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = FakeORCAJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("orca", folder=tmp_path, label="orca_opt_fake")
@@ -472,7 +473,7 @@ class TestScratchYamlOverride:
         assert runner.scratch is False
 
     def test_missing_scratch_dir_falls_back_to_job_folder(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = FakeGaussianJobRunner(
             server=pbs_server, scratch=False, fake=True
@@ -525,7 +526,7 @@ class TestGaussianJobRunnerDirectHelpers:
             runner.executable
 
     def test_assign_variables_dispatches_to_scratch_setup(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = GaussianJobRunner(
             server=pbs_server,
@@ -555,7 +556,7 @@ class TestGaussianJobRunnerDirectHelpers:
         assert not hasattr(job, "local")
 
     def test_assign_variables_dispatches_to_job_directory_setup(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = GaussianJobRunner(server=pbs_server, scratch=False, fake=True)
         calls = []
@@ -580,7 +581,7 @@ class TestGaussianJobRunnerDirectHelpers:
         assert job.local is True
 
     def test_set_up_variables_in_scratch_creates_fresh_directory(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
         runner = GaussianJobRunner(
             server=pbs_server,
@@ -612,7 +613,7 @@ class TestGaussianJobRunnerDirectHelpers:
         )
 
     def test_set_up_variables_in_scratch_reuses_existing_directory(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
 
         scratch_root = tmp_path / "scratch_root2"
@@ -632,9 +633,7 @@ class TestGaussianJobRunnerDirectHelpers:
             str(scratch_root), job.execution_name
         )
 
-    def test_set_up_variables_in_job_directory(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_set_up_variables_in_job_directory(self, pbs_server, tmp_path):
 
         runner = GaussianJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job(
@@ -649,7 +648,7 @@ class TestGaussianJobRunnerDirectHelpers:
         assert runner.job_outputfile == os.path.abspath(job.outputfile)
 
     def test_prerun_delegates_to_assign_variables(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = GaussianJobRunner(server=pbs_server, scratch=False, fake=True)
         calls = []
@@ -661,7 +660,7 @@ class TestGaussianJobRunnerDirectHelpers:
         assert calls == [job]
 
     def test_write_input_uses_gaussian_input_writer(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = GaussianJobRunner(server=pbs_server, scratch=False, fake=True)
         runner.running_directory = str(tmp_path)
@@ -749,15 +748,13 @@ class TestGaussianJobRunnerDirectHelpers:
         assert (tmp_path / "job.log").exists()
         assert (tmp_path / "job.err").exists()
 
-    def test_postrun_noop_when_scratch_disabled(
-        self, pbs_server, tmp_path, dummy_job
-    ):
+    def test_postrun_noop_when_scratch_disabled(self, pbs_server, tmp_path):
         runner = GaussianJobRunner(server=pbs_server, scratch=False, fake=True)
         job = dummy_job("gaussian", folder=tmp_path, label="noop_job")
         runner._postrun(job)  # should not raise, nothing to copy
 
     def test_postrun_copies_matching_files_to_job_folder(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
 
         running_dir = tmp_path / "scratch_run"
@@ -780,7 +777,7 @@ class TestGaussianJobRunnerDirectHelpers:
         assert os.path.exists(str(running_dir / "copy_job.log"))
 
     def test_postrun_skips_files_whose_full_path_starts_with_gau_prefix(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         """Defensive branch: the "except files starting with Gau-" check
         tests the full glob'd path (not the basename), so it only ever
@@ -805,7 +802,7 @@ class TestGaussianJobRunnerDirectHelpers:
         assert not (job_folder / "prefixed_job.log").exists()
 
     def test_postrun_logs_and_continues_on_copy_failure(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         running_dir = tmp_path / "scratch_run2"
         running_dir.mkdir()
@@ -829,7 +826,7 @@ class TestGaussianJobRunnerDirectHelpers:
 
 class TestFakeGaussianJobRunnerDirectHelpers:
     def test_set_up_variables_in_scratch_reuses_existing_directory(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
 
         scratch_root = tmp_path / "fake_scratch_root"
@@ -853,7 +850,7 @@ class TestFakeGaussianJobRunnerDirectHelpers:
         assert runner.running_directory == expected_dir
 
     def test_set_up_variables_in_scratch_creates_fresh_directory(
-        self, pbs_server, tmp_path, dummy_job
+        self, pbs_server, tmp_path
     ):
 
         scratch_root = tmp_path / "fake_scratch_root_fresh"
@@ -875,7 +872,7 @@ class TestFakeGaussianJobRunnerDirectHelpers:
         assert runner.running_directory == expected_dir
 
     def test_run_executes_full_fake_pipeline_in_order(
-        self, pbs_server, tmp_path, monkeypatch, dummy_job
+        self, pbs_server, tmp_path, monkeypatch
     ):
         runner = FakeGaussianJobRunner(
             server=pbs_server, scratch=False, fake=True
@@ -1072,7 +1069,7 @@ class TestJobRunnerConstruction:
 
     def test_repr_contains_class_and_server(self, concrete_jobrunner):
         text = repr(concrete_jobrunner)
-        assert type(concrete_jobrunner).__name__ in text
+        assert ConcreteJobRunner.__name__ in text
 
     def test_server_as_string_resolves_via_from_servername(
         self, make_concrete_jobrunner
@@ -1243,7 +1240,7 @@ class TestUpdateOsEnviron:
     ):
         job = MagicMock()
         with patch.object(
-            type(concrete_jobrunner),
+            ConcreteJobRunner,
             "executable",
             new=property(lambda self: MagicMock(env={})),
         ):
@@ -1255,7 +1252,7 @@ class TestUpdateOsEnviron:
     ):
         job = MagicMock()
         with patch.object(
-            type(concrete_jobrunner),
+            ConcreteJobRunner,
             "executable",
             new=property(
                 lambda self: MagicMock(
@@ -1295,7 +1292,7 @@ class TestJobRunnerFromJob:
             JobRunner.from_job(job, server=pbs_server)
 
     def test_from_job_treats_notimplemented_jobtypes_as_empty_list(
-        self, pbs_server, concrete_jobrunner
+        self, pbs_server
     ):
         """A registered runner subclass that never overrides JOBTYPES
         (still NotImplemented) must be treated as supporting no
@@ -1319,7 +1316,7 @@ class TestJobRunnerFromJob:
         job = MagicMock()
         job.TYPE = "concrete_runner_type"
         result = JobRunner.from_job(job, server=pbs_server, fake=True)
-        assert isinstance(result, type(concrete_jobrunner))
+        assert isinstance(result, ConcreteJobRunner)
 
 
 class TestJobRunnerErrFileCleanup:

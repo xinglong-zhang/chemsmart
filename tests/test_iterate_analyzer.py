@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from chemsmart.jobs.iterate.iterate import IterateAnalyzer
+from tests.helpers import make_scripted_minimize
 
 
 class TestMoleculeToArray:
@@ -275,7 +276,6 @@ class TestOptimizeLagrangePreOptimizationFallback:
         caplog,
         iterate_skeleton_array,
         failed_minimize_result,
-        make_scripted_minimize,
     ):
         # First minimize() call (pre-optimization) fails; the rest use
         # the real solver.
@@ -297,7 +297,7 @@ class TestOptimizeLagrangePreOptimizationFallback:
         assert result is not None
 
     def test_pre_optimization_exception_falls_back_to_projection(
-        self, caplog, iterate_skeleton_array, make_scripted_minimize
+        self, caplog, iterate_skeleton_array
     ):
         # First minimize() call (pre-optimization) raises; the rest use
         # the real solver.
@@ -325,7 +325,6 @@ class TestOptimizeLagrangeMainLoopFailures:
         caplog,
         iterate_skeleton_array,
         failed_minimize_result,
-        make_scripted_minimize,
     ):
         # Let the pre-optimization (first call) succeed via the real
         # solver so we reach the main loop; fail everything after that.
@@ -349,7 +348,7 @@ class TestOptimizeLagrangeMainLoopFailures:
         assert "All optimization attempts failed" in caplog.text
 
     def test_exception_in_main_loop_is_logged_and_skipped(
-        self, caplog, iterate_skeleton_array, make_scripted_minimize
+        self, caplog, iterate_skeleton_array
     ):
         # First call: real pre-optimization. Second call (first main-loop
         # attempt): raise. Remaining calls: real solver, so the run still

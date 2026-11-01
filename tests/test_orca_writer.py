@@ -25,6 +25,7 @@ from chemsmart.jobs.orca.settings import (
 )
 from chemsmart.jobs.orca.writer import ORCAInputWriter
 from chemsmart.settings.orca import ORCAProjectSettings
+from tests.helpers import make_orca_writer
 
 
 class TestORCAInputWriter:
@@ -1738,21 +1739,19 @@ class TestORCAInputWriter:
 
 
 class TestScfBlock:
-    def test_neither_convergence_nor_maxiter_writes_nothing(
-        self, make_orca_writer
-    ):
+    def test_neither_convergence_nor_maxiter_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_scf_block(f)
         assert f.getvalue() == ""
 
-    def test_maxiter_only_defaults_convergence_absent(self, make_orca_writer):
+    def test_maxiter_only_defaults_convergence_absent(self):
         writer = make_orca_writer(ORCAJobSettings(scf_maxiter=500))
         f = io.StringIO()
         writer._write_scf_block(f)
         assert f.getvalue() == "%scf\n  maxiter 500\nend\n"
 
-    def test_convergence_only_uses_default_maxiter(self, make_orca_writer):
+    def test_convergence_only_uses_default_maxiter(self):
         writer = make_orca_writer(ORCAJobSettings(scf_convergence="tight"))
         f = io.StringIO()
         writer._write_scf_block(f)
@@ -1760,13 +1759,13 @@ class TestScfBlock:
             f.getvalue() == "%scf\n  maxiter 200\n  convergence tight\nend\n"
         )
 
-    def test_convergence_with_scf_suffix_is_stripped(self, make_orca_writer):
+    def test_convergence_with_scf_suffix_is_stripped(self):
         writer = make_orca_writer(ORCAJobSettings(scf_convergence="TightSCF"))
         f = io.StringIO()
         writer._write_scf_convergence(f)
         assert f.getvalue() == "  convergence tight\n"
 
-    def test_invalid_convergence_raises(self, make_orca_writer):
+    def test_invalid_convergence_raises(self):
         """See BUGS_FOUND.md: the f-string building the ValueError
         message references self.scf_convergence (an attribute of the
         writer, which doesn't exist) instead of
@@ -1778,7 +1777,7 @@ class TestScfBlock:
 
 
 class TestWriteSelfAndRouteQmmm:
-    def test_write_self_writes_input_string_verbatim(self, make_orca_writer):
+    def test_write_self_writes_input_string_verbatim(self):
         writer = make_orca_writer(
             ORCAJobSettings(input_string="! B3LYP def2-SVP\n")
         )
@@ -1786,9 +1785,7 @@ class TestWriteSelfAndRouteQmmm:
         writer._write_self(f)
         assert f.getvalue() == "! B3LYP def2-SVP\n"
 
-    def test_write_without_target_directory_uses_job_folder(
-        self, tmp_path, make_orca_writer
-    ):
+    def test_write_without_target_directory_uses_job_folder(self, tmp_path):
         writer = make_orca_writer(
             ORCAJobSettings(
                 functional="b3lyp", basis="def2-svp", charge=0, multiplicity=1
@@ -1798,9 +1795,7 @@ class TestWriteSelfAndRouteQmmm:
         writer._write()
         assert (tmp_path / "test_job.inp").is_file()
 
-    def test_write_dispatches_to_write_self_for_input_string(
-        self, tmp_path, make_orca_writer
-    ):
+    def test_write_dispatches_to_write_self_for_input_string(self, tmp_path):
         writer = make_orca_writer(
             ORCAJobSettings(input_string="! raw input\n")
         )
@@ -1808,9 +1803,7 @@ class TestWriteSelfAndRouteQmmm:
         writer._write()
         assert (tmp_path / "test_job.inp").read_text() == "! raw input\n"
 
-    def test_route_section_uses_qmmm_route_string_for_qmmm_settings(
-        self, make_orca_writer
-    ):
+    def test_route_section_uses_qmmm_route_string_for_qmmm_settings(self):
         settings = ORCAQMMMJobSettings(jobtype="QMMM", parent_jobtype="opt")
         writer = make_orca_writer(
             settings, molecule=MagicMock(is_monoatomic=False)
@@ -1821,9 +1814,7 @@ class TestWriteSelfAndRouteQmmm:
 
 
 class TestSolventBlockFiltering:
-    def test_blank_line_preserved_when_filtering_solvent_name(
-        self, make_orca_writer
-    ):
+    def test_blank_line_preserved_when_filtering_solvent_name(self):
         """When solvent-name filtering is active (cosmors + solvent_id),
         blank lines in custom_solvent must be preserved, not treated as
         a 'solvent "name"' line to filter."""
@@ -1845,13 +1836,13 @@ class TestSolventBlockFiltering:
 
 
 class TestMdciBlock:
-    def test_no_cutoff_writes_nothing(self, make_orca_writer):
+    def test_no_cutoff_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_mdci_block(f)
         assert f.getvalue() == ""
 
-    def test_invalid_cutoff_raises(self, make_orca_writer):
+    def test_invalid_cutoff_raises(self):
         writer = make_orca_writer(ORCAJobSettings(mdci_cutoff="ultra"))
         with pytest.raises(AssertionError):
             writer._write_mdci_block(io.StringIO())
@@ -1864,7 +1855,7 @@ class TestMdciBlock:
             ("tight", "TCutPairs 1e-5"),
         ],
     )
-    def test_cutoff_levels(self, cutoff, expected_pairs, make_orca_writer):
+    def test_cutoff_levels(self, cutoff, expected_pairs):
         writer = make_orca_writer(ORCAJobSettings(mdci_cutoff=cutoff))
         f = io.StringIO()
         writer._write_mdci_block(f)
@@ -1873,7 +1864,7 @@ class TestMdciBlock:
         assert expected_pairs in out
         assert out.endswith("end\n")
 
-    def test_invalid_density_raises(self, make_orca_writer):
+    def test_invalid_density_raises(self):
         writer = make_orca_writer(
             ORCAJobSettings(mdci_cutoff="normal", mdci_density="bogus")
         )
@@ -1888,7 +1879,7 @@ class TestMdciBlock:
             ("relaxed", "Density Relaxed"),
         ],
     )
-    def test_density_levels(self, density, expected, make_orca_writer):
+    def test_density_levels(self, density, expected):
         writer = make_orca_writer(
             ORCAJobSettings(mdci_cutoff="normal", mdci_density=density)
         )
@@ -1898,15 +1889,13 @@ class TestMdciBlock:
 
 
 class TestElpropBlock:
-    def test_neither_dipole_nor_quadrupole_writes_nothing(
-        self, make_orca_writer
-    ):
+    def test_neither_dipole_nor_quadrupole_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_elprop_block(f)
         assert f.getvalue() == ""
 
-    def test_dipole_true_quadrupole_false(self, make_orca_writer):
+    def test_dipole_true_quadrupole_false(self):
         writer = make_orca_writer(ORCAJobSettings(dipole=True))
         f = io.StringIO()
         writer._write_elprop_block(f)
@@ -1914,7 +1903,7 @@ class TestElpropBlock:
         assert "Dipole True" in out
         assert "Quadrupole False" in out
 
-    def test_quadrupole_true_dipole_false(self, make_orca_writer):
+    def test_quadrupole_true_dipole_false(self):
         writer = make_orca_writer(ORCAJobSettings(quadrupole=True))
         f = io.StringIO()
         writer._write_elprop_block(f)
@@ -1924,15 +1913,13 @@ class TestElpropBlock:
 
 
 class TestQmmmBlockDispatch:
-    def test_non_qmmm_settings_writes_nothing(self, make_orca_writer):
+    def test_non_qmmm_settings_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_qmmm_block(f)
         assert f.getvalue() == ""
 
-    def test_qmmm_settings_delegates_to_settings_qmmm_block(
-        self, make_orca_writer
-    ):
+    def test_qmmm_settings_delegates_to_settings_qmmm_block(self):
         settings = ORCAQMMMJobSettings(
             jobtype="QMMM",
             low_level_method="ff.prms",
@@ -1946,7 +1933,7 @@ class TestQmmmBlockDispatch:
 
 
 class TestModredBlock:
-    def test_list_format_writes_constraints(self, make_orca_writer):
+    def test_list_format_writes_constraints(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_modred_if_list(f, [[1, 2], [3, 4, 5]])
@@ -1956,7 +1943,7 @@ class TestModredBlock:
         assert "{A 2 3 4 C}" in out
         assert out.rstrip().endswith("end")
 
-    def test_dict_format_scan_only(self, make_orca_writer):
+    def test_dict_format_scan_only(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         modred = {
@@ -1972,7 +1959,7 @@ class TestModredBlock:
         assert "B 0 1 = 1.5, 3.5, 10" in out
         assert "bond distance" in out
 
-    def test_dict_format_with_constrained_coordinates(self, make_orca_writer):
+    def test_dict_format_with_constrained_coordinates(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         modred = {
@@ -1989,7 +1976,7 @@ class TestModredBlock:
         assert "A 0 1 2 = 90.0, 120.0, 5" in out
         assert "angle" in out
 
-    def test_dihedral_scan_variable_name(self, make_orca_writer):
+    def test_dihedral_scan_variable_name(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         modred = {
@@ -2002,7 +1989,7 @@ class TestModredBlock:
         out = f.getvalue()
         assert "dihedral" in out
 
-    def test_write_modred_dispatches_by_type(self, make_orca_writer):
+    def test_write_modred_dispatches_by_type(self):
         writer = make_orca_writer(ORCAJobSettings())
         f_list = io.StringIO()
         writer._write_modred(f_list, [1, 2])
@@ -2020,7 +2007,7 @@ class TestModredBlock:
         )
         assert "Scan" in f_dict.getvalue()
 
-    def test_modred_block_wraps_in_geom_section(self, make_orca_writer):
+    def test_modred_block_wraps_in_geom_section(self):
         writer = make_orca_writer(ORCAJobSettings(modred=[1, 2]))
         f = io.StringIO()
         writer._write_modred_block(f)
@@ -2028,13 +2015,13 @@ class TestModredBlock:
         assert out.startswith("%geom\n")
         assert out.rstrip().endswith("end")
 
-    def test_no_modred_writes_nothing(self, make_orca_writer):
+    def test_no_modred_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_modred_block(f)
         assert f.getvalue() == ""
 
-    def test_modred_of_unsupported_type_writes_nothing(self, make_orca_writer):
+    def test_modred_of_unsupported_type_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_modred(f, modred="not a list or dict")
@@ -2042,7 +2029,7 @@ class TestModredBlock:
 
 
 class TestHessianBlockForTS:
-    def test_minimal_ts_settings(self, make_orca_writer):
+    def test_minimal_ts_settings(self):
         settings = ORCATSJobSettings()
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2054,7 +2041,7 @@ class TestHessianBlockForTS:
         assert f"Recalc_Hess {settings.recalc_hess}" in out
         assert out.rstrip().endswith("end")
 
-    def test_inhess_requires_existing_file(self, tmp_path, make_orca_writer):
+    def test_inhess_requires_existing_file(self, tmp_path):
         hess_file = tmp_path / "guess.hess"
         hess_file.write_text("fake hessian")
         settings = ORCATSJobSettings(
@@ -2067,13 +2054,13 @@ class TestHessianBlockForTS:
         assert "InHess Read" in out
         assert f'InHessName "{hess_file}"' in out
 
-    def test_inhess_without_filename_raises(self, make_orca_writer):
+    def test_inhess_without_filename_raises(self):
         settings = ORCATSJobSettings(inhess=True)
         writer = make_orca_writer(settings)
         with pytest.raises(AssertionError, match="No Hessian file"):
             writer._write_hessian_block_for_ts(io.StringIO())
 
-    def test_inhess_missing_file_raises(self, make_orca_writer):
+    def test_inhess_missing_file_raises(self):
         settings = ORCATSJobSettings(
             inhess=True, inhess_filename="/no/such/file.hess"
         )
@@ -2081,7 +2068,7 @@ class TestHessianBlockForTS:
         with pytest.raises(AssertionError, match="is not found"):
             writer._write_hessian_block_for_ts(io.StringIO())
 
-    def test_hybrid_hess_converts_to_0_indexed(self, make_orca_writer):
+    def test_hybrid_hess_converts_to_0_indexed(self):
         settings = ORCATSJobSettings(
             hybrid_hess=True, hybrid_hess_atoms=[1, 2, 5]
         )
@@ -2090,13 +2077,13 @@ class TestHessianBlockForTS:
         writer._write_hessian_block_for_ts(f)
         assert "Hybrid_Hess {0 1 4} end" in f.getvalue()
 
-    def test_hybrid_hess_without_atoms_raises(self, make_orca_writer):
+    def test_hybrid_hess_without_atoms_raises(self):
         settings = ORCATSJobSettings(hybrid_hess=True)
         writer = make_orca_writer(settings)
         with pytest.raises(AssertionError, match="No atoms"):
             writer._write_hessian_block_for_ts(io.StringIO())
 
-    def test_trust_radius_negative_is_fixed(self, make_orca_writer):
+    def test_trust_radius_negative_is_fixed(self):
         settings = ORCATSJobSettings(trust_radius=-0.3)
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2105,7 +2092,7 @@ class TestHessianBlockForTS:
         assert "Trust -0.3" in out
         assert "fixed trust radius" in out
 
-    def test_trust_radius_positive_is_update(self, make_orca_writer):
+    def test_trust_radius_positive_is_update(self):
         settings = ORCATSJobSettings(trust_radius=0.3)
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2114,7 +2101,7 @@ class TestHessianBlockForTS:
         assert "Trust 0.3" in out
         assert "trust radius update" in out
 
-    def test_trust_radius_zero_writes_neither_comment(self, make_orca_writer):
+    def test_trust_radius_zero_writes_neither_comment(self):
         settings = ORCATSJobSettings(trust_radius=0)
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2124,13 +2111,13 @@ class TestHessianBlockForTS:
         assert "fixed trust radius" not in out
         assert "trust radius update" not in out
 
-    def test_scants_requires_modred(self, make_orca_writer):
+    def test_scants_requires_modred(self):
         settings = ORCATSJobSettings(tssearch_type="scants")
         writer = make_orca_writer(settings)
         with pytest.raises(AssertionError, match="No modred"):
             writer._write_hessian_block_for_ts(io.StringIO())
 
-    def test_scants_writes_scan_block(self, make_orca_writer):
+    def test_scants_writes_scan_block(self):
         settings = ORCATSJobSettings(
             tssearch_type="scants",
             scants_modred={
@@ -2145,7 +2132,7 @@ class TestHessianBlockForTS:
         writer._write_hessian_block_for_ts(f)
         assert "Scan" in f.getvalue()
 
-    def test_full_scan_writes_flag(self, make_orca_writer):
+    def test_full_scan_writes_flag(self):
         settings = ORCATSJobSettings(full_scan=True)
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2154,13 +2141,13 @@ class TestHessianBlockForTS:
 
 
 class TestHessianBlockDispatch:
-    def test_non_ts_settings_no_hessian_block(self, make_orca_writer):
+    def test_non_ts_settings_no_hessian_block(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_hessian_block(f)
         assert f.getvalue() == ""
 
-    def test_ts_settings_dispatches(self, make_orca_writer):
+    def test_ts_settings_dispatches(self):
         writer = make_orca_writer(ORCATSJobSettings())
         f = io.StringIO()
         writer._write_hessian_block(f)
@@ -2168,14 +2155,14 @@ class TestHessianBlockDispatch:
 
 
 class TestIrcBlockForIrc:
-    def test_no_irc_specific_options_writes_nothing(self, make_orca_writer):
+    def test_no_irc_specific_options_writes_nothing(self):
         settings = ORCAIRCJobSettings()
         writer = make_orca_writer(settings)
         f = io.StringIO()
         writer._write_irc_block_for_irc(f)
         assert f.getvalue() == ""
 
-    def test_maxiter_option_written(self, make_orca_writer):
+    def test_maxiter_option_written(self):
         settings = ORCAIRCJobSettings(maxiter=20)
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2185,9 +2172,7 @@ class TestIrcBlockForIrc:
         assert "maxiter 20" in out
         assert out.rstrip().endswith("end")
 
-    def test_inithess_read_requires_hess_filename(
-        self, tmp_path, make_orca_writer
-    ):
+    def test_inithess_read_requires_hess_filename(self, tmp_path):
         hess_file = tmp_path / "start.hess"
         hess_file.write_text("fake hessian")
         settings = ORCAIRCJobSettings(
@@ -2200,30 +2185,26 @@ class TestIrcBlockForIrc:
         assert "inithess read" in out
         assert f'Hess_Filename "{hess_file}"' in out
 
-    def test_inithess_read_without_hess_filename_raises(
-        self, make_orca_writer
-    ):
+    def test_inithess_read_without_hess_filename_raises(self):
         settings = ORCAIRCJobSettings(inithess="read")
         writer = make_orca_writer(settings)
         with pytest.raises(AssertionError, match="No Hessian file"):
             writer._write_irc_block_for_irc(io.StringIO())
 
-    def test_inithess_calc_anfreq_no_filename_needed(self, make_orca_writer):
+    def test_inithess_calc_anfreq_no_filename_needed(self):
         settings = ORCAIRCJobSettings(inithess="calc_anfreq")
         writer = make_orca_writer(settings)
         f = io.StringIO()
         writer._write_irc_block_for_irc(f)
         assert "inithess calc_anfreq" in f.getvalue()
 
-    def test_monitor_internals_requires_internal_modred(
-        self, make_orca_writer
-    ):
+    def test_monitor_internals_requires_internal_modred(self):
         settings = ORCAIRCJobSettings(monitor_internals=True)
         writer = make_orca_writer(settings)
         with pytest.raises(AssertionError, match="internal modred"):
             writer._write_irc_block_for_irc(io.StringIO())
 
-    def test_monitor_internals_writes_coordinates(self, make_orca_writer):
+    def test_monitor_internals_writes_coordinates(self):
         settings = ORCAIRCJobSettings(
             monitor_internals=True, internal_modred=[[1, 2], [5, 6]]
         )
@@ -2235,9 +2216,7 @@ class TestIrcBlockForIrc:
         assert "{ B 0 1 }" in out
         assert "{ B 4 5 }" in out
 
-    def test_monitor_internals_false_writes_nothing_for_it(
-        self, make_orca_writer
-    ):
+    def test_monitor_internals_false_writes_nothing_for_it(self):
         settings = ORCAIRCJobSettings(monitor_internals=False)
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2254,7 +2233,7 @@ class TestIrcBlockForIrc:
             ("sd_corr_parabolicfit", "SD_Corr_ParabolicFit True"),
         ],
     )
-    def test_boolean_flag_options(self, key, expected_text, make_orca_writer):
+    def test_boolean_flag_options(self, key, expected_text):
         settings = ORCAIRCJobSettings(**{key: True})
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2271,7 +2250,7 @@ class TestIrcBlockForIrc:
             "sd_corr_parabolicfit",
         ],
     )
-    def test_boolean_flag_options_false_omitted(self, key, make_orca_writer):
+    def test_boolean_flag_options_false_omitted(self, key):
         settings = ORCAIRCJobSettings(**{key: False})
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2282,13 +2261,13 @@ class TestIrcBlockForIrc:
 
 
 class TestIrcBlockDispatch:
-    def test_non_irc_settings_writes_nothing(self, make_orca_writer):
+    def test_non_irc_settings_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_irc_block(f)
         assert f.getvalue() == ""
 
-    def test_irc_settings_dispatches(self, make_orca_writer):
+    def test_irc_settings_dispatches(self):
         writer = make_orca_writer(ORCAIRCJobSettings(maxiter=5))
         f = io.StringIO()
         writer._write_irc_block(f)
@@ -2296,19 +2275,19 @@ class TestIrcBlockDispatch:
 
 
 class TestNebBlock:
-    def test_missing_nimages_raises(self, make_orca_writer):
+    def test_missing_nimages_raises(self):
         settings = ORCANEBJobSettings(ending_xyzfile="product.xyz")
         writer = make_orca_writer(settings)
         with pytest.raises(AssertionError, match="number of images"):
             _ = writer.neb_block
 
-    def test_missing_geometry_raises(self, make_orca_writer):
+    def test_missing_geometry_raises(self):
         settings = ORCANEBJobSettings(nimages=8)
         writer = make_orca_writer(settings)
         with pytest.raises(AssertionError, match="valid input geometry"):
             _ = writer.neb_block
 
-    def test_ending_xyzfile_basic_block(self, make_orca_writer):
+    def test_ending_xyzfile_basic_block(self):
         settings = ORCANEBJobSettings(
             nimages=8, ending_xyzfile="/some/path/product.xyz"
         )
@@ -2320,7 +2299,7 @@ class TestNebBlock:
         assert "PREOPT_ENDS False" in block
         assert block.endswith("end")
 
-    def test_preopt_ends_true(self, make_orca_writer):
+    def test_preopt_ends_true(self):
         settings = ORCANEBJobSettings(
             nimages=8,
             ending_xyzfile="product.xyz",
@@ -2329,7 +2308,7 @@ class TestNebBlock:
         writer = make_orca_writer(settings)
         assert "PREOPT_ENDS True" in writer.neb_block
 
-    def test_intermediate_xyzfile_included(self, make_orca_writer):
+    def test_intermediate_xyzfile_included(self):
         settings = ORCANEBJobSettings(
             nimages=8,
             ending_xyzfile="product.xyz",
@@ -2338,9 +2317,7 @@ class TestNebBlock:
         writer = make_orca_writer(settings)
         assert 'NEB_TS_XYZFILE "ts_guess.xyz"' in writer.neb_block
 
-    def test_restart_file_takes_precedence_and_skips_preopt(
-        self, make_orca_writer
-    ):
+    def test_restart_file_takes_precedence_and_skips_preopt(self):
         settings = ORCANEBJobSettings(
             nimages=8,
             ending_xyzfile="product.xyz",
@@ -2352,7 +2329,7 @@ class TestNebBlock:
         assert "NEB_END_XYZFILE" not in block
         assert "PREOPT_ENDS" not in block
 
-    def test_write_neb_block_for_neb_matches_property(self, make_orca_writer):
+    def test_write_neb_block_for_neb_matches_property(self):
         settings = ORCANEBJobSettings(nimages=8, ending_xyzfile="product.xyz")
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2360,7 +2337,7 @@ class TestNebBlock:
         written = f.getvalue().rstrip("\n")
         assert written == writer.neb_block
 
-    def test_write_neb_block_for_neb_with_restart_file(self, make_orca_writer):
+    def test_write_neb_block_for_neb_with_restart_file(self):
         """The file-writing method (unlike the neb_block property test
         above, which uses ending_xyzfile) also needs direct coverage
         of its own restarting_xyzfile branch."""
@@ -2379,13 +2356,13 @@ class TestNebBlock:
 
 
 class TestNebBlockDispatch:
-    def test_non_neb_settings_writes_nothing(self, make_orca_writer):
+    def test_non_neb_settings_writes_nothing(self):
         writer = make_orca_writer(ORCAJobSettings())
         f = io.StringIO()
         writer._write_neb_block(f)
         assert f.getvalue() == ""
 
-    def test_neb_settings_dispatches(self, make_orca_writer):
+    def test_neb_settings_dispatches(self):
         settings = ORCANEBJobSettings(nimages=4, ending_xyzfile="product.xyz")
         writer = make_orca_writer(settings)
         f = io.StringIO()
@@ -2394,14 +2371,14 @@ class TestNebBlockDispatch:
 
 
 class TestConstrainedAtoms:
-    def test_no_frozen_atoms_writes_nothing(self, make_orca_writer):
+    def test_no_frozen_atoms_writes_nothing(self):
         molecule = MagicMock(frozen_atoms=None)
         writer = make_orca_writer(ORCAJobSettings(), molecule=molecule)
         f = io.StringIO()
         writer._write_constrained_atoms(f)
         assert f.getvalue() == ""
 
-    def test_frozen_atoms_written_0_indexed(self, make_orca_writer):
+    def test_frozen_atoms_written_0_indexed(self):
         molecule = MagicMock(frozen_atoms=[-1, 0, -1])
         writer = make_orca_writer(ORCAJobSettings(), molecule=molecule)
         f = io.StringIO()
@@ -2413,7 +2390,7 @@ class TestConstrainedAtoms:
         assert "{ C 1 C }" not in out
         assert out.rstrip().endswith("end")
 
-    def test_invert_constraints_flag(self, make_orca_writer):
+    def test_invert_constraints_flag(self):
         molecule = MagicMock(frozen_atoms=[-1])
         writer = make_orca_writer(
             ORCAJobSettings(invert_constraints=True), molecule=molecule
@@ -2424,18 +2401,18 @@ class TestConstrainedAtoms:
 
 
 class TestChargeAndMultiplicity:
-    def test_direct_charge_and_multiplicity(self, make_orca_writer):
+    def test_direct_charge_and_multiplicity(self):
         writer = make_orca_writer(ORCAJobSettings(charge=1, multiplicity=2))
         f = io.StringIO()
         writer._write_charge_and_multiplicity(f)
         assert f.getvalue() == "* xyz 1 2\n"
 
-    def test_missing_both_raises(self, make_orca_writer):
+    def test_missing_both_raises(self):
         writer = make_orca_writer(ORCAJobSettings())
         with pytest.raises(AssertionError, match="Charge and multiplicity"):
             writer._write_charge_and_multiplicity(io.StringIO())
 
-    def test_qmmm_without_charge_high_raises(self, make_orca_writer):
+    def test_qmmm_without_charge_high_raises(self):
         # The QMMM coordinate line ("* xyz ...") must reflect the
         # high-level (QM) region's own charge/multiplicity, not the
         # whole-system total -- using total here could silently write

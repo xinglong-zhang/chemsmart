@@ -22,6 +22,7 @@ from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.io.xtb.route import XTBRoute
 from chemsmart.utils.constants import kcal_per_mol_to_hartree
+from tests.helpers import bare_xtb_input
 
 
 class TestXTBRoute:
@@ -3018,11 +3019,11 @@ class TestXTBInputFileNotFound:
 
 
 class TestXTBInputGetKey:
-    def test_group_not_present_returns_default(self, bare_xtb_input):
+    def test_group_not_present_returns_default(self):
         inp = bare_xtb_input({})
         assert inp._get_key("cube", "step", "0.4") == "0.4"
 
-    def test_key_not_present_in_group_returns_default(self, bare_xtb_input):
+    def test_key_not_present_in_group_returns_default(self):
         inp = bare_xtb_input({"cube": ["boff=3.0"]})
         assert inp._get_key("cube", "step", "0.4") == "0.4"
 
@@ -3051,11 +3052,11 @@ class TestXTBInputChargeAndSpin:
     ):
         assert malformed_xtb_input.spin == 0
 
-    def test_charge_default_when_group_absent(self, bare_xtb_input):
+    def test_charge_default_when_group_absent(self):
         inp = bare_xtb_input({})
         assert inp.charge == 0
 
-    def test_spin_default_when_group_absent(self, bare_xtb_input):
+    def test_spin_default_when_group_absent(self):
         inp = bare_xtb_input({})
         assert inp.spin == 0
 
@@ -3068,21 +3069,21 @@ class TestXTBInputNoneOnInvalidRatherThanNumericDefault:
     def test_atom_type_none_on_malformed_value(self, malformed_xtb_input):
         assert malformed_xtb_input.atom_type is None
 
-    def test_atom_type_none_when_key_absent(self, bare_xtb_input):
+    def test_atom_type_none_when_key_absent(self):
         inp = bare_xtb_input({})
         assert inp.atom_type is None
 
     def test_modef_n_none_on_malformed_value(self, malformed_xtb_input):
         assert malformed_xtb_input.modef_n is None
 
-    def test_modef_n_none_when_key_absent(self, bare_xtb_input):
+    def test_modef_n_none_when_key_absent(self):
         inp = bare_xtb_input({})
         assert inp.modef_n is None
 
     def test_mode_following_none_on_malformed_value(self, malformed_xtb_input):
         assert malformed_xtb_input.mode_following is None
 
-    def test_mode_following_none_when_key_absent(self, bare_xtb_input):
+    def test_mode_following_none_when_key_absent(self):
         inp = bare_xtb_input({})
         assert inp.mode_following is None
 
@@ -3105,13 +3106,11 @@ class TestXTBInputOptimizationLevelFallback:
             ("3", "extreme"),
         ],
     )
-    def test_integer_optlevel_maps_to_keyword(
-        self, int_level, expected, bare_xtb_input
-    ):
+    def test_integer_optlevel_maps_to_keyword(self, int_level, expected):
         inp = bare_xtb_input({"opt": [f"optlevel={int_level}"]})
         assert inp.optimization_level == expected
 
-    def test_out_of_range_integer_falls_back_to_normal(self, bare_xtb_input):
+    def test_out_of_range_integer_falls_back_to_normal(self):
         inp = bare_xtb_input({"opt": ["optlevel=99"]})
         assert inp.optimization_level == "normal"
 
@@ -3122,7 +3121,7 @@ class TestXTBInputBooleanKeywordProperties:
     so any non-"true" string (not just a literal "false") yields
     False -- confirmed here rather than assumed."""
 
-    def test_non_true_string_is_falsy(self, bare_xtb_input):
+    def test_non_true_string_is_falsy(self):
         inp = bare_xtb_input(
             {
                 "embedding": ["es=nonsense"],
