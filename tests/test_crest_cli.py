@@ -7,6 +7,7 @@ from chemsmart.cli.crest.crest import crest
 from chemsmart.cli.run import run
 from chemsmart.cli.sub import sub
 from chemsmart.jobs.crest import CRESTConformerSearchJob
+from tests.helpers import run_crest_and_capture_settings
 
 
 class TestCRESTHelp:
@@ -27,9 +28,7 @@ class TestCRESTHelp:
 
 
 class TestCRESTCLISettings:
-    def test_conformers_settings_merge(
-        self, single_molecule_xyz_file, run_crest_and_capture_settings
-    ):
+    def test_conformers_settings_merge(self, single_molecule_xyz_file):
         result, settings, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
@@ -64,9 +63,7 @@ class TestCRESTCLISettings:
         assert settings.solvent_id == "water"
         assert settings.energy_window == 8.0
 
-    def test_conformers_default_settings(
-        self, single_molecule_xyz_file, run_crest_and_capture_settings
-    ):
+    def test_conformers_default_settings(self, single_molecule_xyz_file):
         result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
@@ -86,9 +83,7 @@ class TestCRESTCLISettings:
         assert settings.gfn_version == "gfn2"
         assert settings.constraints is None
 
-    def test_constrained_settings(
-        self, single_molecule_xyz_file, run_crest_and_capture_settings
-    ):
+    def test_constrained_settings(self, single_molecule_xyz_file):
         result, settings, _ = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
             [
@@ -183,7 +178,7 @@ class TestCRESTCLILabelFallback:
         assert label == "output_suffix"
 
     def test_append_label_suffixes_filename_derived_label(
-        self, single_molecule_xyz_file, run_crest_and_capture_settings
+        self, single_molecule_xyz_file
     ):
         result, _, mock_job_cls = run_crest_and_capture_settings(
             "chemsmart.jobs.crest.conformers.CRESTConformerSearchJob",
