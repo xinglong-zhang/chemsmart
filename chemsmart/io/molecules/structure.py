@@ -1703,7 +1703,11 @@ class Molecule:
             Molecule or list[Molecule]: Molecule object(s) from CIF file.
 
         Note:
-            - CIF files can contain crystal structure data.
+            - CIF files contain crystal structure data; ASE expands the
+              symmetry, so the returned structure is the crystallographic
+              unit cell rather than a discrete molecule. Use
+              ``Molecule.from_ccdc()`` with a licensed local CSD Python
+              API installation to obtain the deposited discrete molecule.
             - ASE is used to read the CIF file format.
             - For multi-structure CIF files, use index to select specific structures.
         """
@@ -1991,10 +1995,19 @@ class Molecule:
         return None
 
     @classmethod
-    @lru_cache(maxsize=128)
     def from_ccdc(cls, deposition_number, return_list=False):
         """
         Create molecule object from CCDC database.
+
+        Uses the local, licensed CSD Python API when available (returns the
+        deposited discrete molecule); otherwise falls back to downloading
+        the CIF file from the CCDC web service (returns the
+        crystallographic structure read from the CIF).
+
+        Note: no in-memory caching is applied here, since caching the
+        Molecule object would also cache the ``return_list``
+        transformation; retrieved CIF files are instead cached on disk by
+        :func:`chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc`.
 
         Args:
             deposition_number (str or int): CCDC deposition number (e.g., 1428476)
