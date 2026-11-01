@@ -1673,3 +1673,35 @@ def make_executable_file(path):
     ``PATH``."""
     write_text_file(path, "#!/bin/sh\n")
     os.chmod(str(path), 0o755)
+
+
+# ── xTB CLI helpers ──
+def invoke_xtb_cli(cli_args, ctx_obj=None, *, catch_exceptions=False):
+    """Invoke the ``xtb`` CLI group with ``cli_args`` and return the Click
+    result. ``ctx_obj`` defaults to ``{"jobrunner": MagicMock()}``; pass
+    ``catch_exceptions=True`` to assert on ``result.exception`` /
+    ``result.output`` instead of letting errors propagate."""
+    from chemsmart.cli.xtb.xtb import xtb as xtb_cli
+
+    return CliRunner().invoke(
+        xtb_cli,
+        cli_args,
+        obj={"jobrunner": MagicMock()} if ctx_obj is None else ctx_obj,
+        catch_exceptions=catch_exceptions,
+    )
+
+
+def run_xtb_and_capture_settings(job_path, args, *, catch_exceptions=False):
+    """Run the ``xtb`` CLI with the job class at ``job_path`` patched and
+    capture the ``settings`` it was constructed with (``None`` if it never
+    was). Returns ``(result, settings, mock_job_cls)``; inspect
+    ``mock_job_cls`` for labels, call counts, etc."""
+    mock_job = MagicMock()
+    with patch(job_path, return_value=mock_job) as mock_job_cls:
+        result = invoke_xtb_cli(args, catch_exceptions=catch_exceptions)
+        settings = (
+            mock_job_cls.call_args[1]["settings"]
+            if mock_job_cls.call_args is not None
+            else None
+        )
+    return result, settings, mock_job_cls
