@@ -1205,6 +1205,30 @@ def invoke_mol_cli():
 
 
 @pytest.fixture()
+def run_mol_and_capture_kwargs(invoke_mol_cli):
+    """Run the ``mol`` CLI with ``job_class_path`` patched and capture the
+    keyword arguments the job class was constructed with (``None`` if it
+    never was)::
+
+        result, kwargs = run_mol_and_capture_kwargs(
+            "chemsmart.jobs.mol.nci.PyMOLNCIJob",
+            ["-f", xyz_file, "nci"],
+        )
+    """
+
+    def _run(job_class_path, cli_args):
+        with patch(job_class_path) as mock_job_cls:
+            mock_job_cls.return_value = MagicMock()
+            result = invoke_mol_cli(cli_args)
+            call_kwargs = None
+            if mock_job_cls.call_args is not None:
+                call_kwargs = mock_job_cls.call_args.kwargs
+        return result, call_kwargs
+
+    return _run
+
+
+@pytest.fixture()
 def chemsmart_templates_config(mocker):
     """
     Point USER_CONFIG_DIR to the local templates directory.
