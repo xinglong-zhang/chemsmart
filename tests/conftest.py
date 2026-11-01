@@ -415,24 +415,116 @@ def run_thermochemistry_with_directory():
 
 @pytest.fixture()
 def run_gaussian_and_capture_settings():
-    """Run the gaussian CLI with a patched job class and capture settings."""
+    """Run the gaussian CLI with a patched job class and capture settings.
 
-    def _run(job_class_path, cli_args, ctx_obj):
+    ``job_class_path`` is either a dotted path for :func:`patch` or a
+    ``(target, attribute)`` tuple for :func:`patch.object` (needed when
+    the dotted path is shadowed, e.g. ``chemsmart.cli.gaussian.traj``).
+
+    Pass ``job_cls`` to supply the mock yourself and inspect its calls
+    (labels, molecules, call counts) afterwards. Pass
+    ``catch_exceptions=True`` to assert on ``result.exception`` instead
+    of letting errors propagate.
+    """
+
+    def _run(
+        job_class_path,
+        cli_args,
+        ctx_obj,
+        *,
+        job_cls=None,
+        catch_exceptions=False,
+    ):
         runner = CliRunner()
         captured_settings = None
+        if job_cls is None:
+            job_cls = MagicMock(name="job_cls")
+            job_cls.return_value = MagicMock()
 
-        with patch(job_class_path) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
+        if isinstance(job_class_path, tuple):
+            patcher = patch.object(*job_class_path, new=job_cls)
+        else:
+            patcher = patch(job_class_path, new=job_cls)
+
+        with patcher as mock_job_cls:
             result = runner.invoke(
                 gaussian,
                 cli_args,
                 obj=ctx_obj,
-                catch_exceptions=False,
+                catch_exceptions=catch_exceptions,
             )
             if mock_job_cls.call_args is not None:
                 captured_settings = mock_job_cls.call_args[1].get("settings")
 
         return result, captured_settings
+
+    return _run
+
+
+@pytest.fixture()
+def run_gaussian_qmmm_callback():
+    """Invoke the ``opt qmmm`` callback directly and return the job mock.
+
+    Bypasses the real "opt"/"ts"/... parent commands: every real parent
+    unconditionally sets ``ctx.obj["parent_settings"]`` to a real settings
+    object (see e.g. ``chemsmart/cli/gaussian/opt.py``), so
+    ``parent_settings`` being None, ``jobtype`` being None (no
+    ``ctx.parent``), and absent ``parent_jobtype``/``high_level_atoms``
+    are branches no genuine CLI invocation reaches. Building ``ctx.obj``
+    by hand reaches them directly. Keyword arguments override entries in
+    the default ``ctx.obj``.
+    """
+
+    def _run(**ctx_obj_overrides):
+        opt_mod = importlib.import_module("chemsmart.cli.gaussian.opt")
+        qmmm_cmd = opt_mod.opt.commands["qmmm"]
+
+        project_settings = MagicMock()
+        project_settings.qmmm_settings.return_value = None
+        molecule = MagicMock()
+        molecule.frozen_atoms = None
+
+        ctx_obj = {
+            "jobrunner": MagicMock(),
+            "project_settings": project_settings,
+            "label": "test",
+            "molecules": [molecule],
+        }
+        ctx_obj.update(ctx_obj_overrides)
+
+        ctx = click.Context(qmmm_cmd)
+        ctx.obj = ctx_obj
+
+        kwargs = dict(
+            high_level_functional="b3lyp",
+            high_level_basis="6-31g",
+            high_level_force_field=None,
+            medium_level_functional=None,
+            medium_level_basis=None,
+            medium_level_force_field=None,
+            low_level_functional=None,
+            low_level_basis=None,
+            low_level_force_field=None,
+            charge_total=None,
+            mult_total=None,
+            charge_intermediate=None,
+            mult_intermediate=None,
+            charge_high=None,
+            mult_high=None,
+            high_level_atoms=None,
+            medium_level_atoms=None,
+            low_level_atoms=None,
+            bonded_atoms=None,
+            scale_factors=None,
+            mm_atom_info=None,
+            mm_parameters_file=None,
+        )
+
+        with patch("chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob") as mock_job:
+            mock_job.return_value = MagicMock()
+            with ctx:
+                qmmm_cmd.callback(**kwargs)
+            return mock_job
 
     return _run
 
