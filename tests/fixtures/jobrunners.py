@@ -19,6 +19,7 @@ from chemsmart.jobs.nciplot.runner import (
     NCIPLOTJobRunner,
 )
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+from chemsmart.jobs.thermochemistry.runner import ThermochemistryJobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
 from tests.helpers import (
@@ -190,6 +191,12 @@ def pymol_ircmovie_jobrunner(pbs_server):
 @pytest.fixture()
 def pymol_mo_jobrunner(pbs_server):
     return PyMOLMOJobRunner(server=pbs_server, scratch=False)
+
+
+@pytest.fixture()
+def thermochemistry_jobrunner(pbs_server):
+    """:class:`ThermochemistryJobRunner` on ``pbs_server``, no scratch."""
+    return ThermochemistryJobRunner(server=pbs_server, scratch=False)
 
 
 @pytest.fixture()

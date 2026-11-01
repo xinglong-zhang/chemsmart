@@ -1589,3 +1589,61 @@ def read_stripped_text(filepath):
     stripped (e.g. an expected-output reference file)."""
     with open(filepath, "r") as f:
         return f.read().strip()
+
+
+# ── thermochemistry / Boltzmann CLI helpers ──
+BOLTZMANN_JOB = "chemsmart.jobs.thermochemistry.boltzmann.BoltzmannAverageThermochemistryJob"
+
+
+def run_boltzmann_and_capture_kwargs(cli_args, obj=None):
+    """Run the ``thermochemistry ... boltzmann`` CLI with a patched job class
+    and capture the constructor call kwargs, plus the mock job instance (to
+    check whether ``compute_boltzmann_averages``/``show_results`` were
+    invoked). ``obj`` (default ``{}``) is the Click context object.
+    Returns ``(result, call_kwargs, mock_instance)``."""
+    obj = {} if obj is None else obj
+    with patch(BOLTZMANN_JOB) as mock_job_cls:
+        mock_instance = MagicMock()
+        mock_job_cls.return_value = mock_instance
+        result = CliRunner().invoke(
+            thermochemistry,
+            cli_args,
+            obj=obj,
+            catch_exceptions=True,
+        )
+        call_kwargs = None
+        if mock_job_cls.call_args is not None:
+            call_kwargs = mock_job_cls.call_args.kwargs
+    return result, call_kwargs, mock_instance
+
+
+def run_thermochemistry_directory_mode(cli_args, obj=None):
+    """Invoke ``thermochemistry <cli_args> boltzmann`` with a patched
+    Boltzmann job class, so the group's own directory/filename-resolution
+    logic runs (populating ``obj``, the context object) without reaching
+    the real per-job computation. Returns ``(result, obj)``."""
+    obj = {} if obj is None else obj
+    result, _, _ = run_boltzmann_and_capture_kwargs(
+        [*cli_args, "boltzmann"], obj
+    )
+    return result, obj
+
+
+def make_spec_thermochemistry_mock(**attrs):
+    """Build a ``MagicMock(spec=Thermochemistry)`` with the given attributes,
+    for calling ``Thermochemistry`` property/method implementations on a
+    controlled stand-in."""
+    from chemsmart.analysis.thermochemistry import Thermochemistry
+
+    mock = MagicMock(spec=Thermochemistry)
+    for key, value in attrs.items():
+        setattr(mock, key, value)
+    return mock
+
+
+def thermochemistry_cached_value(name, mock):
+    """Evaluate ``Thermochemistry``'s cached property ``name`` on ``mock``
+    (calls the underlying function, bypassing the cache)."""
+    from chemsmart.analysis.thermochemistry import Thermochemistry
+
+    return Thermochemistry.__dict__[name].func(mock)
