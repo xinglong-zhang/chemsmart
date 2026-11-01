@@ -7,6 +7,7 @@ import pytest
 from chemsmart.jobs.crest.conformers import CRESTConformerSearchJob
 from chemsmart.jobs.crest.job import CRESTJob
 from chemsmart.jobs.crest.settings import CRESTJobSettings
+from tests.helpers import write_text_file
 
 
 class TestCRESTJobConstruction:
@@ -29,6 +30,23 @@ class TestCRESTJobConstruction:
             molecule=a_molecule, settings=crest_settings, label="mylabel"
         )
         assert job.label == "mylabel"
+
+    @pytest.mark.parametrize("label", ["mylabel", None])
+    def test_construction_does_not_create_job_folder(
+        self, a_molecule, crest_settings, tmp_path, monkeypatch, label
+    ):
+        """Building a job only computes ``<cwd>/<label>``; the folder is
+        created by the job runner when the job actually runs (regression:
+        it used to be created at construction time, leaving empty folders
+        such as ``mylabel/`` or ``H2O/`` wherever a job object was built).
+        ``label=None`` covers the default chemical-formula label."""
+        monkeypatch.chdir(tmp_path)
+        job = CRESTJob(
+            molecule=a_molecule, settings=crest_settings, label=label
+        )
+        assert job.folder == os.path.join(os.getcwd(), job.label)
+        assert not os.path.exists(job.folder)
+        assert os.listdir(tmp_path) == []
 
     def test_settings_class_returns_expected_type(self):
         assert CRESTJob.settings_class() is CRESTJobSettings
@@ -152,10 +170,8 @@ class TestCRESTJobBackupAndOutput:
         job = CRESTJob(
             molecule=a_molecule, settings=crest_settings, label="mylabel"
         )
-        with open(job.xyzfile, "w") as f:
-            f.write("xyz")
-        with open(job.outputfile, "w") as f:
-            f.write("output")
+        write_text_file(job.xyzfile, "xyz")
+        write_text_file(job.outputfile, "output")
 
         job._backup_files()
 
@@ -180,8 +196,7 @@ class TestCRESTJobBackupAndOutput:
         job = CRESTJob(
             molecule=a_molecule, settings=crest_settings, label="mylabel"
         )
-        with open(job.outputfile, "w") as f:
-            f.write("dummy output")
+        write_text_file(job.outputfile, "dummy output")
 
         mock_output = MagicMock()
         with patch(
@@ -200,8 +215,7 @@ class TestCRESTJobBackupAndOutput:
         job = CRESTJob(
             molecule=a_molecule, settings=crest_settings, label="mylabel"
         )
-        with open(job.outputfile, "w") as f:
-            f.write("dummy output")
+        write_text_file(job.outputfile, "dummy output")
 
         with patch(
             "chemsmart.io.crest.output.CRESTOutput",

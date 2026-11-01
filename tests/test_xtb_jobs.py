@@ -7,6 +7,7 @@ import pytest
 from chemsmart.jobs.xtb.job import XTBJob
 from chemsmart.jobs.xtb.opt import XTBOptJob
 from chemsmart.jobs.xtb.settings import XTBJobSettings
+from tests.helpers import write_text_file
 
 
 class TestXTBJobs:
@@ -71,6 +72,21 @@ class TestXTBJobConstruction:
         )
         assert job.label == "mylabel"
 
+    @pytest.mark.parametrize("label", ["mylabel", None])
+    def test_construction_does_not_create_job_folder(
+        self, a_molecule, xtb_settings, tmp_path, monkeypatch, label
+    ):
+        """Building a job only computes ``<cwd>/<label>``; the folder is
+        created by the job runner when the job actually runs (regression:
+        it used to be created at construction time, leaving empty folders
+        such as ``mylabel/`` or ``H2O/`` wherever a job object was built).
+        ``label=None`` covers the default chemical-formula label."""
+        monkeypatch.chdir(tmp_path)
+        job = XTBJob(molecule=a_molecule, settings=xtb_settings, label=label)
+        assert job.folder == os.path.join(os.getcwd(), job.label)
+        assert not os.path.exists(job.folder)
+        assert os.listdir(tmp_path) == []
+
     def test_settings_class_returns_expected_type(self):
         assert XTBJob.settings_class() is XTBJobSettings
 
@@ -119,8 +135,7 @@ class TestXTBJobBackupAndOutput:
             job.outputfile,
             job.restartfile,
         ]:
-            with open(f, "w") as fh:
-                fh.write("data")
+            write_text_file(f, "data")
 
         job._backup_files()
 
@@ -147,8 +162,7 @@ class TestXTBJobBackupAndOutput:
         job = XTBJob(
             molecule=a_molecule, settings=xtb_settings, label="mylabel"
         )
-        with open(job.outputfile, "w") as f:
-            f.write("dummy output")
+        write_text_file(job.outputfile, "dummy output")
 
         mock_output = MagicMock()
         with patch(
@@ -167,8 +181,7 @@ class TestXTBJobBackupAndOutput:
         job = XTBJob(
             molecule=a_molecule, settings=xtb_settings, label="mylabel"
         )
-        with open(job.outputfile, "w") as f:
-            f.write("dummy output")
+        write_text_file(job.outputfile, "dummy output")
 
         with patch(
             "chemsmart.io.xtb.output.XTBOutput",
