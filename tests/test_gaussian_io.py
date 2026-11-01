@@ -956,25 +956,24 @@ class TestGaussian16InputDirectPropertyCoverage:
         assert g16.mem is not None
         assert g16.nproc is not None
 
-    def test_charge_and_multiplicity_fall_back_to_oniom_parsing(
+    def test_charge_and_multiplicity_parsed_as_ints_from_oniom_line(
         self, gaussian_qmmm_inputfile_3layer
     ):
         """When the charge/mult line has more than two numbers (as in a
-        combined-layer ONIOM line), _get_charge_and_multiplicity now
-        parses the line directly and returns ints (BUGS_FOUND.md #45
-        fix: previously this fell back to oniom parsing and returned
-        raw strings instead)."""
+        combined-layer ONIOM line), _get_charge_and_multiplicity parses
+        the line directly and returns ints. Regression test: it used to
+        fall back to oniom parsing and return raw strings."""
         g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_3layer)
         assert g16.charge == 0
         assert g16.multiplicity == 1
 
-    def test_oniom_charge_crashes_on_base_class_non_qmmm_input(
+    def test_base_class_has_no_oniom_charge_or_multiplicity(
         self, gaussian_qmmm_inputfile_2layer
     ):
-        """BUGS_FOUND.md #44 is fixed: oniom_charge/oniom_multiplicity/
-        _get_oniom_charge_and_multiplicity were moved off the base class
-        onto Gaussian16QMMMInput, so the base class simply has no such
-        attribute (instead of crashing on the missing self.partition)."""
+        """oniom_charge/oniom_multiplicity/_get_oniom_charge_and_multiplicity
+        live on Gaussian16QMMMInput only, so the base class has no such
+        attribute. Regression test: they used to be on the base class
+        and crashed on the missing self.partition for non-QMMM input."""
         g16 = Gaussian16Input(filename=gaussian_qmmm_inputfile_2layer)
         with pytest.raises(AttributeError, match="oniom_charge"):
             g16.oniom_charge
@@ -1137,9 +1136,9 @@ class TestGaussian16InputDirectPropertyCoverage:
     def test_qmmm_2layer_model_charge_and_multiplicity_resolved(
         self, gaussian_qmmm_inputfile_2layer
     ):
-        """BUGS_FOUND.md #45 (2-layer ONIOM model_charge/model_multiplicity
-        raising KeyError) is fixed: _get_oniom_charge_and_multiplicity now
-        maps the model pair for 2-layer systems instead of omitting it."""
+        """_get_oniom_charge_and_multiplicity maps the model pair for
+        2-layer ONIOM systems. Regression test: it used to omit it, so
+        model_charge/model_multiplicity raised KeyError."""
         g16 = Gaussian16QMMMInput(filename=gaussian_qmmm_inputfile_2layer)
         assert g16.model_charge == 0
         assert g16.model_multiplicity == 1

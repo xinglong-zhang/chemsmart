@@ -801,14 +801,11 @@ class TestGaussianCLIGroupValidation:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
-        """Previously BUG (see BUGS_FOUND.md #25): the intended "output"
-        label fallback for a filename-less (PubChem-only) job with no
-        -l/-a was unreachable -- `os.path.basename(filename)` at
-        gaussian.py's default-label branch was called unconditionally
-        on `filename` (None here) before the `if filename:` guard that
-        would skip it, crashing with a TypeError. Fixed upstream: the
-        unconditional call was removed, so this now falls back to
-        "output" as intended."""
+        """Regression test: a filename-less (PubChem-only) job with no
+        -l/-a falls back to the "output" label. The default-label branch
+        used to call `os.path.basename(filename)` unconditionally on
+        `filename` (None here) before the `if filename:` guard, crashing
+        with a TypeError."""
         pubchem_molecule = MagicMock(name="pubchem_molecule")
         mock_job_cls = MagicMock(name="mock_job_cls")
         with patch(
@@ -998,10 +995,10 @@ class TestGaussianCLIGroupValidation:
         make_cli_ctx_obj,
         run_gaussian_and_capture_settings,
     ):
-        """--rid alone (no -a/-l) takes the default-label elif branch
-        for the record_id suffix (later overwritten by the basename
-        recompute -- see BUGS_FOUND.md #25 -- but the branch itself
-        must still execute)."""
+        """--rid alone (no -a/-l) appends the record_id suffix to the
+        database basename in the default label, before the subcommand
+        suffix."""
+        mock_job_cls = MagicMock(name="mock_job_cls")
         result, settings = run_gaussian_and_capture_settings(
             "chemsmart.jobs.gaussian.opt.GaussianOptJob",
             [
@@ -1014,9 +1011,15 @@ class TestGaussianCLIGroupValidation:
                 "opt",
             ],
             make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+            job_cls=mock_job_cls,
         )
         assert result.exit_code == 0, result.output
         assert settings is not None
+        db_stem = os.path.splitext(os.path.basename(database_chemsmart_file))[
+            0
+        ]
+        label = mock_job_cls.call_args[1]["label"]
+        assert label == f"{db_stem}_RID-6de213a0_opt"
 
     def test_group_level_functional_and_basis_keywords_applied(
         self,
@@ -1076,12 +1079,9 @@ class TestGaussianCLIGroupValidation:
     def _direct_invoke_gaussian_group(self, **kwarg_overrides):
         """Call gaussian()'s own undecorated callback directly,
         bypassing Click's option parsing/validation entirely. Used to
-        reach a couple of defensive branches in the default-label
-        fallback chain that real CLI invocations can't trigger: an
-        empty (not None) filename sidesteps the unconditional
-        `os.path.basename(filename)` crash documented in
-        BUGS_FOUND.md #25, letting execution reach the `if filename:
-        ... else: label = "output"` branch below it."""
+        reach defensive branches in the default-label fallback chain
+        that real CLI invocations can't trigger, e.g. an empty (not
+        None) filename, or a ``None`` ``invoked_subcommand``."""
 
         real_fn = inspect.unwrap(gaussian.callback)
 
@@ -1125,11 +1125,11 @@ class TestGaussianCLIGroupValidation:
 
     def test_empty_filename_falls_back_to_output_label(self):
         """Covers the `if filename: ... else: label = "output"` False
-        arm directly, since a real CLI run can't reach it (filename is
-        either a real path or None, and None used to crash earlier per
-        BUGS_FOUND.md #25, now fixed). The subcommand suffix is
-        appended unconditionally (the old `if ctx.invoked_subcommand:`
-        guard was removed as part of that fix, since a real Click
+        arm with an empty-string filename, which a real CLI run never
+        passes (the real-CLI ``None`` case is covered by
+        test_pubchem_only_without_label_falls_back_to_output). The
+        subcommand suffix is appended unconditionally (the old
+        `if ctx.invoked_subcommand:` guard was removed, since a real Click
         invocation of this group always has a non-None
         `invoked_subcommand` by the time this callback runs), so this
         synthetic direct invocation with `_invoked_subcommand=None`
