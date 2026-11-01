@@ -530,6 +530,32 @@ def run_gaussian_qmmm_callback():
     return _run
 
 
+############ Gaussian Writer Fixtures ##################
+@pytest.fixture()
+def make_gaussian_writer():
+    """Factory for a ``GaussianInputWriter`` around a lightweight fake job.
+
+    Bypasses full Job construction so private writer methods can be
+    tested directly. The fake job exposes only ``settings``,
+    ``jobrunner`` (``num_cores=4``, ``mem_gb=8``), ``label`` and
+    ``molecule``.
+    """
+    from types import SimpleNamespace
+
+    from chemsmart.jobs.gaussian.writer import GaussianInputWriter
+
+    def _make(settings, molecule=None, label="testjob"):
+        job = SimpleNamespace(
+            settings=settings,
+            jobrunner=SimpleNamespace(num_cores=4, mem_gb=8),
+            label=label,
+            molecule=molecule,
+        )
+        return GaussianInputWriter(job=job)
+
+    return _make
+
+
 ############ Gaussian UV-Vis / pKa Job Fixtures ##################
 @pytest.fixture()
 def make_uvvis_job():
