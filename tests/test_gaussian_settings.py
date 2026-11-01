@@ -79,49 +79,57 @@ class TestGaussianJobSettings:
         assert sp_settings.solvent_model == "smd"
         assert sp_settings.solvent_id == "toluene"
 
-    def test_get_settings_from_yaml_no_defaults_file_gaussian(self, tmp_path):
-        project_yaml = tmp_path / "project.yaml"
-        project_yaml.write_text(
-            yaml.safe_dump({"gas": {"functional": "m062x"}, "solv": {}})
+    def test_get_settings_from_yaml_no_defaults_file_gaussian(
+        self, write_tmp_file
+    ):
+        project_yaml = write_tmp_file(
+            "project.yaml",
+            yaml.safe_dump({"gas": {"functional": "m062x"}, "solv": {}}),
         )
         all_project_settings = read_molecular_job_yaml(
-            str(project_yaml), program="gaussian"
+            project_yaml, program="gaussian"
         )
         assert all_project_settings["opt"]["functional"] == "m062x"
 
-    def test_get_settings_from_yaml_no_defaults_file_orca(self, tmp_path):
-        project_yaml = tmp_path / "project.yaml"
-        project_yaml.write_text(
-            yaml.safe_dump({"gas": {"functional": "m062x"}, "solv": {}})
+    def test_get_settings_from_yaml_no_defaults_file_orca(
+        self, write_tmp_file
+    ):
+        project_yaml = write_tmp_file(
+            "project.yaml",
+            yaml.safe_dump({"gas": {"functional": "m062x"}, "solv": {}}),
         )
         all_project_settings = read_molecular_job_yaml(
-            str(project_yaml), program="orca"
+            project_yaml, program="orca"
         )
         assert all_project_settings["opt"]["functional"] == "m062x"
 
-    def test_get_settings_from_yaml_no_defaults_file_xtb(self, tmp_path):
-        project_yaml = tmp_path / "project.yaml"
-        project_yaml.write_text(yaml.safe_dump({"gas": {}, "solv": {}}))
+    def test_get_settings_from_yaml_no_defaults_file_xtb(self, write_tmp_file):
+        project_yaml = write_tmp_file(
+            "project.yaml", yaml.safe_dump({"gas": {}, "solv": {}})
+        )
         all_project_settings = read_molecular_job_yaml(
-            str(project_yaml), program="xtb"
+            project_yaml, program="xtb"
         )
         # Falls back to XTBJobSettings.default() when no defaults.yaml.
         assert all_project_settings["opt"]["gfn_version"] == "gfn2"
         assert all_project_settings["opt"]["jobtype"] == "opt"
 
     def test_get_settings_from_yaml_no_defaults_file_other_program(
-        self, tmp_path
+        self, write_tmp_file
     ):
-        project_yaml = tmp_path / "project.yaml"
-        project_yaml.write_text(yaml.safe_dump({"solv": {}}))
+        project_yaml = write_tmp_file(
+            "project.yaml", yaml.safe_dump({"solv": {}})
+        )
         all_project_settings = read_molecular_job_yaml(
-            str(project_yaml), program="other"
+            project_yaml, program="other"
         )
         # default_config stays {} for an unrecognized program; jobtype is
         # still populated per job.
         assert all_project_settings["opt"]["jobtype"] == "opt"
 
-    def test_get_settings_from_yaml_gas_config_bad_key_raises(self, tmp_path):
+    def test_get_settings_from_yaml_gas_config_bad_key_raises(
+        self, write_tmp_file
+    ):
         # See BUGS_FOUND.md: read_molecular_job_yaml has an unguarded
         # duplicate call to update_dict_with_existing_keys(..., gas_config)
         # immediately before the try/except that's meant to catch exactly
@@ -129,34 +137,34 @@ class TestGaussianJobSettings:
         # always raises first, so the except branch is unreachable dead
         # code -- a bad key in gas_config always propagates as a ValueError
         # instead of triggering the documented qmmm_config fallback.
-        defaults_yaml = tmp_path / "defaults.yaml"
-        defaults_yaml.write_text(
-            yaml.safe_dump({"functional": None, "basis": None})
+        write_tmp_file(
+            "defaults.yaml",
+            yaml.safe_dump({"functional": None, "basis": None}),
         )
-        project_yaml = tmp_path / "project.yaml"
-        project_yaml.write_text(
+        project_yaml = write_tmp_file(
+            "project.yaml",
             yaml.safe_dump(
                 {
                     "gas": {"high_level_functional": "MN15"},
                     "solv": {},
                     "qmmm": {"functional": "pbe"},
                 }
-            )
+            ),
         )
         with pytest.raises(ValueError, match="high_level_functional"):
-            read_molecular_job_yaml(str(project_yaml), program="gaussian")
+            read_molecular_job_yaml(project_yaml, program="gaussian")
 
-    def test_get_settings_from_yaml_td_config(self, tmp_path):
-        defaults_yaml = tmp_path / "defaults.yaml"
-        defaults_yaml.write_text(
-            yaml.safe_dump({"functional": None, "basis": None})
+    def test_get_settings_from_yaml_td_config(self, write_tmp_file):
+        write_tmp_file(
+            "defaults.yaml",
+            yaml.safe_dump({"functional": None, "basis": None}),
         )
-        project_yaml = tmp_path / "project.yaml"
-        project_yaml.write_text(
-            yaml.safe_dump({"solv": {}, "td": {"functional": "cam-b3lyp"}})
+        project_yaml = write_tmp_file(
+            "project.yaml",
+            yaml.safe_dump({"solv": {}, "td": {"functional": "cam-b3lyp"}}),
         )
         all_project_settings = read_molecular_job_yaml(
-            str(project_yaml), program="gaussian"
+            project_yaml, program="gaussian"
         )
         assert all_project_settings["td"]["functional"] == "cam-b3lyp"
         assert all_project_settings["td"]["jobtype"] == "td"
@@ -1123,10 +1131,10 @@ class TestGaussianJobFromLogFile:
         assert settings.solvent_id is None
 
     def test_reads_oldform_redundant_coordinates_with_atomic_numbers(
-        self, tmp_path
+        self, write_tmp_file
     ):
-        outputfile = tmp_path / "old_form_numeric_coords.log"
-        outputfile.write_text(
+        outputfile = write_tmp_file(
+            "old_form_numeric_coords.log",
             "\n".join(
                 [
                     " ----------------------------------------------------------------------",
@@ -1141,9 +1149,9 @@ class TestGaussianJobFromLogFile:
                     " Normal termination of Gaussian 16 at Wed Nov  8 08:36:34 2023.",
                 ]
             )
-            + "\n"
+            + "\n",
         )
-        settings = GaussianJobSettings.from_logfile(str(outputfile))
+        settings = GaussianJobSettings.from_logfile(outputfile)
         assert settings.jobtype == "opt"
         assert settings.functional == "b3lyp"
         assert settings.basis == "gen"
@@ -3254,10 +3262,9 @@ class TestCustomSolventValidation:
         settings = GaussianJobSettings(custom_solvent="eps=78.4\n")
         assert settings.custom_solvent == "eps=78.4\n"
 
-    def test_custom_solvent_from_file(self, tmp_path):
-        solvent_file = tmp_path / "solvent.txt"
-        solvent_file.write_text("eps=78.4\nrsolv=1.0\n")
-        settings = GaussianJobSettings(custom_solvent=str(solvent_file))
+    def test_custom_solvent_from_file(self, write_tmp_file):
+        solvent_file = write_tmp_file("solvent.txt", "eps=78.4\nrsolv=1.0\n")
+        settings = GaussianJobSettings(custom_solvent=solvent_file)
         assert settings.custom_solvent == "eps=78.4\nrsolv=1.0\n"
 
     def test_set_custom_solvent_via_file_missing_raises(self):
@@ -3322,21 +3329,19 @@ class TestFromDatabase:
             )
 
     def test_structure_id_and_record_selector_mutually_exclusive(
-        self, tmp_path
+        self, write_tmp_file
     ):
-        db_file = tmp_path / "test.db"
-        db_file.write_text("")
+        db_file = write_tmp_file("test.db", "")
         with patch("chemsmart.database.database.Database"):
             with pytest.raises(ValueError, match="not both"):
                 GaussianJobSettings.from_database(
-                    filepath=str(db_file),
+                    filepath=db_file,
                     structure_id="abc123",
                     record_index=1,
                 )
 
-    def test_structure_id_not_found_raises(self, tmp_path):
-        db_file = tmp_path / "test.db"
-        db_file.write_text("")
+    def test_structure_id_not_found_raises(self, write_tmp_file):
+        db_file = write_tmp_file("test.db", "")
         mock_db = MagicMock()
         mock_db.get_structure_by_partial_id.return_value = "full-sid"
         mock_db.get_structure.return_value = None
@@ -3345,12 +3350,13 @@ class TestFromDatabase:
         ):
             with pytest.raises(ValueError, match="No structure found"):
                 GaussianJobSettings.from_database(
-                    filepath=str(db_file), structure_id="abc"
+                    filepath=db_file, structure_id="abc"
                 )
 
-    def test_structure_id_populates_charge_and_multiplicity(self, tmp_path):
-        db_file = tmp_path / "test.db"
-        db_file.write_text("")
+    def test_structure_id_populates_charge_and_multiplicity(
+        self, write_tmp_file
+    ):
+        db_file = write_tmp_file("test.db", "")
         mock_db = MagicMock()
         mock_db.get_structure_by_partial_id.return_value = "full-sid"
         mock_db.get_structure.return_value = {
@@ -3361,15 +3367,14 @@ class TestFromDatabase:
             "chemsmart.database.database.Database", return_value=mock_db
         ):
             settings = GaussianJobSettings.from_database(
-                filepath=str(db_file), structure_id="abc"
+                filepath=db_file, structure_id="abc"
             )
         assert settings.charge == 1
         assert settings.multiplicity == 2
         assert "chemsmart database" in settings.title
 
-    def test_record_not_found_returns_none(self, tmp_path):
-        db_file = tmp_path / "test.db"
-        db_file.write_text("")
+    def test_record_not_found_returns_none(self, write_tmp_file):
+        db_file = write_tmp_file("test.db", "")
         with (
             patch("chemsmart.database.database.Database"),
             patch(
@@ -3377,15 +3382,14 @@ class TestFromDatabase:
             ),
         ):
             result = GaussianJobSettings.from_database(
-                filepath=str(db_file), record_index=1
+                filepath=db_file, record_index=1
             )
         assert result is None
 
     def test_record_selector_populates_settings_from_meta_and_structure(
-        self, tmp_path
+        self, write_tmp_file
     ):
-        db_file = tmp_path / "test.db"
-        db_file.write_text("")
+        db_file = write_tmp_file("test.db", "")
         fake_record = {
             "meta": {
                 "method": "b3lyp",
@@ -3405,7 +3409,7 @@ class TestFromDatabase:
             ),
         ):
             settings = GaussianJobSettings.from_database(
-                filepath=str(db_file), record_index=1, structure_index="-1"
+                filepath=db_file, record_index=1, structure_index="-1"
             )
 
         assert settings.charge == 0
@@ -3416,9 +3420,8 @@ class TestFromDatabase:
         assert settings.solvent_model == "smd"
         assert settings.solvent_id == "water"
 
-    def test_record_with_slice_structure_index_raises(self, tmp_path):
-        db_file = tmp_path / "test.db"
-        db_file.write_text("")
+    def test_record_with_slice_structure_index_raises(self, write_tmp_file):
+        db_file = write_tmp_file("test.db", "")
         fake_record = {"meta": {}, "molecules": [{}]}
         with (
             patch("chemsmart.database.database.Database"),
@@ -3429,14 +3432,13 @@ class TestFromDatabase:
         ):
             with pytest.raises(ValueError, match="one structure at a time"):
                 GaussianJobSettings.from_database(
-                    filepath=str(db_file),
+                    filepath=db_file,
                     record_index=1,
                     structure_index=":",
                 )
 
-    def test_record_structure_index_out_of_range_raises(self, tmp_path):
-        db_file = tmp_path / "test.db"
-        db_file.write_text("")
+    def test_record_structure_index_out_of_range_raises(self, write_tmp_file):
+        db_file = write_tmp_file("test.db", "")
         fake_record = {"meta": {}, "molecules": [{"charge": 0}]}
         with (
             patch("chemsmart.database.database.Database"),
@@ -3447,7 +3449,7 @@ class TestFromDatabase:
         ):
             with pytest.raises(ValueError, match="out of range"):
                 GaussianJobSettings.from_database(
-                    filepath=str(db_file),
+                    filepath=db_file,
                     record_index=1,
                     structure_index="5",
                 )

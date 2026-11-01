@@ -860,9 +860,9 @@ class TestConfigurePathsInteractively:
 class TestUpdateYamlFilesFunction:
     """Direct tests for the module-level update_yaml_files helper."""
 
-    def test_replaces_value_in_all_yaml_files(self, tmp_path):
-        (tmp_path / "a.yaml").write_text("path: ~/bin/g16\nother: value\n")
-        (tmp_path / "b.txt").write_text("path: ~/bin/g16\n")
+    def test_replaces_value_in_all_yaml_files(self, tmp_path, write_tmp_file):
+        write_tmp_file("a.yaml", "path: ~/bin/g16\nother: value\n")
+        write_tmp_file("b.txt", "path: ~/bin/g16\n")
 
         update_yaml_files(tmp_path, "~/bin/g16", "/opt/g16")
 
@@ -881,11 +881,14 @@ class TestUpdateYamlFilesFunction:
 class TestAddLinesInYamlFilesFunction:
     """Direct tests for the module-level add_lines_in_yaml_files helper."""
 
-    def test_adds_lines_after_matching_position_once(self, tmp_path):
-        (tmp_path / "server.yaml").write_text(
+    def test_adds_lines_after_matching_position_once(
+        self, tmp_path, write_tmp_file
+    ):
+        write_tmp_file(
+            "server.yaml",
             "EXTRA_COMMANDS: |\n"
             "  #extra commands to activate chemsmart environment\n"
-            "other: 1\n"
+            "other: 1\n",
         )
 
         add_lines_in_yaml_files(
@@ -901,14 +904,17 @@ class TestAddLinesInYamlFilesFunction:
         # only added once even though the file is only processed once
         assert content.count("export PATH=x") == 1
 
-    def test_multiple_matching_lines_only_add_once(self, tmp_path):
+    def test_multiple_matching_lines_only_add_once(
+        self, tmp_path, write_tmp_file
+    ):
         """Covers the skip_addition guard's False arm: a second
         matching line later in the same file must not re-add lines."""
-        (tmp_path / "server.yaml").write_text(
+        write_tmp_file(
+            "server.yaml",
             "EXTRA_COMMANDS: |\n"
             "  #extra commands\n"
             "  #extra commands\n"
-            "other: 1\n"
+            "other: 1\n",
         )
 
         add_lines_in_yaml_files(
@@ -922,14 +928,16 @@ class TestAddLinesInYamlFilesFunction:
         missing = tmp_path / "does_not_exist"
         add_lines_in_yaml_files(missing, ["x"], ["y"])
 
-    def test_malformed_yaml_is_logged_not_raised(self, tmp_path):
+    def test_malformed_yaml_is_logged_not_raised(
+        self, tmp_path, write_tmp_file
+    ):
         """A file that fails to open/process shouldn't abort the whole
         directory scan; unexpected errors (generic Exception) are
         caught and logged. Note the `except yaml.YAMLError` clause
         can never actually trigger, since this function only ever
         does plain text I/O (readlines/write) -- no yaml.safe_load
         or similar parsing call exists in its body."""
-        (tmp_path / "broken.yaml").write_text("some: content\n")
+        write_tmp_file("broken.yaml", "some: content\n")
         with patch(
             "builtins.open", side_effect=OSError("simulated read failure")
         ):

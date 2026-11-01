@@ -265,6 +265,26 @@ def write_text_file():
 
 
 @pytest.fixture()
+def write_tmp_file(tmp_path, write_text_file):
+    """Return a callable that writes a file into the test's ``tmp_path``.
+
+    Program-agnostic: use it for any synthetic input/output file (ORCA
+    ``.inp``/``.out``, Gaussian ``.com``/``.log``, ``.xyz``, ...). The
+    returned path is a ``str``, which every chemsmart file reader accepts.
+
+    Usage in tests::
+
+        def test_something(write_tmp_file):
+            path = write_tmp_file("water.inp", "! hf def2-svp\\n...")
+    """
+
+    def _write(name, content):
+        return str(write_text_file(tmp_path / name, content))
+
+    return _write
+
+
+@pytest.fixture()
 def invoke_update_projects():
     """Return a callable that invokes 'chemsmart update projects' via Click's CliRunner.
 
@@ -3503,6 +3523,20 @@ def empty_pdb_file(tmpdir):
     with open(filepath, "w") as f:
         f.write("REMARK  This PDB has no atoms.\nEND\n")
     return filepath
+
+
+@pytest.fixture()
+def water_pdb_file(structure_test_directory):
+    """Single-molecule SDF (V2000 molfile) for water."""
+    return os.path.join(structure_test_directory, "pdb", "water.pdb")
+
+
+@pytest.fixture()
+def water_pdb_file_content(water_pdb_file):
+    """Returns the content of the water.sdf file as a string."""
+    with open(water_pdb_file, "r") as f:
+        content = f.read()
+    return content
 
 
 ############ Canonical Geometry / Structure ID Fixtures ##################

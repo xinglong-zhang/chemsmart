@@ -123,12 +123,11 @@ class TestGetOutfileFormat:
         result = get_program_type_from_file(water_output_gas_path)
         assert result == "orca"
 
-    def test_orca_log_output_detection(self, tmp_path):
+    def test_orca_log_output_detection(self, write_tmp_file):
         """Test detection of ORCA .log output file."""
         log_content = "* O   R   C   A *"
-        log_file = tmp_path / "test.log"
-        log_file.write_text(log_content)
-        result = get_program_type_from_file(str(log_file))
+        log_file = write_tmp_file("test.log", log_content)
+        result = get_program_type_from_file(log_file)
         assert result == "orca"
 
     def test_unknown_format(self):
@@ -181,10 +180,11 @@ class TestIsXYZFile:
     def test_false_for_gaussian_log(self, gaussian_singlet_opt_outfile):
         assert is_xyzfile(gaussian_singlet_opt_outfile) is False
 
-    def test_false_for_random_text(self, tmp_path):
-        path = tmp_path / "not_xyz.log"
-        path.write_text("Entering Gaussian System\nsome more text\n")
-        assert is_xyzfile(str(path)) is False
+    def test_false_for_random_text(self, write_tmp_file):
+        path = write_tmp_file(
+            "not_xyz.log", "Entering Gaussian System\nsome more text\n"
+        )
+        assert is_xyzfile(path) is False
 
 
 class TestCleanDuplicateStructure:

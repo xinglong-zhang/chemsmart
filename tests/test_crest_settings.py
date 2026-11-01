@@ -106,51 +106,53 @@ class TestCRESTProjectSettingsManager:
         manager = CRESTProjectSettingsManager(filename="project.yaml")
         assert manager.filename == str(tmp_path / "project.yaml")
 
-    def test_create_delegates_to_yaml_crest_project_settings(self, tmp_path):
-        yaml_file = tmp_path / "myproj.yaml"
-        yaml_file.write_text(
-            "conformers:\n  gfn_version: gfnff\n  charge: -1\n"
+    def test_create_delegates_to_yaml_crest_project_settings(
+        self, write_tmp_file
+    ):
+        yaml_file = write_tmp_file(
+            "myproj.yaml", "conformers:\n  gfn_version: gfnff\n  charge: -1\n"
         )
-        manager = CRESTProjectSettingsManager(filename=str(yaml_file))
+        manager = CRESTProjectSettingsManager(filename=yaml_file)
         settings = manager.create()
         assert isinstance(settings, YamlCRESTProjectSettings)
         assert settings.PROJECT_NAME == "myproj"
 
 
 class TestYamlCRESTProjectSettingsBuilder:
-    def test_build_parses_project_name_from_filename(self, tmp_path):
-        yaml_file = tmp_path / "gas_solv.yaml"
-        yaml_file.write_text("conformers:\n  gfn_version: gfn2\n")
-        builder = YamlCRESTProjectSettingsBuilder(filename=str(yaml_file))
+    def test_build_parses_project_name_from_filename(self, write_tmp_file):
+        yaml_file = write_tmp_file(
+            "gas_solv.yaml", "conformers:\n  gfn_version: gfn2\n"
+        )
+        builder = YamlCRESTProjectSettingsBuilder(filename=yaml_file)
         project_settings = builder.build()
         assert project_settings.PROJECT_NAME == "gas_solv"
 
-    def test_build_reads_conformer_settings_from_yaml(self, tmp_path):
-        yaml_file = tmp_path / "proj.yaml"
-        yaml_file.write_text(
-            "conformers:\n  gfn_version: gfnff\n  energy_window: 4.0\n"
+    def test_build_reads_conformer_settings_from_yaml(self, write_tmp_file):
+        yaml_file = write_tmp_file(
+            "proj.yaml",
+            "conformers:\n  gfn_version: gfnff\n  energy_window: 4.0\n",
         )
-        builder = YamlCRESTProjectSettingsBuilder(filename=str(yaml_file))
+        builder = YamlCRESTProjectSettingsBuilder(filename=yaml_file)
         project_settings = builder.build()
         settings = project_settings.conformer_settings()
         assert settings.gfn_version == "gfnff"
         assert settings.energy_window == 4.0
         assert settings.jobtype == "conformers"
 
-    def test_empty_yaml_file_returns_empty_config(self, tmp_path):
-        yaml_file = tmp_path / "empty.yaml"
-        yaml_file.write_text("")
-        builder = YamlCRESTProjectSettingsBuilder(filename=str(yaml_file))
+    def test_empty_yaml_file_returns_empty_config(self, write_tmp_file):
+        yaml_file = write_tmp_file("empty.yaml", "")
+        builder = YamlCRESTProjectSettingsBuilder(filename=yaml_file)
         assert builder._read_config() == {}
 
     def test_missing_jobtype_section_warns_and_uses_defaults(
-        self, tmp_path, caplog
+        self, caplog, write_tmp_file
     ):
         import logging
 
-        yaml_file = tmp_path / "no_conformers.yaml"
-        yaml_file.write_text("other_job:\n  gfn_version: gfnff\n")
-        builder = YamlCRESTProjectSettingsBuilder(filename=str(yaml_file))
+        yaml_file = write_tmp_file(
+            "no_conformers.yaml", "other_job:\n  gfn_version: gfnff\n"
+        )
+        builder = YamlCRESTProjectSettingsBuilder(filename=yaml_file)
         with caplog.at_level(logging.WARNING):
             settings = builder._settings_for_job("conformers")
         assert "No CREST configuration found for conformers" in caplog.text
@@ -158,18 +160,20 @@ class TestYamlCRESTProjectSettingsBuilder:
         assert settings.gfn_version == "gfn2"
 
     def test_settings_for_job_sets_default_jobtype_when_absent_from_config(
-        self, tmp_path
+        self, write_tmp_file
     ):
-        yaml_file = tmp_path / "proj.yaml"
-        yaml_file.write_text("conformers:\n  gfn_version: gfnff\n")
-        builder = YamlCRESTProjectSettingsBuilder(filename=str(yaml_file))
+        yaml_file = write_tmp_file(
+            "proj.yaml", "conformers:\n  gfn_version: gfnff\n"
+        )
+        builder = YamlCRESTProjectSettingsBuilder(filename=yaml_file)
         settings = builder._settings_for_job("conformers")
         assert settings.jobtype == "conformers"
 
-    def test_config_explicit_jobtype_is_preserved(self, tmp_path):
-        yaml_file = tmp_path / "proj.yaml"
-        yaml_file.write_text("conformers:\n  jobtype: conformers\n")
-        builder = YamlCRESTProjectSettingsBuilder(filename=str(yaml_file))
+    def test_config_explicit_jobtype_is_preserved(self, write_tmp_file):
+        yaml_file = write_tmp_file(
+            "proj.yaml", "conformers:\n  jobtype: conformers\n"
+        )
+        builder = YamlCRESTProjectSettingsBuilder(filename=yaml_file)
         settings = builder._settings_for_job("conformers")
         assert settings.jobtype == "conformers"
 
@@ -184,10 +188,11 @@ class TestYamlCRESTProjectSettings:
         settings_a.charge = 3
         assert settings_b.charge is None
 
-    def test_from_yaml_builds_via_builder(self, tmp_path):
-        yaml_file = tmp_path / "proj.yaml"
-        yaml_file.write_text("conformers:\n  gfn_version: gfn2\n")
-        project_settings = YamlCRESTProjectSettings.from_yaml(str(yaml_file))
+    def test_from_yaml_builds_via_builder(self, write_tmp_file):
+        yaml_file = write_tmp_file(
+            "proj.yaml", "conformers:\n  gfn_version: gfn2\n"
+        )
+        project_settings = YamlCRESTProjectSettings.from_yaml(yaml_file)
         assert isinstance(project_settings, YamlCRESTProjectSettings)
         assert project_settings.PROJECT_NAME == "proj"
 

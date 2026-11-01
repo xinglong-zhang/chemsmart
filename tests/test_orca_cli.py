@@ -502,14 +502,13 @@ class TestORCACpcmBlockOptions:
 
     def test_solventfilename_injected_into_sp_settings(
         self,
-        tmp_path,
         single_molecule_xyz_file,
         run_orca_and_capture_settings,
+        write_tmp_file,
     ):
         """-sf /path/water.cosmorsxyz stores solventfilename on sp settings."""
         # Create a dummy .cosmorsxyz file so click.Path(exists=True) is satisfied
-        sf = tmp_path / "water.cosmorsxyz"
-        sf.write_text("")
+        sf = write_tmp_file("water.cosmorsxyz", "")
 
         result, settings = run_orca_and_capture_settings(
             "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
@@ -527,7 +526,7 @@ class TestORCACpcmBlockOptions:
                 "-si",
                 "water",
                 "-sf",
-                str(sf),
+                sf,
                 "sp",
             ],
         )
@@ -536,17 +535,16 @@ class TestORCACpcmBlockOptions:
         assert settings is not None
         assert settings.solvent_model == "cosmors"
         assert settings.solvent_id == "water"
-        assert settings.solventfilename == str(sf)
+        assert settings.solventfilename == sf
 
     def test_solventfilename_group_level_injected_into_sp_settings(
         self,
-        tmp_path,
         single_molecule_xyz_file,
         run_orca_and_capture_settings,
+        write_tmp_file,
     ):
         """-sf at the orca group level propagates solventfilename to sp settings."""
-        sf = tmp_path / "custom.cosmorsxyz"
-        sf.write_text("")
+        sf = write_tmp_file("custom.cosmorsxyz", "")
 
         result, settings = run_orca_and_capture_settings(
             "chemsmart.jobs.orca.singlepoint.ORCASinglePointJob",
@@ -562,14 +560,14 @@ class TestORCACpcmBlockOptions:
                 "-sm",
                 "cosmors",
                 "-sf",
-                str(sf),
+                sf,
                 "sp",
             ],
         )
 
         assert result.exit_code == 0, result.output
         assert settings is not None
-        assert settings.solventfilename == str(sf)
+        assert settings.solventfilename == sf
 
 
 class TestORCALabelAndAuxBasisOptions:

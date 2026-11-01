@@ -2638,24 +2638,20 @@ class TestConvertAllFilesDirectoryDispatch:
         converter.convert_files()
         assert (tmp_path / "water_sp.xyz").is_file()
 
-    def test_sdf_directory_conversion(self, tmp_path, water_sdf_file_content):
-        target = tmp_path / "structure.sdf"
-        target.write_text(water_sdf_file_content)
+    def test_sdf_directory_conversion(
+        self, tmp_path, water_sdf_file_content, write_tmp_file
+    ):
+        write_tmp_file("structure.sdf", water_sdf_file_content)
         converter = FileConverter(
             directory=str(tmp_path), type="sdf", output_filetype="xyz"
         )
         converter.convert_files()
         assert (tmp_path / "structure.xyz").is_file()
 
-    def test_pdb_directory_conversion(self, tmp_path):
-        pdb_content = (
-            "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
-            "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
-            "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
-            "END\n"
-        )
-        pdb_path = tmp_path / "water.pdb"
-        pdb_path.write_text(pdb_content)
+    def test_pdb_directory_conversion(
+        self, tmp_path, water_pdb_file_content, write_tmp_file
+    ):
+        write_tmp_file("water.pdb", water_pdb_file_content)
         converter = FileConverter(
             directory=str(tmp_path), type="pdb", output_filetype="xyz"
         )
@@ -2688,12 +2684,11 @@ class TestConvertAllFilesDirectoryDispatch:
 
 
 class TestConvertSingleFileDispatch:
-    def test_out_could_not_detect_program_raises(self, tmp_path):
-        fake_out = tmp_path / "unknown.out"
-        fake_out.write_text("this is not a real quantum chemistry output\n")
-        converter = FileConverter(
-            filename=str(fake_out), output_filetype="xyz"
+    def test_out_could_not_detect_program_raises(self, write_tmp_file):
+        fake_out = write_tmp_file(
+            "unknown.out", "this is not a real quantum chemistry output\n"
         )
+        converter = FileConverter(filename=fake_out, output_filetype="xyz")
         with pytest.raises(
             ValueError, match="Unsupported .out file program type"
         ):
@@ -2737,48 +2732,39 @@ class TestConvertSingleFileDispatch:
         converter.convert_files()
         assert (tmp_path / "water_sp.xyz").is_file()
 
-    def test_sdf_single_file(self, tmp_path, water_sdf_file_content):
-        target = tmp_path / "structure.sdf"
-        target.write_text(water_sdf_file_content)
-        converter = FileConverter(filename=str(target), output_filetype="xyz")
+    def test_sdf_single_file(
+        self, tmp_path, water_sdf_file_content, write_tmp_file
+    ):
+        target = write_tmp_file("structure.sdf", water_sdf_file_content)
+        converter = FileConverter(filename=target, output_filetype="xyz")
         converter.convert_files()
         assert (tmp_path / "structure.xyz").is_file()
 
-    def test_pdb_single_file(self, tmp_path):
-        pdb_content = (
-            "HETATM    1  O   HOH A   7       0.000   0.000   0.000  1.00  0.00           O\n"
-            "HETATM    2  H1  HOH A   7       0.960   0.000   0.000  1.00  0.00           H\n"
-            "HETATM    3  H2  HOH A   7      -0.240   0.930   0.000  1.00  0.00           H\n"
-            "END\n"
-        )
-        pdb_path = tmp_path / "water.pdb"
-        pdb_path.write_text(pdb_content)
-        converter = FileConverter(
-            filename=str(pdb_path), output_filetype="xyz"
-        )
+    def test_pdb_single_file(
+        self, tmp_path, water_pdb_file_content, write_tmp_file
+    ):
+        pdb_path = write_tmp_file("water.pdb", water_pdb_file_content)
+        converter = FileConverter(filename=pdb_path, output_filetype="xyz")
         converter.convert_files()
         assert (tmp_path / "water.xyz").is_file()
 
-    def test_xyz_single_file_to_com(self, tmp_path):
-        xyz_path = tmp_path / "water.xyz"
-        xyz_path.write_text(
-            "3\nwater\nO 0.0 0.0 0.0\nH 0.0 0.76 0.59\nH 0.0 -0.76 0.59\n"
+    def test_xyz_single_file_to_com(self, tmp_path, write_tmp_file):
+        xyz_path = write_tmp_file(
+            "water.xyz",
+            "3\nwater\nO 0.0 0.0 0.0\nH 0.0 0.76 0.59\nH 0.0 -0.76 0.59\n",
         )
-        converter = FileConverter(
-            filename=str(xyz_path), output_filetype="com"
-        )
+        converter = FileConverter(filename=xyz_path, output_filetype="com")
         converter.convert_files()
         assert (tmp_path / "water.com").is_file()
 
-    def test_unsupported_single_file_type_raises(self, tmp_path):
+    def test_unsupported_single_file_type_raises(self, write_tmp_file):
         """An unrecognized extension falls through to ASE (via
         Molecule._read_other), which raises its own UnknownFileTypeError
         for a format neither Open Babel nor ASE recognizes."""
         from ase.io.formats import UnknownFileTypeError
 
-        bogus = tmp_path / "file.bogus"
-        bogus.write_text("data")
-        converter = FileConverter(filename=str(bogus))
+        bogus = write_tmp_file("file.bogus", "data")
+        converter = FileConverter(filename=bogus)
         with pytest.raises(UnknownFileTypeError, match="bogus"):
             converter.convert_files()
 
@@ -2856,9 +2842,8 @@ class TestXYZToPdb:
         assert pdb_path.is_file()
         assert xyz_path.is_file()
 
-    def test_unreadable_xyz_raises_value_error(self, tmp_path):
-        xyz_path = tmp_path / "empty.xyz"
-        xyz_path.write_text("")
+    def test_unreadable_xyz_raises_value_error(self, tmp_path, write_tmp_file):
+        xyz_path = write_tmp_file("empty.xyz", "")
         pdb_path = tmp_path / "out.pdb"
         water = Molecule(
             symbols=["O", "H", "H"],
@@ -2872,7 +2857,7 @@ class TestXYZToPdb:
             FileConverter.xyz_to_pdb(
                 water,
                 str(pdb_path),
-                xyz_filename=str(xyz_path),
+                xyz_filename=xyz_path,
                 cleanup=False,
             )
 

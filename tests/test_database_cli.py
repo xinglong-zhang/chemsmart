@@ -566,38 +566,32 @@ class TestExportCommandValidation:
 
 
 class TestExportParseMethodBasis:
-    def test_no_slash_raises(self, mocker, tmp_path):
-        db_file = tmp_path / "my.db"
-        db_file.write_text("")
+    def test_no_slash_raises(self, mocker, write_tmp_file):
+        db_file = write_tmp_file("my.db", "")
         with pytest.raises(click.UsageError, match="method/basis"):
-            export_module._parse_method_basis(str(db_file), "MN15only")
+            export_module._parse_method_basis(db_file, "MN15only")
 
-    def test_empty_parts_raises(self, tmp_path):
-        db_file = tmp_path / "my.db"
-        db_file.write_text("")
+    def test_empty_parts_raises(self, write_tmp_file):
+        db_file = write_tmp_file("my.db", "")
         with pytest.raises(click.UsageError, match="non-empty"):
-            export_module._parse_method_basis(str(db_file), "MN15/")
+            export_module._parse_method_basis(db_file, "MN15/")
 
-    def test_unresolved_raises(self, mocker, tmp_path):
-        db_file = tmp_path / "my.db"
-        db_file.write_text("")
+    def test_unresolved_raises(self, mocker, write_tmp_file):
+        db_file = write_tmp_file("my.db", "")
         mocker.patch(
             "chemsmart.database.database.Database.resolve_method_basis",
             return_value=None,
         )
         with pytest.raises(click.UsageError, match="not present"):
-            export_module._parse_method_basis(str(db_file), "MN15/def2tzvp")
+            export_module._parse_method_basis(db_file, "MN15/def2tzvp")
 
-    def test_success_returns_tuple(self, mocker, tmp_path):
-        db_file = tmp_path / "my.db"
-        db_file.write_text("")
+    def test_success_returns_tuple(self, mocker, write_tmp_file):
+        db_file = write_tmp_file("my.db", "")
         mocker.patch(
             "chemsmart.database.database.Database.resolve_method_basis",
             return_value=("MN15", "def2tzvp"),
         )
-        result = export_module._parse_method_basis(
-            str(db_file), "MN15/def2tzvp"
-        )
+        result = export_module._parse_method_basis(db_file, "MN15/def2tzvp")
         assert result == ("MN15", "def2tzvp")
 
 

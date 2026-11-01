@@ -43,51 +43,53 @@ class TestParseTable:
         with pytest.raises(FileNotFoundError, match="Table file not found"):
             TabularDataset.parse_table(str(tmp_path / "missing.csv"))
 
-    def test_parses_csv_with_normalized_headers(self, tmp_path):
-        csv_path = tmp_path / "data.csv"
-        csv_path.write_text("Total Energy,Job Name\n1.0,job1\n2.0,job2\n")
-        dataset = TabularDataset.parse_table(str(csv_path))
+    def test_parses_csv_with_normalized_headers(self, write_tmp_file):
+        csv_path = write_tmp_file(
+            "data.csv", "Total Energy,Job Name\n1.0,job1\n2.0,job2\n"
+        )
+        dataset = TabularDataset.parse_table(csv_path)
         assert dataset.columns == ["total_energy", "job_name"]
         assert len(dataset) == 2
-        assert dataset.source_path == str(csv_path)
+        assert dataset.source_path == csv_path
 
-    def test_parses_whitespace_delimited_txt(self, tmp_path):
-        txt_path = tmp_path / "data.txt"
-        txt_path.write_text("name  value\nfoo   1\nbar   2\n")
-        dataset = TabularDataset.parse_table(str(txt_path))
+    def test_parses_whitespace_delimited_txt(self, write_tmp_file):
+        txt_path = write_tmp_file(
+            "data.txt", "name  value\nfoo   1\nbar   2\n"
+        )
+        dataset = TabularDataset.parse_table(txt_path)
         assert dataset.columns == ["name", "value"]
         assert len(dataset) == 2
 
-    def test_explicit_delimiter_overrides_extension_default(self, tmp_path):
-        txt_path = tmp_path / "data.txt"
-        txt_path.write_text("a;b\n1;2\n")
-        dataset = TabularDataset.parse_table(str(txt_path), delimiter=";")
+    def test_explicit_delimiter_overrides_extension_default(
+        self, write_tmp_file
+    ):
+        txt_path = write_tmp_file("data.txt", "a;b\n1;2\n")
+        dataset = TabularDataset.parse_table(txt_path, delimiter=";")
         assert dataset.columns == ["a", "b"]
 
-    def test_empty_file_raises_value_error(self, tmp_path):
-        csv_path = tmp_path / "empty.csv"
-        csv_path.write_text("")
+    def test_empty_file_raises_value_error(self, write_tmp_file):
+        csv_path = write_tmp_file("empty.csv", "")
         with pytest.raises(ValueError, match="No valid entries found"):
-            TabularDataset.parse_table(str(csv_path))
+            TabularDataset.parse_table(csv_path)
 
-    def test_header_only_file_raises_value_error(self, tmp_path):
-        csv_path = tmp_path / "header_only.csv"
-        csv_path.write_text("a,b\n")
+    def test_header_only_file_raises_value_error(self, write_tmp_file):
+        csv_path = write_tmp_file("header_only.csv", "a,b\n")
         with pytest.raises(ValueError, match="No valid entries found"):
-            TabularDataset.parse_table(str(csv_path))
+            TabularDataset.parse_table(csv_path)
 
-    def test_malformed_file_raises_value_error(self, tmp_path):
+    def test_malformed_file_raises_value_error(self, write_tmp_file):
         # An unterminated quoted field triggers a ParserError from the
         # python engine ("unexpected end of data").
-        csv_path = tmp_path / "bad.csv"
-        csv_path.write_text('a,b\n"unterminated,1\n2,3\n')
+        csv_path = write_tmp_file("bad.csv", 'a,b\n"unterminated,1\n2,3\n')
         with pytest.raises(ValueError, match="Failed to parse"):
-            TabularDataset.parse_table(str(csv_path))
+            TabularDataset.parse_table(csv_path)
 
-    def test_comment_lines_are_skipped(self, tmp_path):
-        csv_path = tmp_path / "with_comments.csv"
-        csv_path.write_text("# a comment\na,b\n1,2\n# another comment\n3,4\n")
-        dataset = TabularDataset.parse_table(str(csv_path))
+    def test_comment_lines_are_skipped(self, write_tmp_file):
+        csv_path = write_tmp_file(
+            "with_comments.csv",
+            "# a comment\na,b\n1,2\n# another comment\n3,4\n",
+        )
+        dataset = TabularDataset.parse_table(csv_path)
         assert len(dataset) == 2
 
 
@@ -195,10 +197,9 @@ class TestValidate:
         with pytest.raises(ValueError, match="File not found for path"):
             dataset.validate(path_columns=["path"])
 
-    def test_path_column_valid_file_passes(self, tmp_path):
-        existing = tmp_path / "exists.xyz"
-        existing.write_text("1\ncomment\nH 0 0 0\n")
-        df = pd.DataFrame({"path": [str(existing)]})
+    def test_path_column_valid_file_passes(self, write_tmp_file):
+        existing = write_tmp_file("exists.xyz", "1\ncomment\nH 0 0 0\n")
+        df = pd.DataFrame({"path": [existing]})
         dataset = TabularDataset(df)
         assert dataset.validate(path_columns=["path"]) is dataset
 

@@ -1535,13 +1535,12 @@ class TestGaussianInputWriterGenecpAlwaysAppendsNewline:
     the source content already ends with one."""
 
     def test_extra_blank_line_always_appended(
-        self, tmp_path, make_gaussian_writer
+        self, make_gaussian_writer, write_tmp_file
     ):
-        genecp_file = tmp_path / "genecp.txt"
-        genecp_file.write_text("C 0\nsto-3g\n****\n")
+        genecp_file = write_tmp_file("genecp.txt", "C 0\nsto-3g\n****\n")
         settings = GaussianJobSettings.default()
         settings.basis = "genecp"
-        settings.gen_genecp_file = str(genecp_file)
+        settings.gen_genecp_file = genecp_file
         settings.heavy_elements = None
         molecule = Molecule(
             symbols=["C"],
@@ -1560,12 +1559,13 @@ class TestGaussianInputWriterOtherAdditionalInfo:
     free-string branches."""
 
     def test_reads_from_existing_file_path(
-        self, tmp_path, make_gaussian_writer
+        self, make_gaussian_writer, write_tmp_file
     ):
-        info_file = tmp_path / "extra_info.txt"
-        info_file.write_text("extra line one\nextra line two\n")
+        info_file = write_tmp_file(
+            "extra_info.txt", "extra line one\nextra line two\n"
+        )
         settings = GaussianJobSettings.default()
-        settings.append_additional_info = str(info_file)
+        settings.append_additional_info = info_file
         writer = make_gaussian_writer(settings)
         buf = io.StringIO()
         writer._append_other_additional_info(buf)

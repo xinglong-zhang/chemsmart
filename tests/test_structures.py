@@ -4683,43 +4683,44 @@ class TestStructureEdgeCases:
                 [1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0, 1, 0]
             )
 
-    def test_from_directorypath_errors(self, tmp_path):
+    def test_from_directorypath_errors(self, tmp_path, write_tmp_file):
         with pytest.raises(FileNotFoundError):
             Molecule.from_directorypath(str(tmp_path / "missing"))
-        a_file = tmp_path / "a.xyz"
-        a_file.write_text("1\n\nH 0 0 0\n")
+        a_file = write_tmp_file("a.xyz", "1\n\nH 0 0 0\n")
         with pytest.raises(NotADirectoryError):
-            Molecule.from_directorypath(str(a_file))
+            Molecule.from_directorypath(a_file)
         with pytest.raises(ValueError, match="Unsupported program 'orca'"):
             Molecule.from_directorypath(str(tmp_path), program="orca")
 
-    def test_extxyz_falls_back_to_xyz_parser(self, tmp_path):
-        path = tmp_path / "plain.extxyz"
-        path.write_text("2\nnot an extxyz header =\nH 0 0 0\nH 0 0 0.74\n")
+    def test_extxyz_falls_back_to_xyz_parser(self, write_tmp_file):
+        path = write_tmp_file(
+            "plain.extxyz", "2\nnot an extxyz header =\nH 0 0 0\nH 0 0 0.74\n"
+        )
         with patch.object(
             Molecule, "_read_other", side_effect=RuntimeError("ase failed")
         ):
-            mol = Molecule.from_filepath(str(path))
+            mol = Molecule.from_filepath(path)
         assert list(mol.symbols) == ["H", "H"]
 
-    def test_trj_with_xyz_content(self, tmp_path):
-        path = tmp_path / "traj.trj"
-        path.write_text("1\nframe 1\nHe 0 0 0\n1\nframe 2\nHe 0 0 1\n")
-        mol = Molecule.from_filepath(str(path), index="-1")
+    def test_trj_with_xyz_content(self, write_tmp_file):
+        path = write_tmp_file(
+            "traj.trj", "1\nframe 1\nHe 0 0 0\n1\nframe 2\nHe 0 0 1\n"
+        )
+        mol = Molecule.from_filepath(path, index="-1")
         assert mol.symbols == ["He"]
         assert np.allclose(mol.positions[0], [0.0, 0.0, 1.0])
 
-    def test_read_gromacs_gro(self, tmp_path):
-        path = tmp_path / "water.gro"
-        path.write_text(
+    def test_read_gromacs_gro(self, write_tmp_file):
+        path = write_tmp_file(
+            "water.gro",
             "water\n"
             "    3\n"
             "    1SOL     OW    1   0.000   0.000   0.000\n"
             "    1SOL    HW1    2   0.096   0.000   0.000\n"
             "    1SOL    HW2    3  -0.024   0.093   0.000\n"
-            "   1.0 1.0 1.0\n"
+            "   1.0 1.0 1.0\n",
         )
-        mol = Molecule.from_filepath(str(path))
+        mol = Molecule.from_filepath(path)
         assert mol.symbols == ["O", "H", "H"]
         # .gro coordinates are in nm
         assert np.allclose(mol.positions[1], [0.96, 0.0, 0.0])
@@ -4735,11 +4736,12 @@ class TestStructureEdgeCases:
         with pytest.raises(ValueError, match="neither a valid chemsmart"):
             Molecule.from_filepath(str(path), index=index)
 
-    def test_invalid_gaussian_input_raises(self, tmp_path):
-        path = tmp_path / "bad.com"
-        path.write_text("# opt b3lyp/6-31g(d)\n\ntitle\n\n0 1\n\n")
+    def test_invalid_gaussian_input_raises(self, write_tmp_file):
+        path = write_tmp_file(
+            "bad.com", "# opt b3lyp/6-31g(d)\n\ntitle\n\n0 1\n\n"
+        )
         with pytest.raises(ValueError, match="Failed to read Gaussian input"):
-            Molecule.from_filepath(str(path))
+            Molecule.from_filepath(path)
 
     @pytest.mark.parametrize(
         "xyz, match",
@@ -4758,16 +4760,14 @@ class TestStructureEdgeCases:
         with pytest.raises(ValueError, match=match):
             Molecule._molecule_from_pybel(FakePybelMol())
 
-    def test_read_via_openbabel_errors(self, tmp_path):
+    def test_read_via_openbabel_errors(self, write_tmp_file):
         pytest.importorskip("openbabel")
-        no_ext = tmp_path / "structure"
-        no_ext.write_text("")
+        no_ext = write_tmp_file("structure", "")
         with pytest.raises(ValueError, match="Cannot infer Open Babel format"):
-            Molecule._read_via_openbabel(str(no_ext))
-        empty = tmp_path / "empty.xyz"
-        empty.write_text("")
+            Molecule._read_via_openbabel(no_ext)
+        empty = write_tmp_file("empty.xyz", "")
         with pytest.raises(ValueError, match="found no molecules"):
-            Molecule._read_via_openbabel(str(empty))
+            Molecule._read_via_openbabel(empty)
 
     def test_from_rdkit_mol_rejects_invalid_input(self):
         with pytest.raises(ValueError, match="Invalid RDKit molecule"):

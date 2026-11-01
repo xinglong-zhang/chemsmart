@@ -287,7 +287,9 @@ class TestPKa:
         assert called["kwargs"]["href_solv_file"] == files["hbs.log"]
         assert called["kwargs"]["ref_solv_file"] == files["bs.log"]
 
-    def test_run_pka_batch_analyze_orca_outputs(self, tmp_path, monkeypatch):
+    def test_run_pka_batch_analyze_orca_outputs(
+        self, tmp_path, monkeypatch, write_tmp_file
+    ):
         """batch-analyze should build Thermochemistry objects for ORCA files."""
         monkeypatch.chdir(tmp_path)
         basename = "target"
@@ -298,10 +300,10 @@ class TestPKa:
         for name in ("ref_HA_opt", "ref_A_opt", "ref_HA_sp", "ref_A_sp"):
             (tmp_path / f"{name}.out").write_text("* O   R   C   A *\n")
 
-        table = tmp_path / "pka_output.csv"
-        table.write_text(
+        table = write_tmp_file(
+            "pka_output.csv",
             "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
-            f"{basename},,,,,ref_HA_opt.out,ref_A_opt.out,ref_HA_sp.out,ref_A_sp.out,10.6\n"
+            f"{basename},,,,,ref_HA_opt.out,ref_A_opt.out,ref_HA_sp.out,ref_A_sp.out,10.6\n",
         )
 
         constructed = _install_fake_thermochemistry(monkeypatch)
@@ -319,7 +321,7 @@ class TestPKa:
                 "100",
                 "batch-analyze",
                 "-o",
-                str(table),
+                table,
             ],
         )
 
@@ -329,7 +331,7 @@ class TestPKa:
         assert "pKa" in result.output
 
     def test_run_pka_batch_analyze_mixed_gaussian_orca(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, write_tmp_file
     ):
         """batch-analyze stays program-agnostic via Thermochemistry(filename=...)."""
         monkeypatch.chdir(tmp_path)
@@ -341,10 +343,10 @@ class TestPKa:
         for name in ("ref_HA_opt", "ref_A_opt", "ref_HA_sp", "ref_A_sp"):
             (tmp_path / f"{name}.log").write_text("Gaussian, Inc.\n")
 
-        table = tmp_path / "pka_output.csv"
-        table.write_text(
+        table = write_tmp_file(
+            "pka_output.csv",
             "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
-            f"{basename},,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,10.6\n"
+            f"{basename},,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,10.6\n",
         )
 
         constructed = _install_fake_thermochemistry(monkeypatch)
@@ -356,7 +358,7 @@ class TestPKa:
                 "pka",
                 "batch-analyze",
                 "-o",
-                str(table),
+                table,
             ],
         )
 
@@ -366,7 +368,7 @@ class TestPKa:
         assert "pKa" in result.output
 
     def test_run_pka_batch_analyze_gaussian_outputs(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, write_tmp_file
     ):
         """batch-analyze should preserve Gaussian table behavior."""
         monkeypatch.chdir(tmp_path)
@@ -378,10 +380,10 @@ class TestPKa:
         for name in ("ref_HA_opt", "ref_A_opt", "ref_HA_sp", "ref_A_sp"):
             (tmp_path / f"{name}.log").write_text("Gaussian, Inc.\n")
 
-        table = tmp_path / "pka_output.csv"
-        table.write_text(
+        table = write_tmp_file(
+            "pka_output.csv",
             "basename,ha_gas,a_gas,ha_sp,a_sp,href_gas,ref_gas,href_sp,ref_sp,pka_ref\n"
-            f"{basename},,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,6.75\n"
+            f"{basename},,,,,ref_HA_opt.log,ref_A_opt.log,ref_HA_sp.log,ref_A_sp.log,6.75\n",
         )
 
         constructed = _install_fake_thermochemistry(monkeypatch)
@@ -389,7 +391,7 @@ class TestPKa:
         runner = CliRunner()
         result = runner.invoke(
             run,
-            ["pka", "batch-analyze", "-o", str(table)],
+            ["pka", "batch-analyze", "-o", table],
         )
 
         assert result.exit_code == 0, result.output
@@ -448,7 +450,7 @@ class TestPKa:
         assert result.exit_code != 0
 
     def test_sub_orca_pka_batch_reconstructs_per_job_cli_args(
-        self, tmp_path, monkeypatch, captured
+        self, tmp_path, monkeypatch, captured, write_tmp_file
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -456,16 +458,18 @@ class TestPKa:
         from chemsmart.io.molecules.structure import Molecule
         from chemsmart.settings.server import Server
 
-        acid1 = tmp_path / "acid1.xyz"
-        acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
-        acid2 = tmp_path / "acid2.xyz"
-        acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+        acid1 = write_tmp_file(
+            "acid1.xyz", "2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
+        acid2 = write_tmp_file(
+            "acid2.xyz", "2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
 
-        table = tmp_path / "batch.xyz"
-        table.write_text(
+        table = write_tmp_file(
+            "batch.xyz",
             "filepath proton_index charge multiplicity\n"
             f"{acid1} 2 0 1\n"
-            f"{acid2} 2 1 2\n"
+            f"{acid2} 2 1 2\n",
         )
 
         config_root = tmp_path / "chemsmart_cfg"
@@ -547,7 +551,7 @@ class TestPKa:
         assert str(table) not in first_args
 
     def test_sub_orca_pka_batch_rewrites_per_entry_file_args(
-        self, tmp_path, monkeypatch, captured
+        self, tmp_path, monkeypatch, captured, write_tmp_file
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -555,16 +559,18 @@ class TestPKa:
         from chemsmart.io.molecules.structure import Molecule
         from chemsmart.settings.server import Server
 
-        acid1 = tmp_path / "acid1.xyz"
-        acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
-        acid2 = tmp_path / "acid2.xyz"
-        acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+        acid1 = write_tmp_file(
+            "acid1.xyz", "2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
+        acid2 = write_tmp_file(
+            "acid2.xyz", "2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
 
-        table = tmp_path / "batch.xyz"
-        table.write_text(
+        table = write_tmp_file(
+            "batch.xyz",
             "filepath proton_index charge multiplicity\n"
             f"{acid1} 2 0 1\n"
-            f"{acid2} 2 1 2\n"
+            f"{acid2} 2 1 2\n",
         )
 
         config_root = tmp_path / "chemsmart_cfg"
@@ -654,7 +660,7 @@ class TestPKa:
         assert first_args.index("submit") < first_args.index("--proton-index")
 
     def test_sub_orca_pka_batch_shared_reference_loaded_once(
-        self, tmp_path, monkeypatch, captured
+        self, tmp_path, monkeypatch, captured, write_tmp_file
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -663,18 +669,21 @@ class TestPKa:
         from chemsmart.jobs.orca.settings import ORCApKaJobSettings
         from chemsmart.settings.server import Server
 
-        acid1 = tmp_path / "acid1.xyz"
-        acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
-        acid2 = tmp_path / "acid2.xyz"
-        acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
-        reference = tmp_path / "ref.xyz"
-        reference.write_text("2\nref\nO 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+        acid1 = write_tmp_file(
+            "acid1.xyz", "2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
+        acid2 = write_tmp_file(
+            "acid2.xyz", "2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
+        reference = write_tmp_file(
+            "ref.xyz", "2\nref\nO 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
 
-        table = tmp_path / "batch.xyz"
-        table.write_text(
+        table = write_tmp_file(
+            "batch.xyz",
             "filepath proton_index charge multiplicity\n"
             f"{acid1} 2 0 1\n"
-            f"{acid2} 2 1 2\n"
+            f"{acid2} 2 1 2\n",
         )
 
         config_root = tmp_path / "chemsmart_cfg"
@@ -770,7 +779,7 @@ class TestPKa:
         assert reference_pair_call_count["count"] == 0
 
     def test_sub_orca_pka_batch_first_exchange_rest_direct(
-        self, tmp_path, monkeypatch, captured
+        self, tmp_path, monkeypatch, captured, write_tmp_file
     ):
         _require_backend_pka_subcommand(sub, "orca")
         orca_cli = importlib.import_module("chemsmart.cli.orca.orca")
@@ -778,18 +787,21 @@ class TestPKa:
         from chemsmart.io.molecules.structure import Molecule
         from chemsmart.settings.server import Server
 
-        acid1 = tmp_path / "acid1.xyz"
-        acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
-        acid2 = tmp_path / "acid2.xyz"
-        acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
-        reference = tmp_path / "ref.xyz"
-        reference.write_text("2\nref\nO 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+        acid1 = write_tmp_file(
+            "acid1.xyz", "2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
+        acid2 = write_tmp_file(
+            "acid2.xyz", "2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
+        reference = write_tmp_file(
+            "ref.xyz", "2\nref\nO 0.0 0.0 0.0\nH 0.0 0.0 1.0\n"
+        )
 
-        table = tmp_path / "batch.xyz"
-        table.write_text(
+        table = write_tmp_file(
+            "batch.xyz",
             "filepath proton_index charge multiplicity\n"
             f"{acid1} 2 0 1\n"
-            f"{acid2} 2 1 2\n"
+            f"{acid2} 2 1 2\n",
         )
 
         config_root = tmp_path / "chemsmart_cfg"
@@ -1441,14 +1453,15 @@ class TestPKa:
         backend,
         colored_proton_cdxml_file,
         captured,
+        write_tmp_file,
     ):
         """CDXML rows with blank proton_index auto-detect the coloured proton."""
         _require_backend_pka_subcommand(sub, backend)
 
-        table = tmp_path / "pka_cdxml.csv"
-        table.write_text(
+        table = write_tmp_file(
+            "pka_cdxml.csv",
             "filepath,proton_index,charge,multiplicity\n"
-            f"{colored_proton_cdxml_file},,0,1\n"
+            f"{colored_proton_cdxml_file},,0,1\n",
         )
 
         config_root = _write_test_backend_project(tmp_path, backend)
@@ -1480,7 +1493,7 @@ class TestPKa:
                 "-p",
                 "test",
                 "-f",
-                str(table),
+                table,
                 "pka",
                 "-s",
                 "direct",
@@ -1501,14 +1514,15 @@ class TestPKa:
         backend,
         colored_proton_cdxml_file,
         captured,
+        write_tmp_file,
     ):
         """Explicit table proton_index overrides CDXML coloured-proton detection."""
         _require_backend_pka_subcommand(sub, backend)
 
-        table = tmp_path / "pka_cdxml.csv"
-        table.write_text(
+        table = write_tmp_file(
+            "pka_cdxml.csv",
             "filepath,proton_index,charge,multiplicity\n"
-            f"{colored_proton_cdxml_file},8,0,1\n"
+            f"{colored_proton_cdxml_file},8,0,1\n",
         )
 
         config_root = _write_test_backend_project(tmp_path, backend)
@@ -1540,7 +1554,7 @@ class TestPKa:
                 "-p",
                 "test",
                 "-f",
-                str(table),
+                table,
                 "pka",
                 "-s",
                 "direct",
@@ -1560,14 +1574,15 @@ class TestPKa:
         monkeypatch,
         backend,
         colored_proton_two_molecule_cdxml_file,
+        write_tmp_file,
     ):
         """Multi-molecule CDXML paths in a table row must fail clearly."""
         _require_backend_pka_subcommand(sub, backend)
 
-        table = tmp_path / "pka_cdxml.csv"
-        table.write_text(
+        table = write_tmp_file(
+            "pka_cdxml.csv",
             "filepath,proton_index,charge,multiplicity\n"
-            f"{colored_proton_two_molecule_cdxml_file},,0,1\n"
+            f"{colored_proton_two_molecule_cdxml_file},,0,1\n",
         )
 
         config_root = _write_test_backend_project(tmp_path, backend)
@@ -1594,7 +1609,7 @@ class TestPKa:
                 "-p",
                 "test",
                 "-f",
-                str(table),
+                table,
                 "pka",
                 "-s",
                 "direct",
@@ -1742,7 +1757,11 @@ class TestPKa:
         assert captured["sp_labels"] == ["5a_pka_HA_sp", "5a_pka_A_sp"]
 
     def test_orca_pka_subjob_is_complete_recognizes_legacy_output(
-        self, single_molecule_xyz_file, orca_jobrunner_no_scratch, tmp_path
+        self,
+        single_molecule_xyz_file,
+        orca_jobrunner_no_scratch,
+        tmp_path,
+        write_tmp_file,
     ):
         """Pre-rename ORCA pKa outputs should still count as complete."""
         from chemsmart.io.molecules.structure import Molecule
@@ -1769,8 +1788,7 @@ class TestPKa:
         )
         job.folder = str(tmp_path)
 
-        legacy_out = tmp_path / "1a_pka.out"
-        legacy_out.write_text("****ORCA TERMINATED NORMALLY****\n")
+        write_tmp_file("1a_pka.out", "****ORCA TERMINATED NORMALLY****\n")
 
         assert job._subjob_is_complete(
             job.protonated_job, legacy_label="1a_pka"

@@ -213,12 +213,11 @@ class TestGenGenECPSectionEdgeCases:
             GenGenECPSection.from_genecp_path(str(missing_path))
 
     def test_from_genecp_path_reads_file_dropping_trailing_blank_line(
-        self, tmp_path
+        self, write_tmp_file
     ):
-        genecp_file = tmp_path / "genecp.txt"
-        genecp_file.write_text("H C 0\nbasis\n****\n\n")
+        genecp_file = write_tmp_file("genecp.txt", "H C 0\nbasis\n****\n\n")
 
-        section = GenGenECPSection.from_genecp_path(str(genecp_file))
+        section = GenGenECPSection.from_genecp_path(genecp_file)
 
         # The extra trailing blank line is dropped before reading; the
         # remaining single "\n" at the end of "****\n" still produces one
@@ -226,12 +225,11 @@ class TestGenGenECPSectionEdgeCases:
         assert section.string_list == ["H C 0", "basis", "****", ""]
 
     def test_from_genecp_path_reads_file_without_trailing_blank_line(
-        self, tmp_path
+        self, write_tmp_file
     ):
-        genecp_file = tmp_path / "genecp.txt"
-        genecp_file.write_text("H C 0\nbasis\n****")
+        genecp_file = write_tmp_file("genecp.txt", "H C 0\nbasis\n****")
 
-        section = GenGenECPSection.from_genecp_path(str(genecp_file))
+        section = GenGenECPSection.from_genecp_path(genecp_file)
 
         assert section.string_list == ["H C 0", "basis", "****"]
 
