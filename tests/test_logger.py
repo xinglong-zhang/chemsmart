@@ -12,51 +12,16 @@ list, and LogOnceFilter's deduplication/formatting helpers.
 import logging
 import sys
 
-import pytest
-
 from chemsmart.utils.logger import LogOnceFilter, create_logger
 
 
-@pytest.fixture()
-def clean_root_logger():
-    """Snapshot and restore the root logger around each test.
-
-    create_logger() mutates the (global, shared) root logger's level,
-    handlers, and filters, so tests must not leak that state into the
-    rest of the suite.
-    """
-    root = logging.getLogger()
-    original_handlers = root.handlers[:]
-    original_filters = root.filters[:]
-    original_level = root.level
-    yield root
-    for handler in root.handlers:
-        if handler not in original_handlers:
-            handler.close()
-    root.handlers = original_handlers
-    root.filters = original_filters
-    root.level = original_level
-
-
-def _make_record(msg, args=None):
-    return logging.LogRecord(
-        name="test",
-        level=logging.INFO,
-        pathname="",
-        lineno=0,
-        msg=msg,
-        args=args,
-        exc_info=None,
-    )
-
-
 class TestLogOnceFilterFormatRecord:
-    def test_formats_message_with_args(self):
-        record = _make_record("value is %s", args=("foo",))
+    def test_formats_message_with_args(self, make_log_record):
+        record = make_log_record("value is %s", args=("foo",))
         assert LogOnceFilter.format_record(record) == "value is foo"
 
-    def test_formats_message_without_args(self):
-        record = _make_record("plain message")
+    def test_formats_message_without_args(self, make_log_record):
+        record = make_log_record("plain message")
         assert LogOnceFilter.format_record(record) == "plain message"
 
 
@@ -71,27 +36,27 @@ class TestLogOnceFilterRemoveTimestamp:
 
 
 class TestLogOnceFilterFilter:
-    def test_first_occurrence_passes(self):
+    def test_first_occurrence_passes(self, make_log_record):
         log_filter = LogOnceFilter()
-        assert log_filter.filter(_make_record("hello")) is True
+        assert log_filter.filter(make_log_record("hello")) is True
 
-    def test_duplicate_message_is_filtered_out(self):
+    def test_duplicate_message_is_filtered_out(self, make_log_record):
         log_filter = LogOnceFilter()
-        log_filter.filter(_make_record("hello"))
-        assert log_filter.filter(_make_record("hello")) is False
+        log_filter.filter(make_log_record("hello"))
+        assert log_filter.filter(make_log_record("hello")) is False
 
-    def test_distinct_messages_both_pass(self):
+    def test_distinct_messages_both_pass(self, make_log_record):
         log_filter = LogOnceFilter()
-        assert log_filter.filter(_make_record("hello")) is True
-        assert log_filter.filter(_make_record("world")) is True
+        assert log_filter.filter(make_log_record("hello")) is True
+        assert log_filter.filter(make_log_record("world")) is True
 
-    def test_formatted_args_are_deduplicated(self):
+    def test_formatted_args_are_deduplicated(self, make_log_record):
         # Two records with the same msg template and args collapse to
         # the same formatted string and are deduplicated accordingly.
         log_filter = LogOnceFilter()
-        log_filter.filter(_make_record("value is %s", args=("foo",)))
+        log_filter.filter(make_log_record("value is %s", args=("foo",)))
         assert (
-            log_filter.filter(_make_record("value is %s", args=("foo",)))
+            log_filter.filter(make_log_record("value is %s", args=("foo",)))
             is False
         )
 
@@ -124,6 +89,7 @@ class TestCreateLogger:
         # Only the always-on stderr error handler should be present.
         assert len(stream_handlers) == 1
         assert stream_handlers[0].stream is sys.stderr
+        assert stream_handlers[0].level == logging.ERROR
 
     def test_logfile_creates_file_handler_at_configured_level(
         self, clean_root_logger, tmp_path
@@ -139,6 +105,7 @@ class TestCreateLogger:
         assert len(file_handlers) == 1
         assert file_handlers[0].baseFilename == str(tmp_path / logfile)
         assert file_handlers[0].level == logging.INFO
+        assert (tmp_path / logfile).exists()
 
     def test_errfile_creates_file_handler_at_warning_level(
         self, clean_root_logger, tmp_path
@@ -152,6 +119,7 @@ class TestCreateLogger:
         assert len(file_handlers) == 1
         assert file_handlers[0].baseFilename == str(tmp_path / errfile)
         assert file_handlers[0].level == logging.WARNING
+        assert (tmp_path / errfile).exists()
 
     def test_logfile_and_errfile_both_create_separate_handlers(
         self, clean_root_logger, tmp_path
@@ -191,6 +159,14 @@ class TestCreateLogger:
 
         assert len(logger.handlers) == first_handler_count
         assert len(logger.filters) == first_filter_count
+
+    def test_removes_preexisting_handlers(self, clean_root_logger):
+        clean_root_logger.addHandler(logging.NullHandler())
+        create_logger(stream=False)
+        assert not any(
+            isinstance(h, logging.NullHandler)
+            for h in clean_root_logger.handlers
+        )
 
     def test_returns_root_logger(self, clean_root_logger):
         assert create_logger() is logging.getLogger()
