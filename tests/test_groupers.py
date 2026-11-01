@@ -53,127 +53,7 @@ from chemsmart.utils.utils import (
     to_graph_wrapper,
 )
 
-SYMBOLS = ["H", "H"]
-
-
-POSITIONS = np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]])
-
-
 grouper_module = importlib.import_module("chemsmart.cli.grouper.grouper")
-
-
-@pytest.fixture()
-def grouper_job(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    return GrouperJob(
-        molecules=make_molecules(3),
-        grouping_strategy="rmsd",
-        label="mygrp",
-        threshold=0.5,
-    )
-
-
-class SimpleMolecule:
-    def __init__(self, energy, symbols, positions):
-        self.energy = energy
-        self.chemical_symbols = symbols
-        self.positions = positions
-
-    @property
-    def num_atoms(self):
-        return len(self.chemical_symbols)
-
-
-def make_molecules(n=3):
-    return [MagicMock(name=f"molecule{i}") for i in range(n)]
-
-
-class _ConcreteGrouper(MoleculeGrouper):
-    """Minimal concrete subclass so the abstract base can be instantiated."""
-
-    def group(self):
-        indices = list(range(len(self.molecules)))
-        return [self.molecules], [indices]
-
-
-def _make_water():
-    return Molecule(
-        symbols=["O", "H"],
-        positions=[[0.0, 0.0, 0.0], [0.96, 0.0, 0.0]],
-        charge=0,
-        multiplicity=1,
-    )
-
-
-def _mol_tfd_grouper():
-    return Molecule(symbols=SYMBOLS, positions=POSITIONS)
-
-
-def _mol_energy_grouper(energy):
-    return Molecule(symbols=SYMBOLS, positions=POSITIONS, energy=energy)
-
-
-def _mol(x_offset=0.0):
-    positions = np.array(
-        [[0.0 + x_offset, 0.0, 0.0], [0.74 + x_offset, 0.0, 0.0]]
-    )
-    return Molecule(symbols=SYMBOLS, positions=positions)
-
-
-def _formaldehyde(x_offset=0.0, y_rotate=False):
-    # One C, one O, two H -- exercises the Hungarian assignment's
-    # single-atom-per-element shortcut (C and O) alongside the real
-    # linear_sum_assignment path (the two H atoms).
-    positions = np.array(
-        [
-            [0.0 + x_offset, 0.0, 0.0],
-            [1.2 + x_offset, 0.0, 0.0],
-            [-0.6 + x_offset, 0.9, 0.0],
-            [-0.6 + x_offset, -0.9, 0.0],
-        ]
-    )
-    if y_rotate:
-        # Swap the two symmetric H atoms' order to force the Hungarian
-        # algorithm to actually search for the optimal assignment.
-        positions = positions[[0, 1, 3, 2]]
-    return Molecule(symbols=["C", "O", "H", "H"], positions=positions)
-
-
-def _cleanup_pymol_grouper(grouper):
-    """Avoid __del__ triggering a real cmd.quit() during teardown,
-    mirroring the pattern used in tests/test_groupers.py."""
-    import shutil
-
-    if getattr(grouper, "_temp_dir", None):
-        shutil.rmtree(grouper._temp_dir, ignore_errors=True)
-        grouper._temp_dir = None
-    grouper.cmd = None
-
-
-@pytest.fixture()
-def shared_pymol_grouper():
-    # A single real PymolRMSDGrouper reused across several tests below.
-    # Constructing PyMOL's embedded, process-wide session is expensive
-    # and (empirically) prone to hangs if done many times back-to-back
-    # in the same process alongside tests/test_groupers.py's own PyMOL
-    # tests -- so we build it once per test instead of once per test
-    # method.
-    grouper = PymolRMSDGrouper([_mol(), _mol(0.001)])
-    yield grouper
-    _cleanup_pymol_grouper(grouper)
-
-
-def _make_irmsd_grouper(**kwargs):
-    # find_irmsd_command() is called at __init__ time and raises
-    # RuntimeError if no real irmsd binary is found. Mocking it lets us
-    # exercise the rest of IRMSDGrouper's logic (XYZ writing, output
-    # parsing, subprocess error handling, and _record_results) without
-    # needing the actual external tool installed.
-    with patch(
-        "chemsmart.jobs.grouper.rmsd.find_irmsd_command",
-        return_value="/fake/bin/irmsd",
-    ):
-        return IRMSDGrouper([_mol(), _mol(0.001)], **kwargs)
 
 
 def _is_irmsd_available() -> bool:
@@ -5216,26 +5096,29 @@ class TestRepresentativeStrategy:
 
 
 class TestRMSDGrouperConstruction:
-    def test_rejects_both_threshold_and_num_groups(self):
+    def test_rejects_both_threshold_and_num_groups(
+        self, make_hydrogen_molecule
+    ):
         with pytest.raises(ValueError, match="Cannot specify both"):
-            BasicRMSDGrouper([_mol(), _mol()], threshold=0.5, num_groups=2)
+            BasicRMSDGrouper(
+                [make_hydrogen_molecule(), make_hydrogen_molecule()],
+                threshold=0.5,
+                num_groups=2,
+            )
 
 
 class TestGetHeavyAtoms:
-    def test_returns_all_atoms_when_not_ignoring_hydrogens(self):
-        molecules = [_mol(), _mol()]
+    def test_returns_all_atoms_when_not_ignoring_hydrogens(
+        self, make_hydrogen_molecule
+    ):
+        molecules = [make_hydrogen_molecule(), make_hydrogen_molecule()]
         grouper = BasicRMSDGrouper(molecules, ignore_hydrogens=False)
         positions, symbols = grouper._get_heavy_atoms(molecules[0])
         assert symbols == ["H", "H"]
         assert positions.shape == (2, 3)
 
-    def test_filters_hydrogens_when_ignoring(self):
-        mol = Molecule(
-            symbols=["C", "H", "H"],
-            positions=np.array(
-                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]
-            ),
-        )
+    def test_filters_hydrogens_when_ignoring(self, methane_molecule):
+        mol = methane_molecule
         grouper = BasicRMSDGrouper([mol, mol], ignore_hydrogens=True)
         positions, symbols = grouper._get_heavy_atoms(mol)
         assert symbols == ["C"]
@@ -5243,21 +5126,25 @@ class TestGetHeavyAtoms:
 
 
 class TestRMSDGrouperNumGroups:
-    def test_num_groups_at_least_n_returns_singletons(self, tmp_path):
-        molecules = [_mol(), _mol(1.0)]
+    def test_num_groups_at_least_n_returns_singletons(
+        self, tmp_path, make_hydrogen_molecule
+    ):
+        molecules = [make_hydrogen_molecule(), make_hydrogen_molecule(1.0)]
         grouper = BasicRMSDGrouper(
             molecules, num_groups=5, output_dir=str(tmp_path)
         )
         groups, index_groups = grouper.group()
         assert index_groups == [[0], [1]]
 
-    def test_num_groups_produces_requested_count(self, tmp_path):
+    def test_num_groups_produces_requested_count(
+        self, tmp_path, make_hydrogen_molecule
+    ):
         molecules = [
-            _mol(0.0),
-            _mol(0.001),
-            _mol(5.0),
-            _mol(5.001),
-            _mol(10.0),
+            make_hydrogen_molecule(0.0),
+            make_hydrogen_molecule(0.001),
+            make_hydrogen_molecule(5.0),
+            make_hydrogen_molecule(5.001),
+            make_hydrogen_molecule(10.0),
         ]
         grouper = BasicRMSDGrouper(
             molecules,
@@ -5269,26 +5156,41 @@ class TestRMSDGrouperNumGroups:
         assert len(groups) == 3
         assert grouper._auto_threshold is not None
 
-    def test_repr_with_num_groups(self):
-        grouper = BasicRMSDGrouper([_mol(), _mol()], num_groups=1)
+    def test_repr_with_num_groups(self, make_hydrogen_molecule):
+        grouper = BasicRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule()], num_groups=1
+        )
         assert "num_groups=1" in repr(grouper)
 
-    def test_repr_with_threshold(self):
-        grouper = BasicRMSDGrouper([_mol(), _mol()], threshold=0.3)
+    def test_repr_with_threshold(self, make_hydrogen_molecule):
+        grouper = BasicRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule()], threshold=0.3
+        )
         assert "threshold=0.3" in repr(grouper)
 
 
 class TestCalculateFullRmsdMatrix:
-    def test_returns_symmetric_matrix_without_output_file(self):
-        molecules = [_mol(0.0), _mol(0.001), _mol(5.0)]
+    def test_returns_symmetric_matrix_without_output_file(
+        self, make_hydrogen_molecule
+    ):
+        molecules = [
+            make_hydrogen_molecule(0.0),
+            make_hydrogen_molecule(0.001),
+            make_hydrogen_molecule(5.0),
+        ]
         grouper = BasicRMSDGrouper(molecules, num_procs=1)
         matrix = grouper.calculate_full_rmsd_matrix()
         assert matrix.shape == (3, 3)
         assert np.allclose(matrix, matrix.T)
         assert np.allclose(np.diag(matrix), 0.0)
 
-    def test_writes_output_file_when_requested(self, tmp_path):
-        molecules = [_mol(0.0), _mol(0.001)]
+    def test_writes_output_file_when_requested(
+        self, tmp_path, make_hydrogen_molecule
+    ):
+        molecules = [
+            make_hydrogen_molecule(0.0),
+            make_hydrogen_molecule(0.001),
+        ]
         grouper = BasicRMSDGrouper(
             molecules, num_procs=1, output_dir=str(tmp_path)
         )
@@ -5301,8 +5203,14 @@ class TestCalculateFullRmsdMatrix:
 
 
 class TestRecordResultsBranches:
-    def test_record_results_with_num_groups_and_grouping_time(self, tmp_path):
-        molecules = [_mol(0.0), _mol(0.001), _mol(5.0)]
+    def test_record_results_with_num_groups_and_grouping_time(
+        self, tmp_path, make_hydrogen_molecule
+    ):
+        molecules = [
+            make_hydrogen_molecule(0.0),
+            make_hydrogen_molecule(0.001),
+            make_hydrogen_molecule(5.0),
+        ]
         grouper = BasicRMSDGrouper(
             molecules,
             num_groups=2,
@@ -5313,9 +5221,12 @@ class TestRecordResultsBranches:
         assert len(groups) == 2
 
     def test_record_results_with_threshold_and_no_grouping_time(
-        self, tmp_path
+        self, tmp_path, make_hydrogen_molecule
     ):
-        molecules = [_mol(0.0), _mol(0.001)]
+        molecules = [
+            make_hydrogen_molecule(0.0),
+            make_hydrogen_molecule(0.001),
+        ]
         grouper = BasicRMSDGrouper(
             molecules,
             threshold=0.5,
@@ -5325,11 +5236,13 @@ class TestRecordResultsBranches:
         rmsd_matrix = np.zeros((2, 2))
         grouper._record_results(rmsd_matrix, grouping_time=None)
 
-    def test_record_results_with_num_groups_and_auto_threshold(self, tmp_path):
+    def test_record_results_with_num_groups_and_auto_threshold(
+        self, tmp_path, make_hydrogen_molecule
+    ):
         molecules = [
-            _mol_tfd_grouper(),
-            _mol_tfd_grouper(),
-            _mol_tfd_grouper(),
+            make_hydrogen_molecule(),
+            make_hydrogen_molecule(),
+            make_hydrogen_molecule(),
         ]
         grouper = TorsionFingerprintGrouper(
             molecules,
@@ -5346,8 +5259,10 @@ class TestRecordResultsBranches:
             index_groups=[[0, 1], [2]],
         )
 
-    def test_record_results_without_groups_or_grouping_time(self, tmp_path):
-        molecules = [_mol_tfd_grouper(), _mol_tfd_grouper()]
+    def test_record_results_without_groups_or_grouping_time(
+        self, tmp_path, make_hydrogen_molecule
+    ):
+        molecules = [make_hydrogen_molecule(), make_hydrogen_molecule()]
         grouper = TorsionFingerprintGrouper(
             molecules,
             threshold=0.1,
@@ -5364,18 +5279,19 @@ class TestRecordResultsBranches:
 
 
 class TestHungarianRMSDGrouperSpecifics:
-    def test_incompatible_symbols_return_inf(self):
-        mol1 = _mol()
-        mol2 = Molecule(
-            symbols=["C", "H"],
-            positions=np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]]),
-        )
+    def test_incompatible_symbols_return_inf(
+        self, make_hydrogen_molecule, ch_molecule
+    ):
+        mol1 = make_hydrogen_molecule()
+        mol2 = ch_molecule
         grouper = HungarianRMSDGrouper([mol1, mol2])
         assert grouper._calculate_rmsd((0, 1)) == np.inf
 
-    def test_single_atom_per_element_shortcut_and_alignment(self):
-        mol1 = _formaldehyde()
-        mol2 = _formaldehyde(y_rotate=True)
+    def test_single_atom_per_element_shortcut_and_alignment(
+        self, make_formaldehyde_molecule
+    ):
+        mol1 = make_formaldehyde_molecule()
+        mol2 = make_formaldehyde_molecule(swap_hydrogens=True)
         grouper = HungarianRMSDGrouper([mol1, mol2], align_molecules=True)
         rmsd = grouper._calculate_rmsd((0, 1))
         # C and O each appear once (shortcut path); the two equivalent
@@ -5383,9 +5299,9 @@ class TestHungarianRMSDGrouperSpecifics:
         # RMSD after Kabsch alignment should be ~0.
         assert rmsd < 1e-6
 
-    def test_without_alignment_skips_kabsch(self):
-        mol1 = _formaldehyde()
-        mol2 = _formaldehyde(x_offset=5.0)
+    def test_without_alignment_skips_kabsch(self, make_formaldehyde_molecule):
+        mol1 = make_formaldehyde_molecule()
+        mol2 = make_formaldehyde_molecule(x_offset=5.0)
         grouper = HungarianRMSDGrouper([mol1, mol2], align_molecules=False)
         rmsd = grouper._calculate_rmsd((0, 1))
         # Without alignment, a pure translation still contributes to RMSD.
@@ -5393,37 +5309,39 @@ class TestHungarianRMSDGrouperSpecifics:
 
 
 class TestSpyRMSDGrouperSpecifics:
-    def test_mismatched_coord_length_returns_inf(self):
-        mol1 = _mol()
-        mol2 = Molecule(
-            symbols=["H", "H", "H"],
-            positions=np.array(
-                [[0.0, 0.0, 0.0], [0.74, 0.0, 0.0], [1.5, 0.0, 0.0]]
-            ),
-        )
+    def test_mismatched_coord_length_returns_inf(
+        self, make_hydrogen_molecule, water_molecule
+    ):
+        mol1 = make_hydrogen_molecule()
+        mol2 = water_molecule
         grouper = SpyRMSDGrouper([mol1, mol2])
         assert grouper._calculate_rmsd((0, 1)) == np.inf
         assert grouper.best_isomorphisms[(0, 1)] is None
 
-    def test_mismatched_atomic_numbers_returns_inf(self):
-        mol1 = _mol()
-        mol2 = Molecule(
-            symbols=["C", "H"],
-            positions=np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]]),
-        )
+    def test_mismatched_atomic_numbers_returns_inf(
+        self, make_hydrogen_molecule, ch_molecule
+    ):
+        mol1 = make_hydrogen_molecule()
+        mol2 = ch_molecule
         grouper = SpyRMSDGrouper([mol1, mol2])
         assert grouper._calculate_rmsd((0, 1)) == np.inf
         assert grouper.best_isomorphisms[(0, 1)] is None
 
-    def test_non_tuple_result_from_symmrmsd(self):
-        grouper = SpyRMSDGrouper([_mol(), _mol(0.001)])
+    def test_non_tuple_result_from_symmrmsd(self, make_hydrogen_molecule):
+        grouper = SpyRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule(0.001)]
+        )
         with patch("spyrmsd.rmsd.symmrmsd", return_value=0.123):
             rmsd = grouper._calculate_rmsd((0, 1))
         assert rmsd == pytest.approx(0.123)
         assert grouper.best_isomorphisms[(0, 1)] is None
 
-    def test_exception_during_symmrmsd_returns_inf(self):
-        grouper = SpyRMSDGrouper([_mol(), _mol(0.001)])
+    def test_exception_during_symmrmsd_returns_inf(
+        self, make_hydrogen_molecule
+    ):
+        grouper = SpyRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule(0.001)]
+        )
         with patch(
             "spyrmsd.rmsd.symmrmsd",
             side_effect=RuntimeError("boom"),
@@ -5432,23 +5350,35 @@ class TestSpyRMSDGrouperSpecifics:
         assert rmsd == np.inf
         assert grouper.best_isomorphisms[(0, 1)] is None
 
-    def test_get_best_isomorphism_direct_hit(self):
-        grouper = SpyRMSDGrouper([_mol(), _mol(0.001)])
+    def test_get_best_isomorphism_direct_hit(self, make_hydrogen_molecule):
+        grouper = SpyRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule(0.001)]
+        )
         grouper.best_isomorphisms[(0, 1)] = ([0, 1], [1, 0])
         assert grouper.get_best_isomorphism(0, 1) == ([0, 1], [1, 0])
 
-    def test_get_best_isomorphism_reversed_hit_with_mapping(self):
-        grouper = SpyRMSDGrouper([_mol(), _mol(0.001)])
+    def test_get_best_isomorphism_reversed_hit_with_mapping(
+        self, make_hydrogen_molecule
+    ):
+        grouper = SpyRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule(0.001)]
+        )
         grouper.best_isomorphisms[(1, 0)] = ([0, 1], [1, 0])
         assert grouper.get_best_isomorphism(0, 1) == ([1, 0], [0, 1])
 
-    def test_get_best_isomorphism_reversed_hit_without_mapping(self):
-        grouper = SpyRMSDGrouper([_mol(), _mol(0.001)])
+    def test_get_best_isomorphism_reversed_hit_without_mapping(
+        self, make_hydrogen_molecule
+    ):
+        grouper = SpyRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule(0.001)]
+        )
         grouper.best_isomorphisms[(1, 0)] = None
         assert grouper.get_best_isomorphism(0, 1) is None
 
-    def test_get_best_isomorphism_not_found(self):
-        grouper = SpyRMSDGrouper([_mol(), _mol(0.001)])
+    def test_get_best_isomorphism_not_found(self, make_hydrogen_molecule):
+        grouper = SpyRMSDGrouper(
+            [make_hydrogen_molecule(), make_hydrogen_molecule(0.001)]
+        )
         assert grouper.get_best_isomorphism(5, 6) is None
 
 
@@ -5499,18 +5429,15 @@ class TestPymolRMSDGrouperSpecifics:
     def test_repr_with_threshold(self, shared_pymol_grouper):
         assert "threshold=0.5" in repr(shared_pymol_grouper)
 
-    def test_repr_with_num_groups(self):
+    def test_repr_with_num_groups(self, make_pymol_rmsd_grouper):
         # This is the one repr variant that needs a distinct instance
         # (num_groups vs. threshold is fixed at construction time).
-        grouper = PymolRMSDGrouper(
-            [_mol(), _mol(0.001)], threshold=None, num_groups=1
-        )
-        try:
-            assert "num_groups=1" in repr(grouper)
-        finally:
-            _cleanup_pymol_grouper(grouper)
+        grouper = make_pymol_rmsd_grouper(threshold=None, num_groups=1)
+        assert "num_groups=1" in repr(grouper)
 
-    def test_del_quits_pymol_and_removes_temp_dir(self):
+    def test_del_quits_pymol_and_removes_temp_dir(
+        self, make_pymol_rmsd_grouper
+    ):
         # NOTE: __del__ is called explicitly here for coverage, but the
         # real `cmd` object is a process-wide singleton PyMOL session
         # shared by every PymolRMSDGrouper in this process. If we left
@@ -5518,71 +5445,64 @@ class TestPymolRMSDGrouperSpecifics:
         # garbage collection would call __del__ again later (unmocked),
         # issuing a *real* cmd.quit() that kills the shared session for
         # every subsequent test. So we always null out cmd/_temp_dir
-        # afterward, same as _cleanup_pymol_grouper does elsewhere.
-        grouper = PymolRMSDGrouper([_mol(), _mol(0.001)])
+        # afterward -- make_pymol_rmsd_grouper does this at teardown.
+        grouper = make_pymol_rmsd_grouper()
         temp_dir = grouper._temp_dir
         assert os.path.isdir(temp_dir)
-        try:
-            with patch.object(grouper.cmd, "quit") as mock_quit:
-                grouper.__del__()
-                mock_quit.assert_called_once()
-            assert not os.path.isdir(temp_dir)
-        finally:
-            _cleanup_pymol_grouper(grouper)
+        with patch.object(grouper.cmd, "quit") as mock_quit:
+            grouper.__del__()
+            mock_quit.assert_called_once()
+        assert not os.path.isdir(temp_dir)
 
-    def test_del_swallows_quit_exception(self):
-        grouper = PymolRMSDGrouper([_mol(), _mol(0.001)])
-        try:
-            with patch.object(
-                grouper.cmd, "quit", side_effect=RuntimeError("boom")
-            ):
-                grouper.__del__()  # Should not raise
-        finally:
-            _cleanup_pymol_grouper(grouper)
+    def test_del_swallows_quit_exception(self, make_pymol_rmsd_grouper):
+        grouper = make_pymol_rmsd_grouper()
+        with patch.object(
+            grouper.cmd, "quit", side_effect=RuntimeError("boom")
+        ):
+            grouper.__del__()  # Should not raise
 
-    def test_del_swallows_rmtree_exception(self):
-        grouper = PymolRMSDGrouper([_mol(), _mol(0.001)])
-        try:
-            # Also mock quit() here: __del__ calls cmd.quit() before the
-            # rmtree cleanup, and a real quit() tears down PyMOL's
-            # process-wide embedded session for good, hanging every
-            # later test (including in test_groupers.py) that tries to
-            # launch a new PymolRMSDGrouper.
-            with (
-                patch.object(grouper.cmd, "quit"),
-                patch("shutil.rmtree", side_effect=RuntimeError("boom")),
-            ):
-                grouper.__del__()  # Should not raise
-        finally:
-            _cleanup_pymol_grouper(grouper)
+    def test_del_swallows_rmtree_exception(self, make_pymol_rmsd_grouper):
+        grouper = make_pymol_rmsd_grouper()
+        # Also mock quit() here: __del__ calls cmd.quit() before the
+        # rmtree cleanup, and a real quit() tears down PyMOL's
+        # process-wide embedded session for good, hanging every later
+        # test that tries to launch a new PymolRMSDGrouper.
+        with (
+            patch.object(grouper.cmd, "quit"),
+            patch("shutil.rmtree", side_effect=RuntimeError("boom")),
+        ):
+            grouper.__del__()  # Should not raise
 
 
 class TestIRMSDGrouperConstruction:
-    def test_raises_when_irmsd_command_not_found(self):
+    def test_raises_when_irmsd_command_not_found(self, make_hydrogen_molecule):
         with patch(
             "chemsmart.jobs.grouper.rmsd.find_irmsd_command",
             return_value=None,
         ):
             with pytest.raises(RuntimeError, match="irmsd is not available"):
-                IRMSDGrouper([_mol(), _mol(0.001)])
+                IRMSDGrouper(
+                    [make_hydrogen_molecule(), make_hydrogen_molecule(0.001)]
+                )
 
-    def test_explicit_threshold_is_not_overridden(self):
-        grouper = _make_irmsd_grouper(threshold=0.3)
+    def test_explicit_threshold_is_not_overridden(self, make_irmsd_grouper):
+        grouper = make_irmsd_grouper(threshold=0.3)
         assert grouper.threshold == 0.3
 
 
 class TestIRMSDGrouperSpecifics:
-    def test_incompatible_symbols_return_inf(self):
-        grouper = _make_irmsd_grouper()
-        mol2 = Molecule(
-            symbols=["C", "H"],
-            positions=np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]]),
-        )
+    def test_incompatible_symbols_return_inf(
+        self, ch_molecule, make_irmsd_grouper
+    ):
+        grouper = make_irmsd_grouper()
+        mol2 = ch_molecule
         grouper.molecules.append(mol2)
         assert grouper._calculate_rmsd((0, 2)) == np.inf
 
-    def test_successful_run_parses_rmsd_and_inversion(self):
-        grouper = _make_irmsd_grouper(inversion="auto")
+    def test_successful_run_parses_rmsd_and_inversion(
+        self, make_irmsd_grouper
+    ):
+        grouper = make_irmsd_grouper(inversion="auto")
         fake_stdout = "some header\niRMSD: 0.4567\nInversion check: off\n"
         with patch(
             "subprocess.run",
@@ -5596,8 +5516,8 @@ class TestIRMSDGrouperSpecifics:
         assert rmsd == pytest.approx(0.4567)
         assert grouper._actual_inversion == "off"
 
-    def test_nonzero_returncode_returns_inf(self):
-        grouper = _make_irmsd_grouper()
+    def test_nonzero_returncode_returns_inf(self, make_irmsd_grouper):
+        grouper = make_irmsd_grouper()
         with patch(
             "subprocess.run",
             return_value=type(
@@ -5608,10 +5528,10 @@ class TestIRMSDGrouperSpecifics:
         ):
             assert grouper._calculate_rmsd((0, 1)) == np.inf
 
-    def test_timeout_returns_inf(self):
+    def test_timeout_returns_inf(self, make_irmsd_grouper):
         import subprocess as subprocess_module
 
-        grouper = _make_irmsd_grouper()
+        grouper = make_irmsd_grouper()
         with patch(
             "subprocess.run",
             side_effect=subprocess_module.TimeoutExpired(
@@ -5620,13 +5540,13 @@ class TestIRMSDGrouperSpecifics:
         ):
             assert grouper._calculate_rmsd((0, 1)) == np.inf
 
-    def test_unexpected_exception_returns_inf(self):
-        grouper = _make_irmsd_grouper()
+    def test_unexpected_exception_returns_inf(self, make_irmsd_grouper):
+        grouper = make_irmsd_grouper()
         with patch("subprocess.run", side_effect=RuntimeError("boom")):
             assert grouper._calculate_rmsd((0, 1)) == np.inf
 
-    def test_temp_file_cleanup_swallows_unlink_error(self):
-        grouper = _make_irmsd_grouper()
+    def test_temp_file_cleanup_swallows_unlink_error(self, make_irmsd_grouper):
+        grouper = make_irmsd_grouper()
         with (
             patch("subprocess.run", side_effect=RuntimeError("boom")),
             patch("os.unlink", side_effect=OSError("already gone")),
@@ -5634,8 +5554,8 @@ class TestIRMSDGrouperSpecifics:
             # Should not raise despite os.unlink failing during cleanup.
             assert grouper._calculate_rmsd((0, 1)) == np.inf
 
-    def test_ignore_hydrogens_adds_heavy_flag(self):
-        grouper = _make_irmsd_grouper(ignore_hydrogens=True)
+    def test_ignore_hydrogens_adds_heavy_flag(self, make_irmsd_grouper):
+        grouper = make_irmsd_grouper(ignore_hydrogens=True)
         captured_cmd = {}
 
         def fake_run(cmd, **kwargs):
@@ -5650,11 +5570,13 @@ class TestIRMSDGrouperSpecifics:
             grouper._calculate_rmsd((0, 1))
         assert "--heavy" in captured_cmd["cmd"]
 
-    def test_non_standard_inversion_omits_inversion_flag(self):
+    def test_non_standard_inversion_omits_inversion_flag(
+        self, make_irmsd_grouper
+    ):
         # inversion is only normalized with .lower() in __init__, not
         # validated against {"on", "off", "auto"} -- so a nonstandard
         # value is kept as-is and skips the --inversion flag entirely.
-        grouper = _make_irmsd_grouper(inversion="weird")
+        grouper = make_irmsd_grouper(inversion="weird")
         captured_cmd = {}
 
         def fake_run(cmd, **kwargs):
@@ -5669,24 +5591,30 @@ class TestIRMSDGrouperSpecifics:
             grouper._calculate_rmsd((0, 1))
         assert "--inversion" not in captured_cmd["cmd"]
 
-    def test_parse_irmsd_output_handles_unparsable_rmsd_line(self):
-        grouper = _make_irmsd_grouper()
+    def test_parse_irmsd_output_handles_unparsable_rmsd_line(
+        self, make_irmsd_grouper
+    ):
+        grouper = make_irmsd_grouper()
         rmsd, inversion = grouper._parse_irmsd_output(
             "iRMSD: not-a-number\n", parse_inversion=True
         )
         assert rmsd == np.inf
         assert inversion is None
 
-    def test_parse_irmsd_output_skips_inversion_when_not_requested(self):
-        grouper = _make_irmsd_grouper()
+    def test_parse_irmsd_output_skips_inversion_when_not_requested(
+        self, make_irmsd_grouper
+    ):
+        grouper = make_irmsd_grouper()
         rmsd, inversion = grouper._parse_irmsd_output(
             "iRMSD: 0.2\nInversion check: on\n", parse_inversion=False
         )
         assert rmsd == pytest.approx(0.2)
         assert inversion is None
 
-    def test_record_results_includes_inversion_header(self, tmp_path):
-        grouper = _make_irmsd_grouper(
+    def test_record_results_includes_inversion_header(
+        self, tmp_path, make_irmsd_grouper
+    ):
+        grouper = make_irmsd_grouper(
             output_dir=str(tmp_path), matrix_format="csv"
         )
         grouper._actual_inversion = "auto"
@@ -5696,53 +5624,70 @@ class TestIRMSDGrouperSpecifics:
 
 class TestEnergyGrouperConstruction:
 
-    def test_defaults_to_one_kcal_threshold(self):
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(1.0)]
+    def test_defaults_to_one_kcal_threshold(self, make_hydrogen_molecule):
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=1.0),
+        ]
         grouper = EnergyGrouper(molecules)
         assert grouper.threshold == 1.0
         assert np.isclose(grouper.threshold_hartree, 1.0 * KCAL_TO_HARTREE)
 
-    def test_num_groups_leaves_threshold_hartree_none(self):
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(1.0)]
+    def test_num_groups_leaves_threshold_hartree_none(
+        self, make_hydrogen_molecule
+    ):
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=1.0),
+        ]
         grouper = EnergyGrouper(molecules, num_groups=1)
         assert grouper.threshold is None
         assert grouper.threshold_hartree is None
 
 
 class TestEnergyGrouperValidation:
-    def test_rejects_missing_energy_few_molecules(self):
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(None)]
-        with pytest.raises(ValueError, match="missing energy information"):
-            EnergyGrouper(molecules)
-
-    def test_rejects_non_numeric_energy(self):
+    def test_rejects_missing_energy_few_molecules(
+        self, make_hydrogen_molecule
+    ):
         molecules = [
-            _mol_energy_grouper(0.0),
-            _mol_energy_grouper("not-a-number"),
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=None),
         ]
         with pytest.raises(ValueError, match="missing energy information"):
             EnergyGrouper(molecules)
 
-    def test_rejects_non_finite_energy(self):
+    def test_rejects_non_numeric_energy(self, make_hydrogen_molecule):
         molecules = [
-            _mol_energy_grouper(0.0),
-            _mol_energy_grouper(float("nan")),
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy="not-a-number"),
         ]
         with pytest.raises(ValueError, match="missing energy information"):
             EnergyGrouper(molecules)
 
-    def test_reports_count_when_many_molecules_missing_energy(self):
-        molecules = [_mol_energy_grouper(None) for _ in range(6)]
+    def test_rejects_non_finite_energy(self, make_hydrogen_molecule):
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=float("nan")),
+        ]
+        with pytest.raises(ValueError, match="missing energy information"):
+            EnergyGrouper(molecules)
+
+    def test_reports_count_when_many_molecules_missing_energy(
+        self, make_hydrogen_molecule
+    ):
+        molecules = [make_hydrogen_molecule(energy=None) for _ in range(6)]
         with pytest.raises(ValueError, match="Found 6 molecules"):
             EnergyGrouper(molecules)
 
 
 class TestEnergyGrouperThresholdGrouping:
-    def test_group_by_threshold_separates_distant_energies(self, tmp_path):
+    def test_group_by_threshold_separates_distant_energies(
+        self, tmp_path, make_hydrogen_molecule
+    ):
         molecules = [
-            _mol_energy_grouper(0.0),
-            _mol_energy_grouper(0.0001),
-            _mol_energy_grouper(10.0),
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=0.0001),
+            make_hydrogen_molecule(energy=10.0),
         ]
         grouper = EnergyGrouper(
             molecules, threshold=1.0, output_dir=str(tmp_path)
@@ -5752,15 +5697,23 @@ class TestEnergyGrouperThresholdGrouping:
         assert len(groups) == 2
         assert sorted(len(g) for g in index_groups) == [1, 2]
 
-    def test_repr_with_threshold(self):
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(1.0)]
+    def test_repr_with_threshold(self, make_hydrogen_molecule):
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=1.0),
+        ]
         grouper = EnergyGrouper(molecules, threshold=2.0)
         assert "threshold=2.0 kcal/mol" in repr(grouper)
 
 
 class TestEnergyGrouperNumGroups:
-    def test_num_groups_at_least_n_returns_singleton_groups(self, tmp_path):
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(1.0)]
+    def test_num_groups_at_least_n_returns_singleton_groups(
+        self, tmp_path, make_hydrogen_molecule
+    ):
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=1.0),
+        ]
         grouper = EnergyGrouper(
             molecules, num_groups=5, output_dir=str(tmp_path)
         )
@@ -5768,10 +5721,12 @@ class TestEnergyGrouperNumGroups:
         assert len(groups) == 2
         assert index_groups == [[0], [1]]
 
-    def test_num_groups_produces_requested_count(self, tmp_path):
+    def test_num_groups_produces_requested_count(
+        self, tmp_path, make_hydrogen_molecule
+    ):
         # Energies chosen so distinct thresholds yield distinct group counts.
         energies = [0.0, 0.0005, 5.0, 5.0005, 10.0]
-        molecules = [_mol_energy_grouper(e) for e in energies]
+        molecules = [make_hydrogen_molecule(energy=e) for e in energies]
         grouper = EnergyGrouper(
             molecules, num_groups=3, output_dir=str(tmp_path)
         )
@@ -5779,18 +5734,23 @@ class TestEnergyGrouperNumGroups:
         assert len(groups) == 3
         assert grouper._auto_threshold is not None
 
-    def test_repr_with_num_groups(self):
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(1.0)]
+    def test_repr_with_num_groups(self, make_hydrogen_molecule):
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=1.0),
+        ]
         grouper = EnergyGrouper(molecules, num_groups=1)
         assert "num_groups=1" in repr(grouper)
 
 
 class TestEnergyGrouperMerge:
-    def test_merge_groups_to_target_reduces_group_count(self, tmp_path):
+    def test_merge_groups_to_target_reduces_group_count(
+        self, tmp_path, make_hydrogen_molecule
+    ):
         # Three well-separated clusters of increasing size force a merge
         # down to 2 groups, exercising _merge_groups_to_target directly.
         energies = [0.0, 0.0001, 20.0, 40.0, 40.0001, 40.0002]
-        molecules = [_mol_energy_grouper(e) for e in energies]
+        molecules = [make_hydrogen_molecule(energy=e) for e in energies]
         grouper = EnergyGrouper(
             molecules, num_groups=2, output_dir=str(tmp_path)
         )
@@ -5802,13 +5762,16 @@ class TestEnergyGrouperMerge:
 
 class TestEnergyGrouperRecordResultsDirect:
     def test_record_results_without_grouping_time_or_cached_groups(
-        self, tmp_path
+        self, tmp_path, make_hydrogen_molecule
     ):
         # Calling _record_results directly (bypassing group()) with
         # grouping_time=None and no cached group indices exercises the
         # false side of both `if grouping_time is not None` and `if
         # index_groups is not None`.
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(1.0)]
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=1.0),
+        ]
         grouper = EnergyGrouper(
             molecules,
             threshold=1.0,
@@ -5821,11 +5784,13 @@ class TestEnergyGrouperRecordResultsDirect:
 
 
 class TestEnergyGrouperRecordResults:
-    def test_record_results_writes_output_with_threshold(self, tmp_path):
+    def test_record_results_writes_output_with_threshold(
+        self, tmp_path, make_hydrogen_molecule
+    ):
         molecules = [
-            _mol_energy_grouper(0.0),
-            _mol_energy_grouper(0.5),
-            _mol_energy_grouper(5.0),
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=0.5),
+            make_hydrogen_molecule(energy=5.0),
         ]
         grouper = EnergyGrouper(
             molecules,
@@ -5837,12 +5802,14 @@ class TestEnergyGrouperRecordResults:
         groups, index_groups = grouper.group()
         assert len(groups) >= 1
 
-    def test_record_results_writes_output_with_num_groups(self, tmp_path):
+    def test_record_results_writes_output_with_num_groups(
+        self, tmp_path, make_hydrogen_molecule
+    ):
         molecules = [
-            _mol_energy_grouper(0.0),
-            _mol_energy_grouper(0.5),
-            _mol_energy_grouper(5.0),
-            _mol_energy_grouper(5.5),
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=0.5),
+            make_hydrogen_molecule(energy=5.0),
+            make_hydrogen_molecule(energy=5.5),
         ]
         grouper = EnergyGrouper(
             molecules,
@@ -5854,8 +5821,13 @@ class TestEnergyGrouperRecordResults:
         groups, index_groups = grouper.group()
         assert len(groups) == 2
 
-    def test_record_results_includes_thermo_header_for_qhg(self, tmp_path):
-        molecules = [_mol_energy_grouper(0.0), _mol_energy_grouper(0.5)]
+    def test_record_results_includes_thermo_header_for_qhg(
+        self, tmp_path, make_hydrogen_molecule
+    ):
+        molecules = [
+            make_hydrogen_molecule(energy=0.0),
+            make_hydrogen_molecule(energy=0.5),
+        ]
         grouper = EnergyGrouper(
             molecules,
             threshold=1.0,
@@ -6061,24 +6033,27 @@ class TestRepr:
         rep = repr(grouper)
         assert "num_groups=2" in rep
 
-    def test_repr_includes_num_procs(self):
+    def test_repr_includes_num_procs(self, water_molecule):
         # RDKitIsomorphismGrouper does not support multiprocessing, so
         # any requested num_procs > 1 is clamped down to 1.
-        grouper = RDKitIsomorphismGrouper([_make_water()], num_procs=4)
+        grouper = RDKitIsomorphismGrouper([water_molecule], num_procs=4)
         assert repr(grouper) == "RDKitIsomorphismGrouper(num_procs=1)"
 
 
 class TestTorsionFingerprintGrouperConstruction:
 
-    def test_rejects_invalid_max_dev(self):
+    def test_rejects_invalid_max_dev(self, make_hydrogen_molecule):
         with pytest.raises(ValueError, match="max_dev must be either"):
             TorsionFingerprintGrouper(
-                [_mol_tfd_grouper(), _mol_tfd_grouper()], max_dev="bogus"
+                [make_hydrogen_molecule(), make_hydrogen_molecule()],
+                max_dev="bogus",
             )
 
-    def test_defaults_threshold_when_neither_specified(self):
+    def test_defaults_threshold_when_neither_specified(
+        self, make_hydrogen_molecule
+    ):
         grouper = TorsionFingerprintGrouper(
-            [_mol_tfd_grouper(), _mol_tfd_grouper()]
+            [make_hydrogen_molecule(), make_hydrogen_molecule()]
         )
         assert grouper.threshold == 0.1
         assert grouper.num_groups is None
@@ -6093,18 +6068,20 @@ class TestPrepareConformerMoleculeEdgeCases:
         assert grouper.rdkit_mol is None
         assert grouper.valid_conformer_ids == []
 
-    def test_rdkit_mol_none_short_circuits(self):
+    def test_rdkit_mol_none_short_circuits(self, make_hydrogen_molecule):
         grouper = TorsionFingerprintGrouper.__new__(TorsionFingerprintGrouper)
-        grouper.molecules = [_mol_tfd_grouper()]
+        grouper.molecules = [make_hydrogen_molecule()]
         grouper.ignore_hydrogens = False
         with patch.object(Molecule, "to_rdkit", return_value=None):
             grouper._prepare_conformer_molecule()
         assert grouper.rdkit_mol is None
         assert grouper.valid_conformer_ids == []
 
-    def test_add_conformer_failure_is_logged_and_skipped(self):
+    def test_add_conformer_failure_is_logged_and_skipped(
+        self, make_hydrogen_molecule
+    ):
         grouper = TorsionFingerprintGrouper(
-            [_mol_tfd_grouper(), _mol_tfd_grouper()]
+            [make_hydrogen_molecule(), make_hydrogen_molecule()]
         )
         # rdkit_mol was already prepared successfully in __init__; now
         # force a failure while re-preparing to hit the except branch
@@ -6116,34 +6093,42 @@ class TestPrepareConformerMoleculeEdgeCases:
             grouper._prepare_conformer_molecule()
         assert grouper.valid_conformer_ids == []
 
-    def test_ignore_hydrogens_removes_hs_successfully(self):
+    def test_ignore_hydrogens_removes_hs_successfully(
+        self, make_hydrogen_molecule
+    ):
         grouper = TorsionFingerprintGrouper(
-            [_mol_tfd_grouper(), _mol_tfd_grouper()], ignore_hydrogens=True
+            [make_hydrogen_molecule(), make_hydrogen_molecule()],
+            ignore_hydrogens=True,
         )
         assert grouper.rdkit_mol is not None
 
-    def test_ignore_hydrogens_falls_back_on_failure(self):
+    def test_ignore_hydrogens_falls_back_on_failure(
+        self, make_hydrogen_molecule
+    ):
         with patch(
             "chemsmart.jobs.grouper.tfd.Chem.RemoveHs",
             side_effect=RuntimeError("cannot remove"),
         ):
             grouper = TorsionFingerprintGrouper(
-                [_mol_tfd_grouper(), _mol_tfd_grouper()], ignore_hydrogens=True
+                [make_hydrogen_molecule(), make_hydrogen_molecule()],
+                ignore_hydrogens=True,
             )
         assert grouper.rdkit_mol is not None
 
 
 class TestCalculateTFDEdgeCases:
-    def test_returns_inf_when_no_rdkit_mol(self):
+    def test_returns_inf_when_no_rdkit_mol(self, make_hydrogen_molecule):
         grouper = TorsionFingerprintGrouper(
-            [_mol_tfd_grouper(), _mol_tfd_grouper()]
+            [make_hydrogen_molecule(), make_hydrogen_molecule()]
         )
         grouper.rdkit_mol = None
         assert grouper._calculate_tfd((0, 1)) == float("inf")
 
-    def test_returns_inf_on_calculation_exception(self):
+    def test_returns_inf_on_calculation_exception(
+        self, make_hydrogen_molecule
+    ):
         grouper = TorsionFingerprintGrouper(
-            [_mol_tfd_grouper(), _mol_tfd_grouper()]
+            [make_hydrogen_molecule(), make_hydrogen_molecule()]
         )
         with patch(
             "chemsmart.jobs.grouper.tfd.TorsionFingerprints"
@@ -6161,18 +6146,22 @@ class TestGroupEdgeCases:
         assert groups == []
         assert index_groups == []
 
-    def test_single_molecule_returns_single_group(self):
+    def test_single_molecule_returns_single_group(
+        self, make_hydrogen_molecule
+    ):
         grouper = TorsionFingerprintGrouper.__new__(TorsionFingerprintGrouper)
-        grouper.molecules = [_mol_tfd_grouper()]
+        grouper.molecules = [make_hydrogen_molecule()]
         groups, index_groups = grouper.group()
         assert groups == [[grouper.molecules[0]]]
         assert index_groups == [[0]]
 
-    def test_no_valid_conformers_falls_back_to_singleton_groups(self):
+    def test_no_valid_conformers_falls_back_to_singleton_groups(
+        self, make_hydrogen_molecule
+    ):
         molecules = [
-            _mol_tfd_grouper(),
-            _mol_tfd_grouper(),
-            _mol_tfd_grouper(),
+            make_hydrogen_molecule(),
+            make_hydrogen_molecule(),
+            make_hydrogen_molecule(),
         ]
         grouper = TorsionFingerprintGrouper(molecules)
         grouper.valid_conformer_ids = []
@@ -6214,17 +6203,17 @@ class TestTorsionFingerprintGrouperNumGroups:
 
 
 class TestTorsionFingerprintGrouperRepr:
-    def test_repr_with_threshold(self):
+    def test_repr_with_threshold(self, make_hydrogen_molecule):
         grouper = TorsionFingerprintGrouper(
-            [_mol_tfd_grouper(), _mol_tfd_grouper()], threshold=0.2
+            [make_hydrogen_molecule(), make_hydrogen_molecule()], threshold=0.2
         )
         text = repr(grouper)
         assert "threshold=0.2" in text
         assert "TorsionFingerprintGrouper" in text
 
-    def test_repr_with_num_groups(self):
+    def test_repr_with_num_groups(self, make_hydrogen_molecule):
         grouper = TorsionFingerprintGrouper(
-            [_mol_tfd_grouper(), _mol_tfd_grouper()], num_groups=1
+            [make_hydrogen_molecule(), make_hydrogen_molecule()], num_groups=1
         )
         text = repr(grouper)
         assert "num_groups=1" in text
@@ -6232,13 +6221,13 @@ class TestTorsionFingerprintGrouperRepr:
 
 class TestGroupInvalidMoleculeFallback:
     def test_molecule_with_no_hash_gets_its_own_group(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, water_molecule
     ):
         """group() calls self.record(...) unconditionally, which writes
         output files relative to cwd when output_dir is unset -- chdir
         into a throwaway directory to avoid polluting the repo."""
         monkeypatch.chdir(tmp_path)
-        mol = _make_water()
+        mol = water_molecule
         grouper = RDKitIsomorphismGrouper([mol], num_procs=1)
         with patch.object(Molecule, "get_rdkit_hash", return_value=None):
             groups, index_groups = grouper.group()
@@ -6247,9 +6236,11 @@ class TestGroupInvalidMoleculeFallback:
 
 
 class TestRecordResultsWithoutGroupingTime:
-    def test_grouping_time_none_skips_time_header(self, tmp_path, monkeypatch):
+    def test_grouping_time_none_skips_time_header(
+        self, tmp_path, monkeypatch, water_molecule
+    ):
         monkeypatch.chdir(tmp_path)
-        mol = _make_water()
+        mol = water_molecule
         grouper = RDKitIsomorphismGrouper([mol], num_procs=1, label="test")
 
         # Should not raise despite grouping_time being omitted.
@@ -6338,25 +6329,14 @@ class TestResultsRecorderFilename:
 
 
 class TestResultsRecorderRecordResults:
-    def _make_common_args(self):
-        header_info = [
-            ("Title", None),
-            ("", "Some Title Line"),
-            ("Key", ""),
-            ("Method", "RMSD"),
-        ]
-        sheets_data = {
-            "Groups": pd.DataFrame({"Group": [1], "Members": ["1"]})
-        }
-        matrix = np.array([[0.0, np.inf], [np.inf, 0.0]])
-        matrix_data = ("Matrix", matrix, ["1", "2"])
-        return header_info, sheets_data, matrix_data
 
-    def test_record_results_xlsx_with_matrix(self, tmp_path):
+    def test_record_results_xlsx_with_matrix(
+        self, tmp_path, results_recorder_args
+    ):
         recorder = ResultsRecorder(
             output_dir=str(tmp_path), matrix_format="xlsx"
         )
-        header_info, sheets_data, matrix_data = self._make_common_args()
+        header_info, sheets_data, matrix_data = results_recorder_args
         # Include a sheet sharing the matrix's name, to hit the "skip if
         # already written as matrix" continue branch in _write_xlsx.
         sheets_data[matrix_data[0]] = pd.DataFrame({"A": [1]})
@@ -6368,11 +6348,13 @@ class TestResultsRecorderRecordResults:
         )
         assert os.path.isfile(path)
 
-    def test_record_results_xlsx_without_matrix(self, tmp_path):
+    def test_record_results_xlsx_without_matrix(
+        self, tmp_path, results_recorder_args
+    ):
         recorder = ResultsRecorder(
             output_dir=str(tmp_path), matrix_format="xlsx"
         )
-        header_info, sheets_data, _ = self._make_common_args()
+        header_info, sheets_data, _ = results_recorder_args
         sheets_data["Other"] = pd.DataFrame({"A": [1, 2]})
         path = recorder.record_results(
             grouper_name="TestGrouper",
@@ -6382,11 +6364,11 @@ class TestResultsRecorderRecordResults:
         )
         assert os.path.isfile(path)
 
-    def test_record_results_csv(self, tmp_path):
+    def test_record_results_csv(self, tmp_path, results_recorder_args):
         recorder = ResultsRecorder(
             output_dir=str(tmp_path), matrix_format="csv"
         )
-        header_info, sheets_data, matrix_data = self._make_common_args()
+        header_info, sheets_data, matrix_data = results_recorder_args
         sheets_data["Extra"] = pd.DataFrame({"A": [1]})
         # Also include a sheet with the same name as the matrix sheet, to
         # exercise the "skip if already written as matrix" continue branch.
@@ -6401,11 +6383,13 @@ class TestResultsRecorderRecordResults:
         extra_file = path[:-4] + "_Extra.csv"
         assert os.path.isfile(extra_file)
 
-    def test_record_results_csv_without_matrix(self, tmp_path):
+    def test_record_results_csv_without_matrix(
+        self, tmp_path, results_recorder_args
+    ):
         recorder = ResultsRecorder(
             output_dir=str(tmp_path), matrix_format="csv"
         )
-        header_info, sheets_data, _ = self._make_common_args()
+        header_info, sheets_data, _ = results_recorder_args
         path = recorder.record_results(
             grouper_name="TestGrouper",
             header_info=header_info,
@@ -6413,11 +6397,11 @@ class TestResultsRecorderRecordResults:
         )
         assert os.path.isfile(path)
 
-    def test_record_results_txt(self, tmp_path):
+    def test_record_results_txt(self, tmp_path, results_recorder_args):
         recorder = ResultsRecorder(
             output_dir=str(tmp_path), matrix_format="txt"
         )
-        header_info, sheets_data, matrix_data = self._make_common_args()
+        header_info, sheets_data, matrix_data = results_recorder_args
         sheets_data["Extra"] = pd.DataFrame({"A": [1]})
         sheets_data[matrix_data[0]] = pd.DataFrame({"A": [1]})
         path = recorder.record_results(
@@ -6431,11 +6415,13 @@ class TestResultsRecorderRecordResults:
         assert "Matrix" in content
         assert "inf" in content
 
-    def test_record_results_txt_without_matrix(self, tmp_path):
+    def test_record_results_txt_without_matrix(
+        self, tmp_path, results_recorder_args
+    ):
         recorder = ResultsRecorder(
             output_dir=str(tmp_path), matrix_format="txt"
         )
-        header_info, sheets_data, _ = self._make_common_args()
+        header_info, sheets_data, _ = results_recorder_args
         path = recorder.record_results(
             grouper_name="TestGrouper",
             header_info=header_info,
@@ -6484,23 +6470,31 @@ class TestMoleculeGrouperValidation:
     # (always Iterable). So only the "non-Molecule items" branch below
     # is reachable in practice.
 
-    def test_rejects_non_molecule_items(self):
+    def test_rejects_non_molecule_items(self, make_molecule_grouper):
         with pytest.raises(TypeError, match="Molecule instances"):
-            _ConcreteGrouper(molecules=[1, 2, 3])
+            make_molecule_grouper(molecules=[1, 2, 3])
 
-    def test_accepts_valid_molecules(self, water_molecule):
-        grouper = _ConcreteGrouper(molecules=[water_molecule])
+    def test_accepts_valid_molecules(
+        self, water_molecule, make_molecule_grouper
+    ):
+        grouper = make_molecule_grouper(molecules=[water_molecule])
         assert grouper.molecules == [water_molecule]
         assert grouper.num_procs == 1
 
-    def test_num_procs_floored_at_one(self, water_molecule):
-        grouper = _ConcreteGrouper(molecules=[water_molecule], num_procs=0)
+    def test_num_procs_floored_at_one(
+        self, water_molecule, make_molecule_grouper
+    ):
+        grouper = make_molecule_grouper(
+            molecules=[water_molecule], num_procs=0
+        )
         assert grouper.num_procs == 1
 
 
 class TestMoleculeGrouperOutputDir:
-    def test_get_output_dir_with_label(self, water_molecule, tmp_path):
-        grouper = _ConcreteGrouper(
+    def test_get_output_dir_with_label(
+        self, water_molecule, tmp_path, make_molecule_grouper
+    ):
+        grouper = make_molecule_grouper(
             molecules=[water_molecule],
             label="sys1",
             output_dir=str(tmp_path),
@@ -6509,12 +6503,16 @@ class TestMoleculeGrouperOutputDir:
             str(tmp_path), "sys1_group_result"
         )
 
-    def test_get_output_dir_without_label_or_output_dir(self, water_molecule):
-        grouper = _ConcreteGrouper(molecules=[water_molecule])
+    def test_get_output_dir_without_label_or_output_dir(
+        self, water_molecule, make_molecule_grouper
+    ):
+        grouper = make_molecule_grouper(molecules=[water_molecule])
         assert grouper._get_output_dir() == "group_result"
 
-    def test_get_results_recorder(self, water_molecule, tmp_path):
-        grouper = _ConcreteGrouper(
+    def test_get_results_recorder(
+        self, water_molecule, tmp_path, make_molecule_grouper
+    ):
+        grouper = make_molecule_grouper(
             molecules=[water_molecule],
             label="sys1",
             output_dir=str(tmp_path),
@@ -6525,8 +6523,10 @@ class TestMoleculeGrouperOutputDir:
 
 
 class TestMoleculeGrouperRecordDelegation:
-    def test_record_delegates_to_record_results(self, water_molecule):
-        grouper = _ConcreteGrouper(molecules=[water_molecule])
+    def test_record_delegates_to_record_results(
+        self, water_molecule, make_molecule_grouper
+    ):
+        grouper = make_molecule_grouper(molecules=[water_molecule])
         with pytest.raises(NotImplementedError, match="_record_results"):
             grouper.record()
 
@@ -6534,9 +6534,9 @@ class TestMoleculeGrouperRecordDelegation:
 class TestMoleculeGrouperHeaderHelpers:
     @pytest.mark.parametrize("energy_type", ["QHH", "QHG", "SP_QHG", "qhh"])
     def test_append_thermo_header_included_for_thermo_energy_types(
-        self, water_molecule, energy_type
+        self, water_molecule, energy_type, make_molecule_grouper
     ):
-        grouper = _ConcreteGrouper(
+        grouper = make_molecule_grouper(
             molecules=[water_molecule],
             energy_type=energy_type,
             thermo_parameters="s=1,T=298.15",
@@ -6546,9 +6546,9 @@ class TestMoleculeGrouperHeaderHelpers:
         assert header_info == [("Thermochemistry Parameters", "s=1,T=298.15")]
 
     def test_append_thermo_header_skipped_for_non_thermo_energy_type(
-        self, water_molecule
+        self, water_molecule, make_molecule_grouper
     ):
-        grouper = _ConcreteGrouper(
+        grouper = make_molecule_grouper(
             molecules=[water_molecule],
             energy_type="E",
             thermo_parameters="s=1,T=298.15",
@@ -6558,17 +6558,19 @@ class TestMoleculeGrouperHeaderHelpers:
         assert header_info == []
 
     def test_append_thermo_header_skipped_without_thermo_parameters(
-        self, water_molecule
+        self, water_molecule, make_molecule_grouper
     ):
-        grouper = _ConcreteGrouper(
+        grouper = make_molecule_grouper(
             molecules=[water_molecule], energy_type="QHH"
         )
         header_info = []
         grouper._append_thermo_header(header_info)
         assert header_info == []
 
-    def test_append_input_usage_header_with_skipped_ids(self, water_molecule):
-        grouper = _ConcreteGrouper(
+    def test_append_input_usage_header_with_skipped_ids(
+        self, water_molecule, make_molecule_grouper
+    ):
+        grouper = make_molecule_grouper(
             molecules=[water_molecule], skipped_ids=["c3", "c4"]
         )
         header_info = []
@@ -6578,9 +6580,9 @@ class TestMoleculeGrouperHeaderHelpers:
         assert ("Skipped IDs", "c3, c4") in header_info
 
     def test_append_input_usage_header_without_skipped_ids(
-        self, water_molecule
+        self, water_molecule, make_molecule_grouper
     ):
-        grouper = _ConcreteGrouper(molecules=[water_molecule])
+        grouper = make_molecule_grouper(molecules=[water_molecule])
         header_info = []
         grouper._append_input_usage_header(header_info)
         assert ("Skipped IDs", "None") in header_info
@@ -6588,14 +6590,14 @@ class TestMoleculeGrouperHeaderHelpers:
 
 class TestMoleculeGrouperUnique:
     def test_unique_writes_xyz_and_returns_lowest_energy(
-        self, water_molecule, methane_molecule, tmp_path
+        self, water_molecule, methane_molecule, tmp_path, make_molecule_grouper
     ):
         mol_low = water_molecule
         mol_low.energy = -1.0
         mol_high = methane_molecule
         mol_high.energy = 5.0
 
-        grouper = _ConcreteGrouper(
+        grouper = make_molecule_grouper(
             molecules=[mol_low, mol_high], output_dir=str(tmp_path)
         )
         unique = grouper.unique(output_dir=str(tmp_path))
@@ -6610,10 +6612,10 @@ class TestMoleculeGrouperUnique:
         assert "Group 1 Member 2" in content
 
     def test_unique_uses_cached_groups_on_second_call(
-        self, water_molecule, tmp_path
+        self, water_molecule, tmp_path, make_molecule_grouper
     ):
         water_molecule.energy = None
-        grouper = _ConcreteGrouper(
+        grouper = make_molecule_grouper(
             molecules=[water_molecule],
             label="cached",
             output_dir=str(tmp_path),
@@ -6627,10 +6629,10 @@ class TestMoleculeGrouperUnique:
         assert first[0] is second[0]
 
     def test_unique_with_conformer_ids_labels_original_index(
-        self, water_molecule, tmp_path
+        self, water_molecule, tmp_path, make_molecule_grouper
     ):
         water_molecule.energy = None
-        grouper = _ConcreteGrouper(
+        grouper = make_molecule_grouper(
             molecules=[water_molecule],
             conformer_ids=["confA"],
             output_dir=str(tmp_path),
@@ -6733,25 +6735,29 @@ class TestGrouperJobConstruction:
         with pytest.raises(ValueError, match="must be a list"):
             GrouperJob(molecules="not-a-list", grouping_strategy="rmsd")
 
-    def test_rejects_fewer_than_two_molecules(self):
+    def test_rejects_fewer_than_two_molecules(self, make_mock_molecules):
         with pytest.raises(ValueError, match="at least 2"):
-            GrouperJob(molecules=make_molecules(1), grouping_strategy="rmsd")
+            GrouperJob(
+                molecules=make_mock_molecules(1), grouping_strategy="rmsd"
+            )
 
-    def test_label_defaults_to_grouper(self):
-        job = GrouperJob(molecules=make_molecules(2), grouping_strategy="rmsd")
+    def test_label_defaults_to_grouper(self, make_mock_molecules):
+        job = GrouperJob(
+            molecules=make_mock_molecules(2), grouping_strategy="rmsd"
+        )
         assert job.label == "grouper"
 
-    def test_custom_label_used(self):
+    def test_custom_label_used(self, make_mock_molecules):
         job = GrouperJob(
-            molecules=make_molecules(2),
+            molecules=make_mock_molecules(2),
             grouping_strategy="rmsd",
             label="my_group",
         )
         assert job.label == "my_group"
 
-    def test_stores_configuration(self):
+    def test_stores_configuration(self, make_mock_molecules):
         job = GrouperJob(
-            molecules=make_molecules(3),
+            molecules=make_mock_molecules(3),
             grouping_strategy="tanimoto",
             threshold=0.9,
             num_groups=2,
@@ -6771,30 +6777,32 @@ class TestGrouperJobConstruction:
 
 
 class TestGrouperJobPaths:
-    def test_job_basename_returns_label(self):
+    def test_job_basename_returns_label(self, make_mock_molecules):
         job = GrouperJob(
-            molecules=make_molecules(2),
+            molecules=make_mock_molecules(2),
             grouping_strategy="rmsd",
             label="mygrp",
         )
         assert job.job_basename == "mygrp"
 
-    def test_output_dir_uses_label(self):
+    def test_output_dir_uses_label(self, make_mock_molecules):
         job = GrouperJob(
-            molecules=make_molecules(2),
+            molecules=make_mock_molecules(2),
             grouping_strategy="rmsd",
             label="mygrp",
         )
         assert job.output_dir == os.path.join(job.folder, "mygrp_group_result")
 
-    def test_output_dir_without_label_falls_back(self):
-        job = GrouperJob(molecules=make_molecules(2), grouping_strategy="rmsd")
+    def test_output_dir_without_label_falls_back(self, make_mock_molecules):
+        job = GrouperJob(
+            molecules=make_mock_molecules(2), grouping_strategy="rmsd"
+        )
         job.label = None
         assert job.output_dir == os.path.join(job.folder, "group_result")
 
-    def test_outputfile_path(self):
+    def test_outputfile_path(self, make_mock_molecules):
         job = GrouperJob(
-            molecules=make_molecules(2),
+            molecules=make_mock_molecules(2),
             grouping_strategy="rmsd",
             label="mygrp",
         )
@@ -6802,9 +6810,9 @@ class TestGrouperJobPaths:
             job.output_dir, "mygrp_group_1.xyz"
         )
 
-    def test_logfile_and_errfile_paths(self):
+    def test_logfile_and_errfile_paths(self, make_mock_molecules):
         job = GrouperJob(
-            molecules=make_molecules(2),
+            molecules=make_mock_molecules(2),
             grouping_strategy="rmsd",
             label="mygrp",
         )
@@ -6813,14 +6821,18 @@ class TestGrouperJobPaths:
 
 
 class TestGrouperJobCompletion:
-    def test_not_complete_when_output_dir_missing(self):
-        job = GrouperJob(molecules=make_molecules(2), grouping_strategy="rmsd")
+    def test_not_complete_when_output_dir_missing(self, make_mock_molecules):
+        job = GrouperJob(
+            molecules=make_mock_molecules(2), grouping_strategy="rmsd"
+        )
         assert job.is_complete() is False
 
-    def test_complete_when_output_file_exists(self, tmp_path, monkeypatch):
+    def test_complete_when_output_file_exists(
+        self, tmp_path, monkeypatch, make_mock_molecules
+    ):
         monkeypatch.chdir(tmp_path)
         job = GrouperJob(
-            molecules=make_molecules(2),
+            molecules=make_mock_molecules(2),
             grouping_strategy="rmsd",
             label="mygrp",
         )
@@ -6831,10 +6843,10 @@ class TestGrouperJobCompletion:
 
 
 class TestGrouperJobRun:
-    def test_run_delegates_to_jobrunner(self):
+    def test_run_delegates_to_jobrunner(self, make_mock_molecules):
         mock_runner = MagicMock()
         job = GrouperJob(
-            molecules=make_molecules(2),
+            molecules=make_mock_molecules(2),
             grouping_strategy="rmsd",
             jobrunner=mock_runner,
         )
@@ -7038,7 +7050,7 @@ class TestGrouperJobRunnerCreateProcess:
 
 class TestGrouperJobRunnerWriteOutputs:
     def test_write_outputs_preserves_upstream_group_order_and_writes_xyz(
-        self, pbs_server, grouper_job
+        self, pbs_server, grouper_job, make_hydrogen_molecule
     ):
         # Group/representative ordering is finalized upstream by the
         # grouper (see RMSDGrouper/EnergyGrouper's representative_strategy
@@ -7047,12 +7059,8 @@ class TestGrouperJobRunnerWriteOutputs:
         os.makedirs(grouper_job.output_dir)
         runner = GrouperJobRunner(server=pbs_server)
 
-        mol_low = SimpleMolecule(
-            energy=-2.0, symbols=["H"], positions=[(1.0, 1.0, 1.0)]
-        )
-        mol_high = SimpleMolecule(
-            energy=-1.0, symbols=["H"], positions=[(0.0, 0.0, 0.0)]
-        )
+        mol_low = make_hydrogen_molecule(1.0, energy=-2.0)
+        mol_high = make_hydrogen_molecule(energy=-1.0)
         groups = [[mol_low, mol_high]]
         group_indices = [[1, 0]]
 
@@ -7068,14 +7076,12 @@ class TestGrouperJobRunnerWriteOutputs:
         )
 
     def test_write_outputs_handles_molecules_without_energy(
-        self, pbs_server, grouper_job
+        self, pbs_server, grouper_job, make_hydrogen_molecule
     ):
         os.makedirs(grouper_job.output_dir)
         runner = GrouperJobRunner(server=pbs_server)
 
-        mol = SimpleMolecule(
-            energy=None, symbols=["C"], positions=[(0.0, 0.0, 0.0)]
-        )
+        mol = make_hydrogen_molecule()
         groups = [[mol]]
         group_indices = [[0]]
 
@@ -7087,15 +7093,13 @@ class TestGrouperJobRunnerWriteOutputs:
         assert "Energy: N/A" in content
 
     def test_write_outputs_uses_conformer_ids_when_provided(
-        self, pbs_server, grouper_job
+        self, pbs_server, grouper_job, make_hydrogen_molecule
     ):
         os.makedirs(grouper_job.output_dir)
         grouper_job.conformer_ids = ["c1", "c2"]
         runner = GrouperJobRunner(server=pbs_server)
 
-        mol = SimpleMolecule(
-            energy=-1.0, symbols=["C"], positions=[(0.0, 0.0, 0.0)]
-        )
+        mol = make_hydrogen_molecule(energy=-1.0)
         groups = [[mol]]
         group_indices = [[1]]
 
@@ -7177,24 +7181,19 @@ class TestGetLabel:
 
 
 class TestExtractEnergyBasedOnEnergyType:
-    def _mock_thermo(self, **output_attrs):
-        thermo = MagicMock()
-        output = MagicMock()
-        for key, value in output_attrs.items():
-            setattr(output, key, value)
-        thermo.file_object = output
-        return thermo
 
-    def test_energy_type_e_returns_last_energy(self):
-        thermo = self._mock_thermo(energies=[1.0, 2.0, 3.0])
+    def test_energy_type_e_returns_last_energy(self, make_thermo_with_output):
+        thermo = make_thermo_with_output(energies=[1.0, 2.0, 3.0])
         assert _extract_energy_based_on_energy_type(thermo, "E") == 3.0
 
-    def test_energy_type_e_no_energies_returns_none(self):
-        thermo = self._mock_thermo(energies=[])
+    def test_energy_type_e_no_energies_returns_none(
+        self, make_thermo_with_output
+    ):
+        thermo = make_thermo_with_output(energies=[])
         assert _extract_energy_based_on_energy_type(thermo, "E") is None
 
-    def test_energy_type_h_returns_enthalpy(self):
-        thermo = self._mock_thermo(enthalpy=-5.0)
+    def test_energy_type_h_returns_enthalpy(self, make_thermo_with_output):
+        thermo = make_thermo_with_output(enthalpy=-5.0)
         assert _extract_energy_based_on_energy_type(thermo, "H") == -5.0
 
     def test_energy_type_h_attribute_error_returns_none(self):
@@ -7203,8 +7202,8 @@ class TestExtractEnergyBasedOnEnergyType:
         thermo.file_object = output
         assert _extract_energy_based_on_energy_type(thermo, "H") is None
 
-    def test_energy_type_g_returns_gibbs(self):
-        thermo = self._mock_thermo(gibbs_free_energy=-6.0)
+    def test_energy_type_g_returns_gibbs(self, make_thermo_with_output):
+        thermo = make_thermo_with_output(gibbs_free_energy=-6.0)
         assert _extract_energy_based_on_energy_type(thermo, "G") == -6.0
 
     def test_energy_type_g_attribute_error_returns_none(self):
