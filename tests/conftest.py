@@ -785,22 +785,47 @@ def orca_pka_settings_with_reference(orca_reference_xyz_file):
 
 @pytest.fixture()
 def run_orca_and_capture_settings():
-    """Run the orca CLI with a patched job class and capture settings."""
+    """Run the orca CLI with a patched job class and capture settings.
+
+    Returns ``(result, settings)``; ``settings`` is ``None`` when the job
+    class was never instantiated (e.g. the CLI rejected the arguments).
+
+    Pass ``autospec=True`` to patch with a signature-checked mock, so the
+    test fails if the CLI calls the job with arguments its constructor
+    doesn't accept. Pass ``job_cls`` to supply the mock yourself and
+    inspect its calls (labels, call counts) afterwards. Pass
+    ``catch_exceptions=True`` to assert on error exits instead of letting
+    exceptions propagate.
+    """
     from chemsmart.cli.orca.orca import orca as orca_cli
 
-    def _run(job_class_path, cli_args, ctx_obj=None):
+    def _run(
+        job_class_path,
+        cli_args,
+        ctx_obj=None,
+        *,
+        job_cls=None,
+        catch_exceptions=False,
+        autospec=False,
+    ):
         if ctx_obj is None:
             ctx_obj = {}
         runner = CliRunner()
         captured_settings = None
 
-        with patch(job_class_path) as mock_job_cls:
-            mock_job_cls.return_value = MagicMock()
+        if job_cls is not None:
+            patcher = patch(job_class_path, new=job_cls)
+        else:
+            patcher = patch(job_class_path, autospec=autospec)
+
+        with patcher as mock_job_cls:
+            if job_cls is None:
+                mock_job_cls.return_value = MagicMock()
             result = runner.invoke(
                 orca_cli,
                 cli_args,
                 obj=ctx_obj,
-                catch_exceptions=False,
+                catch_exceptions=catch_exceptions,
             )
             if mock_job_cls.call_args is not None:
                 captured_settings = mock_job_cls.call_args[1].get("settings")
@@ -808,6 +833,56 @@ def run_orca_and_capture_settings():
         return result, captured_settings
 
     return _run
+
+
+@pytest.fixture()
+def orca_td_settings(orca_td_project_name):
+    """``ORCATDDFTJobSettings`` built from the ``orca_td`` project's ``td:``
+    block, as a closed-shell neutral (charge 0, multiplicity 1) system.
+
+    Each test gets a fresh object, so tests may mutate it freely.
+    """
+    from chemsmart.jobs.orca.settings import ORCATDDFTJobSettings
+    from chemsmart.settings.orca import ORCAProjectSettings
+
+    td_settings = ORCAProjectSettings.from_project(
+        orca_td_project_name
+    ).td_settings()
+    td_settings.charge = 0
+    td_settings.multiplicity = 1
+    return ORCATDDFTJobSettings(**td_settings.__dict__)
+
+
+@pytest.fixture()
+def write_orca_td_input(
+    tmpdir, single_molecule_xyz_file, orca_jobrunner_no_scratch
+):
+    """Return a callable that writes a real ORCA TD input and returns its text.
+
+    Builds an ``ORCATDDFTJob`` from ``single_molecule_xyz_file`` with the
+    given settings, runs the real ``ORCAInputWriter`` into ``tmpdir`` and
+    reads back ``<label>.inp``, so tests assert on genuine writer output.
+
+    Usage in tests::
+
+        def test_something(orca_td_settings, write_orca_td_input):
+            content = write_orca_td_input(orca_td_settings)
+    """
+    from chemsmart.jobs.orca import ORCATDDFTJob
+    from chemsmart.jobs.orca.writer import ORCAInputWriter
+
+    def _write(settings, label="orca_td"):
+        job = ORCATDDFTJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=settings,
+            label=label,
+            jobrunner=orca_jobrunner_no_scratch,
+        )
+        ORCAInputWriter(job=job).write(target_directory=str(tmpdir))
+        with open(os.path.join(str(tmpdir), f"{label}.inp")) as f:
+            return f.read()
+
+    return _write
 
 
 @pytest.fixture()
