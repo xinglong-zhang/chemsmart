@@ -25,4 +25,5 @@ pytest_plugins = [
     "tests.fixtures.database",
     "tests.fixtures.jobs",
     "tests.fixtures.pymol",
+    "tests.fixtures.pka",
 ]

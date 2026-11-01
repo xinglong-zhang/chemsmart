@@ -14,12 +14,14 @@ from unittest.mock import MagicMock, patch
 
 import click
 import numpy as np
+import pytest
 import yaml
 from click.testing import CliRunner
 
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.nciplot.nciplot import nciplot
+from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
@@ -1236,3 +1238,228 @@ def bare_xtb_input(content_groups):
     inp = XTBInput.__new__(XTBInput)
     inp.__dict__["content_groups"] = content_groups
     return inp
+
+
+# ── pKa CLI helpers ──
+def write_program_signature_file(path: Path, program: str):
+    signatures = {
+        "gaussian": "Gaussian, Inc.\n",
+        "orca": "* O   R   C   A *\n",
+        "unknown": "Some random text\n",
+    }
+    path.write_text(signatures[program])
+
+
+def build_pka_outputs(tmp_path: Path, program: str):
+    names = [
+        "ha.log",
+        "a.log",
+        "hb.log",
+        "b.log",
+        "has.log",
+        "as.log",
+        "hbs.log",
+        "bs.log",
+    ]
+    files = {}
+    for n in names:
+        p = tmp_path / n
+        write_program_signature_file(p, program)
+        files[n] = str(p)
+    return files
+
+
+def invoke_pka_direct(runner, files, delta_g_proton=-265.9):
+    return runner.invoke(
+        run,
+        [
+            "pka",
+            "-s",
+            "direct",
+            "-dG",
+            str(delta_g_proton),
+            "analyze",
+            "-ha",
+            files["ha.log"],
+            "-a",
+            files["a.log"],
+            "-has",
+            files["has.log"],
+            "-as",
+            files["as.log"],
+        ],
+    )
+
+
+def invoke_pka(runner, files):
+    return runner.invoke(
+        run,
+        [
+            "pka",
+            "analyze",
+            "-ha",
+            files["ha.log"],
+            "-a",
+            files["a.log"],
+            "-hr",
+            files["hb.log"],
+            "-r",
+            files["b.log"],
+            "-has",
+            files["has.log"],
+            "-as",
+            files["as.log"],
+            "--href-solv",
+            files["hbs.log"],
+            "--ref-solv",
+            files["bs.log"],
+            "-rp",
+            "6.75",
+        ],
+    )
+
+
+def require_backend_pka_subcommand(command_group, backend):
+    runner = CliRunner()
+    result = runner.invoke(command_group, [backend, "--help"])
+    assert result.exit_code == 0, result.output
+    if "\n  pka" not in result.output:
+        pytest.skip(
+            f"{backend} backend pka subcommand is not registered in this build."
+        )
+
+
+class FakeThermochemistry:
+    def __init__(self, filename, **kwargs):
+        self.filename = filename
+        self.electronic_energy = -627.0
+        self.qrrho_gibbs_free_energy = -628.0
+
+
+def write_test_backend_project(tmp_path, backend):
+    config_root = tmp_path / "chemsmart_cfg"
+    backend_cfg_dir = config_root / backend
+    backend_cfg_dir.mkdir(parents=True)
+    (backend_cfg_dir / "test.yaml").write_text(
+        "gas:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "solv:\n"
+        "  functional: B3LYP\n"
+        "  basis: def2-SVP\n"
+        "  freq: false\n"
+        "  solvent_model: smd\n"
+        "  solvent_id: water\n"
+    )
+    return config_root
+
+
+def build_pka_batch_table(tmp_path):
+    acid1 = tmp_path / "acid1.xyz"
+    acid1.write_text("2\nacid1\nC 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+    acid2 = tmp_path / "acid2.xyz"
+    acid2.write_text("2\nacid2\nN 0.0 0.0 0.0\nH 0.0 0.0 1.0\n")
+
+    table = tmp_path / "pka_scale.csv"
+    table.write_text(
+        "filepath,proton_index,charge,multiplicity\n"
+        f"{acid1},2,0,1\n"
+        f"{acid2},2,1,2\n"
+    )
+    return table
+
+
+def build_pka_shared(**overrides):
+    """Minimal 'pka_shared' dict matching the keys the `pka` group builds."""
+    shared = dict(
+        scheme="direct",
+        reference=None,
+        reference_proton_index=None,
+        reference_color_code=None,
+        reference_charge=None,
+        reference_multiplicity=None,
+        reference_conjugate_base_charge=None,
+        reference_conjugate_base_multiplicity=None,
+        delta_g_proton=None,
+        conjugate_base_charge=None,
+        conjugate_base_multiplicity=None,
+        solvent_model=None,
+        solvent_id=None,
+        temperature=None,
+        concentration=None,
+        pressure=None,
+        cutoff_entropy_grimme=None,
+        cutoff_enthalpy=None,
+        entropy_method=None,
+        skip_completed=False,
+    )
+    shared.update(overrides)
+    return shared
+
+
+def invoke_sub_process_pipeline_directly(
+    cli_tokens,
+    batch_entry=None,
+    subcommand_list=None,
+    _omit_subcommand_key=False,
+    **result_kwargs,
+):
+    """Directly invoke ``sub``'s result callback with a stubbed
+    ``CtxObjArguments.reconstruct_command_line`` output.
+
+    This bypasses the need to build a fully realistic
+    ``ctx.obj["subcommand"]`` chain (which only ``MyGroup``/``MyCommand``
+    invocation normally populates) so that ``_replace_batch_table_tokens``
+    can be driven with exact, hand-picked token lists to reach its less
+    common rewrite branches.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock, patch
+
+    import click
+
+    import chemsmart.cli.sub as sub_module
+    from chemsmart.settings.server import Server
+
+    class _StubArgs:
+        def __init__(self, commands, entry_point):
+            pass
+
+        def reconstruct_command_line(self):
+            return ["placeholder"] + list(cli_tokens)
+
+    fake_server = Server(name="dummy")
+    captured = {"cli_args": None}
+    fake_server.submit = (
+        lambda job, test=False, cli_args=None, **kw: captured.update(
+            cli_args=cli_args
+        )
+    )
+
+    job = SimpleNamespace()
+    if batch_entry is not None:
+        job._batch_entry = batch_entry
+
+    if subcommand_list is None:
+        subcommand_list = [{"name": "sub", "kwargs": {}}]
+
+    kwargs = {"test": False, "print_command": False, "server": "dummy"}
+    kwargs.update(result_kwargs)
+
+    with (
+        patch.object(sub_module, "CtxObjArguments", _StubArgs),
+        patch(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        ),
+    ):
+        ctx = click.Context(sub_module.sub)
+        mock_jobrunner = MagicMock()
+        mock_jobrunner.server = fake_server
+        ctx.obj = {"jobrunner": mock_jobrunner}
+        if not _omit_subcommand_key:
+            ctx.obj["subcommand"] = subcommand_list
+        with ctx:
+            sub_module.sub._result_callback(job, **kwargs)
+
+    return captured["cli_args"]
