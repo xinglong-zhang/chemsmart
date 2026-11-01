@@ -7,6 +7,7 @@ Fixtures live in ``tests/fixtures/`` (loaded by ``tests/conftest.py``).
 
 import importlib
 import logging
+import os
 import shutil
 from pathlib import Path
 from textwrap import dedent
@@ -1663,3 +1664,12 @@ class FakeYamlParser:
         if self._error is not None:
             raise self._error
         return self._result
+
+
+# ── utils test helpers ──
+def make_executable_file(path):
+    """Write a minimal ``#!/bin/sh`` script at ``path`` and mark it
+    executable (``0o755``), e.g. a stand-in for an external program on
+    ``PATH``."""
+    write_text_file(path, "#!/bin/sh\n")
+    os.chmod(str(path), 0o755)

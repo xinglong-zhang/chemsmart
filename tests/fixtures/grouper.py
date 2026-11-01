@@ -156,3 +156,18 @@ def constrained_pbc_db_file(io_test_directory):
     return os.path.join(
         io_test_directory, "heterogenous_pbc_constraints_5images.db"
     )
+
+
+@pytest.fixture()
+def clear_irmsd_env(monkeypatch):
+    """Unset the environment variables ``find_irmsd_command`` consults
+    (``IRMSD_PATH``, ``IRMSD_CONDA_ENV``, ``CONDA_PREFIX``,
+    ``CONDA_PREFIX_1``), so the host's own conda/irmsd setup can't affect
+    the test. Opt in with ``@pytest.mark.usefixtures("clear_irmsd_env")``."""
+    for key in (
+        "IRMSD_PATH",
+        "IRMSD_CONDA_ENV",
+        "CONDA_PREFIX",
+        "CONDA_PREFIX_1",
+    ):
+        monkeypatch.delenv(key, raising=False)
