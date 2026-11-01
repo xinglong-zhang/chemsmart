@@ -556,6 +556,36 @@ def make_gaussian_writer():
     return _make
 
 
+@pytest.fixture()
+def make_nciplot_writer(tmp_path):
+    """Factory for an ``NCIPLOTInputWriter`` built without ``__init__``.
+
+    Bypasses ``NCIPLOTJob``/``JobRunner`` entirely, since most of the
+    writer's validation branches are pure functions of
+    ``self.job.filenames``/``self.settings`` and need no real job or
+    running directory. The fake job's ``folder`` and the jobrunner's
+    ``running_directory`` both point at the test's ``tmp_path``.
+    Keyword arguments override attributes on the default
+    ``NCIPLOTJobSettings``.
+    """
+    from types import SimpleNamespace
+
+    from chemsmart.jobs.nciplot.writer import NCIPLOTInputWriter
+
+    def _make(**setting_overrides):
+        writer = NCIPLOTInputWriter.__new__(NCIPLOTInputWriter)
+        writer.job = SimpleNamespace(
+            filenames=None, label="test", folder=str(tmp_path)
+        )
+        writer.settings = NCIPLOTJobSettings()
+        writer.jobrunner = SimpleNamespace(running_directory=str(tmp_path))
+        for key, value in setting_overrides.items():
+            setattr(writer.settings, key, value)
+        return writer
+
+    return _make
+
+
 ############ Gaussian UV-Vis / pKa Job Fixtures ##################
 @pytest.fixture()
 def make_uvvis_job():
