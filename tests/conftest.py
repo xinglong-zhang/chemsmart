@@ -1,3 +1,4 @@
+import copy
 import importlib
 import logging
 import os
@@ -25,6 +26,7 @@ from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.cli.update import DependencyUpdater, VersionUpdater
 from chemsmart.database.database import Database
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.xtb.input import XTBInput
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.jobs.crest.runner import FakeCRESTJobRunner
 from chemsmart.jobs.crest.settings import CRESTJobSettings
@@ -2484,6 +2486,106 @@ def xtb_acetaldehyde_outfolder(xtb_outputs_directory):
 @pytest.fixture()
 def xtb_he_outfolder(xtb_outputs_directory):
     return os.path.join(xtb_outputs_directory, "he_hess")
+
+
+_MALFORMED_GROUPS = {
+    "chrg": ["notanumber"],
+    "spin": ["notanumber"],
+    "cube": [
+        "step=notanumber",
+        "pthr=notanumber",
+        "boff=notanumber",
+        "cal=notanumber",
+    ],
+    "embedding": ["at=notanumber"],
+    "gfn": ["dispscale=notanumber"],
+    "hess": [
+        "sccacc=notanumber",
+        "step=notanumber",
+        "scale=notanumber",
+    ],
+    "md": [
+        "temp=notanumber",
+        "time=notanumber",
+        "dump=notanumber",
+        "skip=notanumber",
+        "step=notanumber",
+        "hmass=notanumber",
+        "shake=notanumber",
+        "sccacc=notanumber",
+    ],
+    "modef": [
+        "n=notanumber",
+        "step=notanumber",
+        "updat=notanumber",
+        "local=notanumber",
+        "vthr=notanumber",
+        "prj=notanumber",
+        "mode=notanumber",
+    ],
+    "opt": [
+        "optlevel=notanumber",
+        "microcycle=notanumber",
+        "maxcycle=notanumber",
+        "maxdispl=notanumber",
+        "hlow=notanumber",
+        "s6=notanumber",
+        "kstretch=notanumber",
+        "kbend=notanumber",
+        "ktorsion=notanumber",
+        "koutofp=notanumber",
+        "kvdw=notanumber",
+        "kes=notanumber",
+        "rcut=notanumber",
+    ],
+    "path": [
+        "nrun=notanumber",
+        "npoint=notanumber",
+        "anopt=notanumber",
+        "kpush=notanumber",
+        "kpull=notanumber",
+        "alp=notanumber",
+    ],
+    "scc": [
+        "maxiterations=notanumber",
+        "temp=notanumber",
+        "broydamp=notanumber",
+    ],
+    "symmetry": ["desy=notanumber", "maxat=notanumber"],
+    "thermo": [
+        "temp=notanumber",
+        "sthr=notanumber",
+        "imagthr=notanumber",
+        "scale=notanumber",
+    ],
+    "wall": [
+        "alpha=notanumber",
+        "beta=notanumber",
+        "temp=notanumber",
+        "autoscale=notanumber",
+        "axisshift=notanumber",
+    ],
+}
+
+
+@pytest.fixture()
+def bare_xtb_input():
+    """Factory for an XTBInput that skips file parsing and uses the
+    given content_groups directly (seeding the cached_property)."""
+
+    def _make(content_groups):
+        inp = XTBInput.__new__(XTBInput)
+        inp.__dict__["content_groups"] = content_groups
+        return inp
+
+    return _make
+
+
+@pytest.fixture()
+def malformed_xtb_input(bare_xtb_input):
+    """Bare XTBInput with every numeric key set to a non-numeric
+    string, to force every ValueError-fallback branch at once."""
+    return bare_xtb_input(copy.deepcopy(_MALFORMED_GROUPS))
 
 
 # master CREST test directory
