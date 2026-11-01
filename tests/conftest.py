@@ -2911,6 +2911,8 @@ class _DummyJob:
         self.label = label
         self.settings = settings
         self.molecule = molecule if molecule is not None else MagicMock()
+        # InputWriter.__init__ reads job.jobrunner; runners never do.
+        self.jobrunner = None
 
     def _path(self, ext):
         return str(Path(self.folder) / f"{self.label}{ext}")
