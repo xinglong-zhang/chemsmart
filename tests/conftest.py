@@ -22,6 +22,7 @@ from rdkit import Chem
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.run import run
+from chemsmart.cli.sub import sub
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.cli.update import DependencyUpdater, VersionUpdater
 from chemsmart.database.database import Database
@@ -329,6 +330,103 @@ def invoke_folder_command():
         return result
 
     return _invoke
+
+
+@pytest.fixture()
+def invoke_gaussian_opt_cli(
+    monkeypatch, single_molecule_xyz_file, gaussian_project_config_dir
+):
+    """Invoke ``chemsmart run``/``sub`` (``command``) with the given
+    top-level ``options`` for a Gaussian ``opt`` job on
+    ``single_molecule_xyz_file`` (project ``test``, charge 0, mult 1),
+    using the ``gaussian_project_config_dir`` user config. Returns the
+    Click result, e.g. ``invoke_gaussian_opt_cli(sub, ["--test"])``."""
+    monkeypatch.setenv(
+        "CHEMSMART_CONFIG_DIR", str(gaussian_project_config_dir)
+    )
+
+    def _invoke(command, options=()):
+        args = [
+            *options,
+            "gaussian",
+            "-p",
+            "test",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "opt",
+        ]
+        return CliRunner().invoke(command, args)
+
+    return _invoke
+
+
+@pytest.fixture()
+def run_jobrunner_and_capture_results(monkeypatch, invoke_gaussian_opt_cli):
+    """Run ``chemsmart run --fake [options] gaussian ... opt`` with
+    ``JobRunner.from_job`` and ``Job.run`` stubbed out, capturing the
+    ``server``/``scratch``/``fake`` arguments the CLI builds the runner
+    with::
+
+        result, captured = run_jobrunner_and_capture_results(["--scratch"])
+        assert captured["scratch"] is True
+
+    ``captured["scratch"]`` stays ``"unset"`` if ``from_job`` is never
+    called.
+    """
+
+    def _run(options=()):
+        captured = {"scratch": "unset"}
+
+        def _from_job(cls, job, server, scratch=None, fake=False, **kwargs):
+            captured.update(server=server, scratch=scratch, fake=fake)
+            return type("R", (), {"scratch": scratch})()
+
+        monkeypatch.setattr(
+            "chemsmart.jobs.runner.JobRunner.from_job",
+            classmethod(_from_job),
+        )
+        monkeypatch.setattr("chemsmart.jobs.job.Job.run", lambda self: None)
+        result = invoke_gaussian_opt_cli(run, ["--fake", *options])
+        return result, captured
+
+    return _run
+
+
+@pytest.fixture()
+def submit_job_and_capture_results(monkeypatch, invoke_gaussian_opt_cli):
+    """Run ``chemsmart sub --test --server dummy [options] gaussian ... opt``
+    against a fake ``dummy`` :class:`Server` whose ``submit`` records the
+    forwarded ``cli_args`` instead of submitting::
+
+        result, server, captured = submit_job_and_capture_results(
+            ["--queue", "gpu"]
+        )
+        assert server.queue_name == "gpu"
+        assert "--scratch" not in captured["cli_args"]
+    """
+
+    def _submit(options=()):
+        captured = {"cli_args": None}
+        fake_server = Server(name="dummy")
+        fake_server.submit = (
+            lambda job, test=False, cli_args=None, **kw: captured.update(
+                cli_args=cli_args
+            )
+        )
+        monkeypatch.setattr(
+            "chemsmart.settings.server.Server.from_servername",
+            lambda _name: fake_server,
+        )
+        result = invoke_gaussian_opt_cli(
+            sub, ["--test", "--server", "dummy", *options]
+        )
+        return result, fake_server, captured
+
+    return _submit
 
 
 @pytest.fixture()
@@ -3011,6 +3109,72 @@ def dummy_job():
             settings=settings if settings is not None else default_settings(),
             molecule=molecule,
         )
+
+    return _make
+
+
+class _ConcreteJobRunner(JobRunner):
+    """Minimal concrete :class:`JobRunner` for exercising base-class
+    behavior. Defining it registers it as the runner for the
+    ``concrete_runner_type`` jobtype (used by ``JobRunner.from_job`` tests).
+    """
+
+    JOBTYPES = ["concrete_runner_type"]
+    PROGRAM = "concrete"
+    FAKE = False
+    SCRATCH = False
+
+    @property
+    def executable(self):
+        return None
+
+    def _get_command(self, job):
+        return "echo hi"
+
+    def _create_process(self, job, command, env):
+        return MagicMock()
+
+
+@pytest.fixture()
+def make_concrete_jobrunner(pbs_server):
+    """Factory for :class:`_ConcreteJobRunner`, on ``pbs_server`` without
+    scratch by default, e.g. ``make_concrete_jobrunner(num_cores=99)`` or
+    ``make_concrete_jobrunner(server="myserver")``."""
+
+    def _make(server=pbs_server, scratch=False, **kwargs):
+        return _ConcreteJobRunner(server=server, scratch=scratch, **kwargs)
+
+    return _make
+
+
+@pytest.fixture()
+def concrete_jobrunner(make_concrete_jobrunner):
+    """A :class:`_ConcreteJobRunner` on ``pbs_server`` without scratch."""
+    return make_concrete_jobrunner()
+
+
+@pytest.fixture()
+def make_gaussian_com_file(tmp_path):
+    """Factory writing a minimal CH Gaussian input file into ``tmp_path``
+    and returning its path, e.g.
+    ``make_gaussian_com_file(route="# opt freq pm6", mult=2)``."""
+
+    def _make(filename="test.com", route="# opt freq b3lyp/6-31g(d)", mult=1):
+        lines = [
+            "%chk=test.chk",
+            "%mem=4GB",
+            route,
+            "",
+            "title",
+            "",
+            f"0 {mult}",
+            "C 0.0 0.0 0.0",
+            "H 0.0 0.0 1.0",
+            "",
+        ]
+        path = tmp_path / filename
+        path.write_text("\n".join(lines))
+        return str(path)
 
     return _make
 
