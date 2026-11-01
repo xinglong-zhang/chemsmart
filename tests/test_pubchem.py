@@ -13,36 +13,10 @@ from chemsmart.io.molecules.pubchem import (
     pubchem_search,
     search_pubchem_raw,
 )
+from tests.helpers import MockHTTPResponse, make_http_error, make_http_response
 
-
-def _make_response(text=None, status_code=200, raise_exc=None):
-    response = MockResponse(text=text, status_code=status_code)
-    if raise_exc is not None:
-        response.raise_for_status = lambda: (_ for _ in ()).throw(raise_exc)
-    return response
-
-
-class MockResponse:
-    def __init__(self, text=None, status_code=200):
-        self.text = text
-        self.status_code = status_code
-
-    def raise_for_status(self):
-        pass
-
-
-def _http_error(status_code):
-    error = RequestsHTTPError(f"HTTP {status_code}")
-    error.response = MockResponse(status_code=status_code)
-    return error
-
-
-@pytest.fixture(autouse=True)
-def clear_pubchem_cache():
-    """pubchem_search is lru_cache'd; avoid cross-test cache pollution."""
-    pubchem_search.cache_clear()
-    yield
-    pubchem_search.cache_clear()
+# pubchem_search is lru_cache'd; clear it around every test in this module.
+pytestmark = pytest.mark.usefixtures("clear_pubchem_cache")
 
 
 class TestRetryablePubchem:
@@ -50,11 +24,11 @@ class TestRetryablePubchem:
         assert _retryable_pubchem(Timeout()) is True
 
     def test_http_error_with_retryable_status_is_retryable(self):
-        error = _http_error(503)
+        error = make_http_error(503)
         assert _retryable_pubchem(error) is True
 
     def test_http_error_with_non_retryable_status_is_not_retryable(self):
-        error = _http_error(404)
+        error = make_http_error(404)
         assert _retryable_pubchem(error) is False
 
     def test_http_error_without_response_is_not_retryable(self):
@@ -73,7 +47,7 @@ class TestSearchPubchemRawConformersField:
     def test_conformers_field_returns_text_directly(self, mocker):
         mock_get = mocker.patch(
             "chemsmart.io.molecules.pubchem.requests.get",
-            return_value=MockResponse(text="CONFORMER_SDF"),
+            return_value=MockHTTPResponse(text="CONFORMER_SDF"),
         )
         result = search_pubchem_raw("abc123", "conformers")
         assert result == "CONFORMER_SDF"
@@ -85,8 +59,8 @@ class TestSearchPubchemRawStandardField:
     def test_raises_on_http_error(self, mocker):
         mocker.patch(
             "chemsmart.io.molecules.pubchem.requests.get",
-            return_value=_make_response(
-                raise_exc=_http_error(404), status_code=404
+            return_value=make_http_response(
+                raise_exc=make_http_error(404), status_code=404
             ),
         )
         with pytest.raises(RequestsHTTPError):
@@ -98,8 +72,10 @@ class TestSearchPubchemRawStandardField:
         mocker.patch(
             "chemsmart.io.molecules.pubchem.requests.get",
             side_effect=[
-                MockResponse(text="MAIN_SDF_DATA"),
-                _make_response(raise_exc=_http_error(404), status_code=404),
+                MockHTTPResponse(text="MAIN_SDF_DATA"),
+                make_http_response(
+                    raise_exc=make_http_error(404), status_code=404
+                ),
             ],
         )
         result = search_pubchem_raw("123", "cid")
@@ -110,10 +86,12 @@ class TestSearchPubchemRawStandardField:
         mocker.patch(
             "chemsmart.io.molecules.pubchem.requests.get",
             side_effect=[
-                MockResponse(text="MAIN_SDF_DATA"),
-                MockResponse(text=conformer_json),
+                MockHTTPResponse(text="MAIN_SDF_DATA"),
+                MockHTTPResponse(text=conformer_json),
                 # Nested conformer-of-conformer lookup fails; suppressed.
-                _make_response(raise_exc=_http_error(404), status_code=404),
+                make_http_response(
+                    raise_exc=make_http_error(404), status_code=404
+                ),
             ],
         )
         with pytest.warns(UserWarning, match="more than one"):
@@ -150,7 +128,7 @@ class TestPubchemSearch:
         )
         mocker.patch(
             "chemsmart.io.molecules.pubchem.search_pubchem_raw",
-            side_effect=[_http_error(404), "RAW_SDF_2D"],
+            side_effect=[make_http_error(404), "RAW_SDF_2D"],
         )
         mocker.patch(
             "chemsmart.io.molecules.pubchem._pubchem_2d_to_3d",
@@ -178,7 +156,7 @@ class TestPubchemSearch:
         )
         mocker.patch(
             "chemsmart.io.molecules.pubchem.search_pubchem_raw",
-            side_effect=_http_error(500),
+            side_effect=make_http_error(500),
         )
         import tenacity
 
@@ -194,7 +172,7 @@ class TestPubchemSearch:
         )
         mocker.patch(
             "chemsmart.io.molecules.pubchem.search_pubchem_raw",
-            side_effect=[_http_error(404), _http_error(404)],
+            side_effect=[make_http_error(404), make_http_error(404)],
         )
         result = pubchem_search(cid="search-bothfail", fail_silently=True)
         assert result is None
@@ -223,7 +201,7 @@ class TestPubchemSearch:
         )
         mocker.patch(
             "chemsmart.io.molecules.pubchem.search_pubchem_raw",
-            side_effect=[_http_error(404), _http_error(404)],
+            side_effect=[make_http_error(404), make_http_error(404)],
         )
         with pytest.raises(ValueError, match="Error getting structure"):
             pubchem_search(cid="search-bothfail-raise", fail_silently=False)

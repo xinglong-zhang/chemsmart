@@ -14,6 +14,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
+from tests.helpers import (
+    make_fukui_output,
+    make_thermochemistry_results_mock,
+    write_text_file,
+)
+
 
 class TestFmoScript:
     def test_closed_shell_system(self):
@@ -262,16 +268,6 @@ class TestFukuiScript:
                     catch_exceptions=False,
                 )
 
-    @staticmethod
-    def _make_output(shift):
-        output = MagicMock()
-        output.energies = [-100.0 + shift]
-        output.mulliken_atomic_charges = {"1C": 0.1 + shift}
-        output.natural_charges = {"1C": 0.2 + shift}
-        output.hirshfeld_charges = {"1C": 0.3 + shift}
-        output.hirshfeld_cm5_charges = {"1C": 0.4 + shift}
-        return output
-
     def test_cation_only_skips_anion_and_global_indices(self):
         """With no radical anion file, the global electrophilicity
         block is skipped entirely (only 2 outputs constructed) and the
@@ -287,8 +283,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -309,8 +305,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -331,9 +327,9 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.2),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.2),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -364,8 +360,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -388,8 +384,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -413,8 +409,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -435,8 +431,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -457,8 +453,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -479,8 +475,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -501,8 +497,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -523,8 +519,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -549,8 +545,8 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.1),
             ]
             with pytest.raises(ValueError, match="Unknown mode"):
                 entry_point.callback(
@@ -572,9 +568,9 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.2),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.2),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -604,9 +600,9 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.ORCAOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.2),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.2),
+                make_fukui_output(-0.1),
             ]
             with pytest.raises(
                 AssertionError, match="only available for Gaussian"
@@ -642,9 +638,9 @@ class TestFukuiScript:
             patch("chemsmart.scripts.fukui.Gaussian16WBIOutput") as mock_cls,
         ):
             mock_cls.side_effect = [
-                self._make_output(0.0),
-                self._make_output(0.3),
-                self._make_output(-0.1),
+                make_fukui_output(0.0),
+                make_fukui_output(0.3),
+                make_fukui_output(-0.1),
             ]
             result = runner.invoke(
                 entry_point,
@@ -829,13 +825,14 @@ class TestStructureFilterScript:
 
 
 class TestGenerateIsotopeData:
-    def test_parse_isotope_file_with_natural_abundance(self, tmp_path):
+    def test_parse_isotope_file_with_natural_abundance(self, write_tmp_file):
         from chemsmart.scripts.generate_isotope_data import (
             parse_isotope_file,
         )
 
-        isotope_txt = tmp_path / "isotopes.txt"
-        isotope_txt.write_text(textwrap.dedent("""\
+        isotope_txt = write_tmp_file(
+            "isotopes.txt",
+            textwrap.dedent("""\
                 Atomic Number = 1
                 Mass Number = 1
                 Relative Atomic Mass = 1.00782503(1)
@@ -844,9 +841,10 @@ class TestGenerateIsotopeData:
                 Mass Number = 2
                 Relative Atomic Mass = 2.01410178(1)
                 Isotopic Composition = 0.000115(70)
-                """))
+                """),
+        )
 
-        isotopes = parse_isotope_file(str(isotope_txt))
+        isotopes = parse_isotope_file(isotope_txt)
 
         assert 1 in isotopes
         assert isotopes[1]["most_abundant"]["mass_number"] == 1
@@ -854,58 +852,65 @@ class TestGenerateIsotopeData:
             1.00782503, rel=1e-3
         )
 
-    def test_parse_isotope_file_radioactive_element_fallback(self, tmp_path):
+    def test_parse_isotope_file_radioactive_element_fallback(
+        self, write_tmp_file
+    ):
         from chemsmart.scripts.generate_isotope_data import (
             parse_isotope_file,
         )
 
         # Technetium (Z=43): no natural abundance, falls back to most
         # stable mass number 98 per `most_stable_mass_numbers`.
-        isotope_txt = tmp_path / "isotopes_tc.txt"
-        isotope_txt.write_text(textwrap.dedent("""\
+        isotope_txt = write_tmp_file(
+            "isotopes_tc.txt",
+            textwrap.dedent("""\
                 Atomic Number = 43
                 Mass Number = 98
                 Relative Atomic Mass = 97.9072124(1)
                 Isotopic Composition =
-                """))
+                """),
+        )
 
-        isotopes = parse_isotope_file(str(isotope_txt))
+        isotopes = parse_isotope_file(isotope_txt)
 
         assert isotopes[43]["most_abundant"]["mass_number"] == 98
         assert isotopes[43]["weighted_atomic_mass"] == pytest.approx(
             97.9072124, rel=1e-6
         )
 
-    def test_parse_isotope_file_skips_irrelevant_lines(self, tmp_path):
+    def test_parse_isotope_file_skips_irrelevant_lines(self, write_tmp_file):
         """Lines matching none of the four recognized prefixes (e.g. a
         blank line or file header) are simply skipped."""
         from chemsmart.scripts.generate_isotope_data import (
             parse_isotope_file,
         )
 
-        isotope_txt = tmp_path / "isotopes.txt"
-        isotope_txt.write_text(textwrap.dedent("""\
+        isotope_txt = write_tmp_file(
+            "isotopes.txt",
+            textwrap.dedent("""\
                 Some irrelevant header line
 
                 Atomic Number = 1
                 Mass Number = 1
                 Relative Atomic Mass = 1.00782503(1)
                 Isotopic Composition = 0.999885(70)
-                """))
+                """),
+        )
 
-        isotopes = parse_isotope_file(str(isotope_txt))
+        isotopes = parse_isotope_file(isotope_txt)
 
         assert 1 in isotopes
 
     def test_generate_isotope_data_file_writes_importable_module(
-        self, tmp_path
+        self, tmp_path, write_tmp_file
     ):
         from chemsmart.scripts.generate_isotope_data import (
             generate_isotope_data_file,
         )
 
-        isotope_txt = tmp_path / "isotopes.txt"
-        isotope_txt.write_text(textwrap.dedent("""\
+        isotope_txt = write_tmp_file(
+            "isotopes.txt",
+            textwrap.dedent("""\
                 Atomic Number = 1
                 Mass Number = 1
                 Relative Atomic Mass = 1.00782503(1)
@@ -918,10 +923,11 @@ class TestGenerateIsotopeData:
                 Mass Number = 98
                 Relative Atomic Mass = 97.9072124(1)
                 Isotopic Composition =
-                """))
+                """),
+        )
         output_file = tmp_path / "isotopes_data.py"
 
-        generate_isotope_data_file(str(isotope_txt), str(output_file))
+        generate_isotope_data_file(isotope_txt, str(output_file))
 
         content = output_file.read_text()
         assert content.startswith('"""Isotope data extracted from NIST')
@@ -943,59 +949,41 @@ class TestGenerateIsotopeData:
 
 
 class TestGetThermochemistryScript:
-    def _make_thermo_mock(self):
-        thermo = MagicMock()
-        thermo.electronic_energy = -100.0
-        thermo.zero_point_energy = 0.05
-        thermo.enthalpy = -99.9
-        thermo.qrrho_enthalpy = -99.9
-        thermo.entropy_times_temperature = -0.02
-        thermo.qrrho_entropy_times_temperature = -0.02
-        thermo.gibbs_free_energy = -99.92
-        thermo.qrrho_gibbs_free_energy = -99.92
-        thermo.qrrho_gibbs_free_energy_qh = -99.92
-        thermo.qrrho_gibbs_free_energy_qs = -99.92
-        thermo.imaginary_frequencies = []
-        thermo.jobtype = "opt"
-        thermo.vibrational_frequencies = [100.0]
-        return thermo
 
-    def test_default_run_writes_results(self, tmp_path):
+    def test_default_run_writes_results(self, write_tmp_file):
         from chemsmart.scripts.get_thermochemistry import entry_point
 
-        log_file = tmp_path / "mol.log"
-        log_file.write_text("dummy")
+        log_file = write_tmp_file("mol.log", "dummy")
 
         runner = CliRunner()
         with runner.isolated_filesystem():
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
-                    ["-f", str(log_file)],
+                    ["-f", log_file],
                     catch_exceptions=False,
                 )
 
             assert result.exit_code == 0, result.output
             mock_cls.assert_called_once()
 
-    def test_quasi_rrho_flag_run(self, tmp_path):
+    def test_quasi_rrho_flag_run(self, write_tmp_file):
         from chemsmart.scripts.get_thermochemistry import entry_point
 
-        log_file = tmp_path / "mol.log"
-        log_file.write_text("dummy")
+        log_file = write_tmp_file("mol.log", "dummy")
 
         runner = CliRunner()
         with runner.isolated_filesystem():
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
-                    ["-f", str(log_file), "-q"],
+                    ["-f", log_file, "-q"],
                     catch_exceptions=False,
                 )
 
@@ -1013,17 +1001,16 @@ class TestGetThermochemistryScript:
                     catch_exceptions=False,
                 )
 
-    def test_unsupported_file_extension_logs_error(self, tmp_path):
+    def test_unsupported_file_extension_logs_error(self, write_tmp_file):
         from chemsmart.scripts.get_thermochemistry import entry_point
 
-        bad_file = tmp_path / "mol.txt"
-        bad_file.write_text("dummy")
+        bad_file = write_tmp_file("mol.txt", "dummy")
 
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
                 entry_point,
-                ["-f", str(bad_file)],
+                ["-f", bad_file],
                 catch_exceptions=False,
             )
 
@@ -1034,12 +1021,11 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("a.log", "w") as f:
-                f.write("dummy")
+            write_text_file("a.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
                     ["-d", ".", "-ft", "log"],
@@ -1053,12 +1039,11 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("a.out", "w") as f:
-                f.write("dummy")
+            write_text_file("a.out", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
                     ["-d", ".", "-ft", "out"],
@@ -1072,12 +1057,11 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
                     ["-f", "mol.log", "--cutoff", "50.0"],
@@ -1100,12 +1084,11 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
                     ["-f", "mol.log", "-u", unit],
@@ -1118,12 +1101,11 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
                     ["-f", "mol.log", "-c", "1.0"],
@@ -1141,12 +1123,11 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
-                mock_cls.return_value = self._make_thermo_mock()
+                mock_cls.return_value = make_thermochemistry_results_mock()
                 result = runner.invoke(
                     entry_point,
                     ["-f", "mol.log", flag],
@@ -1161,15 +1142,14 @@ class TestGetThermochemistryScript:
         frequency is reported with a warning rather than skipped."""
         from chemsmart.scripts.get_thermochemistry import entry_point
 
-        thermo = self._make_thermo_mock()
+        thermo = make_thermochemistry_results_mock()
         thermo.imaginary_frequencies = [-50.0]
         thermo.jobtype = "ts"
         thermo.vibrational_frequencies = [-50.0, 100.0]
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
@@ -1184,15 +1164,14 @@ class TestGetThermochemistryScript:
     def test_ts_with_multiple_imaginary_frequencies_is_skipped(self):
         from chemsmart.scripts.get_thermochemistry import entry_point
 
-        thermo = self._make_thermo_mock()
+        thermo = make_thermochemistry_results_mock()
         thermo.imaginary_frequencies = [-50.0, -60.0]
         thermo.jobtype = "ts"
         thermo.vibrational_frequencies = [-50.0, -60.0]
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
@@ -1207,15 +1186,14 @@ class TestGetThermochemistryScript:
     def test_non_ts_with_imaginary_frequency_is_skipped(self):
         from chemsmart.scripts.get_thermochemistry import entry_point
 
-        thermo = self._make_thermo_mock()
+        thermo = make_thermochemistry_results_mock()
         thermo.imaginary_frequencies = [-50.0]
         thermo.jobtype = "opt"
         thermo.vibrational_frequencies = [-50.0]
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
@@ -1250,8 +1228,7 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
@@ -1278,8 +1255,7 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry"
             ) as mock_cls:
@@ -1299,8 +1275,7 @@ class TestGetThermochemistryScript:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
-            with open("mol.log", "w") as f:
-                f.write("dummy")
+            write_text_file("mol.log", "dummy")
             with patch(
                 "chemsmart.scripts.get_thermochemistry.Thermochemistry",
                 side_effect=ValueError("simulated parse failure"),

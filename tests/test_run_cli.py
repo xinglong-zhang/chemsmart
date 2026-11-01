@@ -7,51 +7,42 @@ single Job, a list of Jobs, or None) to local execution.
 import importlib
 from unittest.mock import patch
 
-import click
 import pytest
 
 import chemsmart.cli.run as run_module
-from chemsmart.cli.run import process_pipeline, run
+from chemsmart.cli.run import process_pipeline
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
-
-
-def _make_ctx(pbs_server):
-    ctx = click.Context(run)
-    ctx.ensure_object(dict)
-    ctx.obj["jobrunner"] = JobRunner(server=pbs_server, fake=True)
-    return ctx
 
 
 class TestProcessPipeline:
-    def test_no_args_returns_none(self, pbs_server):
+    def test_no_args_returns_none(self, run_ctx):
         """Some subcommands (e.g. post-processing) return nothing at all."""
-        ctx = _make_ctx(pbs_server)
+        ctx = run_ctx
         assert process_pipeline.__wrapped__(ctx) is None
 
-    def test_none_job_returns_none(self, pbs_server):
-        ctx = _make_ctx(pbs_server)
+    def test_none_job_returns_none(self, run_ctx):
+        ctx = run_ctx
         assert process_pipeline.__wrapped__(ctx, None) is None
 
-    def test_empty_job_list_returns_none(self, pbs_server):
-        ctx = _make_ctx(pbs_server)
+    def test_empty_job_list_returns_none(self, run_ctx):
+        ctx = run_ctx
         assert process_pipeline.__wrapped__(ctx, []) is None
 
-    def test_invalid_single_job_type_raises(self, pbs_server):
-        ctx = _make_ctx(pbs_server)
+    def test_invalid_single_job_type_raises(self, run_ctx):
+        ctx = run_ctx
         with pytest.raises(ValueError, match="Invalid job type"):
             process_pipeline.__wrapped__(ctx, "not-a-job")
 
-    def test_rejects_non_job_batch_payload(self, pbs_server):
+    def test_rejects_non_job_batch_payload(self, run_ctx):
         """Scheduler-style batch payloads that are not Job lists stay blocked."""
-        ctx = _make_ctx(pbs_server)
+        ctx = run_ctx
         with pytest.raises(
             ValueError, match="Batch job submission is not supported"
         ):
             process_pipeline.__wrapped__(ctx, ["not-a-job", "also-not-a-job"])
 
-    def test_single_job_runs_locally(self, pbs_server, mocker):
-        ctx = _make_ctx(pbs_server)
+    def test_single_job_runs_locally(self, mocker, run_ctx):
+        ctx = run_ctx
         mock_job = mocker.MagicMock(spec=Job)
         mocker.patch.object(
             ctx.obj["jobrunner"], "from_job", return_value=mocker.MagicMock()
@@ -59,8 +50,8 @@ class TestProcessPipeline:
         process_pipeline.__wrapped__(ctx, mock_job)
         mock_job.run.assert_called_once()
 
-    def test_job_list_runs_each_locally(self, pbs_server, mocker):
-        ctx = _make_ctx(pbs_server)
+    def test_job_list_runs_each_locally(self, mocker, run_ctx):
+        ctx = run_ctx
         mock_jobs = [mocker.MagicMock(spec=Job) for _ in range(2)]
         mocker.patch.object(
             ctx.obj["jobrunner"], "from_job", return_value=mocker.MagicMock()

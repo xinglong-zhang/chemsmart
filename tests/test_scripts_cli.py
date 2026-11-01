@@ -162,11 +162,10 @@ class TestFileOrganizerScript:
 
 
 class TestSubmitJobsScript:
-    def test_entry_point_submits_each_file(self, tmp_path):
+    def test_entry_point_submits_each_file(self, write_tmp_file):
         from chemsmart.scripts.submit_jobs import entry_point
 
-        list_file = tmp_path / "jobs.txt"
-        list_file.write_text("job1.com\njob2.com\n")
+        list_file = write_tmp_file("jobs.txt", "job1.com\njob2.com\n")
 
         runner = CliRunner()
         with patch(
@@ -179,7 +178,7 @@ class TestSubmitJobsScript:
                 entry_point,
                 [
                     "-f",
-                    str(list_file),
+                    list_file,
                     "-c",
                     "chemsmart sub gaussian -p test -f file sp",
                 ],
@@ -236,11 +235,12 @@ class TestWbiAnalysisScript:
 
 
 class TestWriteXyzScript:
-    def test_single_structure_writes_single_file(self, tmp_path):
+    def test_single_structure_writes_single_file(
+        self, tmp_path, write_tmp_file
+    ):
         from chemsmart.scripts.write_xyz import entry_point
 
-        input_file = tmp_path / "mymol.xyz"
-        input_file.write_text("dummy")
+        input_file = write_tmp_file("mymol.xyz", "dummy")
 
         runner = CliRunner()
         with patch(
@@ -250,7 +250,7 @@ class TestWriteXyzScript:
             mock_from_filepath.return_value = [mol]
             result = runner.invoke(
                 entry_point,
-                ["-f", str(input_file)],
+                ["-f", input_file],
                 catch_exceptions=False,
             )
 
@@ -259,11 +259,12 @@ class TestWriteXyzScript:
             str(tmp_path / "mymol_single.xyz")
         )
 
-    def test_multiple_structures_single_file_mode(self, tmp_path):
+    def test_multiple_structures_single_file_mode(
+        self, tmp_path, write_tmp_file
+    ):
         from chemsmart.scripts.write_xyz import entry_point
 
-        input_file = tmp_path / "traj.xyz"
-        input_file.write_text("dummy")
+        input_file = write_tmp_file("traj.xyz", "dummy")
 
         runner = CliRunner()
         with patch(
@@ -273,7 +274,7 @@ class TestWriteXyzScript:
             mock_from_filepath.return_value = mols
             result = runner.invoke(
                 entry_point,
-                ["-f", str(input_file), "-i", ":"],
+                ["-f", input_file, "-i", ":"],
                 catch_exceptions=False,
             )
 
@@ -282,11 +283,12 @@ class TestWriteXyzScript:
         for mol in mols:
             mol.write_xyz.assert_called_once_with(expected_path, mode="a")
 
-    def test_multiple_structures_multi_file_mode(self, tmp_path):
+    def test_multiple_structures_multi_file_mode(
+        self, tmp_path, write_tmp_file
+    ):
         from chemsmart.scripts.write_xyz import entry_point
 
-        input_file = tmp_path / "traj.xyz"
-        input_file.write_text("dummy")
+        input_file = write_tmp_file("traj.xyz", "dummy")
 
         runner = CliRunner()
         with patch(
@@ -296,7 +298,7 @@ class TestWriteXyzScript:
             mock_from_filepath.return_value = mols
             result = runner.invoke(
                 entry_point,
-                ["-f", str(input_file), "-i", ":", "--no-single-files"],
+                ["-f", input_file, "-i", ":", "--no-single-files"],
                 catch_exceptions=False,
             )
 

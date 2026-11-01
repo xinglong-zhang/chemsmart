@@ -404,3 +404,15 @@ def soap_reference_filepath(soap_test_directory):
 def soap_reference_data(soap_reference_filepath):
     """Fixture to load the SOAP reference data."""
     return np.load(soap_reference_filepath)
+
+
+@pytest.fixture()
+def clear_pubchem_cache():
+    """Clear ``pubchem_search``'s ``lru_cache`` before and after the test so
+    cached lookups can't leak between tests. Opt in with
+    ``pytestmark = pytest.mark.usefixtures("clear_pubchem_cache")``."""
+    from chemsmart.io.molecules.pubchem import pubchem_search
+
+    pubchem_search.cache_clear()
+    yield
+    pubchem_search.cache_clear()

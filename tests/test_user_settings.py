@@ -1,8 +1,7 @@
 """Tests for chemsmart.settings.user.CHEMSMARTUserSettings."""
 
-import os
-
 from chemsmart.settings.user import CHEMSMARTUserSettings
+from tests.helpers import write_text_file
 
 
 class TestResolveConfigDir:
@@ -22,11 +21,13 @@ class TestInit:
     def test_empty_data_when_yaml_missing(self, user_settings):
         assert user_settings.data == {}
 
-    def test_loads_yaml_data_when_present(self, tmp_path, monkeypatch):
+    def test_loads_yaml_data_when_present(
+        self, tmp_path, monkeypatch, write_tmp_file
+    ):
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(tmp_path))
-        yaml_path = tmp_path / CHEMSMARTUserSettings.USER_YAML_FILE
-        yaml_path.write_text(
-            "SCRATCH: /tmp/scratch\nEMAIL: user@example.com\n"
+        write_tmp_file(
+            CHEMSMARTUserSettings.USER_YAML_FILE,
+            "SCRATCH: /tmp/scratch\nEMAIL: user@example.com\n",
         )
 
         settings = CHEMSMARTUserSettings()
@@ -78,10 +79,10 @@ class TestPathProperties:
 
 
 class TestDataBackedCachedProperties:
-    def test_scratch_present(self, tmp_path, monkeypatch):
+    def test_scratch_present(self, tmp_path, monkeypatch, write_tmp_file):
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(tmp_path))
-        (tmp_path / CHEMSMARTUserSettings.USER_YAML_FILE).write_text(
-            "SCRATCH: /tmp/scratch\n"
+        write_tmp_file(
+            CHEMSMARTUserSettings.USER_YAML_FILE, "SCRATCH: /tmp/scratch\n"
         )
         settings = CHEMSMARTUserSettings()
         assert settings.scratch == "/tmp/scratch"
@@ -89,10 +90,10 @@ class TestDataBackedCachedProperties:
     def test_scratch_absent_returns_none(self, user_settings):
         assert user_settings.scratch is None
 
-    def test_email_present(self, tmp_path, monkeypatch):
+    def test_email_present(self, tmp_path, monkeypatch, write_tmp_file):
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(tmp_path))
-        (tmp_path / CHEMSMARTUserSettings.USER_YAML_FILE).write_text(
-            "EMAIL: user@example.com\n"
+        write_tmp_file(
+            CHEMSMARTUserSettings.USER_YAML_FILE, "EMAIL: user@example.com\n"
         )
         settings = CHEMSMARTUserSettings()
         assert settings.email == "user@example.com"
@@ -100,10 +101,10 @@ class TestDataBackedCachedProperties:
     def test_email_absent_returns_none(self, user_settings):
         assert user_settings.email is None
 
-    def test_project_present(self, tmp_path, monkeypatch):
+    def test_project_present(self, tmp_path, monkeypatch, write_tmp_file):
         monkeypatch.setenv("CHEMSMART_CONFIG_DIR", str(tmp_path))
-        (tmp_path / CHEMSMARTUserSettings.USER_YAML_FILE).write_text(
-            "PROJECT: myproject\n"
+        write_tmp_file(
+            CHEMSMARTUserSettings.USER_YAML_FILE, "PROJECT: myproject\n"
         )
         settings = CHEMSMARTUserSettings()
         assert settings.project == "myproject"
@@ -115,10 +116,9 @@ class TestDataBackedCachedProperties:
 class TestGlobBasedLists:
     def test_server_yaml_files(self, user_settings, tmp_path):
         server_dir = tmp_path / "server"
-        os.makedirs(server_dir)
-        (server_dir / "cluster1.yaml").write_text("")
-        (server_dir / "cluster2.yaml").write_text("")
-        (server_dir / "notes.txt").write_text("")
+        write_text_file(server_dir / "cluster1.yaml", "")
+        write_text_file(server_dir / "cluster2.yaml", "")
+        write_text_file(server_dir / "notes.txt", "")
 
         assert sorted(user_settings.server_yaml_files) == sorted(
             [
@@ -132,9 +132,8 @@ class TestGlobBasedLists:
 
     def test_gaussian_project_yaml_files(self, user_settings, tmp_path):
         gaussian_dir = tmp_path / "gaussian"
-        os.makedirs(gaussian_dir)
-        (gaussian_dir / "b3lyp.yaml").write_text("")
-        (gaussian_dir / "m062x.yaml").write_text("")
+        write_text_file(gaussian_dir / "b3lyp.yaml", "")
+        write_text_file(gaussian_dir / "m062x.yaml", "")
 
         assert sorted(user_settings.gaussian_project_yaml_files) == sorted(
             [
@@ -145,8 +144,7 @@ class TestGlobBasedLists:
 
     def test_orca_project_yaml_files(self, user_settings, tmp_path):
         orca_dir = tmp_path / "orca"
-        os.makedirs(orca_dir)
-        (orca_dir / "dlpno.yaml").write_text("")
+        write_text_file(orca_dir / "dlpno.yaml", "")
 
         assert user_settings.orca_project_yaml_files == [
             str(orca_dir / "dlpno.yaml")
@@ -154,21 +152,18 @@ class TestGlobBasedLists:
 
     def test_all_available_servers(self, user_settings, tmp_path):
         server_dir = tmp_path / "server"
-        os.makedirs(server_dir)
-        (server_dir / "cluster1.yaml").write_text("")
+        write_text_file(server_dir / "cluster1.yaml", "")
 
         assert user_settings.all_available_servers == ["cluster1"]
 
     def test_all_available_gaussian_projects(self, user_settings, tmp_path):
         gaussian_dir = tmp_path / "gaussian"
-        os.makedirs(gaussian_dir)
-        (gaussian_dir / "m062x.yaml").write_text("")
+        write_text_file(gaussian_dir / "m062x.yaml", "")
 
         assert user_settings.all_available_gaussian_projects == ["m062x"]
 
     def test_all_available_orca_projects(self, user_settings, tmp_path):
         orca_dir = tmp_path / "orca"
-        os.makedirs(orca_dir)
-        (orca_dir / "dlpno.yaml").write_text("")
+        write_text_file(orca_dir / "dlpno.yaml", "")
 
         assert user_settings.all_available_orca_projects == ["dlpno"]

@@ -7,6 +7,7 @@ import pytest
 
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 from tests.helpers import (
+    ConcreteGaussianProjectSettings,
     FakePKaSettings,
     make_pka_sub_job_factory,
 )
@@ -1003,3 +1004,10 @@ def smd_TBME_solvent_parameters_text_file(txt_path):
 @pytest.fixture()
 def Ni_def2tzvp_PCHOSi_svp_text_file(txt_path):
     return os.path.join(txt_path, "Ni_def2tzvp_PCHOSi_svp.txt")
+
+
+@pytest.fixture()
+def concrete_gaussian_project_settings():
+    """A fresh hardcoded (non-YAML) :class:`ConcreteGaussianProjectSettings`
+    instance, exercising ``GaussianProjectSettings``' default methods."""
+    return ConcreteGaussianProjectSettings()

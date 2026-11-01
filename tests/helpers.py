@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 import yaml
 from click.testing import CliRunner
+from requests.exceptions import HTTPError as RequestsHTTPError
 
 from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
@@ -34,6 +35,8 @@ from chemsmart.jobs.grouper.base import MatrixGrouper, MoleculeGrouper
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.xtb.settings import XTBJobSettings
+from chemsmart.settings.gaussian import GaussianProjectSettings
+from chemsmart.settings.xtb import XTBProjectSettings
 from chemsmart.utils.mixins import RegistryMixin
 
 _UNSET = object()
@@ -1463,3 +1466,104 @@ def invoke_sub_process_pipeline_directly(
             sub_module.sub._result_callback(job, **kwargs)
 
     return captured["cli_args"]
+
+
+# ── pubchem HTTP fakes ──
+class MockHTTPResponse:
+    def __init__(self, text=None, status_code=200):
+        self.text = text
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        pass
+
+
+def make_http_response(text=None, status_code=200, raise_exc=None):
+    response = MockHTTPResponse(text=text, status_code=status_code)
+    if raise_exc is not None:
+        response.raise_for_status = lambda: (_ for _ in ()).throw(raise_exc)
+    return response
+
+
+def make_http_error(status_code):
+    error = RequestsHTTPError(f"HTTP {status_code}")
+    error.response = MockHTTPResponse(status_code=status_code)
+    return error
+
+
+# ── Gaussian project-settings stub ──
+class ConcreteGaussianProjectSettings(GaussianProjectSettings):
+    """A hardcoded (non-YAML) project settings subclass, exercising
+    the base class's own default method implementations."""
+
+    PROJECT_NAME = "concrete_test_project"
+    functional = "b3lyp"
+    small_basis = "sto-3g"
+    large_basis = "def2tzvp"
+
+
+# ── xTB project-settings stub ──
+class MyXTBProjectSettings(XTBProjectSettings):
+    PROJECT_NAME = "my_project"
+    gfn_version = "gfnff"
+
+
+# ── CtxObjArguments option kwargs ──
+def make_ctx_option_kwargs(
+    value,
+    nargs=1,
+    is_multiple=False,
+    type_name="string",
+    is_flag=False,
+    secondary_opts=None,
+):
+    return {
+        "value": value,
+        "nargs": nargs,
+        "is_multiple": is_multiple,
+        "type": MagicMock(name=type_name),
+        "is_flag": is_flag,
+        "secondary_opts": secondary_opts or [],
+    }
+
+
+# ── script-analysis mocks ──
+def make_fukui_output(shift):
+    output = MagicMock()
+    output.energies = [-100.0 + shift]
+    output.mulliken_atomic_charges = {"1C": 0.1 + shift}
+    output.natural_charges = {"1C": 0.2 + shift}
+    output.hirshfeld_charges = {"1C": 0.3 + shift}
+    output.hirshfeld_cm5_charges = {"1C": 0.4 + shift}
+    return output
+
+
+def make_thermochemistry_results_mock():
+    thermo = MagicMock()
+    thermo.electronic_energy = -100.0
+    thermo.zero_point_energy = 0.05
+    thermo.enthalpy = -99.9
+    thermo.qrrho_enthalpy = -99.9
+    thermo.entropy_times_temperature = -0.02
+    thermo.qrrho_entropy_times_temperature = -0.02
+    thermo.gibbs_free_energy = -99.92
+    thermo.qrrho_gibbs_free_energy = -99.92
+    thermo.qrrho_gibbs_free_energy_qh = -99.92
+    thermo.qrrho_gibbs_free_energy_qs = -99.92
+    thermo.imaginary_frequencies = []
+    thermo.jobtype = "opt"
+    thermo.vibrational_frequencies = [100.0]
+    return thermo
+
+
+# ── mock job for submitter tests ──
+def make_mock_job(
+    label="job1", program="Gaussian", complete=False, folder="."
+):
+    job = MagicMock()
+    job.label = label
+    job.PROGRAM = program
+    job.execution_name = Job.execution_name.fget(job)
+    job.folder = folder
+    job.is_complete.return_value = complete
+    return job

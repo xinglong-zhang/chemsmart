@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chemsmart.jobs.job import Job
 from chemsmart.settings.server import Server
 from chemsmart.settings.submitters import (
     FUGAKUSubmitter,
@@ -26,16 +25,7 @@ from chemsmart.settings.submitters import (
     Submitter,
     user_settings,
 )
-
-
-def make_job(label="job1", program="Gaussian", complete=False, folder="."):
-    job = MagicMock()
-    job.label = label
-    job.PROGRAM = program
-    job.execution_name = Job.execution_name.fget(job)
-    job.folder = folder
-    job.is_complete.return_value = complete
-    return job
+from tests.helpers import make_mock_job
 
 
 class TestRunScript:
@@ -56,18 +46,18 @@ class TestRunScript:
 
 class TestSubmitterDunderMethods:
     def test_eq_compares_by_name(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         s1 = PBSSubmitter(job=job, server=pbs_test_server)
         s2 = PBSSubmitter(name="PBS", job=job, server=pbs_test_server)
         assert s1 == s2
 
     def test_hash_based_on_name(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         s1 = PBSSubmitter(job=job, server=pbs_test_server)
         assert hash(s1) == hash("PBS")
 
     def test_str_and_repr(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         s1 = PBSSubmitter(job=job, server=pbs_test_server)
         assert str(s1) == "Submitter: PBS"
         assert repr(s1) == "Submitter(name=PBS)"
@@ -75,22 +65,22 @@ class TestSubmitterDunderMethods:
 
 class TestSubmitterPaths:
     def test_submit_folder_is_job_folder(self, pbs_test_server, tmp_path):
-        job = make_job(folder=str(tmp_path))
+        job = make_mock_job(folder=str(tmp_path))
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert submitter.submit_folder == str(tmp_path)
 
     def test_submit_script_uses_label(self, pbs_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert submitter.submit_script == "chemsmart_sub_gaussian_mylabel.sh"
 
     def test_submit_script_default_without_label(self, pbs_test_server):
-        job = make_job(label=None)
+        job = make_mock_job(label=None)
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert submitter.submit_script == "chemsmart_sub.sh"
 
     def test_array_submit_script_uses_label(self, pbs_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert (
             submitter.array_submit_script
@@ -98,22 +88,20 @@ class TestSubmitterPaths:
         )
 
     def test_run_script_uses_label(self, pbs_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert submitter.run_script == "chemsmart_run_gaussian_mylabel.py"
 
 
 class TestSubmitterExecutableDispatch:
     def test_unsupported_program_raises(self, pbs_test_server):
-        job = make_job(program="SomeUnsupportedProgram")
+        job = make_mock_job(program="SomeUnsupportedProgram")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         with pytest.raises(ValueError, match="not supported"):
             _ = submitter.executable
 
-    def test_gaussian_program_resolves_executable(
-        self, pbs_test_server, server_yaml_file
-    ):
-        job = make_job(program="Gaussian")
+    def test_gaussian_program_resolves_executable(self, server_yaml_file):
+        job = make_mock_job(program="Gaussian")
         server = Server.from_yaml(name=server_yaml_file)
         submitter = PBSSubmitter(job=job, server=server)
         executable = submitter.executable
@@ -133,7 +121,7 @@ class TestSubmitterExecutableDispatch:
             f"chemsmart.settings.submitters.{executable_class}.from_servername"
         )
         submitter = PBSSubmitter(
-            job=make_job(program=program), server=pbs_test_server
+            job=make_mock_job(program=program), server=pbs_test_server
         )
 
         assert submitter.executable is factory.return_value
@@ -145,7 +133,7 @@ class TestSubmitterWrite:
         self, pbs_test_server, tmp_path, monkeypatch, caplog
     ):
         monkeypatch.chdir(tmp_path)
-        job = make_job(complete=True)
+        job = make_mock_job(complete=True)
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         with (
             patch.object(submitter, "_write_runscript") as mock_run,
@@ -160,7 +148,7 @@ class TestSubmitterWrite:
         self, pbs_test_server, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         with patch.object(
             type(submitter),
@@ -184,7 +172,7 @@ class TestSubmitterArrayJob:
     def test_write_array_job_no_jobs_warns_and_returns(
         self, pbs_test_server, caplog
     ):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         with caplog.at_level("WARNING"):
             submitter.write_array_job(jobs=[])
@@ -194,9 +182,9 @@ class TestSubmitterArrayJob:
         self, pbs_test_server, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        jobs = [make_job(label=f"j{i}") for i in range(3)]
+        jobs = [make_mock_job(label=f"j{i}") for i in range(3)]
 
         with patch.object(
             submitter, "_write_array_submitscript"
@@ -216,9 +204,9 @@ class TestSubmitterArrayJob:
         self, pbs_test_server, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        jobs = [make_job(label=f"j{i}") for i in range(2)]
+        jobs = [make_mock_job(label=f"j{i}") for i in range(2)]
         per_job_args = [["gaussian", "opt", "0"], ["gaussian", "opt", "1"]]
 
         with patch.object(submitter, "_write_array_submitscript"):
@@ -230,7 +218,7 @@ class TestSubmitterArrayJob:
             assert "run(['gaussian', 'opt', '1'])" in f.read()
 
     def test_write_array_job_command_format(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         submitter._write_array_job_command(buf)
@@ -245,21 +233,21 @@ class TestSubmitterArrayJob:
 
 class TestSubmitterFromSchedulerType:
     def test_dispatches_to_pbs(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         result = Submitter.from_scheduler_type(
             "PBS", job=job, server=pbs_test_server
         )
         assert isinstance(result, PBSSubmitter)
 
     def test_dispatches_to_slurm(self, slurm_test_server):
-        job = make_job()
+        job = make_mock_job()
         result = Submitter.from_scheduler_type(
             "SLURM", job=job, server=slurm_test_server
         )
         assert isinstance(result, SLURMSubmitter)
 
     def test_unknown_scheduler_raises(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         with pytest.raises(ValueError, match="Could not find any submitters"):
             Submitter.from_scheduler_type(
                 "BOGUS_SCHEDULER", job=job, server=pbs_test_server
@@ -268,7 +256,7 @@ class TestSubmitterFromSchedulerType:
 
 class TestPBSSubmitter:
     def test_scheduler_options_basic(self, pbs_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
@@ -284,7 +272,7 @@ class TestPBSSubmitter:
         server = Server(
             "gpu-pbs", SCHEDULER="PBS", NUM_CORES=8, MEM_GB=24, NUM_GPUS=2
         )
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=server)
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
@@ -294,7 +282,7 @@ class TestPBSSubmitter:
     def test_scheduler_options_includes_project_and_email(
         self, pbs_test_server
     ):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(
@@ -309,7 +297,7 @@ class TestPBSSubmitter:
         assert "#PBS -m abe" in content
 
     def test_change_to_job_directory(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         submitter._write_change_to_job_directory(buf)
@@ -318,7 +306,7 @@ class TestPBSSubmitter:
 
 class TestSLURMSubmitter:
     def test_scheduler_options_basic(self, slurm_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLURMSubmitter(job=job, server=slurm_test_server)
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
@@ -329,9 +317,9 @@ class TestSLURMSubmitter:
         assert "#SBATCH --time=24:00:00" in content
 
     def test_array_scheduler_options_default_throttle(self, slurm_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLURMSubmitter(job=job, server=slurm_test_server)
-        submitter.jobs = [make_job() for _ in range(5)]
+        submitter.jobs = [make_mock_job() for _ in range(5)]
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
             submitter._write_array_scheduler_options(buf, num_nodes=None)
@@ -340,16 +328,16 @@ class TestSLURMSubmitter:
     def test_array_scheduler_options_with_node_throttle(
         self, slurm_test_server
     ):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLURMSubmitter(job=job, server=slurm_test_server)
-        submitter.jobs = [make_job() for _ in range(5)]
+        submitter.jobs = [make_mock_job() for _ in range(5)]
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
             submitter._write_array_scheduler_options(buf, num_nodes=2)
         assert "#SBATCH --array=1-5%2\n" in buf.getvalue()
 
     def test_change_to_job_directory(self, slurm_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = SLURMSubmitter(job=job, server=slurm_test_server)
         buf = StringIO()
         submitter._write_change_to_job_directory(buf)
@@ -364,7 +352,7 @@ class TestSLFSubmitterBug:
 
     def test_change_to_job_directory_works(self):
         server = Server("slf-server", SCHEDULER="SLF", NUM_CORES=8, MEM_GB=24)
-        job = make_job()
+        job = make_mock_job()
         submitter = SLFSubmitter(job=job, server=server)
         buf = StringIO()
         submitter._write_change_to_job_directory(buf)
@@ -379,7 +367,7 @@ class TestSLFSubmitterBug:
             NUM_GPUS=0,
             NUM_HOURS=24,
         )
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLFSubmitter(job=job, server=server)
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
@@ -398,7 +386,7 @@ class TestFUGAKUSubmitterBug:
         server = Server(
             "fugaku-server", SCHEDULER="FUGAKU", NUM_CORES=8, MEM_GB=24
         )
-        job = make_job()
+        job = make_mock_job()
         submitter = FUGAKUSubmitter(job=job, server=server)
         buf = StringIO()
         submitter._write_change_to_job_directory(buf)
@@ -412,7 +400,7 @@ class TestFUGAKUSubmitterBug:
             MEM_GB=24,
             NUM_HOURS=24,
         )
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = FUGAKUSubmitter(job=job, server=server)
         buf = StringIO()
         with patch.object(user_settings, "data", {"RSCGRP": "small"}):
@@ -422,13 +410,13 @@ class TestFUGAKUSubmitterBug:
 
 class TestSubmitterCall:
     def test_call_dispatches_by_name(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = Submitter(name="PBS", job=job, server=pbs_test_server)
         result = submitter()
         assert isinstance(result, PBSSubmitter)
 
     def test_call_raises_for_unknown_name(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = Submitter(
             name="NOT_A_REAL_SCHEDULER", job=job, server=pbs_test_server
         )
@@ -438,7 +426,7 @@ class TestSubmitterCall:
 
 class TestSubmitterFromDict:
     def test_from_dict_constructs_instance(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter.from_dict(
             {"job": job, "server": pbs_test_server}
         )
@@ -448,21 +436,19 @@ class TestSubmitterFromDict:
 
 class TestSubmitterDefaultFilenamesWithoutLabel:
     def test_array_submit_script_default_without_label(self, pbs_test_server):
-        job = make_job(label=None)
+        job = make_mock_job(label=None)
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert submitter.array_submit_script == "chemsmart_sub_array.sh"
 
     def test_run_script_default_without_label(self, pbs_test_server):
-        job = make_job(label=None)
+        job = make_mock_job(label=None)
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         assert submitter.run_script == "chemsmart_run.py"
 
 
 class TestSubmitterExecutableDispatchExtra:
-    def test_orca_program_resolves_executable(
-        self, pbs_test_server, server_yaml_file
-    ):
-        job = make_job(program="Orca")
+    def test_orca_program_resolves_executable(self, server_yaml_file):
+        job = make_mock_job(program="Orca")
         server = Server.from_yaml(name=server_yaml_file)
         submitter = PBSSubmitter(job=job, server=server)
         assert submitter.executable is not None
@@ -470,7 +456,7 @@ class TestSubmitterExecutableDispatchExtra:
     def test_nciplot_program_resolves_executable(self, pbs_test_server):
         from chemsmart.settings.submitters import NCIPLOTExecutable
 
-        job = make_job(program="NCIPLOT")
+        job = make_mock_job(program="NCIPLOT")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         sentinel = object()
         with patch.object(
@@ -482,73 +468,57 @@ class TestSubmitterExecutableDispatchExtra:
 
 
 class TestWriteProgramSpecifics:
-    def _submitter(self, pbs_test_server, **exec_kwargs):
-        job = make_job()
-        submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        mock_exec = MagicMock(
-            conda_env=None, modules=None, scripts=None, envars=None
-        )
-        for k, v in exec_kwargs.items():
-            setattr(mock_exec, k, v)
-        patcher = patch.object(type(submitter), "executable", new=mock_exec)
-        patcher.start()
-        return submitter, patcher
 
-    def test_conda_env_written_when_present(self, pbs_test_server):
-        submitter, patcher = self._submitter(
-            pbs_test_server, conda_env=["source activate myenv\n"]
+    def test_conda_env_written_when_present(
+        self, make_pbs_submitter_with_executable
+    ):
+        submitter = make_pbs_submitter_with_executable(
+            conda_env=["source activate myenv\n"]
         )
-        try:
-            buf = StringIO()
-            submitter._write_program_specific_conda_env(buf)
-            assert "source activate myenv" in buf.getvalue()
-        finally:
-            patcher.stop()
+        buf = StringIO()
+        submitter._write_program_specific_conda_env(buf)
+        assert "source activate myenv" in buf.getvalue()
 
-    def test_modules_written_when_present(self, pbs_test_server):
-        submitter, patcher = self._submitter(
-            pbs_test_server, modules=["module load gaussian\n"]
+    def test_modules_written_when_present(
+        self, make_pbs_submitter_with_executable
+    ):
+        submitter = make_pbs_submitter_with_executable(
+            modules=["module load gaussian\n"]
         )
-        try:
-            buf = StringIO()
-            submitter._write_load_program_specific_modules(buf)
-            assert "module load gaussian" in buf.getvalue()
-        finally:
-            patcher.stop()
+        buf = StringIO()
+        submitter._write_load_program_specific_modules(buf)
+        assert "module load gaussian" in buf.getvalue()
 
-    def test_scripts_written_when_present(self, pbs_test_server):
-        submitter, patcher = self._submitter(
-            pbs_test_server, scripts=["source /opt/g16/bsd/g16.profile\n"]
+    def test_scripts_written_when_present(
+        self, make_pbs_submitter_with_executable
+    ):
+        submitter = make_pbs_submitter_with_executable(
+            scripts=["source /opt/g16/bsd/g16.profile\n"]
         )
-        try:
-            buf = StringIO()
-            submitter._write_source_program_specific_script(buf)
-            assert "g16.profile" in buf.getvalue()
-        finally:
-            patcher.stop()
+        buf = StringIO()
+        submitter._write_source_program_specific_script(buf)
+        assert "g16.profile" in buf.getvalue()
 
-    def test_envars_written_when_present(self, pbs_test_server):
+    def test_envars_written_when_present(
+        self, make_pbs_submitter_with_executable
+    ):
         # `.env` (a separate property, parsed from `.envars`) is what
         # _write_program_specific_environment_variables actually
         # iterates over -- set it directly since our mock executable
         # isn't a real Executable instance that would parse it itself.
-        submitter, patcher = self._submitter(
-            pbs_test_server,
+        submitter = make_pbs_submitter_with_executable(
             envars="export GAUSS_SCRDIR=/tmp/scratch\n",
             env={"GAUSS_SCRDIR": "/tmp/scratch"},
         )
-        try:
-            buf = StringIO()
-            submitter._write_program_specific_environment_variables(buf)
-            content = buf.getvalue()
-            assert "export GAUSS_SCRDIR=/tmp/scratch" in content
-        finally:
-            patcher.stop()
+        buf = StringIO()
+        submitter._write_program_specific_environment_variables(buf)
+        content = buf.getvalue()
+        assert "export GAUSS_SCRDIR=/tmp/scratch" in content
 
 
 class TestWriteExtraSchedulerDirectivesAndCommands:
     def test_none_directives_writes_nothing(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(
@@ -560,7 +530,7 @@ class TestWriteExtraSchedulerDirectivesAndCommands:
         assert buf.getvalue() == ""
 
     def test_string_directive_gets_newline_appended(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(
@@ -572,7 +542,7 @@ class TestWriteExtraSchedulerDirectivesAndCommands:
         assert buf.getvalue() == "#PBS -custom-directive\n"
 
     def test_list_directives_each_get_newline_appended(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(
@@ -584,7 +554,7 @@ class TestWriteExtraSchedulerDirectivesAndCommands:
         assert buf.getvalue() == "#PBS -one\n#PBS -two\n"
 
     def test_extra_commands_written_when_present(self, pbs_test_server):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(
@@ -600,7 +570,7 @@ class TestWriteExtraSchedulerDirectivesAndCommands:
 
 class TestPBSSubmitterNoUserSettings:
     def test_scheduler_options_without_user_settings(self, pbs_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch("chemsmart.settings.submitters.user_settings", None):
@@ -615,7 +585,7 @@ class TestSLURMSubmitterExtra:
         server = Server(
             "gpu-slurm", SCHEDULER="SLURM", NUM_CORES=8, MEM_GB=24, NUM_GPUS=2
         )
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLURMSubmitter(job=job, server=server)
         buf = StringIO()
         with patch.object(
@@ -634,9 +604,9 @@ class TestSLURMSubmitterExtra:
         server = Server(
             "gpu-slurm", SCHEDULER="SLURM", NUM_CORES=8, MEM_GB=24, NUM_GPUS=2
         )
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLURMSubmitter(job=job, server=server)
-        submitter.jobs = [make_job() for _ in range(3)]
+        submitter.jobs = [make_mock_job() for _ in range(3)]
         buf = StringIO()
         with patch.object(
             user_settings,
@@ -651,7 +621,7 @@ class TestSLURMSubmitterExtra:
         assert "#SBATCH --mail-type=END,FAIL" in content
 
     def test_scheduler_options_without_user_settings(self, slurm_test_server):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLURMSubmitter(job=job, server=slurm_test_server)
         buf = StringIO()
         with patch("chemsmart.settings.submitters.user_settings", None):
@@ -661,9 +631,9 @@ class TestSLURMSubmitterExtra:
     def test_array_scheduler_options_without_user_settings(
         self, slurm_test_server
     ):
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLURMSubmitter(job=job, server=slurm_test_server)
-        submitter.jobs = [make_job()]
+        submitter.jobs = [make_mock_job()]
         buf = StringIO()
         with patch("chemsmart.settings.submitters.user_settings", None):
             submitter._write_array_scheduler_options(buf, num_nodes=None)
@@ -687,7 +657,7 @@ class TestSLFSubmitterExtraCoverage:
             NUM_HOURS=24,
         )
         server.num_nodes = 1
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLFSubmitter(job=job, server=server)
         buf = StringIO()
         with patch.object(user_settings, "data", {"PROJECT": "proj123"}):
@@ -709,7 +679,7 @@ class TestSLFSubmitterExtraCoverage:
             NUM_HOURS=24,
         )
         server.num_nodes = 1
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLFSubmitter(job=job, server=server)
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
@@ -733,7 +703,7 @@ class TestFUGAKUSubmitterExtraCoverage:
             MEM_GB=24,
             NUM_HOURS=24,
         )
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = FUGAKUSubmitter(job=job, server=server)
         submitter.project = "myproj"
         buf = StringIO()
@@ -753,7 +723,7 @@ class TestFUGAKUSubmitterExtraCoverage:
             MEM_GB=24,
             NUM_HOURS=24,
         )
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = FUGAKUSubmitter(job=job, server=server)
         submitter.project = "myproj"
         buf = StringIO()
@@ -766,14 +736,18 @@ class TestBaseSubmitterAbstractMethods:
     def test_write_scheduler_options_raises_not_implemented(
         self, pbs_test_server
     ):
-        submitter = Submitter(name="x", job=make_job(), server=pbs_test_server)
+        submitter = Submitter(
+            name="x", job=make_mock_job(), server=pbs_test_server
+        )
         with pytest.raises(NotImplementedError):
             submitter._write_scheduler_options(StringIO())
 
     def test_write_change_to_job_directory_raises_not_implemented(
         self, pbs_test_server
     ):
-        submitter = Submitter(name="x", job=make_job(), server=pbs_test_server)
+        submitter = Submitter(
+            name="x", job=make_mock_job(), server=pbs_test_server
+        )
         with pytest.raises(NotImplementedError):
             submitter._write_change_to_job_directory(StringIO())
 
@@ -783,7 +757,7 @@ class TestWriteRunscriptDirect:
         self, pbs_test_server, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         submitter._write_runscript(["gaussian", "opt"])
         assert os.path.exists("chemsmart_run_gaussian_mylabel.py")
@@ -796,7 +770,7 @@ class TestWriteFull:
         self, pbs_test_server, tmp_path, monkeypatch, caplog
     ):
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel", complete=False)
+        job = make_mock_job(label="mylabel", complete=False)
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         with patch.object(
             type(submitter),
@@ -815,9 +789,9 @@ class TestWriteArrayJobFull:
         self, pbs_test_server, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        jobs = [make_job(label=f"j{i}") for i in range(2)]
+        jobs = [make_mock_job(label=f"j{i}") for i in range(2)]
 
         with patch.object(
             type(submitter),
@@ -845,9 +819,9 @@ class TestWriteArrayJobFull:
         # arguments -- exercising the "else keep job_cli_args=cli_args"
         # arm of the per-job/shared-args branch.
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        jobs = [make_job(label=f"j{i}") for i in range(3)]
+        jobs = [make_mock_job(label=f"j{i}") for i in range(3)]
         mismatched_args = [["gaussian", "opt"], ["gaussian", "ts"]]
 
         with patch.object(submitter, "_write_array_submitscript"):
@@ -866,9 +840,9 @@ class TestWriteArrayJobFull:
         # isinstance check is False and every job shares it directly,
         # skipping the per-job-vs-shared length/type comparison entirely.
         monkeypatch.chdir(tmp_path)
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
-        jobs = [make_job(label=f"j{i}") for i in range(2)]
+        jobs = [make_mock_job(label=f"j{i}") for i in range(2)]
 
         with patch.object(submitter, "_write_array_submitscript"):
             submitter.write_array_job(jobs=jobs, cli_args=None)
@@ -884,7 +858,7 @@ class TestArraySchedulerOptionsDefaultFallback:
     ):
         # PBSSubmitter doesn't override _write_array_scheduler_options,
         # so the base class default delegates to _write_scheduler_options.
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(user_settings, "data", {}):
@@ -896,7 +870,7 @@ class TestExtraSchedulerDirectivesTrailingNewline:
     def test_list_item_already_ending_in_newline_is_not_duplicated(
         self, pbs_test_server
     ):
-        job = make_job()
+        job = make_mock_job()
         submitter = PBSSubmitter(job=job, server=pbs_test_server)
         buf = StringIO()
         with patch.object(
@@ -924,7 +898,7 @@ class TestSLFSubmitterUnboundLocalBug:
             NUM_HOURS=24,
         )
         server.num_nodes = 1
-        job = make_job(label="mylabel")
+        job = make_mock_job(label="mylabel")
         submitter = SLFSubmitter(job=job, server=server)
         buf = StringIO()
         with patch("chemsmart.settings.submitters.user_settings", None):

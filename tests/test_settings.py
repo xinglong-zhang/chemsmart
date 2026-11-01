@@ -31,79 +31,70 @@ from chemsmart.settings.gaussian import (
 )
 
 
-class _ConcreteProjectSettings(GaussianProjectSettings):
-    """A hardcoded (non-YAML) project settings subclass, exercising
-    the base class's own default method implementations."""
-
-    PROJECT_NAME = "concrete_test_project"
-    functional = "b3lyp"
-    small_basis = "sto-3g"
-    large_basis = "def2tzvp"
-
-
-@pytest.fixture()
-def concrete_project():
-    return _ConcreteProjectSettings()
-
-
 class TestGaussianProjectSettingsDefaults:
     def test_main_settings_uses_functional_and_small_basis(
-        self, concrete_project
+        self, concrete_gaussian_project_settings
     ):
-        settings = concrete_project.main_settings()
+        settings = concrete_gaussian_project_settings.main_settings()
         assert isinstance(settings, GaussianJobSettings)
         assert settings.functional == "b3lyp"
         assert settings.basis == "sto-3g"
 
-    def test_opt_settings(self, concrete_project):
-        settings = concrete_project.opt_settings()
+    def test_opt_settings(self, concrete_gaussian_project_settings):
+        settings = concrete_gaussian_project_settings.opt_settings()
         assert settings.jobtype == "opt"
         assert settings.functional == "b3lyp"
         assert settings.basis == "sto-3g"
 
-    def test_modred_settings(self, concrete_project):
-        settings = concrete_project.modred_settings()
+    def test_modred_settings(self, concrete_gaussian_project_settings):
+        settings = concrete_gaussian_project_settings.modred_settings()
         assert settings.jobtype == "modred"
 
-    def test_ts_settings(self, concrete_project):
-        settings = concrete_project.ts_settings()
+    def test_ts_settings(self, concrete_gaussian_project_settings):
+        settings = concrete_gaussian_project_settings.ts_settings()
         assert settings.jobtype == "ts"
 
     def test_irc_settings_returns_irc_specific_class_with_freq_disabled(
-        self, concrete_project
+        self, concrete_gaussian_project_settings
     ):
-        settings = concrete_project.irc_settings()
+        settings = concrete_gaussian_project_settings.irc_settings()
         assert isinstance(settings, GaussianIRCJobSettings)
         assert settings.jobtype == "irc"
         assert settings.freq is False
 
-    def test_scan_settings_disables_freq(self, concrete_project):
-        settings = concrete_project.scan_settings()
+    def test_scan_settings_disables_freq(
+        self, concrete_gaussian_project_settings
+    ):
+        settings = concrete_gaussian_project_settings.scan_settings()
         assert settings.jobtype == "scan"
         assert settings.freq is False
 
-    def test_nci_settings_disables_freq(self, concrete_project):
-        settings = concrete_project.nci_settings()
+    def test_nci_settings_disables_freq(
+        self, concrete_gaussian_project_settings
+    ):
+        settings = concrete_gaussian_project_settings.nci_settings()
         assert settings.jobtype == "nci"
         assert settings.freq is False
 
-    def test_wbi_settings_disables_freq(self, concrete_project):
-        settings = concrete_project.wbi_settings()
+    def test_wbi_settings_disables_freq(
+        self, concrete_gaussian_project_settings
+    ):
+        settings = concrete_gaussian_project_settings.wbi_settings()
         assert settings.jobtype == "wbi"
         assert settings.freq is False
 
     def test_sp_settings_uses_large_basis_and_disables_freq(
-        self, concrete_project
+        self, concrete_gaussian_project_settings
     ):
-        settings = concrete_project.sp_settings()
+        settings = concrete_gaussian_project_settings.sp_settings()
         assert settings.jobtype == "sp"
         assert settings.freq is False
         assert settings.basis == "def2tzvp"
 
     def test_qmmm_settings_returns_qmmm_specific_class_with_freq_disabled(
-        self, concrete_project
+        self, concrete_gaussian_project_settings
     ):
-        settings = concrete_project.qmmm_settings()
+        settings = concrete_gaussian_project_settings.qmmm_settings()
         assert isinstance(settings, GaussianQMMMJobSettings)
         assert settings.jobtype == "qmmm"
         assert settings.freq is False

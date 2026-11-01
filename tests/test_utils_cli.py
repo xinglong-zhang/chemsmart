@@ -19,6 +19,7 @@ from chemsmart.utils.cli import (
     get_setting_from_jobtype_for_orca,
     update_irc_label,
 )
+from tests.helpers import make_ctx_option_kwargs
 
 
 class TestMyGroupAndCommand:
@@ -138,30 +139,12 @@ class TestCtxObjArgumentsEntryPoint:
 class TestCtxObjArgumentsReconstruct:
     """Tests for command-line reconstruction."""
 
-    @staticmethod
-    def _kw(
-        value,
-        nargs=1,
-        is_multiple=False,
-        type_name="string",
-        is_flag=False,
-        secondary_opts=None,
-    ):
-        return {
-            "value": value,
-            "nargs": nargs,
-            "is_multiple": is_multiple,
-            "type": MagicMock(name=type_name),
-            "is_flag": is_flag,
-            "secondary_opts": secondary_opts or [],
-        }
-
     def test_reconstruct_command_skips_none_values(self):
         commands = [
             {
                 "name": "root",
                 "parent": None,
-                "kwargs": {"skip_me": self._kw(None)},
+                "kwargs": {"skip_me": make_ctx_option_kwargs(None)},
             }
         ]
         obj = CtxObjArguments(commands)
@@ -173,7 +156,7 @@ class TestCtxObjArgumentsReconstruct:
             {
                 "name": "root",
                 "parent": None,
-                "kwargs": {"skip_me": self._kw(())},
+                "kwargs": {"skip_me": make_ctx_option_kwargs(())},
             }
         ]
         obj = CtxObjArguments(commands)
@@ -181,7 +164,7 @@ class TestCtxObjArgumentsReconstruct:
         assert result == ["root"]
 
     def test_reconstruct_command_simple_value(self):
-        kw = self._kw("val")
+        kw = make_ctx_option_kwargs("val")
         kw["type"].name = "string"
         commands = [{"name": "root", "parent": None, "kwargs": {"name": kw}}]
         obj = CtxObjArguments(commands)
@@ -189,7 +172,7 @@ class TestCtxObjArgumentsReconstruct:
         assert result == ["root", "--name", "val"]
 
     def test_reconstruct_command_literal_eval_type(self):
-        kw = self._kw("[1, 2]")
+        kw = make_ctx_option_kwargs("[1, 2]")
         kw["type"].name = "literal_eval"
         commands = [{"name": "root", "parent": None, "kwargs": {"coords": kw}}]
         obj = CtxObjArguments(commands)
@@ -197,7 +180,7 @@ class TestCtxObjArgumentsReconstruct:
         assert result == ["root", "--coords", "[1, 2]"]
 
     def test_reconstruct_command_list_value(self):
-        kw = self._kw([1, 2])
+        kw = make_ctx_option_kwargs([1, 2])
         kw["type"].name = "string"
         commands = [{"name": "root", "parent": None, "kwargs": {"nums": kw}}]
         obj = CtxObjArguments(commands)
@@ -205,7 +188,7 @@ class TestCtxObjArgumentsReconstruct:
         assert result == ["root", "--nums", "1", "2"]
 
     def test_reconstruct_command_multiple_single_nargs(self):
-        kw = self._kw(("a", "b"), nargs=1, is_multiple=True)
+        kw = make_ctx_option_kwargs(("a", "b"), nargs=1, is_multiple=True)
         kw["type"].name = "string"
         commands = [{"name": "root", "parent": None, "kwargs": {"item": kw}}]
         obj = CtxObjArguments(commands)
@@ -213,7 +196,9 @@ class TestCtxObjArgumentsReconstruct:
         assert result == ["root", "--item", "a", "--item", "b"]
 
     def test_reconstruct_command_multiple_multi_nargs(self):
-        kw = self._kw((("a", "b"), ("c", "d")), nargs=2, is_multiple=True)
+        kw = make_ctx_option_kwargs(
+            (("a", "b"), ("c", "d")), nargs=2, is_multiple=True
+        )
         kw["type"].name = "string"
         commands = [{"name": "root", "parent": None, "kwargs": {"pair": kw}}]
         obj = CtxObjArguments(commands)

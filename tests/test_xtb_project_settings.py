@@ -21,16 +21,12 @@ from chemsmart.settings.xtb import (
     YamlXTBProjectSettings,
     YamlXTBProjectSettingsBuilder,
 )
-
-
-class _MyProjectSettings(XTBProjectSettings):
-    PROJECT_NAME = "my_project"
-    gfn_version = "gfnff"
+from tests.helpers import MyXTBProjectSettings
 
 
 class TestMainSettings:
     def test_main_settings_uses_gfn_version(self):
-        settings = _MyProjectSettings().main_settings()
+        settings = MyXTBProjectSettings().main_settings()
         assert isinstance(settings, XTBJobSettings)
         assert settings.gfn_version == "gfnff"
 
@@ -40,23 +36,23 @@ class TestMainSettings:
 
 class TestJobtypeSettings:
     def test_sp_settings_disables_freq(self):
-        settings = _MyProjectSettings().sp_settings()
+        settings = MyXTBProjectSettings().sp_settings()
         assert settings.jobtype == "sp"
         assert settings.freq is False
         assert settings.gfn_version == "gfnff"
 
     def test_opt_settings_enables_freq(self):
-        settings = _MyProjectSettings().opt_settings()
+        settings = MyXTBProjectSettings().opt_settings()
         assert settings.jobtype == "opt"
         assert settings.freq is True
 
     def test_hess_settings_enables_freq(self):
-        settings = _MyProjectSettings().hess_settings()
+        settings = MyXTBProjectSettings().hess_settings()
         assert settings.jobtype == "hess"
         assert settings.freq is True
 
     def test_each_jobtype_returns_independent_copy(self):
-        project = _MyProjectSettings()
+        project = MyXTBProjectSettings()
         a = project.sp_settings()
         b = project.sp_settings()
         a.charge = 5
@@ -128,31 +124,35 @@ class TestXTBProjectSettingsManager:
         manager = XTBProjectSettingsManager(filename="project.yaml")
         assert manager.filename == str(tmp_path / "project.yaml")
 
-    def test_create_delegates_to_yaml_xtb_project_settings(self, tmp_path):
-        yaml_file = tmp_path / "myproj.yaml"
-        yaml_file.write_text("sp:\n  gfn_version: gfnff\n")
-        manager = XTBProjectSettingsManager(filename=str(yaml_file))
+    def test_create_delegates_to_yaml_xtb_project_settings(
+        self, write_tmp_file
+    ):
+        yaml_file = write_tmp_file(
+            "myproj.yaml", "sp:\n  gfn_version: gfnff\n"
+        )
+        manager = XTBProjectSettingsManager(filename=yaml_file)
         settings = manager.create()
         assert isinstance(settings, YamlXTBProjectSettings)
         assert settings.PROJECT_NAME == "myproj"
 
 
 class TestYamlXTBProjectSettingsBuilder:
-    def test_build_parses_project_name_from_filename(self, tmp_path):
-        yaml_file = tmp_path / "gas_solv.yaml"
-        yaml_file.write_text("sp:\n  gfn_version: gfn2\n")
-        builder = YamlXTBProjectSettingsBuilder(filename=str(yaml_file))
+    def test_build_parses_project_name_from_filename(self, write_tmp_file):
+        yaml_file = write_tmp_file(
+            "gas_solv.yaml", "sp:\n  gfn_version: gfn2\n"
+        )
+        builder = YamlXTBProjectSettingsBuilder(filename=yaml_file)
         project_settings = builder.build()
         assert project_settings.PROJECT_NAME == "gas_solv"
 
-    def test_build_reads_all_three_jobtypes_from_yaml(self, tmp_path):
-        yaml_file = tmp_path / "proj.yaml"
-        yaml_file.write_text(
+    def test_build_reads_all_three_jobtypes_from_yaml(self, write_tmp_file):
+        yaml_file = write_tmp_file(
+            "proj.yaml",
             "sp:\n  gfn_version: gfnff\n"
             "opt:\n  optimization_level: tight\n"
-            "hess:\n  charge: -1\n"
+            "hess:\n  charge: -1\n",
         )
-        builder = YamlXTBProjectSettingsBuilder(filename=str(yaml_file))
+        builder = YamlXTBProjectSettingsBuilder(filename=yaml_file)
         project_settings = builder.build()
 
         sp = project_settings.sp_settings()
@@ -170,25 +170,24 @@ class TestYamlXTBProjectSettingsBuilder:
         assert hess.charge == -1
         assert hess.freq is True
 
-    def test_empty_yaml_file_returns_empty_config(self, tmp_path):
-        yaml_file = tmp_path / "empty.yaml"
-        yaml_file.write_text("")
-        builder = YamlXTBProjectSettingsBuilder(filename=str(yaml_file))
+    def test_empty_yaml_file_returns_empty_config(self, write_tmp_file):
+        yaml_file = write_tmp_file("empty.yaml", "")
+        builder = YamlXTBProjectSettingsBuilder(filename=yaml_file)
         assert builder._read_config() == {}
 
-    def test_missing_jobtype_section_uses_defaults(self, tmp_path):
-        yaml_file = tmp_path / "sp_only.yaml"
-        yaml_file.write_text("sp:\n  gfn_version: gfnff\n")
-        builder = YamlXTBProjectSettingsBuilder(filename=str(yaml_file))
+    def test_missing_jobtype_section_uses_defaults(self, write_tmp_file):
+        yaml_file = write_tmp_file(
+            "sp_only.yaml", "sp:\n  gfn_version: gfnff\n"
+        )
+        builder = YamlXTBProjectSettingsBuilder(filename=yaml_file)
         opt_settings = builder._settings_for_job("opt")
         assert opt_settings.jobtype == "opt"
         assert opt_settings.gfn_version == "gfn2"
         assert opt_settings.freq is True
 
-    def test_unsupported_jobtype_raises(self, tmp_path):
-        yaml_file = tmp_path / "proj.yaml"
-        yaml_file.write_text("sp:\n  gfn_version: gfn2\n")
-        builder = YamlXTBProjectSettingsBuilder(filename=str(yaml_file))
+    def test_unsupported_jobtype_raises(self, write_tmp_file):
+        yaml_file = write_tmp_file("proj.yaml", "sp:\n  gfn_version: gfn2\n")
+        builder = YamlXTBProjectSettingsBuilder(filename=yaml_file)
         with pytest.raises(ValueError, match="Unsupported xTB job type"):
             builder._settings_for_job("bogus")
 
@@ -207,9 +206,8 @@ class TestYamlXTBProjectSettings:
         a.charge = 3
         assert b.charge is None
 
-    def test_from_yaml_builds_via_builder(self, tmp_path):
-        yaml_file = tmp_path / "proj.yaml"
-        yaml_file.write_text("sp:\n  gfn_version: gfn2\n")
-        project_settings = YamlXTBProjectSettings.from_yaml(str(yaml_file))
+    def test_from_yaml_builds_via_builder(self, write_tmp_file):
+        yaml_file = write_tmp_file("proj.yaml", "sp:\n  gfn_version: gfn2\n")
+        project_settings = YamlXTBProjectSettings.from_yaml(yaml_file)
         assert isinstance(project_settings, YamlXTBProjectSettings)
         assert project_settings.PROJECT_NAME == "proj"

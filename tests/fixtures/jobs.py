@@ -26,8 +26,9 @@ from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.settings.crest import CRESTProjectSettings
 from chemsmart.settings.server import Server
+from chemsmart.settings.submitters import PBSSubmitter
 from chemsmart.settings.user import CHEMSMARTUserSettings
-from tests.helpers import make_concrete_job, make_matrix_grouper
+from tests.helpers import make_concrete_job, make_matrix_grouper, make_mock_job
 
 
 ############ Job Settings Fixtures ##################
@@ -188,6 +189,29 @@ def pbs_test_server():
         NUM_HOURS=24,
         QUEUE_NAME="normal",
     )
+
+
+@pytest.fixture()
+def make_pbs_submitter_with_executable(pbs_test_server, monkeypatch):
+    """Factory for a ``PBSSubmitter`` (mock job, ``pbs_test_server``) whose
+    ``executable`` is a mock with ``conda_env``/``modules``/``scripts``/
+    ``envars`` set to ``None`` unless overridden by keyword. The patch is
+    undone automatically at teardown::
+
+        submitter = make_pbs_submitter_with_executable(modules=["module load g16\n"])
+    """
+
+    def _make(**exec_kwargs):
+        submitter = PBSSubmitter(job=make_mock_job(), server=pbs_test_server)
+        mock_exec = MagicMock(
+            conda_env=None, modules=None, scripts=None, envars=None
+        )
+        for key, value in exec_kwargs.items():
+            setattr(mock_exec, key, value)
+        monkeypatch.setattr(type(submitter), "executable", mock_exec)
+        return submitter
+
+    return _make
 
 
 @pytest.fixture()
