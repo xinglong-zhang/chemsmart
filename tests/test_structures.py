@@ -3317,8 +3317,12 @@ class TestInChI:
     EXPECTED_NORMAL = "NNJYFTBCZFRDIO-UHFFFAOYSA-N"
     EXPECTED_R_ENANTIOMER = "YDCAVENCOFCEDV-HSZRJFAPSA-N"
     EXPECTED_S_ENANTIOMER = "YDCAVENCOFCEDV-QHCPKHFHSA-N"
-    EXPECTED_LARGE_C3 = "WYLDIUSELJCHHK-MMELAICESA-M"
-    EXPECTED_LARGE_C2 = "KRPJGRYSEYYRSW-YWQHEUOTSA-M"
+    # The two large Cu complexes (~530 atoms) are perceived differently by
+    # different Open Babel releases, so these keys are tied to the version
+    # pinned in environment.yml (openbabel=3.2.1). Under 3.1.1 they were
+    # WYLDIUSELJCHHK-MMELAICESA-M and KRPJGRYSEYYRSW-YWQHEUOTSA-M.
+    EXPECTED_LARGE_C3 = "VAFLQEKAEZNPGK-MMELAICESA-M"
+    EXPECTED_LARGE_C2 = "DEZXYXREAPNJFK-YWQHEUOTSA-M"
 
     # InChI constants (full InChI strings)
     EXPECTED_INCHI_NORMAL = "InChI=1S/C4H10O3P/c1-3-6-8(5)7-4-2/h3-4H2,1-2H3"
