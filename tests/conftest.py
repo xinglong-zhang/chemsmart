@@ -33,6 +33,7 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianIRCJobSettings,
     GaussianJobSettings,
     GaussianLinkJobSettings,
+    GaussianpKaJobSettings,
 )
 from chemsmart.jobs.grouper.base import MatrixGrouper
 from chemsmart.jobs.iterate.runner import IterateJobRunner
@@ -527,6 +528,150 @@ def run_gaussian_qmmm_callback():
             return mock_job
 
     return _run
+
+
+############ Gaussian UV-Vis / pKa Job Fixtures ##################
+@pytest.fixture()
+def make_uvvis_job():
+    """Factory for a ``GaussianUVVISJob`` built without ``__init__``.
+
+    ``GaussianUVVISJob.__init__`` always raises (BUGS_FOUND.md #11), so
+    the instance is created with ``__new__`` and its attributes are set
+    by hand.
+    """
+    from chemsmart.jobs.gaussian.uvvis import GaussianUVVISJob
+
+    def _make(settings=None):
+        job = GaussianUVVISJob.__new__(GaussianUVVISJob)
+        job.folder = "/tmp/uvvis_job"
+        job.molecule = MagicMock(name="molecule")
+        job.settings = settings or GaussianJobSettings.default()
+        return job
+
+    return _make
+
+
+class _FakePKaSettings(GaussianpKaJobSettings):
+    """Settings double with deterministic sub-job wiring.
+
+    Overrides the pair/settings-generation methods to return plain
+    sentinel strings instead of doing real molecule-copying or
+    basis/functional resolution, since ``GaussianOptJob`` and
+    ``GaussianSinglePointJob`` are mocked out in these tests and never
+    actually inspect these values.
+    """
+
+    def conjugate_pair_molecules(self, molecule):
+        return "PROT_MOL", "CONJ_MOL"
+
+    def _create_gas_phase_job_settings(self, molecule):
+        return "PROT_OPT_SETTINGS", "CONJ_OPT_SETTINGS"
+
+    def reference_pair_molecules(self):
+        return "REF_ACID_MOL", "REF_CONJ_MOL"
+
+    def reference_pair_job_settings(self):
+        return "REF_ACID_OPT_SETTINGS", "REF_CONJ_OPT_SETTINGS"
+
+    def _create_solution_phase_sp_settings(self, molecule):
+        return "PROT_SP_SETTINGS", "CONJ_SP_SETTINGS"
+
+    def reference_pair_sp_job_settings(self):
+        return "REF_ACID_SP_SETTINGS", "REF_CONJ_SP_SETTINGS"
+
+
+@pytest.fixture
+def _clear_shared_reference_cache():
+    """Reset ``GaussianpKaJob``'s class-level reference-molecule cache.
+
+    ``_shared_reference_molecule_cache`` is shared by every
+    ``GaussianpKaJob`` instance; clearing it around each test stops
+    state leaking between tests.
+    """
+    from chemsmart.jobs.gaussian.pka import GaussianpKaJob
+
+    GaussianpKaJob._shared_reference_molecule_cache.clear()
+    yield
+    GaussianpKaJob._shared_reference_molecule_cache.clear()
+
+
+@pytest.fixture()
+def pka_settings():
+    return _FakePKaSettings()
+
+
+@pytest.fixture()
+def pka_settings_with_reference():
+    return _FakePKaSettings(
+        reference_file="href.xyz",
+        reference_proton_index=1,
+        reference_charge=0,
+        reference_multiplicity=1,
+    )
+
+
+def _make_pka_sub_job_factory():
+    """Return a side_effect factory for GaussianOptJob/GaussianSinglePointJob.
+
+    Records every created mock job in ``factory.created`` (in creation
+    order) so tests can reach in and configure ``is_complete``/
+    ``_output``/``outputfile`` per job.
+    """
+
+    created = []
+
+    def factory(*, molecule, settings, label, jobrunner, skip_completed):
+        job = MagicMock()
+        job.molecule = molecule
+        job.settings = settings
+        job.label = label
+        job.jobrunner = jobrunner
+        job.skip_completed = skip_completed
+        job.is_complete.return_value = False
+        job._output.return_value = None
+        job.outputfile = f"{label}.log"
+
+        # By default, simulate a successful run: once `.run()` is
+        # called the job reports itself complete. Tests that need to
+        # simulate a job staying incomplete after running should clear
+        # this with `job.run.side_effect = None`.
+        def _mark_complete_on_run():
+            job.is_complete.return_value = True
+
+        job.run.side_effect = _mark_complete_on_run
+        created.append(job)
+        return job
+
+    factory.created = created
+    return factory
+
+
+@pytest.fixture()
+def opt_factory():
+    """Recording side_effect factory for pKa's mocked ``GaussianOptJob``."""
+    return _make_pka_sub_job_factory()
+
+
+@pytest.fixture()
+def sp_factory():
+    """Recording side_effect factory for pKa's mocked SP job class."""
+    return _make_pka_sub_job_factory()
+
+
+@pytest.fixture()
+def patched_sub_jobs(opt_factory, sp_factory):
+    """Patch pKa's opt/SP sub-job classes with the recording factories."""
+    with (
+        patch(
+            "chemsmart.jobs.gaussian.pka.GaussianOptJob",
+            side_effect=opt_factory,
+        ),
+        patch(
+            "chemsmart.jobs.gaussian.pka.GaussianSinglePointJob",
+            side_effect=sp_factory,
+        ),
+    ):
+        yield opt_factory, sp_factory
 
 
 @pytest.fixture()
