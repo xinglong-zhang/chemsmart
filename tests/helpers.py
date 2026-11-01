@@ -978,6 +978,21 @@ def make_dummy_folder_output(main_out=None, secondary_out=None):
     )
 
 
+def invoke_orca_cli(cli_args, ctx_obj=None, *, catch_exceptions=False):
+    """Invoke the ``orca`` CLI group with ``cli_args`` (``ctx_obj``
+    defaults to ``{}``) and return the Click result. Pass
+    ``catch_exceptions=True`` to assert on ``result.exception`` /
+    ``result.output`` instead of letting errors propagate."""
+    from chemsmart.cli.orca.orca import orca as orca_cli
+
+    return CliRunner().invoke(
+        orca_cli,
+        cli_args,
+        obj={} if ctx_obj is None else ctx_obj,
+        catch_exceptions=catch_exceptions,
+    )
+
+
 def run_orca_and_capture_settings(
     job_class_path,
     cli_args,
@@ -999,11 +1014,6 @@ def run_orca_and_capture_settings(
     ``catch_exceptions=True`` to assert on error exits instead of letting
     exceptions propagate.
     """
-    from chemsmart.cli.orca.orca import orca as orca_cli
-
-    if ctx_obj is None:
-        ctx_obj = {}
-    runner = CliRunner()
     captured_settings = None
 
     if job_cls is not None:
@@ -1014,11 +1024,8 @@ def run_orca_and_capture_settings(
     with patcher as mock_job_cls:
         if job_cls is None:
             mock_job_cls.return_value = MagicMock()
-        result = runner.invoke(
-            orca_cli,
-            cli_args,
-            obj=ctx_obj,
-            catch_exceptions=catch_exceptions,
+        result = invoke_orca_cli(
+            cli_args, ctx_obj, catch_exceptions=catch_exceptions
         )
         if mock_job_cls.call_args is not None:
             captured_settings = mock_job_cls.call_args[1].get("settings")
