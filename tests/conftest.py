@@ -606,6 +606,36 @@ def make_nciplot_writer(tmp_path):
     return _make
 
 
+@pytest.fixture()
+def make_orca_writer():
+    """Factory for an ``ORCAInputWriter`` around a lightweight fake job.
+
+    Bypasses full Job construction so individual writer methods can be
+    tested directly. The fake job exposes ``settings``, ``molecule``
+    (default: a ``MagicMock`` with ``frozen_atoms=None``), ``jobrunner``
+    (``num_cores=4``, ``mem_gb=8``), ``label`` and ``folder``.
+    """
+    from types import SimpleNamespace
+
+    from chemsmart.jobs.orca.writer import ORCAInputWriter
+
+    def _make(settings, molecule=None):
+        job = SimpleNamespace(
+            settings=settings,
+            molecule=(
+                molecule
+                if molecule is not None
+                else MagicMock(frozen_atoms=None)
+            ),
+            jobrunner=MagicMock(num_cores=4, mem_gb=8),
+            label="test_job",
+            folder="/tmp",
+        )
+        return ORCAInputWriter(job=job)
+
+    return _make
+
+
 ############ Gaussian UV-Vis / pKa Job Fixtures ##################
 @pytest.fixture()
 def make_uvvis_job():
