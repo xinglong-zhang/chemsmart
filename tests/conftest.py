@@ -869,6 +869,40 @@ def run_orca_and_capture_settings():
 
 
 @pytest.fixture()
+def run_grouper_and_capture_job_kwargs():
+    """Run the grouper CLI with a patched ``GrouperJob`` and capture the
+    keyword arguments it was constructed with.
+
+    Grouper jobs have no settings object, so the grouper analogue of
+    ``run_gaussian_and_capture_settings`` captures the ``GrouperJob``
+    constructor kwargs instead. Returns ``(result, job_kwargs)``;
+    ``job_kwargs`` is ``None`` when ``GrouperJob`` was never instantiated
+    (e.g. the CLI rejected the arguments).
+
+    Pass ``job_cls`` to supply the mock yourself and inspect its calls
+    (e.g. call counts) afterwards. Pass ``catch_exceptions=True`` to
+    assert on ``result.exception`` instead of letting errors propagate.
+    """
+    from chemsmart.cli.grouper import grouper as grouper_cli
+
+    def _run(cli_args, *, job_cls=None, catch_exceptions=False):
+        captured_kwargs = None
+        if job_cls is None:
+            job_cls = MagicMock(name="grouper_job_cls")
+
+        with patch("chemsmart.jobs.grouper.GrouperJob", new=job_cls):
+            result = CliRunner().invoke(
+                grouper_cli, cli_args, catch_exceptions=catch_exceptions
+            )
+        if job_cls.call_args is not None:
+            captured_kwargs = job_cls.call_args.kwargs
+
+        return result, captured_kwargs
+
+    return _run
+
+
+@pytest.fixture()
 def orca_td_settings(orca_td_project_name):
     """``ORCATDDFTJobSettings`` built from the ``orca_td`` project's ``td:``
     block, as a closed-shell neutral (charge 0, multiplicity 1) system.

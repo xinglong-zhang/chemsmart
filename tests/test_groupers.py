@@ -7,9 +7,7 @@ import click
 import numpy as np
 import pandas as pd
 import pytest
-from click.testing import CliRunner
 
-from chemsmart.cli.grouper import grouper
 from chemsmart.cli.grouper.grouper import (
     THERMOCHEMISTRY_DEFAULT_KWARGS,
     _extract_conformer_id,
@@ -62,15 +60,6 @@ POSITIONS = np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]])
 
 
 grouper_module = importlib.import_module("chemsmart.cli.grouper.grouper")
-
-
-def invoke_grouper(args, mocker, mock_job_return=None):
-    mock_job_cls = mocker.patch("chemsmart.jobs.grouper.GrouperJob")
-    if mock_job_return is not None:
-        mock_job_cls.return_value = mock_job_return
-    runner = CliRunner()
-    result = runner.invoke(grouper, args, catch_exceptions=False)
-    return result, mock_job_cls
 
 
 @pytest.fixture()
@@ -208,13 +197,12 @@ class TestGrouperCliRunner:
 
     # --- CLI wiring ---
     def test_tfd_cli_forwards_strategy_and_representative(
-        self, monkeypatch, multiple_molecules_xyz_file, captured
+        self,
+        monkeypatch,
+        multiple_molecules_xyz_file,
+        captured,
+        run_grouper_and_capture_job_kwargs,
     ):
-        from click.testing import CliRunner
-
-        grouper_module = importlib.import_module(
-            "chemsmart.cli.grouper.grouper"
-        )
         tfd_module = importlib.import_module("chemsmart.cli.grouper.tfd")
 
         def fake_create_grouper_job(ctx, **kwargs):
@@ -227,8 +215,7 @@ class TestGrouperCliRunner:
             fake_create_grouper_job,
         )
 
-        result = CliRunner().invoke(
-            grouper_module.grouper,
+        result, _ = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7426,9 +7413,12 @@ class TestExtractLastEnergyFromOutputFile:
 
 class TestGrouperCliValidation:
     def test_both_filenames_and_directory_raises(
-        self, mocker, multiple_molecules_xyz_file, tmp_path
+        self,
+        run_grouper_and_capture_job_kwargs,
+        multiple_molecules_xyz_file,
+        tmp_path,
     ):
-        result, _ = invoke_grouper(
+        result, _ = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7438,25 +7428,23 @@ class TestGrouperCliValidation:
                 "gaussian",
                 "rmsd",
             ],
-            mocker,
         )
         assert result.exit_code != 0
         assert "Cannot specify both" in result.output
 
     def test_directory_without_program_or_filetype_raises(
-        self, mocker, tmp_path
+        self, run_grouper_and_capture_job_kwargs, tmp_path
     ):
-        result, _ = invoke_grouper(
+        result, _ = run_grouper_and_capture_job_kwargs(
             ["-d", str(tmp_path), "rmsd"],
-            mocker,
         )
         assert result.exit_code != 0
         assert "Must specify -p/--program" in result.output
 
     def test_multiple_filenames_rejected(
-        self, mocker, multiple_molecules_xyz_file
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
     ):
-        result, _ = invoke_grouper(
+        result, _ = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7464,15 +7452,14 @@ class TestGrouperCliValidation:
                 multiple_molecules_xyz_file,
                 "rmsd",
             ],
-            mocker,
         )
         assert result.exit_code != 0
         assert "only single file input" in result.output
 
     def test_non_e_energy_type_for_xyz_rejected(
-        self, mocker, multiple_molecules_xyz_file
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
     ):
-        result, _ = invoke_grouper(
+        result, _ = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7480,36 +7467,39 @@ class TestGrouperCliValidation:
                 "H",
                 "rmsd",
             ],
-            mocker,
         )
         assert result.exit_code != 0
         assert "Only energy" in result.output
 
-    def test_no_input_specified_warns_and_returns(self, mocker):
-        result, mock_job_cls = invoke_grouper(["rmsd"], mocker)
+    def test_no_input_specified_warns_and_returns(
+        self, run_grouper_and_capture_job_kwargs
+    ):
+        mock_job_cls = MagicMock(name="grouper_job_cls")
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
+            ["rmsd"], job_cls=mock_job_cls
+        )
         assert result.exit_code == 0
         mock_job_cls.assert_called_once()
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["molecules"] is None
+        assert job_kwargs["molecules"] is None
 
 
 class TestGrouperCliSuccessPaths:
     def test_single_file_rmsd_success(
-        self, mocker, multiple_molecules_xyz_file
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
     ):
-        result, mock_job_cls = invoke_grouper(
-            ["-f", multiple_molecules_xyz_file, "rmsd"], mocker
+        mock_job_cls = MagicMock(name="grouper_job_cls")
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
+            ["-f", multiple_molecules_xyz_file, "rmsd"], job_cls=mock_job_cls
         )
         assert result.exit_code == 0, result.output
         mock_job_cls.assert_called_once()
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["grouping_strategy"] == "rmsd"
-        assert len(call_kwargs["molecules"]) > 1
+        assert job_kwargs["grouping_strategy"] == "rmsd"
+        assert len(job_kwargs["molecules"]) > 1
 
     def test_label_option_used_as_grouper_label(
-        self, mocker, multiple_molecules_xyz_file
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
     ):
-        result, mock_job_cls = invoke_grouper(
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7517,13 +7507,13 @@ class TestGrouperCliSuccessPaths:
                 "mylabel",
                 "rmsd",
             ],
-            mocker,
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["label"] == "mylabel_rmsd"
+        assert job_kwargs["label"] == "mylabel_rmsd"
 
-    def test_directory_mode_success(self, mocker, tmp_path):
+    def test_directory_mode_success(
+        self, mocker, run_grouper_and_capture_job_kwargs, tmp_path
+    ):
         mock_molecule = MagicMock(name="a")
         mocker.patch.object(
             grouper_module,
@@ -7535,39 +7525,38 @@ class TestGrouperCliSuccessPaths:
                 "auto_label",
             ),
         )
-        result, mock_job_cls = invoke_grouper(
-            ["-d", str(tmp_path), "-p", "gaussian", "rmsd"], mocker
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
+            ["-d", str(tmp_path), "-p", "gaussian", "rmsd"],
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["conformer_ids"] == ["c1", "c2"]
-        assert call_kwargs["label"] == "auto_label_rmsd"
+        assert job_kwargs["conformer_ids"] == ["c1", "c2"]
+        assert job_kwargs["label"] == "auto_label_rmsd"
 
     def test_fewer_than_two_molecules_warns_but_continues(
-        self, mocker, tmp_path
+        self, run_grouper_and_capture_job_kwargs, tmp_path
     ):
         single_mol_file = tmp_path / "single.xyz"
         single_mol_file.write_text("1\ncomment\nH 0.0 0.0 0.0\n")
-        result, mock_job_cls = invoke_grouper(
-            ["-f", str(single_mol_file), "rmsd"], mocker
+        mock_job_cls = MagicMock(name="grouper_job_cls")
+        result, _ = run_grouper_and_capture_job_kwargs(
+            ["-f", str(single_mol_file), "rmsd"], job_cls=mock_job_cls
         )
         assert result.exit_code == 0, result.output
         mock_job_cls.assert_called_once()
 
     def test_tanimoto_default_fingerprint(
-        self, mocker, multiple_molecules_xyz_file
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
     ):
-        result, mock_job_cls = invoke_grouper(
-            ["-f", multiple_molecules_xyz_file, "tanimoto"], mocker
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
+            ["-f", multiple_molecules_xyz_file, "tanimoto"],
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["fingerprint_type"] == "rdkit"
+        assert job_kwargs["fingerprint_type"] == "rdkit"
 
     def test_tanimoto_custom_fingerprint(
-        self, mocker, multiple_molecules_xyz_file
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
     ):
-        result, mock_job_cls = invoke_grouper(
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7575,14 +7564,14 @@ class TestGrouperCliSuccessPaths:
                 "--fingerprint-type",
                 "morgan",
             ],
-            mocker,
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["fingerprint_type"] == "morgan"
+        assert job_kwargs["fingerprint_type"] == "morgan"
 
-    def test_tfd_options(self, mocker, multiple_molecules_xyz_file):
-        result, mock_job_cls = invoke_grouper(
+    def test_tfd_options(
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
+    ):
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7591,15 +7580,15 @@ class TestGrouperCliSuccessPaths:
                 "--max-dev",
                 "spec",
             ],
-            mocker,
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["use_weights"] is False
-        assert call_kwargs["max_dev"] == "spec"
+        assert job_kwargs["use_weights"] is False
+        assert job_kwargs["max_dev"] == "spec"
 
-    def test_irmsd_inversion_option(self, mocker, multiple_molecules_xyz_file):
-        result, mock_job_cls = invoke_grouper(
+    def test_irmsd_inversion_option(
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
+    ):
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7607,24 +7596,24 @@ class TestGrouperCliSuccessPaths:
                 "--inversion",
                 "on",
             ],
-            mocker,
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["inversion"] == "on"
+        assert job_kwargs["inversion"] == "on"
 
     @pytest.mark.parametrize(
         "subcommand", ["hrmsd", "spyrmsd", "pymolrmsd", "energy"]
     )
     def test_simple_subcommands_succeed(
-        self, mocker, multiple_molecules_xyz_file, subcommand
+        self,
+        run_grouper_and_capture_job_kwargs,
+        multiple_molecules_xyz_file,
+        subcommand,
     ):
-        result, mock_job_cls = invoke_grouper(
-            ["-f", multiple_molecules_xyz_file, subcommand], mocker
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
+            ["-f", multiple_molecules_xyz_file, subcommand],
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["grouping_strategy"] == subcommand
+        assert job_kwargs["grouping_strategy"] == subcommand
 
 
 class TestGrouperCliStructuralSubcommands:
@@ -7637,22 +7626,28 @@ class TestGrouperCliStructuralSubcommands:
         ],
     )
     def test_succeeds_without_threshold_or_num_groups(
-        self, mocker, multiple_molecules_xyz_file, subcommand, strategy
+        self,
+        run_grouper_and_capture_job_kwargs,
+        multiple_molecules_xyz_file,
+        subcommand,
+        strategy,
     ):
-        result, mock_job_cls = invoke_grouper(
-            ["-f", multiple_molecules_xyz_file, subcommand], mocker
+        result, job_kwargs = run_grouper_and_capture_job_kwargs(
+            ["-f", multiple_molecules_xyz_file, subcommand],
         )
         assert result.exit_code == 0, result.output
-        _, call_kwargs = mock_job_cls.call_args
-        assert call_kwargs["grouping_strategy"] == strategy
+        assert job_kwargs["grouping_strategy"] == strategy
 
     @pytest.mark.parametrize(
         "subcommand", ["connectivity", "formula", "isomorphism"]
     )
     def test_rejects_threshold_option(
-        self, mocker, multiple_molecules_xyz_file, subcommand
+        self,
+        run_grouper_and_capture_job_kwargs,
+        multiple_molecules_xyz_file,
+        subcommand,
     ):
-        result, _ = invoke_grouper(
+        result, _ = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7660,7 +7655,6 @@ class TestGrouperCliStructuralSubcommands:
                 "0.5",
                 subcommand,
             ],
-            mocker,
         )
         assert result.exit_code != 0
         assert "does not support threshold" in result.output
@@ -7669,9 +7663,12 @@ class TestGrouperCliStructuralSubcommands:
         "subcommand", ["connectivity", "formula", "isomorphism"]
     )
     def test_rejects_num_groups_option(
-        self, mocker, multiple_molecules_xyz_file, subcommand
+        self,
+        run_grouper_and_capture_job_kwargs,
+        multiple_molecules_xyz_file,
+        subcommand,
     ):
-        result, _ = invoke_grouper(
+        result, _ = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7679,7 +7676,6 @@ class TestGrouperCliStructuralSubcommands:
                 "3",
                 subcommand,
             ],
-            mocker,
         )
         assert result.exit_code != 0
         assert "does not support num_groups" in result.output
@@ -7687,9 +7683,9 @@ class TestGrouperCliStructuralSubcommands:
 
 class TestGrouperCliBothCutoffsRejected:
     def test_both_cutoffs_becomes_bad_parameter(
-        self, mocker, multiple_molecules_xyz_file
+        self, run_grouper_and_capture_job_kwargs, multiple_molecules_xyz_file
     ):
-        result, _ = invoke_grouper(
+        result, _ = run_grouper_and_capture_job_kwargs(
             [
                 "-f",
                 multiple_molecules_xyz_file,
@@ -7699,7 +7695,6 @@ class TestGrouperCliBothCutoffsRejected:
                 "110",
                 "rmsd",
             ],
-            mocker,
         )
         assert result.exit_code != 0
         assert "Cannot specify both" in result.output
