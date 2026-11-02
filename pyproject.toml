@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "3.4.0"
+version = "3.4.9"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -78,7 +78,6 @@ docs = [
     "rstcheck",
     "rstfmt",
 ]
-
 [project.urls]
 ##"Documentation" = "https://documentation_url"
 homepage = "https://github.com/xinglong-zhang/chemsmart/"
@@ -125,3 +124,9 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["chemsmart"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

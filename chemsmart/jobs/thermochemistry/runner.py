@@ -115,7 +115,7 @@ class ThermochemistryJobRunner(JobRunner):
             job: Thermochemistry job instance to configure
         """
         # Create scratch job directory
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)

@@ -1,7 +1,6 @@
 """Focused tests for the PySCF Click surface and option propagation."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -9,55 +8,7 @@ from click.testing import CliRunner
 from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.pyscf.common import resolve_engine, settings_for_molecule
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
-
-_JOB_CLASS = {
-    "sp": "chemsmart.jobs.pyscf.singlepoint.PySCFSinglePointJob",
-    "opt": "chemsmart.jobs.pyscf.opt.PySCFOptJob",
-    "hess": "chemsmart.jobs.pyscf.hess.PySCFHessJob",
-}
-
-
-def _run_and_capture_settings(
-    cli_args, jobtype="sp", num_gpus=0, preflight_violations=None
-):
-    runner = CliRunner()
-    jobrunner = MagicMock(num_gpus=num_gpus)
-
-    patches = [patch(_JOB_CLASS[jobtype])]
-    # Stage B adds this symbol to the shared builder. Keeping the test helper
-    # tolerant of both checkpoints lets the Stage A propagation tests remain
-    # useful while the typed preflight is integrated.
-    try:
-        import chemsmart.cli.pyscf.common as common
-
-        if hasattr(common, "preflight"):
-            patches.append(
-                patch.object(
-                    common,
-                    "preflight",
-                    return_value=preflight_violations or [],
-                )
-            )
-    except ImportError:
-        pass
-
-    entered = [manager.__enter__() for manager in patches]
-    try:
-        job_cls = entered[0]
-        job_cls.return_value = MagicMock()
-        result = runner.invoke(
-            pyscf,
-            cli_args,
-            obj={"jobrunner": jobrunner},
-            catch_exceptions=False,
-        )
-        settings = None
-        if job_cls.call_args is not None:
-            settings = job_cls.call_args.kwargs.get("settings")
-        return result, settings
-    finally:
-        for manager in reversed(patches):
-            manager.__exit__(None, None, None)
+from tests.helpers import run_pyscf_and_capture_settings
 
 
 @pytest.mark.parametrize("jobtype", ["sp", "opt", "hess"])
@@ -110,7 +61,7 @@ def test_group_and_all_leaves_expose_help(single_molecule_xyz_file, jobtype):
 def test_every_group_override_survives_the_merge(
     single_molecule_xyz_file, option, field, expected
 ):
-    result, settings = _run_and_capture_settings(
+    result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
@@ -141,7 +92,7 @@ def test_every_group_override_survives_the_merge(
 def test_explicit_engine_override_wins(
     single_molecule_xyz_file, option, expected
 ):
-    result, settings = _run_and_capture_settings(
+    result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
@@ -165,7 +116,7 @@ def test_explicit_engine_override_wins(
 def test_server_gpu_count_resolves_default_engine(
     single_molecule_xyz_file, num_gpus, expected
 ):
-    result, settings = _run_and_capture_settings(
+    result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
@@ -187,7 +138,7 @@ def test_server_gpu_count_resolves_default_engine(
 def test_remove_solvent_clears_project_single_point_solvent(
     single_molecule_xyz_file,
 ):
-    result, settings = _run_and_capture_settings(
+    result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
@@ -210,7 +161,7 @@ def test_remove_solvent_clears_project_single_point_solvent(
 def test_leaf_selects_matching_project_settings(
     single_molecule_xyz_file, jobtype
 ):
-    result, settings = _run_and_capture_settings(
+    result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",

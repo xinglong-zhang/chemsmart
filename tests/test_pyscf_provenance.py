@@ -10,8 +10,10 @@ import h5py
 import numpy as np
 import pytest
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
 from chemsmart.jobs.pyscf.writer import (
     H5_NULL_ATTRIBUTE,
     RESULTS_SCHEMA_VERSION,
@@ -188,30 +190,15 @@ def test_non_opt_spec_does_not_claim_optimizer_settings():
         charge=0,
         multiplicity=1,
     )
-    molecule = type(
-        "Molecule",
-        (),
-        {
-            "chemical_symbols": ["H", "H"],
-            "positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.7]],
-            "charge": 0,
-            "multiplicity": 1,
-        },
-    )()
-    job = type(
-        "Job",
-        (),
-        {
-            "settings": settings,
-            "molecule": molecule,
-            "jobrunner": type(
-                "Runner", (), {"num_cores": 1, "mem_gb": None}
-            )(),
-            "label": "h2_sp",
-            "TYPE": "pyscf_sp",
-            "stages": ("scf",),
-        },
-    )()
+    molecule = Molecule(
+        symbols=["H", "H"],
+        positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.7]]),
+        charge=0,
+        multiplicity=1,
+    )
+    job = PySCFSinglePointJob(
+        molecule=molecule, settings=settings, label="h2_sp"
+    )
 
     config = PySCFScriptWriter(job).build_config()
 
