@@ -141,7 +141,6 @@ class Molecule:
         point_group=None,
         info=None,
         dataset_source=None,
-        dataset_energy=None,
         id=None,
         A=None,
         B=None,
@@ -181,7 +180,6 @@ class Molecule:
         self.info = info
         # Dataset values retain their source units.
         self.dataset_source = dataset_source
-        self.dataset_energy = dataset_energy
         self.id = id
         self.A = A
         self.B = B

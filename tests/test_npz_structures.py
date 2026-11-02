@@ -32,6 +32,50 @@ def _write_revqm9(path):
 
 
 class TestNPZStructures:
+    def test_failed_npz_insert_rolls_back_record(self, tmp_path):
+        from chemsmart.database.assemble import NPZAssembler
+        from chemsmart.database.database import Database
+
+        source = (
+            Path(__file__).parent / "data" / "IOTests" / "revQM9_subset.npz"
+        )
+        db = Database(str(tmp_path / "records.db"))
+        db.create()
+        with db.get_connection() as conn:
+            conn.execute("DROP TABLE dataset_properties")
+        records = NPZAssembler(
+            str(source), index="1", dataset="revqm9"
+        ).assemble()
+        assert db.insert_records(records) == 0
+        assert db.count_records() == 0
+
+    def test_failed_npz_update_preserves_existing_record(self, tmp_path):
+        from chemsmart.database.assemble import NPZAssembler
+        from chemsmart.database.database import Database
+
+        source = (
+            Path(__file__).parent / "data" / "IOTests" / "revQM9_subset.npz"
+        )
+        db = Database(str(tmp_path / "records.db"))
+        db.create()
+        assert (
+            db.insert_records(
+                NPZAssembler(
+                    str(source), index="1", dataset="revqm9"
+                ).assemble()
+            )
+            == 1
+        )
+        with db.get_connection() as conn:
+            conn.execute("DROP TABLE dataset_properties")
+        records = NPZAssembler(
+            str(source), index="1", dataset="revqm9", method="PBE0"
+        ).assemble()
+        assert db.insert_records(records) == 0
+        record = db.get_record(record_index=1)
+        assert record["meta"]["method"] == "aPBE0"
+        assert len(record["molecules"]) == 1
+
     def test_npz_reimport_preserves_record_index_and_declared_data(
         self, tmp_path
     ):
@@ -54,7 +98,10 @@ class TestNPZStructures:
         assert record["results"]["homo_energy"] is None
         restored = Molecule.from_filepath(str(output), record_index=1)
         assert restored.energy is None
-        assert restored.dataset_energy == pytest.approx(-40.47574250955533)
+        assert record["molecules"][0]["dataset_properties"]["energies"] == {
+            "value": pytest.approx(-40.47574250955533),
+            "unit": None,
+        }
         run(["--dataset", "revqm9"])
         record = db.get_record(record_index=1)
         assert record["meta"]["method"] == "aPBE0"
@@ -200,6 +247,7 @@ class TestNPZStructures:
 
             assert rows[1][1] == pytest.approx(-40.47574250955533)
             assert rows[1][5] == pytest.approx(rows[1][1])
+            assert restored.energy == pytest.approx(-40.47574250955533)
             assert rows[1][2] == pytest.approx(-0.4093204819908599 * Hartree)
             assert properties["homo"]["value"] == pytest.approx(-0.40932048)
             assert properties["homo"]["unit"] == "Hartree"
@@ -245,15 +293,14 @@ class TestNPZStructures:
             "H2O",
         ]
         assert molecules[0].energy is None
-        assert molecules[0].dataset_energy == pytest.approx(-40.47574250955533)
+        declared = Molecule.from_filepath(path, index="1", dataset="revqm9")
+        assert declared.energy == pytest.approx(-40.47574250955533)
         assert molecules[0].homo == pytest.approx(-0.40932048)
         assert molecules[0].atomization == pytest.approx(-0.66538218)
         assert molecules[2].structure_index_in_file == 3
         selected = Molecule.from_filepath(path, index="3,1")
         assert [m.empirical_formula for m in selected] == ["H2O", "CH4"]
-        assert selected[1].dataset_energy == pytest.approx(
-            molecules[0].dataset_energy
-        )
+        assert selected[1].energy is None
         assert selected[1].homo == molecules[0].homo
 
     def test_dgl_qm9_ev_subset_fixture(self):
@@ -339,9 +386,6 @@ class TestNPZStructures:
         )
         molecules = Molecule.from_filepath(path, index="2,1")
         assert [m.energy for m in molecules] == [None, None]
-        assert [m.dataset_energy for m in molecules] == pytest.approx(
-            [-3.4, -1.2]
-        )
         declared = Molecule.from_filepath(path, index="2,1", dataset="revqm9")
         assert [m.energy for m in declared] == pytest.approx([-3.4, -1.2])
 
@@ -480,6 +524,7 @@ class TestNPZStructures:
         with pytest.raises(ValueError, match="does not match its NPY header"):
             Molecule.from_filepath(path)
 
+    @pytest.mark.parametrize("selection", ["2", "-1"])
     @pytest.mark.parametrize(
         "backend, project, job_path, subcommand",
         [
@@ -506,6 +551,7 @@ class TestNPZStructures:
         project,
         job_path,
         subcommand,
+        selection,
         make_cli_ctx_obj,
         gaussian_jobrunner_no_scratch,
     ):
@@ -522,8 +568,9 @@ class TestNPZStructures:
                 "get_molecules",
                 autospec=True,
                 side_effect=original_reader,
-            ),
+            ) as reader,
         ):
+            ctx_obj = make_cli_ctx_obj(gaussian_jobrunner_no_scratch)
             result = CliRunner().invoke(
                 command,
                 [
@@ -532,15 +579,67 @@ class TestNPZStructures:
                     "-f",
                     str(path),
                     "-i",
-                    "2",
+                    selection,
                     "-c",
                     "0",
                     "-m",
                     "1",
                     subcommand,
                 ],
-                obj=make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+                obj=ctx_obj,
             )
         assert result.exit_code == 0, (result.output, result.exception)
         job.assert_called_once()
         assert list(job.call_args.kwargs["molecule"].symbols) == ["H", "H"]
+        if backend != "crest":
+            assert reader.call_args.kwargs["index"] == selection
+            assert ctx_obj["molecule_indices"] == [2]
+
+    @pytest.mark.parametrize(
+        "backend,project,job_path",
+        [
+            (
+                "gaussian",
+                "gas_solv",
+                "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            ),
+            ("orca", "gas_solv", "chemsmart.jobs.orca.opt.ORCAOptJob"),
+            ("xtb", "test", "chemsmart.jobs.xtb.opt.XTBOptJob"),
+        ],
+    )
+    def test_cli_npz_preserves_selected_order(
+        self,
+        tmp_path,
+        backend,
+        project,
+        job_path,
+        make_cli_ctx_obj,
+        gaussian_jobrunner_no_scratch,
+    ):
+        path = tmp_path / "revQM9.npz"
+        _write_revqm9(path)
+        command = getattr(
+            import_module(f"chemsmart.cli.{backend}.{backend}"), backend
+        )
+        ctx_obj = make_cli_ctx_obj(gaussian_jobrunner_no_scratch)
+        with patch(job_path, return_value=MagicMock()) as job:
+            result = CliRunner().invoke(
+                command,
+                [
+                    "-p",
+                    project,
+                    "-f",
+                    str(path),
+                    "-i",
+                    "2,1",
+                    "-c",
+                    "0",
+                    "-m",
+                    "1",
+                    "opt",
+                ],
+                obj=ctx_obj,
+            )
+        assert result.exit_code == 0, (result.output, result.exception)
+        assert ctx_obj["molecule_indices"] == [2, 1]
+        assert job.call_count == 2

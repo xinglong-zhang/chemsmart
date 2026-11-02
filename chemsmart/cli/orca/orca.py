@@ -18,6 +18,7 @@ from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
+    load_molecules_with_indices,
 )
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
@@ -681,6 +682,7 @@ def orca(
 
     # obtain molecule structure from file or PubChem
     molecules = None
+    molecule_indices = None
 
     # Skip molecule loading for pKa table/CDXML files (handled by pKa batch)
     if is_pka_table_input:
@@ -723,8 +725,8 @@ def orca(
                 f"Obtained database molecule {molecules} from {filename}"
             )
         else:
-            molecules = Molecule.from_filepath(
-                filepath=filename, index=":", return_list=True
+            molecules, molecule_indices = load_molecules_with_indices(
+                filepath=filename, index=index
             )
             assert (
                 molecules is not None
@@ -774,8 +776,7 @@ def orca(
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
-    molecule_indices = None
-    if index is not None and not is_chemsmart_db:
+    if index is not None and not filename and not is_chemsmart_db:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index

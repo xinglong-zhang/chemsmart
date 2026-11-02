@@ -28,6 +28,14 @@ class NPZFile(FileMixin):
         """Return the last structure, like XYZFile.molecule."""
         return self.get_molecules(index="-1")
 
+    @cached_property
+    def raw_energies(self):
+        """Return the original energies array without assuming its units."""
+        with ZipFile(self.filepath) as archive:
+            if "energies.npy" not in archive.namelist():
+                return None
+            return self._read_array(archive, "energies")
+
     def get_molecules(self, index=":", return_list=False):
         """Read selected structures using the existing 1-based index syntax."""
         from chemsmart.io.molecules.structure import Molecule
@@ -234,7 +242,6 @@ class NPZFile(FileMixin):
                     symbols=symbols,
                     positions=xyz,
                     energy=energy if self.dataset == "revqm9" else None,
-                    dataset_energy=energy,
                     charge=0,
                     multiplicity=1,
                     structure_index_in_file=int(i) + 1,

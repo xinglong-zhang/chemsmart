@@ -548,12 +548,17 @@ class Database:
         conn = self.get_connection()
         count = 0
         try:
+            conn.execute("BEGIN")
             for record in records:
+                conn.execute("SAVEPOINT insert_record")
                 try:
                     if self.insert_record(record, conn):
                         count += 1
                 except Exception as e:
+                    conn.execute("ROLLBACK TO SAVEPOINT insert_record")
                     logger.error(f"Failed to insert record: {e}")
+                finally:
+                    conn.execute("RELEASE SAVEPOINT insert_record")
             conn.commit()
         finally:
             conn.close()

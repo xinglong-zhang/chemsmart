@@ -36,6 +36,7 @@ from chemsmart.database.utils import (
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.npz import NPZFile
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.io import get_program_type_from_file
@@ -428,11 +429,14 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                 digest.update(chunk)
         source_hash = digest.hexdigest()
         source_size = file_size(self.filename)
-        molecules = Molecule.from_filepath(
-            self.filename,
-            index=self.index,
-            return_list=True,
-            dataset=self.dataset,
+        npz_file = NPZFile(self.filename, dataset=self.dataset)
+        molecules = npz_file.get_molecules(index=self.index, return_list=True)
+        raw_energies = (
+            npz_file.raw_energies
+            if self.dataset is None
+            and molecules
+            and molecules[0].dataset_source == "revQM9"
+            else None
         )
         for molecule in molecules:
             expected_source = {"revqm9": "revQM9", "qm9": "qm9_eV"}.get(
@@ -486,9 +490,12 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                 for key, unit in fields.items()
                 if getattr(molecule, key) is not None
             }
-            if self.dataset is None and molecule.dataset_energy is not None:
+            if (
+                raw_energies is not None
+                and molecule.dataset_source == "revQM9"
+            ):
                 dataset_properties["energies"] = {
-                    "value": molecule.dataset_energy,
+                    "value": float(raw_energies[index - 1]),
                     "unit": None,
                 }
             if self.dataset == "qm9":
