@@ -1405,13 +1405,14 @@ class Molecule:
 
         The ``.out`` file is PySCF's own log and is never parsed; it only
         identifies the program. The geometry, energy and vibrational data
-        come from the sibling ``.h5`` results file, which ChemSmart's own
+        come from the sibling ``.h5`` results file, which CHEMSMART's own
         generated driver wrote as exact float64.
 
         Args:
             filepath (str): Path to the PySCF ``.out`` log file.
-            index (str or int): Accepted for interface parity. A PySCF job
-                stores one final structure, so there is nothing to index.
+            index (str or int): 1-based index into the stored structures. A
+                PySCF job stores only its final structure, so only that
+                structure can be selected.
             return_list (bool): Wrap the result in a list.
 
         Returns:

@@ -49,6 +49,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pyscf = [
+    "pyscf>=2.14.0",
+    "geometric",
+]
 test = [
     "pytest",
     "pytest-mock",

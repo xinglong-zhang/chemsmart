@@ -27,6 +27,8 @@ class Executable(RegistryMixin):
     """
 
     PROGRAM: Optional[str] = None
+    # Whether a server YAML program block must name an executable folder.
+    REQUIRES_EXEFOLDER = True
 
     def __init__(
         self,
@@ -93,10 +95,11 @@ class Executable(RegistryMixin):
                 "Run `chemsmart update configs` to update your server YAML.`"
             )
 
-        # EXEFOLDER is optional: a library backend such as PySCF has no
-        # executable folder, and its subclass resolves an interpreter
-        # instead.
-        executable_folder_raw = program_cfg.get("EXEFOLDER")
+        executable_folder_raw = (
+            program_cfg["EXEFOLDER"]
+            if cls.REQUIRES_EXEFOLDER
+            else program_cfg.get("EXEFOLDER")
+        )
         executable_folder = (
             os.path.expanduser(executable_folder_raw)
             if executable_folder_raw
@@ -403,7 +406,7 @@ class PySCFExecutable(Executable):
     interpreter that owns it. ``EXEFOLDER`` is therefore optional and, when
     present, names the ``bin/`` of the environment PySCF is installed in --
     exactly as ``XTB: EXEFOLDER: /opt/anaconda3/bin`` already does. That is
-    what lets a GPU4PySCF job run in a CUDA environment while ChemSmart
+    what lets a GPU4PySCF job run in a CUDA environment while CHEMSMART
     stays in its own, whose numpy is pinned to 1.x by rdkit and pymol.
 
     The program block is still needed for ``CONDA_ENV``, ``MODULES``,
@@ -411,13 +414,16 @@ class PySCFExecutable(Executable):
     """
 
     PROGRAM = "PYSCF"
+    # A library backend has no executable folder; get_executable falls back
+    # to the running interpreter.
+    REQUIRES_EXEFOLDER = False
 
     @classmethod
     def from_servername(cls, servername):
         """Return the PySCF executable configuration for ``servername``.
 
         Unlike a binary backend, PySCF needs no server configuration at all:
-        with no ``PYSCF:`` block it runs in ChemSmart's own interpreter,
+        with no ``PYSCF:`` block it runs in CHEMSMART's own interpreter,
         which is correct whenever PySCF shares that environment. Requiring a
         block would break every existing server YAML the first time someone
         ran a PySCF job, for no information we do not already have.
@@ -451,8 +457,8 @@ class PySCFExecutable(Executable):
 
         Returns:
             str: Path to the interpreter. Falls back to the interpreter
-                running ChemSmart when ``EXEFOLDER`` is not configured, which
-                is correct whenever PySCF shares ChemSmart's environment.
+                running CHEMSMART when ``EXEFOLDER`` is not configured, which
+                is correct whenever PySCF shares CHEMSMART's environment.
         """
         if self.executable_folder is not None:
             interpreter = (

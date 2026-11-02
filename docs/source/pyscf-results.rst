@@ -35,7 +35,11 @@ An optimization with the packaged ``test`` project produces:
    molecule_opt_gas_phase.err
 
 The ``.out`` log is not parsed for numbers. chemsmart uses it to recognize a PySCF calculation and reads every quantity
-from the ``.h5`` file beside it, so keep the two together.
+from the ``.h5`` file beside it, so keep the two together. A rerun under the same label deletes the old ``.h5`` first,
+so a run that dies early cannot be mistaken for the earlier result.
+
+A PySCF job stores only its final structure, so ``-i`` can select only that structure from a PySCF output. Results that
+could not be computed are listed with the reason under ``status/skipped_properties``.
 
 .. warning::
 

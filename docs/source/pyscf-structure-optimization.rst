@@ -100,7 +100,7 @@ Single points read the ``solv`` section, which is normally where the larger basi
      density_fit: True
      defgrid: defgrid2
      scf_tol: 1.0e-9
-     solvent_model: smd
+     solvent_model: cpcm
      solvent_id: water
 
 Basic Usage
@@ -112,8 +112,8 @@ Standard single point calculation:
 
    chemsmart sub pyscf -p test -f molecule.xyz sp
 
-Because the ``solv`` section requests SMD water, the results file is named ``molecule_sp_smd_water.h5``. A section with
-no solvent produces ``_gas_phase`` instead.
+Because the ``solv`` section requests C-PCM water, the results file is named ``molecule_sp_cpcm_water.h5``. A section
+with no solvent produces ``_gas_phase`` instead.
 
 Single point on one structure of a multi-structure file, using 1-based indexing:
 
@@ -127,7 +127,7 @@ Single point on a structure fetched from PubChem, naming the job explicitly:
 
    chemsmart sub pyscf -p test -P 962 -l water sp
 
-This fetches water (CID 962) and writes ``water_sp_smd_water.h5``.
+This fetches water (CID 962) and writes ``water_sp_cpcm_water.h5``.
 
 *****************************************
  Changing the Method, Basis, and Solvent

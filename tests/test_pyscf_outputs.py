@@ -10,6 +10,7 @@ import os
 
 import h5py
 import numpy as np
+import pytest
 
 from chemsmart.io.pyscf.output import PySCFOutput
 
@@ -51,7 +52,7 @@ class TestPySCFArtifactProvenance:
         label = os.path.basename(pyscf_water_opt_outfolder)
         resultsfile = os.path.join(pyscf_water_opt_outfolder, f"{label}.h5")
         with h5py.File(resultsfile, "r") as handle:
-            assert handle.attrs["schema_version"] in ("1.0", "2.0")
+            assert handle.attrs["schema_version"] == "2.0"
             for group in ("spec", "provenance", "status", "results"):
                 assert group in handle
 
@@ -200,3 +201,53 @@ class TestPySCFMoleculeRoundTrip:
         assert molecule.num_atoms == 1
         assert molecule.empirical_formula == "He"
         assert np.allclose(molecule.positions, 0.0)
+
+
+class TestPySCFSymmetryFromDistortedStart:
+    """Optimising from a distorted start must recover the true symmetry."""
+
+    def test_near_symmetric_geometry_gets_the_true_symmetry_number(
+        self, pyscf_water_opt_distorted_outfolder
+    ):
+        output = _output(pyscf_water_opt_distorted_outfolder)
+        assert output.point_group == "C2v"
+        assert output.rotational_symmetry_number == 2
+
+    def test_free_energy_does_not_depend_on_the_starting_geometry(
+        self, pyscf_water_opt_distorted_outfolder, pyscf_water_opt_outfolder
+    ):
+        distorted = _output(pyscf_water_opt_distorted_outfolder)
+        symmetric = _output(pyscf_water_opt_outfolder)
+        # A wrong sigma would differ by RT ln 2 = 6.5e-4 Hartree.
+        assert distorted.gibbs_free_energy == pytest.approx(
+            symmetric.gibbs_free_energy, abs=1e-5
+        )
+
+
+class TestPySCFStructureAccess:
+    """The stored structure behaves like other output readers' structures."""
+
+    def test_optimized_structure_is_available_after_convergence(
+        self, pyscf_water_opt_outfolder
+    ):
+        output = _output(pyscf_water_opt_outfolder)
+        assert output.optimized_structure.is_optimized_structure
+        assert len(output.all_structures) == 1
+
+    def test_index_selects_among_stored_structures(
+        self, pyscf_water_opt_outfolder
+    ):
+        output = _output(pyscf_water_opt_outfolder)
+        assert isinstance(output.get_molecule(index=":"), list)
+        assert output.get_molecule(index="1").num_atoms == 3
+        with pytest.raises(IndexError):
+            output.get_molecule(index="99")
+
+    def test_dipole_and_point_group_reach_the_molecule(
+        self, pyscf_water_opt_outfolder
+    ):
+        molecule = _output(pyscf_water_opt_outfolder).get_molecule()
+        assert molecule.point_group == "C2V"
+        assert molecule.dipole_moment_magnitude == pytest.approx(
+            np.linalg.norm(molecule.dipole_moment)
+        )

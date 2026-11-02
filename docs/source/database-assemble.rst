@@ -39,7 +39,7 @@ existing outputs have been updated.
    -  -  ``-p, --program``
       -  string
       -  Restrict parsing to output files/folders from a specific program. Supported values are ``gaussian``, ``orca``,
-         and ``xtb``. If omitted, outputs from all supported programs are scanned.
+         ``pyscf``, and ``xtb``. If omitted, outputs from all supported programs are scanned.
 
    -  -  ``-i, --index``
       -  string

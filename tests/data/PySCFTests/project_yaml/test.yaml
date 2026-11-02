@@ -17,5 +17,5 @@ solv:
   density_fit: True
   defgrid: defgrid2
   scf_tol: 1.0e-9
-  solvent_model: smd
+  solvent_model: cpcm
   solvent_id: water

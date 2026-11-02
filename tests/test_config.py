@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import yaml
 from click.testing import CliRunner
 
 from chemsmart.cli.config import Config, config
@@ -819,6 +820,25 @@ class TestConfigPySCF:
         result = self._invoke(dest, ["-f", str(empty_bin)])
         assert result.exit_code != 0
         assert "No Python interpreter found" in result.output
+
+    def test_server_yaml_without_a_pyscf_block_gains_one(self, tmp_path):
+        """A server file older than PySCF support must not be skipped."""
+        dest = tmp_path / ".chemsmart"
+        server_dir = dest / "server"
+        server_dir.mkdir(parents=True)
+        server_yaml = server_dir / "old.yaml"
+        server_yaml.write_text("GAUSSIAN:\n    EXEFOLDER: /opt/g16\n")
+
+        pyscf_bin = tmp_path / "bin"
+        pyscf_bin.mkdir()
+        (pyscf_bin / self._interpreter_name()).touch()
+
+        result = self._invoke(dest, ["-f", str(pyscf_bin)])
+        assert result.exit_code == 0, result.output
+
+        parsed = yaml.safe_load(server_yaml.read_text())
+        assert parsed["PYSCF"]["EXEFOLDER"] == str(pyscf_bin)
+        assert parsed["GAUSSIAN"]["EXEFOLDER"] == "/opt/g16"
 
     def test_interpreter_folder_is_written_to_server_yaml(self, tmp_path):
         """A valid bin directory is recorded as the PYSCF EXEFOLDER."""

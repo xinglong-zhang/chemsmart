@@ -20,7 +20,7 @@ def hess(ctx, skip_completed, **kwargs):
 
     The geometry is used as given and is not re-optimised, so it should
     already be a stationary point at the same method and basis. Frequencies
-    are reported; free energies are computed by ChemSmart's own
+    are reported; free energies are computed by CHEMSMART's own
     thermochemistry engine so that they stay comparable with Gaussian and
     ORCA results.
     """

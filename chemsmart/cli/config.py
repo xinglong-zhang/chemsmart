@@ -468,7 +468,8 @@ def set_program_exefolder(target_directory, program, folder):
     Server templates intentionally keep PySCF's interpreter optional and
     commented.  This line-oriented update activates or replaces only the
     requested program field, preserving comments and block-scalar commands in
-    the rest of each server file.
+    the rest of each server file. A file without a block for the program, such
+    as one created before PySCF support, gains one at the end.
     """
     if not target_directory.exists():
         logger.info(f"Target directory not found: {target_directory}")
@@ -513,7 +514,12 @@ def set_program_exefolder(target_directory, program, folder):
                 continue
             updated.append(line)
 
-        if in_program and not field_written:
+        if not field_written:
+            # Either the block is last in the file or it is absent entirely.
+            if not in_program:
+                if updated and not updated[-1].endswith("\n"):
+                    updated[-1] += "\n"
+                updated.append(f"\n{program_header}\n")
             updated.append(f"    EXEFOLDER: {rendered_folder}\n")
             field_written = True
         if field_written:

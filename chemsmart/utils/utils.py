@@ -1481,9 +1481,7 @@ def check_charge_and_multiplicity(settings):
         ValueError: If charge or multiplicity is None.
     """
     if settings.charge is None or settings.multiplicity is None:
-        raise ValueError(
-            "Charge and multiplicity must be set for Gaussian/ORCA jobs."
-        )
+        raise ValueError("Charge and multiplicity must be set for this job.")
 
 
 def cmp_with_ignore(f1, f2, ignore_string=None):

@@ -1,11 +1,14 @@
 """Focused tests for the PySCF Click surface and option propagation."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.pyscf import pyscf
+from chemsmart.cli.pyscf.common import resolve_engine, settings_for_molecule
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 
 _JOB_CLASS = {
     "sp": "chemsmart.jobs.pyscf.singlepoint.PySCFSinglePointJob",
@@ -225,3 +228,48 @@ def test_leaf_selects_matching_project_settings(
     assert result.exit_code == 0, result.output
     assert settings.jobtype == jobtype
     assert settings.project_yaml_digest is not None
+
+
+@pytest.mark.parametrize(
+    ("project_engine", "num_gpus", "expected"),
+    [
+        ("gpu", None, "gpu"),
+        ("cpu", 2, "cpu"),
+        (None, 2, "gpu"),
+        (None, 0, "cpu"),
+    ],
+)
+def test_project_engine_is_respected_before_server_gpus(
+    project_engine, num_gpus, expected
+):
+    settings = PySCFJobSettings(
+        functional="b3lyp", basis="def2-svp", engine=project_engine
+    )
+    ctx = SimpleNamespace(
+        obj={"jobrunner": SimpleNamespace(num_gpus=num_gpus)}
+    )
+    assert resolve_engine(ctx, settings) == expected
+
+
+def test_charge_and_multiplicity_fall_back_to_the_molecule():
+    settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
+    molecule = SimpleNamespace(charge=1, multiplicity=2)
+    resolved = settings_for_molecule(settings, molecule)
+    assert (resolved.charge, resolved.multiplicity) == (1, 2)
+    assert settings.charge is None
+
+
+def test_explicit_charge_and_multiplicity_win_over_the_molecule():
+    settings = PySCFJobSettings(
+        functional="b3lyp", basis="def2-svp", charge=0, multiplicity=1
+    )
+    molecule = SimpleNamespace(charge=1, multiplicity=2)
+    resolved = settings_for_molecule(settings, molecule)
+    assert (resolved.charge, resolved.multiplicity) == (0, 1)
+
+
+def test_missing_charge_and_multiplicity_are_reported():
+    settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
+    molecule = SimpleNamespace(charge=None, multiplicity=None)
+    with pytest.raises(ValueError, match="Charge and multiplicity"):
+        settings_for_molecule(settings, molecule)

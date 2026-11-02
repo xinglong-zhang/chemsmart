@@ -152,7 +152,7 @@ class TestPySCFProjectSettings:
         )
         assert (opt.solvent_model, opt.solvent_id) == (None, None)
         assert (hess.solvent_model, hess.solvent_id) == (None, None)
-        assert (sp.solvent_model, sp.solvent_id) == ("smd", "water")
+        assert (sp.solvent_model, sp.solvent_id) == ("cpcm", "water")
         assert opt.freq is True
         assert hess.freq is True
         assert sp.freq is False
@@ -191,3 +191,22 @@ def test_all_packaged_server_templates_declare_pyscf_environment():
         assert config["PYSCF"]["LOCAL_RUN"] is True
         assert config["PYSCF"]["SCRATCH"] is False
         assert "conda activate" in config["PYSCF"]["CONDA_ENV"]
+
+
+@pytest.mark.parametrize(
+    "request_field",
+    [{"semiempirical": "pm6"}, {"modred": [[1, 2]]}],
+)
+def test_settings_the_driver_cannot_apply_are_refused(request_field):
+    settings = PySCFJobSettings(
+        functional="b3lyp", basis="def2-svp", **request_field
+    )
+    with pytest.raises(ValueError, match="not supported"):
+        settings.validate()
+
+
+def test_project_yaml_digest_survives_merge():
+    settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
+    assert settings.project_yaml_digest is None
+    settings.project_yaml_digest = "abc"
+    assert settings.merge({}).project_yaml_digest == "abc"

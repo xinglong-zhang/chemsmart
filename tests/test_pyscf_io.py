@@ -166,3 +166,62 @@ def test_failed_status_never_reads_as_complete(tmp_path):
     output = PySCFOutput(logfile)
     assert output.normal_termination is False
     assert output.failure["stage"] == "scf"
+
+
+def _opt_status(optimizer_converged):
+    return {
+        "normal_termination": optimizer_converged,
+        "stages": {
+            "scf": {"converged": True},
+            "opt": {
+                "converged": optimizer_converged,
+                "optimizer_converged": optimizer_converged,
+                "final_scf_converged": True,
+            },
+        },
+        "failure": None,
+    }
+
+
+def test_unconverged_optimisation_is_not_labelled_optimized(tmp_path):
+    logfile = tmp_path / "opt.out"
+    logfile.write_text("PySCF version 2.14.0\n")
+    write_pyscf_h5(
+        tmp_path / "opt.h5",
+        spec={
+            "jobtype": "opt",
+            "symbols": ["H", "H"],
+            "charge": 0,
+            "multiplicity": 1,
+        },
+        provenance={"engine": "cpu"},
+        status=_opt_status(False),
+        results={"positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]},
+    )
+
+    output = PySCFOutput(logfile)
+    assert output.get_molecule().is_optimized_structure is False
+    assert output.optimized_structure is None
+
+
+def test_run_without_a_geometry_reports_why(tmp_path):
+    logfile = tmp_path / "failed.out"
+    logfile.write_text("PySCF version 2.14.0\n")
+    write_pyscf_h5(
+        tmp_path / "failed.h5",
+        spec={"jobtype": "sp", "symbols": ["H", "H"]},
+        provenance={"engine": "cpu"},
+        status={
+            "normal_termination": False,
+            "stages": {},
+            "failure": {
+                "type": "RuntimeError",
+                "message": "SMD module is not available",
+                "stage": "initialization",
+            },
+        },
+        results={},
+    )
+
+    with pytest.raises(ValueError, match="SMD module is not available"):
+        PySCFOutput(logfile).get_molecule()

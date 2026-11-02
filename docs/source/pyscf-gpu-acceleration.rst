@@ -29,7 +29,7 @@ subcommands and the same project YAML apply; only the engine changes.
 
 ``--gpu`` chooses the engine PySCF runs on. ``-g`` tells the scheduler how many devices to reserve and belongs to
 ``chemsmart run`` and ``chemsmart sub``, so it comes before the program name. With neither ``--gpu`` nor ``--no-gpu``,
-the engine follows ``SERVER.NUM_GPUS`` from the server YAML.
+the engine follows ``engine`` in the project YAML, and then ``SERVER.NUM_GPUS`` from the server YAML.
 
 Basic Usage
 ===========

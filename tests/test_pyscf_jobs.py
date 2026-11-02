@@ -7,6 +7,8 @@ not installed.
 """
 
 import os
+import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -14,8 +16,10 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.jobs.pyscf.hess import PySCFHessJob
 from chemsmart.jobs.pyscf.opt import PySCFOptJob
+from chemsmart.jobs.pyscf.runner import PySCFJobRunner
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
+from chemsmart.jobs.pyscf.writer import PySCFScriptWriter
 
 
 @pytest.fixture()
@@ -158,7 +162,7 @@ class TestFakePySCFJobRunner:
         )
         with open(job.inputfile) as handle:
             script = handle.read()
-        assert "ChemSmart PySCF driver" in script
+        assert "CHEMSMART PySCF driver" in script
         assert "def2-svp" in script
 
     def test_preview_in_scratch_copies_results_back(
@@ -197,3 +201,81 @@ class TestFakePySCFJobRunner:
         assert output.solvent_on
         assert output.solvent_model == "cpcm"
         assert output.solvent_id == "water"
+
+
+class TestPySCFRerun:
+    """A rerun must never report the results of an earlier run."""
+
+    def test_rerun_that_dies_does_not_report_the_old_result(
+        self,
+        water_molecule,
+        pbs_server,
+        pyscf_jobrunner_no_scratch,
+        temporary_working_dir,
+    ):
+        first = PySCFSinglePointJob(
+            molecule=water_molecule,
+            settings=_settings("sp"),
+            label="rerun",
+            jobrunner=pyscf_jobrunner_no_scratch,
+            skip_completed=False,
+        )
+        first.run()
+        assert first.is_complete()
+
+        changed = _settings("sp")
+        changed.functional = "pbe"
+        rerun = PySCFSinglePointJob(
+            molecule=water_molecule,
+            settings=changed,
+            label="rerun",
+            jobrunner=PySCFJobRunner(server=pbs_server, scratch=False),
+            skip_completed=False,
+        )
+        dies = f"{sys.executable} -c 'raise SystemExit(1)'"
+        with patch.object(PySCFJobRunner, "_get_command", return_value=dies):
+            rerun.run()
+        assert not rerun.is_complete()
+        assert not os.path.exists(rerun.resultsfile)
+
+
+class TestPySCFForcesRequest:
+    """A gradient is computed only when its cost is justified."""
+
+    @pytest.mark.parametrize(
+        ("job_class", "jobtype", "extra", "expected"),
+        [
+            (PySCFSinglePointJob, "sp", {}, False),
+            (PySCFSinglePointJob, "sp", {"forces": True}, True),
+            (PySCFHessJob, "hess", {}, False),
+            (PySCFOptJob, "opt", {}, True),
+        ],
+    )
+    def test_forces_follow_the_request(
+        self,
+        job_class,
+        jobtype,
+        extra,
+        expected,
+        water_molecule,
+        temporary_working_dir,
+    ):
+        job = job_class(
+            molecule=water_molecule,
+            settings=_settings(jobtype, **extra),
+            label="forces",
+        )
+        assert PySCFScriptWriter(job=job).build_config()["forces"] is expected
+
+
+def test_optimized_structure_of_a_completed_opt_job(
+    water_molecule, pyscf_jobrunner_no_scratch, temporary_working_dir
+):
+    job = PySCFOptJob(
+        molecule=water_molecule,
+        settings=_settings("opt", freq=False),
+        label="opt",
+        jobrunner=pyscf_jobrunner_no_scratch,
+    )
+    job.run()
+    assert job.optimized_structure().is_optimized_structure

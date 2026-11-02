@@ -1935,6 +1935,11 @@ def pyscf_water_hess_outfolder(pyscf_outputs_directory):
 
 
 @pytest.fixture()
+def pyscf_water_opt_distorted_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "water_opt_distorted")
+
+
+@pytest.fixture()
 def pyscf_he_sp_outfolder(pyscf_outputs_directory):
     return os.path.join(pyscf_outputs_directory, "he_sp_gas_phase")
 

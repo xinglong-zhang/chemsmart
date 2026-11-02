@@ -9,6 +9,12 @@ PySCF is a Python library, not an external binary, so chemsmart runs it by gener
 executing it with a chosen Python interpreter. GPU4PySCF is an execution engine of the same program, selected with
 ``--gpu``; it is not a separate program.
 
+PySCF is not installed with chemsmart. To run it in the same environment, use ``pip install "chemsmart[pyscf]"``, which
+adds PySCF and the geomeTRIC optimizer. To run it elsewhere, see `Server Configuration`_. Other optional features have
+their own requirements: ``--dispersion`` needs ``pyscf-dispersion``, ``--opt-solver berny`` needs ``pyberny``,
+``--opt-solver ase`` needs ``ase``, and ``--gpu`` needs GPU4PySCF. SMD needs a PySCF build compiled with
+``-DENABLE_SMD=ON``, which the PyPI wheel tested with chemsmart does not provide; the other solvent models work with it.
+
 *************************
  Basic Command Structure
 *************************
@@ -221,8 +227,30 @@ Engine Options
       -  bool
       -  Run on GPU4PySCF or on CPU
 
-When neither flag is given, the engine follows ``SERVER.NUM_GPUS`` from the server YAML. GPU and CPU results are not
-bit-identical, so the resolved engine is recorded in the results file. See :doc:`pyscf-gpu-acceleration`.
+When neither flag is given, the engine follows ``engine`` in the project YAML, and then ``SERVER.NUM_GPUS`` from the
+server YAML. GPU and CPU results are not bit-identical, so the resolved engine is recorded in the results file. See
+:doc:`pyscf-gpu-acceleration`.
+
+Results Options
+===============
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``--forces/--no-forces``
+      -  bool
+      -  Compute the nuclear gradient for ``sp`` or ``hess``, which can add a large fraction of the SCF cost. ``opt``
+         always stores the final forces.
+
+   -  -  ``--point-group-tol``
+      -  float
+      -  Geometry tolerance in Bohr for point-group detection, which sets the rotational symmetry number used in free
+         energies. Defaults to ``1e-3``.
 
 Solvent Options
 ===============
@@ -292,13 +320,13 @@ matches the usual workflow: optimize and take frequencies at one level, then ref
      density_fit: True
      defgrid: defgrid2
      scf_tol: 1.0e-9
-     solvent_model: smd
+     solvent_model: cpcm
      solvent_id: water
 
 A key that does not exist on the PySCF settings raises an error at load time and lists every valid key, so a typo stops
 the run instead of quietly applying a default. Settings inherited from the Gaussian and ORCA schemas are refused rather
-than ignored, including ``gen_genecp_file``, ``heavy_elements``, ``numfreq``, ``additional_route_parameters``,
-``route_to_be_written``, ``input_string``, and ``custom_solvent``.
+than ignored, including ``semiempirical``, ``modred``, ``gen_genecp_file``, ``heavy_elements``, ``numfreq``,
+``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and ``custom_solvent``.
 
 **********************
  Server Configuration

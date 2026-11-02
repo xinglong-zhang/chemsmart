@@ -4,13 +4,14 @@ These tests construct temporary HDF5 files only. No PySCF calculation or
 optional chemistry solver is executed.
 """
 
-import json
+import ast
 
 import h5py
 import numpy as np
 import pytest
 
 from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.jobs.pyscf.writer import (
     H5_NULL_ATTRIBUTE,
     RESULTS_SCHEMA_VERSION,
@@ -148,7 +149,9 @@ def test_generated_standalone_encoder_writes_same_v2_contract(tmp_path):
 
     path = tmp_path / "generated.h5"
     spec, provenance, status, results = _v2_payload()
-    namespace["_write_h5"](path, spec, provenance, status, results)
+    namespace["write_pyscf_h5"](
+        path, spec=spec, provenance=provenance, status=status, results=results
+    )
 
     observed = read_pyscf_h5(path)
     assert observed[:3] == (spec, provenance, status)
@@ -177,33 +180,14 @@ def test_solvent_resolution_is_deferred_to_target_interpreter():
 
 
 def test_non_opt_spec_does_not_claim_optimizer_settings():
-    settings = type(
-        "Settings",
-        (),
-        {
-            "jobtype": "sp",
-            "functional": "pbe0",
-            "ab_initio": None,
-            "basis": "def2-svp",
-            "aux_basis": None,
-            "defgrid": None,
-            "dispersion": None,
-            "density_fit": True,
-            "scf_tol": None,
-            "scf_maxiter": None,
-            "solvent_model": None,
-            "solvent_id": None,
-            "opt_solver": "geometric",
-            "opt_maxsteps": 100,
-            "engine": "cpu",
-            "charge": 0,
-            "multiplicity": 1,
-            "xc": "pbe0",
-            "method_name": "pbe0",
-            "project_yaml_digest": None,
-            "validate": lambda self: self,
-        },
-    )()
+    settings = PySCFJobSettings(
+        jobtype="sp",
+        functional="pbe0",
+        basis="def2-svp",
+        engine="cpu",
+        charge=0,
+        multiplicity=1,
+    )
     molecule = type(
         "Molecule",
         (),
@@ -265,41 +249,6 @@ def test_v2_round_trip_does_not_mask_injected_spec_mismatch(
     assert observed_spec[field] != expected
 
 
-def test_v1_json_payload_remains_readable(tmp_path):
-    path = tmp_path / "legacy.h5"
-    spec = {
-        "label": "legacy",
-        "basis": "def2-svp",
-        "point_group": "C1",
-        "stages": ["scf"],
-    }
-    provenance = {
-        "engine": "cpu",
-        "settings_digest": "legacy-digest",
-    }
-    status = {
-        "normal_termination": False,
-        "stages": {"scf": {"converged": False, "cycles": 50}},
-        "failure": {"type": "RuntimeError", "message": "not converged"},
-    }
-    energy = np.asarray([-1.25], dtype=np.float64)
-
-    with h5py.File(path, "w") as handle:
-        handle.attrs["schema_version"] = "1.0"
-        handle.create_dataset("spec", data=json.dumps(spec))
-        handle.create_dataset("provenance", data=json.dumps(provenance))
-        handle.create_dataset("status", data=json.dumps(status))
-        handle.create_group("results").create_dataset("energies", data=energy)
-
-    observed_spec, observed_provenance, observed_status, observed_results = (
-        read_pyscf_h5(path)
-    )
-    assert observed_spec == spec
-    assert observed_provenance == provenance
-    assert observed_status == status
-    np.testing.assert_array_equal(observed_results["energies"], energy)
-
-
 def test_schema_version_layout_mismatch_is_rejected(tmp_path):
     path = tmp_path / "wrong-layout.h5"
     with h5py.File(path, "w") as handle:
@@ -345,3 +294,27 @@ def test_settings_digest_ignores_provenance_only_fields_but_not_engine():
 
     engine_change = dict(config, engine="gpu")
     assert PySCFScriptWriter.settings_digest(engine_change) != baseline
+
+
+def test_generated_driver_never_imports_chemsmart():
+    """The driver must run in an environment without chemsmart installed."""
+    source = PySCFScriptWriter.render(
+        {"schema_version": RESULTS_SCHEMA_VERSION, "label": "source-only"}
+    )
+    imported = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported.add(node.module.split(".")[0])
+    assert "chemsmart" not in imported
+    assert {"pyscf", "h5py", "numpy"} <= imported
+
+
+def test_writer_leaves_no_temporary_file_behind(tmp_path):
+    path = tmp_path / "atomic.h5"
+    spec, provenance, status, results = _v2_payload()
+    write_pyscf_h5(
+        path, spec=spec, provenance=provenance, status=status, results=results
+    )
+    assert [item.name for item in tmp_path.iterdir()] == ["atomic.h5"]

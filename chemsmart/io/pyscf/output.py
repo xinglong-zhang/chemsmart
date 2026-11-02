@@ -1,21 +1,20 @@
 """Reader for PySCF calculation results.
 
-This is a typed reader over the structured ``label.h5`` file that ChemSmart's
+This is a typed reader over the structured ``label.h5`` file that CHEMSMART's
 own generated driver script writes -- not a log parser. ``io/orca/output.py``
 is ~4,000 lines of regex because ORCA's printed text is the only interface it
-offers; here ChemSmart controls both ends, so the numbers come back as exact
+offers; here CHEMSMART controls both ends, so the numbers come back as exact
 float64 arrays and the sibling ``label.out`` (PySCF's own log) is never
 parsed. It exists for humans and for program sniffing only.
 
 Thermochemistry is **delegated** to ``chemsmart/analysis/thermochemistry.py``
 rather than recomputed. PySCF ships ``pyscf.hessian.thermo.thermo()``, but
 using it would give free energies that silently disagree with the Gaussian
-and ORCA numbers for the same molecule, since ChemSmart's engine has its own
+and ORCA numbers for the same molecule, since CHEMSMART's engine has its own
 rotational-symmetry and quasi-harmonic conventions. Cross-program consistency
 is the whole point of a unified toolkit, so there is exactly one such engine.
 """
 
-import json
 import logging
 import os
 from datetime import datetime
@@ -24,15 +23,15 @@ from functools import cached_property
 import numpy as np
 from ase import units
 
+from chemsmart.io.pyscf.driver import H5_NULL_ATTRIBUTE
 from chemsmart.utils.constants import joule_per_mol_to_hartree
 from chemsmart.utils.mixins import FileMixin
+from chemsmart.utils.utils import parse_index_specification
 
 logger = logging.getLogger(__name__)
 
-#: Layouts this reader understands. Version 1.0 used JSON string datasets for
-#: three sections; 2.0 uses navigable groups and typed datasets throughout.
-SUPPORTED_SCHEMA_VERSIONS = ("1.0", "2.0")
-H5_NULL_ATTRIBUTE = "chemsmart_is_null"
+#: Layouts this reader understands.
+SUPPORTED_SCHEMA_VERSIONS = ("2.0",)
 
 #: Conditions at which the thermochemistry delegates are evaluated. A PySCF
 #: Hessian carries no temperature of its own, so the standard state is the
@@ -199,16 +198,12 @@ class PySCFOutput(FileMixin):
 
     @property
     def point_group(self):
-        # Version 1.0 placed this derived result in spec. Version 2.0 stores it
-        # under results while preserving the public property for old artifacts.
-        if "point_group" in self.spec:
-            return self.spec.get("point_group")
         return self.results.get("point_group")
 
     @property
     def freq(self):
         """Return whether this run produced frequencies."""
-        return "hess" in self.spec.get("stages", [])
+        return self.results.get("vibrational_frequencies") is not None
 
     @property
     def rotational_symmetry_number(self):
@@ -217,7 +212,7 @@ class PySCFOutput(FileMixin):
         Gaussian and ORCA print this; PySCF does not, so it is derived from
         the point group PySCF detected. It divides the rotational partition
         function, so getting it wrong shifts the rotational entropy by
-        R*ln(sigma) -- about 1.4 kJ/mol at 298 K for sigma = 2.
+        R*ln(sigma) -- about 1.7 kJ/mol at 298 K for sigma = 2.
         """
         return rotational_symmetry_number_from_point_group(self.point_group)
 
@@ -250,6 +245,11 @@ class PySCFOutput(FileMixin):
         parts = [str(spec.get("method") or ""), str(spec.get("basis") or "")]
         if spec.get("density_fit"):
             parts.append("df")
+        # These change the numbers but have no structured database field, so
+        # they must reach the route hash or the records would overwrite.
+        for name in ("aux_basis", "scf_tol", "opt_solver"):
+            if spec.get(name) is not None:
+                parts.append(f"{name}={spec[name]}")
         if spec.get("defgrid"):
             parts.append(str(spec["defgrid"]))
         if spec.get("dispersion"):
@@ -367,26 +367,74 @@ class PySCFOutput(FileMixin):
         values = self.results.get("dipole_moment")
         return [float(v) for v in values] if values is not None else None
 
-    def get_molecule(self, index="-1", return_list=False):
-        """Build a :class:`Molecule` from the stored geometry and results."""
+    @property
+    def optimizer_converged(self):
+        """Return whether a geometry optimisation met its criteria."""
+        stage = self.status.get("stages", {}).get("opt", {})
+        return bool(stage.get("optimizer_converged", False))
+
+    @cached_property
+    def all_structures(self):
+        """Return the stored structures: a PySCF job keeps only the final one.
+
+        Raises:
+            ValueError: If the run failed before producing a geometry.
+        """
         from chemsmart.io.molecules.structure import Molecule
 
-        molecule = Molecule(
-            symbols=self.chemical_symbols,
-            positions=self.positions,
-            charge=self.charge,
-            multiplicity=self.multiplicity,
-            energy=self.energies[-1] if self.energies else None,
-            forces=self.forces,
-            vibrational_frequencies=self.vibrational_frequencies,
-            vibrational_modes=self.vibrational_modes,
-            mulliken_atomic_charges=self.mulliken_atomic_charges,
-            rotational_symmetry_number=self.rotational_symmetry_number,
-            is_optimized_structure=self.jobtype in ("opt",),
-        )
-        if return_list:
-            return [molecule]
-        return molecule
+        if self.positions is None:
+            failure = self.failure or {}
+            raise ValueError(
+                f"No structure in {self.resultsfile}; the calculation failed "
+                f"at stage {failure.get('stage')!r}: "
+                f"{failure.get('type')}: {failure.get('message')}"
+            )
+        dipole = self.dipole_moment
+        point_group = self.point_group
+        return [
+            Molecule(
+                symbols=self.chemical_symbols,
+                positions=self.positions,
+                charge=self.charge,
+                multiplicity=self.multiplicity,
+                energy=self.energies[-1] if self.energies else None,
+                forces=self.forces,
+                vibrational_frequencies=self.vibrational_frequencies,
+                vibrational_modes=self.vibrational_modes,
+                mulliken_atomic_charges=self.mulliken_atomic_charges,
+                rotational_symmetry_number=self.rotational_symmetry_number,
+                is_optimized_structure=self.optimizer_converged,
+                dipole_moment=(
+                    np.asarray(dipole) if dipole is not None else None
+                ),
+                dipole_moment_magnitude=(
+                    float(np.linalg.norm(dipole))
+                    if dipole is not None
+                    else None
+                ),
+                point_group=(
+                    str(point_group).upper() if point_group else None
+                ),
+            )
+        ]
+
+    @property
+    def optimized_structure(self):
+        """Return the optimised structure, or None if not converged."""
+        if not self.optimizer_converged:
+            return None
+        return self.all_structures[-1]
+
+    def get_molecule(self, index="-1", return_list=False):
+        """Return the stored structures selected by a 1-based index."""
+        selector = parse_index_specification(str(index))
+        structures = self.all_structures
+        if isinstance(selector, list):
+            return [structures[i] for i in selector]
+        selected = structures[selector]
+        if return_list and not isinstance(selected, list):
+            return [selected]
+        return selected
 
     # ------------------------------------------------------------------
     # thermochemistry -- delegated, never recomputed
@@ -394,7 +442,7 @@ class PySCFOutput(FileMixin):
 
     @cached_property
     def _thermochemistry(self):
-        """Return ChemSmart's thermochemistry engine for this result.
+        """Return CHEMSMART's thermochemistry engine for this result.
 
         Evaluated at standard conditions. A Hessian is temperature
         independent -- the temperature enters only when the partition
@@ -408,7 +456,7 @@ class PySCFOutput(FileMixin):
         ``normal_termination`` and the vibrational data from this object, and
         never touches a thermochemical property.
         """
-        if not self.freq:
+        if not self.freq or not self.normal_termination:
             return None
         from chemsmart.analysis.thermochemistry import Thermochemistry
 
@@ -421,7 +469,7 @@ class PySCFOutput(FileMixin):
     def _thermo(self, attribute):
         """Return a raw engine value in the engine's SI units."""
         engine = self._thermochemistry
-        return getattr(engine, attribute, None) if engine else None
+        return getattr(engine, attribute) if engine else None
 
     def _thermo_energy(self, attribute):
         """Return an engine energy converted from J/mol to Hartree.
@@ -513,7 +561,7 @@ class PySCFOutput(FileMixin):
     # The "thermal correction to ..." quantities are Gaussian's naming. The
     # engine exposes the absolute terms, so the corrections are derived the
     # same way Gaussian defines them: the thermal quantity minus the
-    # electronic energy. Kept in the engine's SI units, like its siblings.
+    # electronic energy.
 
     @property
     def thermal_vibration_correction(self):
@@ -557,12 +605,10 @@ class PySCFOutput(FileMixin):
 
 
 def read_pyscf_h5(filename):
-    """Read a v1 or v2 PySCF HDF5 artifact.
+    """Read a PySCF HDF5 artifact.
 
-    Version 1.0 is retained for Stage A artifacts and stores three mappings as
-    JSON strings. Version 2.0 requires four top-level groups. Mapping arrays
-    are converted to ordinary Python lists to preserve the historical public
-    payload shape; values below ``results/`` remain exact numpy arrays.
+    Mapping arrays are converted to ordinary Python lists; values below
+    ``results/`` remain exact numpy arrays.
     """
     import h5py
 
@@ -572,35 +618,16 @@ def read_pyscf_h5(filename):
         if version not in SUPPORTED_SCHEMA_VERSIONS:
             raise ValueError(
                 f"Unsupported PySCF results schema {version!r} in "
-                f"{filename}; this ChemSmart understands "
+                f"{filename}; this CHEMSMART understands "
                 f"{SUPPORTED_SCHEMA_VERSIONS}."
             )
-
-        if version == "1.0":
-            _require_nodes(handle, ("spec", "provenance", "status", "results"))
-            for name in ("spec", "provenance", "status"):
-                if not isinstance(handle[name], h5py.Dataset):
-                    raise ValueError(
-                        f"PySCF schema 1.0 requires /{name} to be a JSON "
-                        f"dataset in {filename}"
-                    )
-            if not isinstance(handle["results"], h5py.Group):
-                raise ValueError(
-                    f"PySCF schema 1.0 requires /results to be a group in "
-                    f"{filename}"
-                )
-            spec = json.loads(_text(handle["spec"][()]))
-            provenance = json.loads(_text(handle["provenance"][()]))
-            status = json.loads(_text(handle["status"][()]))
-            results = _read_group(handle["results"], preserve_arrays=True)
-            return spec, provenance, status, results
 
         _require_nodes(handle, ("spec", "provenance", "status", "results"))
         for name in ("spec", "provenance", "status", "results"):
             if not isinstance(handle[name], h5py.Group):
                 raise ValueError(
-                    f"PySCF schema 2.0 requires /{name} to be a group in "
-                    f"{filename}"
+                    f"PySCF schema {version} requires /{name} to be a group "
+                    f"in {filename}"
                 )
         spec = _read_group(handle["spec"])
         provenance = _read_group(handle["provenance"])

@@ -1,7 +1,7 @@
 """PySCF job classes.
 
 Unlike Gaussian and ORCA, PySCF is a Python library rather than an external
-binary. ChemSmart therefore *generates* the calculation script and controls
+binary. CHEMSMART therefore *generates* the calculation script and controls
 both ends of the interface, which changes the file contract:
 
 ``label.py``   the generated, standalone-runnable driver script
@@ -62,6 +62,13 @@ class PySCFJob(Job):
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
         self.label = label
+
+    @property
+    def stages(self):
+        """Return the ordered stages the generated script executes."""
+        raise NotImplementedError(
+            f"{type(self).__name__} must define its stages."
+        )
 
     @classmethod
     def settings_class(cls) -> Type[PySCFJobSettings]:
@@ -131,7 +138,6 @@ class PySCFJob(Job):
         index="-1",
         label=None,
         jobrunner=None,
-        keywords=("charge", "multiplicity"),
         **kwargs,
     ):
         """Create a PySCF job from a molecular structure file."""
@@ -192,19 +198,4 @@ class PySCFJob(Job):
             label=label,
             jobrunner=jobrunner,
             **kwargs,
-        )
-
-
-class PySCFGeneralJob(PySCFJob):
-    """General PySCF job.
-
-    Exists so that specialised subclasses can create and run a plain PySCF
-    job internally without recursing into their own type.
-    """
-
-    TYPE = "pyscfjob"
-
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
         )
