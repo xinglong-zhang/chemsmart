@@ -637,6 +637,8 @@ class Database:
             index = row["index_in_record"]
             if index in properties:
                 molecule["dataset_properties"] = properties[index]
+            if record_row.get("parser") == "NPZFile":
+                molecule["dataset_source"] = record_row.get("program")
             molecules.append(molecule)
 
         return {
