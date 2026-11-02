@@ -141,6 +141,7 @@ class Molecule:
         point_group=None,
         info=None,
         dataset_source=None,
+        dataset_energy=None,
         id=None,
         A=None,
         B=None,
@@ -180,6 +181,7 @@ class Molecule:
         self.info = info
         # Dataset values retain their source units.
         self.dataset_source = dataset_source
+        self.dataset_energy = dataset_energy
         self.id = id
         self.A = A
         self.B = B
@@ -1219,7 +1221,10 @@ class Molecule:
 
         if basename.lower().endswith(".npz"):
             return cls._read_npz_file(
-                filepath=filepath, index=index, return_list=return_list
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+                dataset=kwargs.get("dataset"),
             )
 
         if basename.endswith(".xyz"):
@@ -1333,11 +1338,13 @@ class Molecule:
         return molecules
 
     @classmethod
-    def _read_npz_file(cls, filepath, index="-1", return_list=False):
+    def _read_npz_file(
+        cls, filepath, index="-1", return_list=False, dataset=None
+    ):
         """Read molecular structures from a NumPy archive."""
         from chemsmart.io.npz import NPZFile
 
-        npz_file = NPZFile(filename=filepath)
+        npz_file = NPZFile(filename=filepath, dataset=dataset)
         return npz_file.get_molecules(index=index, return_list=return_list)
 
     @staticmethod

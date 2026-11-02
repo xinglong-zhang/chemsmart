@@ -32,6 +32,132 @@ def _write_revqm9(path):
 
 
 class TestNPZStructures:
+    def test_npz_reimport_preserves_record_index_and_declared_data(
+        self, tmp_path
+    ):
+        from chemsmart.cli.database.assemble import assemble
+        from chemsmart.database.database import Database
+
+        source = (
+            Path(__file__).parent / "data" / "IOTests" / "revQM9_subset.npz"
+        )
+        output = tmp_path / "records.db"
+        base = ["-f", str(source), "-i", "1", "-o", str(output)]
+
+        def run(extra):
+            result = CliRunner().invoke(assemble, base + extra, obj={})
+            assert result.exit_code == 0, (result.output, result.exception)
+
+        run([])
+        db = Database(str(output))
+        record = db.get_record(record_index=1)
+        assert record["results"]["homo_energy"] is None
+        restored = Molecule.from_filepath(str(output), record_index=1)
+        assert restored.energy is None
+        assert restored.dataset_energy == pytest.approx(-40.47574250955533)
+        run(["--dataset", "revqm9"])
+        record = db.get_record(record_index=1)
+        assert record["meta"]["method"] == "aPBE0"
+        homo = record["results"]["homo_energy"]
+        assert homo is not None
+        run([])
+        record = db.get_record(record_index=1)
+        assert db.count_records() == 1
+        assert record["meta"]["method"] == "aPBE0"
+        assert record["results"]["homo_energy"] == homo
+        run(["--dataset", "revqm9", "--method", "PBE0"])
+        assert db.get_record(record_index=1)["meta"]["method"] == "PBE0"
+
+    def test_npz_database_cli_metadata_override(self, tmp_path):
+        from chemsmart.cli.database.assemble import assemble
+        from chemsmart.database.database import Database
+
+        source = (
+            Path(__file__).parent / "data" / "IOTests" / "revQM9_subset.npz"
+        )
+        output = tmp_path / "custom.db"
+        result = CliRunner().invoke(
+            assemble,
+            [
+                "-f",
+                str(source),
+                "--dataset",
+                "revqm9",
+                "--method",
+                "PBE0",
+                "--basis",
+                "def2-SVP",
+                "-i",
+                "1",
+                "-o",
+                str(output),
+            ],
+            obj={},
+        )
+        assert result.exit_code == 0, (result.output, result.exception)
+        record = Database(str(output)).get_record(record_index=1)
+        assert record["meta"]["method"] == "PBE0"
+        assert record["meta"]["basis"] == "def2-SVP"
+
+    @pytest.mark.parametrize(
+        "dataset,method,basis,expected_source,expected_method,expected_basis",
+        [
+            (None, None, None, None, None, None),
+            ("revqm9", None, None, "revQM9", "aPBE0", "cc-pVTZ"),
+            ("qm9", None, None, "qm9_eV", "B3LYP", "6-31G(2df,p)"),
+            ("qm9", "PBE0", "def2-SVP", "qm9_eV", "PBE0", "def2-SVP"),
+            (
+                "revqm9",
+                "custom",
+                "custom-basis",
+                "revQM9",
+                "custom",
+                "custom-basis",
+            ),
+        ],
+    )
+    def test_npz_database_metadata(
+        self,
+        tmp_path,
+        dataset,
+        method,
+        basis,
+        expected_source,
+        expected_method,
+        expected_basis,
+    ):
+        from chemsmart.database.assemble import NPZAssembler
+
+        filename = (
+            "qm9_eV_subset.npz" if dataset == "qm9" else "revQM9_subset.npz"
+        )
+        source = Path(__file__).parent / "data" / "IOTests" / filename
+        record = next(
+            NPZAssembler(
+                source, index="1", dataset=dataset, method=method, basis=basis
+            ).assemble()
+        )
+        assert record.provenance["program"] == expected_source
+        assert record.meta["method"] == expected_method
+        assert record.meta["basis"] == expected_basis
+        if dataset is None:
+            assert record.results.get("total_energy") is None
+            assert record.results.get("homo_energy") is None
+            assert record.molecules[0]["energy"] is None
+            assert (
+                record.molecules[0]["dataset_properties"]["energies"]["unit"]
+                is None
+            )
+
+    def test_npz_rejects_mismatched_dataset(self):
+        from chemsmart.database.assemble import NPZAssembler
+
+        source = (
+            Path(__file__).parent / "data" / "IOTests" / "revQM9_subset.npz"
+        )
+        with pytest.raises(ValueError, match="layout does not match"):
+            list(NPZAssembler(source, index="1", dataset="qm9").assemble())
+
     @pytest.mark.parametrize(
         "filename", ["revQM9_subset.npz", "qm9_eV_subset.npz"]
     )
@@ -41,7 +167,17 @@ class TestNPZStructures:
 
         source = Path(__file__).parent / "data" / "IOTests" / filename
         output = tmp_path / "dataset.db"
-        args = ["-f", str(source), "-i", "3,1", "-o", str(output)]
+        dataset = "revqm9" if filename.startswith("rev") else "qm9"
+        args = [
+            "-f",
+            str(source),
+            "--dataset",
+            dataset,
+            "-i",
+            "3,1",
+            "-o",
+            str(output),
+        ]
         result = CliRunner().invoke(assemble, args, obj={})
         assert result.exit_code == 0, (result.output, result.exception)
         with sqlite3.connect(output) as conn:
@@ -66,12 +202,13 @@ class TestNPZStructures:
             assert rows[1][5] == pytest.approx(rows[1][1])
             assert rows[1][2] == pytest.approx(-0.4093204819908599 * Hartree)
             assert properties["homo"]["value"] == pytest.approx(-0.40932048)
-            assert properties["homo"]["unit"] is None
+            assert properties["homo"]["unit"] == "Hartree"
             assert restored.homo == pytest.approx(-0.40932048)
             assert restored.atomization == pytest.approx(-0.66538218)
             assert restored.dataset_source == "revQM9"
-            assert properties["homo"]["unit_status"] == "inferred"
-            assert properties["dipole"]["suggested_unit"] == "Debye"
+            assert properties["dipole"]["unit"] == "Debye"
+            assert properties["atomization"]["unit"] == "Hartree"
+            assert properties["lumo"]["unit"] == "Hartree"
             assert record["molecules"][0][
                 "dipole_moment_magnitude"
             ] == pytest.approx(1.2762092032023672e-05)
@@ -107,13 +244,16 @@ class TestNPZStructures:
             "H3N",
             "H2O",
         ]
-        assert molecules[0].energy == pytest.approx(-40.47574250955533)
+        assert molecules[0].energy is None
+        assert molecules[0].dataset_energy == pytest.approx(-40.47574250955533)
         assert molecules[0].homo == pytest.approx(-0.40932048)
         assert molecules[0].atomization == pytest.approx(-0.66538218)
         assert molecules[2].structure_index_in_file == 3
         selected = Molecule.from_filepath(path, index="3,1")
         assert [m.empirical_formula for m in selected] == ["H2O", "CH4"]
-        assert selected[1].energy == pytest.approx(molecules[0].energy)
+        assert selected[1].dataset_energy == pytest.approx(
+            molecules[0].dataset_energy
+        )
         assert selected[1].homo == molecules[0].homo
 
     def test_dgl_qm9_ev_subset_fixture(self):
@@ -198,7 +338,12 @@ class TestNPZStructures:
             energies=[-1.2, -3.4],
         )
         molecules = Molecule.from_filepath(path, index="2,1")
-        assert [m.energy for m in molecules] == pytest.approx([-3.4, -1.2])
+        assert [m.energy for m in molecules] == [None, None]
+        assert [m.dataset_energy for m in molecules] == pytest.approx(
+            [-3.4, -1.2]
+        )
+        declared = Molecule.from_filepath(path, index="2,1", dataset="revqm9")
+        assert [m.energy for m in declared] == pytest.approx([-3.4, -1.2])
 
     def test_dgl_u0_is_not_assigned_as_total_energy(self, tmp_path):
         path = tmp_path / "dgl.npz"

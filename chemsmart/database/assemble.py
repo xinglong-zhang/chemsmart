@@ -139,7 +139,9 @@ class BaseAssembler(MoleculeInfoAssemblerMixin):
             )
             return molecules if isinstance(molecules, list) else [molecules]
         return Molecule.from_filepath(
-            self.filename, index=self.index, return_list=True
+            self.filename,
+            index=self.index,
+            return_list=True,
         )
 
     def build_provenance(self):
@@ -408,9 +410,16 @@ class XTBAssembler(BaseAssembler):
 class NPZAssembler(MoleculeInfoAssemblerMixin):
     """Build one database record per NPZ structure."""
 
-    def __init__(self, filename, index=":"):
+    def __init__(
+        self, filename, index=":", dataset=None, method=None, basis=None
+    ):
         self.filename = filename
         self.index = index
+        if dataset not in (None, "revqm9", "qm9"):
+            raise ValueError("Dataset must be 'revqm9' or 'qm9'.")
+        self.dataset = dataset
+        self.method = method
+        self.basis = basis
 
     def assemble(self):
         digest = hashlib.sha256()
@@ -420,14 +429,27 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
         source_hash = digest.hexdigest()
         source_size = file_size(self.filename)
         molecules = Molecule.from_filepath(
-            self.filename, index=self.index, return_list=True
+            self.filename,
+            index=self.index,
+            return_list=True,
+            dataset=self.dataset,
         )
         for molecule in molecules:
+            expected_source = {"revqm9": "revQM9", "qm9": "qm9_eV"}.get(
+                self.dataset
+            )
+            if (
+                expected_source is not None
+                and molecule.dataset_source != expected_source
+            ):
+                raise ValueError(
+                    f"NPZ layout does not match dataset {self.dataset}."
+                )
             index = molecule.structure_index_in_file
             record_id = hashlib.sha256(
                 f"npz|{source_hash}|{index}".encode()
             ).hexdigest()
-            results = {"total_energy": molecule.energy}
+            results = {"total_energy": molecule.energy} if self.dataset else {}
             fields = (
                 {
                     "id": None,
@@ -450,32 +472,32 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                 if molecule.dataset_source == "qm9_eV"
                 else {
                     "inds": None,
-                    "atomization": None,
-                    "homo": None,
-                    "lumo": None,
-                    "dipole": None,
+                    "atomization": "Hartree",
+                    "homo": "Hartree",
+                    "lumo": "Hartree",
+                    "dipole": "Debye",
                 }
             )
             dataset_properties = {
-                key: {"value": getattr(molecule, key), "unit": unit}
+                key: {
+                    "value": getattr(molecule, key),
+                    "unit": unit if self.dataset else None,
+                }
                 for key, unit in fields.items()
                 if getattr(molecule, key) is not None
             }
-            if molecule.dataset_source == "revQM9":
-                for key in ("atomization", "homo", "lumo"):
-                    if key in dataset_properties:
-                        dataset_properties[key]["suggested_unit"] = "Hartree"
-                        dataset_properties[key]["unit_status"] = "inferred"
-                if "dipole" in dataset_properties:
-                    dataset_properties["dipole"]["suggested_unit"] = "Debye"
-                    dataset_properties["dipole"]["unit_status"] = "inferred"
-            if molecule.dataset_source == "qm9_eV":
+            if self.dataset is None and molecule.dataset_energy is not None:
+                dataset_properties["energies"] = {
+                    "value": molecule.dataset_energy,
+                    "unit": None,
+                }
+            if self.dataset == "qm9":
                 results.update(
                     homo_energy=molecule.homo,
                     lumo_energy=molecule.lumo,
                     fmo_gap=molecule.gap,
                 )
-            else:
+            elif self.dataset == "revqm9":
                 if molecule.homo is not None:
                     results["homo_energy"] = molecule.homo * Hartree
                 if molecule.lumo is not None:
@@ -485,18 +507,20 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                         molecule.lumo - molecule.homo
                     ) * Hartree
             molecule_info = self.get_molecule_info(molecule)
-            if (
-                molecule.dataset_source == "revQM9"
-                and molecule.dipole is not None
-            ):
+            if self.dataset is None:
+                molecule_info["energy"] = None
+            if self.dataset == "revqm9" and molecule.dipole is not None:
                 molecule_info["dipole_moment_magnitude"] = molecule.dipole
             yield AssembledRecord(
                 record_id=record_id,
-                meta=(
-                    {"method": "aPBE0", "basis": "cc-pVTZ"}
-                    if molecule.dataset_source == "revQM9"
-                    else {}
-                ),
+                meta={
+                    "method": self.method
+                    or {"revqm9": "aPBE0", "qm9": "B3LYP"}.get(self.dataset),
+                    "basis": self.basis
+                    or {"revqm9": "cc-pVTZ", "qm9": "6-31G(2df,p)"}.get(
+                        self.dataset
+                    ),
+                },
                 results=results,
                 molecules=[
                     {
@@ -509,7 +533,7 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                     "source": self.filename,
                     "source_file_hash": source_hash,
                     "source_size": source_size,
-                    "program": molecule.dataset_source,
+                    "program": expected_source,
                     "parser": "NPZFile",
                     "chemsmart_version": chemsmart_version,
                     "assembled_at": utcnow_iso(),

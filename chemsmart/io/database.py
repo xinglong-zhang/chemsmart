@@ -84,6 +84,7 @@ class DatabaseFile(FileMixin):
             ),
             point_group=struct_dict.get("point_group"),
             dataset_source=struct_dict.get("dataset_source"),
+            dataset_energy=properties.get("energies", {}).get("value"),
             **dataset_values,
         )
 

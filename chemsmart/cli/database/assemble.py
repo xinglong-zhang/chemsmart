@@ -36,6 +36,15 @@ logger = logging.getLogger(__name__)
     help="Index (1-based) of the structures to extract from multi-structure files.",
 )
 @click.option(
+    "--dataset",
+    type=click.Choice(["revqm9", "qm9"], case_sensitive=False),
+    help="Identify the NPZ dataset and its units.",
+)
+@click.option(
+    "--method", help="Calculation method to record for the NPZ dataset."
+)
+@click.option("--basis", help="Basis set to record for the NPZ dataset.")
+@click.option(
     "-o",
     "--output",
     type=str,
@@ -60,6 +69,9 @@ def assemble(
     output,
     include_failed,
     input_file,
+    dataset,
+    method,
+    basis,
 ):
     """Assemble calculation output files into a chemsmart database.
 
@@ -84,11 +96,21 @@ def assemble(
         db = Database(db_file=output)
         db.create()
         count = db.insert_records(
-            NPZAssembler(input_file, index=index).assemble()
+            NPZAssembler(
+                input_file,
+                index=index,
+                dataset=dataset,
+                method=method,
+                basis=basis,
+            ).assemble()
         )
         logger.info(f"Imported {count} NPZ record(s) into database: {output}")
         return None
 
+    if dataset or method or basis:
+        raise click.UsageError(
+            "--dataset, --method and --basis require --file."
+        )
     if directory is None:
         directory = "./"
     directory = os.path.abspath(directory)

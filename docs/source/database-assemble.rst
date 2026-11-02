@@ -23,13 +23,24 @@ existing outputs have been updated.
  Options
 *********
 
-To import a supported NPZ dataset, use ``chemsmart run database assemble -f revQM9.npz -o dataset.db``. Each selected
-structure becomes a separate record. For qm9_eV, orbital energies are stored in eV, while the atom-reference-adjusted U0
-is not stored as total energy. Per-molecule dataset properties are preserved as original values with units where
-confirmed, accessible through ``Database.get_record()`` in ``record["molecules"][0]["dataset_properties"]``. revQM9
-property units remain unspecified when unconfirmed. The dataset-level ``meta`` and unmatched ``atomization_test`` array
-are not imported. The supported QM9 and revQM9 layouts are treated as neutral closed-shell molecules (charge 0,
-multiplicity 1).
+To import a supported NPZ dataset, use ``chemsmart run database assemble -f revQM9.npz --dataset revqm9 -o dataset.db``.
+Each selected structure becomes a separate record. For qm9_eV, orbital energies are stored in eV, while the
+atom-reference-adjusted U0 is not stored as total energy. Per-molecule dataset properties are preserved as original
+values with units where available, accessible through ``Database.get_record()`` in
+``record["molecules"][0]["dataset_properties"]``. revQM9 orbital and atomization energies use Hartree, and dipole
+moments use Debye. The dataset-level ``meta`` and unmatched ``atomization_test`` array are not imported. The supported
+QM9 and revQM9 layouts are treated as neutral closed-shell molecules (charge 0, multiplicity 1).
+
+Use ``--dataset revqm9`` or ``--dataset qm9`` to declare the dataset and its units. The default method and basis are
+aPBE0/cc-pVTZ for revQM9 and B3LYP/6-31G(2df,p) for QM9; ``--method`` and ``--basis`` override these values. Without
+``--dataset``, the layout is detected but the source and units are unknown: raw dataset properties are retained without
+units, while energy fields requiring known units are left empty. The method and basis can still be supplied explicitly.
+Dataset declarations must match the file layout. These options apply only to database import; using an NPZ as a
+calculation input does not require them and expects coordinates in Angstrom.
+
+Reimporting a record with a declared dataset updates that record and retains its record index. If the existing record
+has a declared dataset, reimporting the same structure without ``--dataset`` skips it to avoid discarding known units
+and metadata. Specify the dataset again when updating the method or basis.
 
 .. list-table::
    :header-rows: 1

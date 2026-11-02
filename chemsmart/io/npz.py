@@ -17,8 +17,11 @@ class NPZFile(FileMixin):
     Supports DGL QM9 (R/Z/N) and revQM9 (coords/charges).
     """
 
-    def __init__(self, filename):
+    def __init__(self, filename, dataset=None):
         self.filename = filename
+        if dataset not in (None, "revqm9", "qm9"):
+            raise ValueError("Dataset must be 'revqm9' or 'qm9'.")
+        self.dataset = dataset
 
     @cached_property
     def molecule(self):
@@ -58,7 +61,7 @@ class NPZFile(FileMixin):
                 )
             elif {"coords", "charges"} <= keys:
                 position_key, atom_key = "coords", "charges"
-                # Assume revQM9 total energies are in Hartree.
+                # revQM9 total energies are in Hartree.
                 energy_key = "energies"
                 property_keys = (
                     "atomization",
@@ -70,6 +73,12 @@ class NPZFile(FileMixin):
             else:
                 raise ValueError(
                     "NPZ requires DGL QM9 fields R/Z/N or revQM9 fields coords/charges."
+                )
+            if self.dataset is not None and self.dataset != (
+                "qm9" if energy_key is None else "revqm9"
+            ):
+                raise ValueError(
+                    f"NPZ layout does not match dataset {self.dataset}."
                 )
             positions = self._read_array(archive, position_key)
             atoms = self._read_array(archive, atom_key)
@@ -224,7 +233,8 @@ class NPZFile(FileMixin):
                 molecule = Molecule(
                     symbols=symbols,
                     positions=xyz,
-                    energy=energy,
+                    energy=energy if self.dataset == "revqm9" else None,
+                    dataset_energy=energy,
                     charge=0,
                     multiplicity=1,
                     structure_index_in_file=int(i) + 1,

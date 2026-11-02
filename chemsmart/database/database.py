@@ -262,10 +262,25 @@ class Database:
             close_conn = True
 
         try:
+            provenance = record_dict.get("provenance", {})
+            if (
+                provenance.get("parser") == "NPZFile"
+                and provenance.get("program") is None
+            ):
+                existing = conn.execute(
+                    "SELECT program FROM records WHERE record_id = ? AND parser = 'NPZFile'",
+                    (record_dict.get("record_id"),),
+                ).fetchone()
+                if existing is not None and existing[0] is not None:
+                    logger.warning(
+                        "Skipping NPZ record: existing record has a declared dataset; specify --dataset to update it."
+                    )
+                    return False
             self._insert_record_row(conn, record_dict, program)
             self._insert_related_rows(conn, record_dict)
             if close_conn:
                 conn.commit()
+            return True
         finally:
             if close_conn:
                 conn.close()
@@ -276,9 +291,8 @@ class Database:
         results = record_dict.get("results", {})
         provenance = record_dict.get("provenance", {})
 
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO records (
+        sql = """
+            INSERT INTO records (
                 record_id, program,
                 method, basis, num_basis_functions, spin, jobtype,
                 solvent_on, route_string, solvent_model, solvent_id, custom_solvent,
@@ -307,7 +321,19 @@ class Database:
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
-            """,
+            """
+        columns = sql.split("INSERT INTO records (", 1)[1].split(
+            ") VALUES", 1
+        )[0]
+        columns = [column.strip() for column in columns.split(",")]
+        updates = ", ".join(
+            f"{column} = excluded.{column}"
+            for column in columns
+            if column != "record_id"
+        )
+        sql += f" ON CONFLICT(record_id) DO UPDATE SET {updates}"
+        conn.execute(
+            sql,
             (
                 record_dict.get("record_id"),
                 program,
@@ -524,8 +550,8 @@ class Database:
         try:
             for record in records:
                 try:
-                    self.insert_record(record, conn)
-                    count += 1
+                    if self.insert_record(record, conn):
+                        count += 1
                 except Exception as e:
                     logger.error(f"Failed to insert record: {e}")
             conn.commit()
