@@ -16,8 +16,6 @@ import hashlib
 import logging
 from functools import cached_property
 
-from ase.units import Hartree
-
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
@@ -30,12 +28,14 @@ from chemsmart.database.utils import (
     is_custom_basis,
     is_custom_solvent,
     sha256_content,
+    sha256_file,
     standardize_basis_set,
     utcnow_iso,
 )
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.npz import NPZFile
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.io import get_program_type_from_file
@@ -411,111 +411,83 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
     def __init__(self, filename, index=":"):
         self.filename = filename
         self.index = index
+        self.npz_file = NPZFile(filename)
 
     def assemble(self):
-        digest = hashlib.sha256()
-        with open(self.filename, "rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        source_hash = digest.hexdigest()
+        schema = self.npz_file.schema
+        source_hash = sha256_file(self.filename)
         source_size = file_size(self.filename)
-        molecules = Molecule.from_filepath(
-            self.filename, index=self.index, return_list=True
+        molecules = self.npz_file.get_molecules(
+            index=self.index, return_list=True
         )
         for molecule in molecules:
             index = molecule.structure_index_in_file
             record_id = hashlib.sha256(
                 f"npz|{source_hash}|{index}".encode()
             ).hexdigest()
-            results = {"total_energy": molecule.energy}
-            fields = (
-                {
-                    "id": None,
-                    "A": "GHz",
-                    "B": "GHz",
-                    "C": "GHz",
-                    "mu": "Debye",
-                    "alpha": "bohr^3",
-                    "homo": "eV",
-                    "lumo": "eV",
-                    "gap": "eV",
-                    "r2": "bohr^2",
-                    "zpve": "eV",
-                    "U0": "eV",
-                    "U": "eV",
-                    "H": "eV",
-                    "G": "eV",
-                    "Cv": "cal/(mol K)",
-                }
-                if molecule.dataset_source == "qm9_eV"
-                else {
-                    "inds": None,
-                    "atomization": None,
-                    "homo": None,
-                    "lumo": None,
-                    "dipole": None,
-                }
-            )
-            dataset_properties = {
-                key: {"value": getattr(molecule, key), "unit": unit}
-                for key, unit in fields.items()
-                if getattr(molecule, key) is not None
-            }
-            if molecule.dataset_source == "revQM9":
-                for key in ("atomization", "homo", "lumo"):
-                    if key in dataset_properties:
-                        dataset_properties[key]["suggested_unit"] = "Hartree"
-                        dataset_properties[key]["unit_status"] = "inferred"
-                if "dipole" in dataset_properties:
-                    dataset_properties["dipole"]["suggested_unit"] = "Debye"
-                    dataset_properties["dipole"]["unit_status"] = "inferred"
-            if molecule.dataset_source == "qm9_eV":
-                results.update(
-                    homo_energy=molecule.homo,
-                    lumo_energy=molecule.lumo,
-                    fmo_gap=molecule.gap,
-                )
-            else:
-                if molecule.homo is not None:
-                    results["homo_energy"] = molecule.homo * Hartree
-                if molecule.lumo is not None:
-                    results["lumo_energy"] = molecule.lumo * Hartree
-                if molecule.homo is not None and molecule.lumo is not None:
-                    results["fmo_gap"] = (
-                        molecule.lumo - molecule.homo
-                    ) * Hartree
-            molecule_info = self.get_molecule_info(molecule)
-            if (
-                molecule.dataset_source == "revQM9"
-                and molecule.dipole is not None
-            ):
-                molecule_info["dipole_moment_magnitude"] = molecule.dipole
             yield AssembledRecord(
                 record_id=record_id,
-                meta=(
-                    {"method": "aPBE0", "basis": "cc-pVTZ"}
-                    if molecule.dataset_source == "revQM9"
-                    else {}
-                ),
-                results=results,
+                meta=dict(schema.meta),
+                results=self._get_results(molecule, schema),
                 molecules=[
                     {
                         "index": 1,
-                        **molecule_info,
-                        "dataset_properties": dataset_properties,
+                        **self._get_structure_info(molecule, schema),
                     }
                 ],
                 provenance={
                     "source": self.filename,
                     "source_file_hash": source_hash,
                     "source_size": source_size,
-                    "program": molecule.dataset_source,
+                    "program": schema.name,
                     "parser": "NPZFile",
                     "chemsmart_version": chemsmart_version,
                     "assembled_at": utcnow_iso(),
                     "normal_termination": None,
                 },
             )
+
+    @staticmethod
+    def _get_results(molecule, schema):
+        """Convert dataset values to the record's energy conventions."""
+        to_eV = schema.orbital_energy_to_eV
+        homo, lumo, gap = molecule.homo, molecule.lumo, molecule.gap
+        if gap is None and homo is not None and lumo is not None:
+            gap = lumo - homo
+        results = {"total_energy": molecule.energy}
+        if homo is not None:
+            results["homo_energy"] = homo * to_eV
+        if lumo is not None:
+            results["lumo_energy"] = lumo * to_eV
+        if gap is not None:
+            results["fmo_gap"] = gap * to_eV
+        return results
+
+    def _get_structure_info(self, molecule, schema):
+        """Return structure fields plus the original dataset values."""
+        molecule_info = self.get_molecule_info(molecule)
+        dipole = getattr(molecule, schema.dipole_key)
+        if dipole is not None:
+            molecule_info["dipole_moment_magnitude"] = dipole
+        molecule_info["dataset_source"] = schema.name
+        molecule_info["dataset_properties"] = self._get_dataset_properties(
+            molecule, schema
+        )
+        return molecule_info
+
+    @staticmethod
+    def _get_dataset_properties(molecule, schema):
+        """Describe original dataset values and their unit confidence."""
+        properties = {}
+        for key, unit in schema.property_units.items():
+            value = getattr(molecule, key)
+            if value is None:
+                continue
+            properties[key] = {"value": value, "unit": unit}
+            if key in schema.inferred_units:
+                properties[key]["suggested_unit"] = schema.inferred_units[key]
+                properties[key]["unit_status"] = "inferred"
+        return properties
 
 
 class SingleFileAssembler:

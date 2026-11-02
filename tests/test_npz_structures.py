@@ -4,7 +4,6 @@ import os
 import pickle
 import sqlite3
 from importlib import import_module
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zipfile import ZipFile
 
@@ -14,6 +13,9 @@ from ase.units import Hartree
 from click.testing import CliRunner
 from numpy.lib.format import write_array_header_1_0
 
+from chemsmart.cli.database.assemble import assemble
+from chemsmart.database.assemble import NPZAssembler
+from chemsmart.database.database import Database
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.npz import NPZFile
 
@@ -35,11 +37,8 @@ class TestNPZStructures:
     @pytest.mark.parametrize(
         "filename", ["revQM9_subset.npz", "qm9_eV_subset.npz"]
     )
-    def test_npz_database_import(self, tmp_path, filename):
-        from chemsmart.cli.database.assemble import assemble
-        from chemsmart.database.database import Database
-
-        source = Path(__file__).parent / "data" / "IOTests" / filename
+    def test_npz_database_import(self, tmp_path, io_test_directory, filename):
+        source = os.path.join(io_test_directory, filename)
         output = tmp_path / "dataset.db"
         args = ["-f", str(source), "-i", "3,1", "-o", str(output)]
         result = CliRunner().invoke(assemble, args, obj={})
@@ -68,6 +67,9 @@ class TestNPZStructures:
             assert restored.homo == pytest.approx(-0.40932048)
             assert restored.atomization == pytest.approx(-0.66538218)
             assert restored.dataset_source == "revQM9"
+            assert record["results"]["fmo_gap"] == pytest.approx(
+                (0.06115874826417237 + 0.4093204819908599) * Hartree
+            )
             assert properties["homo"]["unit_status"] == "inferred"
             assert properties["dipole"]["suggested_unit"] == "Debye"
             assert record["molecules"][0][
@@ -86,10 +88,59 @@ class TestNPZStructures:
             assert properties["U0"]["unit"] == "eV"
             assert restored.U0 == pytest.approx(-17.17218053)
             assert restored.dataset_source == "qm9_eV"
+            assert record["results"]["fmo_gap"] == pytest.approx(
+                properties["gap"]["value"]
+            )
+            assert record["molecules"][0][
+                "dipole_moment_magnitude"
+            ] == pytest.approx(properties["mu"]["value"])
 
-    def test_revqm9_subset_fixture(self):
+    def test_database_keeps_source_without_dataset_properties(self, tmp_path):
+        source = tmp_path / "revQM9.npz"
+        np.savez(source, coords=np.zeros((1, 1, 3)), charges=[[2]])
+        output = tmp_path / "dataset.db"
+        database = Database(str(output))
+        database.create()
+        assert (
+            database.insert_records(NPZAssembler(str(source)).assemble()) == 1
+        )
+        restored = Molecule.from_filepath(str(output), record_index=1)
+        assert restored.dataset_source == "revQM9"
+
+    def test_database_reimport_replaces_dataset_properties(
+        self, tmp_path, io_test_directory
+    ):
+        source = os.path.join(io_test_directory, "revQM9_subset.npz")
+        output = tmp_path / "dataset.db"
+        database = Database(str(output))
+        database.create()
+        for _ in range(2):
+            database.insert_records(NPZAssembler(source, index="1").assemble())
+        with sqlite3.connect(output) as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM dataset_properties"
+            ).fetchone()[0]
+        assert count == 1
+
+    @pytest.mark.parametrize(
+        "extra",
+        [["-d", "."], ["-t", "log"], ["-p", "orca"], ["--include-failed"]],
+    )
+    def test_assemble_rejects_options_ignored_for_npz(
+        self, tmp_path, io_test_directory, extra
+    ):
+        output = tmp_path / "dataset.db"
+        source = os.path.join(io_test_directory, "revQM9_subset.npz")
+        result = CliRunner().invoke(
+            assemble, ["-f", source, "-o", str(output), *extra], obj={}
+        )
+        assert result.exit_code != 0
+        assert "cannot be combined" in result.output
+        assert not output.exists()
+
+    def test_revqm9_subset_fixture(self, io_test_directory):
         # First five entries from the official revQM9 dataset.
-        path = Path(__file__).parent / "data" / "IOTests" / "revQM9_subset.npz"
+        path = os.path.join(io_test_directory, "revQM9_subset.npz")
         molecules = Molecule.from_filepath(path, index=":", return_list=True)
         assert len(molecules) == 5
         assert [m.empirical_formula for m in molecules[:3]] == [
@@ -106,9 +157,9 @@ class TestNPZStructures:
         assert selected[1].energy == pytest.approx(molecules[0].energy)
         assert selected[1].homo == molecules[0].homo
 
-    def test_dgl_qm9_ev_subset_fixture(self):
+    def test_dgl_qm9_ev_subset_fixture(self, io_test_directory):
         # First five molecules from DGL's qm9_eV.npz, with original arrays.
-        path = Path(__file__).parent / "data" / "IOTests" / "qm9_eV_subset.npz"
+        path = os.path.join(io_test_directory, "qm9_eV_subset.npz")
         molecules = Molecule.from_filepath(path, index=":", return_list=True)
         assert len(molecules) == 5
         assert [m.num_atoms for m in molecules] == [5, 4, 3, 4, 3]

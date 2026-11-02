@@ -227,6 +227,15 @@ def sha256_content(output):
     return sha256
 
 
+def sha256_file(filename):
+    """Compute the SHA-256 hash of a file's raw bytes."""
+    digest = hashlib.sha256()
+    with open(filename, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def convert_numpy(obj):
     """Recursively convert NumPy types to JSON-serializable types."""
     # NumPy arrays -> lists

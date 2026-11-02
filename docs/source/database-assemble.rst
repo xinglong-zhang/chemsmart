@@ -23,14 +23,6 @@ existing outputs have been updated.
  Options
 *********
 
-To import a supported NPZ dataset, use ``chemsmart run database assemble -f revQM9.npz -o dataset.db``. Each selected
-structure becomes a separate record. For qm9_eV, orbital energies are stored in eV, while the atom-reference-adjusted U0
-is not stored as total energy. Per-molecule dataset properties are preserved as original values with units where
-confirmed, accessible through ``Database.get_record()`` in ``record["molecules"][0]["dataset_properties"]``. revQM9
-property units remain unspecified when unconfirmed. The dataset-level ``meta`` and unmatched ``atomization_test`` array
-are not imported. The supported QM9 and revQM9 layouts are treated as neutral closed-shell molecules (charge 0,
-multiplicity 1).
-
 .. list-table::
    :header-rows: 1
    :widths: 18 12 70
@@ -48,6 +40,11 @@ multiplicity 1).
       -  string
       -  Restrict parsing to output files/folders from a specific program. Supported values are ``gaussian``, ``orca``,
          and ``xtb``. If omitted, outputs from all supported programs are scanned.
+
+   -  -  ``-f, --file``
+      -  string
+      -  Import structures from a supported NPZ dataset instead of scanning a directory. Cannot be combined with ``-d``,
+         ``-t``, ``-p``, or ``--include-failed``.
 
    -  -  ``-i, --index``
       -  string
@@ -105,6 +102,19 @@ Example directory layout:
 Every xTB calculation directory must contain exactly one xTB main output together with the required auxiliary files.
 Directories containing multiple xTB main outputs are ambiguous: CHEMSMART logs an error, skips that directory, and
 continues assembling other valid calculations.
+
+**Import a supported NPZ dataset:**
+
+.. code:: bash
+
+   chemsmart run database assemble -f revQM9.npz -o dataset.db
+
+Each selected structure becomes a separate record. Orbital energies and FMO gaps are stored in eV, and dipole magnitudes
+are stored in ``dipole_moment_magnitude``. For qm9_eV, the atom-reference-adjusted U0 is not stored as total energy.
+Per-molecule dataset properties are preserved as original values with units where confirmed, accessible through
+``Database.get_record()`` in ``record["molecules"][0]["dataset_properties"]``. revQM9 property units remain unspecified
+when unconfirmed. The dataset-level ``meta`` and unmatched ``atomization_test`` array are not imported. The supported
+QM9 and revQM9 layouts are treated as neutral closed-shell molecules (charge 0, multiplicity 1).
 
 **Assemble only the final structure from each calculation source:**
 

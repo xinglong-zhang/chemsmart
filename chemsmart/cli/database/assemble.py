@@ -70,6 +70,7 @@ def assemble(
     Examples:
         chemsmart run database assemble -d results/ -o my.db
         chemsmart run database assemble -d ./ -p gaussian -o database.db
+        chemsmart run database assemble -f revQM9.npz -i 1:101 -o dataset.db
     """
 
     # Ensure the output filename ends with .db
@@ -81,10 +82,15 @@ def assemble(
             raise click.BadParameter(
                 "Expected an NPZ file.", param_hint="--file"
             )
+        if directory or filetype or program or include_failed:
+            raise click.UsageError(
+                "--file cannot be combined with --directory, --filetype, "
+                "--program, or --include-failed."
+            )
         db = Database(db_file=output)
         db.create()
         count = db.insert_records(
-            NPZAssembler(input_file, index=index).assemble()
+            NPZAssembler(os.path.abspath(input_file), index=index).assemble()
         )
         logger.info(f"Imported {count} NPZ record(s) into database: {output}")
         return None

@@ -210,6 +210,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS dataset_properties (
                     record_id TEXT NOT NULL,
                     index_in_record INTEGER NOT NULL,
+                    dataset_source TEXT NOT NULL,
                     properties_json TEXT NOT NULL,
                     PRIMARY KEY (record_id, index_in_record),
                     FOREIGN KEY (record_id) REFERENCES records(record_id)
@@ -394,9 +395,7 @@ class Database:
         conn.execute(
             "DELETE FROM record_structures WHERE record_id = ?", (record_id,)
         )
-        has_dataset_properties = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dataset_properties'"
-        ).fetchone()
+        has_dataset_properties = self._has_dataset_properties_table(conn)
         if has_dataset_properties:
             conn.execute(
                 "DELETE FROM dataset_properties WHERE record_id = ?",
@@ -404,17 +403,23 @@ class Database:
             )
 
         for mol in molecules:
-            if mol.get("dataset_properties"):
+            if mol.get("dataset_source"):
                 if not has_dataset_properties:
                     raise ValueError(
                         "Create the dataset_properties table before importing NPZ data."
                     )
                 conn.execute(
-                    "INSERT INTO dataset_properties VALUES (?, ?, ?)",
+                    """
+                    INSERT INTO dataset_properties (
+                        record_id, index_in_record,
+                        dataset_source, properties_json
+                    ) VALUES (?, ?, ?, ?)
+                    """,
                     (
                         record_id,
                         mol.get("index"),
-                        to_json(mol["dataset_properties"]),
+                        mol["dataset_source"],
+                        to_json(mol.get("dataset_properties", {})),
                     ),
                 )
             molecule_id = mol.get("molecule_id")
@@ -517,6 +522,17 @@ class Database:
                 ),
             )
 
+    @staticmethod
+    def _has_dataset_properties_table(conn):
+        """Check for the table, which older databases do not have."""
+        return (
+            conn.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type='table' AND name='dataset_properties'"
+            ).fetchone()
+            is not None
+        )
+
     def insert_records(self, records):
         """Insert multiple records into the database."""
         conn = self.get_connection()
@@ -618,15 +634,16 @@ class Database:
         )
         struct_rows = cursor.fetchall()
 
-        has_properties = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dataset_properties'"
-        ).fetchone()
-        properties = {}
-        if has_properties:
-            properties = {
-                row[0]: from_json(row[1])
-                for row in conn.execute(
-                    "SELECT index_in_record, properties_json FROM dataset_properties WHERE record_id = ?",
+        dataset_fields = {}
+        if self._has_dataset_properties_table(conn):
+            dataset_fields = {
+                index: {
+                    "dataset_source": source,
+                    "dataset_properties": from_json(properties),
+                }
+                for index, source, properties in conn.execute(
+                    "SELECT index_in_record, dataset_source, properties_json "
+                    "FROM dataset_properties WHERE record_id = ?",
                     (record_id,),
                 )
             }
@@ -634,9 +651,7 @@ class Database:
         molecules = []
         for row in struct_rows:
             molecule = self._record_structure_row_to_dict(dict(row))
-            index = row["index_in_record"]
-            if index in properties:
-                molecule["dataset_properties"] = properties[index]
+            molecule.update(dataset_fields.get(row["index_in_record"], {}))
             molecules.append(molecule)
 
         return {
