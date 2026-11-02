@@ -8092,9 +8092,9 @@ class TestCCDCIntegration:
 
     def test_user_settings_ccdc_paths(self):
         """User settings expose the ccdc settings directory and envars."""
-        from chemsmart.settings.user import ChemsmartUserSettings
+        from chemsmart.settings.user import CHEMSMARTUserSettings
 
-        settings = ChemsmartUserSettings()
+        settings = CHEMSMARTUserSettings()
         assert settings.user_ccdc_settings_dir == os.path.join(
             settings.config_dir, "ccdc"
         )
