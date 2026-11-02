@@ -127,9 +127,9 @@ def configure_csd_environment(envars_file=None):
             (empty dict if the file does not exist).
     """
     if envars_file is None:
-        from chemsmart.settings.user import ChemsmartUserSettings
+        from chemsmart.settings.user import CHEMSMARTUserSettings
 
-        envars_file = ChemsmartUserSettings().user_ccdc_envars
+        envars_file = CHEMSMARTUserSettings().user_ccdc_envars
 
     if not os.path.exists(envars_file):
         logger.debug(
