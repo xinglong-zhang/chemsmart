@@ -358,8 +358,14 @@ class DatabaseInspector:
                 "Unpaired Electrons", results.get("num_unpaired_electrons")
             )
         )
-        # Closed-shell orbitals
-        if results.get("num_unpaired_electrons") == 0:
+        # Dataset records can have orbital energies but no spin information.
+        if results.get("num_unpaired_electrons") == 0 or (
+            results.get("num_unpaired_electrons") is None
+            and any(
+                results.get(key) is not None
+                for key in ("homo_energy", "lumo_energy")
+            )
+        ):
             lines.append(
                 format_kv(
                     "HOMO Energy (eV)",
@@ -372,7 +378,25 @@ class DatabaseInspector:
                     format_energy(results.get("lumo_energy")),
                 )
             )
-        else:
+        if results.get("num_unpaired_electrons") != 0 and (
+            results.get("num_unpaired_electrons") is not None
+            or any(
+                results.get(key) is not None
+                for key in (
+                    "alpha_homo_energy",
+                    "beta_homo_energy",
+                    "alpha_lumo_energy",
+                    "beta_lumo_energy",
+                    "alpha_fmo_gap",
+                    "beta_fmo_gap",
+                    "somo_energies",
+                )
+            )
+            or all(
+                results.get(key) is None
+                for key in ("homo_energy", "lumo_energy")
+            )
+        ):
             lines.append(
                 format_kv(
                     "α-HOMO Energy (eV)",

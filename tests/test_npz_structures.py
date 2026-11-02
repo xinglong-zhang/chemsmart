@@ -60,6 +60,8 @@ class TestNPZStructures:
         assert (restored.charge, restored.multiplicity) == (0, 1)
         assert restored.structure_index_in_file == 1
         if filename.startswith("rev"):
+            from chemsmart.database.inspect import DatabaseInspector
+
             assert rows[1][1] == pytest.approx(-40.47574250955533)
             assert rows[1][5] == pytest.approx(rows[1][1])
             assert rows[1][2] == pytest.approx(-0.4093204819908599 * Hartree)
@@ -76,6 +78,14 @@ class TestNPZStructures:
             assert record["results"]["lumo_energy"] == pytest.approx(
                 0.06115874826417237 * Hartree
             )
+            detail = DatabaseInspector(
+                str(output), index=2
+            ).format_record_detail()
+            assert "HOMO Energy (eV)" in detail
+            assert "LUMO Energy (eV)" in detail
+            assert "-11.138" in detail
+            assert "1.664" in detail
+            assert "α-HOMO Energy" not in detail
             assert properties["atomization"]["value"] == pytest.approx(
                 -0.66538218
             )
