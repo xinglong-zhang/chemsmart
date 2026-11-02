@@ -17,6 +17,8 @@ Review as a computational chemistry software maintainer. Prioritise correct scie
 
 Read [review-evidence.md](references/review-evidence.md) when interpreting a preference or resolving a tradeoff. It records selected firsthand comments, including corrections. Treat recurring principles as stronger evidence than isolated suggestions. Treat the numerical and failure-mode checks below as review safeguards, not claims that Xinglong explicitly prescribed every test.
 
+Read [review-cases.md](references/review-cases.md) when a finding resembles a listed case. Each case records the expected behaviour and a counterexample.
+
 Read [github-integration.md](references/github-integration.md) when preparing repository installation, manual GitHub invocation, or automatic PR review. Use [github-AGENTS.md](assets/github-AGENTS.md) as a starting section to merge into existing repository instructions; do not overwrite an existing `AGENTS.md`.
 
 ## Review object ownership explicitly
@@ -40,7 +42,8 @@ Apply these rules deliberately:
 - Reuse compatible parent classes and methods. For example, inspect `OutputFile` before duplicating content loading. Do not force inheritance where the parent contract cannot be met.
 - Initialise usable attributes in the constructor or establish them through an explicit property contract. Prefer a defined `None` state and explicit handling over attributes appearing only after a particular execution path.
 - Check reuse of the same instance across runs and restarts. Reset per-run state through one defined lifecycle operation, including optional results and branch-selection metadata; initialise that contract in `__init__`. Do not treat constructor initialisation alone as proof that later runs cannot retain stale results.
-- Flag `getattr`/`hasattr` used to conceal a missing invariant on a known type. Allow justified introspection at genuine optional/plugin boundaries.
+- Flag `getattr`/`hasattr` used to conceal a missing invariant on a known type, including a `getattr` default on an attribute that should already exist. Allow justified introspection at genuine optional/plugin boundaries.
+- Do not flag `getattr(obj, name)` merely for using `getattr` when `name` is runtime data, such as a schema field, the attribute is established by the constructor, and there is no default, so a missing attribute still raises. Do not recommend a replacement that adds duplicate field lists or turns that error into a silent omission, such as `values.get(name)`. If separate attributes are themselves the design problem, raise that as an OOP/API recommendation.
 - Expose operations useful to downstream objects through a stable public API. Flag unrelated callers reaching into private methods. Keep internal hooks private when a suitable public entry point exists; subclass reuse alone does not require every helper to become public.
 - Distinguish an instance method from `@classmethod`. Use `self` for existing object state and `cls` when class-level dispatch/construction is needed. A class method can return one instance, multiple instances, or another value; never reject it solely because of return type. Do not manufacture an output object from settings if required parsed information is absent.
 
