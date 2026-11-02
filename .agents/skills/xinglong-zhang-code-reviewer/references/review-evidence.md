@@ -6,6 +6,7 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 
 - [Interpretation safeguards](#interpretation-safeguards)
 - [User clarification: class layout](#user-clarification-class-layout)
+- [User feedback: dynamic getattr lookups](#user-feedback-dynamic-getattr-lookups)
 - [PR #391](#pr-391)
 - [PR #475](#pr-475)
 - [PR #524](#pr-524)
@@ -27,6 +28,15 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 ## User clarification: class layout
 
 In the conversation on 17 October 2026 (Asia/Singapore), the user asked whether the private static helpers preceding `GaussianMECPJob.__init__` should be moved below it. Apply constructor-first ordering as the requested readability preference. The suggested broader ordering of factories, properties, public operations, and private helpers is review guidance, not a Python language rule. Keep legitimate static methods; do not infer that object-oriented design requires instance methods for every pure calculation.
+
+## User feedback: dynamic getattr lookups
+
+- **Date and source:** conversation on 2 November 2026 during the review of the `npz` branch (head `5bf40ee7`), about `NPZAssembler` in `chemsmart/database/assemble.py`.
+- **Classification:** context-dependent exception to the `getattr` rule. It does not withdraw the PR #687 preference for constructor-created attributes.
+- **User statements:** the user asked "can the getattr() method in assemble.py be replaced?", "how good is option 2?", and "is it better to keep getattr() in this case?". After the assistant answered that it should be kept while `Molecule` retains individual attributes, the user said "learn this".
+- **Inferred principle:** the wording of the rule is the assistant's synthesis, authorised for incorporation by "learn this"; the user did not state it. A defaultless `getattr` with a runtime field name does not hide a missing invariant, because the attribute is constructor-defined and a missing one still raises.
+- **Rationale:** the alternatives were a hand-written `Molecule.dataset_values` dictionary, which adds another field list and risks silent omission through `.get`, or per-dataset attribute access, which restores the branching the schema removed.
+- **Scope:** this does not settle whether dataset values should remain separate `Molecule` attributes. That API question stayed open.
 
 ## PR #391
 
