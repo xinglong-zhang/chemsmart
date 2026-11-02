@@ -93,6 +93,11 @@ def assemble(
             raise click.BadParameter(
                 "Expected an NPZ file.", param_hint="--file"
             )
+        if directory or filetype or program or include_failed:
+            raise click.UsageError(
+                "--file cannot be combined with --directory, --filetype, "
+                "--program, or --include-failed."
+            )
         db = Database(db_file=output)
         db.create()
         count = db.insert_records(

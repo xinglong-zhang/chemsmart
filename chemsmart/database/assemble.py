@@ -16,8 +16,6 @@ import hashlib
 import logging
 from functools import cached_property
 
-from ase.units import Hartree
-
 from chemsmart import __version__ as chemsmart_version
 from chemsmart.database.records import AssembledRecord
 from chemsmart.database.utils import (
@@ -30,6 +28,7 @@ from chemsmart.database.utils import (
     is_custom_basis,
     is_custom_solvent,
     sha256_content,
+    sha256_file,
     standardize_basis_set,
     utcnow_iso,
 )
@@ -423,11 +422,7 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
         self.basis = basis
 
     def assemble(self):
-        digest = hashlib.sha256()
-        with open(self.filename, "rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        source_hash = digest.hexdigest()
+        source_hash = sha256_file(self.filename)
         source_size = file_size(self.filename)
         npz_file = NPZFile(self.filename, dataset=self.dataset)
         molecules = npz_file.get_molecules(index=self.index, return_list=True)
@@ -454,34 +449,8 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                 f"npz|{source_hash}|{index}".encode()
             ).hexdigest()
             results = {"total_energy": molecule.energy} if self.dataset else {}
-            fields = (
-                {
-                    "id": None,
-                    "A": "GHz",
-                    "B": "GHz",
-                    "C": "GHz",
-                    "mu": "Debye",
-                    "alpha": "bohr^3",
-                    "homo": "eV",
-                    "lumo": "eV",
-                    "gap": "eV",
-                    "r2": "bohr^2",
-                    "zpve": "eV",
-                    "U0": "eV",
-                    "U": "eV",
-                    "H": "eV",
-                    "G": "eV",
-                    "Cv": "cal/(mol K)",
-                }
-                if molecule.dataset_source == "qm9_eV"
-                else {
-                    "inds": None,
-                    "atomization": "Hartree",
-                    "homo": "Hartree",
-                    "lumo": "Hartree",
-                    "dipole": "Debye",
-                }
-            )
+            schema = npz_file.schema
+            fields = schema.property_units
             dataset_properties = {
                 key: {
                     "value": getattr(molecule, key),
@@ -506,27 +475,30 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                 )
             elif self.dataset == "revqm9":
                 if molecule.homo is not None:
-                    results["homo_energy"] = molecule.homo * Hartree
+                    results["homo_energy"] = (
+                        molecule.homo * schema.orbital_energy_to_eV
+                    )
                 if molecule.lumo is not None:
-                    results["lumo_energy"] = molecule.lumo * Hartree
+                    results["lumo_energy"] = (
+                        molecule.lumo * schema.orbital_energy_to_eV
+                    )
                 if molecule.homo is not None and molecule.lumo is not None:
                     results["fmo_gap"] = (
                         molecule.lumo - molecule.homo
-                    ) * Hartree
+                    ) * schema.orbital_energy_to_eV
             molecule_info = self.get_molecule_info(molecule)
             if self.dataset is None:
                 molecule_info["energy"] = None
-            if self.dataset == "revqm9" and molecule.dipole is not None:
-                molecule_info["dipole_moment_magnitude"] = molecule.dipole
+            dipole = getattr(molecule, schema.dipole_key)
+            if self.dataset and dipole is not None:
+                molecule_info["dipole_moment_magnitude"] = dipole
             yield AssembledRecord(
                 record_id=record_id,
                 meta={
                     "method": self.method
-                    or {"revqm9": "aPBE0", "qm9": "B3LYP"}.get(self.dataset),
+                    or (schema.meta["method"] if self.dataset else None),
                     "basis": self.basis
-                    or {"revqm9": "cc-pVTZ", "qm9": "6-31G(2df,p)"}.get(
-                        self.dataset
-                    ),
+                    or (schema.meta["basis"] if self.dataset else None),
                 },
                 results=results,
                 molecules=[

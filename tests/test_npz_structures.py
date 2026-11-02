@@ -643,3 +643,34 @@ class TestNPZStructures:
         assert result.exit_code == 0, (result.output, result.exception)
         assert ctx_obj["molecule_indices"] == [2, 1]
         assert job.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "extra", [["-d", "."], ["-t", "log"], ["-p", "orca"], ["--include-failed"]]
+)
+def test_npz_import_rejects_directory_options(tmp_path, extra):
+    from chemsmart.cli.database.assemble import assemble
+
+    source = tmp_path / "input.npz"
+    _write_revqm9(source)
+    output = tmp_path / "output.db"
+    result = CliRunner().invoke(
+        assemble, ["-f", str(source), "-o", str(output), *extra], obj={}
+    )
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+    assert not output.exists()
+
+
+def test_qm9_declared_dipole_magnitude():
+    from chemsmart.database.assemble import NPZAssembler
+
+    source = Path(__file__).parent / "data" / "IOTests" / "qm9_eV_subset.npz"
+    declared = next(
+        NPZAssembler(str(source), index="1", dataset="qm9").assemble()
+    )
+    undeclared = next(NPZAssembler(str(source), index="1").assemble())
+    assert declared.molecules[0]["dipole_moment_magnitude"] == pytest.approx(
+        declared.molecules[0]["dataset_properties"]["mu"]["value"]
+    )
+    assert undeclared.molecules[0].get("dipole_moment_magnitude") is None

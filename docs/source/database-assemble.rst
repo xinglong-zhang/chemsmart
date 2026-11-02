@@ -35,8 +35,9 @@ Use ``--dataset revqm9`` or ``--dataset qm9`` to declare the dataset and its uni
 aPBE0/cc-pVTZ for revQM9 and B3LYP/6-31G(2df,p) for QM9; ``--method`` and ``--basis`` override these values. Without
 ``--dataset``, the layout is detected but the source and units are unknown: raw dataset properties are retained without
 units, while energy fields requiring known units are left empty. The method and basis can still be supplied explicitly.
-Dataset declarations must match the file layout. These options apply only to database import; using an NPZ as a
-calculation input does not require them and expects coordinates in Angstrom.
+Declared QM9 and revQM9 dipole magnitudes are stored in ``dipole_moment_magnitude``. Dataset declarations must match the
+file layout. These options apply only to database import; using an NPZ as a calculation input does not require them and
+expects coordinates in Angstrom.
 
 Reimporting a record with a declared dataset updates that record and retains its record index. If the existing record
 has a declared dataset, reimporting the same structure without ``--dataset`` skips it to avoid discarding known units
@@ -59,6 +60,11 @@ and metadata. Specify the dataset again when updating the method or basis.
       -  string
       -  Restrict parsing to output files/folders from a specific program. Supported values are ``gaussian``, ``orca``,
          and ``xtb``. If omitted, outputs from all supported programs are scanned.
+
+   -  -  ``-f, --file``
+      -  string
+      -  Import an NPZ dataset. Cannot be combined with ``--directory``, ``--filetype``, ``--program``, or
+         ``--include-failed``.
 
    -  -  ``-i, --index``
       -  string
