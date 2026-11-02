@@ -282,6 +282,47 @@ with aromatic ligands such as Cp, Cp\*, and benzene rings.
 
 For full details on organometallic complex support and its restrictions, see :doc:`chemdraw-organometallic`.
 
+CIF Files (Crystallographic Information Files)
+==============================================
+
+**NEW**: Chemsmart now supports reading molecular structures from CIF (Crystallographic Information File) format,
+commonly used for crystal structures from databases like the Cambridge Crystallographic Data Centre (CCDC).
+
+Reading Local CIF Files
+-----------------------
+
+CIF files contain crystallographic data including atomic coordinates and unit cell parameters:
+
+.. code:: bash
+
+   # Gaussian job with CIF file
+   chemsmart sub -s server gaussian -p project -f structure.cif -c 0 -m 1 opt
+
+   # ORCA job with CIF file
+   chemsmart sub -s server orca -p project -f structure.cif -c 0 -m 1 opt
+
+**Python API:**
+
+.. code:: python
+
+   from chemsmart.io.molecules.structure import Molecule
+
+   # Read a single structure from a CIF file
+   mol = Molecule.from_cif_file('structure.cif')
+
+   # Read with return_list option
+   mols = Molecule.from_cif_file('structure.cif', return_list=True)
+
+   # Also works with from_filepath (auto-detects .cif extension)
+   mol = Molecule.from_filepath('structure.cif')
+
+.. note::
+
+   -  CIF files are commonly used for crystallographic data
+   -  Chemsmart uses ASE (Atomic Simulation Environment) to parse CIF files
+   -  For multi-structure CIF files, use ``-i`` to select a specific structure
+   -  Charge and multiplicity must be specified with ``-c`` and ``-m`` flags
+
 *********************
  Molecular Databases
 *********************
@@ -334,6 +375,74 @@ Query PubChem directly by name, CID, or SMILES:
    -  When using ``-P`` (PubChem), the ``-l`` flag specifies the output filename.
    -  PubChem queries support compound names, CIDs (Compound IDs), and SMILES strings.
    -  SMILES strings are processed by PubChem to retrieve 3D structures and generate coordinates.
+
+CCDC Database Integration
+=========================
+
+**NEW**: Retrieve crystal structures directly from the Cambridge Crystallographic Data Centre (CCDC) database by
+deposition number.
+
+.. code:: bash
+
+   # Gaussian optimization with CCDC structure
+   chemsmart sub -s server gaussian -p project -C 1428476 -c 0 -m 1 opt
+
+   # ORCA single point with CCDC structure
+   chemsmart sub -s server orca -p project -C 1428476 -c 0 -m 1 sp
+
+   # With custom label
+   chemsmart sub -s server gaussian -p project -C 1428476 -l complex -c 0 -m 1 opt
+
+**Python API:**
+
+.. code:: python
+
+   from chemsmart.io.molecules.structure import Molecule
+
+   # Retrieve structure from CCDC by deposition number
+   mol = Molecule.from_ccdc(1428476)
+
+   # With return_list option
+   mols = Molecule.from_ccdc(1428476, return_list=True)
+
+.. tip::
+
+   The CCDC option ``-C`` works similarly to the PubChem option ``-P``:
+
+   -  Use ``-l`` to specify a custom output filename
+   -  Downloaded structures are automatically cached to avoid repeated downloads
+   -  Cache location: ``/tmp/chemsmart_ccdc_cache/``
+
+**Configuring CCDC URL:**
+
+The CCDC base URL can be configured via environment variable if you need to use a different endpoint:
+
+.. code:: bash
+
+   export CCDC_BASE_URL="https://your-ccdc-endpoint.com"
+   chemsmart sub -s server gaussian -p project -C 1428476 -c 0 -m 1 opt
+
+.. warning::
+
+   The default CCDC URL is a placeholder. Users should verify and configure the actual CCDC API endpoint based on their
+   institutional access and licensing requirements.
+
+**Caching:**
+
+CCDC structures are automatically cached to improve performance:
+
+-  Default cache location: ``/tmp/chemsmart_ccdc_cache/``
+-  Cache files are named by deposition number (e.g., ``1428476.cif``)
+-  Cached files are reused across sessions to minimize network requests
+
+**Error Handling:**
+
+Clear error messages are provided for common issues:
+
+-  Invalid deposition numbers
+-  Network failures (with automatic retry)
+-  Missing or restricted structures
+-  CIF parsing errors
 
 ASE Database and Trajectory Files (.db, .traj)
 ==============================================
@@ -439,8 +548,10 @@ Always specify charge and multiplicity for:
 -  XYZ files
 -  SDF files
 -  PDB files
+-  CIF files
 -  ASE database/trajectory files
 -  PubChem queries
+-  CCDC queries
 -  ChemDraw files
 
 .. code:: bash
@@ -470,6 +581,7 @@ CHEMSMART automatically detects file formats based on extensions:
 -  ``.xyz`` → XYZ format
 -  ``.sdf`` → SDF format
 -  ``.pdb`` → PDB format
+-  ``.cif`` → CIF (Crystallographic Information File) format
 -  ``.com``, ``.gjf`` → Gaussian input
 -  ``.log`` → Gaussian output
 -  ``.inp`` → ORCA input
