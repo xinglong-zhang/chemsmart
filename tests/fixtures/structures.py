@@ -577,3 +577,16 @@ def sterimol_toluene_xyz_file(tmp_path, sterimol_toluene_molecule):
         sterimol_toluene_molecule.chemical_symbols,
         [sterimol_toluene_molecule.positions],
     )
+
+
+############ CIF File Fixtures ##################
+@pytest.fixture()
+def cif_test_directory(structure_test_directory):
+    """Directory containing CIF test files."""
+    return os.path.join(structure_test_directory, "cif")
+
+
+@pytest.fixture()
+def benzene_cif_file(cif_test_directory):
+    """Path to benzene CIF test file."""
+    return os.path.join(cif_test_directory, "benzene.cif")
