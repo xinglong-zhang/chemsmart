@@ -27,6 +27,7 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.settings import (
@@ -35,6 +36,7 @@ from chemsmart.jobs.gaussian.settings import (
 )
 from chemsmart.jobs.grouper.base import MatrixGrouper, MoleculeGrouper
 from chemsmart.jobs.job import Job
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
@@ -1727,3 +1729,124 @@ def run_xtb_and_capture_settings(job_path, args, *, catch_exceptions=False):
             else None
         )
     return result, settings, mock_job_cls
+
+
+def assert_runner_was_configured(job, options):
+    """Assert a job factory passed its runner options to the runner only.
+
+    ``options`` is the ``server``, ``scratch`` and ``fake`` mapping given to
+    the factory, as in the ``runner_options`` fixture.
+    """
+    assert job.jobrunner is not None
+    assert job.jobrunner.server is options["server"]
+    assert job.jobrunner.scratch is False
+    assert job.jobrunner.fake is True
+    assert not set(options) & set(job.kwargs)
+
+
+def copy_pyscf_output(source_folder, destination):
+    """Copy a committed PySCF output, returning the path of its log."""
+    os.makedirs(destination)
+    label = os.path.basename(source_folder)
+    for suffix in (".out", ".h5"):
+        shutil.copy(
+            os.path.join(source_folder, label + suffix),
+            os.path.join(destination, "calc" + suffix),
+        )
+    return os.path.join(destination, "calc.out")
+
+
+def read_pyscf_output_folder(folder):
+    """Return a PySCFOutput for the run stored in ``folder``."""
+    label = os.path.basename(folder)
+    logfile = os.path.join(folder, f"{label}.out")
+    assert os.path.exists(logfile)
+    assert os.path.exists(os.path.join(folder, f"{label}.h5"))
+    return PySCFOutput(logfile)
+
+
+def make_pyscf_settings(jobtype, **extra):
+    return PySCFJobSettings(
+        functional="b3lyp",
+        basis="def2-svp",
+        charge=0,
+        multiplicity=1,
+        jobtype=jobtype,
+        **extra,
+    )
+
+
+def make_pyscf_results_payload():
+    """Return a representative B2 payload with exact numeric arrays."""
+    spec = {
+        "label": "water_hess",
+        "program": "pyscf",
+        "jobtype": "hess",
+        "engine": "cpu",
+        "xc": "b3lyp",
+        "method": "b3lyp",
+        "basis": "def2-svp",
+        "charge": 0,
+        "spin": 0,
+        "multiplicity": 1,
+        "solvent_model": "smd",
+        "solvent_id": "water",
+        "density_fit": True,
+        "aux_basis": "def2-universal-jkfit",
+        "defgrid": "defgrid3",
+        "scf_tol": 1.0e-9,
+        "opt_solver": "geometric",
+        "opt_maxsteps": 100,
+        "stages": ["scf", "hess"],
+        "symbols": ["O", "H", "H"],
+        "settings_digest": "settings-sha256",
+    }
+    provenance = {
+        "pyscf_version": "2.14.0",
+        "gpu4pyscf_version": None,
+        "libxc_version": "7.0.0",
+        "chemsmart_version": "3.1.4",
+        "numpy_version": "1.26.4",
+        "h5py_version": "3.16.0",
+        "python_version": "3.10.20",
+        "interpreter": "/opt/compute/bin/python",
+        "host": "compute-node",
+        "engine": "cpu",
+        "num_threads": 2,
+        "cuda_visible_devices": "",
+        "started_at": "2026-08-02T12:00:00+0000",
+        "ended_at": "2026-08-02T12:00:02+0000",
+        "wall_seconds": 2.0,
+        "core_seconds": 4.0,
+        "settings_digest": "settings-sha256",
+        "project_yaml_digest": "project-sha256",
+    }
+    status = {
+        "normal_termination": True,
+        "stages": {
+            "scf": {"converged": True, "iterations": 7},
+            "hess": {"converged": True},
+        },
+        "failure": None,
+    }
+    results = {
+        "energies": np.asarray([-76.3], dtype=np.float64),
+        "positions": np.asarray(
+            [[0.0, 0.0, 0.0], [0.7, 0.5, 0.0], [-0.7, 0.5, 0.0]],
+            dtype=np.float64,
+        ),
+        "forces": np.asarray(
+            [[0.0, 0.0, 0.0], [1.0e-5, 0.0, 0.0], [-1.0e-5, 0.0, 0.0]],
+            dtype=np.float64,
+        ),
+        "mo_energy": np.asarray([-0.5, 0.1], dtype=np.float64),
+        "mo_occ": np.asarray([2.0, 0.0], dtype=np.float64),
+        "vibrational_frequencies": np.asarray(
+            [1600.0, 3900.0, 4010.0], dtype=np.float64
+        ),
+        "normal_modes": np.arange(27, dtype=np.float64).reshape(3, 3, 3),
+        "mulliken_charges": np.asarray([-0.3, 0.15, 0.15], dtype=np.float64),
+        "dipole_moment": np.asarray([0.0, 1.8, 0.0], dtype=np.float64),
+        "point_group": "C2v",
+    }
+    return spec, provenance, status, results

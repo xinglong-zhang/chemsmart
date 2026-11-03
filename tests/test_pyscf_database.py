@@ -1,7 +1,6 @@
 """Tests for PySCF results reaching a CHEMSMART database."""
 
 import os
-import shutil
 
 import h5py
 import pytest
@@ -11,25 +10,14 @@ from chemsmart.cli.database.assemble import assemble
 from chemsmart.database.assemble import PySCFAssembler, SingleFileAssembler
 from chemsmart.database.database import Database
 from chemsmart.database.utils import sha256_file
-
-
-def _copy_output(source_folder, destination):
-    """Copy a committed PySCF output, returning the path of its log."""
-    os.makedirs(destination)
-    label = os.path.basename(source_folder)
-    for suffix in (".out", ".h5"):
-        shutil.copy(
-            os.path.join(source_folder, label + suffix),
-            os.path.join(destination, "calc" + suffix),
-        )
-    return os.path.join(destination, "calc.out")
+from tests.helpers import copy_pyscf_output
 
 
 @pytest.mark.parametrize("extra", [[], ["-p", "pyscf"]])
 def test_assemble_finds_pyscf_outputs_in_a_directory(
     pyscf_water_sp_outfolder, tmp_path, extra
 ):
-    _copy_output(pyscf_water_sp_outfolder, tmp_path / "calculations")
+    copy_pyscf_output(pyscf_water_sp_outfolder, tmp_path / "calculations")
     output = tmp_path / "pyscf.db"
     result = CliRunner().invoke(
         assemble,
@@ -48,8 +36,8 @@ def test_assemble_finds_pyscf_outputs_in_a_directory(
 def test_settings_that_change_results_change_the_record_id(
     pyscf_water_sp_outfolder, tmp_path, field, value
 ):
-    original = _copy_output(pyscf_water_sp_outfolder, tmp_path / "a")
-    changed = _copy_output(pyscf_water_sp_outfolder, tmp_path / "b")
+    original = copy_pyscf_output(pyscf_water_sp_outfolder, tmp_path / "a")
+    changed = copy_pyscf_output(pyscf_water_sp_outfolder, tmp_path / "b")
     with h5py.File(tmp_path / "b" / "calc.h5", "a") as handle:
         del handle[f"spec/{field}"]
         handle["spec"].create_dataset(field, data=value)
@@ -79,9 +67,9 @@ def test_assemble_keeps_converged_runs_and_skips_failed_ones(
     tmp_path,
 ):
     root = tmp_path / "calculations"
-    _copy_output(pyscf_water_sp_outfolder, root / "good")
-    _copy_output(pyscf_water_scf_failed_outfolder, root / "scf_failed")
-    _copy_output(pyscf_water_smd_failed_outfolder, root / "no_geometry")
+    copy_pyscf_output(pyscf_water_sp_outfolder, root / "good")
+    copy_pyscf_output(pyscf_water_scf_failed_outfolder, root / "scf_failed")
+    copy_pyscf_output(pyscf_water_smd_failed_outfolder, root / "no_geometry")
     output = tmp_path / "pyscf.db"
     result = CliRunner().invoke(
         assemble, ["-d", str(root), "-p", "pyscf", "-o", str(output)], obj={}

@@ -18,22 +18,12 @@ from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.jobs.pyscf.hess import PySCFHessJob
 from chemsmart.jobs.pyscf.job import PySCFJob
 from chemsmart.jobs.pyscf.opt import PySCFOptJob
-from chemsmart.jobs.pyscf.runner import FakePySCFJobRunner, PySCFJobRunner
+from chemsmart.jobs.pyscf.runner import PySCFJobRunner
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
 from chemsmart.jobs.pyscf.writer import PySCFScriptWriter
 from chemsmart.settings.executable import PySCFExecutable
-
-
-def _settings(jobtype, **extra):
-    return PySCFJobSettings(
-        functional="b3lyp",
-        basis="def2-svp",
-        charge=0,
-        multiplicity=1,
-        jobtype=jobtype,
-        **extra,
-    )
+from tests.helpers import make_pyscf_settings
 
 
 class TestPySCFJobConstruction:
@@ -44,7 +34,7 @@ class TestPySCFJobConstruction:
     ):
         job = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="water_sp",
         )
         folder = str(temporary_working_dir)
@@ -58,7 +48,7 @@ class TestPySCFJobConstruction:
     ):
         job = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="water_sp",
         )
         assert not os.path.exists(job.resultsfile)
@@ -78,7 +68,7 @@ class TestPySCFJobConstruction:
         with pytest.raises(ValueError):
             PySCFSinglePointJob(
                 molecule="water",
-                settings=_settings("sp"),
+                settings=make_pyscf_settings("sp"),
                 label="water_sp",
             )
 
@@ -90,7 +80,7 @@ class TestFakePySCFJobRunner:
     def _run(job_class, jobtype, molecule, jobrunner, **extra):
         job = job_class(
             molecule=molecule,
-            settings=_settings(jobtype, **extra),
+            settings=make_pyscf_settings(jobtype, **extra),
             label=f"water_{jobtype}",
             jobrunner=jobrunner,
         )
@@ -209,7 +199,7 @@ class TestPySCFRerun:
     ):
         first = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="rerun",
             jobrunner=pyscf_jobrunner_no_scratch,
             skip_completed=False,
@@ -217,7 +207,7 @@ class TestPySCFRerun:
         first.run()
         assert first.is_complete()
 
-        changed = _settings("sp")
+        changed = make_pyscf_settings("sp")
         changed.functional = "pbe"
         rerun = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
@@ -256,7 +246,7 @@ class TestPySCFForcesRequest:
     ):
         job = job_class(
             molecule=pyscf_water_molecule,
-            settings=_settings(jobtype, **extra),
+            settings=make_pyscf_settings(jobtype, **extra),
             label="forces",
         )
         assert PySCFScriptWriter(job=job).build_config()["forces"] is expected
@@ -267,7 +257,7 @@ def test_optimized_structure_of_a_completed_opt_job(
 ):
     job = PySCFOptJob(
         molecule=pyscf_water_molecule,
-        settings=_settings("opt", freq=False),
+        settings=make_pyscf_settings("opt", freq=False),
         label="opt",
         jobrunner=pyscf_jobrunner_no_scratch,
     )
@@ -284,24 +274,12 @@ class TestPySCFJobFactories:
     ):
         job = PySCFSinglePointJob.from_filename(
             pyscf_water_xyz,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="from_file",
             jobrunner=pyscf_jobrunner_no_scratch,
         )
         assert list(job.molecule.chemical_symbols) == ["O", "H", "H"]
         assert job.label == "from_file"
-
-    def test_from_filename_builds_a_runner_when_none_is_given(
-        self, pyscf_water_xyz, pbs_server, temporary_working_dir
-    ):
-        job = PySCFSinglePointJob.from_filename(
-            pyscf_water_xyz,
-            settings=_settings("sp"),
-            label="from_file",
-            server=pbs_server,
-            fake=True,
-        )
-        assert isinstance(job.jobrunner, FakePySCFJobRunner)
 
     def test_from_pubchem_uses_the_fetched_structure(
         self,
@@ -314,27 +292,12 @@ class TestPySCFJobFactories:
         ) as fetch:
             job = PySCFSinglePointJob.from_pubchem(
                 "962",
-                settings=_settings("sp"),
+                settings=make_pyscf_settings("sp"),
                 label="fetched",
                 jobrunner=pyscf_jobrunner_no_scratch,
             )
         fetch.assert_called_once_with(identifier="962")
         assert job.molecule.num_atoms == 3
-
-    def test_from_pubchem_builds_a_runner_when_none_is_given(
-        self, pyscf_water_molecule, pbs_server, temporary_working_dir
-    ):
-        with patch.object(
-            Molecule, "from_pubchem", return_value=pyscf_water_molecule
-        ):
-            job = PySCFSinglePointJob.from_pubchem(
-                "962",
-                settings=_settings("sp"),
-                label="fetched",
-                server=pbs_server,
-                fake=True,
-            )
-        assert isinstance(job.jobrunner, FakePySCFJobRunner)
 
 
 class TestPySCFFactoryRunnerSelection:
@@ -343,30 +306,13 @@ class TestPySCFFactoryRunnerSelection:
     ):
         job = PySCFSinglePointJob.from_filename(
             pyscf_water_xyz,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="selected",
             server=pbs_server,
             fake=True,
         )
         job.run()
         assert job.is_complete()
-
-    def test_runner_options_reach_the_runner_not_the_job(
-        self, pyscf_water_xyz, pbs_server, temporary_working_dir
-    ):
-        job = PySCFSinglePointJob.from_filename(
-            pyscf_water_xyz,
-            settings=_settings("sp"),
-            label="options",
-            server=pbs_server,
-            scratch=False,
-            fake=True,
-            skip_completed=False,
-        )
-        assert job.jobrunner.server is pbs_server
-        assert job.jobrunner.scratch is False
-        assert job.skip_completed is False
-        assert not {"server", "scratch", "fake"} & set(job.kwargs)
 
     def test_given_runner_is_kept(
         self,
@@ -377,7 +323,7 @@ class TestPySCFFactoryRunnerSelection:
     ):
         job = PySCFSinglePointJob.from_filename(
             pyscf_water_xyz,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="given",
             jobrunner=pyscf_jobrunner_no_scratch,
             server=pbs_server,
@@ -390,7 +336,7 @@ class TestPySCFJobContract:
         self, pyscf_water_molecule, temporary_working_dir
     ):
         job = PySCFSinglePointJob(
-            molecule=pyscf_water_molecule, settings=_settings("sp")
+            molecule=pyscf_water_molecule, settings=make_pyscf_settings("sp")
         )
         assert job.label == "H2O"
         assert job.errfile.endswith("H2O.err")
@@ -403,7 +349,7 @@ class TestPySCFJobContract:
     ):
         job = PySCFJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="base",
         )
         with pytest.raises(NotImplementedError, match="PySCFJob"):
@@ -414,7 +360,7 @@ class TestPySCFJobContract:
     ):
         job = PySCFOptJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("opt", freq=True),
+            settings=make_pyscf_settings("opt", freq=True),
             label="opt",
         )
         assert job.stages == ["scf", "opt", "hess"]
@@ -427,7 +373,7 @@ class TestPySCFJobContract:
     ):
         job = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="kept",
             jobrunner=pyscf_jobrunner_no_scratch,
         )
@@ -478,7 +424,7 @@ class TestPySCFJobRunner:
         runner = PySCFJobRunner(server=pbs_server, scratch=False)
         job = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="command",
             jobrunner=runner,
         )
@@ -503,7 +449,7 @@ class TestPySCFJobRunner:
         runner = PySCFJobRunner(server=pbs_server, scratch=False, num_gpus=2)
         job = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp", engine=engine),
+            settings=make_pyscf_settings("sp", engine=engine),
             label="devices",
             jobrunner=runner,
         )
@@ -529,7 +475,7 @@ class TestPySCFJobRunner:
     ):
         job = PySCFSinglePointJob(
             molecule=pyscf_water_molecule,
-            settings=_settings("sp"),
+            settings=make_pyscf_settings("sp"),
             label="copyfail",
             jobrunner=pyscf_jobrunner_scratch,
         )

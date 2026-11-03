@@ -17,7 +17,6 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -147,8 +146,10 @@ class PySCFJob(Job):
         logger.info(f"Number of molecules read: {len(molecules)}")
         molecules = molecules[string2index_1based(index)]
 
-        return cls._from_molecule_with_runner(
-            molecules, settings, label, jobrunner, **kwargs
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(molecule=molecules, settings=settings, label=label),
+            **kwargs,
         )
 
     @classmethod
@@ -158,33 +159,8 @@ class PySCFJob(Job):
         """Create a PySCF job from a PubChem identifier."""
         molecule = Molecule.from_pubchem(identifier=identifier)
 
-        return cls._from_molecule_with_runner(
-            molecule, settings, label, jobrunner, **kwargs
-        )
-
-    @classmethod
-    def _from_molecule_with_runner(
-        cls, molecule, settings, label, jobrunner, **kwargs
-    ):
-        """Create a job, selecting a runner for it if none was given.
-
-        ``server``, ``scratch`` and ``fake`` configure the runner, so they are
-        taken out of ``kwargs`` rather than passed on a second time. Anything
-        left over goes to both the job and the runner, which ignore what they
-        do not use.
-        """
-        server = kwargs.pop("server", None)
-        scratch = kwargs.pop("scratch", None)
-        fake = kwargs.pop("fake", False)
-        job = cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(molecule=molecule, settings=settings, label=label),
             **kwargs,
         )
-        if jobrunner is None:
-            job.jobrunner = JobRunner.from_job(
-                job, server=server, scratch=scratch, fake=fake, **kwargs
-            )
-        return job

@@ -378,7 +378,7 @@ class TestORCAJobFactories:
     ):
         sentinel_runner = MagicMock()
         with patch(
-            "chemsmart.jobs.orca.job.JobRunner.from_job",
+            "chemsmart.jobs.runner.JobRunner.from_job",
             return_value=sentinel_runner,
         ) as mock_from_job:
             job = ORCAJob.from_filename(
@@ -399,7 +399,7 @@ class TestORCAJobFactories:
                 return_value=pubchem_molecule,
             ),
             patch(
-                "chemsmart.jobs.orca.job.JobRunner.from_job",
+                "chemsmart.jobs.runner.JobRunner.from_job",
                 return_value=sentinel_runner,
             ) as mock_from_job,
         ):
@@ -416,7 +416,7 @@ class TestORCAJobFactories:
     ):
         sentinel_runner = MagicMock()
         with patch(
-            "chemsmart.jobs.orca.job.JobRunner.from_job",
+            "chemsmart.jobs.runner.JobRunner.from_job",
             return_value=sentinel_runner,
         ) as mock_from_job:
             job = ORCAJob.from_jobtype(
@@ -461,7 +461,7 @@ class TestORCAInpJob:
     ):
         sentinel_runner = MagicMock()
         with patch(
-            "chemsmart.jobs.orca.job.JobRunner.from_job",
+            "chemsmart.jobs.runner.JobRunner.from_job",
             return_value=sentinel_runner,
         ) as mock_from_job:
             job = ORCAInpJob.from_filename(filename=water_sp_input_path)

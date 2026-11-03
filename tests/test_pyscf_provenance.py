@@ -23,87 +23,12 @@ from chemsmart.jobs.pyscf.writer import (
     PySCFScriptWriter,
     write_pyscf_h5,
 )
-
-
-def _v2_payload():
-    """Return a representative B2 payload with exact numeric arrays."""
-    spec = {
-        "label": "water_hess",
-        "program": "pyscf",
-        "jobtype": "hess",
-        "engine": "cpu",
-        "xc": "b3lyp",
-        "method": "b3lyp",
-        "basis": "def2-svp",
-        "charge": 0,
-        "spin": 0,
-        "multiplicity": 1,
-        "solvent_model": "smd",
-        "solvent_id": "water",
-        "density_fit": True,
-        "aux_basis": "def2-universal-jkfit",
-        "defgrid": "defgrid3",
-        "scf_tol": 1.0e-9,
-        "opt_solver": "geometric",
-        "opt_maxsteps": 100,
-        "stages": ["scf", "hess"],
-        "symbols": ["O", "H", "H"],
-        "settings_digest": "settings-sha256",
-    }
-    provenance = {
-        "pyscf_version": "2.14.0",
-        "gpu4pyscf_version": None,
-        "libxc_version": "7.0.0",
-        "chemsmart_version": "3.1.4",
-        "numpy_version": "1.26.4",
-        "h5py_version": "3.16.0",
-        "python_version": "3.10.20",
-        "interpreter": "/opt/compute/bin/python",
-        "host": "compute-node",
-        "engine": "cpu",
-        "num_threads": 2,
-        "cuda_visible_devices": "",
-        "started_at": "2026-08-02T12:00:00+0000",
-        "ended_at": "2026-08-02T12:00:02+0000",
-        "wall_seconds": 2.0,
-        "core_seconds": 4.0,
-        "settings_digest": "settings-sha256",
-        "project_yaml_digest": "project-sha256",
-    }
-    status = {
-        "normal_termination": True,
-        "stages": {
-            "scf": {"converged": True, "iterations": 7},
-            "hess": {"converged": True},
-        },
-        "failure": None,
-    }
-    results = {
-        "energies": np.asarray([-76.3], dtype=np.float64),
-        "positions": np.asarray(
-            [[0.0, 0.0, 0.0], [0.7, 0.5, 0.0], [-0.7, 0.5, 0.0]],
-            dtype=np.float64,
-        ),
-        "forces": np.asarray(
-            [[0.0, 0.0, 0.0], [1.0e-5, 0.0, 0.0], [-1.0e-5, 0.0, 0.0]],
-            dtype=np.float64,
-        ),
-        "mo_energy": np.asarray([-0.5, 0.1], dtype=np.float64),
-        "mo_occ": np.asarray([2.0, 0.0], dtype=np.float64),
-        "vibrational_frequencies": np.asarray(
-            [1600.0, 3900.0, 4010.0], dtype=np.float64
-        ),
-        "normal_modes": np.arange(27, dtype=np.float64).reshape(3, 3, 3),
-        "mulliken_charges": np.asarray([-0.3, 0.15, 0.15], dtype=np.float64),
-        "dipole_moment": np.asarray([0.0, 1.8, 0.0], dtype=np.float64),
-        "point_group": "C2v",
-    }
-    return spec, provenance, status, results
+from tests.helpers import make_pyscf_results_payload
 
 
 def test_v2_groups_round_trip_typed_status_nulls_and_exact_arrays(tmp_path):
     path = tmp_path / "label.h5"
-    spec, provenance, status, results = _v2_payload()
+    spec, provenance, status, results = make_pyscf_results_payload()
 
     write_pyscf_h5(
         path,
@@ -153,7 +78,7 @@ def test_generated_standalone_encoder_writes_same_v2_contract(tmp_path):
     exec(compile(source, "<generated-pyscf-driver>", "exec"), namespace)
 
     path = tmp_path / "generated.h5"
-    spec, provenance, status, results = _v2_payload()
+    spec, provenance, status, results = make_pyscf_results_payload()
     namespace["write_pyscf_h5"](
         path, spec=spec, provenance=provenance, status=status, results=results
     )
@@ -222,7 +147,7 @@ def test_v2_round_trip_does_not_mask_injected_spec_mismatch(
 ):
     """An applied-setting mismatch must survive exact HDF5 round-trip."""
     path = tmp_path / f"wrong-{field}.h5"
-    spec, provenance, status, results = _v2_payload()
+    spec, provenance, status, results = make_pyscf_results_payload()
     assert spec[field] == expected
     spec[field] = injected
 
@@ -303,7 +228,7 @@ def test_generated_driver_never_imports_chemsmart():
 
 def test_writer_leaves_no_temporary_file_behind(tmp_path):
     path = tmp_path / "atomic.h5"
-    spec, provenance, status, results = _v2_payload()
+    spec, provenance, status, results = make_pyscf_results_payload()
     write_pyscf_h5(
         path, spec=spec, provenance=provenance, status=status, results=results
     )

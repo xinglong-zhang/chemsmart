@@ -47,6 +47,12 @@ def pbs_server(server_yaml_file):
 
 
 @pytest.fixture()
+def runner_options(pbs_server):
+    """Options a job factory uses to select a fake runner on ``pbs_server``."""
+    return {"server": pbs_server, "scratch": False, "fake": True}
+
+
+@pytest.fixture()
 def gaussian_jobrunner_no_scratch(pbs_server):
     return FakeGaussianJobRunner(server=pbs_server, scratch=False, fake=True)
 

@@ -15,15 +15,7 @@ import pytest
 from ase import units
 
 from chemsmart.io.pyscf.output import PySCFOutput
-
-
-def _output(folder):
-    """Return a PySCFOutput for the run stored in ``folder``."""
-    label = os.path.basename(folder)
-    logfile = os.path.join(folder, f"{label}.out")
-    assert os.path.exists(logfile)
-    assert os.path.exists(os.path.join(folder, f"{label}.h5"))
-    return PySCFOutput(logfile)
+from tests.helpers import read_pyscf_output_folder
 
 
 class TestPySCFArtifactProvenance:
@@ -43,7 +35,7 @@ class TestPySCFArtifactProvenance:
             pyscf_he_sp_outfolder,
         )
         for folder in folders:
-            output = _output(folder)
+            output = read_pyscf_output_folder(folder)
             assert output.version == "2.14.0"
             assert output.normal_termination
             assert output.engine == "cpu"
@@ -65,7 +57,7 @@ class TestPySCFSinglePointOutput:
     def test_water_single_point_energy_and_state(
         self, pyscf_water_sp_outfolder
     ):
-        output = _output(pyscf_water_sp_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_sp_outfolder)
         assert output.jobtype == "sp"
         assert output.method == "b3lyp"
         assert output.basis == "def2-svp"
@@ -80,7 +72,7 @@ class TestPySCFSinglePointOutput:
     def test_water_single_point_records_the_applied_solvent(
         self, pyscf_water_sp_outfolder
     ):
-        output = _output(pyscf_water_sp_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_sp_outfolder)
         assert output.solvent_on
         assert output.solvent_model == "cpcm"
         assert output.solvent_id == "water"
@@ -90,7 +82,7 @@ class TestPySCFSinglePointOutput:
     def test_water_single_point_population_analysis(
         self, pyscf_water_sp_outfolder
     ):
-        output = _output(pyscf_water_sp_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_sp_outfolder)
         charges = np.asarray(output.mulliken_atomic_charges)
         assert np.isclose(charges[0], -0.31530136, rtol=1e-6)
         assert np.allclose(charges[1], charges[2])
@@ -102,7 +94,7 @@ class TestPySCFSinglePointOutput:
         assert np.allclose(dipole[:2], 0.0, atol=1e-10)
 
     def test_helium_single_point_is_a_single_atom(self, pyscf_he_sp_outfolder):
-        output = _output(pyscf_he_sp_outfolder)
+        output = read_pyscf_output_folder(pyscf_he_sp_outfolder)
         assert output.chemical_symbols == ["He"]
         assert output.num_basis_functions == 5
         assert output.energies[-1] == -2.9071053229634183
@@ -117,7 +109,7 @@ class TestPySCFHessianOutput:
     """Hessian stages, both standalone and following an optimization."""
 
     def test_optimized_water_is_a_minimum(self, pyscf_water_opt_outfolder):
-        output = _output(pyscf_water_opt_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         assert output.jobtype == "opt"
         assert output.freq
         frequencies = np.asarray(output.vibrational_frequencies)
@@ -130,22 +122,22 @@ class TestPySCFHessianOutput:
         )
 
     def test_optimization_lowers_the_energy(self, pyscf_water_opt_outfolder):
-        output = _output(pyscf_water_opt_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         energies = np.asarray(output.energies)
         assert len(energies) == 2
         assert energies[-1] < energies[0]
         assert energies[-1] == -76.35832577320055
 
     def test_water_symmetry_is_detected(self, pyscf_water_opt_outfolder):
-        output = _output(pyscf_water_opt_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         assert output.point_group == "C2v"
         assert output.rotational_symmetry_number == 2
 
     def test_standalone_hessian_uses_the_supplied_geometry(
         self, pyscf_water_hess_outfolder, pyscf_water_opt_outfolder
     ):
-        hess = _output(pyscf_water_hess_outfolder)
-        opt = _output(pyscf_water_opt_outfolder)
+        hess = read_pyscf_output_folder(pyscf_water_hess_outfolder)
+        opt = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         assert hess.jobtype == "hess"
         # The hess job never optimizes, so its energy is the optimization's
         # starting point, not its result.
@@ -155,7 +147,7 @@ class TestPySCFHessianOutput:
     def test_hessian_away_from_a_minimum_shifts_the_frequencies(
         self, pyscf_water_hess_outfolder
     ):
-        output = _output(pyscf_water_hess_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_hess_outfolder)
         frequencies = np.asarray(output.vibrational_frequencies)
         assert len(frequencies) == 3
         assert np.allclose(
@@ -188,7 +180,7 @@ class TestPySCFMoleculeRoundTrip:
     def test_molecule_preserves_float64_geometry(
         self, pyscf_water_opt_outfolder
     ):
-        output = _output(pyscf_water_opt_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         molecule = output.get_molecule()
         assert molecule.num_atoms == 3
         assert molecule.empirical_formula == "H2O"
@@ -198,7 +190,7 @@ class TestPySCFMoleculeRoundTrip:
         assert np.allclose(molecule.positions, output.positions)
 
     def test_helium_molecule_round_trip(self, pyscf_he_sp_outfolder):
-        output = _output(pyscf_he_sp_outfolder)
+        output = read_pyscf_output_folder(pyscf_he_sp_outfolder)
         molecule = output.get_molecule()
         assert molecule.num_atoms == 1
         assert molecule.empirical_formula == "He"
@@ -211,15 +203,17 @@ class TestPySCFSymmetryFromDistortedStart:
     def test_near_symmetric_geometry_gets_the_true_symmetry_number(
         self, pyscf_water_opt_distorted_outfolder
     ):
-        output = _output(pyscf_water_opt_distorted_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_opt_distorted_outfolder)
         assert output.point_group == "C2v"
         assert output.rotational_symmetry_number == 2
 
     def test_free_energy_does_not_depend_on_the_starting_geometry(
         self, pyscf_water_opt_distorted_outfolder, pyscf_water_opt_outfolder
     ):
-        distorted = _output(pyscf_water_opt_distorted_outfolder)
-        symmetric = _output(pyscf_water_opt_outfolder)
+        distorted = read_pyscf_output_folder(
+            pyscf_water_opt_distorted_outfolder
+        )
+        symmetric = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         # A wrong sigma would differ by RT ln 2 = 6.5e-4 Hartree.
         assert distorted.gibbs_free_energy == pytest.approx(
             symmetric.gibbs_free_energy, abs=1e-5
@@ -232,14 +226,14 @@ class TestPySCFStructureAccess:
     def test_optimized_structure_is_available_after_convergence(
         self, pyscf_water_opt_outfolder
     ):
-        output = _output(pyscf_water_opt_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         assert output.optimized_structure.is_optimized_structure
         assert len(output.all_structures) == 1
 
     def test_index_selects_among_stored_structures(
         self, pyscf_water_opt_outfolder
     ):
-        output = _output(pyscf_water_opt_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_opt_outfolder)
         assert isinstance(output.get_molecule(index=":"), list)
         assert output.get_molecule(index="1").num_atoms == 3
         with pytest.raises(IndexError):
@@ -248,7 +242,9 @@ class TestPySCFStructureAccess:
     def test_dipole_and_point_group_reach_the_molecule(
         self, pyscf_water_opt_outfolder
     ):
-        molecule = _output(pyscf_water_opt_outfolder).get_molecule()
+        molecule = read_pyscf_output_folder(
+            pyscf_water_opt_outfolder
+        ).get_molecule()
         assert molecule.point_group == "C2V"
         assert molecule.dipole_moment_magnitude == pytest.approx(
             np.linalg.norm(molecule.dipole_moment)
@@ -259,7 +255,7 @@ class TestPySCFUnrestrictedOutput:
     """UKS B3LYP/def2-SVP on the OH radical, computed with PySCF 2.14."""
 
     def test_spin_channels_are_separated(self, pyscf_oh_radical_outfolder):
-        output = _output(pyscf_oh_radical_outfolder)
+        output = read_pyscf_output_folder(pyscf_oh_radical_outfolder)
         assert output.multiplicity == 2
         assert output.spin == 1
         assert output.results["mo_energy"].ndim == 2
@@ -268,14 +264,14 @@ class TestPySCFUnrestrictedOutput:
         assert output.num_unpaired_electrons == 1
 
     def test_orbital_energies_are_in_ev(self, pyscf_oh_radical_outfolder):
-        output = _output(pyscf_oh_radical_outfolder)
+        output = read_pyscf_output_folder(pyscf_oh_radical_outfolder)
         assert output.alpha_homo_energy == pytest.approx(
             float(output.results["mo_energy"][0][4]) * units.Hartree
         )
         assert output.alpha_homo_energy != output.beta_homo_energy
 
     def test_linear_molecule_symmetry(self, pyscf_oh_radical_outfolder):
-        output = _output(pyscf_oh_radical_outfolder)
+        output = read_pyscf_output_folder(pyscf_oh_radical_outfolder)
         assert output.point_group == "Coov"
         assert output.rotational_symmetry_number == 1
 
@@ -284,14 +280,14 @@ class TestPySCFUnconvergedScf:
     """A real SCF stopped after one cycle."""
 
     def test_does_not_read_as_complete(self, pyscf_water_scf_failed_outfolder):
-        output = _output(pyscf_water_scf_failed_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_scf_failed_outfolder)
         assert output.normal_termination is False
         assert output.status["stages"]["scf"]["converged"] is False
 
     def test_no_forces_from_an_unconverged_density(
         self, pyscf_water_scf_failed_outfolder
     ):
-        output = _output(pyscf_water_scf_failed_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_scf_failed_outfolder)
         assert output.forces is None
         assert (
             output.status["skipped_properties"]["forces"]
@@ -305,7 +301,9 @@ class TestPySCFUnconvergedOptimisation:
     def test_structure_is_not_labelled_optimized(
         self, pyscf_water_opt_unconverged_outfolder
     ):
-        output = _output(pyscf_water_opt_unconverged_outfolder)
+        output = read_pyscf_output_folder(
+            pyscf_water_opt_unconverged_outfolder
+        )
         assert output.normal_termination is False
         assert output.optimizer_converged is False
         assert output.get_molecule().is_optimized_structure is False
@@ -314,7 +312,9 @@ class TestPySCFUnconvergedOptimisation:
     def test_hessian_was_skipped_so_no_thermochemistry_is_reported(
         self, pyscf_water_opt_unconverged_outfolder
     ):
-        output = _output(pyscf_water_opt_unconverged_outfolder)
+        output = read_pyscf_output_folder(
+            pyscf_water_opt_unconverged_outfolder
+        )
         assert output.status["stages"]["hess"]["completed"] is False
         assert output.freq is False
         assert output.vibrational_frequencies is None
@@ -329,7 +329,7 @@ class TestPySCFRunWithoutGeometry:
     def test_failure_is_recorded_with_its_stage(
         self, pyscf_water_smd_failed_outfolder
     ):
-        output = _output(pyscf_water_smd_failed_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_smd_failed_outfolder)
         assert output.normal_termination is False
         assert output.failure["type"] == "RuntimeError"
         assert output.failure["stage"] == "scf"
@@ -338,31 +338,33 @@ class TestPySCFRunWithoutGeometry:
     def test_requesting_a_structure_explains_the_failure(
         self, pyscf_water_smd_failed_outfolder
     ):
-        output = _output(pyscf_water_smd_failed_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_smd_failed_outfolder)
         with pytest.raises(ValueError, match="SMD module is not available"):
             output.get_molecule()
 
 
 class TestPySCFOutputDescriptions:
     def test_repr_names_the_calculation(self, pyscf_water_opt_outfolder):
-        text = repr(_output(pyscf_water_opt_outfolder))
+        text = repr(read_pyscf_output_folder(pyscf_water_opt_outfolder))
         assert "jobtype='opt'" in text
         assert "normal_termination=True" in text
 
     def test_listed_indices_return_a_list(self, pyscf_water_opt_outfolder):
-        selected = _output(pyscf_water_opt_outfolder).get_molecule(index="1,1")
+        selected = read_pyscf_output_folder(
+            pyscf_water_opt_outfolder
+        ).get_molecule(index="1,1")
         assert [molecule.num_atoms for molecule in selected] == [3, 3]
 
     def test_single_index_can_be_wrapped(self, pyscf_water_opt_outfolder):
-        selected = _output(pyscf_water_opt_outfolder).get_molecule(
-            index="-1", return_list=True
-        )
+        selected = read_pyscf_output_folder(
+            pyscf_water_opt_outfolder
+        ).get_molecule(index="-1", return_list=True)
         assert len(selected) == 1
 
     def test_single_point_reports_no_thermochemistry(
         self, pyscf_water_sp_outfolder
     ):
-        output = _output(pyscf_water_sp_outfolder)
+        output = read_pyscf_output_folder(pyscf_water_sp_outfolder)
         assert output.internal_energy is None
         assert output.thermal_gibbs_free_energy_correction is None
 

@@ -7,6 +7,7 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 - [Interpretation safeguards](#interpretation-safeguards)
 - [User clarification: class layout](#user-clarification-class-layout)
 - [User feedback: dynamic getattr lookups](#user-feedback-dynamic-getattr-lookups)
+- [User feedback: test data and test support layout](#user-feedback-test-data-and-test-support-layout)
 - [PR #391](#pr-391)
 - [PR #475](#pr-475)
 - [PR #524](#pr-524)
@@ -37,6 +38,18 @@ In the conversation on 17 October 2026 (Asia/Singapore), the user asked whether 
 - **Inferred principle:** the wording of the rule is the assistant's synthesis, authorised for incorporation by "learn this"; the user did not state it. A defaultless `getattr` with a runtime field name does not hide a missing invariant, because the attribute is constructor-defined and a missing one still raises.
 - **Rationale:** the alternatives were a hand-written `Molecule.dataset_values` dictionary, which adds another field list and risks silent omission through `.get`, or per-dataset attribute access, which restores the branching the schema removed.
 - **Scope:** this does not settle whether dataset values should remain separate `Molecule` attributes. That API question stayed open.
+
+## User feedback: test data and test support layout
+
+- **Date and source:** conversation on 3 November 2026, while improving test coverage for PR #722 and fixing job factories in PR #723.
+- **Classification:** a general review principle for test data, and a repository-specific convention for test layout. The layout rule replaces the location in the PR #475 comment "pytest fixtures should be in conftest.py", because `tests/conftest.py` now registers fixtures defined in `tests/fixtures/`; the point of that comment, keeping fixtures out of test files, stands.
+- **User statements:**
+  - On PySCF coverage: "please use real pyscf inputs and outputs for testing where appropriate".
+  - On `tests/test_job_factories.py`: "fix test_job_factories.py by moving fixtures to where they belong, and not in the test file itself".
+  - On a helper used by that one file: "_assert_runner_was_configured() should be moved to helpers.py as well?". The assistant answered yes and moved it, and the user then said "learn this (how to write good tests) and update skills".
+- **Inferred principle:** the wording of the rules is the assistant's synthesis, authorised for incorporation by "learn this". The user did not list which data cannot be real; the corrupt-file, network and hardware examples come from what the assistant kept synthetic in that work. Applying the helper rule only to new or changed tests is also the assistant's limit, since 9 test files on `main` keep private helpers.
+- **Rationale:** real PySCF runs and outputs test what the code actually consumes, and small calculations ran in about a second in total. `tests/conftest.py` and `tests/helpers.py` already state the layout.
+- **Scope:** "where appropriate" is part of the user's statement, so this is a preference with judgement, not a ban on synthetic data.
 
 ## PR #391
 
