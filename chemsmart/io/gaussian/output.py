@@ -639,12 +639,15 @@ class Gaussian16Output(GaussianFileMixin):
             if self.is_link:
                 # IRC can switch to Input-only output after the stability
                 # check. Preserve these newer frames as well as their PBC.
-                trailing_inputs = 0
-                for line in reversed(self.contents):
-                    if line.startswith("Standard orientation:"):
-                        break
-                    if line.startswith("Input orientation:"):
-                        trailing_inputs += 1
+                last_standard = max(
+                    i
+                    for i, line in enumerate(self.contents)
+                    if line.startswith("Standard orientation:")
+                )
+                trailing_inputs = sum(
+                    line.startswith("Input orientation:")
+                    for line in self.contents[last_standard + 1 :]
+                )
                 if trailing_inputs:
                     orientations.extend(
                         self.input_orientations[-trailing_inputs:]

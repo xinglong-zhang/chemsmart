@@ -1709,8 +1709,9 @@ class TestGaussian16Output:
         assert molecule.is_optimized_structure
 
     @pytest.mark.parametrize("normal_termination", [True, False])
+    @pytest.mark.parametrize("input_before_standard", [True, False])
     def test_link_irc_uses_later_input_orientations(
-        self, write_tmp_file, normal_termination
+        self, write_tmp_file, normal_termination, input_before_standard
     ):
         """Input-only IRC frames must not be hidden by stability coordinates."""
 
@@ -1747,6 +1748,8 @@ class TestGaussian16Output:
 
  NAtoms=      2 NQM=        2 NQMF=       0
 """
+        if input_before_standard:
+            contents += orientation_block("Input", 0.74)
         contents += orientation_block("Standard", 0.74)
         contents += " SCF Done:  E(RHF) =  -1.1000000 A.U.\n"
         contents += " Normal termination of Gaussian 16\n"
@@ -1768,6 +1771,7 @@ class TestGaussian16Output:
         assert output.is_link
         assert output.normal_termination == normal_termination
         assert len(output.all_structures) == 2
+        assert [m.energy for m in output.all_structures] == [-1.1, -1.12]
 
         molecule = Molecule.from_filepath(outputfile, index="-1")
         np.testing.assert_allclose(
