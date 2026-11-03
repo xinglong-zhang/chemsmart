@@ -1705,3 +1705,16 @@ def run_xtb_and_capture_settings(job_path, args, *, catch_exceptions=False):
             else None
         )
     return result, settings, mock_job_cls
+
+
+def assert_runner_was_configured(job, options):
+    """Assert a job factory passed its runner options to the runner only.
+
+    ``options`` is the ``server``, ``scratch`` and ``fake`` mapping given to
+    the factory, as in the ``runner_options`` fixture.
+    """
+    assert job.jobrunner is not None
+    assert job.jobrunner.server is options["server"]
+    assert job.jobrunner.scratch is False
+    assert job.jobrunner.fake is True
+    assert not set(options) & set(job.kwargs)
