@@ -231,6 +231,22 @@ class PySCFOutput(FileMixin):
         return self.results.get("point_group")
 
     @property
+    def level_of_theory(self):
+        """Return the applied level of theory, by ``PySCFJobSettings`` field."""
+        spec = self.spec
+        return {
+            "functional": spec.get("xc"),
+            "ab_initio": spec.get("ab_initio"),
+            "basis": spec.get("basis"),
+            "density_fit": spec.get("density_fit"),
+            "aux_basis": spec.get("aux_basis"),
+            "defgrid": spec.get("defgrid"),
+            "dispersion": spec.get("dispersion"),
+            "solvent_model": spec.get("solvent_model"),
+            "solvent_id": spec.get("solvent_id"),
+        }
+
+    @property
     def freq(self):
         """Return whether this run produced frequencies."""
         return self.results.get("vibrational_frequencies") is not None

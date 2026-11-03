@@ -157,6 +157,16 @@ def pyscf_output(tmp_path):
 
 
 @pytest.fixture()
+def pyscf_output_file(pyscf_outputs_directory):
+    """Return a function giving the path of a committed PySCF output."""
+
+    def path(label, suffix=".out"):
+        return os.path.join(pyscf_outputs_directory, label, label + suffix)
+
+    return path
+
+
+@pytest.fixture()
 def pyscf_benzene_outfolder(pyscf_outputs_directory):
     return os.path.join(pyscf_outputs_directory, "benzene")
 

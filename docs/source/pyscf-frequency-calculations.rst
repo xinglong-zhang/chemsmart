@@ -74,7 +74,7 @@ constants.
  Using an Optimized Geometry
 *****************************
 
-To take frequencies at a different level of theory from the optimization, point ``hess`` at the completed optimization.
+To take frequencies on an existing optimization, point ``hess`` at its result.
 
 Optimize first:
 
@@ -86,7 +86,12 @@ Then run the frequency job on that output:
 
 .. code:: bash
 
-   chemsmart sub pyscf -p test -f molecule_opt_gas_phase.out -x m062x hess
+   chemsmart sub pyscf -p test -f molecule_opt_gas_phase.out hess
+
+The result supplies the geometry, charge, and multiplicity. The level of theory comes from the ``gas`` section of the
+project YAML, and an option given on the command line, such as ``-x``, replaces that setting. Use the same project and
+options as the optimization: CHEMSMART logs a warning if the level differs from the result, because the optimized
+geometry is then not a stationary point at the new level, or if the result is not a converged optimization.
 
 The ``.h5`` file can be given instead of the ``.out``. CHEMSMART reads the geometry from the ``.h5`` either way, so
 giving the ``.out`` requires the two files to stay in the same directory. See :doc:`pyscf-results`.

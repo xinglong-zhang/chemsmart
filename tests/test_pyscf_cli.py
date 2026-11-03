@@ -1,9 +1,10 @@
 """Focused tests for the PySCF Click surface and option propagation."""
 
 import glob
+import logging
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import numpy as np
 import pytest
@@ -13,9 +14,10 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.pyscf.common import resolve_engine, settings_for_molecule
 from chemsmart.cli.run import run
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.pyscf.output import read_pyscf_h5
+from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
 from chemsmart.jobs.pyscf.runner import PySCFJobRunner
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from tests.helpers import run_pyscf_and_capture_settings
 
 
@@ -531,3 +533,120 @@ class TestFailedJobsThroughTheCli:
             obj={},
         )
         assert result.exit_code == 0, (result.output, result.exception)
+
+
+class TestHessianLevelOfTheory:
+    """A Hessian uses the project level, or the CLI option if one is given."""
+
+    def _settings(self, *args):
+        result, settings = run_pyscf_and_capture_settings(
+            [*args, "hess"], jobtype="hess"
+        )
+        assert result.exit_code == 0, (result.output, result.exception)
+        return settings
+
+    def _other_project(self, tmp_path):
+        (tmp_path / "other.yaml").write_text(
+            "gas:\n  functional: pbe\n  basis: sto-3g\n"
+            "solv:\n  functional: pbe\n  basis: sto-3g\n"
+        )
+        return patch.object(
+            CHEMSMARTUserSettings,
+            "user_pyscf_settings_dir",
+            new_callable=PropertyMock,
+            return_value=str(tmp_path),
+        )
+
+    @pytest.mark.parametrize("suffix", [".out", ".h5"])
+    def test_project_sets_the_level_for_a_pyscf_result(
+        self, pyscf_output_file, tmp_path, suffix
+    ):
+        path = pyscf_output_file("water_opt_gas_phase", suffix)
+        with self._other_project(tmp_path):
+            settings = self._settings("-p", "other", "-f", path)
+        assert (settings.functional, settings.basis) == ("pbe", "sto-3g")
+
+    def test_functional_option_overrides_the_project(
+        self, pyscf_output_file, tmp_path
+    ):
+        path = pyscf_output_file("water_opt_gas_phase")
+        with self._other_project(tmp_path):
+            settings = self._settings("-p", "other", "-f", path, "-x", "m062x")
+        assert (settings.functional, settings.basis) == ("m062x", "sto-3g")
+
+    def test_a_project_is_still_required(self, pyscf_output_file):
+        path = pyscf_output_file("water_opt_gas_phase")
+        with pytest.raises(FileNotFoundError, match="No PySCF project"):
+            run_pyscf_and_capture_settings(
+                ["-f", path, "hess"], jobtype="hess"
+            )
+
+    def test_charge_and_multiplicity_come_from_the_result(
+        self, pyscf_output_file
+    ):
+        settings = self._settings(
+            "-p", "test", "-f", pyscf_output_file("oh_sp_radical")
+        )
+        assert (settings.charge, settings.multiplicity) == (0, 2)
+
+    def test_matching_level_does_not_warn(self, pyscf_output_file, caplog):
+        path = pyscf_output_file("water_opt_gas_phase")
+        with caplog.at_level(logging.WARNING):
+            self._settings("-p", "test", "-f", path)
+        assert "This Hessian differs" not in caplog.text
+        assert "stationary" not in caplog.text
+
+    def test_project_at_another_level_warns(
+        self, pyscf_output_file, tmp_path, caplog
+    ):
+        path = pyscf_output_file("water_opt_gas_phase")
+        with self._other_project(tmp_path), caplog.at_level(logging.WARNING):
+            self._settings("-p", "other", "-f", path)
+        assert "functional pbe (source: b3lyp)" in caplog.text
+        assert "basis sto-3g (source: def2-svp)" in caplog.text
+
+    def test_functional_option_at_another_level_warns(
+        self, pyscf_output_file, caplog
+    ):
+        path = pyscf_output_file("water_opt_gas_phase")
+        with caplog.at_level(logging.WARNING):
+            self._settings("-p", "test", "-f", path, "-x", "m062x")
+        assert "functional m062x (source: b3lyp)" in caplog.text
+
+    def test_repeating_the_source_functional_does_not_warn(
+        self, pyscf_output_file, caplog
+    ):
+        path = pyscf_output_file("water_opt_gas_phase")
+        with caplog.at_level(logging.WARNING):
+            self._settings("-p", "test", "-f", path, "-x", "B3LYP")
+        assert "This Hessian differs" not in caplog.text
+
+    def test_unconverged_optimisation_warns(self, pyscf_output_file, caplog):
+        path = pyscf_output_file("water_opt_unconverged")
+        with caplog.at_level(logging.WARNING):
+            self._settings("-p", "test", "-f", path)
+        assert "not a converged optimisation" in caplog.text
+
+    def test_plain_structure_file_does_not_warn(self, pyscf_water_xyz, caplog):
+        with caplog.at_level(logging.WARNING):
+            self._settings(
+                "-p", "test", "-f", pyscf_water_xyz, "-c", "0", "-m", "1"
+            )
+        assert "stationary" not in caplog.text
+
+    def test_real_hessian_at_the_same_level_reproduces_the_frequencies(
+        self, pyscf_output_file, temporary_working_dir
+    ):
+        pytest.importorskip("pyscf")
+        source = pyscf_output_file("water_opt_gas_phase", ".h5")
+        result = CliRunner().invoke(
+            run,
+            ["pyscf", "-p", "test", "-f", source, "-l", "again", "hess"],
+            obj={},
+        )
+        assert result.exit_code == 0, (result.output, result.exception)
+        repeated = PySCFOutput(glob.glob("again*.h5")[0])
+        assert repeated.method == "b3lyp"
+        assert repeated.vibrational_frequencies == pytest.approx(
+            PySCFOutput(source).vibrational_frequencies, abs=1.0
+        )

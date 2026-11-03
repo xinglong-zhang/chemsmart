@@ -2,10 +2,43 @@
 
 import logging
 
+from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.utils.cli import create_sp_label
+from chemsmart.utils.io import get_program_type_from_file
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
+
+
+def warn_if_geometry_may_not_be_stationary(filename, settings):
+    """Warn when a Hessian's source geometry may not suit its settings.
+
+    The settings are not changed. Frequencies are only meaningful at a
+    stationary point of the same level of theory, so a PySCF result computed
+    at another level, or not a converged optimisation, deserves a warning.
+    """
+    if not filename or not filename.lower().endswith((".out", ".h5")):
+        return
+    if get_program_type_from_file(filename) != "pyscf":
+        return
+    source = PySCFOutput(filename)
+    if not source.optimizer_converged:
+        logger.warning(
+            f"{filename} is not a converged optimisation, so its geometry "
+            f"may not be a stationary point and the frequencies may not be "
+            f"meaningful."
+        )
+    differences = [
+        f"{field} {getattr(settings, field)} (source: {value})"
+        for field, value in source.level_of_theory.items()
+        if str(getattr(settings, field)).lower() != str(value).lower()
+    ]
+    if differences:
+        logger.warning(
+            f"This Hessian differs from the level of {filename}: "
+            f"{', '.join(differences)}. That geometry is not a stationary "
+            f"point at this level, so the frequencies may not be meaningful."
+        )
 
 
 def resolve_engine(ctx, settings):
