@@ -371,6 +371,17 @@ class TestPySCFCliRealRuns:
         )
         assert len(glob.glob("*.h5")) == 1
 
+    def test_append_label_works_for_a_pubchem_structure(
+        self, pyscf_water_molecule, temporary_working_dir
+    ):
+        with patch.object(
+            Molecule, "from_pubchem", return_value=[pyscf_water_molecule]
+        ):
+            self._preview(
+                "-P", "962", "-c", "0", "-m", "1", "-a", "extra", "sp"
+            )
+        assert glob.glob("output_extra*.h5")
+
     def test_pubchem_structure_is_used_with_a_default_label(
         self, pyscf_water_molecule, temporary_working_dir
     ):

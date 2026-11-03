@@ -374,15 +374,14 @@ def pyscf(
             "Only give PySCF input filename or name to be appended, "
             "but not both!"
         )
-    if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{append_label}"
-    if label is None and append_label is None:
+    if label is None:
+        # A PubChem structure has no file name to build the label from.
         if filename:
-            label = os.path.splitext(os.path.basename(filename))[0]
+            stem = os.path.splitext(os.path.basename(filename))[0]
         else:
-            label = "output"
-        label = f"{label}_{ctx.invoked_subcommand}"
+            stem = "output"
+        suffix = append_label or ctx.invoked_subcommand
+        label = f"{stem}_{suffix}"
     label = clean_label(label)
 
     molecule_indices = None

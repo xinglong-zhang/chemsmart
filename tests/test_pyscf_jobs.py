@@ -291,11 +291,6 @@ class TestPySCFJobFactories:
         assert list(job.molecule.chemical_symbols) == ["O", "H", "H"]
         assert job.label == "from_file"
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason="server is passed to JobRunner.from_job twice",
-    )
     def test_from_filename_builds_a_runner_when_none_is_given(
         self, pyscf_water_xyz, pbs_server, temporary_working_dir
     ):
@@ -326,11 +321,6 @@ class TestPySCFJobFactories:
         fetch.assert_called_once_with(identifier="962")
         assert job.molecule.num_atoms == 3
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason="server is passed to JobRunner.from_job twice",
-    )
     def test_from_pubchem_builds_a_runner_when_none_is_given(
         self, pyscf_water_molecule, pbs_server, temporary_working_dir
     ):
@@ -345,6 +335,54 @@ class TestPySCFJobFactories:
                 fake=True,
             )
         assert isinstance(job.jobrunner, FakePySCFJobRunner)
+
+
+class TestPySCFFactoryRunnerSelection:
+    def test_job_from_a_file_can_run_on_its_selected_runner(
+        self, pyscf_water_xyz, pbs_server, temporary_working_dir
+    ):
+        job = PySCFSinglePointJob.from_filename(
+            pyscf_water_xyz,
+            settings=_settings("sp"),
+            label="selected",
+            server=pbs_server,
+            fake=True,
+        )
+        job.run()
+        assert job.is_complete()
+
+    def test_runner_options_reach_the_runner_not_the_job(
+        self, pyscf_water_xyz, pbs_server, temporary_working_dir
+    ):
+        job = PySCFSinglePointJob.from_filename(
+            pyscf_water_xyz,
+            settings=_settings("sp"),
+            label="options",
+            server=pbs_server,
+            scratch=False,
+            fake=True,
+            skip_completed=False,
+        )
+        assert job.jobrunner.server is pbs_server
+        assert job.jobrunner.scratch is False
+        assert job.skip_completed is False
+        assert not {"server", "scratch", "fake"} & set(job.kwargs)
+
+    def test_given_runner_is_kept(
+        self,
+        pyscf_water_xyz,
+        pbs_server,
+        pyscf_jobrunner_no_scratch,
+        temporary_working_dir,
+    ):
+        job = PySCFSinglePointJob.from_filename(
+            pyscf_water_xyz,
+            settings=_settings("sp"),
+            label="given",
+            jobrunner=pyscf_jobrunner_no_scratch,
+            server=pbs_server,
+        )
+        assert job.jobrunner is pyscf_jobrunner_no_scratch
 
 
 class TestPySCFJobContract:

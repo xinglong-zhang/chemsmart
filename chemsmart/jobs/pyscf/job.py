@@ -147,27 +147,8 @@ class PySCFJob(Job):
         logger.info(f"Number of molecules read: {len(molecules)}")
         molecules = molecules[string2index_1based(index)]
 
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
-            **kwargs,
+        return cls._from_molecule_with_runner(
+            molecules, settings, label, jobrunner, **kwargs
         )
 
     @classmethod
@@ -177,25 +158,33 @@ class PySCFJob(Job):
         """Create a PySCF job from a PubChem identifier."""
         molecule = Molecule.from_pubchem(identifier=identifier)
 
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
+        return cls._from_molecule_with_runner(
+            molecule, settings, label, jobrunner, **kwargs
+        )
 
-        return cls(
+    @classmethod
+    def _from_molecule_with_runner(
+        cls, molecule, settings, label, jobrunner, **kwargs
+    ):
+        """Create a job, selecting a runner for it if none was given.
+
+        ``server``, ``scratch`` and ``fake`` configure the runner, so they are
+        taken out of ``kwargs`` rather than passed on a second time. Anything
+        left over goes to both the job and the runner, which ignore what they
+        do not use.
+        """
+        server = kwargs.pop("server", None)
+        scratch = kwargs.pop("scratch", None)
+        fake = kwargs.pop("fake", False)
+        job = cls(
             molecule=molecule,
             settings=settings,
             label=label,
             jobrunner=jobrunner,
             **kwargs,
         )
+        if jobrunner is None:
+            job.jobrunner = JobRunner.from_job(
+                job, server=server, scratch=scratch, fake=fake, **kwargs
+            )
+        return job
