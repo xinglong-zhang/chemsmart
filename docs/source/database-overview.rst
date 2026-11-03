@@ -107,7 +107,7 @@ A typical CHEMSMART database workflow is:
 #. **Inspect** selected entries in detail using ``chemsmart run database inspect`` (see :doc:`database-inspect`).
 #. **Export** selected content as JSON, CSV, XYZ, or extended XYZ (with per-atom forces) for downstream analysis using
    ``chemsmart run database export`` (see :doc:`database-export`).
-#. **Reuse** database entries in downstream chemsmart workflows (see :doc:`database-workflow`).
+#. **Reuse** database entries in downstream CHEMSMART workflows (see :doc:`database-workflow`).
 
 *****************
  Command Summary
