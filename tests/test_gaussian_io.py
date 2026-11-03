@@ -1791,6 +1791,10 @@ class TestGaussian16Output:
         assert output.normal_termination
         assert len(output.standard_orientations) == 1
         assert len(output.input_orientations) == 3
+        # This fixture prints the final IRC coordinates twice.
+        np.testing.assert_array_equal(
+            output.input_orientations[-1], output.input_orientations[-2]
+        )
 
         structures = output.all_structures
         assert len(structures) == 2
