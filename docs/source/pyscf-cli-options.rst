@@ -9,11 +9,64 @@ PySCF is a Python library, not an external binary, so chemsmart runs it by gener
 executing it with a chosen Python interpreter. GPU4PySCF is an execution engine of the same program, selected with
 ``--gpu``; it is not a separate program.
 
-PySCF is not installed with chemsmart. To run it in the same environment, use ``pip install "chemsmart[pyscf]"``, which
-adds PySCF and the geomeTRIC optimizer. To run it elsewhere, see `Server Configuration`_. Other optional features have
-their own requirements: ``--dispersion`` needs ``pyscf-dispersion``, ``--opt-solver berny`` needs ``pyberny``,
-``--opt-solver ase`` needs ``ase``, and ``--gpu`` needs GPU4PySCF. SMD needs a PySCF build compiled with
-``-DENABLE_SMD=ON``, which the PyPI wheel tested with chemsmart does not provide; the other solvent models work with it.
+******************
+ Installing PySCF
+******************
+
+A standard chemsmart installation does not include PySCF. How to add it depends on how chemsmart is installed:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   -  -  Installation
+      -  Command
+
+   -  -  Development checkout (Linux or macOS)
+      -  ``make install-dev``, which adds PySCF and the geomeTRIC optimizer along with the other development
+         dependencies
+
+   -  -  Source checkout
+      -  ``pip install -e ".[pyscf]"``
+
+   -  -  Installed package
+      -  ``pip install "chemsmart[pyscf]"``
+
+Run the command in the environment that runs your PySCF jobs. To keep PySCF in a separate environment instead, see
+`Server Configuration`_.
+
+``make install-dev`` skips PySCF on Windows, where PySCF publishes no wheels. PySCF jobs then need an interpreter in
+another environment, such as WSL, that has PySCF installed.
+
+.. note::
+
+   If the interpreter cannot import PySCF, the job fails before any calculation starts. It leaves ``LABEL.h5``, which
+   records the failure, and ``LABEL.err``, but no ``LABEL.out``.
+
+Some features have their own requirements:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   -  -  Feature
+      -  Requirement
+
+   -  -  ``--dispersion``
+      -  ``pyscf-dispersion``
+
+   -  -  ``--opt-solver berny``
+      -  ``pyberny``
+
+   -  -  ``--opt-solver ase``
+      -  ``ase``, which chemsmart already installs
+
+   -  -  ``--gpu``
+      -  GPU4PySCF
+
+   -  -  ``--solvent-model smd``
+      -  A PySCF build compiled with ``-DENABLE_SMD=ON``, which the PyPI wheel tested with chemsmart does not provide.
+         The other solvent models work with that wheel.
 
 *************************
  Basic Command Structure
