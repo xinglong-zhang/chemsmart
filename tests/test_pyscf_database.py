@@ -106,3 +106,44 @@ def test_open_shell_record_keeps_both_spin_channels(
     assert record.results["alpha_homo_energy"] is not None
     assert record.results["beta_homo_energy"] is not None
     assert record.meta["spin"] == 1
+
+
+def _assemble_benzene(folder, tmp_path):
+    output = tmp_path / "benzene.db"
+    result = CliRunner().invoke(
+        assemble, ["-d", folder, "-p", "pyscf", "-o", str(output)], obj={}
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    return Database(str(output)).get_record(record_index=1)
+
+
+def test_benzene_record_has_its_energy_and_frequencies(
+    pyscf_benzene_outfolder, tmp_path
+):
+    record = _assemble_benzene(pyscf_benzene_outfolder, tmp_path)
+    molecule = record["molecules"][0]
+    assert record["meta"]["jobtype"] == "opt"
+    assert record["results"]["total_energy"] == pytest.approx(
+        -232.08478438, abs=1e-7
+    )
+    assert record["results"]["zero_point_energy"] == pytest.approx(
+        0.100499, abs=1e-5
+    )
+    assert molecule["is_optimized_structure"] is True
+    assert molecule["num_vibrational_modes"] == 30
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="fixture was computed before the 1e-2 point-group tolerance",
+)
+def test_benzene_record_has_its_true_symmetry(
+    pyscf_benzene_outfolder, tmp_path
+):
+    record = _assemble_benzene(pyscf_benzene_outfolder, tmp_path)
+    molecule = record["molecules"][0]
+    assert molecule["point_group"] == "D6H"
+    assert molecule["rotational_symmetry_number"] == 12
+    assert record["results"]["gibbs_free_energy"] == pytest.approx(
+        -232.009398, abs=1e-5
+    )

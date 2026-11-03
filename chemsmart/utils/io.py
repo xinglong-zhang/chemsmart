@@ -410,6 +410,10 @@ def get_program_type_from_file(filepath):
         str: Program name ("gaussian", "orca", "xtb", "crest") or "unknown"
              if the format cannot be detected.
     """
+    # A binary results file has no text to scan. Only PySCF jobs write one.
+    if str(filepath).lower().endswith(".h5"):
+        return "pyscf"
+
     max_lines = 200
     try:
         with open(filepath, "r", encoding="utf-8") as f:

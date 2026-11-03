@@ -88,8 +88,8 @@ Then run the frequency job on that output:
 
    chemsmart sub pyscf -p test -f molecule_opt_gas_phase.out -x m062x hess
 
-Give the ``.out`` file, not the ``.h5``. chemsmart recognizes a PySCF log and reads the geometry from the structured
-results file stored beside it, so both files need to stay in the same directory. See :doc:`pyscf-results`.
+The ``.h5`` file can be given instead of the ``.out``. CHEMSMART reads the geometry from the ``.h5`` either way, so
+giving the ``.out`` requires the two files to stay in the same directory. See :doc:`pyscf-results`.
 
 The ``thermochemistry`` command does not yet accept PySCF output; enthalpies, entropies, and Gibbs free energies
 currently come from Gaussian, ORCA, or xTB results. See :doc:`thermochemistry-analysis`.

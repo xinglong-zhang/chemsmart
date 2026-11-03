@@ -1099,7 +1099,12 @@ class Molecule:
             raise FileNotFoundError(f"{filepath} could not be found!")
 
         if os.path.getsize(filepath) == 0:
-            return None
+            # PySCF leaves an empty log when it stops while starting up. The
+            # results file beside it records why.
+            stem, suffix = os.path.splitext(filepath)
+            if suffix != ".out" or not os.path.exists(stem + ".h5"):
+                return None
+            filepath = stem + ".h5"
 
         molecule = cls._read_filepath(
             filepath, index=index, return_list=return_list, **kwargs
@@ -1215,7 +1220,7 @@ class Molecule:
             elif program == "gaussian":
                 return cls._read_gaussian_logfile(filepath, index, **kwargs)
             elif program == "pyscf":
-                return cls._read_pyscf_outfile(
+                return cls._read_pyscf_output(
                     filepath, index, return_list=return_list, **kwargs
                 )
             raise ValueError(
@@ -1265,6 +1270,11 @@ class Molecule:
                     "nor an ASE database file."
                 )
             return result
+
+        if basename.lower().endswith(".h5"):
+            return cls._read_pyscf_output(
+                filepath, index, return_list=return_list, **kwargs
+            )
 
         return cls._read_other(filepath, index, **kwargs)
 
@@ -1391,17 +1401,18 @@ class Molecule:
 
     @staticmethod
     @file_cache()
-    def _read_pyscf_outfile(filepath, index, return_list=False, **kwargs):
+    def _read_pyscf_output(filepath, index, return_list=False, **kwargs):
         """
         Read PySCF results.
 
         The ``.out`` file is PySCF's own log and is never parsed; it only
         identifies the program. The geometry, energy and vibrational data
-        come from the sibling ``.h5`` results file, which CHEMSMART's own
-        generated driver wrote as exact float64.
+        come from the ``.h5`` results file, which CHEMSMART's own generated
+        driver wrote as exact float64.
 
         Args:
-            filepath (str): Path to the PySCF ``.out`` log file.
+            filepath (str): Path to the ``.h5`` results file, or to the
+                ``.out`` log file beside it.
             index (str or int): 1-based index into the stored structures. A
                 PySCF job stores only its final structure, so only that
                 structure can be selected.

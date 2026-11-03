@@ -17,7 +17,7 @@ A finished job leaves four files sharing the job label:
    -  -  File
       -  Contents
    -  -  ``LABEL.h5``
-      -  Structured results; this is the file chemsmart reads
+      -  Structured results; this is the file CHEMSMART reads
    -  -  ``LABEL.out``
       -  PySCF's own log, for reading by eye
    -  -  ``LABEL.py``
@@ -34,9 +34,13 @@ An optimization with the packaged ``test`` project produces:
    molecule_opt_gas_phase.py
    molecule_opt_gas_phase.err
 
-The ``.out`` log is not parsed for numbers. chemsmart uses it to recognize a PySCF calculation and reads every quantity
-from the ``.h5`` file beside it, so keep the two together. A rerun under the same label deletes the old ``.h5`` first,
-so a run that dies early cannot be mistaken for the earlier result.
+The ``.out`` log is not parsed for numbers. Every quantity is read from the ``.h5`` file, so keep it even if you discard
+the log. If the job stops while starting up, for example on an unusable basis set, the ``.out`` can be empty or missing;
+the ``.h5`` and ``.err`` files record why.
+
+``chemsmart run`` exits with a non-zero status and prints the reason when a PySCF job fails, including an SCF or
+geometry optimization that did not converge. In a multi-structure run, the remaining structures still run first. A rerun
+under the same label deletes the old ``.h5`` first, so a run that dies early cannot be mistaken for the earlier result.
 
 A PySCF job stores only its final structure, so ``-i`` can select only that structure from a PySCF output. Results that
 could not be computed are listed with the reason under ``status/skipped_properties``.
@@ -91,8 +95,8 @@ Solvent-phase single point on an optimized structure:
 
    chemsmart sub pyscf -p test -f molecule_opt_gas_phase.out sp
 
-Give the ``.out`` file, not the ``.h5``. Both are needed, but the ``.out`` is the one chemsmart accepts as a geometry
-source.
+The ``.h5`` file can also be given directly, and is all that is needed. If the calculation failed before producing a
+geometry, reading either file reports the recorded failure.
 
 ******************
  Previewing a Job

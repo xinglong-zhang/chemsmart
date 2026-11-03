@@ -15,6 +15,8 @@ genecp basis must not silently produce a plain def2-SVP calculation.
 import logging
 from functools import lru_cache
 
+from ase.data import atomic_numbers
+
 from chemsmart.jobs.settings import MolecularJobSettings
 
 logger = logging.getLogger(__name__)
@@ -176,7 +178,7 @@ class PySCFJobSettings(MolecularJobSettings):
         opt_solver="geometric",
         opt_maxsteps=100,
         engine=None,
-        point_group_tol=1.0e-3,
+        point_group_tol=1.0e-2,
         jobtype=None,
         title=None,
         solvent_model=None,
@@ -320,6 +322,36 @@ class PySCFJobSettings(MolecularJobSettings):
             if value != unset:
                 requested.append((field, value))
         return requested
+
+    def validate_electrons(self, molecule):
+        """Raise if charge and multiplicity are impossible for a molecule.
+
+        PySCF would otherwise stop at the start of the run, after the job has
+        been launched. Charge and multiplicity must already be resolved.
+
+        Raises:
+            ValueError: If the electrons cannot form the requested spin state.
+        """
+        nuclear_charge = sum(
+            atomic_numbers[symbol] for symbol in molecule.chemical_symbols
+        )
+        num_electrons = nuclear_charge - int(self.charge)
+        unpaired = self.multiplicity_to_spin(self.multiplicity)
+        problem = None
+        if num_electrons < 0:
+            problem = "leaves a negative number of electrons"
+        elif (num_electrons - unpaired) % 2:
+            parity = "even" if num_electrons % 2 else "odd"
+            problem = f"needs an {parity} multiplicity"
+        elif unpaired > num_electrons:
+            problem = f"cannot have {unpaired} unpaired electrons"
+        if problem:
+            raise ValueError(
+                f"Charge {self.charge} and multiplicity {self.multiplicity} "
+                f"are impossible for {num_electrons} electrons (nuclear "
+                f"charge {nuclear_charge}): this electron count {problem}. "
+                f"Check -c/--charge and -m/--multiplicity."
+            )
 
     def validate(self):
         """Raise if the settings request something PySCF cannot deliver.

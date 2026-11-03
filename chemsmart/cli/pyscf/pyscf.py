@@ -148,7 +148,7 @@ def click_pyscf_settings_options(f):
         type=click.FloatRange(min=0, min_open=True),
         default=None,
         help="Geometry tolerance in Bohr for point-group detection, which "
-        "sets the rotational symmetry number. [default: 1e-3]",
+        "sets the rotational symmetry number. [default: 1e-2]",
     )
     @click.option(
         "--gpu/--no-gpu",

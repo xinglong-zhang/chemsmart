@@ -15,9 +15,11 @@ from pyscf import gto  # noqa: E402
 from pyscf import symm  # noqa: E402
 from pyscf.scf import hf  # noqa: E402
 
+from chemsmart.io.molecules.structure import Molecule  # noqa: E402
 from chemsmart.io.pyscf import driver  # noqa: E402
 from chemsmart.jobs.pyscf.hess import PySCFHessJob  # noqa: E402
 from chemsmart.jobs.pyscf.opt import PySCFOptJob  # noqa: E402
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings  # noqa: E402
 from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
     PySCFSinglePointJob,
 )
@@ -324,6 +326,79 @@ class TestPointGroupDetection:
         default = symm.geom.TOLERANCE
         driver._detect_point_group(self._near_symmetric_water(), 1e-3)
         assert symm.geom.TOLERANCE == default
+
+
+class TestDefaultPointGroupTolerance:
+    """The default must recover the symmetry of real optimised geometries."""
+
+    def _default(self):
+        return PySCFJobSettings().point_group_tol
+
+    def test_benzene_from_a_real_optimisation(self, pyscf_benzene_output):
+        mol = gto.M(
+            atom=list(
+                zip(
+                    pyscf_benzene_output.chemical_symbols,
+                    map(tuple, pyscf_benzene_output.positions),
+                )
+            ),
+            basis="sto-3g",
+            verbose=0,
+        )
+        assert driver._detect_point_group(mol, self._default()) == "D6h"
+        # The previous default read this geometry as C2h, so sigma was 2.
+        assert driver._detect_point_group(mol, 1e-3) == "C2h"
+
+    @pytest.mark.parametrize(
+        ("symbols", "positions", "expected"),
+        [
+            (
+                ["C", "H", "H", "H", "H"],
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.66, 0.60, 0.62],
+                    [-0.60, -0.66, 0.63],
+                    [-0.62, 0.63, -0.60],
+                    [0.63, -0.62, -0.66],
+                ],
+                "Td",
+            ),
+            (
+                ["O", "C", "O"],
+                [[0.0, 0.0, -1.17], [0.0, 0.01, 0.0], [0.0, 0.0, 1.18]],
+                "Dooh",
+            ),
+        ],
+    )
+    def test_small_molecules_optimised_from_distorted_starts(
+        self, run_pyscf_driver, symbols, positions, expected
+    ):
+        molecule = Molecule(
+            symbols=symbols,
+            positions=np.array(positions),
+            charge=0,
+            multiplicity=1,
+        )
+        _, output = run_pyscf_driver(
+            PySCFOptJob, molecule, "opt", freq=False, **HF_MINIMAL
+        )
+        assert output.optimizer_converged
+        assert output.point_group == expected
+
+    def test_real_distortion_is_not_hidden(self):
+        """Alternating ring radii of 0.02 Angstrom are a genuine D3h ring."""
+        atoms = []
+        for i in range(6):
+            angle = i * np.pi / 3
+            radius = 1.3988 + 0.01 * (1 if i % 2 else -1)
+            atoms.append(
+                ("C", (radius * np.cos(angle), radius * np.sin(angle), 0.0))
+            )
+            atoms.append(
+                ("H", (2.4921 * np.cos(angle), 2.4921 * np.sin(angle), 0.0))
+            )
+        mol = gto.M(atom=atoms, basis="sto-3g", verbose=0)
+        assert driver._detect_point_group(mol, self._default()) == "D3h"
 
 
 def test_gpu_conversion_happens_before_the_solvent_is_attached(

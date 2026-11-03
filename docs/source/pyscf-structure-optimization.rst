@@ -192,5 +192,5 @@ By default the charge and multiplicity come from the molecular source. Use ``-c`
 
    chemsmart sub pyscf -p test -f molecule.xyz -c 1 -m 2 sp
 
-Give the multiplicity as ``2S+1``. PySCF's own ``spin`` keyword is ``2S``, and chemsmart converts between the two, so a
+Give the multiplicity as ``2S+1``. PySCF's own ``spin`` keyword is ``2S``, and CHEMSMART converts between the two, so a
 multiplicity of 2 becomes ``spin=1`` in the generated script.

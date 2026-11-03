@@ -24,6 +24,7 @@ from functools import lru_cache
 from glob import glob
 from shutil import copy
 
+from chemsmart.jobs.job import JobFailedError
 from chemsmart.jobs.pyscf.writer import (
     PySCFScriptWriter,
     applied_pyscf_spec,
@@ -85,6 +86,29 @@ class PySCFJobRunner(JobRunner):
                 f"Available servers are: {PySCFExecutable.available_servers}"
             )
             raise
+
+    def run(self, job, **kwargs):
+        """Run the job, raising if it did not finish normally.
+
+        The driver records most failures in the results file rather than
+        raising them, so they would otherwise go unnoticed until something
+        tried to read the result.
+
+        Raises:
+            JobFailedError: If the job has no usable result.
+        """
+        super().run(job, **kwargs)
+        if job.is_complete():
+            return
+        output = job._output()
+        reason = (
+            output.failure_reason
+            if output is not None
+            else "no results file was written"
+        )
+        message = f"PySCF job {job.label} failed: {reason}\nSee {job.errfile}."
+        logger.error(message)
+        raise JobFailedError(message)
 
     def _prerun(self, job):
         self._assign_variables(job)

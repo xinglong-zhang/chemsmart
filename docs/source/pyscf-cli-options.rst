@@ -5,7 +5,7 @@
 This page documents the CLI options available for all PySCF jobs. Use ``chemsmart sub pyscf --help`` for the complete
 list.
 
-PySCF is a Python library, not an external binary, so chemsmart runs it by generating a standalone driver script and
+PySCF is a Python library, not an external binary, so CHEMSMART runs it by generating a standalone driver script and
 executing it with a chosen Python interpreter. GPU4PySCF is an execution engine of the same program, selected with
 ``--gpu``; it is not a separate program.
 
@@ -13,7 +13,7 @@ executing it with a chosen Python interpreter. GPU4PySCF is an execution engine 
  Installing PySCF
 ******************
 
-A standard chemsmart installation does not include PySCF. How to add it depends on how chemsmart is installed:
+A standard CHEMSMART installation does not include PySCF. How to add it depends on how CHEMSMART is installed:
 
 .. list-table::
    :header-rows: 1
@@ -40,8 +40,8 @@ another environment, such as WSL, that has PySCF installed.
 
 .. note::
 
-   If the interpreter cannot import PySCF, the job fails before any calculation starts. It leaves ``LABEL.h5``, which
-   records the failure, and ``LABEL.err``, but no ``LABEL.out``.
+   If the interpreter cannot import PySCF, the job fails before any calculation starts and reports the error. It leaves
+   ``LABEL.h5``, which records the failure, and ``LABEL.err``, but no ``LABEL.out``.
 
 Some features have their own requirements:
 
@@ -59,13 +59,13 @@ Some features have their own requirements:
       -  ``pyberny``
 
    -  -  ``--opt-solver ase``
-      -  ``ase``, which chemsmart already installs
+      -  ``ase``, which CHEMSMART already installs
 
    -  -  ``--gpu``
       -  GPU4PySCF
 
    -  -  ``--solvent-model smd``
-      -  A PySCF build compiled with ``-DENABLE_SMD=ON``, which the PyPI wheel tested with chemsmart does not provide.
+      -  A PySCF build compiled with ``-DENABLE_SMD=ON``, which the PyPI wheel tested with CHEMSMART does not provide.
          The other solvent models work with that wheel.
 
 *************************
@@ -79,7 +79,7 @@ Some features have their own requirements:
 
 .. note::
 
-   A project is required. PySCF has no defensible default functional or basis set, so chemsmart will not invent one.
+   A project is required. PySCF has no defensible default functional or basis set, so CHEMSMART will not invent one.
    This is unlike xTB, whose GFN2 default is a complete method.
 
 ***************
@@ -152,7 +152,7 @@ Molecular Properties Options
 
 .. note::
 
-   PySCF's own ``spin`` keyword is ``2S``, not ``2S+1``. Always give the multiplicity here and let chemsmart convert it,
+   PySCF's own ``spin`` keyword is ``2S``, not ``2S+1``. Always give the multiplicity here and let CHEMSMART convert it,
    so that the value in the command matches the value in the project YAML and in every other program group.
 
 Method and Basis Set Options
@@ -194,7 +194,7 @@ Give either ``-x`` or ``-A``, never both. Basis names follow PySCF and libcint s
 
    PySCF's ``b3lyp`` is the Gaussian VWN3 definition. ORCA's ``B3LYP`` is the VWN5 variant, which PySCF spells
    ``b3lyp5``. For water in def2-SVP the two differ by roughly 23 kcal/mol, so a PySCF ``b3lyp`` energy must not be
-   compared with an ORCA ``B3LYP`` energy. chemsmart logs a warning when it resolves ``b3lyp``, but it cannot know which
+   compared with an ORCA ``B3LYP`` energy. CHEMSMART logs a warning when it resolves ``b3lyp``, but it cannot know which
    convention you meant.
 
 Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied. ``-A`` accepts
@@ -303,7 +303,7 @@ Results Options
    -  -  ``--point-group-tol``
       -  float
       -  Geometry tolerance in Bohr for point-group detection, which sets the rotational symmetry number used in free
-         energies. Defaults to ``1e-3``.
+         energies. Defaults to ``1e-2``.
 
 Solvent Options
 ===============
@@ -330,7 +330,7 @@ Solvent Options
 
 .. note::
 
-   A solvent model always needs a solvent identifier. chemsmart resolves the dielectric explicitly, because PySCF's PCM
+   A solvent model always needs a solvent identifier. CHEMSMART resolves the dielectric explicitly, because PySCF's PCM
    otherwise falls back to water regardless of which solvent was requested.
 
 Examples:
@@ -385,7 +385,7 @@ than ignored, including ``semiempirical``, ``modred``, ``gen_genecp_file``, ``he
  Server Configuration
 **********************
 
-Readiness belongs to the interpreter that runs the calculation, not to the process running chemsmart. The ``PYSCF``
+Readiness belongs to the interpreter that runs the calculation, not to the process running CHEMSMART. The ``PYSCF``
 block in the server YAML names that interpreter's ``bin`` directory:
 
 .. code:: yaml
@@ -395,7 +395,7 @@ block in the server YAML names that interpreter's ``bin`` directory:
      LOCAL_RUN: True
      SCRATCH: False
 
-Omit ``EXEFOLDER`` when PySCF is installed in the same environment as chemsmart; the running interpreter is used. The
+Omit ``EXEFOLDER`` when PySCF is installed in the same environment as CHEMSMART; the running interpreter is used. The
 block itself is optional. ``SCRATCH`` is off because a PySCF job writes a handful of small files, so scratch storage
 adds nothing.
 

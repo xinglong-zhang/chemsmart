@@ -157,6 +157,19 @@ def pyscf_output(tmp_path):
 
 
 @pytest.fixture()
+def pyscf_benzene_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "benzene")
+
+
+@pytest.fixture()
+def pyscf_benzene_output(pyscf_benzene_outfolder):
+    """B3LYP/def2-SVP optimisation and Hessian of benzene, by PySCF 2.14."""
+    return PySCFOutput(
+        os.path.join(pyscf_benzene_outfolder, "benzene_gas_phase.out")
+    )
+
+
+@pytest.fixture()
 def pyscf_oh_radical_outfolder(pyscf_outputs_directory):
     return os.path.join(pyscf_outputs_directory, "oh_sp_radical")
 

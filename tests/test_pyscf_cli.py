@@ -1,9 +1,11 @@
 """Focused tests for the PySCF Click surface and option propagation."""
 
 import glob
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 from click.testing import CliRunner
 
@@ -12,12 +14,13 @@ from chemsmart.cli.pyscf.common import resolve_engine, settings_for_molecule
 from chemsmart.cli.run import run
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf.output import read_pyscf_h5
+from chemsmart.jobs.pyscf.runner import PySCFJobRunner
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from tests.helpers import run_pyscf_and_capture_settings
 
 
 @pytest.mark.parametrize("jobtype", ["sp", "opt", "hess"])
-def test_group_and_all_leaves_expose_help(single_molecule_xyz_file, jobtype):
+def test_group_and_all_leaves_expose_help(pyscf_water_xyz, jobtype):
     runner = CliRunner()
 
     group = runner.invoke(pyscf, ["--help"])
@@ -27,7 +30,7 @@ def test_group_and_all_leaves_expose_help(single_molecule_xyz_file, jobtype):
             "-p",
             "test",
             "-f",
-            single_molecule_xyz_file,
+            pyscf_water_xyz,
             jobtype,
             "--help",
         ],
@@ -42,8 +45,8 @@ def test_group_and_all_leaves_expose_help(single_molecule_xyz_file, jobtype):
     ("option", "field", "expected"),
     [
         (["-t", "receipt"], "title", "receipt"),
-        (["-c", "1"], "charge", 1),
-        (["-m", "2"], "multiplicity", 2),
+        (["-c", "2"], "charge", 2),
+        (["-m", "3"], "multiplicity", 3),
         (["-x", "pbe0"], "functional", "pbe0"),
         (["-A", "hf"], "ab_initio", "hf"),
         (["-b", "def2-tzvp"], "basis", "def2-tzvp"),
@@ -64,14 +67,14 @@ def test_group_and_all_leaves_expose_help(single_molecule_xyz_file, jobtype):
     ],
 )
 def test_every_group_override_survives_the_merge(
-    single_molecule_xyz_file, option, field, expected
+    pyscf_water_xyz, option, field, expected
 ):
     result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
             "-f",
-            single_molecule_xyz_file,
+            pyscf_water_xyz,
             "-c",
             "0",
             "-m",
@@ -94,15 +97,13 @@ def test_every_group_override_survives_the_merge(
 @pytest.mark.parametrize(
     ("option", "expected"), [(["--gpu"], "gpu"), (["--no-gpu"], "cpu")]
 )
-def test_explicit_engine_override_wins(
-    single_molecule_xyz_file, option, expected
-):
+def test_explicit_engine_override_wins(pyscf_water_xyz, option, expected):
     result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
             "-f",
-            single_molecule_xyz_file,
+            pyscf_water_xyz,
             "-c",
             "0",
             "-m",
@@ -119,14 +120,14 @@ def test_explicit_engine_override_wins(
 
 @pytest.mark.parametrize(("num_gpus", "expected"), [(0, "cpu"), (1, "gpu")])
 def test_server_gpu_count_resolves_default_engine(
-    single_molecule_xyz_file, num_gpus, expected
+    pyscf_water_xyz, num_gpus, expected
 ):
     result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
             "-f",
-            single_molecule_xyz_file,
+            pyscf_water_xyz,
             "-c",
             "0",
             "-m",
@@ -141,14 +142,14 @@ def test_server_gpu_count_resolves_default_engine(
 
 
 def test_remove_solvent_clears_project_single_point_solvent(
-    single_molecule_xyz_file,
+    pyscf_water_xyz,
 ):
     result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
             "-f",
-            single_molecule_xyz_file,
+            pyscf_water_xyz,
             "-c",
             "0",
             "-m",
@@ -163,15 +164,13 @@ def test_remove_solvent_clears_project_single_point_solvent(
 
 
 @pytest.mark.parametrize("jobtype", ["sp", "opt", "hess"])
-def test_leaf_selects_matching_project_settings(
-    single_molecule_xyz_file, jobtype
-):
+def test_leaf_selects_matching_project_settings(pyscf_water_xyz, jobtype):
     result, settings = run_pyscf_and_capture_settings(
         [
             "-p",
             "test",
             "-f",
-            single_molecule_xyz_file,
+            pyscf_water_xyz,
             "-c",
             "0",
             "-m",
@@ -209,7 +208,9 @@ def test_project_engine_is_respected_before_server_gpus(
 
 def test_charge_and_multiplicity_fall_back_to_the_molecule():
     settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
-    molecule = SimpleNamespace(charge=1, multiplicity=2)
+    molecule = Molecule(
+        symbols=["He"], positions=np.zeros((1, 3)), charge=1, multiplicity=2
+    )
     resolved = settings_for_molecule(settings, molecule)
     assert (resolved.charge, resolved.multiplicity) == (1, 2)
     assert settings.charge is None
@@ -219,14 +220,16 @@ def test_explicit_charge_and_multiplicity_win_over_the_molecule():
     settings = PySCFJobSettings(
         functional="b3lyp", basis="def2-svp", charge=0, multiplicity=1
     )
-    molecule = SimpleNamespace(charge=1, multiplicity=2)
+    molecule = Molecule(
+        symbols=["He"], positions=np.zeros((1, 3)), charge=1, multiplicity=2
+    )
     resolved = settings_for_molecule(settings, molecule)
     assert (resolved.charge, resolved.multiplicity) == (0, 1)
 
 
 def test_missing_charge_and_multiplicity_are_reported():
     settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
-    molecule = SimpleNamespace(charge=None, multiplicity=None)
+    molecule = Molecule(symbols=["He"], positions=np.zeros((1, 3)))
     with pytest.raises(ValueError, match="Charge and multiplicity"):
         settings_for_molecule(settings, molecule)
 
@@ -347,7 +350,7 @@ class TestPySCFCliRealRuns:
             "-c",
             "0",
             "-m",
-            "1",
+            "2",
             "-i",
             "1,2",
             "sp",
@@ -364,7 +367,7 @@ class TestPySCFCliRealRuns:
             "-c",
             "0",
             "-m",
-            "1",
+            "2",
             "-i",
             "2",
             "sp",
@@ -390,3 +393,141 @@ class TestPySCFCliRealRuns:
         ):
             self._preview("-P", "962", "-c", "0", "-m", "1", "sp")
         assert glob.glob("output_sp*.h5")
+
+
+class TestImpossibleElectronStates:
+    """Electron counts PySCF would refuse, stopped before any job starts."""
+
+    def test_odd_electron_count_cannot_be_a_singlet(
+        self, pyscf_oh_molecule, temporary_working_dir
+    ):
+        settings = PySCFJobSettings(
+            functional="b3lyp", basis="def2-svp", charge=0, multiplicity=1
+        )
+        with pytest.raises(ValueError, match="needs an even multiplicity"):
+            settings_for_molecule(settings, pyscf_oh_molecule)
+
+    def test_the_message_says_what_to_check(self, pyscf_oh_molecule):
+        settings = PySCFJobSettings(
+            functional="b3lyp", basis="def2-svp", charge=0, multiplicity=1
+        )
+        with pytest.raises(ValueError, match="9 electrons.*Check -c"):
+            settings_for_molecule(settings, pyscf_oh_molecule)
+
+    @pytest.mark.parametrize(
+        ("symbols", "charge", "multiplicity", "message"),
+        [
+            (["H", "H"], 0, 2, "needs an odd multiplicity"),
+            (["H", "H"], 0, 5, "cannot have 4 unpaired"),
+            (["He"], 3, 2, "negative number of electrons"),
+        ],
+    )
+    def test_impossible_states(self, symbols, charge, multiplicity, message):
+        molecule = Molecule(
+            symbols=symbols,
+            positions=np.arange(len(symbols) * 3.0).reshape(-1, 3),
+        )
+        settings = PySCFJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            charge=charge,
+            multiplicity=multiplicity,
+        )
+        with pytest.raises(ValueError, match=message):
+            settings.validate_electrons(molecule)
+
+    @pytest.mark.parametrize(
+        ("symbols", "charge", "multiplicity"),
+        [
+            (["O", "H"], 0, 2),
+            (["O", "H"], -1, 1),
+            (["H", "H"], 0, 3),
+            (["H"], 1, 1),
+        ],
+    )
+    def test_possible_states_are_accepted(self, symbols, charge, multiplicity):
+        molecule = Molecule(
+            symbols=symbols,
+            positions=np.arange(len(symbols) * 3.0).reshape(-1, 3),
+        )
+        settings = PySCFJobSettings(
+            functional="b3lyp",
+            basis="sto-3g",
+            charge=charge,
+            multiplicity=multiplicity,
+        )
+        settings.validate_electrons(molecule)
+
+    def test_fake_run_stops_before_writing_anything(
+        self, pyscf_oh_molecule, temporary_working_dir
+    ):
+        with patch.object(
+            Molecule, "from_pubchem", return_value=[pyscf_oh_molecule]
+        ):
+            result = CliRunner().invoke(
+                run,
+                ["--fake", "pyscf", "-p", "test", "-P", "962"]
+                + ["-c", "0", "-m", "1", "sp"],
+                obj={},
+            )
+        assert result.exit_code != 0
+        assert "needs an even multiplicity" in str(result.exception)
+        assert glob.glob("*.py") == []
+
+
+class TestFailedJobsThroughTheCli:
+    def _run(self, *args):
+        return CliRunner().invoke(run, ["pyscf", "-p", "test", *args], obj={})
+
+    def test_real_failure_exits_non_zero_and_gives_the_reason(
+        self, pyscf_water_xyz, temporary_working_dir
+    ):
+        pytest.importorskip("pyscf")
+        result = self._run(
+            "-f",
+            pyscf_water_xyz,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "-si",
+            "not_a_solvent",
+            "-l",
+            "bad",
+            "sp",
+        )
+        assert result.exit_code == 1
+        assert "not_a_solvent" in result.output
+        assert "failed" in result.output
+
+    def test_batch_runs_every_structure_before_reporting(
+        self, multiple_molecules_xyz_file, temporary_working_dir
+    ):
+        dies = f"{sys.executable} -c 'raise SystemExit(1)'"
+        with patch.object(PySCFJobRunner, "_get_command", return_value=dies):
+            result = self._run(
+                "-f",
+                multiple_molecules_xyz_file,
+                "-c",
+                "0",
+                "-m",
+                "2",
+                "-i",
+                "1,2",
+                "sp",
+            )
+        assert result.exit_code == 1
+        assert "2 of 2 jobs failed" in result.output
+        assert len(glob.glob("*_idx1_*.py")) == 1
+        assert len(glob.glob("*_idx2_*.py")) == 1
+
+    def test_passing_preview_still_exits_zero(
+        self, pyscf_water_xyz, temporary_working_dir
+    ):
+        result = CliRunner().invoke(
+            run,
+            ["--fake", "pyscf", "-p", "test", "-f", pyscf_water_xyz]
+            + ["-c", "0", "-m", "1", "sp"],
+            obj={},
+        )
+        assert result.exit_code == 0, (result.output, result.exception)

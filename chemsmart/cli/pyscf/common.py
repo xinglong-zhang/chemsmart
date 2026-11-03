@@ -37,6 +37,9 @@ def settings_for_molecule(settings, molecule):
     An explicit ``-c``/``-m`` or project value wins; otherwise the input file's
     own values apply, as when reading a calculation output. Formats that carry
     neither, such as plain XYZ, still have to be given them explicitly.
+
+    Checking the resulting electron count here stops an impossible state
+    before any job is launched, including under ``--fake``.
     """
     settings = settings.copy()
     if settings.charge is None:
@@ -44,6 +47,7 @@ def settings_for_molecule(settings, molecule):
     if settings.multiplicity is None:
         settings.multiplicity = molecule.multiplicity
     check_charge_and_multiplicity(settings)
+    settings.validate_electrons(molecule)
     return settings
 
 

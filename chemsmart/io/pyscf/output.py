@@ -54,6 +54,8 @@ class PySCFOutput(FileMixin):
     """
 
     def __init__(self, filename):
+        # A log may be absent or empty after an early failure, so the results
+        # file can be given directly; only its sibling path is derived here.
         self.filename = os.path.abspath(filename)
         stem, _ = os.path.splitext(self.filename)
         self.resultsfile = stem + ".h5"
@@ -70,7 +72,13 @@ class PySCFOutput(FileMixin):
                 f"PySCF results file not found: {self.resultsfile}. "
                 f"The calculation did not reach the point of writing results."
             )
-        return read_pyscf_h5(self.resultsfile)
+        try:
+            return read_pyscf_h5(self.resultsfile)
+        except OSError as e:
+            raise ValueError(
+                f"{self.resultsfile} is not a readable PySCF results file: "
+                f"{e}"
+            ) from e
 
     @property
     def spec(self):
@@ -113,6 +121,28 @@ class PySCFOutput(FileMixin):
     def failure(self):
         """Return the typed failure record, or None."""
         return self.status.get("failure")
+
+    @property
+    def failure_reason(self):
+        """Return why this run did not finish normally, or None if it did."""
+        if self.normal_termination:
+            return None
+        try:
+            status = self.status
+        except (FileNotFoundError, ValueError) as e:
+            return str(e)
+        failure = status.get("failure")
+        if failure:
+            return (
+                f"{failure.get('type')} at stage {failure.get('stage')!r}: "
+                f"{failure.get('message')}"
+            )
+        unfinished = [
+            stage
+            for stage, entry in status.get("stages", {}).items()
+            if not entry.get("converged", entry.get("completed", False))
+        ]
+        return f"these stages did not finish: {', '.join(unfinished)}"
 
     @property
     def version(self):
@@ -460,8 +490,9 @@ class PySCFOutput(FileMixin):
             return None
         from chemsmart.analysis.thermochemistry import Thermochemistry
 
+        # The results file always exists here, whereas the log may not.
         return Thermochemistry(
-            filename=self.filename,
+            filename=self.resultsfile,
             temperature=STANDARD_TEMPERATURE_K,
             pressure=STANDARD_PRESSURE_ATM,
         )

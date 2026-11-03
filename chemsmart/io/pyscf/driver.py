@@ -328,8 +328,10 @@ def _detect_point_group(mol, tolerance):
 
     PySCF's default (1e-5 Bohr) is far tighter than an optimiser's convergence
     criteria: water optimised from a distorted start keeps O-H bonds differing
-    by 1e-4 Angstrom and reads as Cs rather than C2v. The rotational symmetry
-    number comes from this label, so that error would shift G by RT ln(sigma).
+    by 1e-4 Angstrom and reads as Cs rather than C2v, and an optimised benzene
+    with C-C bonds within 2e-5 Angstrom still needs about 5e-3 to read as D6h.
+    The rotational symmetry number comes from this label, so that error would
+    shift G by RT ln(sigma).
     """
     from pyscf import symm
 

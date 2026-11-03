@@ -1765,15 +1765,16 @@ def read_pyscf_output_folder(folder):
     return PySCFOutput(logfile)
 
 
-def make_pyscf_settings(jobtype, **extra):
-    return PySCFJobSettings(
-        functional="b3lyp",
-        basis="def2-svp",
-        charge=0,
-        multiplicity=1,
-        jobtype=jobtype,
-        **extra,
-    )
+def make_pyscf_settings(jobtype, **overrides):
+    """Return valid B3LYP/def2-SVP singlet settings, with any overrides."""
+    settings = {
+        "functional": "b3lyp",
+        "basis": "def2-svp",
+        "charge": 0,
+        "multiplicity": 1,
+        "jobtype": jobtype,
+    }
+    return PySCFJobSettings(**{**settings, **overrides})
 
 
 def make_pyscf_results_payload():

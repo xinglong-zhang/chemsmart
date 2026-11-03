@@ -14,7 +14,9 @@ import numpy as np
 import pytest
 from ase import units
 
+from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf.output import PySCFOutput
+from chemsmart.utils.io import get_program_type_from_file
 from tests.helpers import read_pyscf_output_folder
 
 
@@ -385,3 +387,221 @@ class TestPySCFOutputDescriptions:
         assert "d3bj" in route
         assert "cpcm(water)" in route
         assert "engine=cpu" in route
+
+
+class TestPySCFFailureReason:
+    def test_recorded_exception_is_described(
+        self, pyscf_water_smd_failed_outfolder
+    ):
+        reason = read_pyscf_output_folder(
+            pyscf_water_smd_failed_outfolder
+        ).failure_reason
+        assert reason.startswith("RuntimeError at stage 'scf'")
+        assert "SMD module is not available" in reason
+
+    def test_unconverged_stages_are_named(
+        self, pyscf_water_opt_unconverged_outfolder
+    ):
+        reason = read_pyscf_output_folder(
+            pyscf_water_opt_unconverged_outfolder
+        ).failure_reason
+        assert "did not finish" in reason
+        assert "opt" in reason
+        assert "hess" in reason
+
+    def test_successful_run_has_no_reason(self, pyscf_water_opt_outfolder):
+        output = read_pyscf_output_folder(pyscf_water_opt_outfolder)
+        assert output.failure_reason is None
+
+
+class TestReadingResultsFilesDirectly:
+    def _results_file(self, folder):
+        return os.path.join(folder, f"{os.path.basename(folder)}.h5")
+
+    def test_matches_reading_through_the_log(self, pyscf_water_opt_outfolder):
+        log = self._results_file(pyscf_water_opt_outfolder)[:-3] + ".out"
+        direct = Molecule.from_filepath(
+            self._results_file(pyscf_water_opt_outfolder)
+        )
+        via_log = Molecule.from_filepath(log)
+        np.testing.assert_array_equal(direct.positions, via_log.positions)
+        assert direct.energy == via_log.energy
+
+    def test_works_without_the_log(self, pyscf_water_opt_outfolder, tmp_path):
+        path = tmp_path / "calc.h5"
+        shutil.copy(self._results_file(pyscf_water_opt_outfolder), path)
+        assert Molecule.from_filepath(str(path)).num_atoms == 3
+
+    def test_index_and_return_list_are_honoured(
+        self, pyscf_water_opt_outfolder
+    ):
+        path = self._results_file(pyscf_water_opt_outfolder)
+        assert len(Molecule.from_filepath(path, index=":")) == 1
+        assert len(Molecule.from_filepath(path, return_list=True)) == 1
+
+    def test_failed_run_reports_its_failure(
+        self, pyscf_water_smd_failed_outfolder
+    ):
+        with pytest.raises(ValueError, match="SMD module is not available"):
+            Molecule.from_filepath(
+                self._results_file(pyscf_water_smd_failed_outfolder)
+            )
+
+    def test_empty_log_reports_the_failure_beside_it(
+        self, pyscf_water_smd_failed_outfolder, tmp_path
+    ):
+        shutil.copy(
+            self._results_file(pyscf_water_smd_failed_outfolder),
+            tmp_path / "calc.h5",
+        )
+        (tmp_path / "calc.out").write_text("")
+        with pytest.raises(ValueError, match="SMD module is not available"):
+            Molecule.from_filepath(str(tmp_path / "calc.out"))
+
+    def test_empty_log_without_results_still_returns_none(self, tmp_path):
+        (tmp_path / "calc.out").write_text("")
+        assert Molecule.from_filepath(str(tmp_path / "calc.out")) is None
+
+    def test_other_hdf5_files_are_refused_clearly(self, tmp_path):
+        path = tmp_path / "other.h5"
+        with h5py.File(path, "w") as handle:
+            handle.create_dataset("data", data=[1.0, 2.0])
+        with pytest.raises(ValueError, match="Unsupported PySCF results"):
+            Molecule.from_filepath(str(path))
+
+    def test_non_hdf5_file_is_refused_clearly(self, tmp_path):
+        path = tmp_path / "other.h5"
+        path.write_bytes(b"not an hdf5 file")
+        with pytest.raises(ValueError, match="not a readable PySCF results"):
+            Molecule.from_filepath(str(path))
+
+
+class TestPySCFBenzeneOutput:
+    """Optimisation and frequencies of benzene from a real PySCF run."""
+
+    def test_run_finished_normally(self, pyscf_benzene_output):
+        output = pyscf_benzene_output
+        assert output.normal_termination
+        assert output.optimizer_converged
+        assert output.failure_reason is None
+        assert output.spec["stages"] == ["scf", "opt", "hess"]
+        assert (output.method, output.basis) == ("b3lyp", "def2-svp")
+        assert output.version == "2.14.0"
+
+    def test_optimisation_lowers_the_energy(self, pyscf_benzene_output):
+        first, final = pyscf_benzene_output.energies
+        assert final < first
+        assert final == pytest.approx(-232.08478438, abs=1e-7)
+
+    def test_geometry_is_a_regular_flat_hexagon(self, pyscf_benzene_output):
+        positions = pyscf_benzene_output.positions
+        symbols = pyscf_benzene_output.chemical_symbols
+        distances = np.linalg.norm(
+            positions[:, None] - positions[None], axis=-1
+        )
+        carbons = [i for i, s in enumerate(symbols) if s == "C"]
+        hydrogens = [i for i, s in enumerate(symbols) if s == "H"]
+        carbon_carbon = [
+            distances[i, j]
+            for i in carbons
+            for j in carbons
+            if i < j and distances[i, j] < 1.6
+        ]
+        carbon_hydrogen = [
+            distances[i, j]
+            for i in carbons
+            for j in hydrogens
+            if distances[i, j] < 1.3
+        ]
+        assert carbon_carbon == pytest.approx([1.3988] * 6, abs=1e-3)
+        assert carbon_hydrogen == pytest.approx([1.0933] * 6, abs=1e-3)
+        centred = positions - positions.mean(axis=0)
+        assert np.linalg.svd(centred, compute_uv=False)[2] < 1e-3
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="fixture was computed before the 1e-2 point-group tolerance",
+    )
+    def test_near_exact_symmetry_gives_the_true_symmetry_number(
+        self, pyscf_benzene_output
+    ):
+        """C-C bonds within 2e-5 Angstrom once read as C2h, with sigma = 2."""
+        assert pyscf_benzene_output.point_group == "D6h"
+        assert pyscf_benzene_output.rotational_symmetry_number == 12
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="fixture was computed before the 1e-2 point-group tolerance",
+    )
+    def test_free_energy_uses_the_true_symmetry_number(
+        self, pyscf_benzene_output
+    ):
+        assert pyscf_benzene_output.gibbs_free_energy == pytest.approx(
+            -232.009398, abs=1e-5
+        )
+
+    def test_minimum_has_all_real_frequencies(self, pyscf_benzene_output):
+        frequencies = pyscf_benzene_output.vibrational_frequencies
+        assert len(frequencies) == 30
+        assert min(frequencies) == pytest.approx(418.5, abs=0.5)
+        assert max(frequencies) == pytest.approx(3198.3, abs=0.5)
+
+    def test_final_forces_vanish_at_the_minimum(self, pyscf_benzene_output):
+        assert np.abs(pyscf_benzene_output.forces).max() < 1e-4
+        assert pyscf_benzene_output.forces.shape == (12, 3)
+
+    def test_nonpolar_molecule_has_no_dipole(self, pyscf_benzene_output):
+        molecule = pyscf_benzene_output.get_molecule()
+        assert molecule.dipole_moment_magnitude < 1e-3
+
+    def test_frontier_orbitals_are_in_ev(self, pyscf_benzene_output):
+        output = pyscf_benzene_output
+        assert output.homo_energy == pytest.approx(-6.96678, abs=1e-4)
+        assert output.lumo_energy == pytest.approx(-0.24861, abs=1e-4)
+        assert output.fmo_gap == pytest.approx(6.71817, abs=1e-4)
+
+    def test_zero_point_energy(self, pyscf_benzene_output):
+        # Unlike the free energy, this does not depend on the point group.
+        assert pyscf_benzene_output.zero_point_energy == pytest.approx(
+            0.100499, abs=1e-5
+        )
+
+    def test_structure_reads_as_aromatic_benzene(self, pyscf_benzene_output):
+        molecule = pyscf_benzene_output.get_molecule()
+        assert molecule.chemical_formula == "C6H6"
+        assert molecule.is_aromatic
+        assert molecule.is_optimized_structure
+
+
+class TestPySCFResultsWithoutTheirLog:
+    def _only_results(self, folder, tmp_path):
+        path = tmp_path / "calc.h5"
+        shutil.copy(os.path.join(folder, "benzene_gas_phase.h5"), path)
+        return path
+
+    def test_thermochemistry_reads_the_results_file(
+        self, pyscf_benzene_outfolder, pyscf_benzene_output, tmp_path
+    ):
+        path = self._only_results(pyscf_benzene_outfolder, tmp_path)
+        assert PySCFOutput(path).gibbs_free_energy == pytest.approx(
+            pyscf_benzene_output.gibbs_free_energy
+        )
+
+    def test_absent_log_does_not_stop_thermochemistry(
+        self, pyscf_benzene_outfolder, pyscf_benzene_output, tmp_path
+    ):
+        self._only_results(pyscf_benzene_outfolder, tmp_path)
+        output = PySCFOutput(tmp_path / "calc.out")
+        assert output.gibbs_free_energy == pytest.approx(
+            pyscf_benzene_output.gibbs_free_energy
+        )
+
+    def test_results_file_is_recognised_as_pyscf(
+        self, pyscf_benzene_outfolder
+    ):
+        path = os.path.join(pyscf_benzene_outfolder, "benzene_gas_phase.h5")
+        assert get_program_type_from_file(path) == "pyscf"
+
+    def test_molecule_reads_the_results_file(self, pyscf_benzene_outfolder):
+        path = os.path.join(pyscf_benzene_outfolder, "benzene_gas_phase.h5")
+        assert Molecule.from_filepath(path).chemical_formula == "C6H6"

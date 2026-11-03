@@ -15,6 +15,7 @@ import pytest
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf.output import PySCFOutput
+from chemsmart.jobs.job import JobFailedError
 from chemsmart.jobs.pyscf.hess import PySCFHessJob
 from chemsmart.jobs.pyscf.job import PySCFJob
 from chemsmart.jobs.pyscf.opt import PySCFOptJob
@@ -218,7 +219,8 @@ class TestPySCFRerun:
         )
         dies = f"{sys.executable} -c 'raise SystemExit(1)'"
         with patch.object(PySCFJobRunner, "_get_command", return_value=dies):
-            rerun.run()
+            with pytest.raises(JobFailedError, match="no results file"):
+                rerun.run()
         assert not rerun.is_complete()
         assert not os.path.exists(rerun.resultsfile)
 
@@ -329,6 +331,53 @@ class TestPySCFFactoryRunnerSelection:
             server=pbs_server,
         )
         assert job.jobrunner is pyscf_jobrunner_no_scratch
+
+
+class TestPySCFFailureReporting:
+    def test_real_failure_raises_with_the_recorded_reason(
+        self, pbs_server, pyscf_h2_molecule, temporary_working_dir
+    ):
+        pytest.importorskip("pyscf")
+        job = PySCFSinglePointJob(
+            molecule=pyscf_h2_molecule,
+            settings=make_pyscf_settings("sp", basis="not_a_basis_set"),
+            label="badbasis",
+            jobrunner=PySCFJobRunner(server=pbs_server, scratch=False),
+        )
+        with pytest.raises(JobFailedError, match="at stage") as failure:
+            job.run()
+        assert "badbasis.err" in str(failure.value)
+        assert os.path.exists(job.errfile)
+
+    def test_unconverged_scf_counts_as_a_failure(
+        self, pbs_server, pyscf_h2_molecule, temporary_working_dir
+    ):
+        pytest.importorskip("pyscf")
+        job = PySCFSinglePointJob(
+            molecule=pyscf_h2_molecule,
+            settings=make_pyscf_settings(
+                "sp", basis="def2-svp", scf_maxiter=1, scf_tol=1e-12
+            ),
+            label="short",
+            jobrunner=PySCFJobRunner(server=pbs_server, scratch=False),
+        )
+        with pytest.raises(JobFailedError, match="did not finish: scf"):
+            job.run()
+
+    def test_preview_runner_does_not_raise(
+        self,
+        pyscf_water_molecule,
+        pyscf_jobrunner_no_scratch,
+        temporary_working_dir,
+    ):
+        job = PySCFSinglePointJob(
+            molecule=pyscf_water_molecule,
+            settings=make_pyscf_settings("sp"),
+            label="preview",
+            jobrunner=pyscf_jobrunner_no_scratch,
+        )
+        job.run()
+        assert job.is_complete()
 
 
 class TestPySCFJobContract:
