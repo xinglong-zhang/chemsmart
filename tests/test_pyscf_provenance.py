@@ -5,12 +5,15 @@ optional chemistry solver is executed.
 """
 
 import ast
+import sys
+from unittest.mock import patch
 
 import h5py
 import numpy as np
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.pyscf import driver
 from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
@@ -305,3 +308,80 @@ def test_writer_leaves_no_temporary_file_behind(tmp_path):
         path, spec=spec, provenance=provenance, status=status, results=results
     )
     assert [item.name for item in tmp_path.iterdir()] == ["atomic.h5"]
+
+
+class TestResultsEncoding:
+    def _round_trip(self, tmp_path, value):
+        path = tmp_path / "encoded.h5"
+        write_pyscf_h5(
+            path,
+            spec={"value": value},
+            provenance={},
+            status={},
+            results={},
+        )
+        return read_pyscf_h5(path)[0]["value"]
+
+    def test_string_lists_round_trip(self, tmp_path):
+        assert self._round_trip(tmp_path, ["O", "H", "H"]) == ["O", "H", "H"]
+
+    def test_object_array_of_strings_round_trips(self, tmp_path):
+        value = np.array(["scf", "opt"], dtype=object)
+        assert self._round_trip(tmp_path, value) == ["scf", "opt"]
+
+    def test_nested_mappings_and_nulls_round_trip(self, tmp_path):
+        value = {"inner": {"present": 1.5, "absent": None}}
+        assert self._round_trip(tmp_path, value) == value
+
+    def test_unsupported_objects_are_refused_not_stringified(self, tmp_path):
+        value = np.array([object()], dtype=object)
+        with pytest.raises(TypeError, match="object-valued"):
+            self._round_trip(tmp_path, value)
+
+
+class TestOptionalProperties:
+    def test_failure_is_recorded_rather_than_raised(self, capsys):
+        results = {}
+        status = {"skipped_properties": {}}
+
+        def not_implemented():
+            raise NotImplementedError("no gradient for this model")
+
+        driver._record_optional(results, status, "forces", not_implemented)
+
+        assert "forces" not in results
+        assert (
+            status["skipped_properties"]["forces"]
+            == "NotImplementedError: no gradient for this model"
+        )
+        assert "no gradient for this model" in capsys.readouterr().err
+
+    def test_success_is_stored(self):
+        results = {}
+        status = {"skipped_properties": {}}
+        driver._record_optional(results, status, "forces", lambda: [1.0])
+        assert results == {"forces": [1.0]}
+        assert status["skipped_properties"] == {}
+
+
+def test_missing_pyscf_still_produces_a_failure_record(
+    tmp_path, monkeypatch, pyscf_driver_config, pyscf_h2_molecule
+):
+    """Setting the module to None makes ``import pyscf`` fail as if absent."""
+    monkeypatch.chdir(tmp_path)
+    config = pyscf_driver_config(
+        PySCFSinglePointJob,
+        pyscf_h2_molecule,
+        "sp",
+        label="absent",
+        functional="b3lyp",
+        basis="sto-3g",
+    )
+    with patch.dict(sys.modules, {"pyscf": None}):
+        assert driver.main(config) == 1
+
+    output = PySCFOutput(tmp_path / "absent.out")
+    assert output.normal_termination is False
+    assert output.failure["stage"] == "initialization"
+    assert output.failure["type"] == "ModuleNotFoundError"
+    assert output.version is None

@@ -1,11 +1,17 @@
 """Boundary tests for the structured PySCF output reader."""
 
+import logging
+
 import h5py
 import numpy as np
 import pytest
 from ase import units
 
-from chemsmart.io.pyscf.output import PySCFOutput
+from chemsmart.io.pyscf.output import (
+    PySCFOutput,
+    read_pyscf_h5,
+    rotational_symmetry_number_from_point_group,
+)
 from chemsmart.jobs.pyscf.writer import (
     RESULTS_SCHEMA_VERSION,
     write_pyscf_h5,
@@ -93,60 +99,81 @@ def test_failed_status_never_reads_as_complete(tmp_path):
     assert output.failure["stage"] == "scf"
 
 
-def _opt_status(optimizer_converged):
-    return {
-        "normal_termination": optimizer_converged,
-        "stages": {
-            "scf": {"converged": True},
-            "opt": {
-                "converged": optimizer_converged,
-                "optimizer_converged": optimizer_converged,
-                "final_scf_converged": True,
-            },
-        },
-        "failure": None,
-    }
-
-
-def test_unconverged_optimisation_is_not_labelled_optimized(tmp_path):
-    logfile = tmp_path / "opt.out"
+def test_missing_results_read_as_not_terminated(tmp_path):
+    logfile = tmp_path / "absent.out"
     logfile.write_text("PySCF version 2.14.0\n")
-    write_pyscf_h5(
-        tmp_path / "opt.h5",
-        spec={
-            "jobtype": "opt",
-            "symbols": ["H", "H"],
-            "charge": 0,
-            "multiplicity": 1,
-        },
-        provenance={"engine": "cpu"},
-        status=_opt_status(False),
-        results={"positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]},
-    )
-
     output = PySCFOutput(logfile)
-    assert output.get_molecule().is_optimized_structure is False
-    assert output.optimized_structure is None
+    assert output.normal_termination is False
+    assert output.file_date is None
+    with pytest.raises(FileNotFoundError, match="did not reach"):
+        output.spec
 
 
-def test_run_without_a_geometry_reports_why(tmp_path):
-    logfile = tmp_path / "failed.out"
+def test_corrupt_results_read_as_not_terminated(tmp_path):
+    """A file truncated by a crash must never count as a completed run."""
+    logfile = tmp_path / "corrupt.out"
     logfile.write_text("PySCF version 2.14.0\n")
-    write_pyscf_h5(
-        tmp_path / "failed.h5",
-        spec={"jobtype": "sp", "symbols": ["H", "H"]},
-        provenance={"engine": "cpu"},
-        status={
-            "normal_termination": False,
-            "stages": {},
-            "failure": {
-                "type": "RuntimeError",
-                "message": "SMD module is not available",
-                "stage": "initialization",
-            },
-        },
-        results={},
-    )
+    (tmp_path / "corrupt.h5").write_bytes(b"not an hdf5 file")
+    assert PySCFOutput(logfile).normal_termination is False
 
-    with pytest.raises(ValueError, match="SMD module is not available"):
-        PySCFOutput(logfile).get_molecule()
+
+def test_unsupported_schema_version_is_rejected(tmp_path):
+    path = tmp_path / "future.h5"
+    with h5py.File(path, "w") as handle:
+        handle.attrs["schema_version"] = "99.0"
+    with pytest.raises(ValueError, match="Unsupported PySCF results schema"):
+        read_pyscf_h5(path)
+
+
+def test_missing_schema_version_is_rejected(tmp_path):
+    path = tmp_path / "unversioned.h5"
+    with h5py.File(path, "w"):
+        pass
+    with pytest.raises(ValueError, match="Unsupported PySCF results schema"):
+        read_pyscf_h5(path)
+
+
+def test_missing_section_is_named(tmp_path):
+    path = tmp_path / "partial.h5"
+    with h5py.File(path, "w") as handle:
+        handle.attrs["schema_version"] = RESULTS_SCHEMA_VERSION
+        handle.create_group("spec")
+    with pytest.raises(ValueError, match="provenance"):
+        read_pyscf_h5(path)
+
+
+@pytest.mark.parametrize(
+    ("point_group", "sigma"),
+    [
+        ("C1", 1),
+        ("Cs", 1),
+        ("Ci", 1),
+        ("C2", 2),
+        ("C2v", 2),
+        ("C3h", 3),
+        ("D2", 4),
+        ("D3d", 6),
+        ("D6h", 12),
+        ("S4", 2),
+        ("S6", 3),
+        ("Coov", 1),
+        ("Dooh", 2),
+        ("T", 12),
+        ("Td", 12),
+        ("Th", 12),
+        ("O", 24),
+        ("Oh", 24),
+        ("I", 60),
+        ("Ih", 60),
+    ],
+)
+def test_rotational_symmetry_numbers(point_group, sigma):
+    assert rotational_symmetry_number_from_point_group(point_group) == sigma
+
+
+@pytest.mark.parametrize("point_group", [None, "", "Xyz", "Q5"])
+def test_unknown_point_group_warns_and_uses_one(point_group, caplog):
+    with caplog.at_level(logging.WARNING):
+        sigma = rotational_symmetry_number_from_point_group(point_group)
+    assert sigma == 1
+    assert "Rotational entropy may be overestimated" in caplog.text

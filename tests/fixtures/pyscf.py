@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.pyscf import driver
 from chemsmart.io.pyscf.output import PySCFOutput
-from chemsmart.jobs.pyscf.writer import (
-    write_pyscf_h5,
-)
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.jobs.pyscf.writer import PySCFScriptWriter, write_pyscf_h5
 
 
 # master PySCF test directory
@@ -154,3 +154,112 @@ def pyscf_output(tmp_path):
         results=results,
     )
     return PySCFOutput(logfile), positions
+
+
+@pytest.fixture()
+def pyscf_oh_radical_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "oh_sp_radical")
+
+
+@pytest.fixture()
+def pyscf_water_scf_failed_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "water_sp_scf_failed")
+
+
+@pytest.fixture()
+def pyscf_water_opt_unconverged_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "water_opt_unconverged")
+
+
+@pytest.fixture()
+def pyscf_water_smd_failed_outfolder(pyscf_outputs_directory):
+    return os.path.join(pyscf_outputs_directory, "water_sp_smd_failed")
+
+
+@pytest.fixture()
+def pyscf_water_xyz(pyscf_inputs_directory):
+    return os.path.join(pyscf_inputs_directory, "water.xyz")
+
+
+@pytest.fixture()
+def pyscf_h2_molecule():
+    return Molecule(
+        symbols=["H", "H"],
+        positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]),
+        charge=0,
+        multiplicity=1,
+    )
+
+
+@pytest.fixture()
+def pyscf_oh_molecule():
+    return Molecule(
+        symbols=["O", "H"],
+        positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.97]]),
+        charge=0,
+        multiplicity=2,
+    )
+
+
+@pytest.fixture()
+def pyscf_distorted_water_molecule():
+    return Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.05], [0.0, 0.85, -0.5], [0.0, -0.80, -0.42]]
+        ),
+        charge=0,
+        multiplicity=1,
+    )
+
+
+@pytest.fixture()
+def pyscf_linear_water_molecule():
+    return Molecule(
+        symbols=["O", "H", "H"],
+        positions=np.array(
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 0.99], [0.0, 0.0, -0.99]]
+        ),
+        charge=0,
+        multiplicity=1,
+    )
+
+
+@pytest.fixture()
+def pyscf_driver_config():
+    """Return a factory building a real driver configuration through a job."""
+
+    def build(job_class, molecule, jobtype, label=None, **settings):
+        settings.setdefault("charge", molecule.charge)
+        settings.setdefault("multiplicity", molecule.multiplicity)
+        job = job_class(
+            molecule=molecule,
+            settings=PySCFJobSettings(jobtype=jobtype, **settings),
+            label=label or jobtype,
+        )
+        return PySCFScriptWriter(job).build_config()
+
+    return build
+
+
+@pytest.fixture()
+def run_pyscf_driver(tmp_path, monkeypatch, pyscf_driver_config):
+    """Return a function running the real driver in-process in ``tmp_path``."""
+    monkeypatch.chdir(tmp_path)
+
+    def run(
+        job_class,
+        molecule,
+        jobtype,
+        label=None,
+        config_overrides=None,
+        **settings,
+    ):
+        config = pyscf_driver_config(
+            job_class, molecule, jobtype, label=label, **settings
+        )
+        config.update(config_overrides or {})
+        returncode = driver.main(config)
+        return returncode, PySCFOutput(config["label"] + ".out")
+
+    return run

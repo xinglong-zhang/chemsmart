@@ -7,10 +7,12 @@ from the writer that the reader is paired with.
 """
 
 import os
+import shutil
 
 import h5py
 import numpy as np
 import pytest
+from ase import units
 
 from chemsmart.io.pyscf.output import PySCFOutput
 
@@ -251,3 +253,133 @@ class TestPySCFStructureAccess:
         assert molecule.dipole_moment_magnitude == pytest.approx(
             np.linalg.norm(molecule.dipole_moment)
         )
+
+
+class TestPySCFUnrestrictedOutput:
+    """UKS B3LYP/def2-SVP on the OH radical, computed with PySCF 2.14."""
+
+    def test_spin_channels_are_separated(self, pyscf_oh_radical_outfolder):
+        output = _output(pyscf_oh_radical_outfolder)
+        assert output.multiplicity == 2
+        assert output.spin == 1
+        assert output.results["mo_energy"].ndim == 2
+        assert len(output.alpha_occ_eigenvalues) == 5
+        assert len(output.beta_occ_eigenvalues) == 4
+        assert output.num_unpaired_electrons == 1
+
+    def test_orbital_energies_are_in_ev(self, pyscf_oh_radical_outfolder):
+        output = _output(pyscf_oh_radical_outfolder)
+        assert output.alpha_homo_energy == pytest.approx(
+            float(output.results["mo_energy"][0][4]) * units.Hartree
+        )
+        assert output.alpha_homo_energy != output.beta_homo_energy
+
+    def test_linear_molecule_symmetry(self, pyscf_oh_radical_outfolder):
+        output = _output(pyscf_oh_radical_outfolder)
+        assert output.point_group == "Coov"
+        assert output.rotational_symmetry_number == 1
+
+
+class TestPySCFUnconvergedScf:
+    """A real SCF stopped after one cycle."""
+
+    def test_does_not_read_as_complete(self, pyscf_water_scf_failed_outfolder):
+        output = _output(pyscf_water_scf_failed_outfolder)
+        assert output.normal_termination is False
+        assert output.status["stages"]["scf"]["converged"] is False
+
+    def test_no_forces_from_an_unconverged_density(
+        self, pyscf_water_scf_failed_outfolder
+    ):
+        output = _output(pyscf_water_scf_failed_outfolder)
+        assert output.forces is None
+        assert (
+            output.status["skipped_properties"]["forces"]
+            == "final SCF did not converge"
+        )
+
+
+class TestPySCFUnconvergedOptimisation:
+    """A real optimisation stopped by its step limit, with freq requested."""
+
+    def test_structure_is_not_labelled_optimized(
+        self, pyscf_water_opt_unconverged_outfolder
+    ):
+        output = _output(pyscf_water_opt_unconverged_outfolder)
+        assert output.normal_termination is False
+        assert output.optimizer_converged is False
+        assert output.get_molecule().is_optimized_structure is False
+        assert output.optimized_structure is None
+
+    def test_hessian_was_skipped_so_no_thermochemistry_is_reported(
+        self, pyscf_water_opt_unconverged_outfolder
+    ):
+        output = _output(pyscf_water_opt_unconverged_outfolder)
+        assert output.status["stages"]["hess"]["completed"] is False
+        assert output.freq is False
+        assert output.vibrational_frequencies is None
+        assert output.gibbs_free_energy is None
+        assert output.internal_energy is None
+        assert output.thermal_enthalpy_correction is None
+
+
+class TestPySCFRunWithoutGeometry:
+    """A real SMD request on a PySCF build without that module."""
+
+    def test_failure_is_recorded_with_its_stage(
+        self, pyscf_water_smd_failed_outfolder
+    ):
+        output = _output(pyscf_water_smd_failed_outfolder)
+        assert output.normal_termination is False
+        assert output.failure["type"] == "RuntimeError"
+        assert output.failure["stage"] == "scf"
+        assert "SMD" in output.failure["message"]
+
+    def test_requesting_a_structure_explains_the_failure(
+        self, pyscf_water_smd_failed_outfolder
+    ):
+        output = _output(pyscf_water_smd_failed_outfolder)
+        with pytest.raises(ValueError, match="SMD module is not available"):
+            output.get_molecule()
+
+
+class TestPySCFOutputDescriptions:
+    def test_repr_names_the_calculation(self, pyscf_water_opt_outfolder):
+        text = repr(_output(pyscf_water_opt_outfolder))
+        assert "jobtype='opt'" in text
+        assert "normal_termination=True" in text
+
+    def test_listed_indices_return_a_list(self, pyscf_water_opt_outfolder):
+        selected = _output(pyscf_water_opt_outfolder).get_molecule(index="1,1")
+        assert [molecule.num_atoms for molecule in selected] == [3, 3]
+
+    def test_single_index_can_be_wrapped(self, pyscf_water_opt_outfolder):
+        selected = _output(pyscf_water_opt_outfolder).get_molecule(
+            index="-1", return_list=True
+        )
+        assert len(selected) == 1
+
+    def test_single_point_reports_no_thermochemistry(
+        self, pyscf_water_sp_outfolder
+    ):
+        output = _output(pyscf_water_sp_outfolder)
+        assert output.internal_energy is None
+        assert output.thermal_gibbs_free_energy_correction is None
+
+    def test_route_names_every_identity_setting(
+        self, pyscf_water_sp_outfolder, tmp_path
+    ):
+        """No committed output used dispersion, as it needs an extra package."""
+        label = os.path.basename(pyscf_water_sp_outfolder)
+        for suffix in (".out", ".h5"):
+            shutil.copy(
+                os.path.join(pyscf_water_sp_outfolder, label + suffix),
+                tmp_path / f"calc{suffix}",
+            )
+        with h5py.File(tmp_path / "calc.h5", "a") as handle:
+            del handle["spec/dispersion"]
+            handle["spec"].create_dataset("dispersion", data="d3bj")
+        route = PySCFOutput(tmp_path / "calc.out").route_string
+        assert "d3bj" in route
+        assert "cpcm(water)" in route
+        assert "engine=cpu" in route

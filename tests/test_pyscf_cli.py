@@ -1,12 +1,17 @@
 """Focused tests for the PySCF Click surface and option propagation."""
 
+import glob
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.pyscf.common import resolve_engine, settings_for_molecule
+from chemsmart.cli.run import run
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.pyscf.output import read_pyscf_h5
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from tests.helpers import run_pyscf_and_capture_settings
 
@@ -224,3 +229,153 @@ def test_missing_charge_and_multiplicity_are_reported():
     molecule = SimpleNamespace(charge=None, multiplicity=None)
     with pytest.raises(ValueError, match="Charge and multiplicity"):
         settings_for_molecule(settings, molecule)
+
+
+class TestPySCFCliRequests:
+    def _invoke(self, args):
+        return CliRunner().invoke(
+            pyscf,
+            args,
+            obj={"jobrunner": MagicMock(num_gpus=0)},
+            catch_exceptions=False,
+        )
+
+    @pytest.mark.parametrize(
+        ("options", "message"),
+        [
+            (["-x", "pbe", "-A", "hf"], "either --functional or --ab-initio"),
+            (["-A", "hf", "--defgrid", "defgrid2"], "DFT-only"),
+            (["--no-density-fit", "-ab", "x"], "--aux-basis cannot"),
+        ],
+    )
+    def test_contradictory_options_are_refused(
+        self, pyscf_water_xyz, options, message
+    ):
+        with pytest.raises(ValueError, match=message):
+            self._invoke(["-p", "test", "-f", pyscf_water_xyz, *options, "sp"])
+
+    def test_a_structure_source_is_required(self):
+        with pytest.raises(ValueError, match="has not been specified"):
+            self._invoke(["-p", "test", "sp"])
+
+    def test_only_one_structure_source_is_allowed(self, pyscf_water_xyz):
+        with pytest.raises(ValueError, match="Both"):
+            self._invoke(
+                ["-p", "test", "-f", pyscf_water_xyz, "-P", "962", "sp"]
+            )
+
+    def test_label_and_append_label_conflict(self, pyscf_water_xyz):
+        with pytest.raises(ValueError, match="but not both"):
+            self._invoke(
+                [
+                    "-p",
+                    "test",
+                    "-f",
+                    pyscf_water_xyz,
+                    "-l",
+                    "a",
+                    "-a",
+                    "b",
+                    "sp",
+                ]
+            )
+
+
+class TestPySCFCliRealRuns:
+    """Preview runs through ``chemsmart run`` from real input files."""
+
+    def _preview(self, *args):
+        result = CliRunner().invoke(
+            run, ["--fake", "pyscf", "-p", "test", *args], obj={}
+        )
+        assert result.exit_code == 0, (result.output, result.exception)
+
+    def test_append_label_extends_the_file_name(
+        self, pyscf_water_xyz, temporary_working_dir
+    ):
+        self._preview(
+            "-f", pyscf_water_xyz, "-c", "0", "-m", "1", "-a", "extra", "sp"
+        )
+        assert glob.glob("water_extra*.h5")
+
+    def test_forces_and_tolerance_reach_the_results(
+        self, pyscf_water_xyz, temporary_working_dir
+    ):
+        self._preview(
+            "-f",
+            pyscf_water_xyz,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "--forces",
+            "--point-group-tol",
+            "0.01",
+            "-l",
+            "requested",
+            "sp",
+        )
+        spec = read_pyscf_h5(glob.glob("requested*.h5")[0])[0]
+        assert spec["forces"] is True
+        assert spec["point_group_tol"] == 0.01
+
+    def test_no_density_fit_clears_an_inherited_auxiliary_basis(
+        self, pyscf_water_xyz, temporary_working_dir
+    ):
+        self._preview(
+            "-f",
+            pyscf_water_xyz,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "--no-density-fit",
+            "-l",
+            "nodf",
+            "sp",
+        )
+        spec = read_pyscf_h5(glob.glob("nodf*.h5")[0])[0]
+        assert spec["density_fit"] is False
+        assert spec["aux_basis"] is None
+
+    def test_each_selected_structure_gets_its_own_job(
+        self, multiple_molecules_xyz_file, temporary_working_dir
+    ):
+        self._preview(
+            "-f",
+            multiple_molecules_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "-i",
+            "1,2",
+            "sp",
+        )
+        assert len(glob.glob("*_idx1_*.h5")) == 1
+        assert len(glob.glob("*_idx2_*.h5")) == 1
+
+    def test_single_selected_index_runs_one_job(
+        self, multiple_molecules_xyz_file, temporary_working_dir
+    ):
+        self._preview(
+            "-f",
+            multiple_molecules_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "-i",
+            "2",
+            "sp",
+        )
+        assert len(glob.glob("*.h5")) == 1
+
+    def test_pubchem_structure_is_used_with_a_default_label(
+        self, pyscf_water_molecule, temporary_working_dir
+    ):
+        with patch.object(
+            Molecule, "from_pubchem", return_value=[pyscf_water_molecule]
+        ):
+            self._preview("-P", "962", "-c", "0", "-m", "1", "sp")
+        assert glob.glob("output_sp*.h5")

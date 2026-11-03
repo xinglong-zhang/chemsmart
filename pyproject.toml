@@ -58,6 +58,9 @@ test = [
     "pytest-mock",
     "coverage",
     "pytest-cov",
+    # Real driver tests. PySCF publishes no Windows wheels; they skip there.
+    "pyscf>=2.14.0; sys_platform != 'win32'",
+    "geometric; sys_platform != 'win32'",
 ]
 dev = [
     "pre-commit>=3.6.0",

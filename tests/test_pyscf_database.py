@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.database.assemble import assemble
-from chemsmart.database.assemble import PySCFAssembler
+from chemsmart.database.assemble import PySCFAssembler, SingleFileAssembler
 from chemsmart.database.database import Database
 from chemsmart.database.utils import sha256_file
 
@@ -70,3 +70,51 @@ def test_record_identifies_the_results_file(pyscf_water_opt_outfolder):
     assert molecule["point_group"] == "C2V"
     assert molecule["dipole_moment_magnitude"] is not None
     assert molecule["is_optimized_structure"] is True
+
+
+def test_assemble_keeps_converged_runs_and_skips_failed_ones(
+    pyscf_water_sp_outfolder,
+    pyscf_water_scf_failed_outfolder,
+    pyscf_water_smd_failed_outfolder,
+    tmp_path,
+):
+    root = tmp_path / "calculations"
+    _copy_output(pyscf_water_sp_outfolder, root / "good")
+    _copy_output(pyscf_water_scf_failed_outfolder, root / "scf_failed")
+    _copy_output(pyscf_water_smd_failed_outfolder, root / "no_geometry")
+    output = tmp_path / "pyscf.db"
+    result = CliRunner().invoke(
+        assemble, ["-d", str(root), "-p", "pyscf", "-o", str(output)], obj={}
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    assert Database(str(output)).count_records() == 1
+
+
+def test_failed_run_with_a_geometry_can_be_included(
+    pyscf_water_scf_failed_outfolder,
+):
+    label = os.path.basename(pyscf_water_scf_failed_outfolder)
+    logfile = os.path.join(pyscf_water_scf_failed_outfolder, f"{label}.out")
+    record = PySCFAssembler(filename=logfile, include_failed=True).assemble()
+    assert record.provenance["normal_termination"] is False
+    assert record.molecules[0]["is_optimized_structure"] is False
+
+
+def test_failed_run_without_a_geometry_assembles_to_nothing(
+    pyscf_water_smd_failed_outfolder,
+):
+    label = os.path.basename(pyscf_water_smd_failed_outfolder)
+    logfile = os.path.join(pyscf_water_smd_failed_outfolder, f"{label}.out")
+    assembler = SingleFileAssembler(logfile, include_failed=True)
+    assert assembler.assemble_data is None
+
+
+def test_open_shell_record_keeps_both_spin_channels(
+    pyscf_oh_radical_outfolder,
+):
+    label = os.path.basename(pyscf_oh_radical_outfolder)
+    logfile = os.path.join(pyscf_oh_radical_outfolder, f"{label}.out")
+    record = SingleFileAssembler(logfile).assemble_data
+    assert record.results["alpha_homo_energy"] is not None
+    assert record.results["beta_homo_energy"] is not None
+    assert record.meta["spin"] == 1
