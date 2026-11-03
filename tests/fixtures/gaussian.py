@@ -254,6 +254,13 @@ def gaussian_link_opt_outputfile(gaussian_link_outputs_test_directory):
 
 
 @pytest.fixture()
+def gaussian_link_irc_outputfile(gaussian_link_outputs_test_directory):
+    return os.path.join(
+        gaussian_link_outputs_test_directory, "link_irc_output_irc_link.log"
+    )
+
+
+@pytest.fixture()
 def gaussian_link_ts_outputfile(gaussian_link_outputs_test_directory):
     gaussian_link_ts_outfile = os.path.join(
         gaussian_link_outputs_test_directory,
