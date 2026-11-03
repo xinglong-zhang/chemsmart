@@ -980,41 +980,26 @@ class TestGaussianJobFactories:
         )
         assert isinstance(job, GaussianGeneralJob)
 
-    def test_from_jobtype_g16_with_explicit_jobrunner_is_buggy(
+    def test_from_jobtype_g16_keeps_an_explicit_jobrunner(
         self, a_molecule, gaussian_settings
     ):
-        """Documents a real bug in ``GaussianJob.from_jobtype``: the
-        ``return GaussianGeneralJob(...)`` for the "g16" branch is nested
-        inside ``if jobrunner is None:`` instead of the ``elif
-        jobtype.lower() == "g16":`` block. When a caller *already* has a
-        jobrunner (the common case — see e.g. the ``qmmm`` subcommands
-        that build parent jobs with a jobrunner in hand), this falls
-        through to the ``else: raise ValueError(f"Invalid job type:
-        {jobtype}")`` clause even though "g16" is a valid job type."""
         mock_jobrunner = MagicMock()
-        with pytest.raises(ValueError, match="Invalid job type: g16"):
-            GaussianJob.from_jobtype(
-                jobtype="g16",
-                molecule=a_molecule,
-                settings=gaussian_settings,
-                jobrunner=mock_jobrunner,
-            )
-
-    def test_from_jobtype_invalid_silently_returns_none(
-        self, a_molecule, gaussian_settings
-    ):
-        """Documents a second bug in ``from_jobtype``: the "invalid job
-        type" ``raise ValueError`` is only reachable from inside the
-        "g16" branch (see the "buggy" test above). There is no top-level
-        ``else`` for jobtypes that are not "opt"/"com"/"g16" at all, so a
-        genuinely unrecognized jobtype silently falls through and returns
-        ``None`` instead of raising."""
-        result = GaussianJob.from_jobtype(
-            jobtype="bogus",
+        job = GaussianJob.from_jobtype(
+            jobtype="g16",
             molecule=a_molecule,
             settings=gaussian_settings,
+            jobrunner=mock_jobrunner,
         )
-        assert result is None
+        assert isinstance(job, GaussianGeneralJob)
+        assert job.jobrunner is mock_jobrunner
+
+    def test_from_jobtype_invalid_raises(self, a_molecule, gaussian_settings):
+        with pytest.raises(ValueError, match="Invalid job type: bogus"):
+            GaussianJob.from_jobtype(
+                jobtype="bogus",
+                molecule=a_molecule,
+                settings=gaussian_settings,
+            )
 
 
 class TestGaussianComJob:

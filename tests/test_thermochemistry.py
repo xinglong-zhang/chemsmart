@@ -5225,7 +5225,7 @@ class TestBoltzmannJobFromFiles:
     ):
         mock_runner_instance = MagicMock()
         with patch(
-            "chemsmart.jobs.thermochemistry.boltzmann.JobRunner.from_job",
+            "chemsmart.jobs.runner.JobRunner.from_job",
             return_value=mock_runner_instance,
         ) as mock_from_job:
             job = BoltzmannAverageThermochemistryJob.from_files(
@@ -5702,7 +5702,7 @@ class TestThermochemistryJobFromFilename:
     ):
         mock_runner_instance = MagicMock()
         with patch(
-            "chemsmart.jobs.thermochemistry.job.JobRunner.from_job",
+            "chemsmart.jobs.runner.JobRunner.from_job",
             return_value=mock_runner_instance,
         ) as mock_from_job:
             job = ThermochemistryJob.from_filename(
