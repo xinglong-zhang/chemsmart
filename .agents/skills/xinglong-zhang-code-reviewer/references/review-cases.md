@@ -33,3 +33,69 @@ scratch_dir = getattr(job, "scratch_parent_folder", None)
 ```
 
 Ask for the attribute to be initialised in the constructor, as in PR #687, so its availability does not depend on which code path has run. The same concern applies to `getattr(molecule, key, None)` when the attribute should always exist.
+
+## Real test data
+
+Source: [User feedback: test data and test support layout](review-evidence.md#user-feedback-test-data-and-test-support-layout).
+
+### Situation
+
+A PR adds a reader for a program's results file, and a test builds a failed run by hand because no committed output covers one:
+
+```python
+write_results(path, status={"normal_termination": False}, results={})
+assert Output(path).normal_termination is False
+```
+
+### Expected behaviour
+
+Ask whether the failed run can come from the program itself: a real calculation stopped by its iteration limit, committed as a small fixture, or run in the test if it is fast. A hand-written file only shows that the reader agrees with what the test's author assumed the program writes. Keep this as a recommendation, and do not report it as a defect in the reader.
+
+### Counterexample: this should not be flagged
+
+Some inputs cannot be real or cannot run in the test environment, so synthetic data or a narrow patch is appropriate:
+
+```python
+(tmp_path / "corrupt.h5").write_bytes(b"not an hdf5 file")
+assert Output(tmp_path / "corrupt.out").normal_termination is False
+
+with patch.object(Molecule, "from_pubchem", return_value=molecule):
+    job = Job.from_pubchem("962", settings=settings, label="fetched")
+```
+
+## Test support layout
+
+Source: [User feedback: test data and test support layout](review-evidence.md#user-feedback-test-data-and-test-support-layout).
+
+### Situation
+
+A new test file defines its own fixture and assertion helper, even though only that file uses them so far:
+
+```python
+@pytest.fixture()
+def runner_options(pbs_server):
+    return {"server": pbs_server, "scratch": False, "fake": True}
+
+
+def _assert_runner_was_configured(job, options):
+    assert job.jobrunner.server is options["server"]
+```
+
+### Expected behaviour
+
+Check `tests/conftest.py` for the current layout, then ask for the fixture to move to the matching `tests/fixtures/<area>.py` module and the helper to `tests/helpers.py`. Report this as a consistency finding, not a correctness defect.
+
+### Counterexample: this should not be flagged
+
+A class or function that only makes sense inside one test, because it captures that test's local state, can stay there:
+
+```python
+def test_rejects_arbitrary_pickle_globals(tmp_path):
+    marker = tmp_path / "unpickled"
+
+    class Payload:
+        def __reduce__(self):
+            return os.mkdir, (str(marker),)
+```
+
+Also do not ask for a mass migration of private helpers in test files the PR does not change.
