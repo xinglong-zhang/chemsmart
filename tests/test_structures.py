@@ -5087,7 +5087,7 @@ class TestMoleculeFilepathEdgeCases:
     def test_from_filepath_sdf_extension(self, write_tmp_file):
         sdf_string = (
             "water\n"
-            "  -ChemSmart-3D\n"
+            "  -CHEMSMART-3D\n"
             "\n"
             "  3  2  0  0  0  0  0  0  0  0999 V2000\n"
             "    0.0000    0.0000    0.1173 O   0  0  0  0  0  0  0  0  0  0  0  0\n"
