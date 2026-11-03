@@ -26,19 +26,7 @@ from chemsmart.jobs.thermochemistry.boltzmann import (
     BoltzmannAverageThermochemistryJob,
 )
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
-
-
-@pytest.fixture()
-def runner_options(pbs_server):
-    return {"server": pbs_server, "scratch": False, "fake": True}
-
-
-def _assert_runner_was_configured(job, options):
-    assert job.jobrunner is not None
-    assert job.jobrunner.server is options["server"]
-    assert job.jobrunner.scratch is False
-    assert job.jobrunner.fake is True
-    assert not set(options) & set(job.kwargs)
+from tests.helpers import assert_runner_was_configured
 
 
 class TestGaussianFactories:
@@ -52,7 +40,7 @@ class TestGaussianFactories:
             label="from_file",
             **runner_options,
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     def test_from_pubchem(self, single_molecule_xyz_file, runner_options):
         molecule = Molecule.from_filepath(single_molecule_xyz_file)
@@ -63,7 +51,7 @@ class TestGaussianFactories:
                 label="fetched",
                 **runner_options,
             )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     @pytest.mark.xfail(
         strict=True,
@@ -76,7 +64,7 @@ class TestGaussianFactories:
         job = GaussianComJob.from_filename(
             gaussian_frozen_opt_inputfile, label="com", **runner_options
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     @pytest.mark.parametrize(
         ("jobtype", "job_class"),
@@ -97,7 +85,7 @@ class TestGaussianFactories:
             **runner_options,
         )
         assert isinstance(job, job_class)
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
 
 class TestORCAFactories:
@@ -108,7 +96,7 @@ class TestORCAFactories:
             label="from_file",
             **runner_options,
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     def test_from_pubchem(self, single_molecule_xyz_file, runner_options):
         molecule = Molecule.from_filepath(single_molecule_xyz_file)
@@ -119,13 +107,13 @@ class TestORCAFactories:
                 label="fetched",
                 **runner_options,
             )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     def test_inp_job_from_filename(self, water_sp_input_path, runner_options):
         job = ORCAInpJob.from_filename(
             water_sp_input_path, label="inp", **runner_options
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     @pytest.mark.parametrize(
         ("jobtype", "job_class"),
@@ -146,7 +134,7 @@ class TestORCAFactories:
             **runner_options,
         )
         assert isinstance(job, job_class)
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
 
 class TestPyMOLFactories:
@@ -154,7 +142,7 @@ class TestPyMOLFactories:
         job = PyMOLVisualizationJob.from_filename(
             single_molecule_xyz_file, label="view", **runner_options
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     def test_from_pubchem(self, single_molecule_xyz_file, runner_options):
         molecule = Molecule.from_filepath(single_molecule_xyz_file)
@@ -162,7 +150,7 @@ class TestPyMOLFactories:
             job = PyMOLVisualizationJob.from_pubchem(
                 "962", label="fetched", **runner_options
             )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     def test_irc_movie_from_files(
         self, multiple_molecules_xyz_file, runner_options
@@ -174,7 +162,7 @@ class TestPyMOLFactories:
             label="irc",
             **runner_options,
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
 
 class TestOtherFactories:
@@ -187,7 +175,7 @@ class TestOtherFactories:
             index=":",
             **runner_options,
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     def test_thermochemistry_from_filename(
         self, gaussian_co2_opt_outfile, runner_options
@@ -195,7 +183,7 @@ class TestOtherFactories:
         job = ThermochemistryJob.from_filename(
             gaussian_co2_opt_outfile, **runner_options
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
     def test_boltzmann_from_files(
         self, gaussian_co2_opt_outfile, runner_options
@@ -205,7 +193,7 @@ class TestOtherFactories:
             filename=gaussian_co2_opt_outfile,
             **runner_options,
         )
-        _assert_runner_was_configured(job, runner_options)
+        assert_runner_was_configured(job, runner_options)
 
 
 def test_extra_job_arguments_reach_the_job(
