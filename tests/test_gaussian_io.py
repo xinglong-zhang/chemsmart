@@ -1782,6 +1782,48 @@ class TestGaussian16Output:
             molecule.forces, [[0.0, 0.0, 0.00001], [0.0, 0.0, -0.00001]]
         )
 
+    def test_read_gaussian_link_irc_output_file(
+        self, gaussian_link_irc_outputfile
+    ):
+        """Real reverse IRC log that previously lost all usable geometries."""
+        output = Gaussian16Output(filename=gaussian_link_irc_outputfile)
+        assert output.is_link
+        assert output.normal_termination
+        assert len(output.standard_orientations) == 1
+        assert len(output.input_orientations) == 3
+        np.testing.assert_array_equal(
+            output.input_orientations[-1], output.input_orientations[-2]
+        )
+
+        structures = output.all_structures
+        assert len(structures) == 2
+        assert [m.energy for m in structures] == [
+            -2914.80018749,
+            -2914.80018860,
+        ]
+
+        # Exercise the same geometry-loading entry point as job submission.
+        molecule = Molecule.from_filepath(
+            gaussian_link_irc_outputfile, index="-1"
+        )
+        assert molecule.num_atoms == 80
+        assert molecule.charge == 1
+        assert molecule.multiplicity == 1
+        assert molecule.energy == -2914.80018860
+        np.testing.assert_array_equal(
+            molecule.positions, output.input_orientations[-1]
+        )
+        np.testing.assert_allclose(
+            molecule.positions[[0, -1]],
+            [
+                [1.754299, -0.622878, -0.219045],
+                [-8.337942, 0.932776, 0.563390],
+            ],
+            rtol=0,
+            atol=1e-6,
+        )
+        np.testing.assert_array_equal(molecule.forces, output.forces[-1])
+
     def test_read_gaussian_link_opt_output_file(
         self, gaussian_link_opt_outputfile
     ):
