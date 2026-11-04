@@ -272,6 +272,19 @@ conda activate ~/anaconda3/envs/chemsmart
 
         submitter.write_batch_job.assert_not_called()
 
+    def test_batch_name_uses_batch_label_instead_of_first_structure(self):
+        server = Server("custom-slurm", SCHEDULER="SLURM")
+        job = SimpleNamespace(execution_name="xtb_dataset_idx1", PROGRAM="XTB")
+        submitter = SLURMSubmitter(
+            job=job, server=server, batch_label="dataset_sp"
+        )
+
+        assert submitter.batch_prefix == "xtb_dataset_sp"
+        submitter.num_nodes = 2
+        buffer = StringIO()
+        submitter._write_batch_scheduler_options(buffer)
+        assert "#SBATCH --job-name=xtb_dataset_sp\n" in buffer.getvalue()
+
     def test_pbs_submitter_writes_extra_scheduler_directives(self):
         server = Server(
             "custom-pbs",

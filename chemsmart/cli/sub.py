@@ -424,6 +424,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             num_nodes=num_nodes,
             test=kwargs.get("test"),
             cli_args=batch_cli_args,
+            batch_label=ctx.obj.get("label"),
         )
         return
 

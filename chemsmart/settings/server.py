@@ -692,7 +692,13 @@ class Server(RegistryMixin):
         return p.wait()
 
     def submit_batch_job(
-        self, jobs, num_nodes, test=False, cli_args=None, **kwargs
+        self,
+        jobs,
+        num_nodes,
+        test=False,
+        cli_args=None,
+        batch_label=None,
+        **kwargs,
     ):
         """Submit independent jobs within one node-limited SLURM allocation."""
         if not jobs:
@@ -704,7 +710,9 @@ class Server(RegistryMixin):
             )
 
         first_job = jobs[0]
-        submitter = self.get_submitter(first_job, **kwargs)
+        submitter = self.get_submitter(
+            first_job, batch_label=batch_label, **kwargs
+        )
         labeled_jobs = {
             job.execution_name for job in jobs if job.label is not None
         }

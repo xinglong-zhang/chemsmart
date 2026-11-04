@@ -73,7 +73,6 @@ class XTBJob(Job):
         folder = os.path.abspath(os.getcwd())
         if self.label:
             folder = os.path.join(folder, self.label)
-            os.makedirs(folder, exist_ok=True)
         return folder
 
     def base_folder(self):

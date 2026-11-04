@@ -861,9 +861,15 @@ class SLURMSubmitter(Submitter):
 
     @property
     def batch_prefix(self):
-        label = self.job.execution_name or "batch"
+        label = self.kwargs.get("batch_label")
+        if label:
+            program = self.job.PROGRAM
+            if program:
+                label = f"{program.lower()}_{label}"
+        else:
+            label = self.job.execution_name or "batch"
         label = re.sub(r"[^A-Za-z0-9_.-]+", "_", os.path.basename(label))
-        return f"chemsmart_batch_{label[:100]}"
+        return label[:100]
 
     @property
     def batch_submit_script(self):
