@@ -25,6 +25,73 @@ from chemsmart.database.utils import (
 logger = logging.getLogger(__name__)
 
 
+#: Columns of the ``records`` table, in the order ``_insert_record_row`` binds.
+RECORD_COLUMNS = (
+    "record_id",
+    "program",
+    "method",
+    "basis",
+    "num_basis_functions",
+    "spin",
+    "jobtype",
+    "solvent_on",
+    "route_string",
+    "solvent_model",
+    "solvent_id",
+    "custom_solvent",
+    "custom_basis_json",
+    "trajectory_id",
+    "temperature_in_K",
+    "pressure_in_atm",
+    "total_energy",
+    "num_unpaired_electrons",
+    "homo_energy",
+    "lumo_energy",
+    "alpha_homo_energy",
+    "beta_homo_energy",
+    "alpha_lumo_energy",
+    "beta_lumo_energy",
+    "somo_energies_json",
+    "lowest_somo_energy",
+    "highest_somo_energy",
+    "fmo_gap",
+    "alpha_fmo_gap",
+    "beta_fmo_gap",
+    "total_core_hours",
+    "total_elapsed_walltime",
+    "rotational_temperatures_json",
+    "rotational_constants_json",
+    "zero_point_energy",
+    "thermal_vibration_correction",
+    "thermal_rotation_correction",
+    "thermal_translation_correction",
+    "thermal_energy_correction",
+    "thermal_enthalpy_correction",
+    "thermal_free_energy_correction",
+    "internal_energy",
+    "enthalpy",
+    "electronic_entropy",
+    "vibrational_entropy",
+    "rotational_entropy",
+    "translational_entropy",
+    "entropy",
+    "entropy_times_temperature",
+    "gibbs_free_energy",
+    "source",
+    "source_file_hash",
+    "source_size",
+    "source_date",
+    "program_version",
+    "parser",
+    "chemsmart_version",
+    "assembled_at",
+    "normal_termination",
+)
+
+#: Records written between commits, so a long import keeps its progress.
+COMMIT_BATCH_SIZE = 1000
+
+
 class Database:
     """SQLite database for storing assembled calculation records.
     This class provides methods for creating, populating, and managing
@@ -210,6 +277,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS dataset_properties (
                     record_id TEXT NOT NULL,
                     index_in_record INTEGER NOT NULL,
+                    dataset_source TEXT NOT NULL,
                     properties_json TEXT NOT NULL,
                     PRIMARY KEY (record_id, index_in_record),
                     FOREIGN KEY (record_id) REFERENCES records(record_id)
@@ -291,47 +359,18 @@ class Database:
         results = record_dict.get("results", {})
         provenance = record_dict.get("provenance", {})
 
-        sql = """
-            INSERT INTO records (
-                record_id, program,
-                method, basis, num_basis_functions, spin, jobtype,
-                solvent_on, route_string, solvent_model, solvent_id, custom_solvent,
-                custom_basis_json,
-                trajectory_id,
-                temperature_in_K, pressure_in_atm,
-                total_energy, num_unpaired_electrons,
-                homo_energy, lumo_energy, alpha_homo_energy, beta_homo_energy,
-                alpha_lumo_energy, beta_lumo_energy, somo_energies_json,
-                lowest_somo_energy, highest_somo_energy,
-                fmo_gap, alpha_fmo_gap, beta_fmo_gap,
-                total_core_hours, total_elapsed_walltime,
-                rotational_temperatures_json, rotational_constants_json,
-                zero_point_energy, thermal_vibration_correction,
-                thermal_rotation_correction, thermal_translation_correction,
-                thermal_energy_correction, thermal_enthalpy_correction,
-                thermal_free_energy_correction, internal_energy, enthalpy,
-                electronic_entropy, vibrational_entropy, rotational_entropy,
-                translational_entropy, entropy, entropy_times_temperature,
-                gibbs_free_energy,
-                source, source_file_hash, source_size, source_date,
-                program_version, parser, chemsmart_version, assembled_at,
-                normal_termination
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-            """
-        columns = sql.split("INSERT INTO records (", 1)[1].split(
-            ") VALUES", 1
-        )[0]
-        columns = [column.strip() for column in columns.split(",")]
+        columns = ", ".join(RECORD_COLUMNS)
+        placeholders = ", ".join("?" for _ in RECORD_COLUMNS)
         updates = ", ".join(
             f"{column} = excluded.{column}"
-            for column in columns
+            for column in RECORD_COLUMNS
             if column != "record_id"
         )
-        sql += f" ON CONFLICT(record_id) DO UPDATE SET {updates}"
+        # An upsert, unlike INSERT OR REPLACE, keeps the record_index.
+        sql = (
+            f"INSERT INTO records ({columns}) VALUES ({placeholders}) "
+            f"ON CONFLICT(record_id) DO UPDATE SET {updates}"
+        )
         conn.execute(
             sql,
             (
@@ -430,17 +469,23 @@ class Database:
             )
 
         for mol in molecules:
-            if mol.get("dataset_properties"):
+            if mol.get("dataset_source"):
                 if not has_dataset_properties:
                     raise ValueError(
                         "Create the dataset_properties table before importing NPZ data."
                     )
                 conn.execute(
-                    "INSERT INTO dataset_properties VALUES (?, ?, ?)",
+                    """
+                    INSERT INTO dataset_properties (
+                        record_id, index_in_record,
+                        dataset_source, properties_json
+                    ) VALUES (?, ?, ?, ?)
+                    """,
                     (
                         record_id,
                         mol.get("index"),
-                        to_json(mol["dataset_properties"]),
+                        mol["dataset_source"],
+                        to_json(mol.get("dataset_properties", {})),
                     ),
                 )
             molecule_id = mol.get("molecule_id")
@@ -547,6 +592,7 @@ class Database:
         """Insert multiple records into the database."""
         conn = self.get_connection()
         count = 0
+        processed = 0
         try:
             conn.execute("BEGIN")
             for record in records:
@@ -559,7 +605,16 @@ class Database:
                     logger.error(f"Failed to insert record: {e}")
                 finally:
                     conn.execute("RELEASE SAVEPOINT insert_record")
+                processed += 1
+                if processed % COMMIT_BATCH_SIZE == 0:
+                    conn.commit()
+                    conn.execute("BEGIN")
             conn.commit()
+        except Exception:
+            # ``records`` may be a generator, whose own failures arrive here:
+            # keep what was already written, as reimporting updates in place.
+            conn.commit()
+            raise
         finally:
             conn.close()
         return count
@@ -649,15 +704,19 @@ class Database:
         )
         struct_rows = cursor.fetchall()
 
-        has_properties = conn.execute(
+        has_dataset_fields = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dataset_properties'"
         ).fetchone()
-        properties = {}
-        if has_properties:
-            properties = {
-                row[0]: from_json(row[1])
-                for row in conn.execute(
-                    "SELECT index_in_record, properties_json FROM dataset_properties WHERE record_id = ?",
+        dataset_fields = {}
+        if has_dataset_fields:
+            dataset_fields = {
+                index: {
+                    "dataset_source": source,
+                    "dataset_properties": from_json(properties),
+                }
+                for index, source, properties in conn.execute(
+                    "SELECT index_in_record, dataset_source, properties_json "
+                    "FROM dataset_properties WHERE record_id = ?",
                     (record_id,),
                 )
             }
@@ -665,11 +724,7 @@ class Database:
         molecules = []
         for row in struct_rows:
             molecule = self._record_structure_row_to_dict(dict(row))
-            index = row["index_in_record"]
-            if index in properties:
-                molecule["dataset_properties"] = properties[index]
-            if record_row.get("parser") == "NPZFile":
-                molecule["dataset_source"] = record_row.get("program")
+            molecule.update(dataset_fields.get(row["index_in_record"], {}))
             molecules.append(molecule)
 
         return {

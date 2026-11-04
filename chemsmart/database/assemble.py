@@ -408,117 +408,148 @@ class XTBAssembler(BaseAssembler):
 
 
 class NPZAssembler(MoleculeInfoAssemblerMixin):
-    """Build one database record per NPZ structure."""
+    """Build one database record per NPZ structure.
+
+    Attributes:
+        failed_structures (dict): 1-based structure index to the reason it
+            could not be assembled, filled while ``assemble`` is consumed.
+    """
 
     def __init__(
         self, filename, index=":", dataset=None, method=None, basis=None
     ):
         self.filename = filename
         self.index = index
-        if dataset not in (None, "revqm9", "qm9"):
-            raise ValueError("Dataset must be 'revqm9' or 'qm9'.")
         self.dataset = dataset
         self.method = method
         self.basis = basis
+        self.npz_file = NPZFile(filename, dataset=dataset)
+        self.failed_structures = {}
 
     def assemble(self):
+        schema = self.npz_file.schema
         source_hash = sha256_file(self.filename)
         source_size = file_size(self.filename)
-        npz_file = NPZFile(self.filename, dataset=self.dataset)
-        molecules = npz_file.get_molecules(index=self.index, return_list=True)
-        raw_energies = (
-            npz_file.raw_energies
-            if self.dataset is None
-            and molecules
-            and molecules[0].dataset_source == "revQM9"
-            else None
+        molecules = self.npz_file.get_molecules(
+            index=self.index, return_list=True
         )
+        if self.dataset is None:
+            logger.warning(
+                f"No dataset declared for {self.filename}: energies are "
+                f"recorded assuming the units of the detected {schema.name} "
+                f"layout. Use --dataset {schema.dataset} to confirm this and "
+                f"record its units, method and basis."
+            )
         for molecule in molecules:
-            expected_source = {"revqm9": "revQM9", "qm9": "qm9_eV"}.get(
-                self.dataset
-            )
-            if (
-                expected_source is not None
-                and molecule.dataset_source != expected_source
-            ):
-                raise ValueError(
-                    f"NPZ layout does not match dataset {self.dataset}."
-                )
             index = molecule.structure_index_in_file
-            record_id = hashlib.sha256(
-                f"npz|{source_hash}|{index}".encode()
-            ).hexdigest()
-            results = {"total_energy": molecule.energy} if self.dataset else {}
-            schema = npz_file.schema
-            fields = schema.property_units
-            dataset_properties = {
-                key: {
-                    "value": getattr(molecule, key),
-                    "unit": unit if self.dataset else None,
-                }
-                for key, unit in fields.items()
-                if getattr(molecule, key) is not None
-            }
-            if (
-                raw_energies is not None
-                and molecule.dataset_source == "revQM9"
-            ):
-                dataset_properties["energies"] = {
-                    "value": float(raw_energies[index - 1]),
-                    "unit": None,
-                }
-            if self.dataset == "qm9":
-                results.update(
-                    homo_energy=molecule.homo,
-                    lumo_energy=molecule.lumo,
-                    fmo_gap=molecule.gap,
+            try:
+                yield self._build_record(
+                    molecule, schema, source_hash, source_size
                 )
-            elif self.dataset == "revqm9":
-                if molecule.homo is not None:
-                    results["homo_energy"] = (
-                        molecule.homo * schema.orbital_energy_to_eV
-                    )
-                if molecule.lumo is not None:
-                    results["lumo_energy"] = (
-                        molecule.lumo * schema.orbital_energy_to_eV
-                    )
-                if molecule.homo is not None and molecule.lumo is not None:
-                    results["fmo_gap"] = (
-                        molecule.lumo - molecule.homo
-                    ) * schema.orbital_energy_to_eV
-            molecule_info = self.get_molecule_info(molecule)
-            if self.dataset is None:
-                molecule_info["energy"] = None
-            dipole = getattr(molecule, schema.dipole_key)
-            if self.dataset and dipole is not None:
-                molecule_info["dipole_moment_magnitude"] = dipole
-            yield AssembledRecord(
-                record_id=record_id,
-                meta={
-                    "method": self.method
-                    or (schema.meta["method"] if self.dataset else None),
-                    "basis": self.basis
-                    or (schema.meta["basis"] if self.dataset else None),
-                },
-                results=results,
-                molecules=[
-                    {
-                        "index": 1,
-                        **molecule_info,
-                        "dataset_properties": dataset_properties,
-                    }
-                ],
-                provenance={
-                    "source": self.filename,
-                    "source_file_hash": source_hash,
-                    "source_size": source_size,
-                    "program": expected_source,
-                    "parser": "NPZFile",
-                    "chemsmart_version": chemsmart_version,
-                    "assembled_at": utcnow_iso(),
-                    "normal_termination": None,
-                },
+            except ImportError:
+                # A missing dependency would fail every structure.
+                raise
+            except Exception as e:
+                logger.error(f"Skipping NPZ structure {index}: {e}")
+                self.failed_structures[index] = str(e)
+
+    def _build_record(self, molecule, schema, source_hash, source_size):
+        """Build the database record for one structure."""
+        index = molecule.structure_index_in_file
+        molecule_info = self.get_molecule_info(molecule)
+        dipole = getattr(molecule, schema.dipole_key)
+        if dipole is not None:
+            molecule_info["dipole_moment_magnitude"] = dipole
+        constants = self._rotational_constants_in_Hz(molecule, schema)
+        if constants is not None:
+            molecule_info["rotational_constants"] = constants
+        return AssembledRecord(
+            record_id=hashlib.sha256(
+                f"npz|{source_hash}|{index}".encode()
+            ).hexdigest(),
+            meta=self._get_meta(schema),
+            results=self._get_results(molecule, schema),
+            molecules=[
+                {
+                    "index": 1,
+                    **molecule_info,
+                    "dataset_source": molecule.dataset_source,
+                    "dataset_properties": self._get_dataset_properties(
+                        molecule, schema
+                    ),
+                }
+            ],
+            provenance={
+                "source": self.filename,
+                "source_file_hash": source_hash,
+                "source_size": source_size,
+                "program": schema.name if self.dataset else None,
+                "parser": "NPZFile",
+                "chemsmart_version": chemsmart_version,
+                "assembled_at": utcnow_iso(),
+                "normal_termination": None,
+            },
+        )
+
+    def _get_meta(self, schema):
+        """Return the method and basis, defaulting from a declared dataset."""
+        defaults = schema.meta if self.dataset else {}
+        return {
+            "method": self.method or defaults.get("method"),
+            "basis": self.basis or defaults.get("basis"),
+        }
+
+    def _get_results(self, molecule, schema):
+        """Convert dataset values to the record's energy conventions.
+
+        Each database column has a fixed unit, so the values are converted
+        using the units of the layout whether or not it was declared.
+        """
+        to_eV = schema.orbital_energy_to_eV
+        homo, lumo, gap = molecule.homo, molecule.lumo, molecule.gap
+        if gap is None and homo is not None and lumo is not None:
+            gap = lumo - homo
+        results = {"total_energy": molecule.energy}
+        if homo is not None:
+            results["homo_energy"] = homo * to_eV
+        if lumo is not None:
+            results["lumo_energy"] = lumo * to_eV
+        if gap is not None:
+            results["fmo_gap"] = gap * to_eV
+        # QM9's U0, U, H and G are atom-reference-adjusted, so they must not
+        # fill the columns holding absolute energies from other programs.
+        if molecule.zpve is not None:
+            results["zero_point_energy"] = (
+                molecule.zpve * schema.zpve_to_hartree
             )
+        constants = self._rotational_constants_in_Hz(molecule, schema)
+        if constants is not None:
+            results["rotational_constants_in_Hz"] = constants
+        return results
+
+    @staticmethod
+    def _rotational_constants_in_Hz(molecule, schema):
+        """Return [A, B, C] in Hz, or None if the dataset does not have them."""
+        constants = [
+            getattr(molecule, key) for key in schema.rotational_constant_keys
+        ]
+        if not constants or None in constants:
+            return None
+        return [
+            constant * schema.rotational_constant_to_Hz
+            for constant in constants
+        ]
+
+    def _get_dataset_properties(self, molecule, schema):
+        """Describe the original values, with units once they are declared."""
+        return {
+            key: {
+                "value": getattr(molecule, key),
+                "unit": unit if self.dataset else None,
+            }
+            for key, unit in schema.property_units.items()
+            if getattr(molecule, key) is not None
+        }
 
 
 class SingleFileAssembler:

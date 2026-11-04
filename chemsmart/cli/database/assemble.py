@@ -82,6 +82,7 @@ def assemble(
     Examples:
         chemsmart run database assemble -d results/ -o my.db
         chemsmart run database assemble -d ./ -p gaussian -o database.db
+        chemsmart run database assemble -f revQM9.npz --dataset revqm9
     """
 
     # Ensure the output filename ends with .db
@@ -100,16 +101,21 @@ def assemble(
             )
         db = Database(db_file=output)
         db.create()
-        count = db.insert_records(
-            NPZAssembler(
-                input_file,
-                index=index,
-                dataset=dataset,
-                method=method,
-                basis=basis,
-            ).assemble()
+        assembler = NPZAssembler(
+            os.path.abspath(input_file),
+            index=index,
+            dataset=dataset,
+            method=method,
+            basis=basis,
         )
+        count = db.insert_records(assembler.assemble())
         logger.info(f"Imported {count} NPZ record(s) into database: {output}")
+        if assembler.failed_structures:
+            logger.warning(
+                f"Skipped {len(assembler.failed_structures)} structure(s) "
+                f"that could not be assembled: "
+                f"{sorted(assembler.failed_structures)}"
+            )
         return None
 
     if dataset or method or basis:

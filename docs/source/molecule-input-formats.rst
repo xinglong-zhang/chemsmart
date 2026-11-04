@@ -93,14 +93,12 @@ Dataset downloads:
 
    chemsmart sub -s server gaussian -p project -f revQM9.npz -i 1 -c 0 -m 1 opt
 
-The reader imports atomic species and coordinates. For an explicitly declared revQM9 dataset, its total energy is
-assigned to ``molecule.energy``. Without a declaration, the energy is not assigned to ``molecule.energy``; database
-import preserves the raw ``energies`` values without an assumed unit. Use ``Molecule.from_filepath(path,
-dataset="revqm9")`` to declare the dataset. DGL QM9's ``U0`` is assigned to ``molecule.U0`` because it is an
-atom-reference-adjusted 0 K energy, rather than the total molecular energy represented by ``molecule.energy``. For the
-supported QM9 and revQM9 layouts, the reader assigns charge 0 and multiplicity 1. The Python API defaults to the last
-structure. Other NPZ schemas and zero padding are not supported. Object arrays are read using restricted NumPy
-reconstruction.
+The reader imports atomic species and coordinates. revQM9's total energy is assigned to ``molecule.energy``, in Hartree.
+DGL QM9's ``U0`` is assigned to ``molecule.U0`` because it is an atom-reference-adjusted 0 K energy, rather than the
+total molecular energy represented by ``molecule.energy``. For the supported QM9 and revQM9 layouts, the molecule read
+from the file has charge 0 and multiplicity 1, but job commands still require ``-c`` and ``-m``. The Python API defaults
+to the last structure. Other NPZ schemas and zero padding are not supported. Object arrays are read using restricted
+NumPy reconstruction.
 
 Supported per-molecule dataset properties are available as ``molecule.homo``, ``molecule.lumo``, and similar attributes,
 using original field names and values without unit conversion. ``molecule.dataset_source`` identifies the detected

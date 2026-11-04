@@ -9,7 +9,6 @@ from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
-    load_molecules_with_indices,
 )
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
@@ -336,7 +335,7 @@ def xtb(
                 f"Obtained database molecule {molecules} from {filename}"
             )
         else:
-            molecules, molecule_indices = load_molecules_with_indices(
+            molecules, molecule_indices = Molecule.from_filepath_with_indices(
                 filepath=filename, index=index
             )
             assert (

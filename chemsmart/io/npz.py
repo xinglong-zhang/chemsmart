@@ -22,11 +22,15 @@ class NPZSchema:
     """
 
     name: str
+    dataset: str
     position_key: str
     atom_key: str
     property_units: dict
     dipole_key: str
     orbital_energy_to_eV: float = 1.0
+    zpve_to_hartree: float = 1.0
+    rotational_constant_keys: tuple = ()
+    rotational_constant_to_Hz: float = 1.0
     count_key: Optional[str] = None
     energy_key: Optional[str] = None
     meta: dict = field(default_factory=dict)
@@ -40,10 +44,14 @@ class NPZSchema:
 
 QM9_SCHEMA = NPZSchema(
     name="qm9_eV",
+    dataset="qm9",
     position_key="R",
     atom_key="Z",
     count_key="N",
     dipole_key="mu",
+    zpve_to_hartree=1.0 / Hartree,
+    rotational_constant_keys=("A", "B", "C"),
+    rotational_constant_to_Hz=1.0e9,
     meta={"method": "B3LYP", "basis": "6-31G(2df,p)"},
     property_units={
         "id": None,
@@ -67,6 +75,7 @@ QM9_SCHEMA = NPZSchema(
 
 REVQM9_SCHEMA = NPZSchema(
     name="revQM9",
+    dataset="revqm9",
     position_key="coords",
     atom_key="charges",
     # Assume revQM9 total energies are in Hartree.
@@ -84,6 +93,7 @@ REVQM9_SCHEMA = NPZSchema(
 )
 
 NPZ_SCHEMAS = (QM9_SCHEMA, REVQM9_SCHEMA)
+NPZ_DATASETS = tuple(schema.dataset for schema in NPZ_SCHEMAS)
 DATASET_PROPERTY_KEYS = frozenset(
     key for schema in NPZ_SCHEMAS for key in schema.property_units
 )
@@ -131,7 +141,7 @@ class NPZFile(FileMixin):
 
     def __init__(self, filename, dataset=None):
         self.filename = filename
-        if dataset not in (None, "revqm9", "qm9"):
+        if dataset is not None and dataset not in NPZ_DATASETS:
             raise ValueError("Dataset must be 'revqm9' or 'qm9'.")
         self.dataset = dataset
 
@@ -141,20 +151,11 @@ class NPZFile(FileMixin):
         return self.get_molecules(index="-1")
 
     @cached_property
-    def raw_energies(self):
-        """Return the original energies array without assuming its units."""
-        with ZipFile(self.filepath) as archive:
-            if "energies.npy" not in archive.namelist():
-                return None
-            return self._read_array(archive, "energies")
-
-    @cached_property
     def schema(self):
         """Return the supported dataset schema matching this archive."""
         for schema in NPZ_SCHEMAS:
             if schema.required_keys <= self._array_names:
-                expected = "qm9" if schema is QM9_SCHEMA else "revqm9"
-                if self.dataset is not None and self.dataset != expected:
+                if self.dataset not in (None, schema.dataset):
                     raise ValueError(
                         f"NPZ layout does not match dataset {self.dataset}."
                     )
@@ -175,18 +176,31 @@ class NPZFile(FileMixin):
     def get_molecules(self, index=":", return_list=False):
         """Read selected structures using the existing 1-based index syntax."""
         data = self._read_data()
-        num_molecules = data.num_molecules
         selector = parse_index_specification(str(index))
-        if isinstance(selector, slice):
-            indices = list(range(num_molecules))[selector]
-        elif isinstance(selector, int):
-            indices = [range(num_molecules)[selector]]
-        else:
-            indices = [range(num_molecules)[i] for i in selector]
+        indices = self._select_indices(selector, data.num_molecules, index)
         molecules = [self._build_molecule(data, i) for i in indices]
         if return_list or not isinstance(selector, int):
             return molecules
         return molecules[0]
+
+    def _select_indices(self, selector, num_molecules, index):
+        """Return the zero-based structures chosen by a parsed index."""
+        available = range(num_molecules)
+        try:
+            if isinstance(selector, slice):
+                indices = list(available[selector])
+            elif isinstance(selector, int):
+                indices = [available[selector]]
+            else:
+                indices = [available[i] for i in selector]
+        except IndexError:
+            indices = []
+        if not indices:
+            raise IndexError(
+                f"Index {index} selects no structures in {self.filename}, "
+                f"which has {num_molecules}."
+            )
+        return indices
 
     def _read_data(self):
         """Load and validate the arrays shared by all selected structures."""
@@ -204,7 +218,13 @@ class NPZFile(FileMixin):
             # The DimeNet/DGL QM9 archive concatenates all atoms in R and Z;
             # N contains the number of atoms for each molecule.
             offsets = None
-            if schema.count_key and positions.ndim == 2 and atoms.ndim == 1:
+            if schema.count_key:
+                if positions.ndim != 2 or atoms.ndim != 1:
+                    raise ValueError(
+                        f"NPZ {schema.name} must concatenate all atoms in "
+                        f"{schema.position_key} and {schema.atom_key}; "
+                        f"padded arrays are not supported."
+                    )
                 counts = self._read_array(archive, schema.count_key)
                 offsets = self._get_atom_offsets(counts, positions, atoms)
                 num_molecules = len(counts)
@@ -328,7 +348,7 @@ class NPZFile(FileMixin):
         return Molecule(
             symbols=Symbols(numbers.astype(int)),
             positions=xyz,
-            energy=energy if self.dataset == "revqm9" else None,
+            energy=energy,
             charge=0,
             multiplicity=1,
             structure_index_in_file=int(i) + 1,

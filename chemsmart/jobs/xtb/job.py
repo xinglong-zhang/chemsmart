@@ -70,10 +70,11 @@ class XTBJob(Job):
         return os.path.join(self.folder, "xtbrestart")
 
     def _determine_folder(self):
+        # Only compute the path: constructing a job must not touch the
+        # filesystem. The job runner creates the folder in _prerun().
         folder = os.path.abspath(os.getcwd())
         if self.label:
             folder = os.path.join(folder, self.label)
-            os.makedirs(folder, exist_ok=True)
         return folder
 
     def base_folder(self):
