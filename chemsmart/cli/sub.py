@@ -6,6 +6,8 @@ various queuing systems and cluster schedulers.
 """
 
 import logging
+import os
+import tempfile
 
 import click
 
@@ -372,6 +374,20 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             return
 
         molecule_indices = ctx.obj.get("molecule_indices")
+        source = ctx.obj.get("filename")
+        prepare_npz = (
+            source
+            and str(source).lower().endswith(".npz")
+            and any(
+                command.get("name") == "xtb"
+                for command in ctx.obj["subcommand"]
+            )
+        )
+        input_dir = None
+        if prepare_npz:
+            input_dir = tempfile.mkdtemp(
+                prefix="chemsmart_batch_inputs_", dir=os.getcwd()
+            )
         batch_cli_args = []
         for index, single_job in enumerate(jobs):
             structure_index = None
@@ -379,14 +395,28 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
                 molecule_indices
             ) == len(jobs):
                 structure_index = molecule_indices[index]
-            batch_cli_args.append(
-                _reconstruct_cli_args(
-                    ctx,
-                    single_job,
-                    structure_index=structure_index,
-                    batch_mode=True,
-                )
+            task_args = _reconstruct_cli_args(
+                ctx,
+                single_job,
+                structure_index=structure_index,
+                batch_mode=True,
             )
+            if input_dir is not None:
+                input_file = os.path.join(
+                    input_dir, f"structure_{index + 1:05d}.xyz"
+                )
+                single_job.molecule.write_xyz(input_file, mode="w")
+                for option in ("-f", "--filename"):
+                    if option in task_args:
+                        task_args[task_args.index(option) + 1] = input_file
+                        break
+                else:
+                    raise ValueError("Cannot locate the batch input filename.")
+                for option in ("-i", "--index", "--structure-index", "--si"):
+                    if option in task_args:
+                        pos = task_args.index(option)
+                        del task_args[pos : pos + 2]
+            batch_cli_args.append(task_args)
             single_job.jobrunner = jobrunner
 
         jobrunner.server.submit_batch_job(

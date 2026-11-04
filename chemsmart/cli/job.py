@@ -11,6 +11,31 @@ import click
 import numpy as np
 
 
+def load_molecules_with_indices(filepath, index=None):
+    """Read selected file structures and their original one-based indices."""
+    from chemsmart.io.molecules.structure import Molecule
+    from chemsmart.utils.utils import (
+        return_objects_and_indices_from_string_index,
+    )
+
+    is_npz = str(filepath).lower().endswith(".npz")
+    molecules = Molecule.from_filepath(
+        filepath=filepath,
+        index=index if is_npz and index is not None else ":",
+        return_list=True,
+    )
+    if molecules is None or index is None:
+        return molecules, None
+    if is_npz:
+        return molecules, [m.structure_index_in_file for m in molecules]
+    molecules, indices = return_objects_and_indices_from_string_index(
+        list_of_objects=molecules, index=index
+    )
+    if not isinstance(molecules, list):
+        return [molecules], [indices]
+    return molecules, indices
+
+
 def click_job_options(f):
     """
     Common job control options for all job types.
