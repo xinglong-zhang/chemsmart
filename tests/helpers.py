@@ -6,6 +6,7 @@ Fixtures live in ``tests/fixtures/`` (loaded by ``tests/conftest.py``).
 """
 
 import importlib
+import json
 import logging
 import os
 import shutil
@@ -1720,6 +1721,51 @@ def assert_runner_was_configured(job, options):
     assert job.jobrunner.scratch is False
     assert job.jobrunner.fake is True
     assert not set(options) & set(job.kwargs)
+
+
+def invoke_sterimol(*args):
+    """Run ``chemsmart run sterimol`` with ``args``.
+
+    Names a server because ``run`` otherwise needs ``local.yaml`` in the user's
+    ``~/.chemsmart``, which CI does not have.
+    """
+    server_yaml = Path(__file__).parent / "data" / "YAMLTests" / "server.yaml"
+    return CliRunner().invoke(
+        run, ["-s", str(server_yaml), "sterimol", *map(str, args)]
+    )
+
+
+def run_sterimol_to_json(tmp_path, *args):
+    """Run ``chemsmart run sterimol`` successfully; return its JSON report."""
+    output = tmp_path / "report.json"
+    result = invoke_sterimol(*args, "--output", output)
+    assert result.exit_code == 0, result.output
+    return json.loads(output.read_text())
+
+
+def assert_sterimol_matches(report, reference):
+    """Compare a report with reference (L, B1, B5) values.
+
+    L and B5 are analytical. B1 is sampled more coarsely than the morfeus
+    references, so it has a wider tolerance.
+    """
+    length, b1, b5 = reference
+    assert report["L"] == pytest.approx(length, abs=1e-4)
+    assert report["B1"] == pytest.approx(b1, abs=1e-3)
+    assert report["B5"] == pytest.approx(b5, abs=1e-4)
+
+
+def write_xyz_file(path, symbols, frames):
+    """Write the frames (each an (N, 3) array) to ``path``; return the path."""
+    lines = []
+    for positions in frames:
+        lines += [str(len(symbols)), "generated for a test"]
+        lines += [
+            f"{symbol} {x:.6f} {y:.6f} {z:.6f}"
+            for symbol, (x, y, z) in zip(symbols, positions)
+        ]
+    path.write_text("\n".join(lines) + "\n")
+    return str(path)
 
 
 def rdkit_embed_and_optimize(smiles, seed=1):

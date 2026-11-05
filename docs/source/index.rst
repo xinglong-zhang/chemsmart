@@ -113,6 +113,7 @@ computational chemistry software.
    :caption: Descriptors
 
    soap-descriptors
+   sterimol-parameters
 
 ..
    .. toctree::

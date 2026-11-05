@@ -1788,13 +1788,13 @@ class TestDescriptors:
         """Ensure the molecule rotates and translates properly."""
         rdmol = Chem.AddHs(rdkit_embed_and_optimize("Cc1ccccc1"))
         mol = Molecule.from_rdkit_mol(rdmol)
-        atom1, atom2 = 0, 1
+        atom1, atom2 = 1, 2
         mol.calculate_sterimol_parameters(atom1, atom2)
         pos = mol.sterimol_parameter["pos"]
 
         # atom1 at origin, atom2 on z-axis
-        assert np.allclose(pos[atom1], 0)
-        assert np.allclose(pos[atom2][:2], 0)
+        assert np.allclose(pos[atom1 - 1], 0)
+        assert np.allclose(pos[atom2 - 1][:2], 0)
 
         # all bond lengths preserved
         rdmol = mol.to_rdkit()
@@ -1818,7 +1818,7 @@ class TestDescriptors:
             ]
         )
         meth = Molecule(symbols=symbol, positions=position)
-        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        meth.calculate_sterimol_parameters(atom1=2, atom2=1)
         sterimol = meth.sterimol_parameter
         bmin = sterimol["B1"]
         bmax = sterimol["B5"]
@@ -1836,8 +1836,8 @@ class TestDescriptors:
         rdmol = rdkit_embed_and_optimize(smiles)
         rdmol = Chem.AddHs(rdmol)
         mol = Molecule.from_rdkit_mol(rdmol)
-        atom1 = 4
-        atom2 = 0
+        atom1 = 5
+        atom2 = 1
 
         sterimol = mol.calculate_sterimol_parameters(atom1, atom2)
         bmin = sterimol["B1"]
@@ -1861,7 +1861,7 @@ class TestDescriptors:
         with pytest.raises(
             ValueError, match="atom2 vector norm too close to zero"
         ):
-            meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+            meth.calculate_sterimol_parameters(atom1=2, atom2=1)
 
     def test_sterimol_flipped_molecules(self):
         """Ensure same calculation for flipped molecules"""
@@ -1877,7 +1877,7 @@ class TestDescriptors:
         )
         position = position * np.array([1, 1, -1])
         meth = Molecule(symbols=symbol, positions=position)
-        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        meth.calculate_sterimol_parameters(atom1=2, atom2=1)
         sterimol = meth.sterimol_parameter
         bmin = sterimol["B1"]
         bmax = sterimol["B5"]
@@ -1894,11 +1894,11 @@ class TestDescriptors:
         symbols, positions = sterimol_methyl_geometry
         mol = Molecule(symbols=symbols, positions=positions.copy())
 
-        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        first = mol.calculate_sterimol_parameters(atom1=2, atom2=1)
         assert np.array_equal(mol.positions, positions)
 
         # a second calculation starts from the same geometry
-        second = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        second = mol.calculate_sterimol_parameters(atom1=2, atom2=1)
         for key in ("L", "B1", "B5"):
             assert second[key] == pytest.approx(first[key])
 
@@ -1908,7 +1908,7 @@ class TestDescriptors:
         """Aligning atom2 from -z must be a rotation, not an inversion."""
         symbols, positions = sterimol_methyl_geometry
         mol = Molecule(symbols=symbols, positions=positions.copy())
-        pos = mol.calculate_sterimol_parameters(atom1=1, atom2=0)["pos"]
+        pos = mol.calculate_sterimol_parameters(atom1=2, atom2=1)["pos"]
 
         assert pos[0] == pytest.approx([0.0, 0.0, 1.09])
         assert np.linalg.det(pos[1:4] - pos[0]) == pytest.approx(
@@ -1921,10 +1921,10 @@ class TestDescriptors:
         mol = Molecule(symbols=symbols, positions=positions.copy())
         assert mol.sterimol_parameter is None
 
-        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        first = mol.calculate_sterimol_parameters(atom1=2, atom2=1)
         assert mol.sterimol_parameter is first
 
-        second = mol.calculate_sterimol_parameters(atom1=2, atom2=0)
+        second = mol.calculate_sterimol_parameters(atom1=3, atom2=1)
         assert mol.sterimol_parameter is second
         assert second["L"] != pytest.approx(first["L"])
 
@@ -1936,7 +1936,7 @@ class TestDescriptors:
         symbols, positions = sterimol_methyl_geometry
         mol = Molecule(symbols=symbols, positions=positions.copy())
         result = mol.calculate_sterimol_parameters(
-            atom1=1, atom2=0, excluded_atoms=[2, 3, 4]
+            atom1=2, atom2=1, excluded_atoms=[3, 4, 5]
         )
         # only the carbon sphere is left, centred on the axis
         assert result["L"] == pytest.approx(1.09 + 1.7)
@@ -1946,43 +1946,195 @@ class TestDescriptors:
 
         with pytest.raises(ValueError, match="cannot be in excluded_atoms"):
             mol.calculate_sterimol_parameters(
-                atom1=1, atom2=0, excluded_atoms=[0]
+                atom1=2, atom2=1, excluded_atoms=[1]
             )
 
-    def test_sterimol_matches_morfeus_reference(self):
+    @pytest.mark.parametrize(
+        "kwargs, error",
+        [
+            # 0 must not wrap around to the last atom
+            ({"atom1": 2, "atom2": 0}, IndexError),
+            ({"atom1": 0, "atom2": 1}, IndexError),
+            ({"atom1": 6, "atom2": 1}, IndexError),
+            ({"atom1": 2, "atom2": 1, "excluded_atoms": [0]}, IndexError),
+            ({"atom1": 2, "atom2": 1, "excluded_atoms": [6]}, IndexError),
+            ({"atom1": 2.0, "atom2": 1}, TypeError),
+            ({"atom1": 2, "atom2": 1, "excluded_atoms": ["3"]}, TypeError),
+        ],
+    )
+    def test_sterimol_rejects_invalid_indices(
+        self, sterimol_methyl_geometry, kwargs, error
+    ):
+        """Indices follow the same 1-based rules as the geometry methods."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+
+        with pytest.raises(error):
+            mol.calculate_sterimol_parameters(**kwargs)
+        assert mol.sterimol_parameter is None
+
+    def test_sterimol_matches_morfeus_reference(
+        self, sterimol_halo_chain_geometry
+    ):
         """Compare an asymmetric substituent with an independent code.
 
         Reference values come from morfeus-ml 0.8.0 (Sterimol, using the same
         RDKit radii, 36000 rotation vectors, L_value_uncorrected).
         """
-        symbols = ["C"] * 5 + ["F", "Cl"] + ["H"] * 10  # CH3-CH(CH3)-CH2-CHFCl
-        positions = np.array(
-            [
-                [-1.0144, 1.0305, 0.9144],
-                [-0.5694, 0.4225, -0.4231],
-                [-1.2529, -0.9297, -0.664],
-                [0.9715, 0.3516, -0.5595],
-                [1.6781, -0.5734, 0.4436],
-                [1.4033, -1.899, 0.1621],
-                [3.441, -0.3363, 0.3383],
-                [-0.4859, 1.99, 1.098],
-                [-2.1056, 1.2374, 0.8889],
-                [-0.8143, 0.3382, 1.7586],
-                [-0.9238, 1.1101, -1.2233],
-                [-2.3501, -0.7845, -0.7606],
-                [-0.8811, -1.3889, -1.6046],
-                [-1.071, -1.6266, 0.1808],
-                [1.3772, 1.3807, -0.4425],
-                [1.2285, 0.0227, -1.5904],
-                [1.369, -0.3454, 1.4833],
-            ]
-        )
+        symbols, positions = sterimol_halo_chain_geometry
         mol = Molecule(symbols=symbols, positions=positions)
-        result = mol.calculate_sterimol_parameters(atom1=7, atom2=0)
+        result = mol.calculate_sterimol_parameters(atom1=8, atom2=1)
 
         assert result["L"] == pytest.approx(4.87845, abs=1e-4)
         assert result["B5"] == pytest.approx(6.41933, abs=1e-4)
         assert result["B1"] == pytest.approx(1.74748, abs=1e-3)
+
+    @pytest.mark.parametrize(
+        "atom1, atom2, expected",
+        [
+            (2, 4, [4, 5, 6, 7, 15, 16, 17]),
+            (4, 2, [1, 2, 3, 8, 9, 10, 11, 12, 13, 14]),
+            (4, 5, [5, 6, 7, 17]),
+            (2, 3, [3, 12, 13, 14]),
+            # a terminal atom on the parent side leaves everything else
+            (8, 1, [1, 2, 3, 4, 5, 6, 7, *range(9, 18)]),
+            # a single terminal atom is a valid substituent
+            (5, 6, [6]),
+        ],
+    )
+    def test_substituent_atoms_cut_the_bond(
+        self, sterimol_halo_chain_geometry, atom1, atom2, expected
+    ):
+        """The substituent is everything on the atom2 side of the bond."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        assert mol.get_substituent_atoms(atom1, atom2) == expected
+
+    def test_substituent_atoms_keep_long_polar_bond(
+        self, sterimol_halo_chain_geometry
+    ):
+        """Losing the 1.383 A C-F bond would silently shrink the group.
+
+        B5 of the 2->4 substituent would drop from 3.86 to 3.38 A.
+        """
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        assert 6 in mol.get_substituent_atoms(2, 4)
+
+    def test_substituent_atoms_warns_about_unconnected_atoms(
+        self, sterimol_methyl_geometry, caplog
+    ):
+        """Atoms attached to neither side are left out, with a warning."""
+        symbols, positions = sterimol_methyl_geometry
+        far_away = np.vstack([positions, [[20.0, 20.0, 20.0]]])
+        mol = Molecule(symbols=[*symbols, "Cl"], positions=far_away)
+
+        with caplog.at_level("WARNING"):
+            assert mol.get_substituent_atoms(2, 1) == [1, 3, 4, 5]
+        assert "Atoms [6] are connected to neither side" in caplog.text
+
+    def test_substituent_atoms_both_sides_of_toluene(
+        self, sterimol_toluene_molecule
+    ):
+        """The two sides of the methyl-ring bond are complementary."""
+        mol = sterimol_toluene_molecule
+        assert mol.get_substituent_atoms(2, 1) == [1, 8, 9, 10]
+        assert mol.get_substituent_atoms(1, 2) == [
+            *range(2, 8),
+            *range(11, 16),
+        ]
+
+    @pytest.mark.parametrize(
+        "atom1, atom2, message",
+        [(2, 3, "is in a ring"), (1, 4, "are not bonded")],
+    )
+    def test_substituent_atoms_rejects_inseparable_atoms(
+        self, sterimol_toluene_molecule, atom1, atom2, message
+    ):
+        """A ring bond or a non-bond does not define a substituent."""
+        with pytest.raises(ValueError, match=message):
+            sterimol_toluene_molecule.get_substituent_atoms(atom1, atom2)
+
+    def test_substituent_atoms_uses_one_based_indices(
+        self, sterimol_toluene_molecule
+    ):
+        """Index 0 must not wrap around to the last atom."""
+        with pytest.raises(IndexError, match="1-based"):
+            sterimol_toluene_molecule.get_substituent_atoms(0, 1)
+
+
+class TestToGraphConnectivity:
+    """The default graph finds long bonds without changing bond orders."""
+
+    def test_finds_long_bond_as_single_bond(
+        self, sterimol_halo_chain_geometry
+    ):
+        """C5-F6 is 1.383 A, beyond the radii sum plus the order buffer."""
+        symbols, positions = sterimol_halo_chain_geometry
+        graph = Molecule(symbols=symbols, positions=positions).to_graph()
+        assert graph.edges[4, 5]["bond_order"] == 1.0
+
+    def test_default_keeps_every_order_of_the_explicit_buffer(
+        self, sterimol_halo_chain_geometry
+    ):
+        """Raising the cutoff for orders would turn C-C into aromatic bonds."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        default = mol.to_graph()
+        explicit = mol.to_graph(bond_cutoff_buffer=0.05)
+
+        for i, j, data in explicit.edges(data=True):
+            assert default.edges[i, j]["bond_order"] == data["bond_order"]
+        added = {frozenset(e) for e in default.edges} - {
+            frozenset(e) for e in explicit.edges
+        }
+        assert added == {frozenset((4, 5))}
+
+    @pytest.mark.parametrize("buffer", [0.0, 0.05])
+    def test_explicit_buffer_does_not_add_long_bonds(
+        self, sterimol_halo_chain_geometry, buffer
+    ):
+        """Callers that choose a buffer get exactly that cutoff."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        graph = mol.to_graph(bond_cutoff_buffer=buffer)
+        assert not graph.has_edge(4, 5)
+
+    def test_does_not_add_long_bonds_to_hydrogen(
+        self, sterimol_methyl_geometry
+    ):
+        """A hydrogen 1.20 A away is not bonded: hydrogen stays at 0.05 A."""
+        symbols, positions = sterimol_methyl_geometry
+        stretched = positions.copy()
+        stretched[1] = positions[0] + [0.0, 0.0, 1.20]
+        graph = Molecule(symbols=symbols, positions=stretched).to_graph()
+        assert not graph.has_edge(0, 1)
+
+    def test_ignores_distant_atoms(self, sterimol_methyl_geometry):
+        """Beyond the connectivity buffer, atoms remain unbonded."""
+        symbols, positions = sterimol_methyl_geometry
+        far_away = np.vstack([positions, positions[0] + [1.0, 1.5, 0.0]])
+        graph = Molecule(
+            symbols=[*symbols, "F"], positions=far_away
+        ).to_graph()
+        assert not graph.has_edge(0, 5)
+
+    @pytest.mark.parametrize("buffer", [None, 0.05])
+    def test_non_vectorized_version_agrees(
+        self, sterimol_halo_chain_geometry, buffer
+    ):
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        vectorized = mol.to_graph(bond_cutoff_buffer=buffer)
+        non_vectorized = mol.to_graph_non_vectorized(bond_cutoff_buffer=buffer)
+
+        def orders(graph):
+            return {
+                frozenset((int(i), int(j))): float(data["bond_order"])
+                for i, j, data in graph.edges(data=True)
+            }
+
+        assert orders(vectorized) == orders(non_vectorized)
 
 
 class TestDerivedPropertiesFollowState:
