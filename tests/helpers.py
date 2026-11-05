@@ -1746,6 +1746,15 @@ def assert_uses_submitting_python(submit_script):
     assert f"export PATH={os.path.dirname(sys.executable)}:" in text
 
 
+def capture_grouper_thermo_parameters(directory, *cutoff_args):
+    """Return the thermochemistry parameters of a directory-mode grouper job."""
+    result, job_kwargs = run_grouper_and_capture_job_kwargs(
+        ["-d", directory, "-p", "gaussian", "-E", "qhG", *cutoff_args, "rmsd"]
+    )
+    assert result.exit_code == 0, result.output
+    return job_kwargs["thermo_parameters"]
+
+
 def read_grouper_structures(folder):
     """Return the text of each group's xyz file under ``folder``, by name."""
     return {

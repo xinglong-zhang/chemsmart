@@ -95,11 +95,11 @@ These options are shared across all grouping strategies and must be placed BEFOR
 
    -  -  ``-csg, --cutoff-entropy-grimme``
       -  float
-      -  Cutoff frequency for entropy (cm⁻¹) using Grimme's qRRHO method (Default: 100)
+      -  Cutoff frequency for entropy (cm⁻¹) using Grimme's qRRHO method (Default: 100, unless ``-cst`` is given)
 
    -  -  ``-cst, --cutoff-entropy-truhlar``
       -  float
-      -  Cutoff frequency for entropy (cm⁻¹) using Truhlar's qRRHO method
+      -  Cutoff frequency for entropy (cm⁻¹) using Truhlar's qRRHO method. Cannot be combined with ``-csg``
 
    -  -  ``-ch, --cutoff-enthalpy``
       -  float
@@ -186,6 +186,12 @@ Fingerprint-based Strategies
    -  -  ``tanimoto``
       -  0.9
       -  Tanimoto similarity with molecular fingerprints
+
+.. note::
+
+   Most ``tanimoto`` fingerprints need RDKit to determine the bonds from the geometry, which often fails for metal
+   complexes and transition states. Structures that fail are left out, and the job fails if none are left. The ``usr``
+   and ``usrcat`` fingerprints do not need this step: ``tanimoto -ft usr``.
 
 Energy-based Strategies
 =======================
@@ -360,8 +366,8 @@ where CHEMSMART is installed, because the job uses that same environment.
 ``-n`` sets the cores requested from the scheduler, and ``-np`` sets how many of them the grouping uses. ``-np``
 defaults to 1 and does not follow ``-n``, so set both.
 
-If the grouping fails, the error is written to ``<label>.err`` and the job still exits normally, so the scheduler
-reports it as successful. Check for this file if the group files are missing.
+If the grouping fails, the reason is written to ``<label>.err`` and the command exits with an error, under both
+``chemsmart run`` and ``chemsmart sub``.
 
 ************
  Next Steps

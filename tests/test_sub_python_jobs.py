@@ -322,6 +322,71 @@ class TestGrouperSubmission:
         assert node_result.exit_code == 0, node_result.output
         assert read_grouper_structures(node) == local_structures
 
+    def test_truhlar_cutoff_matches_a_local_run(
+        self,
+        tmp_path,
+        monkeypatch,
+        server_yaml_file,
+        ts_conformers_log_directory,
+    ):
+        """No Grimme default may reach the node and conflict with -cst."""
+        args = [
+            "grouper",
+            "-d",
+            ts_conformers_log_directory,
+            "-p",
+            "gaussian",
+            "-E",
+            "qhG",
+            "-cst",
+            "110",
+            "rmsd",
+        ]
+        local = tmp_path / "local"
+        local.mkdir()
+        monkeypatch.chdir(local)
+        assert CliRunner().invoke(run, args).exit_code == 0
+        local_structures = read_grouper_structures(local)
+        assert local_structures
+
+        node = tmp_path / "node"
+        node.mkdir()
+        monkeypatch.chdir(node)
+        result = submit_for_test(server_yaml_file, *args)
+        assert result.exit_code == 0, result.output
+        run_scripts = list(node.glob("chemsmart_run_*.py"))
+        assert len(run_scripts) == 1
+        assert "--cutoff-entropy-grimme" not in run_scripts[0].read_text()
+
+        node_result = run_generated_script_command(run_scripts[0])
+        assert node_result.exit_code == 0, node_result.output
+        assert read_grouper_structures(node) == local_structures
+
+    def test_failed_grouping_fails_the_generated_command(
+        self,
+        tmp_path,
+        monkeypatch,
+        server_yaml_file,
+        ts_conformers_log_directory,
+    ):
+        """A scheduler must not report a failed grouping as a success."""
+        monkeypatch.chdir(tmp_path)
+        result = submit_for_test(
+            server_yaml_file,
+            "grouper",
+            "-d",
+            ts_conformers_log_directory,
+            "-p",
+            "gaussian",
+            "tanimoto",
+        )
+        assert result.exit_code == 0, result.output
+        run_scripts = list(tmp_path.glob("chemsmart_run_*.py"))
+        assert len(run_scripts) == 1
+
+        node_result = run_generated_script_command(run_scripts[0])
+        assert node_result.exit_code == 1
+
     @pytest.mark.parametrize(
         "strategy_args, expected",
         [
