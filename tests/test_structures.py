@@ -30,7 +30,12 @@ from chemsmart.utils.cluster import (
     is_pubchem_network_available,
 )
 from chemsmart.utils.utils import cmp_with_ignore
-from tests.helpers import cxsmiles_core, load_last_molecule, read_stripped_text
+from tests.helpers import (
+    cxsmiles_core,
+    load_last_molecule,
+    rdkit_embed_and_optimize,
+    read_stripped_text,
+)
 
 
 class TestCovalentRadiusAndBondCutoff:
@@ -1706,27 +1711,13 @@ class TestMoleculeAdvanced:
 
 
 class TestDescriptors:
-    from rdkit.Chem import AllChem, Descriptors
-
-    @staticmethod
-    def _rdkit_embed_and_optimize(smiles, seed=1):
-        """Return an RDKit Mol with a single optimized 3D conformer (Hs added)."""
-        m = Chem.MolFromSmiles(smiles)
-        m = Chem.AddHs(m)
-        # fixed seed for deterministic embedding
-        params = Chem.AllChem.ETKDGv3()
-        params.randomSeed = seed
-        Chem.AllChem.EmbedMolecule(m, params)
-        Chem.AllChem.UFFOptimizeMolecule(m)
-        return m
-
     def test_2d_descriptors_match_rdkit(self):
         """2D Descriptors should match the result from rdkit"""
 
         from rdkit.Chem import Descriptors
 
         smiles = "CCO"  # Ethanol
-        rdkit_mol = self._rdkit_embed_and_optimize(smiles=smiles)
+        rdkit_mol = rdkit_embed_and_optimize(smiles=smiles)
 
         mol = Molecule.from_rdkit_mol(rdkit_mol)
 
@@ -1749,7 +1740,7 @@ class TestDescriptors:
         import math
 
         smiles = "CCO"  # ethanol with a 3D conformer
-        rd_m = self._rdkit_embed_and_optimize(smiles, seed=42)
+        rd_m = rdkit_embed_and_optimize(smiles, seed=42)
         mol = Molecule.from_rdkit_mol(rd_m)
         desc3_a = mol.threed_descriptors
         assert isinstance(desc3_a, dict)
@@ -1781,7 +1772,7 @@ class TestDescriptors:
 
     def test_descriptors_repeatability(self):
         """Repeated access returns identical results (no caching flakiness)."""
-        rd_m = self._rdkit_embed_and_optimize("c1ccccc1")  # benzene
+        rd_m = rdkit_embed_and_optimize("c1ccccc1")  # benzene
         mol = Molecule.from_rdkit_mol(rd_m)
         d1 = mol.twod_descriptors
         d2 = mol.twod_descriptors
@@ -1795,7 +1786,7 @@ class TestDescriptors:
 
     def test_sterimol_translation_rotation(self):
         """Ensure the molecule rotates and translates properly."""
-        rdmol = Chem.AddHs(self._rdkit_embed_and_optimize("Cc1ccccc1"))
+        rdmol = Chem.AddHs(rdkit_embed_and_optimize("Cc1ccccc1"))
         mol = Molecule.from_rdkit_mol(rdmol)
         atom1, atom2 = 0, 1
         mol.calculate_sterimol_parameters(atom1, atom2)
@@ -1842,7 +1833,7 @@ class TestDescriptors:
     def test_sterimol_symmetry(self):
         """Ensure close bmin and bmax on symmetric molecules"""
         smiles = "C(C)(C)(C)"
-        rdmol = self._rdkit_embed_and_optimize(smiles)
+        rdmol = rdkit_embed_and_optimize(smiles)
         rdmol = Chem.AddHs(rdmol)
         mol = Molecule.from_rdkit_mol(rdmol)
         atom1 = 4
@@ -1915,16 +1906,14 @@ class TestDescriptors:
         self, sterimol_methyl_geometry
     ):
         """Aligning atom2 from -z must be a rotation, not an inversion."""
-
-        def signed_volume(pos):
-            return np.linalg.det(pos[1:4] - pos[0])
-
         symbols, positions = sterimol_methyl_geometry
         mol = Molecule(symbols=symbols, positions=positions.copy())
         pos = mol.calculate_sterimol_parameters(atom1=1, atom2=0)["pos"]
 
         assert pos[0] == pytest.approx([0.0, 0.0, 1.09])
-        assert signed_volume(pos) == pytest.approx(signed_volume(positions))
+        assert np.linalg.det(pos[1:4] - pos[0]) == pytest.approx(
+            np.linalg.det(positions[1:4] - positions[0])
+        )
 
     def test_sterimol_parameter_state(self, sterimol_methyl_geometry):
         """The property reflects the latest calculation on this geometry."""
@@ -1994,6 +1983,68 @@ class TestDescriptors:
         assert result["L"] == pytest.approx(4.87845, abs=1e-4)
         assert result["B5"] == pytest.approx(6.41933, abs=1e-4)
         assert result["B1"] == pytest.approx(1.74748, abs=1e-3)
+
+
+class TestDerivedPropertiesFollowState:
+    """Geometry-derived properties must not outlive the state they use."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "canonical_positions",
+            "canonical_geometry",
+            "structure_id",
+            "distance_matrix",
+            "moments_of_inertia",
+            "rotational_temperatures",
+            "bond_orders",
+        ],
+    )
+    def test_property_follows_new_positions(
+        self, sterimol_methyl_geometry, name
+    ):
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        before = getattr(mol, name)
+
+        mol.positions = positions * 1.5
+        expected = getattr(
+            Molecule(symbols=symbols, positions=positions * 1.5), name
+        )
+
+        assert np.array_equal(getattr(mol, name), expected)
+        assert not np.array_equal(before, expected)
+
+    def test_structure_id_follows_charge_and_multiplicity(
+        self, sterimol_methyl_geometry
+    ):
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+        neutral = mol.structure_id
+        mol.charge = 1
+        cation = mol.structure_id
+        mol.multiplicity = 2
+        assert len({neutral, cation, mol.structure_id}) == 3
+
+    def test_displaced_frame_does_not_inherit_source_values(
+        self, water_with_vib_modes
+    ):
+        """vibrationally_displaced() copies the molecule, then moves it."""
+        source_distances = water_with_vib_modes.distance_matrix
+        source_id = water_with_vib_modes.structure_id
+
+        frame = water_with_vib_modes.vibrationally_displaced(mode_idx=1)
+
+        assert not np.array_equal(frame.distance_matrix, source_distances)
+        assert frame.structure_id != source_id
+        np.testing.assert_array_equal(
+            frame.distance_matrix,
+            Molecule(
+                symbols=frame.symbols, positions=frame.positions
+            ).distance_matrix,
+        )
 
 
 class TestCoordinateBlockAdvanced:
@@ -7076,8 +7127,6 @@ H       1.0 0.0 0.0
         with patch.object(
             water, "get_bond_orders_from_graph", side_effect=RuntimeError("x")
         ):
-            # clear cached_property if present
-            water.__dict__.pop("bond_orders", None)
             assert len(water.bond_orders) > 0
 
     def test_rdkit_vectorized_bond_types(self, gaussian_benzene_opt_outfile):
@@ -7429,6 +7478,16 @@ class TestStructureEdgeCases:
         ):
             mol = Molecule.from_filepath(path)
         assert list(mol.symbols) == ["H", "H"]
+
+    def test_from_filepath_trj_not_xyz_uses_generic_reader(self, tmp_path):
+        """A .trj file that is not XYZ text goes to the generic reader."""
+        trj = tmp_path / "binary.trj"
+        trj.write_bytes(b"not an xyz trajectory")
+        with patch.object(
+            Molecule, "_read_other", return_value="generic"
+        ) as read_other:
+            assert Molecule.from_filepath(str(trj)) == "generic"
+        read_other.assert_called_once()
 
     def test_trj_with_xyz_content(self, write_tmp_file):
         path = write_tmp_file(

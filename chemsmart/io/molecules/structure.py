@@ -7,7 +7,7 @@ import os
 import re
 import tempfile
 from contextlib import contextmanager
-from functools import cached_property, lru_cache
+from functools import lru_cache
 
 import networkx as nx
 import numpy as np
@@ -114,10 +114,10 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
-    twod_descriptors: dict | None
-        The full set of 2D descriptors for a molecule.
-    threed_descriptors: dict | None
-        Descriptors derived from a molecule’s 3D structure
+    twod_descriptors: dict
+        The full set of RDKit 2D descriptors for a molecule.
+    threed_descriptors: dict
+        RDKit descriptors derived from a molecule's 3D structure.
     sterimol_parameter: dict | None
         Latest result of calculate_sterimol_parameters() (L, B1, B5, pos),
         or None if not calculated yet.
@@ -377,7 +377,7 @@ class Molecule:
         """
         return np.average(self.positions, axis=0, weights=self.masses)
 
-    @cached_property
+    @property
     def canonical_positions(self):
         """Canonical atomic positions.
         The positions are translated to the centre of mass and rotated into
@@ -387,7 +387,7 @@ class Molecule:
         """
         return canonicalize_positions(self.masses, self.positions)
 
-    @cached_property
+    @property
     def canonical_geometry(self):
         """Canonical string representation of the molecular geometry.
         Atoms are sorted lexicographically by (symbol, x, y, z) after
@@ -414,7 +414,7 @@ class Molecule:
         ]
         return ";".join(parts)
 
-    @cached_property
+    @property
     def structure_id(self):
         """Unique structural identifier (SHA-256 hex digest).
         Computed from canonical_geometry, charge and multiplicity.
@@ -445,7 +445,7 @@ class Molecule:
         """
         return self.get_chemical_formula()
 
-    @cached_property
+    @property
     def inchikey(self):
         """InChIKey string for the molecule (27-character).
         Computed via Open Babel for robust topological perception,
@@ -480,7 +480,7 @@ class Molecule:
 
         return result
 
-    @cached_property
+    @property
     def molecule_id(self):
         """Unique molecular identifier (InChIKey string).
         Two molecules with identical connectivity and stereochemistry
@@ -488,7 +488,7 @@ class Molecule:
         """
         return self.inchikey
 
-    @cached_property
+    @property
     def molecule_label(self):
         """Unique, human-readable label for the molecule.
         Combines the chemical formula with the molecule_id, e.g.
@@ -507,7 +507,7 @@ class Molecule:
         """
         return Chem.MolToCXSmiles(self.to_rdkit())
 
-    @cached_property
+    @property
     def inchi(self):
         """Full InChI string for the molecule.
         Computed via Open Babel (same XYZ-based pipeline as ``inchikey``).
@@ -539,14 +539,14 @@ class Molecule:
 
         return result
 
-    @cached_property
+    @property
     def smiles(self):
         """SMILES string for the molecule (convenience property).
         Equivalent to calling ``to_smiles()``.
         """
         return self.to_smiles()
 
-    @cached_property
+    @property
     def chemical_symbols(self):
         """
         Return a list of chemical symbols strings
@@ -882,7 +882,7 @@ class Molecule:
         _, _, eigenvectors = self._moments_of_inertia
         return eigenvectors
 
-    @cached_property
+    @property
     def _moments_of_inertia(self):
         """
         Calculate the moments of inertia of the molecule.
@@ -892,7 +892,7 @@ class Molecule:
 
         return calculate_moments_of_inertia(self.masses, self.positions)
 
-    @cached_property
+    @property
     def _moments_of_inertia_weighted_mass(self):
         """
         Calculate the moments of inertia of the molecule using
@@ -905,7 +905,7 @@ class Molecule:
             self.natural_abundance_weighted_masses, self.positions
         )
 
-    @cached_property
+    @property
     def _moments_of_inertia_most_abundant_mass(self):
         """
         Calculate the moments of inertia of the molecule using
@@ -918,7 +918,7 @@ class Molecule:
             self.most_abundant_masses, self.positions
         )
 
-    @cached_property
+    @property
     def rotational_temperatures(self):
         """
         Obtain the rotational temperatures of the molecule in K.
@@ -1054,7 +1054,16 @@ class Molecule:
 
     @property
     def twod_descriptors(self):
-        """A list of 2D descriptors"""
+        """
+        All RDKit 2D descriptors, recomputed on each access.
+
+        Bonds are perceived from the geometry with
+        ``to_rdkit(bond_method="rdkit")``, which uses the molecule's charge.
+
+        Returns:
+            dict: Descriptor name to value, from
+            ``rdkit.Chem.Descriptors.CalcMolDescriptors``.
+        """
         return Descriptors.CalcMolDescriptors(
             self.to_rdkit(bond_method="rdkit")
         )
@@ -1062,14 +1071,18 @@ class Molecule:
     @property
     def threed_descriptors(self):
         """
-        Calculate 3D descriptors for the molecule.
+        All RDKit 3D shape descriptors, recomputed on each access.
+
+        Bonds are perceived as in ``twod_descriptors``, and the molecule's
+        own coordinates are used as the conformer.
 
         Returns:
-            dict: Dictionary containing 3D descriptors.
+            dict: Descriptor name to value, from
+            ``rdkit.Chem.Descriptors3D.CalcMolDescriptors3D``.
         """
-        rdmol = self.to_rdkit(bond_method="rdkit")
-        self._threed_descriptors = Descriptors3D.CalcMolDescriptors3D(rdmol)
-        return self._threed_descriptors
+        return Descriptors3D.CalcMolDescriptors3D(
+            self.to_rdkit(bond_method="rdkit")
+        )
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
@@ -2374,7 +2387,7 @@ class Molecule:
         """
         return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
-    @cached_property
+    @property
     def distance_matrix(self):
         """
         Compute pairwise distance matrix.
@@ -2805,6 +2818,7 @@ class Molecule:
         """
         Add bonds to the RDKit molecule.
         """
+        distances = self.distance_matrix
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
                 if adjust_H:
@@ -2828,7 +2842,7 @@ class Molecule:
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
                 bond_order = self.determine_bond_order_one_bond(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                    bond_length=distances[i, j], bond_cutoff=cutoff
                 )
                 logger.debug(f"bond order: {bond_order}")
                 if bond_order > 0:
@@ -2896,7 +2910,7 @@ class Molecule:
 
         return rdkit_mol
 
-    @cached_property
+    @property
     def rdkit_fingerprints(self):
         """
         Return RDKit molecular fingerprints.
@@ -2904,7 +2918,7 @@ class Molecule:
         rdkit_mol = self.to_rdkit()
         return Chem.RDKFingerprint(rdkit_mol)
 
-    @cached_property
+    @property
     def bond_orders(self):
         """
         Return a list of bond orders from the molecular graph.
@@ -3018,15 +3032,17 @@ class Molecule:
         positions = self.positions
 
         # add nodes
-        for i, symbol in enumerate(self.chemical_symbols):
+        chemical_symbols = self.chemical_symbols
+        for i, symbol in enumerate(chemical_symbols):
             G.add_node(i, element=symbol)
 
         # Add edges (bonds) with bond order
+        distances = self.distance_matrix
         for i in range(len(positions)):
             for j in range(i + 1, len(positions)):
                 element_i, element_j = (
-                    self.chemical_symbols[i],
-                    self.chemical_symbols[j],
+                    chemical_symbols[i],
+                    chemical_symbols[j],
                 )
 
                 cutoff_buffer = bond_cutoff_buffer
@@ -3049,7 +3065,7 @@ class Molecule:
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
                 bond_order = self.determine_bond_order_one_bond(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                    bond_length=distances[i, j], bond_cutoff=cutoff
                 )
                 if bond_order > 0:
                     G.add_edge(i, j, bond_order=bond_order)
