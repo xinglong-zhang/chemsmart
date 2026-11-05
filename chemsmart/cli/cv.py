@@ -1,4 +1,4 @@
-"""CV reports: labelled geometry changes, optional CSV export, no QC jobs."""
+"""Report geometry changes from an existing file and optionally export them to CSV."""
 
 import csv
 import json
