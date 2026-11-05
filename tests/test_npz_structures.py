@@ -31,6 +31,44 @@ from tests.helpers import (
 
 
 class TestNPZStructures:
+    def test_rejects_unknown_dataset(self, io_test_directory):
+        source = os.path.join(io_test_directory, "revQM9_subset.npz")
+        with pytest.raises(ValueError, match="Dataset must be"):
+            NPZFile(source, dataset="unknown")
+
+    @pytest.mark.parametrize("value", [np.nan, "invalid"])
+    def test_rejects_nonfinite_or_nonnumeric_dataset_property(
+        self, tmp_path, value
+    ):
+        source = tmp_path / "invalid.npz"
+        np.savez(
+            source, coords=np.zeros((1, 1, 3)), charges=[[2]], homo=[value]
+        )
+        with pytest.raises(ValueError, match="finite numeric"):
+            NPZFile(str(source)).get_molecules()
+
+    def test_rejects_unsupported_npy_version(self, tmp_path):
+        source = tmp_path / "invalid.npz"
+        with ZipFile(source, "w") as archive:
+            archive.writestr("coords.npy", b"\x93NUMPY\x03\x00")
+            archive.writestr("charges.npy", b"\x93NUMPY\x03\x00")
+        with pytest.raises(ValueError, match="Unsupported NPY version"):
+            NPZFile(str(source)).get_molecules()
+
+    def test_assemble_rejects_non_npz_file(self, tmp_path):
+        source = tmp_path / "molecule.xyz"
+        source.write_text("1\nhelium\nHe 0 0 0\n")
+        result = CliRunner().invoke(assemble, ["-f", str(source)], obj={})
+        assert result.exit_code != 0
+        assert "Expected an NPZ file" in result.output
+
+    @pytest.mark.parametrize("option", ["--dataset", "--method", "--basis"])
+    def test_assemble_requires_file_for_dataset_options(self, option):
+        value = "qm9" if option == "--dataset" else "test"
+        result = CliRunner().invoke(assemble, [option, value], obj={})
+        assert result.exit_code != 0
+        assert "require --file" in result.output
+
     def test_failed_npz_insert_rolls_back_record(
         self, tmp_path, io_test_directory
     ):
