@@ -99,3 +99,48 @@ def test_rejects_arbitrary_pickle_globals(tmp_path):
 ```
 
 Also do not ask for a mass migration of private helpers in test files the PR does not change.
+
+## Cached values on mutable objects
+
+Source: [User feedback: cached_property and property](review-evidence.md#user-feedback-cached_property-and-property).
+
+### Situation
+
+A property is cached on a class whose inputs can be reassigned, and a caller copies the object and then changes it:
+
+```python
+class Molecule:
+    @cached_property
+    def distance_matrix(self):
+        return cdist(self.positions, self.positions)
+
+    def displaced(self, new_positions):
+        molecule = self.copy()
+        molecule.positions = new_positions
+        return molecule
+```
+
+### Expected behaviour
+
+Report a correctness finding. If `distance_matrix` was read before `displaced()` is called, the new molecule returns the old distances, because the copy keeps the cached value. Ask for `@property`, a regression test that compares the displaced molecule with a freshly built one, and a check of callers:
+
+```python
+distances = self.distance_matrix  # compute once, not per atom pair
+for i in range(n_atoms):
+    for j in range(i + 1, n_atoms):
+        bond_length = distances[i, j]
+```
+
+### Counterexample: this should not be flagged
+
+The value comes from a file that the object parses and nothing reassigns its inputs, so caching avoids repeated parsing and cannot go stale in normal use:
+
+```python
+class OutputFile:
+    @cached_property
+    def contents(self):
+        with open(self.filename) as f:
+            return f.readlines()
+```
+
+Also do not report a stale-value bug when no code path changes the input after the value is read. Raise that as an OOP/API recommendation if the class permits such a change.

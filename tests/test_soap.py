@@ -163,6 +163,16 @@ class TestCalculateSoapBasics:
         expected = soap_reference_data["padding_shell_He"]
         np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
 
+    def test_parity_extended_dscribe_references(
+        self, soap_dscribe_case, soap_reference_data
+    ):
+        # r_cut != 6, l_max 0 and 9, on-axis atoms, a lone atom, four species.
+        key, symbols, positions, kwargs = soap_dscribe_case
+        mol = Molecule(symbols=symbols, positions=positions)
+        features = calculate_soap(mol, **kwargs)
+        expected = soap_reference_data[key]
+        np.testing.assert_allclose(features, expected, rtol=RTOL, atol=ATOL)
+
     def test_padding_shell_changes_descriptor(self, water_molecule):
         # Regression lock: atoms beyond r_cut but inside the padded neighbor
         # shell must contribute (DScribe 2.1.2 GTO convention).
