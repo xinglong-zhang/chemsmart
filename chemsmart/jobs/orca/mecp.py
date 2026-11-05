@@ -15,8 +15,10 @@ import numpy as np
 from ase import units
 
 from chemsmart.io.mecp import (
+    convergence_thresholds,
     read_report_fields,
     state_energy_lines,
+    write_final_report,
     write_frequency_log,
 )
 from chemsmart.jobs.mecp import MECPSeamMixin
@@ -108,11 +110,6 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         self.is_seam_follow_branch = is_seam_follow_branch
         self._reset_execution_state()
 
-    @property
-    def seam_report_file(self):
-        """Compatibility alias for the shared seam report."""
-        return self.final_report_file
-
     def _job_is_complete(self):
         if not self.settings.uses_seam_workflow:
             complete = super()._job_is_complete()
@@ -131,15 +128,12 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         )
 
     def _run(self, **kwargs):
+        self._begin_execution()
         if not self.settings.uses_seam_workflow:
             super()._run(**kwargs)
             if self.settings.mode == "numfreq":
                 self._export_native_frequencies()
             return
-        self._reset_execution_state()
-        # Remove an earlier success marker before starting a fresh workflow.
-        if os.path.isfile(self.final_report_file):
-            os.remove(self.final_report_file)
         if self.settings.mecp_numfreq_only:
             self._run_frequency_only()
             return
@@ -162,7 +156,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
     def _run_native_optimization(self, **kwargs):
         """Let ORCA optimize the crossing, then adopt its final geometry."""
         super()._run(**kwargs)
-        native = self.results
+        native = self._native_mecp_result
         if (
             native is None
             or not native.normal_termination
@@ -174,7 +168,11 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         if native.final_structure is None:
             raise RuntimeError("ORCA final MECP structure is missing")
         self.molecule.positions = native.final_structure.positions.copy()
-        self._final_optimization_steps = len(native.energy_gap_history)
+        self._final_optimization_steps = (
+            native.optimization_steps
+            if native.optimization_steps is not None
+            else "NA"
+        )
 
     def verify_seam_minimum(self, *args, **kwargs):
         # Native convergence alone is not sufficient for projected analysis.
@@ -348,7 +346,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
 
     def _export_native_frequencies(self):
         """Reuse ORCA effective frequencies without running state jobs."""
-        native = self.results
+        native = self._native_mecp_result
         if (
             native is None
             or not native.converged
@@ -441,18 +439,7 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         """Path to the quality report for the initial native ORCA calculation."""
         return os.path.join(self.folder, f"{self.label}_report.log")
 
-    @property
-    def report_file(self):
-        """Compatibility alias for the native quality report."""
-        return self.native_quality_report_file
-
-    def _final_report_legacy_fields(self, result, frequency_only):
-        return {
-            "energy_gap": f"{result['energy_diff']:+.12e}",
-            "selected_branch": self._selected_seam_follow_branch or "none",
-        }
-
-    def _log_native_results(self, energy_gap_tolerance=None):
+    def _write_native_quality_report(self, energy_gap_tolerance=None):
         """Write a concise quality report for a completed ORCA MECP job.
 
         ORCA remains responsible for the optimization and frequency
@@ -571,10 +558,73 @@ class ORCAMECPJob(MECPSeamMixin, ORCAJob):
         logger.info(
             f"Wrote ORCA MECP quality report: {self.native_quality_report_file}"
         )
+        # This is the final result only for native-only workflows. The runner
+        # also emits a quality summary during shared seam workflows, where the
+        # final structure may still change.
+        if not self.settings.uses_seam_workflow:
+            complete = (
+                result.normal_termination
+                and result.converged
+                and result.final_structure is not None
+                and result.state_1_energy is not None
+                and result.state_2_energy is not None
+                and (not result.numfreq_requested or result.numfreq_completed)
+            )
+            if complete:
+                write_final_report(
+                    self.final_report_file,
+                    label=self.label,
+                    backend="orca",
+                    hessian_method=(
+                        "native_numerical"
+                        if result.numfreq_requested
+                        else "none"
+                    ),
+                    symbols=result.final_structure.symbols,
+                    positions=result.final_structure.positions,
+                    energy_a=result.state_1_energy,
+                    energy_b=result.state_2_energy,
+                    initial_steps=(
+                        result.optimization_steps
+                        if result.optimization_steps is not None
+                        else "NA"
+                    ),
+                    metrics={"energy_diff": result.energy_gap},
+                    thresholds={
+                        **convergence_thresholds(self.settings),
+                        "energy_diff": tolerance,
+                    },
+                    state_outputs={"native": self.outputfile},
+                    mode=self.settings.mode,
+                    analysis_source="orca_native",
+                    quality_status=status,
+                    native_is_minimum=result.is_minimum,
+                )
+            elif os.path.isfile(self.final_report_file):
+                os.remove(self.final_report_file)
         return self.native_quality_report_file
 
     @property
-    def results(self):
-        """Return the parsed native SurfCrossOpt result, if available."""
+    def _native_mecp_result(self):
         output = self._output()
         return None if output is None else output.mecp_result
+
+    @property
+    def output(self):
+        """Return native output, available step history and selected states."""
+        from chemsmart.io.orca.output import ORCAOutput
+
+        output = self._output()
+        summary = None if output is None else output.mecp_result
+        selected = self._selected_native_outputs(ORCAOutput)
+        if output is None and not selected:
+            return None
+        return {
+            "selected": selected,
+            "optimization_steps": {},
+            "energy_gap_history": (
+                summary.energy_gap_history if summary is not None else ()
+            ),
+            "native_output": output,
+            "native_summary": summary,
+        }

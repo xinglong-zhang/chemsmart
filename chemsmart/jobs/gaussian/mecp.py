@@ -9,6 +9,7 @@ import logging
 import os
 import re
 from functools import partial
+from glob import glob
 from shutil import copyfile
 from tempfile import TemporaryDirectory
 from typing import Type
@@ -163,11 +164,6 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
         )
 
     @property
-    def report_file(self):
-        """Compatibility alias for the optimization progress report."""
-        return self.optimization_report_file
-
-    @property
     def final_gaussian_logs(self):
         """Convenient single-state outputs at the selected final geometry."""
         label = (
@@ -178,6 +174,52 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
         return {
             "A": os.path.join(self.folder, f"{label}.log"),
             "B": os.path.join(self.folder, f"{label}_B.log"),
+        }
+
+    @property
+    def output(self):
+        """Return available Gaussian state outputs, including step history."""
+        from chemsmart.io.gaussian.folder import GaussianOutputFolder
+        from chemsmart.io.gaussian.output import Gaussian16Output
+
+        selected = self._selected_native_outputs(Gaussian16Output)
+
+        directories = [self.optimization_folder]
+        follow_folder = self.mecp_files.follow_folder
+        if os.path.isdir(follow_folder):
+            directories.extend(
+                glob(os.path.join(follow_folder, "*_optimization"))
+            )
+        steps = {}
+        pattern = re.compile(r"_step(\d+)_([AB])\.log$")
+        for directory in directories:
+            if not os.path.isdir(directory):
+                continue
+            folder = GaussianOutputFolder(directory)
+            # The recursive suffix search retains empty files, so failed or
+            # interrupted state jobs remain visible in the history.
+            for path in sorted(folder.all_log_files):
+                if os.path.dirname(path) != directory:
+                    continue
+                match = pattern.search(os.path.basename(path))
+                if match:
+                    key = os.path.join(
+                        os.path.relpath(directory, self.folder), match.group(1)
+                    )
+                    steps.setdefault(key, {})[match.group(2)] = (
+                        Gaussian16Output(path)
+                    )
+        if not selected and not steps:
+            return None
+        return {
+            "selected": selected,
+            "optimization_steps": {
+                key: {"state_outputs": value, "energy_gap": None}
+                for key, value in steps.items()
+            },
+            "energy_gap_history": (),
+            "native_output": None,
+            "native_summary": None,
         }
 
     def _export_final_gaussian_logs(self, sources):
@@ -303,9 +345,6 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
                 report.get("status") == "COMPLETED"
                 and report.get("optimization") == "SKIPPED"
             )
-            if not complete and not report.get("status"):
-                with open(self.final_report_file, encoding="utf-8") as saved:
-                    complete = "NUMFREQ ONLY COMPLETED" in saved.read()
             return complete and all(
                 os.path.isfile(path)
                 for path in (
@@ -882,7 +921,7 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
         )
 
     def _run(self, **kwargs):
-        self._reset_execution_state()
+        self._begin_execution()
         if self.settings.mecp_numfreq_only:
             return self._run_frequency_only()
         positions_bohr = (
@@ -1183,16 +1222,3 @@ class GaussianMECPJob(MECPSeamMixin, GaussianJob):
 
     def _final_report_outputs(self, result):
         return self.final_gaussian_logs
-
-    def verify_seam_minimum(self, *args, **kwargs):
-        result = super().verify_seam_minimum(*args, **kwargs)
-        result["gaussian_output_files"] = result["state_output_files"]
-        return result
-
-    def _final_report_legacy_fields(self, result, frequency_only):
-        if frequency_only:
-            return {}
-        return {
-            f"gaussian_output_{state}": os.path.basename(path)
-            for state, path in self.final_gaussian_logs.items()
-        }

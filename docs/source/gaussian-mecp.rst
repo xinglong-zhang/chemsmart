@@ -750,5 +750,17 @@ identify original engine outputs using paths relative to the report.
 Code API: ``final_report_file`` identifies the selected driver workflow result; ``optimization_report_file`` identifies
 the Gaussian optimization progress report. ``verify_seam_minimum()`` returns the ``state_output_files`` mapping.
 
-For compatibility, ``report_file`` aliases ``optimization_report_file``, and ``gaussian_output_files`` aliases
-``state_output_files``. Final reports retain the earlier output aliases and frequency-only completion marker.
+**Python results API**
+
+``job.results`` returns the selected completed MECP result, or ``None`` if not available. Both backends expose
+``energy_a``, ``energy_b``, ``energy_difference`` (Hartree), ``symbols``, ``positions_angstrom``, ``is_minimum``,
+``projected_frequencies`` (cm⁻¹), ``source``, ``quality_status``, and ``minimum_check_method`` (``projected_hessian``,
+``orca_native_frequency``, or ``None`` when no minimum check was completed). Values absent from the underlying output
+are ``None``. Shared results are read from the final report, so values have the report's printed precision.
+
+``job.output`` is a dictionary containing ``selected`` A/B Gaussian output parsers and ``optimization_steps``, keyed by
+relative optimization folder and step number. Each step's ``state_outputs`` maps available A/B states to Gaussian output
+parsers; inspect each parser's ``normal_termination`` to identify failed jobs. The ``energy_gap`` field is ``None`` when
+no step gap is parsed. Missing states are omitted. Existing output files from earlier runs are retained on disk and may
+also appear in the history. The result is ``None`` if no outputs exist. The shared ``job.results`` describes the
+selected CHEMSMART MECP analysis.

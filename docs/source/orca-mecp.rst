@@ -123,9 +123,8 @@ in Bohr, Cartesian Hessians in Hartree/Bohr², and projected frequencies in cm�
 **************
 
 ``<label>_final_report.log``
-   One schema for Gaussian optimization/analysis and ORCA's CHEMSMART analysis/following workflows, including
-   frequency-only jobs. Native ORCA ``opt/numfreq`` retains its ``<label>_report.log`` quality report, supplemented with
-   the same canonical energy fields and units.
+   One schema for Gaussian and ORCA selected MECP results, including native ORCA ``opt/numfreq`` and CHEMSMART
+   analysis/following workflows. Native ORCA also retains its separate ``<label>_report.log`` quality summary.
 
 ``<label>_mecp_freq.log``
    Selected geometry, masses, projected frequencies and Cartesian normal modes. Both engines use the existing format
@@ -181,10 +180,23 @@ using paths relative to the report.
 Native fields including ``state_1_energy/state_2_energy`` and the PASSED/WARNING/FAILED assessment describe the native
 quality report.
 
-Code API: ``final_report_file`` identifies the selected shared seam-workflow result. For native-only calculations,
-``native_quality_report_file`` identifies the native quality report. The native quality report describes the initial
-ORCA calculation, which may differ from the selected result after seam following. ``verify_seam_minimum()`` returns the
-canonical ``state_output_files`` mapping.
+Code API: ``final_report_file`` identifies the selected final result, and ``native_quality_report_file`` identifies the
+native ORCA quality summary. The native quality report describes the initial ORCA calculation, which may differ from the
+selected result after seam following. ``verify_seam_minimum()`` returns the canonical ``state_output_files`` mapping.
 
-For compatibility, ``report_file`` aliases ``native_quality_report_file``, ``seam_report_file`` aliases
-``final_report_file``, and shared reports retain the earlier energy-gap, branch and frequency-only completion aliases.
+**Python results API**
+
+``job.results`` returns the selected completed MECP result, or ``None`` if not available. Both backends expose
+``energy_a``, ``energy_b``, ``energy_difference`` (Hartree), ``symbols``, ``positions_angstrom``, ``is_minimum``,
+``projected_frequencies`` (cm⁻¹), ``source``, ``quality_status``, and ``minimum_check_method`` (``projected_hessian``,
+``orca_native_frequency``, or ``None`` when no minimum check was completed). Values absent from the underlying output
+are ``None``. Shared results are read from the final report, so values have the report's printed precision. For native
+ORCA calculations, ``job.output`` is a dictionary with the same keys as Gaussian. ``native_output`` is the ORCA output
+parser, ``native_summary`` is the parsed native MECP result. ``energy_gap_history`` preserves the energy gap records
+without assigning them to optimization steps. Explicitly reported ORCA optimization cycle count is available as
+``native_summary.optimization_steps``; when absent it is ``None``. ORCA native ``optimization_steps`` is empty because
+separate A/B outputs are not available for each cycle. Its native frequency tables are not interchangeable with shared
+projected frequencies.
+
+Native ORCA reports record ``analysis_source=orca_native`` and ``quality_status``; their native minimum assessment is
+not a CHEMSMART projected-Hessian check.

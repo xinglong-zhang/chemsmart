@@ -24,6 +24,84 @@ CONVERGENCE_CRITERIA = {
 }
 
 
+@dataclass(frozen=True)
+class MECPResult:
+    """Selected MECP result; energies in Hartree and positions in Angstrom.
+
+    ``is_minimum`` is None when no minimum check was completed. Projected
+    frequencies are distinct from backend-native frequency tables.
+    """
+
+    energy_a: float | None
+    energy_b: float | None
+    energy_difference: float | None
+    positions_angstrom: tuple | None
+    symbols: tuple | None
+    is_minimum: bool | None
+    projected_frequencies: tuple | None
+    source: str
+    quality_status: str | None = None
+    minimum_check_method: str | None = None
+
+
+def read_final_result(filename):
+    """Read a completed shared report, including after a job is reloaded."""
+    if not os.path.isfile(filename):
+        return None
+    with open(filename, encoding="utf-8") as stream:
+        lines = stream.readlines()
+    fields = dict(line.strip().split("=", 1) for line in lines if "=" in line)
+    if fields.get("status") != "COMPLETED":
+        return None
+
+    def number(key):
+        value = fields.get(key, "NA").split()[0]
+        return None if value == "NA" else float(value)
+
+    positions = []
+    symbols = []
+    frequencies = []
+    section = None
+    for line in lines:
+        if line.strip() == "Final geometry (Angstrom):":
+            section = "geometry"
+        elif line.strip() == "Projected MECP frequencies (cm^-1):":
+            section = "frequencies"
+        elif line.startswith("status="):
+            section = None
+        elif section == "geometry" and len(line.split()) == 4:
+            parts = line.split()
+            symbols.append(parts[0])
+            positions.append(tuple(float(x) for x in parts[1:]))
+        elif section == "frequencies" and line.strip().startswith("mode "):
+            frequencies.append(float(line.split()[-1]))
+    minimum = {"PASS": True, "FAIL": False}.get(fields.get("seam_minimum"))
+    if fields.get("analysis_source") == "orca_native":
+        minimum = {"True": True, "False": False}.get(
+            fields.get("native_is_minimum")
+        )
+    return MECPResult(
+        energy_a=number("energy_A"),
+        energy_b=number("energy_B"),
+        energy_difference=number("energy_difference"),
+        positions_angstrom=tuple(positions) if positions else None,
+        symbols=tuple(symbols) if positions else None,
+        is_minimum=minimum,
+        projected_frequencies=tuple(frequencies) if frequencies else None,
+        source=fields.get("analysis_source", "shared_report"),
+        quality_status=fields.get("quality_status"),
+        minimum_check_method=(
+            (
+                "orca_native_frequency"
+                if fields.get("analysis_source") == "orca_native"
+                else "projected_hessian"
+            )
+            if minimum is not None
+            else None
+        ),
+    )
+
+
 def state_job_label(label, step, state, checkpoint_tag=None):
     if not isinstance(step, str):
         prefix = f"{checkpoint_tag}_" if checkpoint_tag else ""
@@ -135,8 +213,10 @@ def write_final_report(
     macro_steps=0,
     selected_branch=None,
     state_outputs=None,
-    legacy_fields=None,
     mode=None,
+    analysis_source=None,
+    quality_status=None,
+    native_is_minimum=None,
 ):
     """Write one final-result schema for optimization and frequency-only jobs.
 
@@ -158,12 +238,16 @@ def write_final_report(
         )
         if mode is not None:
             output.write(f"mode={mode}\n")
+        if analysis_source is not None:
+            output.write(f"analysis_source={analysis_source}\n")
+        if quality_status is not None:
+            output.write(f"quality_status={quality_status}\n")
+        if native_is_minimum is not None:
+            output.write(f"native_is_minimum={native_is_minimum}\n")
         for state, path in (state_outputs or {}).items():
             output.write(
                 f"state_output_{state}={os.path.relpath(path, os.path.dirname(filename))}\n"
             )
-        for name, value in (legacy_fields or {}).items():
-            output.write(f"{name}={value}\n")
         if macro_steps:
             output.write(
                 f"final_branch_optimization_steps={result.get('optimization_steps', 'NA')}\n"
@@ -200,8 +284,6 @@ def write_final_report(
             output.write("\nProjected MECP frequencies (cm^-1):\n")
             for index, frequency in enumerate(result["frequencies"], 1):
                 output.write(f"mode {index:4d}: {frequency:+14.6f}\n")
-        if frequency_only:
-            output.write("NUMFREQ ONLY COMPLETED\n")
         output.write("status=COMPLETED\n")
 
 

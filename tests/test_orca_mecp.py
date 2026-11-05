@@ -383,13 +383,14 @@ def test_orca_followseam_releases_and_selects_verified_branch(
     monkeypatch.setattr(ORCAMECPJob, "_run_state", state_run)
     monkeypatch.setattr(
         ORCAMECPJob,
-        "results",
+        "_native_mecp_result",
         property(
             lambda job: SimpleNamespace(
                 normal_termination=True,
                 converged=True,
                 final_structure=job.molecule.copy(),
                 energy_gap_history=[0.0],
+                optimization_steps=1,
             )
         ),
     )
@@ -1458,9 +1459,84 @@ def test_mecp_positional_mode_command_reconstruction():
         assert ctx.params["mode_argument"] == "numfreq"
 
 
-def test_legacy_report_path_aliases(tmp_path):
-    job = object.__new__(ORCAMECPJob)
-    job.folder = str(tmp_path)
-    job.label = "crossing"
-    assert job.report_file == job.native_quality_report_file
-    assert job.seam_report_file == job.final_report_file
+def test_unified_results_for_native_orca(
+    tmp_path, orca_jobrunner_no_scratch, mecp_case
+):
+    source = mecp_case("ch3o_ch2oh_numfreq")
+    xyz = Path("tests/data/ORCATests/inputs/xyz/ch3o_ch2oh_mecp.xyz").resolve()
+    job = ORCAMECPJob.from_filename(
+        filename=str(xyz),
+        settings=mecp_settings(
+            charge=1, multiplicity1=3, multiplicity2=1, mode="numfreq"
+        ),
+        label="crossing",
+        jobrunner=orca_jobrunner_no_scratch,
+    )
+    job.set_folder(str(tmp_path))
+    shutil.copy(source, job.outputfile)
+    assert job.results is None
+    job.log_results(energy_gap_tolerance=2e-4)
+    selected = job.results
+    native_bundle = job.output
+    native = native_bundle["native_summary"]
+    assert not native_bundle["selected"]
+    assert native_bundle["optimization_steps"] == {}
+    assert native_bundle["energy_gap_history"] == native.energy_gap_history
+    assert native_bundle["native_output"] is not None
+    assert selected.source == "orca_native"
+    assert selected.energy_a == pytest.approx(native.state_1_energy)
+    assert selected.energy_b == pytest.approx(native.state_2_energy)
+    assert selected.energy_difference == pytest.approx(
+        native.energy_gap, abs=1e-9
+    )
+    assert selected.is_minimum == native.is_minimum
+    assert selected.minimum_check_method == "orca_native_frequency"
+    assert selected.projected_frequencies is None
+    assert selected.quality_status == "PASSED"
+    assert Path(job.final_report_file).is_file()
+    # A fresh job can read the persisted final result.
+    job._reset_execution_state()
+    assert job.results == selected
+
+
+def test_native_final_report_preserves_warning(
+    tmp_path, orca_jobrunner_no_scratch, mecp_case
+):
+    xyz = Path("tests/data/ORCATests/inputs/xyz/ch3o_ch2oh_mecp.xyz").resolve()
+    job = ORCAMECPJob.from_filename(
+        filename=str(xyz),
+        settings=mecp_settings(
+            charge=1, multiplicity1=3, multiplicity2=1, mode="numfreq"
+        ),
+        label="crossing",
+        jobrunner=orca_jobrunner_no_scratch,
+    )
+    job.set_folder(str(tmp_path))
+    shutil.copy(mecp_case("ch3o_ch2oh_numfreq"), job.outputfile)
+    job.log_results(energy_gap_tolerance=1e-8)
+    assert job.results.quality_status == "WARNING"
+    assert job.results.source == "orca_native"
+    assert job.results.projected_frequencies is None
+    report = Path(job.final_report_file).read_text()
+    assert "seam_minimum=NOT_CHECKED" in report
+    assert "native_is_minimum=" in report
+
+
+def test_orca_cycle_count_excludes_post_optimization_gap(tmp_path):
+    output = tmp_path / "crossing.out"
+    output.write_text(
+        "! SurfCrossOpt SurfCrossNumFreq\n"
+        "GEOMETRY OPTIMIZATION CYCLE 1\n"
+        "Energy difference between both states 0.001\n"
+        "GEOMETRY OPTIMIZATION CYCLE 2\n"
+        "Energy difference between both states 0.0001\n"
+        "Energy difference between both states 0.00009\n"
+    )
+    parsed = ORCAOutput(str(output))
+    assert parsed.mecp_optimization_steps == 2
+    assert parsed.mecp_energy_gap_history == [0.001, 0.0001, 0.00009]
+    assert parsed.mecp_result.optimization_steps == 2
+    output.write_text(
+        "! SurfCrossOpt\nEnergy difference between both states 0.001\n"
+    )
+    assert ORCAOutput(str(output)).mecp_optimization_steps is None

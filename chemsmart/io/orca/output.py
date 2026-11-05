@@ -58,6 +58,7 @@ class ORCAMECPResult:
     state_2_imaginary_frequencies: tuple[float, ...]
     is_minimum: bool | None
     energy_gap_history: tuple[float, ...]
+    optimization_steps: int | None = None
 
 
 class ORCAOutput(ORCAFileMixin):
@@ -204,6 +205,19 @@ class ORCAOutput(ORCAFileMixin):
         return gaps
 
     @cached_property
+    def mecp_optimization_steps(self):
+        """Last explicit ORCA geometry optimization cycle, if reported."""
+        pattern = re.compile(
+            r"GEOMETRY\s+OPTIMIZATION\s+CYCLE\s+(\d+)", re.IGNORECASE
+        )
+        cycles = [
+            int(match.group(1))
+            for line in self.contents
+            if (match := pattern.search(line))
+        ]
+        return cycles[-1] if cycles else None
+
+    @cached_property
     def mecp_state_energies(self):
         """Final PES1/PES2 energies adjacent to the last reported MECP gap."""
         explicit = re.compile(
@@ -291,6 +305,7 @@ class ORCAOutput(ORCAFileMixin):
             state_2_imaginary_frequencies=state_2_imaginary,
             is_minimum=is_minimum,
             energy_gap_history=gaps,
+            optimization_steps=self.mecp_optimization_steps,
         )
 
     @cached_property

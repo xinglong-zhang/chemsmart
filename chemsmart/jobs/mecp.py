@@ -16,6 +16,8 @@ from ase import units
 from chemsmart.io.mecp import (
     MECPFiles,
     convergence_thresholds,
+    read_final_result,
+    read_report_fields,
     write_final_report,
     write_frequency_log,
     write_seam_check_log,
@@ -87,6 +89,26 @@ class MECPSeamMixin:
         self._selected_seam_follow_branch = None
         self._selected_seam_follow_macro_steps = 0
 
+    def _begin_execution(self):
+        """Reset run state and invalidate the previous final result."""
+        self._reset_execution_state()
+        if os.path.isfile(self.final_report_file):
+            os.remove(self.final_report_file)
+
+    def _selected_native_outputs(self, output_class):
+        """Read available state outputs referenced by the completed report."""
+        fields = read_report_fields(self.final_report_file)
+        if fields.get("status") != "COMPLETED":
+            return {}
+        outputs = {}
+        for state in ("A", "B"):
+            relative = fields.get(f"state_output_{state}")
+            if relative:
+                path = os.path.join(self.folder, relative)
+                if os.path.isfile(path):
+                    outputs[state] = output_class(path)
+        return outputs
+
     @property
     def optimization_folder(self):
         return self.mecp_files.optimization_folder
@@ -97,11 +119,13 @@ class MECPSeamMixin:
 
     @property
     def final_report_file(self):
-        """Path to the shared report for the selected driver workflow result.
-
-        Native-only ORCA runs instead produce ``native_quality_report_file``.
-        """
+        """Path to the report for the selected MECP result."""
         return self.mecp_files.final_report
+
+    @property
+    def results(self):
+        """Selected completed MECP result, or None if unavailable."""
+        return read_final_result(self.final_report_file)
 
     @property
     def frequency_file(self):
@@ -135,9 +159,6 @@ class MECPSeamMixin:
 
     def _final_report_outputs(self, result):
         return result.get("state_output_files", {})
-
-    def _final_report_legacy_fields(self, result, frequency_only):
-        return {}
 
     def _run_frequency_only(self):
         """Analyze the supplied crossing and use the common result report."""
@@ -209,11 +230,11 @@ class MECPSeamMixin:
                     "Driver-based reports use the settings' convergence thresholds."
                 )
             return self._write_final_report(*context)
-        return self._log_native_results(
+        return self._write_native_quality_report(
             energy_gap_tolerance=energy_gap_tolerance
         )
 
-    def _log_native_results(self, energy_gap_tolerance=None):
+    def _write_native_quality_report(self, energy_gap_tolerance=None):
         """Backends with native MECP output implement result reporting."""
         return None
 
@@ -271,9 +292,6 @@ class MECPSeamMixin:
             macro_steps=self._selected_seam_follow_macro_steps,
             selected_branch=self._selected_seam_follow_branch,
             state_outputs=outputs,
-            legacy_fields=self._final_report_legacy_fields(
-                result, frequency_only
-            ),
             mode=mode,
         )
         return self.final_report_file

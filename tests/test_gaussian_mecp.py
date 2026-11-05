@@ -1447,6 +1447,18 @@ def test_gaussian_and_orca_share_final_report_format(tmp_path):
         assert Path(job.final_report_file).read_text() == report
         with pytest.raises(ValueError, match="convergence thresholds"):
             job.log_results(energy_gap_tolerance=1e-4)
+        selected = job.results
+        assert selected.symbols == ("H", "H")
+        assert selected.positions_angstrom == (
+            (0.0, 0.0, 0.0),
+            (0.7, 0.0, 0.0),
+        )
+        assert selected.energy_a == pytest.approx(-1.0)
+        assert selected.energy_b == pytest.approx(-0.99998)
+        assert selected.is_minimum is True
+        assert selected.minimum_check_method == "projected_hessian"
+        assert selected.projected_frequencies == (1234.5,)
+        assert selected.source == "shared_report"
         fields = read_report_fields(job.final_report_file)
         assert fields["backend"] == backend.PROGRAM.lower()
         assert fields["mode"] == "anafreq"
@@ -2050,42 +2062,6 @@ def test_mecp_execution_state_is_initialized_and_reset(backend):
         assert getattr(job, name) == value
 
 
-def test_legacy_frequency_report_requires_outputs_and_no_failed_status(
-    tmp_path,
-):
-    job = object.__new__(GaussianMECPJob)
-    job.settings = GaussianMECPJobSettings(mecp_numfreq_only=True)
-    job.folder = str(tmp_path)
-    job.label = "crossing"
-    report = Path(job.final_report_file)
-    report.write_text("NUMFREQ ONLY COMPLETED\n")
-    assert not job._job_is_complete()
-    Path(job.frequency_type_folder).mkdir()
-    (Path(job.frequency_type_folder) / "crossing_seam_check.log").write_text(
-        "checked\n"
-    )
-    Path(job.frequency_file).write_text("hessian_method=numerical\n")
-    assert job._job_is_complete()
-    report.write_text("NUMFREQ ONLY COMPLETED\nstatus=FAILED\n")
-    assert not job._job_is_complete()
-
-
-def test_legacy_gaussian_result_and_report_aliases(tmp_path, monkeypatch):
-    from chemsmart.jobs.mecp import MECPSeamMixin
-
-    job = object.__new__(GaussianMECPJob)
-    job.folder = str(tmp_path)
-    job.label = "crossing"
-    outputs = {"A": "a.log", "B": "b.log"}
-    monkeypatch.setattr(
-        MECPSeamMixin,
-        "verify_seam_minimum",
-        lambda self: {"state_output_files": outputs},
-    )
-    assert job.verify_seam_minimum()["gaussian_output_files"] == outputs
-    assert job.report_file == job.optimization_report_file
-
-
 def test_frequency_only_analyzes_known_stationary_crossing(tmp_path):
     from ase import units
 
@@ -2117,3 +2093,89 @@ def test_frequency_only_analyzes_known_stationary_crossing(tmp_path):
     np.testing.assert_array_equal(job.molecule.positions, initial)
     assert job._job_is_complete()
     assert not (tmp_path / "known_optimization").exists()
+
+
+def test_output_reads_selected_state_outputs(tmp_path, monkeypatch):
+    import chemsmart.io.gaussian.output as gaussian_output
+
+    job = object.__new__(GaussianMECPJob)
+    job.folder = str(tmp_path)
+    job.label = "crossing"
+    reference_dir = tmp_path / "numerical_frequency"
+    reference_dir.mkdir()
+    for state in ("A", "B"):
+        (reference_dir / f"reference_{state}.log").write_text(
+            "Gaussian output"
+        )
+    report = Path(job.final_report_file)
+    report.write_text(
+        "state_output_A=numerical_frequency/reference_A.log\n"
+        "state_output_B=numerical_frequency/reference_B.log\n"
+        "status=COMPLETED\n"
+    )
+    monkeypatch.setattr(
+        gaussian_output, "Gaussian16Output", lambda path: Path(path)
+    )
+    assert job.output["selected"] == {
+        "A": reference_dir / "reference_A.log",
+        "B": reference_dir / "reference_B.log",
+    }
+    (reference_dir / "reference_B.log").unlink()
+    assert set(job.output["selected"]) == {"A"}
+    report.write_text("status=RUNNING\n")
+    assert job.output is None
+
+
+def test_output_keeps_gaussian_step_history(tmp_path, monkeypatch):
+    import chemsmart.io.gaussian.output as gaussian_output
+
+    job = object.__new__(GaussianMECPJob)
+    job.folder = str(tmp_path)
+    job.label = "crossing"
+    folder = Path(job.optimization_folder)
+    folder.mkdir()
+    for name in (
+        "crossing_step1_A.log",
+        "crossing_step1_B.log",
+        "crossing_step2_A.log",
+    ):
+        (folder / name).write_text("output")
+    (folder / "crossing_step3_A.log").touch()
+    nested = folder / "nested"
+    nested.mkdir()
+    (nested / "crossing_step4_A.log").write_text("output")
+    monkeypatch.setattr(
+        gaussian_output, "Gaussian16Output", lambda path: Path(path)
+    )
+    native = job.output
+    assert native["native_output"] is None
+    assert not native["selected"]
+    assert set(
+        native["optimization_steps"]["crossing_optimization/1"][
+            "state_outputs"
+        ]
+    ) == {
+        "A",
+        "B",
+    }
+    assert set(
+        native["optimization_steps"]["crossing_optimization/2"][
+            "state_outputs"
+        ]
+    ) == {"A"}
+    assert "crossing_optimization/3" in native["optimization_steps"]
+    assert "crossing_optimization/4" not in native["optimization_steps"]
+    assert (
+        native["optimization_steps"]["crossing_optimization/1"]["energy_gap"]
+        is None
+    )
+
+
+def test_result_without_minimum_check_has_no_check_method(tmp_path):
+    from chemsmart.io.mecp import read_final_result
+
+    report = tmp_path / "final_report.log"
+    report.write_text("seam_minimum=NOT_CHECKED\nstatus=COMPLETED\n")
+    result = read_final_result(str(report))
+    assert result.is_minimum is None
+    assert result.minimum_check_method is None
