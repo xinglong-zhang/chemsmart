@@ -12,7 +12,6 @@ import pandas as pd
 from joblib import Parallel, delayed
 
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.utils.utils import to_graph_wrapper
 
 from .base import MoleculeGrouper
 
@@ -31,7 +30,8 @@ class ConnectivityGrouper(MoleculeGrouper):
         molecules (Iterable[Molecule]): Inherited; collection of molecules to
             group.
         num_procs (int): Inherited; number of worker processes.
-        adjust_H (bool): Whether to adjust hydrogen bond detection.
+        adjust_H (bool): Retained for API compatibility. RDKit connectivity
+            perception is used and this option no longer changes bond perception.
         ignore_hydrogens (bool): Whether to exclude hydrogen atoms from comparison.
     """
 
@@ -53,7 +53,8 @@ class ConnectivityGrouper(MoleculeGrouper):
         Args:
             molecules (Iterable[Molecule]): Collection of molecules to group.
             num_procs (int): Number of processes for parallel computation.
-            adjust_H (bool): Whether to adjust hydrogen bond detection.
+            adjust_H (bool): Retained for API compatibility. RDKit connectivity
+                perception is used and this option no longer changes bond perception.
                 Defaults to True.
             ignore_hydrogens (bool): Whether to exclude hydrogen atoms from
                 graph comparison. Defaults to False.
@@ -78,9 +79,9 @@ class ConnectivityGrouper(MoleculeGrouper):
         """
         Check if two molecular graphs are isomorphic (NetworkX).
 
-        Uses `networkx.is_isomorphic` with attribute-aware matching:
-        - Nodes must have equal `element` values.
-        - Edges must have equal `bond_order` values.
+        Uses `networkx.is_isomorphic` with element-aware node matching.
+        Only atomic connectivity is compared; bond order and aromaticity are
+        intentionally ignored.
 
         Args:
             g1 (nx.Graph): First molecular graph.
@@ -93,7 +94,6 @@ class ConnectivityGrouper(MoleculeGrouper):
             g1,
             g2,
             node_match=lambda a, b: a["element"] == b["element"],
-            edge_match=lambda a, b: a["bond_order"] == b["bond_order"],
         )
 
     def _check_isomorphism(
@@ -139,9 +139,10 @@ class ConnectivityGrouper(MoleculeGrouper):
             f"[{self.__class__.__name__}] Converting {n} molecules to graphs..."
         )
 
-        # Parallel graph conversion (use fixed bond_cutoff_buffer=0.0)
+        # Build connectivity graphs with RDKit. Bond order and aromaticity are
+        # intentionally not part of ConnectivityGrouper's comparison.
         self.graphs = Parallel(n_jobs=self.num_procs)(
-            delayed(to_graph_wrapper)(mol, 0.0, self.adjust_H)
+            delayed(mol.to_rdkit_connectivity_graph)()
             for mol in molecules_list
         )
 
@@ -191,18 +192,16 @@ class ConnectivityGrouper(MoleculeGrouper):
                 group_map[root] = []
             group_map[root].append(i)
 
-        # Convert to output format
-        groups = []
+        # Convert to output format and preserve deterministic group order.
         index_groups = []
         for indices_list in group_map.values():
-            indices_list.sort()  # Sort by index (energy order)
-            groups.append([molecules_list[i] for i in indices_list])
+            indices_list.sort()
             index_groups.append(indices_list)
 
-        # Sort groups by first index
-        sorted_pairs = sorted(zip(index_groups, groups), key=lambda x: x[0][0])
-        index_groups = [p[0] for p in sorted_pairs]
-        groups = [p[1] for p in sorted_pairs]
+        index_groups = sorted(index_groups, key=lambda group: group[0])
+        groups, index_groups = self._apply_lowest_representative_ordering(
+            index_groups
+        )
 
         grouping_time = time.time() - grouping_start_time
 

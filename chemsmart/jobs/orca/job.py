@@ -14,7 +14,6 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.orca.settings import ORCAJobSettings
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -215,29 +214,13 @@ class ORCAJob(Job):
         # Select specified molecule by index
         molecules = molecules[string2index_1based(index)]
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        # Create and return job instance
-        # Note: Some jobs use last molecule only, others require all molecules
-        return cls(
-            molecule=molecules,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecules,
+                settings=settings,
+                label=label,
+            ),
             **kwargs,
         )
 
@@ -265,27 +248,13 @@ class ORCAJob(Job):
         # Retrieve molecule from PubChem database
         molecule = Molecule.from_pubchem(identifier=identifier)
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+            ),
             **kwargs,
         )
 
@@ -326,77 +295,35 @@ class ORCAJob(Job):
 
             logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
 
-            # Create jobrunner if not provided
-            if jobrunner is None:
-                jobrunner = JobRunner.from_job(
-                    ORCAOptJob(
-                        molecule=molecule,
-                        settings=settings,
-                        label=label,
-                        jobrunner=None,
-                        **kwargs,
-                    ),
-                    server=kwargs.get("server"),
-                    scratch=kwargs.get("scratch"),
-                    fake=kwargs.get("fake", False),
-                    **kwargs,
-                )
-
-            return ORCAOptJob(
-                molecule=molecule,
-                settings=settings,
-                label=label,
-                jobrunner=jobrunner,
+            return ORCAOptJob._create_with_jobrunner(
+                jobrunner,
+                job_args=dict(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                ),
                 **kwargs,
             )
 
         elif jobtype.lower() == "inp":
-            # Create jobrunner if not provided
-            if jobrunner is None:
-                jobrunner = JobRunner.from_job(
-                    ORCAInpJob(
-                        molecule=molecule,
-                        settings=settings,
-                        label=label,
-                        jobrunner=None,
-                        **kwargs,
-                    ),
-                    server=kwargs.get("server"),
-                    scratch=kwargs.get("scratch"),
-                    fake=kwargs.get("fake", False),
-                    **kwargs,
-                )
-
-            return ORCAInpJob(
-                molecule=molecule,
-                settings=settings,
-                label=label,
-                jobrunner=jobrunner,
+            return ORCAInpJob._create_with_jobrunner(
+                jobrunner,
+                job_args=dict(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                ),
                 **kwargs,
             )
 
         elif jobtype.lower() == "orca":
-            # Create jobrunner if not provided
-            if jobrunner is None:
-                jobrunner = JobRunner.from_job(
-                    ORCAGeneralJob(
-                        molecule=molecule,
-                        settings=settings,
-                        label=label,
-                        jobrunner=None,
-                        **kwargs,
-                    ),
-                    server=kwargs.get("server"),
-                    scratch=kwargs.get("scratch"),
-                    fake=kwargs.get("fake", False),
-                    **kwargs,
-                )
-
-            return ORCAGeneralJob(
-                molecule=molecule,
-                settings=settings,
-                label=label,
-                jobrunner=jobrunner,
+            return ORCAGeneralJob._create_with_jobrunner(
+                jobrunner,
+                job_args=dict(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                ),
                 **kwargs,
             )
         else:
@@ -497,28 +424,13 @@ class ORCAInpJob(ORCAJob):
 
         logger.debug(f"Writing input lines: \n{input_lines}")
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        # Create and return job instance
-        return cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+            ),
             **kwargs,
         )
 
@@ -553,7 +465,7 @@ class ORCAInpJob(ORCAJob):
         ):
             # Running job in scratch directory
             job_scratch_dir = os.path.join(
-                self.jobrunner.scratch_dir, self.label
+                self.jobrunner.scratch_dir, self.execution_name
             )
 
             # Create scratch directory if needed

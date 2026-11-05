@@ -54,6 +54,7 @@ class GrouperJob(Job):
         conformer_ids: Optional[List[str]] = None,
         skipped_ids: Optional[List[str]] = None,
         matrix_format: str = "xlsx",
+        representative_strategy: str = "lowest",
         energy_type: str = "E",
         thermo_parameters: Optional[str] = None,
         **kwargs,
@@ -101,6 +102,7 @@ class GrouperJob(Job):
         self.conformer_ids = conformer_ids
         self.skipped_ids = skipped_ids
         self.matrix_format = matrix_format
+        self.representative_strategy = representative_strategy
         self.energy_type = energy_type
         self.thermo_parameters = thermo_parameters
         self.grouper_kwargs = kwargs
@@ -195,7 +197,6 @@ class GrouperJob(Job):
         Returns:
             GrouperJob: Configured grouper job instance.
         """
-        from chemsmart.jobs.runner import JobRunner
         from chemsmart.utils.utils import string2index_1based
 
         logger.info(f"Reading molecules from file: {filename}")
@@ -216,33 +217,16 @@ class GrouperJob(Job):
                 f"Need at least 2 molecules for grouping, got {len(molecules)}"
             )
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecules=molecules,
-                    grouping_strategy=grouping_strategy,
-                    label=label,
-                    jobrunner=None,
-                    threshold=threshold,
-                    num_groups=num_groups,
-                    ignore_hydrogens=ignore_hydrogens,
-                    num_procs=num_procs,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-            )
-
-        return cls(
-            molecules=molecules,
-            grouping_strategy=grouping_strategy,
-            label=label,
-            jobrunner=jobrunner,
-            threshold=threshold,
-            num_groups=num_groups,
-            ignore_hydrogens=ignore_hydrogens,
-            num_procs=num_procs,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecules=molecules,
+                grouping_strategy=grouping_strategy,
+                label=label,
+                threshold=threshold,
+                num_groups=num_groups,
+                ignore_hydrogens=ignore_hydrogens,
+                num_procs=num_procs,
+            ),
             **kwargs,
         )

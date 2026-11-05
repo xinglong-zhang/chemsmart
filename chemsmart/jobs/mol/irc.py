@@ -2,7 +2,6 @@ import os
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.mol.movie import PyMOLMovieJob
-from chemsmart.jobs.runner import JobRunner
 
 
 class PyMOLIRCMovieJob(PyMOLMovieJob):
@@ -84,9 +83,9 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
             raise ValueError(
                 "No reactant or product file or full irc file provided."
             )
-        elif reactant_file and product_file and all_file:
+        elif all_file and (reactant_file or product_file):
             raise ValueError(
-                "You can only provide reactant and product files or "
+                "You can only provide reactant/product file(s) or "
                 "full irc file."
             )
         elif reactant_file and product_file:
@@ -100,31 +99,29 @@ class PyMOLIRCMovieJob(PyMOLMovieJob):
             )
             product_molecules = Molecule.from_filepath(product_file, index=":")
             molecules = reactant_molecules + product_molecules
+        elif reactant_file:
+            reactant_file = os.path.basename(reactant_file)
+            label = os.path.splitext(reactant_file)[0]
+            molecules = Molecule.from_filepath(reactant_file, index="::-1")
+        elif product_file:
+            product_file = os.path.basename(product_file)
+            label = os.path.splitext(product_file)[0]
+            molecules = Molecule.from_filepath(product_file, index=":")
         elif all_file:
             label = os.path.splitext(os.path.basename(all_file))[0]
             all_molecules = Molecule.from_filepath(all_file, index=":")
             molecules = all_molecules
         else:
             raise ValueError(
-                "You can only provide reactant and product files or "
+                "You can only provide reactant/product file(s) or "
                 "full irc file."
             )
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecules=molecules,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecules=molecules, label=label, jobrunner=jobrunner, **kwargs
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecules=molecules,
+                label=label,
+            ),
+            **kwargs,
         )

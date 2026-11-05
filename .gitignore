@@ -53,6 +53,7 @@ htmlcov/
 .cache
 nosetests.xml
 coverage.xml
+coverage-soap.xml
 *.cover
 *.py,cover
 .hypothesis/
@@ -141,9 +142,6 @@ dmypy.json
 #macos
 .DS_Store
 .idea/
-
-# Local manual convert CLI scratch (not used by pytest)
-convert_test_files/
 
 # Editor settings
 .vscode/

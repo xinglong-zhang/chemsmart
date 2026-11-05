@@ -216,7 +216,7 @@ class Submitter(RegistryMixin):
             str: Filename for the job submission script.
         """
         if self.job.label is not None:
-            return f"chemsmart_sub_{self.job.label}.sh"
+            return f"chemsmart_sub_{self.job.execution_name}.sh"
         return "chemsmart_sub.sh"
 
     @property
@@ -228,7 +228,7 @@ class Submitter(RegistryMixin):
             str: Filename for the array job submission script.
         """
         if self.job.label is not None:
-            return f"chemsmart_sub_array_{self.job.label}.sh"
+            return f"chemsmart_sub_array_{self.job.execution_name}.sh"
         return "chemsmart_sub_array.sh"
 
     @property
@@ -240,7 +240,7 @@ class Submitter(RegistryMixin):
             str: Filename for the job execution script.
         """
         if self.job.label is not None:
-            return f"chemsmart_run_{self.job.label}.py"
+            return f"chemsmart_run_{self.job.execution_name}.py"
         return "chemsmart_run.py"
 
     @property
@@ -326,6 +326,9 @@ class Submitter(RegistryMixin):
                 - a sequence (e.g., list or tuple) of per-job argument lists,
                   where ``cli_args[i]`` contains the args for ``jobs[i]``.
         """
+        prefix = (
+            f"{self.job.execution_name}_" if self.job.label is not None else ""
+        )
         for i, job in enumerate(jobs):
             # Determine CLI args for this specific job/index.
             # If cli_args looks like a per-job sequence (same length as jobs and
@@ -340,8 +343,8 @@ class Submitter(RegistryMixin):
 
             # Create a run script for each job using a 0-based index so the
             # filenames align with scheduler array task IDs and task-based
-            # execution of chemsmart_run_array_${TASK_ID}.py.
-            runscript_name = f"chemsmart_run_array_{i}.py"
+            # execution of the corresponding array run script.
+            runscript_name = f"chemsmart_run_array_{prefix}{i}.py"
             runscript = RunScript(runscript_name, job_cli_args)
             logger.debug(f"Writing array run script {i}: {runscript_name}")
             runscript.write()
@@ -402,7 +405,10 @@ class Submitter(RegistryMixin):
         )
         f.write("  exit 1\n")
         f.write("fi\n\n")
-        f.write("python chemsmart_run_array_${TASK_ID}.py\n")
+        prefix = (
+            f"{self.job.execution_name}_" if self.job.label is not None else ""
+        )
+        f.write(f"python chemsmart_run_array_{prefix}${{TASK_ID}}.py\n")
 
     def _write_runscript(self, cli_args):
         """
@@ -687,6 +693,7 @@ class PBSSubmitter(Submitter):
         Args:
             f: File handle for writing PBS directives.
         """
+        f.write(f"#PBS -N {self.job.execution_name}\n")
         f.write(f"#PBS -o {self.job.label}.pbsout\n")
         f.write(f"#PBS -e {self.job.label}.pbserr\n")
         if self.server.num_gpus > 0:
@@ -765,7 +772,7 @@ class SLURMSubmitter(Submitter):
         Args:
             f: File handle for writing SLURM directives.
         """
-        f.write(f"#SBATCH --job-name={self.job.label}\n")
+        f.write(f"#SBATCH --job-name={self.job.execution_name}\n")
         f.write(f"#SBATCH --output={self.job.label}.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}.slurmerr\n")
         if self.server.num_gpus:
@@ -808,14 +815,14 @@ class SLURMSubmitter(Submitter):
         # Get number of jobs in array
         num_jobs = len(self.jobs) if hasattr(self, "jobs") else 1
 
-        f.write(f"#SBATCH --job-name={self.job.label}_array\n")
+        f.write(f"#SBATCH --job-name={self.job.execution_name}_array\n")
         f.write(f"#SBATCH --output={self.job.label}_array_%a.slurmout\n")
         f.write(f"#SBATCH --error={self.job.label}_array_%a.slurmerr\n")
 
         # Array directive: 1 to num_jobs, optionally throttled so that at
         # most num_nodes tasks run concurrently (useful for resource limits).
         # This matches the 1-based array runscript filenames
-        # (for example, chemsmart_run_array_1.py ... chemsmart_run_array_N.py).
+        # written by _write_array_runscripts().
         if num_nodes is not None:
             f.write(f"#SBATCH --array=1-{num_jobs}%{num_nodes}\n")
         else:
@@ -898,7 +905,7 @@ class SLFSubmitter(Submitter):
         Args:
             f: File handle for writing LSF directives.
         """
-        f.write(f"#BSUB -J {self.job.label}\n")
+        f.write(f"#BSUB -J {self.job.execution_name}\n")
         f.write(f"#BSUB -o {self.job.label}.bsubout\n")
         f.write(f"#BSUB -e {self.job.label}.bsuberr\n")
         if user_settings is not None:

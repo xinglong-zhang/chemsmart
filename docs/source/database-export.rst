@@ -209,7 +209,7 @@ from the extension of the output file specified with ``-o/--output``.
    **Hartree/Bohr**. These units are written explicitly in the header. Structures that do not have both energy and
    forces at the chosen level of theory are skipped, and a warning summarizing the skipped structures is logged.
 
-   When ``-x``/``--method-basis`` is omitted for extended XYZ export with ``--mid``, chemsmart automatically picks the
+   When ``-x``/``--method-basis`` is omitted for extended XYZ export with ``--mid``, CHEMSMART automatically picks the
    ``(method, basis)`` pair that covers the most structures with both energy and forces stored. With ``--sid``,
-   chemsmart picks an available ``(method, basis)`` pair with both energy and forces for that structure. With
+   CHEMSMART picks an available ``(method, basis)`` pair with both energy and forces for that structure. With
    ``--ri``/``--rid``, the selected record's own ``method/basis`` is used.

@@ -96,7 +96,8 @@ Prefer the built-in CLI for structure conversion:
 
 .. code:: bash
 
-   chemsmart run convert -i molecule.pdb -o molecule.xyz
+   chemsmart run convert -i molecule.pdb
+   chemsmart run convert -i molecule.pdb -o .mol2
    chemsmart run convert -d /path/to/dir -t log --output-filetype xyz
 
 See :doc:`convert-cli-options` and :doc:`molecule-input-formats` for convert options, supported formats, and the Open
@@ -105,7 +106,7 @@ Babel write fallback for non-native output types.
 The legacy ``file_converter.py`` script remains available for the same workflow.
 
 For directory-based conversion, ``-t/--filetype`` selects files by extension, while ``-p/--program`` is only needed when
-chemsmart must know which program-specific parser to use.
+CHEMSMART must know which program-specific parser to use.
 
 Usage
 =====

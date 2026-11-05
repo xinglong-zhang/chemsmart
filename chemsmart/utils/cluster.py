@@ -3,12 +3,12 @@ Cluster utilities for job monitoring and connectivity checks.
 
 Helpers for interacting with common HPC schedulers and network services
 used by CHEMSMART workflows. Currently supports SLURM (via `squeue`/`sacct`)
-and PBS/Torque (via `qstat`) to discover running Gaussian jobs, along with a
+and PBS/Torque (via `qstat`) to discover running jobs, along with a
 simple PubChem reachability check.
 
 Key functionality:
 - Detect current username reliably.
-- Query running Gaussian jobs (IDs and names) on SLURM or PBS/Torque.
+- Query running jobs (IDs and names) on SLURM or PBS/Torque.
 - Validate network connectivity to PubChem for external lookups.
 """
 
@@ -24,7 +24,7 @@ class ClusterHelper:
     """
     Helper for querying running jobs on HPC schedulers.
 
-    Provides methods to obtain IDs and names of running Gaussian jobs on
+    Provides methods to obtain IDs and names of running jobs on
     SLURM and PBS/Torque clusters.
 
     Attributes:
@@ -58,9 +58,9 @@ class ClusterHelper:
             username = out.decode("utf-8").strip()
         return username
 
-    def get_gaussian_running_jobs(self):
+    def get_running_jobs(self):
         """
-        Get IDs and names of currently running Gaussian jobs.
+        Get IDs and names of currently running jobs.
 
         Queries SLURM first and, on failure, falls back to PBS/Torque.
 
@@ -70,25 +70,25 @@ class ClusterHelper:
             available.
         """
         try:
-            running_job_ids = self._get_gaussian_running_job_ids_on_slurm()
-            running_job_names = self._get_gaussian_running_job_names_on_slurm()
+            running_job_ids = self._get_running_job_ids_on_slurm()
+            running_job_names = self._get_running_job_names_on_slurm()
         except Exception:
             try:
                 running_job_ids, running_job_names = (
-                    self._get_gaussian_running_jobs_on_torque()
+                    self._get_running_jobs_on_torque()
                 )
             except FileNotFoundError:
                 running_job_ids, running_job_names = [], []
         return running_job_ids, running_job_names
 
-    def _get_gaussian_running_job_ids_on_slurm(self):
+    def _get_running_job_ids_on_slurm(self):
         """
-        Collect Gaussian job IDs running on SLURM.
+        Collect job IDs running on SLURM.
 
         Invokes `squeue` and filters rows by the current username.
 
         Returns:
-            list[int]: SLURM job IDs for running Gaussian jobs.
+            list[int]: SLURM job IDs for running jobs.
         """
         running_job_ids = []
         p1 = subprocess.Popen(shlex.split("squeue"), stdout=subprocess.PIPE)
@@ -107,18 +107,17 @@ class ClusterHelper:
                 running_job_ids.append(job_id)
         return running_job_ids
 
-    def _get_gaussian_running_job_names_on_slurm(self):
+    def _get_running_job_names_on_slurm(self):
         """
-        Collect Gaussian job names running on SLURM.
+        Collect job names running on SLURM.
 
         Invokes `sacct` and filters by username, then cross-references IDs
-        from `squeue`. Job names are derived from the submit script field and
-        normalized by stripping the `chemsmart_sub_` prefix and file suffix.
+        from `squeue`. Job names are returned as reported by the scheduler.
 
         Returns:
-            list[str]: Job names for currently running Gaussian jobs.
+            list[str]: Job names for currently running jobs.
         """
-        running_job_ids = self._get_gaussian_running_job_ids_on_slurm()
+        running_job_ids = self._get_running_job_ids_on_slurm()
         running_job_names = []
         cmd = 'sacct --format="User,JobID,JobName%100"'
         p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
@@ -130,23 +129,15 @@ class ClusterHelper:
                 job_id = int(line_elem[1])
                 # Checks for currently running jobs
                 if job_id in running_job_ids:
-                    job_name_submitscript = line_elem[-1]
-                    job_name_submitscript_no_ext = os.path.splitext(
-                        job_name_submitscript
-                    )[0]
-                    # Gaussian submission script names
-                    job_name = job_name_submitscript_no_ext.split(
-                        "chemsmart_sub_"
-                    )[-1]
-                    running_job_names.append(job_name)
+                    running_job_names.append(line_elem[-1])
         return running_job_names
 
-    def _get_gaussian_running_jobs_on_torque(self):
+    def _get_running_jobs_on_torque(self):
         """
-        Collect Gaussian job IDs and names on PBS/Torque.
+        Collect job IDs and names on PBS/Torque.
 
         Invokes `qstat -f`, filters surrounding lines by username, parses
-        job IDs and submit-script-based names (stripping `chemsmart_sub_`).
+        job IDs and names as reported by the scheduler.
 
         Returns:
             tuple[list[int], list[str]]: (job_ids, job_names).
@@ -168,15 +159,7 @@ class ClusterHelper:
                 if job_id not in running_job_ids:
                     running_job_ids.append(job_id)
             if "Job_Name" in line:
-                job_name_submitscript = line.split("=")[-1].strip()
-                job_name_submitscript_no_ext = os.path.splitext(
-                    job_name_submitscript
-                )[0]
-                # Gaussian submission script names
-                job_name = job_name_submitscript_no_ext.split(
-                    "chemsmart_sub_"
-                )[-1]
-                running_job_names.append(job_name)
+                running_job_names.append(line.split("=")[-1].strip())
         return running_job_ids, running_job_names
 
 
