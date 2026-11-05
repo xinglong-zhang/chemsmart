@@ -406,6 +406,80 @@ def soap_reference_data(soap_reference_filepath):
     return np.load(soap_reference_filepath)
 
 
+_SOAP_METHANE = (
+    ["C", "H", "H", "H", "H"],
+    [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.09],
+        [0.0, 1.03, -0.36],
+        [0.89, -0.51, -0.36],
+        [-0.89, -0.51, -0.36],
+    ],
+)
+_SOAP_HALO_CHAIN = (
+    ["C"] * 5 + ["F", "Cl"] + ["H"] * 10,
+    [
+        [-1.0144, 1.0305, 0.9144],
+        [-0.5694, 0.4225, -0.4231],
+        [-1.2529, -0.9297, -0.664],
+        [0.9715, 0.3516, -0.5595],
+        [1.6781, -0.5734, 0.4436],
+        [1.4033, -1.899, 0.1621],
+        [3.441, -0.3363, 0.3383],
+        [-0.4859, 1.99, 1.098],
+        [-2.1056, 1.2374, 0.8889],
+        [-0.8143, 0.3382, 1.7586],
+        [-0.9238, 1.1101, -1.2233],
+        [-2.3501, -0.7845, -0.7606],
+        [-0.8811, -1.3889, -1.6046],
+        [-1.071, -1.6266, 0.1808],
+        [1.3772, 1.3807, -0.4425],
+        [1.2285, 0.0227, -1.5904],
+        [1.369, -0.3454, 1.4833],
+    ],
+)
+# Reference key -> ((symbols, positions), calculate_soap keyword arguments).
+_SOAP_DSCRIBE_CASES = {
+    "methane_rcut5_lmax3": (
+        _SOAP_METHANE,
+        dict(r_cut=5.0, n_max=4, l_max=3, sigma=1.0),
+    ),
+    "hcn_linear_sigma_0_5": (
+        (
+            ["H", "C", "N"],
+            [[0.0, 0.0, -1.06], [0.0, 0.0, 0.0], [0.0, 0.0, 1.15]],
+        ),
+        dict(r_cut=5.0, n_max=4, l_max=3, sigma=0.5),
+    ),
+    "halo_chain_4species": (
+        _SOAP_HALO_CHAIN,
+        dict(r_cut=5.0, n_max=4, l_max=3, sigma=1.0),
+    ),
+    "water_lmax9": (
+        (
+            ["O", "H", "H"],
+            [[0.0, 0.0, 0.0], [0.96, 0.0, 0.0], [-0.24, 0.93, 0.0]],
+        ),
+        dict(r_cut=4.0, n_max=3, l_max=9, sigma=0.7),
+    ),
+    "methane_lmax0_rcut3": (
+        _SOAP_METHANE,
+        dict(r_cut=3.0, n_max=2, l_max=0, sigma=0.3),
+    ),
+    "argon_single_atom": (
+        (["Ar"], [[0.0, 0.0, 0.0]]),
+        dict(r_cut=5.0, n_max=4, l_max=3, sigma=1.0),
+    ),
+}
+
+
+@pytest.fixture(params=sorted(_SOAP_DSCRIBE_CASES))
+def soap_dscribe_case(request):
+    """One DScribe 2.1.2 reference case: key, symbols, positions, kwargs."""
+    (symbols, positions), kwargs = _SOAP_DSCRIBE_CASES[request.param]
+    return request.param, symbols, np.array(positions, dtype=float), kwargs
+
+
 @pytest.fixture()
 def clear_pubchem_cache():
     """Clear ``pubchem_search``'s ``lru_cache`` before and after the test so
