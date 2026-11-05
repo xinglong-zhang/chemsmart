@@ -380,6 +380,7 @@ def thermochemistry(
             supported_program = get_program_type_from_file(file) in {
                 "gaussian",
                 "orca",
+                "xtb",
             }
             if (
                 not supported_program
@@ -387,7 +388,7 @@ def thermochemistry(
             ):
                 raise ValueError(
                     f"Unsupported output file type for '{file}'. Use Gaussian, "
-                    "ORCA, or CHEMSMART MECP projected-frequency output files."
+                    "ORCA, xTB, or CHEMSMART MECP projected-frequency output files."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,

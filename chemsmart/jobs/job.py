@@ -256,6 +256,41 @@ class Job(RegistryMixin):
         return self._job_is_complete()
 
     @classmethod
+    def _create_with_jobrunner(cls, jobrunner, job_args, **kwargs):
+        """Create a job, selecting a job runner for it if none was given.
+
+        ``server``, ``scratch`` and ``fake`` configure the runner rather than
+        the job, so they are taken out of ``kwargs`` and passed to
+        ``JobRunner.from_job`` once. Other keyword arguments are given to both
+        the job and the runner, which ignore what they do not use.
+
+        Args:
+            jobrunner: The JobRunner to use, or None to select one from the
+                job's TYPE.
+            job_args (dict): Arguments identifying this job, such as its
+                molecule, settings and label.
+            **kwargs: Runner options and additional job arguments.
+
+        Returns:
+            Job: The new job, with its job runner attached.
+        """
+        # Imported here because chemsmart.jobs.runner imports this module.
+        from chemsmart.jobs.runner import JobRunner
+
+        server = kwargs.pop("server", None)
+        scratch = kwargs.pop("scratch", None)
+        fake = kwargs.pop("fake", False)
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(jobrunner=None, **job_args, **kwargs),
+                server=server,
+                scratch=scratch,
+                fake=fake,
+                **kwargs,
+            )
+        return cls(jobrunner=jobrunner, **job_args, **kwargs)
+
+    @classmethod
     def from_molecule(cls, molecule, label, jobrunner=None, **kwargs):
         """
         Create a Job instance with a JobRunner initialized from the job's TYPE.

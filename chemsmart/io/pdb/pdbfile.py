@@ -8,6 +8,8 @@ from chemsmart.utils.periodictable import PeriodicTable as pt
 from chemsmart.utils.utils import string2index_1based
 
 p = pt()
+# Real element symbols only; index 0 of PERIODIC_TABLE is the dummy 'X'.
+_REAL_ELEMENTS = frozenset(pt.PERIODIC_TABLE[1:])
 
 
 class PDBFile(FileMixin):
@@ -281,12 +283,7 @@ class PDBFile(FileMixin):
             )
 
         if len(cleaned) == 1:
-            try:
-                return p.to_element(cleaned[0].upper())
-            except Exception:
-                raise ValueError(
-                    f"Unable to infer element from atom name '{atom_name}'"
-                )
+            return PDBFile._validated_element(cleaned[0].upper(), atom_name)
 
         # Common biomolecular atom-label prefixes that should remain
         # single-letter element assignments, e.g. CA/CB/CG for
@@ -320,20 +317,31 @@ class PDBFile(FileMixin):
         }
 
         normalized_two_letter = f"{cleaned[0].upper()}{cleaned[1].lower()}"
-        if cleaned[:2].upper() not in ambiguous_biomolecular_names:
-            try:
-                return p.to_element(normalized_two_letter)
-            except Exception:
-                pass
+        if (
+            cleaned[:2].upper() not in ambiguous_biomolecular_names
+            and normalized_two_letter in _REAL_ELEMENTS
+        ):
+            return normalized_two_letter
 
-        candidate = cleaned[0].upper()
+        return PDBFile._validated_element(cleaned[0].upper(), atom_name)
 
-        try:
-            return p.to_element(candidate)
-        except Exception:
+    @staticmethod
+    def _validated_element(symbol, atom_name):
+        """
+        Return ``symbol`` if it is a real element, else raise.
+
+        ``PeriodicTable.to_element`` falls back to a best-effort guess
+        for unknown symbols instead of raising, so the result is checked
+        against the periodic table here (excluding the dummy ``X`` entry).
+
+        Raises:
+            ValueError: If ``symbol`` is not a real element symbol.
+        """
+        if symbol not in _REAL_ELEMENTS:
             raise ValueError(
                 f"Unable to infer element from atom name '{atom_name}'"
             )
+        return p.to_element(symbol)
 
     # ------------------------------------------------------------------
     # PDB v3.3 output formatting

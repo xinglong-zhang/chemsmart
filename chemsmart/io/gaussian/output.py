@@ -689,12 +689,16 @@ class Gaussian16Output(GaussianFileMixin):
           1) standard_orientations (+ PBC)
           2) input_orientations   (+ PBC)
 
+        For link jobs, also include Input orientations printed after the
+        last Standard orientation (e.g. a subsequent IRC calculation).
+
         Special handling (as per design):
           - Non-link & normal termination:
           de-duplicate the terminal (e.g. freq) frame.
           - Non-link & abnormal termination: use safe_min_lengths.
-          - Link & normal termination: drop the first frame, then behave like
-            normal termination (incl. de-dup).
+          - Link & normal termination: drop the first frame only when
+            multiple frames are available, then behave like normal
+            termination (incl. de-dup).
           - Link & abnormal termination:
               * if multiple frames: drop the first
               (carry-over), then use safe_min_lengths.
@@ -709,6 +713,25 @@ class Gaussian16Output(GaussianFileMixin):
         if self.standard_orientations:
             orientations = list(self.standard_orientations)
             orientations_pbc = list(self.standard_orientations_pbc or [])
+            if self.is_link:
+                # IRC can switch to Input-only output after the stability
+                # check. Preserve these newer frames as well as their PBC.
+                last_standard = max(
+                    i
+                    for i, line in enumerate(self.contents)
+                    if line.startswith("Standard orientation:")
+                )
+                trailing_inputs = sum(
+                    line.startswith("Input orientation:")
+                    for line in self.contents[last_standard + 1 :]
+                )
+                if trailing_inputs:
+                    orientations.extend(
+                        self.input_orientations[-trailing_inputs:]
+                    )
+                    orientations_pbc.extend(
+                        self.input_orientations_pbc[-trailing_inputs:]
+                    )
         elif self.input_orientations:
             orientations = list(self.input_orientations)
             orientations_pbc = list(self.input_orientations_pbc or [])
@@ -775,10 +798,12 @@ class Gaussian16Output(GaussianFileMixin):
         # 2) Handle link jobs
         if self.is_link:
             if self.normal_termination:
-                logger.debug(
-                    "Link job with normal termination: dropping first frame."
-                )
-                if orientations:  # drop carried-over first frame if present
+                # Keep the only available geometry so a normally terminated
+                # link job can still be used as input for another calculation.
+                if len(orientations) > 1:
+                    logger.debug(
+                        "Link job with normal termination: dropping first frame."
+                    )
                     drop_first()
 
                 # Single-point link jobs: keep only the last frame (after drop)

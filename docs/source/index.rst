@@ -110,6 +110,12 @@ computational chemistry software.
 
    thermochemistry-analysis
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Descriptors
+
+   soap-descriptors
+
 ..
    .. toctree::
       :maxdepth: 2
