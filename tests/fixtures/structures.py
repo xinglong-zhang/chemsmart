@@ -494,7 +494,7 @@ def clear_pubchem_cache():
 
 @pytest.fixture()
 def sterimol_methyl_geometry():
-    """Symbols and positions of a CH4 model with H(1)->C(0) along -z."""
+    """Symbols and positions of CH4 with H(atom 2)->C(atom 1) along -z."""
     symbols = ["C", "H", "H", "H", "H"]
     positions = np.array(
         [

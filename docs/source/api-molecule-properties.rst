@@ -212,7 +212,7 @@ molecule. They depend on which bond you choose, so calculate them with :meth:`ca
 
    import numpy as np
 
-   # Methane, treated as a methyl substituent with H (index 1) as the attachment point
+   # Methane, treated as a methyl substituent with H (atom 2) as the attachment point
    methane = Molecule(
        symbols=["C", "H", "H", "H", "H"],
        positions=np.array(
@@ -228,7 +228,7 @@ molecule. They depend on which bond you choose, so calculate them with :meth:`ca
 
    print(methane.sterimol_parameter)  # None: nothing calculated yet
 
-   result = methane.calculate_sterimol_parameters(atom1=1, atom2=0)
+   result = methane.calculate_sterimol_parameters(atom1=2, atom2=1)
    print(result["L"], result["B1"], result["B5"])  # about 2.79, 1.71, 2.23
 
    print(methane.sterimol_parameter is result)  # True
@@ -238,14 +238,14 @@ molecule. They depend on which bond you choose, so calculate them with :meth:`ca
    the substituent's furthest extent in that direction.
 -  ``B5`` (float) — Largest distance of the substituent from the axis, in Å.
 -  ``pos`` (numpy.ndarray) — Aligned ``(N, 3)`` coordinates of all atoms, with ``atom1`` at the origin and ``atom2`` on
-   the +z axis. The molecule's own ``positions`` are not changed.
+   the +z axis. Atom ``n`` is at ``pos[n - 1]``. The molecule's own ``positions`` are not changed.
 
 **Arguments of** ``calculate_sterimol_parameters``:
 
--  ``atom1`` (int) — **0-based** index of the atom the substituent is attached to, often a dummy H. It is left out of
+-  ``atom1`` (int) — **1-based** index of the atom the substituent is attached to, often a dummy H. It is left out of
    the measurement.
--  ``atom2`` (int) — **0-based** index of the first atom of the substituent.
--  ``excluded_atoms`` (iterable of int, optional) — **0-based** indices of further atoms to leave out.
+-  ``atom2`` (int) — **1-based** index of the first atom of the substituent.
+-  ``excluded_atoms`` (iterable of int, optional) — **1-based** indices of further atoms to leave out.
 
 .. warning::
 
@@ -255,7 +255,7 @@ molecule. They depend on which bond you choose, so calculate them with :meth:`ca
 
 .. note::
 
-   -  Unlike :meth:`get_distance` and :meth:`get_angle`, these indices are 0-based.
+   -  As in :meth:`get_distance` and :meth:`get_angle`, an index outside ``1..num_atoms`` raises ``IndexError``.
 
    -  Radii come from RDKit's periodic table (H = 1.20 Å, C = 1.70 Å), and ``L`` does not include Verloop's +0.40 Å
       correction. Compare with other programs or literature values only after accounting for both, for example morfeus

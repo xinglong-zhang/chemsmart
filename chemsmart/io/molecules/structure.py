@@ -968,35 +968,45 @@ class Molecule:
         correction.
 
         Args:
-            atom1 (int): 0-based index of the atom the substituent is bonded
+            atom1 (int): 1-based index of the atom the substituent is bonded
                 to (often a dummy H). It is left out of the measurement and
                 defines the origin of the axis.
-            atom2 (int): 0-based index of the first substituent atom. The
+            atom2 (int): 1-based index of the first substituent atom. The
                 atom1->atom2 vector defines the +z axis.
-            excluded_atoms (Iterable[int] | None): 0-based indices of further
+            excluded_atoms (Iterable[int] | None): 1-based indices of further
                 atoms to leave out. All atoms other than atom1 count as the
                 substituent, so when atom1 has other neighbours, list the
                 rest of the molecule here.
 
         Returns:
             dict: "L", "B1" and "B5" in Angstrom, and "pos", the (N, 3)
-            aligned coordinates of all atoms.
+            aligned coordinates of all atoms. "pos" is a NumPy array, so atom
+            n is at pos[n - 1].
 
         Raises:
+            TypeError: If an atom index is not an integer.
+            IndexError: If an atom index is outside 1..num_atoms.
             ValueError: If atom1 and atom2 overlap, or atom2 is excluded.
         """
+        excluded = [] if excluded_atoms is None else list(excluded_atoms)
+        self._validate_geometry_indices(atom1, atom2, *excluded)
+        atom1_idx = atom1 - 1
+        atom2_idx = atom2 - 1
+
         # Work on a copy so that the molecule's own coordinates are untouched
         positions = np.array(self.positions, dtype=float)
-        positions -= positions[atom1].copy()
+        positions -= positions[atom1_idx].copy()
 
         # Rodrigues rotation to place atom2 on the +z axis
         # v: rotation axis, z_axis: target direction, theta: rotation angle
         z_axis = np.array([0.0, 0.0, 1.0])
-        if np.isclose(np.linalg.norm(positions[atom2]), 0.0):
+        if np.isclose(np.linalg.norm(positions[atom2_idx]), 0.0):
             raise ValueError(
                 "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
             )
-        norm_atom2 = positions[atom2] / np.linalg.norm(positions[atom2])
+        norm_atom2 = positions[atom2_idx] / np.linalg.norm(
+            positions[atom2_idx]
+        )
         v = np.cross(norm_atom2, z_axis)
         if not np.isclose(np.linalg.norm(v), 0):
             v /= np.linalg.norm(v)
@@ -1011,7 +1021,7 @@ class Molecule:
             r = identity + np.sin(theta) * k + (1.0 - np.cos(theta)) * (k @ k)
             positions = positions @ r.T
 
-        elif positions[atom2][2] < 0:
+        elif positions[atom2_idx][2] < 0:
             # Atom2 on -z: rotate 180 degrees about x. Negating all coordinates
             # would be an inversion, which turns the molecule into its mirror
             # image.
@@ -1019,10 +1029,9 @@ class Molecule:
 
         # Select the atoms that make up the substituent
         included = np.ones(len(positions), dtype=bool)
-        included[atom1] = False
-        if excluded_atoms is not None:
-            included[list(excluded_atoms)] = False
-        if not included[atom2] and atom1 != atom2:
+        included[atom1_idx] = False
+        included[[idx - 1 for idx in excluded]] = False
+        if not included[atom2_idx] and atom1 != atom2:
             raise ValueError(f"atom2 ({atom2}) cannot be in excluded_atoms.")
 
         pt = rdchem.GetPeriodicTable()

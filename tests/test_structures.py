@@ -1788,13 +1788,13 @@ class TestDescriptors:
         """Ensure the molecule rotates and translates properly."""
         rdmol = Chem.AddHs(rdkit_embed_and_optimize("Cc1ccccc1"))
         mol = Molecule.from_rdkit_mol(rdmol)
-        atom1, atom2 = 0, 1
+        atom1, atom2 = 1, 2
         mol.calculate_sterimol_parameters(atom1, atom2)
         pos = mol.sterimol_parameter["pos"]
 
         # atom1 at origin, atom2 on z-axis
-        assert np.allclose(pos[atom1], 0)
-        assert np.allclose(pos[atom2][:2], 0)
+        assert np.allclose(pos[atom1 - 1], 0)
+        assert np.allclose(pos[atom2 - 1][:2], 0)
 
         # all bond lengths preserved
         rdmol = mol.to_rdkit()
@@ -1818,7 +1818,7 @@ class TestDescriptors:
             ]
         )
         meth = Molecule(symbols=symbol, positions=position)
-        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        meth.calculate_sterimol_parameters(atom1=2, atom2=1)
         sterimol = meth.sterimol_parameter
         bmin = sterimol["B1"]
         bmax = sterimol["B5"]
@@ -1836,8 +1836,8 @@ class TestDescriptors:
         rdmol = rdkit_embed_and_optimize(smiles)
         rdmol = Chem.AddHs(rdmol)
         mol = Molecule.from_rdkit_mol(rdmol)
-        atom1 = 4
-        atom2 = 0
+        atom1 = 5
+        atom2 = 1
 
         sterimol = mol.calculate_sterimol_parameters(atom1, atom2)
         bmin = sterimol["B1"]
@@ -1861,7 +1861,7 @@ class TestDescriptors:
         with pytest.raises(
             ValueError, match="atom2 vector norm too close to zero"
         ):
-            meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+            meth.calculate_sterimol_parameters(atom1=2, atom2=1)
 
     def test_sterimol_flipped_molecules(self):
         """Ensure same calculation for flipped molecules"""
@@ -1877,7 +1877,7 @@ class TestDescriptors:
         )
         position = position * np.array([1, 1, -1])
         meth = Molecule(symbols=symbol, positions=position)
-        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        meth.calculate_sterimol_parameters(atom1=2, atom2=1)
         sterimol = meth.sterimol_parameter
         bmin = sterimol["B1"]
         bmax = sterimol["B5"]
@@ -1894,11 +1894,11 @@ class TestDescriptors:
         symbols, positions = sterimol_methyl_geometry
         mol = Molecule(symbols=symbols, positions=positions.copy())
 
-        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        first = mol.calculate_sterimol_parameters(atom1=2, atom2=1)
         assert np.array_equal(mol.positions, positions)
 
         # a second calculation starts from the same geometry
-        second = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        second = mol.calculate_sterimol_parameters(atom1=2, atom2=1)
         for key in ("L", "B1", "B5"):
             assert second[key] == pytest.approx(first[key])
 
@@ -1908,7 +1908,7 @@ class TestDescriptors:
         """Aligning atom2 from -z must be a rotation, not an inversion."""
         symbols, positions = sterimol_methyl_geometry
         mol = Molecule(symbols=symbols, positions=positions.copy())
-        pos = mol.calculate_sterimol_parameters(atom1=1, atom2=0)["pos"]
+        pos = mol.calculate_sterimol_parameters(atom1=2, atom2=1)["pos"]
 
         assert pos[0] == pytest.approx([0.0, 0.0, 1.09])
         assert np.linalg.det(pos[1:4] - pos[0]) == pytest.approx(
@@ -1921,10 +1921,10 @@ class TestDescriptors:
         mol = Molecule(symbols=symbols, positions=positions.copy())
         assert mol.sterimol_parameter is None
 
-        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        first = mol.calculate_sterimol_parameters(atom1=2, atom2=1)
         assert mol.sterimol_parameter is first
 
-        second = mol.calculate_sterimol_parameters(atom1=2, atom2=0)
+        second = mol.calculate_sterimol_parameters(atom1=3, atom2=1)
         assert mol.sterimol_parameter is second
         assert second["L"] != pytest.approx(first["L"])
 
@@ -1936,7 +1936,7 @@ class TestDescriptors:
         symbols, positions = sterimol_methyl_geometry
         mol = Molecule(symbols=symbols, positions=positions.copy())
         result = mol.calculate_sterimol_parameters(
-            atom1=1, atom2=0, excluded_atoms=[2, 3, 4]
+            atom1=2, atom2=1, excluded_atoms=[3, 4, 5]
         )
         # only the carbon sphere is left, centred on the axis
         assert result["L"] == pytest.approx(1.09 + 1.7)
@@ -1946,8 +1946,32 @@ class TestDescriptors:
 
         with pytest.raises(ValueError, match="cannot be in excluded_atoms"):
             mol.calculate_sterimol_parameters(
-                atom1=1, atom2=0, excluded_atoms=[0]
+                atom1=2, atom2=1, excluded_atoms=[1]
             )
+
+    @pytest.mark.parametrize(
+        "kwargs, error",
+        [
+            # 0 must not wrap around to the last atom
+            ({"atom1": 2, "atom2": 0}, IndexError),
+            ({"atom1": 0, "atom2": 1}, IndexError),
+            ({"atom1": 6, "atom2": 1}, IndexError),
+            ({"atom1": 2, "atom2": 1, "excluded_atoms": [0]}, IndexError),
+            ({"atom1": 2, "atom2": 1, "excluded_atoms": [6]}, IndexError),
+            ({"atom1": 2.0, "atom2": 1}, TypeError),
+            ({"atom1": 2, "atom2": 1, "excluded_atoms": ["3"]}, TypeError),
+        ],
+    )
+    def test_sterimol_rejects_invalid_indices(
+        self, sterimol_methyl_geometry, kwargs, error
+    ):
+        """Indices follow the same 1-based rules as the geometry methods."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+
+        with pytest.raises(error):
+            mol.calculate_sterimol_parameters(**kwargs)
+        assert mol.sterimol_parameter is None
 
     def test_sterimol_matches_morfeus_reference(self):
         """Compare an asymmetric substituent with an independent code.
@@ -1978,7 +2002,7 @@ class TestDescriptors:
             ]
         )
         mol = Molecule(symbols=symbols, positions=positions)
-        result = mol.calculate_sterimol_parameters(atom1=7, atom2=0)
+        result = mol.calculate_sterimol_parameters(atom1=8, atom2=1)
 
         assert result["L"] == pytest.approx(4.87845, abs=1e-4)
         assert result["B5"] == pytest.approx(6.41933, abs=1e-4)
