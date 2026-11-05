@@ -234,13 +234,16 @@ def iterate(
     job = IterateJob(
         settings=job_settings,
         jobrunner=jobrunner,
-        label=os.path.splitext(os.path.basename(filename))[0],
         nprocs=nprocs,
         timeout=timeout,
         outputfile=outputfile or "iterate_out",
         separate_outputs=separate_outputs,
         output_directory=directory,
     )
+
+    # Names the submission scripts and scheduler job, so that jobs from
+    # different configuration files do not share them
+    job.label = os.path.splitext(os.path.basename(filename))[0]
 
     logger.debug(f"Created IterateJob with {nprocs} process(es)")
 

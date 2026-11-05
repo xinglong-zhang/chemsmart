@@ -1752,6 +1752,14 @@ def run_submit_script(submit_script):
     ).returncode
 
 
+def rdkit_mol_without_bonds(symbols):
+    """Return an editable RDKit molecule with these atoms and no bonds."""
+    rdkit_mol = Chem.RWMol()
+    for symbol in symbols:
+        rdkit_mol.AddAtom(Chem.Atom(symbol))
+    return rdkit_mol
+
+
 def rdkit_bond_orders(rdkit_mol):
     """Return the bond order of each bond, keyed by its pair of atom indices."""
     return {

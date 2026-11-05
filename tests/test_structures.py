@@ -36,6 +36,7 @@ from tests.helpers import (
     load_last_molecule,
     rdkit_bond_orders,
     rdkit_embed_and_optimize,
+    rdkit_mol_without_bonds,
     read_stripped_text,
 )
 
@@ -2234,12 +2235,26 @@ class TestToRdkitConnectivity:
     def test_vectorized_version_agrees(self, sterimol_halo_chain_geometry):
         symbols, positions = sterimol_halo_chain_geometry
         mol = Molecule(symbols=symbols, positions=positions)
-        empty = Chem.RWMol()
-        for symbol in symbols:
-            empty.AddAtom(Chem.Atom(symbol))
+        empty = rdkit_mol_without_bonds(symbols)
         vectorized = mol._add_bonds_to_rdkit_mol_vectorized(empty)
         assert rdkit_bond_orders(vectorized) == rdkit_bond_orders(
             mol.to_rdkit()
+        )
+
+    def test_vectorized_version_keeps_an_explicit_buffer(
+        self, sterimol_halo_chain_geometry
+    ):
+        """Callers that choose a buffer get that cutoff, with no long bonds."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        vectorized = rdkit_bond_orders(
+            mol._add_bonds_to_rdkit_mol_vectorized(
+                rdkit_mol_without_bonds(symbols), bond_cutoff_buffer=0.05
+            )
+        )
+        assert frozenset((4, 5)) not in vectorized
+        assert vectorized == rdkit_bond_orders(
+            mol.to_rdkit(bond_cutoff_buffer=0.05)
         )
 
     def test_vectorized_version_computes_distances_once(
@@ -2248,9 +2263,7 @@ class TestToRdkitConnectivity:
         """distance_matrix recomputes on each use, so it must not be in a loop."""
         symbols, positions = sterimol_halo_chain_geometry
         mol = Molecule(symbols=symbols, positions=positions)
-        empty = Chem.RWMol()
-        for symbol in symbols:
-            empty.AddAtom(Chem.Atom(symbol))
+        empty = rdkit_mol_without_bonds(symbols)
         spy = mocker.spy(structure_module, "cdist")
         mol._add_bonds_to_rdkit_mol_vectorized(empty)
         assert spy.call_count == 1

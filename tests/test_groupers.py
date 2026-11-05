@@ -6004,6 +6004,27 @@ class TestInvalidMoleculeHandling:
         assert groups == []
         assert index_groups == []
 
+    @pytest.mark.parametrize(
+        "fingerprint_type, suggests_alternative",
+        [("rdkit", True), ("usr", False), ("usrcat", False)],
+    )
+    def test_failure_suggests_fingerprints_without_bond_perception(
+        self,
+        methanol_molecules,
+        mocker,
+        fingerprint_type,
+        suggests_alternative,
+    ):
+        """usr and usrcat cannot be suggested when they are what failed."""
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules, fingerprint_type=fingerprint_type
+        )
+        mocker.patch.object(grouper, "_get_fingerprint", return_value=None)
+        logger = mocker.patch("chemsmart.jobs.grouper.tanimoto.logger")
+
+        assert grouper.group() == ([], [])
+        assert logger.error.called is suggests_alternative
+
 
 @pytest.mark.usefixtures("temporary_working_dir")
 @pytest.mark.usefixtures("temporary_working_dir")

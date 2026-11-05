@@ -25,7 +25,6 @@ class IterateJob(Job):
         self,
         settings=None,
         jobrunner=None,
-        label="iterate_job",
         nprocs=1,
         timeout=120,
         outputfile="iterate_out",
@@ -42,8 +41,6 @@ class IterateJob(Job):
             Job settings containing skeleton_list, substituent_list, algorithm
         jobrunner : IterateJobRunner, optional
             Job runner instance for executing combinations
-        label : str, optional
-            Job label, used to name submission scripts and scheduler jobs.
         nprocs : int, optional
             Number of processes for parallel execution. Default 1.
         timeout : int, optional
@@ -63,7 +60,7 @@ class IterateJob(Job):
         # molecule, pass None and a default label
         super().__init__(
             molecule=None,
-            label=label,
+            label="iterate_job",
             jobrunner=jobrunner,
             skip_completed=False,  # IterateJob doesn't support skip_completed
             **kwargs,
