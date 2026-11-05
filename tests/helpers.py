@@ -18,6 +18,8 @@ import numpy as np
 import pytest
 import yaml
 from click.testing import CliRunner
+from rdkit import Chem
+from rdkit.Chem import AllChem
 from requests.exceptions import HTTPError as RequestsHTTPError
 
 from chemsmart.cli.gaussian.gaussian import gaussian
@@ -1769,3 +1771,14 @@ def npz_test_stored(tmp_path, io_test_directory, filename, *options):
     )
     assert result.exit_code == 0, (result.output, result.exception)
     return Database(str(output)).get_record(record_index=1)
+
+
+def rdkit_embed_and_optimize(smiles, seed=1):
+    """Return an RDKit Mol with one UFF-optimized 3D conformer (Hs added)."""
+    mol = Chem.AddHs(Chem.MolFromSmiles(smiles))
+    # fixed seed for deterministic embedding
+    params = AllChem.ETKDGv3()
+    params.randomSeed = seed
+    AllChem.EmbedMolecule(mol, params)
+    AllChem.UFFOptimizeMolecule(mol)
+    return mol
