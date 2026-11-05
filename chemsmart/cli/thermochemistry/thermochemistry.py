@@ -13,7 +13,7 @@ from chemsmart.io.folder import BaseFolder
 from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
-from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.cli import MyGroup, get_selected_server
 from chemsmart.utils.io import (
     check_program_availability_in_chemsmart,
     get_program_type_from_file,
@@ -345,6 +345,7 @@ def thermochemistry(
                     filename=file,
                     settings=job_settings,
                     skip_completed=skip_completed,
+                    server=get_selected_server(ctx),
                 )
             except Exception as e:
                 logger.error(
@@ -374,6 +375,7 @@ def thermochemistry(
                 filename=file,
                 settings=job_settings,
                 skip_completed=skip_completed,
+                server=get_selected_server(ctx),
             )
             if outputfile is not None:
                 job_settings.overwrite = False

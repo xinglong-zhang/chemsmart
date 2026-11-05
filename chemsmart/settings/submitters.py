@@ -637,14 +637,16 @@ class Submitter(RegistryMixin):
         Write the final job execution commands.
 
         Makes the run script executable and executes it in the background,
-        then waits for completion.
+        then waits for it. Waiting for that process gives the script its exit
+        status, so that the scheduler sees a failed job; a bare ``wait`` always
+        succeeds.
 
         Args:
             f: File handle for writing job execution commands.
         """
         f.write(f"chmod +x ./{self.run_script}\n")
         f.write(f"./{self.run_script} &\n")
-        f.write("wait\n")
+        f.write('wait "$!"\n')
 
     @classmethod
     def from_scheduler_type(cls, scheduler_type, **kwargs):

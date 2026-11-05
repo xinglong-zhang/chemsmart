@@ -7050,6 +7050,7 @@ class TestGrouperJobRunnerCreateProcess:
             runner._run(1)
 
 
+@pytest.mark.usefixtures("chemsmart_templates_config")
 class TestTanimotoWithoutBondPerception:
     """Metal complexes and transition states defeat RDKit bond perception."""
 
@@ -7764,6 +7765,7 @@ class TestGrouperEntropyCutoffOptions:
         assert "s_freq_cutoff=110.0" in parameters
         assert "cutoff_entropy_grimme" not in parameters
 
+    @pytest.mark.usefixtures("chemsmart_templates_config")
     def test_truhlar_changes_the_energies(
         self, tmp_path, monkeypatch, ts_conformers_log_directory
     ):

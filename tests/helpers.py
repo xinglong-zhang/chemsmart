@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from textwrap import dedent
@@ -1740,6 +1741,27 @@ def run_generated_script_command(run_script):
     return CliRunner().invoke(run, ast.literal_eval(match.group(1)))
 
 
+def run_submit_script(submit_script):
+    """Run a generated PBS script as a node would; return its exit status."""
+    folder = Path(submit_script).parent
+    return subprocess.run(
+        ["bash", str(submit_script)],
+        cwd=folder,
+        env={**os.environ, "PBS_O_WORKDIR": str(folder)},
+        capture_output=True,
+    ).returncode
+
+
+def rdkit_bond_orders(rdkit_mol):
+    """Return the bond order of each bond, keyed by its pair of atom indices."""
+    return {
+        frozenset((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())): (
+            bond.GetBondTypeAsDouble()
+        )
+        for bond in rdkit_mol.GetBonds()
+    }
+
+
 def assert_uses_submitting_python(submit_script):
     """The node must find the Python that has chemsmart installed."""
     text = Path(submit_script).read_text()
@@ -1764,15 +1786,8 @@ def read_grouper_structures(folder):
 
 
 def invoke_sterimol(*args):
-    """Run ``chemsmart run sterimol`` with ``args``.
-
-    Names a server because ``run`` otherwise needs ``local.yaml`` in the user's
-    ``~/.chemsmart``, which CI does not have.
-    """
-    server_yaml = Path(__file__).parent / "data" / "YAMLTests" / "server.yaml"
-    return CliRunner().invoke(
-        run, ["-s", str(server_yaml), "sterimol", *map(str, args)]
-    )
+    """Run ``chemsmart run sterimol`` with ``args``."""
+    return CliRunner().invoke(run, ["sterimol", *map(str, args)])
 
 
 def run_sterimol_to_json(tmp_path, *args):

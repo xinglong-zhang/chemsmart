@@ -13,7 +13,7 @@ from chemsmart.cli.job import click_filename_options
 from chemsmart.jobs.iterate.job import IterateJob
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
-from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.cli import MyGroup, get_selected_server
 from chemsmart.utils.iterate import generate_template, validate_config
 
 logger = logging.getLogger(__name__)
@@ -228,7 +228,7 @@ def iterate(
     job_settings.substituent_list = config["substituents"]
 
     # Create job runner
-    jobrunner = IterateJobRunner()
+    jobrunner = IterateJobRunner(server=get_selected_server(ctx))
 
     # Create job
     job = IterateJob(

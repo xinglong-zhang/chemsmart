@@ -366,8 +366,8 @@ where CHEMSMART is installed, because the job uses that same environment.
 ``-n`` sets the cores requested from the scheduler, and ``-np`` sets how many of them the grouping uses. ``-np``
 defaults to 1 and does not follow ``-n``, so set both.
 
-If the grouping fails, the reason is written to ``<label>.err`` and the command exits with an error, under both
-``chemsmart run`` and ``chemsmart sub``.
+If the grouping fails, the reason is written to ``<label>.err`` and the command exits with an error, so the scheduler
+reports a submitted job as failed.
 
 ************
  Next Steps

@@ -7,6 +7,7 @@ the same calculation on the compute node.
 
 import os
 import shutil
+import sys
 
 import pytest
 from click.testing import CliRunner
@@ -16,8 +17,12 @@ from tests.helpers import (
     assert_uses_submitting_python,
     read_grouper_structures,
     run_generated_script_command,
+    run_submit_script,
     submit_for_test,
 )
+
+# Commands without -s read the user's configuration, which CI does not have
+pytestmark = pytest.mark.usefixtures("chemsmart_templates_config")
 
 
 class TestThermochemistrySubmission:
@@ -387,6 +392,35 @@ class TestGrouperSubmission:
         node_result = run_generated_script_command(run_scripts[0])
         assert node_result.exit_code == 1
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Runs a bash script")
+    @pytest.mark.parametrize(
+        "strategy, expected_status", [("rmsd", 0), ("tanimoto", 1)]
+    )
+    def test_submit_script_reports_the_job_status(
+        self,
+        strategy,
+        expected_status,
+        tmp_path,
+        monkeypatch,
+        server_yaml_file,
+        ts_conformers_log_directory,
+    ):
+        """Runs the script itself, as only it decides what a scheduler sees."""
+        monkeypatch.chdir(tmp_path)
+        result = submit_for_test(
+            server_yaml_file,
+            "grouper",
+            "-d",
+            ts_conformers_log_directory,
+            "-p",
+            "gaussian",
+            strategy,
+        )
+        assert result.exit_code == 0, result.output
+        submit_scripts = list(tmp_path.glob("chemsmart_sub_*.sh"))
+        assert len(submit_scripts) == 1
+        assert run_submit_script(submit_scripts[0]) == expected_status
+
     @pytest.mark.parametrize(
         "strategy_args, expected",
         [
@@ -421,3 +455,60 @@ class TestGrouperSubmission:
         run_scripts = list(tmp_path.glob("chemsmart_run_*.py"))
         assert len(run_scripts) == 1
         assert expected in run_scripts[0].read_text()
+
+
+class TestSelectedServer:
+    """A server named with -s must be used instead of detecting one."""
+
+    @pytest.mark.parametrize(
+        "file_option", ["-f", "-d"], ids=["filenames", "directory"]
+    )
+    def test_thermochemistry_uses_it(
+        self,
+        file_option,
+        tmp_path,
+        monkeypatch,
+        no_default_server,
+        server_yaml_file,
+        gaussian_co2_opt_outfile,
+    ):
+        monkeypatch.chdir(tmp_path)
+        source = (
+            gaussian_co2_opt_outfile
+            if file_option == "-f"
+            else os.path.dirname(gaussian_co2_opt_outfile)
+        )
+        directory_args = ["-p", "gaussian"] if file_option == "-d" else []
+        result = submit_for_test(
+            server_yaml_file,
+            "thermochemistry",
+            "-T",
+            298.15,
+            file_option,
+            source,
+            *directory_args,
+        )
+        assert result.exit_code == 0, result.output
+        no_default_server.assert_not_called()
+
+    def test_iterate_uses_it_when_submitting_and_on_the_node(
+        self, iterate_submission_folder, no_default_server, server_yaml_file
+    ):
+        folder = iterate_submission_folder
+        result = submit_for_test(
+            server_yaml_file,
+            "iterate",
+            "-f",
+            "config.toml",
+            "-s",
+            "16",
+            "-a",
+            "2",
+        )
+        assert result.exit_code == 0, result.output
+
+        node_result = run_generated_script_command(
+            folder / "chemsmart_run_iterate_config.py"
+        )
+        assert node_result.exit_code == 0, node_result.output
+        no_default_server.assert_not_called()

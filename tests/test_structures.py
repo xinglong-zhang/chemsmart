@@ -15,6 +15,7 @@ from rdkit import Chem
 from rdkit.Chem import rdMolTransforms
 from rdkit.Chem.rdchem import Mol as RDKitMolecule
 
+import chemsmart.io.molecules.structure as structure_module
 from chemsmart.io.file import CDXFile, PKaCDXFile
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.io.molecules.structure import (
@@ -33,6 +34,7 @@ from chemsmart.utils.utils import cmp_with_ignore
 from tests.helpers import (
     cxsmiles_core,
     load_last_molecule,
+    rdkit_bond_orders,
     rdkit_embed_and_optimize,
     read_stripped_text,
 )
@@ -2140,15 +2142,6 @@ class TestToGraphConnectivity:
 class TestToRdkitConnectivity:
     """to_rdkit() finds the bonds that to_graph() does, on the same molecules."""
 
-    @staticmethod
-    def bonds(rdkit_mol):
-        return {
-            frozenset((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())): (
-                bond.GetBondTypeAsDouble()
-            )
-            for bond in rdkit_mol.GetBonds()
-        }
-
     def test_finds_long_bond_as_single_bond(
         self, sterimol_halo_chain_geometry
     ):
@@ -2157,7 +2150,7 @@ class TestToRdkitConnectivity:
         mol = Molecule(symbols=symbols, positions=positions)
         rdkit_mol = mol.to_rdkit()
 
-        assert self.bonds(rdkit_mol)[frozenset((4, 5))] == 1.0
+        assert rdkit_bond_orders(rdkit_mol)[frozenset((4, 5))] == 1.0
         assert len(Chem.GetMolFrags(rdkit_mol)) == 1
 
     def test_default_keeps_every_bond_type_of_the_explicit_buffer(
@@ -2165,8 +2158,8 @@ class TestToRdkitConnectivity:
     ):
         symbols, positions = sterimol_halo_chain_geometry
         mol = Molecule(symbols=symbols, positions=positions)
-        default = self.bonds(mol.to_rdkit())
-        explicit = self.bonds(mol.to_rdkit(bond_cutoff_buffer=0.05))
+        default = rdkit_bond_orders(mol.to_rdkit())
+        explicit = rdkit_bond_orders(mol.to_rdkit(bond_cutoff_buffer=0.05))
 
         assert {b: default[b] for b in explicit} == explicit
         assert set(default) - set(explicit) == {frozenset((4, 5))}
@@ -2177,7 +2170,7 @@ class TestToRdkitConnectivity:
         """Callers that choose a buffer get exactly that cutoff."""
         symbols, positions = sterimol_halo_chain_geometry
         mol = Molecule(symbols=symbols, positions=positions)
-        bonds = self.bonds(mol.to_rdkit(bond_cutoff_buffer=0.05))
+        bonds = rdkit_bond_orders(mol.to_rdkit(bond_cutoff_buffer=0.05))
         assert frozenset((4, 5)) not in bonds
 
     def test_does_not_add_long_bonds_to_hydrogen(
@@ -2188,21 +2181,21 @@ class TestToRdkitConnectivity:
         stretched = positions.copy()
         stretched[1] = positions[0] + [0.0, 0.0, 1.20]
         mol = Molecule(symbols=symbols, positions=stretched)
-        assert frozenset((0, 1)) not in self.bonds(mol.to_rdkit())
+        assert frozenset((0, 1)) not in rdkit_bond_orders(mol.to_rdkit())
 
     def test_ignores_distant_atoms(self, sterimol_methyl_geometry):
         """Beyond the connectivity buffer, atoms remain unbonded."""
         symbols, positions = sterimol_methyl_geometry
         far_away = np.vstack([positions, positions[0] + [1.0, 1.5, 0.0]])
         mol = Molecule(symbols=[*symbols, "F"], positions=far_away)
-        assert frozenset((0, 5)) not in self.bonds(mol.to_rdkit())
+        assert frozenset((0, 5)) not in rdkit_bond_orders(mol.to_rdkit())
 
     def test_finds_stretched_carbon_carbon_bond(
         self, gaussian_singlet_opt_outfile
     ):
         """C3-C11 is 1.573 A in this optimized structure."""
         mol = Molecule.from_filepath(gaussian_singlet_opt_outfile)
-        assert frozenset((2, 10)) in self.bonds(mol.to_rdkit())
+        assert frozenset((2, 10)) in rdkit_bond_orders(mol.to_rdkit())
         assert mol.to_graph().has_edge(2, 10)
 
     @pytest.mark.parametrize(
@@ -2215,7 +2208,7 @@ class TestToRdkitConnectivity:
     def test_matches_to_graph_connectivity(self, request, molecule_fixture):
         symbols, positions = request.getfixturevalue(molecule_fixture)
         mol = Molecule(symbols=symbols, positions=positions)
-        assert set(self.bonds(mol.to_rdkit())) == {
+        assert set(rdkit_bond_orders(mol.to_rdkit())) == {
             frozenset((int(i), int(j))) for i, j in mol.to_graph().edges
         }
 
@@ -2228,13 +2221,13 @@ class TestToRdkitConnectivity:
             frozenset((int(i), int(j))) for i, j in mol.to_graph().edges
         }
         assert len(graph_bonds) == 78
-        assert set(self.bonds(mol.to_rdkit())) == graph_bonds
+        assert set(rdkit_bond_orders(mol.to_rdkit())) == graph_bonds
 
     def test_matches_to_graph_connectivity_for_rings(
         self, sterimol_toluene_molecule
     ):
         mol = sterimol_toluene_molecule
-        assert set(self.bonds(mol.to_rdkit())) == {
+        assert set(rdkit_bond_orders(mol.to_rdkit())) == {
             frozenset((int(i), int(j))) for i, j in mol.to_graph().edges
         }
 
@@ -2245,7 +2238,22 @@ class TestToRdkitConnectivity:
         for symbol in symbols:
             empty.AddAtom(Chem.Atom(symbol))
         vectorized = mol._add_bonds_to_rdkit_mol_vectorized(empty)
-        assert self.bonds(vectorized) == self.bonds(mol.to_rdkit())
+        assert rdkit_bond_orders(vectorized) == rdkit_bond_orders(
+            mol.to_rdkit()
+        )
+
+    def test_vectorized_version_computes_distances_once(
+        self, mocker, sterimol_halo_chain_geometry
+    ):
+        """distance_matrix recomputes on each use, so it must not be in a loop."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        empty = Chem.RWMol()
+        for symbol in symbols:
+            empty.AddAtom(Chem.Atom(symbol))
+        spy = mocker.spy(structure_module, "cdist")
+        mol._add_bonds_to_rdkit_mol_vectorized(empty)
+        assert spy.call_count == 1
 
     def test_pdb_output_uses_the_same_bonds(
         self, sterimol_halo_chain_geometry

@@ -2981,8 +2981,9 @@ class Molecule:
                 cutoff_matrix[j, i] = cutoff_ij
 
         # 2. Vectorized bond order calculation
+        distances = self.distance_matrix  # a property that recomputes each use
         bond_orders = self.determine_bond_order(
-            bond_length=self.distance_matrix,  # NxN distances
+            bond_length=distances,  # NxN distances
             bond_cutoff=cutoff_matrix,  # NxN cutoffs
         )
 
@@ -3000,7 +3001,7 @@ class Molecule:
                 if (
                     bo == 0
                     and detect_long_bonds
-                    and self._is_long_bond(i, j, self.distance_matrix[i, j])
+                    and self._is_long_bond(i, j, distances[i, j])
                 ):
                     bo = 1.0
                 if bo > 0:

@@ -22,6 +22,9 @@ from tests.helpers import (
     run_sterimol_to_json,
 )
 
+# Commands without -s read the user's configuration, which CI does not have
+pytestmark = pytest.mark.usefixtures("chemsmart_templates_config")
+
 MORFEUS_REFERENCE = {
     (2, 4): (5.75827, 1.76204, 3.85632),
     (4, 2): (4.43546, 2.11960, 3.38237),

@@ -73,6 +73,16 @@ def legacy_server_yaml(tmp_path):
 
 
 @pytest.fixture()
+def no_default_server(mocker):
+    """Fail a test that detects a server instead of using the one it named."""
+    from chemsmart.settings.server import Server
+
+    return mocker.patch.object(
+        Server, "current", side_effect=AssertionError("Detected a server")
+    )
+
+
+@pytest.fixture()
 def chemsmart_templates_config(mocker):
     """
     Point USER_CONFIG_DIR to the local templates directory.
