@@ -342,6 +342,27 @@ Example comment line:
 
    Group 1 Molecule 1 Original_Index: c3 Energy(Hartree): -126.25755080
 
+******************************
+ Submitting to a Compute Node
+******************************
+
+To run the grouping on a compute node, use ``chemsmart sub`` with the same options:
+
+.. code:: bash
+
+   chemsmart sub -s SERVER -n 16 grouper -f conformers.xyz -np 16 rmsd
+   chemsmart sub -s SERVER -n 16 grouper -d . -p gaussian -np 16 -T 0.5 rmsd
+
+No grouping happens when you submit, but the input structures are read so that problems show up straight away. They are
+read again on the compute node. Your ``server.yaml`` needs no extra section, but submit from the Python environment
+where CHEMSMART is installed, because the job uses that same environment.
+
+``-n`` sets the cores requested from the scheduler, and ``-np`` sets how many of them the grouping uses. ``-np``
+defaults to 1 and does not follow ``-n``, so set both.
+
+If the grouping fails, the error is written to ``<label>.err`` and the job still exits normally, so the scheduler
+reports it as successful. Check for this file if the group files are missing.
+
 ************
  Next Steps
 ************

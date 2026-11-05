@@ -22,7 +22,7 @@ user_settings = CHEMSMARTUserSettings()
 logger = logging.getLogger(__name__)
 
 # These jobs run in Python, so server.yaml has no program section for them
-PYTHON_PROGRAMS = ("iterate", "sterimol", "thermochemistry")
+PYTHON_PROGRAMS = ("grouper", "iterate", "sterimol", "thermochemistry")
 
 
 class RunScript:

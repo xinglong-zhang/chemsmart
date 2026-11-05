@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 from pathlib import Path
 from textwrap import dedent
 from unittest.mock import MagicMock, patch
@@ -1737,6 +1738,20 @@ def run_generated_script_command(run_script):
     """Run the command of a generated run script, as a compute node would."""
     match = re.search(r"run\((\[.*\])\)", Path(run_script).read_text())
     return CliRunner().invoke(run, ast.literal_eval(match.group(1)))
+
+
+def assert_uses_submitting_python(submit_script):
+    """The node must find the Python that has chemsmart installed."""
+    text = Path(submit_script).read_text()
+    assert f"export PATH={os.path.dirname(sys.executable)}:" in text
+
+
+def read_grouper_structures(folder):
+    """Return the text of each group's xyz file under ``folder``, by name."""
+    return {
+        path.name: path.read_text()
+        for path in Path(folder).rglob("*_group_*.xyz")
+    }
 
 
 def invoke_sterimol(*args):

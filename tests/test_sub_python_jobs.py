@@ -6,18 +6,18 @@ the same calculation on the compute node.
 """
 
 import os
-import sys
+import shutil
 
+import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.run import run
-from tests.helpers import run_generated_script_command, submit_for_test
-
-
-def assert_uses_submitting_python(submit_script):
-    """The node must find the Python that has chemsmart installed."""
-    text = submit_script.read_text()
-    assert f"export PATH={os.path.dirname(sys.executable)}:" in text
+from tests.helpers import (
+    assert_uses_submitting_python,
+    read_grouper_structures,
+    run_generated_script_command,
+    submit_for_test,
+)
 
 
 class TestThermochemistrySubmission:
@@ -205,3 +205,154 @@ class TestIterateSubmission:
         )
         assert node_result.exit_code == 0, node_result.output
         assert list((folder / "separate").glob("*.xyz"))
+
+
+class TestGrouperSubmission:
+    def test_writes_scripts_without_grouping(
+        self,
+        tmp_path,
+        monkeypatch,
+        server_yaml_file,
+        multiple_molecules_xyz_file,
+    ):
+        monkeypatch.chdir(tmp_path)
+        result = submit_for_test(
+            server_yaml_file,
+            "grouper",
+            "-f",
+            multiple_molecules_xyz_file,
+            "rmsd",
+        )
+        assert result.exit_code == 0, result.output
+        assert (
+            tmp_path / "chemsmart_run_grouper_crest_conformers_rmsd.py"
+        ).exists()
+        assert_uses_submitting_python(
+            tmp_path / "chemsmart_sub_grouper_crest_conformers_rmsd.sh"
+        )
+        assert not list(tmp_path.glob("*_group_result"))
+
+    def test_generated_command_matches_a_local_run(
+        self,
+        tmp_path,
+        monkeypatch,
+        server_yaml_file,
+        multiple_molecules_xyz_file,
+    ):
+        """Every non-default option changes the result or its file names."""
+        args = [
+            "grouper",
+            "-f",
+            multiple_molecules_xyz_file,
+            "-ih",
+            "-np",
+            "2",
+            "-N",
+            "3",
+            "-m",
+            "csv",
+            "-r",
+            "center",
+            "-a",
+            "tagged",
+            "rmsd",
+        ]
+        local = tmp_path / "local"
+        local.mkdir()
+        monkeypatch.chdir(local)
+        assert CliRunner().invoke(run, args).exit_code == 0
+        local_structures = read_grouper_structures(local)
+        assert len(local_structures) == 3
+
+        node = tmp_path / "node"
+        node.mkdir()
+        monkeypatch.chdir(node)
+        result = submit_for_test(server_yaml_file, *args)
+        assert result.exit_code == 0, result.output
+        run_scripts = list(node.glob("chemsmart_run_*.py"))
+        assert len(run_scripts) == 1
+
+        node_result = run_generated_script_command(run_scripts[0])
+        assert node_result.exit_code == 0, node_result.output
+        assert read_grouper_structures(node) == local_structures
+        assert list(node.rglob("*.csv"))
+
+    def test_directory_mode_keeps_thermochemistry_options(
+        self,
+        tmp_path,
+        monkeypatch,
+        server_yaml_file,
+        ts_conformers_log_directory,
+    ):
+        """The energies written depend on the options reaching the node."""
+        args = [
+            "grouper",
+            "-d",
+            ".",
+            "-p",
+            "gaussian",
+            "-E",
+            "qhG",
+            "-temp",
+            "350",
+            "-c",
+            "0.5",
+            "--no-weighted",
+            "--no-check-imaginary-frequencies",
+            "rmsd",
+        ]
+        local = tmp_path / "local"
+        shutil.copytree(ts_conformers_log_directory, local)
+        monkeypatch.chdir(local)
+        assert CliRunner().invoke(run, args).exit_code == 0
+        local_structures = read_grouper_structures(local)
+        assert local_structures
+        assert all("qhG(Hartree)" in s for s in local_structures.values())
+
+        node = tmp_path / "node"
+        shutil.copytree(ts_conformers_log_directory, node)
+        monkeypatch.chdir(node)
+        result = submit_for_test(server_yaml_file, *args)
+        assert result.exit_code == 0, result.output
+        assert not read_grouper_structures(node)
+        run_scripts = list(node.glob("chemsmart_run_*.py"))
+        assert len(run_scripts) == 1
+
+        node_result = run_generated_script_command(run_scripts[0])
+        assert node_result.exit_code == 0, node_result.output
+        assert read_grouper_structures(node) == local_structures
+
+    @pytest.mark.parametrize(
+        "strategy_args, expected",
+        [
+            (["irmsd", "--inversion", "off"], "'--inversion', 'off'"),
+            (
+                ["tanimoto", "-ft", "morgan"],
+                "'--fingerprint-type', 'morgan'",
+            ),
+            (["tfd", "--use-weights"], "'--use-weights'"),
+            (["pymolrmsd"], "'pymolrmsd'"),
+        ],
+    )
+    def test_strategy_options_reach_the_node(
+        self,
+        strategy_args,
+        expected,
+        tmp_path,
+        monkeypatch,
+        server_yaml_file,
+        multiple_molecules_xyz_file,
+    ):
+        """Checks the command only, as some strategies need optional tools."""
+        monkeypatch.chdir(tmp_path)
+        result = submit_for_test(
+            server_yaml_file,
+            "grouper",
+            "-f",
+            multiple_molecules_xyz_file,
+            *strategy_args,
+        )
+        assert result.exit_code == 0, result.output
+        run_scripts = list(tmp_path.glob("chemsmart_run_*.py"))
+        assert len(run_scripts) == 1
+        assert expected in run_scripts[0].read_text()
