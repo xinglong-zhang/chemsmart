@@ -75,3 +75,39 @@ def test_multi_structure_submission_replays_one_structure(
         assert replay.exit_code == 0, (replay.output, replay.exception)
         assert len(captured) == 1
         assert captured[0].label == call.kwargs["job"].label
+
+
+def test_unsupported_multistructure_input_is_not_submitted(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "structures.trj"
+    source.write_text("1\nfirst\nHe 0 0 0\n1\nsecond\nHe 1 0 0\n")
+    server = Server(
+        "test", SCHEDULER="SLURM", NUM_CORES=8, MEM_GB=24, NUM_GPUS=0
+    )
+    monkeypatch.chdir(tmp_path)
+    with (
+        patch("chemsmart.cli.sub.Server.current", return_value=server),
+        patch.object(server, "submit") as submit,
+    ):
+        result = CliRunner().invoke(
+            sub,
+            [
+                "--test",
+                "xtb",
+                "-p",
+                "test",
+                "-f",
+                str(source),
+                "-i",
+                ":",
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "sp",
+            ],
+        )
+    assert result.exit_code != 0
+    assert "convert the input to XYZ" in result.output
+    submit.assert_not_called()

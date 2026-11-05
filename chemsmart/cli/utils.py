@@ -1,4 +1,8 @@
 import logging
+import os
+import tempfile
+
+import click
 
 logger = logging.getLogger(__name__)
 
@@ -45,3 +49,50 @@ def build_jobs(ctx, job_cls, settings, skip_completed, kwargs):
         skip_completed=skip_completed,
         **kwargs,
     )
+
+
+def prepare_structure_inputs(jobs, source, commands):
+    """Yield ``(job, input_path)`` pairs for geometry-only batch inputs.
+
+    The files must remain accessible until the submitted jobs have finished.
+    Paths are None when the input is not suitable for preparation.
+    """
+    eligible = (
+        len(jobs) > 1
+        and source
+        and any(c.get("name") in {"xtb", "gaussian", "orca"} for c in commands)
+        and all(not getattr(job, "_batch_entry", None) for job in jobs)
+    )
+    if eligible and not str(source).lower().endswith((".npz", ".xyz")):
+        raise click.UsageError(
+            "Multi-structure submission currently supports NPZ and XYZ "
+            "inputs only; convert the input to XYZ before submitting."
+        )
+    prepare = eligible
+    input_dir = (
+        tempfile.mkdtemp(prefix="chemsmart_inputs_", dir=os.getcwd())
+        if prepare
+        else None
+    )
+    for index, job in enumerate(jobs, start=1):
+        path = None
+        if input_dir:
+            path = os.path.join(input_dir, f"structure_{index:05d}.xyz")
+            job.molecule.write_xyz(path, mode="w")
+        yield job, path
+
+
+def prepared_structure_arguments(cli_args, input_path, label):
+    """Replace the source with one prepared structure and preserve its label."""
+    args = list(cli_args)
+    for option in ("--filename", "-f"):
+        if option in args:
+            args[args.index(option) + 1] = input_path
+            break
+    else:
+        raise ValueError("Cannot locate the structure input filename.")
+    for option in ("--index", "-i", "--structure-index", "--si"):
+        if option in args:
+            position = args.index(option)
+            del args[position : position + 2]
+    return ["--batch-label", str(label), *args]

@@ -44,7 +44,7 @@ class TestNPZStructures:
         np.savez(
             source, coords=np.zeros((1, 1, 3)), charges=[[2]], homo=[value]
         )
-        with pytest.raises(ValueError, match="finite numeric"):
+        with pytest.raises(ValueError, match="finite"):
             NPZFile(str(source)).get_molecules()
 
     def test_rejects_unsupported_npy_version(self, tmp_path):
@@ -684,22 +684,26 @@ class TestNPZStructures:
 class TestNPZImportRobustness:
     """Long imports must keep their progress and report what they skipped."""
 
-    @pytest.mark.parametrize("invalid_field", ["coords", "energies"])
+    @pytest.mark.parametrize("invalid_field", ["coords", "energies", "homo"])
     def test_invalid_structure_is_skipped_but_valid_records_are_saved(
         self, tmp_path, invalid_field
     ):
         source = tmp_path / "mixed.npz"
         coords = np.zeros((3, 1, 3))
         energies = np.array([-1.0, -2.0, -3.0])
+        homo = np.array([-0.1, -0.2, -0.3])
         if invalid_field == "coords":
             coords[1, 0, 0] = np.nan
-        else:
+        elif invalid_field == "energies":
             energies[1] = np.nan
+        else:
+            homo[1] = np.nan
         np.savez(
             source,
             coords=coords,
             charges=np.full((3, 1), 2),
             energies=energies,
+            homo=homo,
         )
         db = Database(str(tmp_path / "records.db"))
         db.create()
