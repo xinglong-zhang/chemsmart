@@ -16,7 +16,7 @@ import numpy as np
 from chemsmart.io.molecules.structure import Molecule
 
 
-class CVScreening:
+class CollectiveVariables:
     """Analyse candidate collective variables across ordered Molecules.
     Results belong to one analysis object.
     call refresh() after changing a supplied Molecule's coordinates.
@@ -25,6 +25,7 @@ class CVScreening:
     def __init__(self, molecules):
         self.molecules = tuple(molecules)
         self._metadata = {}
+        self._profile = {}
         self.refresh()
 
     @property
@@ -49,7 +50,13 @@ class CVScreening:
 
     @staticmethod
     def _geometry_summary(values, circular=False):
-        """Use shortest signed torsion endpoint changes in [-180,180)."""
+        """Summarise each coordinate across the ordered geometries.
+
+        With circular=False, use ordinary endpoint differences and ranges.
+        With circular=True, treat values as torsion angles in degrees.
+        Wrap the signed endpoint change into [-180, 180) and report the
+        shortest arc containing all finite observations.
+        """
         summary = np.full((values.shape[1], 7), np.nan)
         counts = np.isfinite(values).sum(axis=0)
         for column in range(values.shape[1]):
@@ -89,11 +96,15 @@ class CVScreening:
 
     def _angular_profile(self, property_name, order):
         molecules = self.molecules
+
+        # Find the connected angles or torsions in each geometry.
         tables = [getattr(molecule, property_name) for molecule in molecules]
         detected = [
             {tuple(int(i) for i in row[:order]): row[-1] for row in table}
             for table in tables
         ]
+
+        # Keep each angle or torsion in the same column across all geometries.
         combinations = sorted(set().union(*(set(rows) for rows in detected)))
         indices = np.asarray(combinations, dtype=int).reshape(-1, order)
         values = np.empty((len(molecules), len(indices)), dtype=float)
@@ -106,6 +117,9 @@ class CVScreening:
                     connected[frame, column] = True
                 else:
                     missing.append(column)
+
+            # Evaluate these paths from coordinates even though their atoms
+            # no longer form a connected path in this geometry.
             if missing:
                 values[frame, missing] = molecule.geometry_table(
                     indices[missing]
@@ -130,6 +144,9 @@ class CVScreening:
             raise ValueError("Provide at least one geometry.")
         if not all(isinstance(molecule, Molecule) for molecule in molecules):
             raise TypeError("All geometries must be Molecule objects.")
+
+        # Use the first geometry as the reference for atom order.
+        # Each atom number must refer to the same atom in every geometry.
         symbols = list(molecules[0].symbols)
         for molecule in molecules:
             if list(molecule.symbols) != symbols:
@@ -137,6 +154,8 @@ class CVScreening:
                     "Geometries have different element sequences."
                 )
             molecule._validate_matrix_positions()
+
+        # Take each atom pair once and skip distances from an atom to itself.
         first, second = np.triu_indices(len(symbols), k=1)
         indices = np.column_stack((first + 1, second + 1))
         values = np.stack(
@@ -145,6 +164,9 @@ class CVScreening:
                 for molecule in molecules
             ]
         )
+
+        # Match each detected bond to its distance column so people can track
+        # which pairs are bonded in each geometry.
         lookup = {tuple(pair): column for column, pair in enumerate(indices)}
         connected = np.zeros(values.shape, dtype=bool)
         for frame, molecule in enumerate(molecules):
@@ -155,6 +177,7 @@ class CVScreening:
             "atom_indices": indices,
             "values_matrix": values,
             "connected_matrix": connected,
+            # Mark pairs that are bonded in at least one geometry.
             "selected_mask": connected.any(axis=0),
             "summary_matrix": summary,
             "summary_columns": columns,
@@ -175,6 +198,8 @@ class CVScreening:
     def from_filepath(cls, filepath):
         """Use the Molecule.from_filepath reader for all geometries."""
         filepath = os.path.abspath(filepath)
+
+        # Read every geometry in file order so each one becomes a profile row.
         molecules = Molecule.from_filepath(
             filepath, index=":", return_list=True
         )
@@ -184,6 +209,8 @@ class CVScreening:
         result = analysis._metadata
         result["source_file"] = filepath
         result["reader"] = "Molecule.from_filepath"
+
+        # Geometry 1 is the first geometry returned by the reader.
         result["geometry_index_definition"] = (
             "1-based position in reader output"
         )
@@ -211,6 +238,8 @@ class CVScreening:
                 raise ValueError("central_bond_only requires two-atom groups.")
             atoms = []
             labels = []
+
+            # Read labels such as C3 as an element and a one-based atom number.
             for label in group:
                 match = (
                     re.fullmatch(r"([A-Za-z]{1,2})([1-9][0-9]*)", label)
@@ -248,8 +277,13 @@ class CVScreening:
             for category in ("distances", "angles", "dihedrals"):
                 data = self.profile[category]
                 indices = data["atom_indices"]
+
+                # One label selects every coordinate containing that atom.
                 if len(atoms) == 1:
                     mask = (indices == atoms[0]).any(axis=1)
+
+                # For three labels, keep distances within the group and
+                # angles or torsions containing the triple in either direction.
                 elif len(atoms) == 3:
                     if category == "distances":
                         mask = np.isin(indices, atoms).all(axis=1)
@@ -260,6 +294,9 @@ class CVScreening:
                             mask |= (window == atoms).all(axis=1)
                             mask |= (window == atoms[::-1]).all(axis=1)
                 else:
+
+                    # For two labels, check adjacent atoms in each coordinate.
+                    # For central-bond torsions, check only the middle pair.
                     left, right = indices[:, :-1], indices[:, 1:]
                     if category == "dihedrals" and central_bond_only:
                         left, right = indices[:, 1:2], indices[:, 2:3]
@@ -296,10 +333,15 @@ class CVScreening:
         for category_column, category in enumerate(categories):
             data = profile[category]
             indices = data["atom_indices"]
+
+            # Compare the magnitude of the change from the first geometry to the last.
             changes = data["summary_matrix"][
                 :, data["summary_columns"].index("absolute_change")
             ]
             eligible = np.ones(len(indices), dtype=bool)
+
+            # By default, compare only distances for pairs that are bonded
+            # in at least one geometry.
             if category == "distances" and connected_distances:
                 eligible &= data["selected_mask"]
             winners_by_atom = []
@@ -320,6 +362,9 @@ class CVScreening:
                     winners_by_atom.append(())
                     continue
                 maximum = changes[finite].max()
+
+                # Keep all coordinates tied for the largest change and list
+                # them in atom-number order so the result is reproducible.
                 winners = sorted(
                     np.flatnonzero(finite & (changes == maximum)),
                     key=lambda column: tuple(indices[column]),
