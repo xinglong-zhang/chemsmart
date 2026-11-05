@@ -10,29 +10,31 @@
 # https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html
 #
 # To use this file:
-#   1. Copy it to ~/.chemsmart/ccdc/ccdc.envars
+#   1. Copy it to ~/.chemsmart/ccdc/ccdc.yaml
 #   2. Adapt the paths below to your local CSD installation
-#   3. Uncomment the lines you need
+#   3. Uncomment the variables you need
 #
 # chemsmart reads this file and exports the variables into the environment
 # before importing the `ccdc` package. Variables that are already set in the
-# shell environment are NOT overwritten.
+# shell environment are NOT overwritten. Values may contain ~ (home directory)
+# and $VARIABLES, which are expanded when the file is loaded.
 # =============================================================================
 
 # Root of the CCDC software installation
-##export CSDHOME=/home/user/CCDC/ccdc-software
+#CSDHOME: /home/user/CCDC/ccdc-software
 
 # Set the variables required to locate the CSD data and files
-##export CCDC_ISOSTAR_DATA_DIRECTORY=/home/user/CCDC/ccdc-data/isostar
-##export CCDC_MOGUL_DATA=/home/user/CCDC/ccdc-data/mogul
-##export CCDC_MOGUL_INITIALISATION_FILE=$PYTHONHOME/lib/python3.9/site-packages/ccdc/parameter_files/mogul.ini
-##export CCDC_CROSSMINER_DATABASE=/home/user/CCDC/ccdc-data/crossminer/csd_pdb_crossminer.feat
-##export CCDC_CROSSMINER_FEATURE_DEFINITIONS=/home/user/CCDC/ccdc-data/crossminer/feature_definitions
-##export GOLD_DIR=/home/user/CCDC/ccdc-software/gold/GOLD
+#CCDC_ISOSTAR_DATA_DIRECTORY: /home/user/CCDC/ccdc-data/isostar
+#CCDC_MOGUL_DATA: /home/user/CCDC/ccdc-data/mogul
+#CCDC_MOGUL_INITIALISATION_FILE: $PYTHONHOME/lib/python3.9/site-packages/ccdc/parameter_files/mogul.ini
+#CCDC_CROSSMINER_DATABASE: /home/user/CCDC/ccdc-data/crossminer/csd_pdb_crossminer.feat
+#CCDC_CROSSMINER_FEATURE_DEFINITIONS: /home/user/CCDC/ccdc-data/crossminer/feature_definitions
+#GOLD_DIR: /home/user/CCDC/ccdc-software/gold/GOLD
 
-# On Windows, the paths typically look like:
-##export CSDHOME="C:\Program Files\CCDC"
-##export CCDC_MOGUL_DATA="C:\ProgramData\CCDC\ccdc-data\mogul"
+# On Windows, the paths typically look like (quote values containing
+# backslashes or spaces):
+#CSDHOME: 'C:\Program Files\CCDC'
+#CCDC_MOGUL_DATA: 'C:\ProgramData\CCDC\ccdc-data\mogul'
 
 # On macOS, the paths typically look like:
-##export CSDHOME=/Applications/CCDC
+#CSDHOME: /Applications/CCDC

@@ -29,7 +29,7 @@ Configuration Structure:
     ├── crest/
     │   └── crest_project_settings.yaml
     └── ccdc/
-        └── ccdc.envars
+        └── ccdc.yaml
 """
 
 import glob
@@ -206,16 +206,16 @@ class CHEMSMARTUserSettings:
         return os.path.join(self.config_dir, "ccdc")
 
     @property
-    def user_ccdc_envars(self):
+    def user_ccdc_yaml(self):
         """
-        Get the path to the CSD/CCDC environment variables file.
+        Get the path to the CSD/CCDC environment variables YAML file.
 
         Returns:
-            str: Path to the file containing environment variables required
-                 by the licensed CSD Python API (``ccdc`` package), e.g.,
-                 ``CSDHOME``, ``CCDC_MOGUL_DATA``.
+            str: Path to the YAML file containing environment variables
+                 required by the licensed CSD Python API (``ccdc``
+                 package), e.g., ``CSDHOME``, ``CCDC_MOGUL_DATA``.
         """
-        return os.path.join(self.user_ccdc_settings_dir, "ccdc.envars")
+        return os.path.join(self.user_ccdc_settings_dir, "ccdc.yaml")
 
     @cached_property
     def server_yaml_files(self):
