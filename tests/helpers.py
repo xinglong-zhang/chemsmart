@@ -1764,8 +1764,15 @@ def read_grouper_structures(folder):
 
 
 def invoke_sterimol(*args):
-    """Run ``chemsmart run sterimol`` with ``args``."""
-    return CliRunner().invoke(run, ["sterimol", *map(str, args)])
+    """Run ``chemsmart run sterimol`` with ``args``.
+
+    Names a server because ``run`` otherwise needs ``local.yaml`` in the user's
+    ``~/.chemsmart``, which CI does not have.
+    """
+    server_yaml = Path(__file__).parent / "data" / "YAMLTests" / "server.yaml"
+    return CliRunner().invoke(
+        run, ["-s", str(server_yaml), "sterimol", *map(str, args)]
+    )
 
 
 def run_sterimol_to_json(tmp_path, *args):

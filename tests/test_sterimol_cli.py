@@ -14,6 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from chemsmart.cli.sub import sub
+from chemsmart.jobs.sterimol.runner import SterimolJobRunner
 from tests.helpers import (
     assert_sterimol_matches,
     invoke_sterimol,
@@ -258,6 +259,21 @@ class TestSterimolErrors:
         assert result.exit_code == 1
         assert "outside the valid 1-based range" in result.output
         assert "--atoms" not in result.output
+
+    def test_rejects_an_empty_file(self, tmp_path):
+        empty_file = tmp_path / "empty.xyz"
+        empty_file.touch()
+        result = invoke_sterimol(
+            "-f", empty_file, "--axis", 1, 2, "--auto-fragment"
+        )
+        assert result.exit_code == 1
+        assert "No structure could be read" in result.output
+
+
+class TestSterimolRunner:
+    def test_needs_no_executable(self, pbs_server):
+        """It must not look for a program section in server.yaml."""
+        assert SterimolJobRunner(server=pbs_server).executable is None
 
 
 class TestSterimolOutputFile:
