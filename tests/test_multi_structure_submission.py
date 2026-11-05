@@ -111,3 +111,66 @@ def test_unsupported_multistructure_input_is_not_submitted(
     assert result.exit_code != 0
     assert "convert the input to XYZ" in result.output
     submit.assert_not_called()
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_batch_label_requires_one_replayed_job(count):
+    import click
+
+    from chemsmart.jobs.job import Job
+    from chemsmart.utils.cli import MyCommand
+
+    jobs = [
+        Job(molecule=None, label=f"job_{i}", jobrunner=None)
+        for i in range(count)
+    ]
+
+    @click.command("replay-test", cls=MyCommand)
+    def replay_test():
+        return jobs
+
+    run.add_command(replay_test)
+    try:
+        with (
+            patch("chemsmart.cli.run.JobRunner"),
+            patch("chemsmart.cli.run._run_single_job") as execute,
+        ):
+            result = CliRunner().invoke(
+                run, ["--batch-label", "selected", "replay-test"]
+            )
+        if count == 1:
+            assert result.exit_code == 0, (result.output, result.exception)
+            assert execute.call_args.args[0].label == "selected"
+        else:
+            assert isinstance(result.exception, ValueError)
+            assert "exactly one job" in str(result.exception)
+            execute.assert_not_called()
+    finally:
+        run.commands.pop("replay-test", None)
+
+
+def test_batch_label_rejects_multiple_molecules():
+    from types import SimpleNamespace
+
+    from chemsmart.cli.utils import build_jobs
+
+    context = SimpleNamespace(
+        obj={
+            "jobrunner": None,
+            "molecules": [object(), object()],
+            "molecule_indices": [1, 2],
+            "label": "original",
+            "batch_label": "selected",
+        }
+    )
+    with pytest.raises(ValueError, match="exactly one molecule"):
+        build_jobs(context, object, None, True, {})
+
+
+def test_prepared_structure_arguments_require_input_filename():
+    from chemsmart.cli.utils import prepared_structure_arguments
+
+    with pytest.raises(ValueError, match="input filename"):
+        prepared_structure_arguments(
+            ["xtb", "sp"], "/tmp/structure.xyz", "molecule"
+        )
