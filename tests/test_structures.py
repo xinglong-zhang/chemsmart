@@ -30,7 +30,12 @@ from chemsmart.utils.cluster import (
     is_pubchem_network_available,
 )
 from chemsmart.utils.utils import cmp_with_ignore
-from tests.helpers import cxsmiles_core, load_last_molecule, read_stripped_text
+from tests.helpers import (
+    cxsmiles_core,
+    load_last_molecule,
+    rdkit_embed_and_optimize,
+    read_stripped_text,
+)
 
 
 class TestCovalentRadiusAndBondCutoff:
@@ -1703,6 +1708,343 @@ class TestMoleculeAdvanced:
         last_model = Molecule.from_filepath(pdb_file, index="-1")
         assert np.allclose(last_model.positions, np.array([[1.5, 2.5, 3.5]]))
         assert last_model.residue_numbers == [2]
+
+
+class TestDescriptors:
+    def test_2d_descriptors_match_rdkit(self):
+        """2D Descriptors should match the result from rdkit"""
+
+        from rdkit.Chem import Descriptors
+
+        smiles = "CCO"  # Ethanol
+        rdkit_mol = rdkit_embed_and_optimize(smiles=smiles)
+
+        mol = Molecule.from_rdkit_mol(rdkit_mol)
+
+        desc2D = mol.twod_descriptors
+        expected = {
+            # Few important descriptors
+            "MolWt": Descriptors.MolWt(rdkit_mol),
+            "HeavyAtomMolWt": Descriptors.HeavyAtomMolWt(rdkit_mol),
+            "NumValenceElectrons": Descriptors.NumValenceElectrons(rdkit_mol),
+        }
+
+        assert isinstance(desc2D, dict)
+        for k, v in expected.items():
+            assert k in desc2D
+            assert isinstance(desc2D[k], (int, float))
+            assert np.isclose(desc2D[k], v)
+
+    def test_3d_descriptors_rotation_and_translation_invariance(self):
+        """3D descriptors should be invariant to rigid transforms (rotation+translation)."""
+        import math
+
+        smiles = "CCO"  # ethanol with a 3D conformer
+        rd_m = rdkit_embed_and_optimize(smiles, seed=42)
+        mol = Molecule.from_rdkit_mol(rd_m)
+        desc3_a = mol.threed_descriptors
+        assert isinstance(desc3_a, dict)
+        # basic value types
+        for k, v in desc3_a.items():
+            assert isinstance(v, (int, float))
+
+        # apply a random rigid rotation + translation to positions
+        pos = np.array(mol.positions, dtype=float)
+        # random rotation with deterministic seed
+        rng = np.random.RandomState(42)
+        theta = rng.rand() * 2 * math.pi
+        u = rng.randn(3)
+        u /= np.linalg.norm(u)
+        # Rodrigues' rotation formula
+        K = np.array([[0, -u[2], u[1]], [u[2], 0, -u[0]], [-u[1], u[0], 0]])
+        R = np.eye(3) + math.sin(theta) * K + (1 - math.cos(theta)) * (K @ K)
+        pos_rot = (pos @ R.T) + np.array([3.2, -1.7, 0.5])  # translate
+
+        mol2 = Molecule(symbols=mol.symbols, positions=pos_rot)
+        desc3_b = mol2.threed_descriptors
+
+        # same keys and numerically close values (allow small numerical tolerance)
+        assert set(desc3_a.keys()) == set(desc3_b.keys())
+        for k in desc3_a:
+            assert np.isclose(
+                desc3_a[k], desc3_b[k], rtol=1e-5, atol=1e-5
+            ), f"3D descriptor {k} changed under rigid transform: {desc3_a[k]} vs {desc3_b[k]}"
+
+    def test_descriptors_repeatability(self):
+        """Repeated access returns identical results (no caching flakiness)."""
+        rd_m = rdkit_embed_and_optimize("c1ccccc1")  # benzene
+        mol = Molecule.from_rdkit_mol(rd_m)
+        d1 = mol.twod_descriptors
+        d2 = mol.twod_descriptors
+        assert d1 == d2
+        e1 = mol.threed_descriptors
+        e2 = mol.threed_descriptors
+        # compare floats within tolerance
+        assert set(e1.keys()) == set(e2.keys())
+        for k in e1:
+            assert np.isclose(e1[k], e2[k], rtol=1e-5, atol=1e-5)
+
+    def test_sterimol_translation_rotation(self):
+        """Ensure the molecule rotates and translates properly."""
+        rdmol = Chem.AddHs(rdkit_embed_and_optimize("Cc1ccccc1"))
+        mol = Molecule.from_rdkit_mol(rdmol)
+        atom1, atom2 = 0, 1
+        mol.calculate_sterimol_parameters(atom1, atom2)
+        pos = mol.sterimol_parameter["pos"]
+
+        # atom1 at origin, atom2 on z-axis
+        assert np.allclose(pos[atom1], 0)
+        assert np.allclose(pos[atom2][:2], 0)
+
+        # all bond lengths preserved
+        rdmol = mol.to_rdkit()
+        for bond in rdmol.GetBonds():
+            i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            assert np.isclose(
+                np.linalg.norm(mol.positions[i] - mol.positions[j]),
+                np.linalg.norm(pos[i] - pos[j]),
+            )
+
+    def test_sterimol_val(self):
+        """Ensure logic is correct by constructed molecule"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 4.09],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        meth = Molecule(symbols=symbol, positions=position)
+        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        sterimol = meth.sterimol_parameter
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        length = sterimol["L"]
+
+        # By hand calculation
+        # B1 = 1.70, B5 = 2.23, L = 2.79
+        assert bmin == pytest.approx(1.70)
+        assert bmax == pytest.approx(2.23)
+        assert length == pytest.approx(2.79)
+
+    def test_sterimol_symmetry(self):
+        """Ensure close bmin and bmax on symmetric molecules"""
+        smiles = "C(C)(C)(C)"
+        rdmol = rdkit_embed_and_optimize(smiles)
+        rdmol = Chem.AddHs(rdmol)
+        mol = Molecule.from_rdkit_mol(rdmol)
+        atom1 = 4
+        atom2 = 0
+
+        sterimol = mol.calculate_sterimol_parameters(atom1, atom2)
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        assert np.isclose(bmin, bmax, atol=0.5)
+
+    def test_sterimol_close_atoms(self):
+        """Ensure close atom1/atom2 are dealt with"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 3],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        meth = Molecule(symbols=symbol, positions=position)
+
+        with pytest.raises(
+            ValueError, match="atom2 vector norm too close to zero"
+        ):
+            meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+
+    def test_sterimol_flipped_molecules(self):
+        """Ensure same calculation for flipped molecules"""
+        symbol = np.array(["C", "H", "H", "H", "H"])
+        position = np.array(
+            [
+                [1, 2, 3],
+                [1, 2, 4.09],
+                [1, 0.97, 2.636],
+                [1.892, 1.485, 2.636],
+                [0.108, 1.485, 2.636],
+            ]
+        )
+        position = position * np.array([1, 1, -1])
+        meth = Molecule(symbols=symbol, positions=position)
+        meth.calculate_sterimol_parameters(atom1=1, atom2=0)
+        sterimol = meth.sterimol_parameter
+        bmin = sterimol["B1"]
+        bmax = sterimol["B5"]
+        length = sterimol["L"]
+
+        # By hand calculation
+        # B1 = 1.70, B5 = 2.23, L = 2.79
+        assert bmin == pytest.approx(1.70)
+        assert bmax == pytest.approx(2.23)
+        assert length == pytest.approx(2.79)
+
+    def test_sterimol_does_not_modify_molecule(self, sterimol_methyl_geometry):
+        """Positions are untouched, also when atom2 lies on -z."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+
+        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        assert np.array_equal(mol.positions, positions)
+
+        # a second calculation starts from the same geometry
+        second = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        for key in ("L", "B1", "B5"):
+            assert second[key] == pytest.approx(first[key])
+
+    def test_sterimol_alignment_preserves_handedness(
+        self, sterimol_methyl_geometry
+    ):
+        """Aligning atom2 from -z must be a rotation, not an inversion."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        pos = mol.calculate_sterimol_parameters(atom1=1, atom2=0)["pos"]
+
+        assert pos[0] == pytest.approx([0.0, 0.0, 1.09])
+        assert np.linalg.det(pos[1:4] - pos[0]) == pytest.approx(
+            np.linalg.det(positions[1:4] - positions[0])
+        )
+
+    def test_sterimol_parameter_state(self, sterimol_methyl_geometry):
+        """The property reflects the latest calculation on this geometry."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        assert mol.sterimol_parameter is None
+
+        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        assert mol.sterimol_parameter is first
+
+        second = mol.calculate_sterimol_parameters(atom1=2, atom2=0)
+        assert mol.sterimol_parameter is second
+        assert second["L"] != pytest.approx(first["L"])
+
+        mol.positions = positions + 1.0
+        assert mol.sterimol_parameter is None
+
+    def test_sterimol_excluded_atoms(self, sterimol_methyl_geometry):
+        """Excluded atoms behave as if they were absent from the molecule."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        result = mol.calculate_sterimol_parameters(
+            atom1=1, atom2=0, excluded_atoms=[2, 3, 4]
+        )
+        # only the carbon sphere is left, centred on the axis
+        assert result["L"] == pytest.approx(1.09 + 1.7)
+        assert result["B1"] == pytest.approx(1.7)
+        assert result["B5"] == pytest.approx(1.7)
+        assert len(result["pos"]) == len(symbols)
+
+        with pytest.raises(ValueError, match="cannot be in excluded_atoms"):
+            mol.calculate_sterimol_parameters(
+                atom1=1, atom2=0, excluded_atoms=[0]
+            )
+
+    def test_sterimol_matches_morfeus_reference(self):
+        """Compare an asymmetric substituent with an independent code.
+
+        Reference values come from morfeus-ml 0.8.0 (Sterimol, using the same
+        RDKit radii, 36000 rotation vectors, L_value_uncorrected).
+        """
+        symbols = ["C"] * 5 + ["F", "Cl"] + ["H"] * 10  # CH3-CH(CH3)-CH2-CHFCl
+        positions = np.array(
+            [
+                [-1.0144, 1.0305, 0.9144],
+                [-0.5694, 0.4225, -0.4231],
+                [-1.2529, -0.9297, -0.664],
+                [0.9715, 0.3516, -0.5595],
+                [1.6781, -0.5734, 0.4436],
+                [1.4033, -1.899, 0.1621],
+                [3.441, -0.3363, 0.3383],
+                [-0.4859, 1.99, 1.098],
+                [-2.1056, 1.2374, 0.8889],
+                [-0.8143, 0.3382, 1.7586],
+                [-0.9238, 1.1101, -1.2233],
+                [-2.3501, -0.7845, -0.7606],
+                [-0.8811, -1.3889, -1.6046],
+                [-1.071, -1.6266, 0.1808],
+                [1.3772, 1.3807, -0.4425],
+                [1.2285, 0.0227, -1.5904],
+                [1.369, -0.3454, 1.4833],
+            ]
+        )
+        mol = Molecule(symbols=symbols, positions=positions)
+        result = mol.calculate_sterimol_parameters(atom1=7, atom2=0)
+
+        assert result["L"] == pytest.approx(4.87845, abs=1e-4)
+        assert result["B5"] == pytest.approx(6.41933, abs=1e-4)
+        assert result["B1"] == pytest.approx(1.74748, abs=1e-3)
+
+
+class TestDerivedPropertiesFollowState:
+    """Geometry-derived properties must not outlive the state they use."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "canonical_positions",
+            "canonical_geometry",
+            "structure_id",
+            "distance_matrix",
+            "moments_of_inertia",
+            "rotational_temperatures",
+            "bond_orders",
+        ],
+    )
+    def test_property_follows_new_positions(
+        self, sterimol_methyl_geometry, name
+    ):
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        before = getattr(mol, name)
+
+        mol.positions = positions * 1.5
+        expected = getattr(
+            Molecule(symbols=symbols, positions=positions * 1.5), name
+        )
+
+        assert np.array_equal(getattr(mol, name), expected)
+        assert not np.array_equal(before, expected)
+
+    def test_structure_id_follows_charge_and_multiplicity(
+        self, sterimol_methyl_geometry
+    ):
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(
+            symbols=symbols, positions=positions, charge=0, multiplicity=1
+        )
+        neutral = mol.structure_id
+        mol.charge = 1
+        cation = mol.structure_id
+        mol.multiplicity = 2
+        assert len({neutral, cation, mol.structure_id}) == 3
+
+    def test_displaced_frame_does_not_inherit_source_values(
+        self, water_with_vib_modes
+    ):
+        """vibrationally_displaced() copies the molecule, then moves it."""
+        source_distances = water_with_vib_modes.distance_matrix
+        source_id = water_with_vib_modes.structure_id
+
+        frame = water_with_vib_modes.vibrationally_displaced(mode_idx=1)
+
+        assert not np.array_equal(frame.distance_matrix, source_distances)
+        assert frame.structure_id != source_id
+        np.testing.assert_array_equal(
+            frame.distance_matrix,
+            Molecule(
+                symbols=frame.symbols, positions=frame.positions
+            ).distance_matrix,
+        )
 
 
 class TestCoordinateBlockAdvanced:
@@ -6785,8 +7127,6 @@ H       1.0 0.0 0.0
         with patch.object(
             water, "get_bond_orders_from_graph", side_effect=RuntimeError("x")
         ):
-            # clear cached_property if present
-            water.__dict__.pop("bond_orders", None)
             assert len(water.bond_orders) > 0
 
     def test_rdkit_vectorized_bond_types(self, gaussian_benzene_opt_outfile):
@@ -7138,6 +7478,16 @@ class TestStructureEdgeCases:
         ):
             mol = Molecule.from_filepath(path)
         assert list(mol.symbols) == ["H", "H"]
+
+    def test_from_filepath_trj_not_xyz_uses_generic_reader(self, tmp_path):
+        """A .trj file that is not XYZ text goes to the generic reader."""
+        trj = tmp_path / "binary.trj"
+        trj.write_bytes(b"not an xyz trajectory")
+        with patch.object(
+            Molecule, "_read_other", return_value="generic"
+        ) as read_other:
+            assert Molecule.from_filepath(str(trj)) == "generic"
+        read_other.assert_called_once()
 
     def test_trj_with_xyz_content(self, write_tmp_file):
         path = write_tmp_file(

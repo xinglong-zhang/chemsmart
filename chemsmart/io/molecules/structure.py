@@ -7,7 +7,7 @@ import os
 import re
 import tempfile
 from contextlib import contextmanager
-from functools import cached_property, lru_cache
+from functools import lru_cache
 
 import networkx as nx
 import numpy as np
@@ -15,7 +15,13 @@ from ase import units
 from ase.io import read as ase_read
 from ase.symbols import Symbols
 from rdkit import Chem
-from rdkit.Chem import rdchem, rdDetermineBonds, rdMolHash
+from rdkit.Chem import (
+    Descriptors,
+    Descriptors3D,
+    rdchem,
+    rdDetermineBonds,
+    rdMolHash,
+)
 from rdkit.Geometry import Point3D
 from scipy.spatial.distance import cdist
 
@@ -108,6 +114,13 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
+    twod_descriptors: dict
+        The full set of RDKit 2D descriptors for a molecule.
+    threed_descriptors: dict
+        RDKit descriptors derived from a molecule's 3D structure.
+    sterimol_parameter: dict | None
+        Latest result of calculate_sterimol_parameters() (L, B1, B5, pos),
+        or None if not calculated yet.
     """
 
     def __init__(
@@ -168,6 +181,7 @@ class Molecule:
         )
         self.rotational_constants = rotational_constants
         self.point_group = point_group
+        self._sterimol = None
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond
@@ -279,6 +293,8 @@ class Molecule:
             raise ValueError(f"positions must be (N, 3); got {arr.shape}")
         # store a copy to avoid accidental aliasing
         self._positions = arr.copy()
+        # geometry-dependent result is no longer valid
+        self._sterimol = None
 
     @property
     def empirical_formula(self):
@@ -361,7 +377,7 @@ class Molecule:
         """
         return np.average(self.positions, axis=0, weights=self.masses)
 
-    @cached_property
+    @property
     def canonical_positions(self):
         """Canonical atomic positions.
         The positions are translated to the centre of mass and rotated into
@@ -371,7 +387,7 @@ class Molecule:
         """
         return canonicalize_positions(self.masses, self.positions)
 
-    @cached_property
+    @property
     def canonical_geometry(self):
         """Canonical string representation of the molecular geometry.
         Atoms are sorted lexicographically by (symbol, x, y, z) after
@@ -398,7 +414,7 @@ class Molecule:
         ]
         return ";".join(parts)
 
-    @cached_property
+    @property
     def structure_id(self):
         """Unique structural identifier (SHA-256 hex digest).
         Computed from canonical_geometry, charge and multiplicity.
@@ -429,7 +445,7 @@ class Molecule:
         """
         return self.get_chemical_formula()
 
-    @cached_property
+    @property
     def inchikey(self):
         """InChIKey string for the molecule (27-character).
         Computed via Open Babel for robust topological perception,
@@ -464,7 +480,7 @@ class Molecule:
 
         return result
 
-    @cached_property
+    @property
     def molecule_id(self):
         """Unique molecular identifier (InChIKey string).
         Two molecules with identical connectivity and stereochemistry
@@ -472,7 +488,7 @@ class Molecule:
         """
         return self.inchikey
 
-    @cached_property
+    @property
     def molecule_label(self):
         """Unique, human-readable label for the molecule.
         Combines the chemical formula with the molecule_id, e.g.
@@ -491,7 +507,7 @@ class Molecule:
         """
         return Chem.MolToCXSmiles(self.to_rdkit())
 
-    @cached_property
+    @property
     def inchi(self):
         """Full InChI string for the molecule.
         Computed via Open Babel (same XYZ-based pipeline as ``inchikey``).
@@ -523,14 +539,14 @@ class Molecule:
 
         return result
 
-    @cached_property
+    @property
     def smiles(self):
         """SMILES string for the molecule (convenience property).
         Equivalent to calling ``to_smiles()``.
         """
         return self.to_smiles()
 
-    @cached_property
+    @property
     def chemical_symbols(self):
         """
         Return a list of chemical symbols strings
@@ -866,7 +882,7 @@ class Molecule:
         _, _, eigenvectors = self._moments_of_inertia
         return eigenvectors
 
-    @cached_property
+    @property
     def _moments_of_inertia(self):
         """
         Calculate the moments of inertia of the molecule.
@@ -876,7 +892,7 @@ class Molecule:
 
         return calculate_moments_of_inertia(self.masses, self.positions)
 
-    @cached_property
+    @property
     def _moments_of_inertia_weighted_mass(self):
         """
         Calculate the moments of inertia of the molecule using
@@ -889,7 +905,7 @@ class Molecule:
             self.natural_abundance_weighted_masses, self.positions
         )
 
-    @cached_property
+    @property
     def _moments_of_inertia_most_abundant_mass(self):
         """
         Calculate the moments of inertia of the molecule using
@@ -902,7 +918,7 @@ class Molecule:
             self.most_abundant_masses, self.positions
         )
 
-    @cached_property
+    @property
     def rotational_temperatures(self):
         """
         Obtain the rotational temperatures of the molecule in K.
@@ -929,6 +945,144 @@ class Molecule:
             # for linear molecule, has only one rotational temperature
             return [result[-1]]
         return result
+
+    @property
+    def sterimol_parameter(self):
+        """
+        Result of the latest calculate_sterimol_parameters() call.
+
+        Sterimol parameters depend on the chosen atom1/atom2 axis, so they
+        cannot be computed on demand. Returns None if they have not been
+        calculated yet, or if the positions were reassigned since.
+        """
+        return self._sterimol
+
+    def calculate_sterimol_parameters(
+        self, atom1: int, atom2: int, excluded_atoms=None
+    ):
+        """
+        Calculate the Sterimol parameters L, B1 and B5 of a substituent.
+
+        The molecule is not modified. Van der Waals radii come from the RDKit
+        periodic table, and L is reported without Verloop's +0.40 A
+        correction.
+
+        Args:
+            atom1 (int): 0-based index of the atom the substituent is bonded
+                to (often a dummy H). It is left out of the measurement and
+                defines the origin of the axis.
+            atom2 (int): 0-based index of the first substituent atom. The
+                atom1->atom2 vector defines the +z axis.
+            excluded_atoms (Iterable[int] | None): 0-based indices of further
+                atoms to leave out. All atoms other than atom1 count as the
+                substituent, so when atom1 has other neighbours, list the
+                rest of the molecule here.
+
+        Returns:
+            dict: "L", "B1" and "B5" in Angstrom, and "pos", the (N, 3)
+            aligned coordinates of all atoms.
+
+        Raises:
+            ValueError: If atom1 and atom2 overlap, or atom2 is excluded.
+        """
+        # Work on a copy so that the molecule's own coordinates are untouched
+        positions = np.array(self.positions, dtype=float)
+        positions -= positions[atom1].copy()
+
+        # Rodrigues rotation to place atom2 on the +z axis
+        # v: rotation axis, z_axis: target direction, theta: rotation angle
+        z_axis = np.array([0.0, 0.0, 1.0])
+        if np.isclose(np.linalg.norm(positions[atom2]), 0.0):
+            raise ValueError(
+                "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
+            )
+        norm_atom2 = positions[atom2] / np.linalg.norm(positions[atom2])
+        v = np.cross(norm_atom2, z_axis)
+        if not np.isclose(np.linalg.norm(v), 0):
+            v /= np.linalg.norm(v)
+            cos_theta = np.dot(z_axis, norm_atom2)
+            theta = np.arccos(np.clip(cos_theta, -1, 1))
+
+            k = np.array(
+                [[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]]
+            )
+
+            identity = np.eye(3)
+            r = identity + np.sin(theta) * k + (1.0 - np.cos(theta)) * (k @ k)
+            positions = positions @ r.T
+
+        elif positions[atom2][2] < 0:
+            # Atom2 on -z: rotate 180 degrees about x. Negating all coordinates
+            # would be an inversion, which turns the molecule into its mirror
+            # image.
+            positions = positions * np.array([1.0, -1.0, -1.0])
+
+        # Select the atoms that make up the substituent
+        included = np.ones(len(positions), dtype=bool)
+        included[atom1] = False
+        if excluded_atoms is not None:
+            included[list(excluded_atoms)] = False
+        if not included[atom2] and atom1 != atom2:
+            raise ValueError(f"atom2 ({atom2}) cannot be in excluded_atoms.")
+
+        pt = rdchem.GetPeriodicTable()
+        radii = np.array([pt.GetRvdw(str(symb)) for symb in self.symbols])
+        radii = radii[included]
+        xy = positions[included, :2]
+        z = positions[included, 2]
+
+        # L: furthest extent along the atom1->atom2 axis
+        length = np.max(z + radii)
+
+        # B5: largest distance from the axis
+        b5 = np.max(np.hypot(xy[:, 0], xy[:, 1]) + radii)
+
+        # B1: smallest, over all directions perpendicular to the axis, of the
+        # substituent's furthest extent in that direction
+        phi = np.linspace(0, 2 * np.pi, 3600, endpoint=False)
+        directions = np.column_stack((np.cos(phi), np.sin(phi)))
+        b1 = np.min(np.max(directions @ xy.T + radii, axis=1))
+
+        self._sterimol = {
+            "L": length,
+            "B1": b1,
+            "B5": b5,
+            "pos": positions,
+        }
+
+        return self._sterimol
+
+    @property
+    def twod_descriptors(self):
+        """
+        All RDKit 2D descriptors, recomputed on each access.
+
+        Bonds are perceived from the geometry with
+        ``to_rdkit(bond_method="rdkit")``, which uses the molecule's charge.
+
+        Returns:
+            dict: Descriptor name to value, from
+            ``rdkit.Chem.Descriptors.CalcMolDescriptors``.
+        """
+        return Descriptors.CalcMolDescriptors(
+            self.to_rdkit(bond_method="rdkit")
+        )
+
+    @property
+    def threed_descriptors(self):
+        """
+        All RDKit 3D shape descriptors, recomputed on each access.
+
+        Bonds are perceived as in ``twod_descriptors``, and the molecule's
+        own coordinates are used as the conformer.
+
+        Returns:
+            dict: Descriptor name to value, from
+            ``rdkit.Chem.Descriptors3D.CalcMolDescriptors3D``.
+        """
+        return Descriptors3D.CalcMolDescriptors3D(
+            self.to_rdkit(bond_method="rdkit")
+        )
 
     def get_chemical_formula(self, mode="hill", empirical=False):
         """
@@ -2233,7 +2387,7 @@ class Molecule:
         """
         return f"{self.__class__.__name__}<{self.empirical_formula},energy: {self.energy}>"
 
-    @cached_property
+    @property
     def distance_matrix(self):
         """
         Compute pairwise distance matrix.
@@ -2664,6 +2818,7 @@ class Molecule:
         """
         Add bonds to the RDKit molecule.
         """
+        distances = self.distance_matrix
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
                 if adjust_H:
@@ -2687,7 +2842,7 @@ class Molecule:
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
                 bond_order = self.determine_bond_order_one_bond(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                    bond_length=distances[i, j], bond_cutoff=cutoff
                 )
                 logger.debug(f"bond order: {bond_order}")
                 if bond_order > 0:
@@ -2755,7 +2910,7 @@ class Molecule:
 
         return rdkit_mol
 
-    @cached_property
+    @property
     def rdkit_fingerprints(self):
         """
         Return RDKit molecular fingerprints.
@@ -2763,7 +2918,7 @@ class Molecule:
         rdkit_mol = self.to_rdkit()
         return Chem.RDKFingerprint(rdkit_mol)
 
-    @cached_property
+    @property
     def bond_orders(self):
         """
         Return a list of bond orders from the molecular graph.
@@ -2877,15 +3032,17 @@ class Molecule:
         positions = self.positions
 
         # add nodes
-        for i, symbol in enumerate(self.chemical_symbols):
+        chemical_symbols = self.chemical_symbols
+        for i, symbol in enumerate(chemical_symbols):
             G.add_node(i, element=symbol)
 
         # Add edges (bonds) with bond order
+        distances = self.distance_matrix
         for i in range(len(positions)):
             for j in range(i + 1, len(positions)):
                 element_i, element_j = (
-                    self.chemical_symbols[i],
-                    self.chemical_symbols[j],
+                    chemical_symbols[i],
+                    chemical_symbols[j],
                 )
 
                 cutoff_buffer = bond_cutoff_buffer
@@ -2908,7 +3065,7 @@ class Molecule:
                     self.symbols[i], self.symbols[j], cutoff_buffer
                 )
                 bond_order = self.determine_bond_order_one_bond(
-                    bond_length=self.distance_matrix[i, j], bond_cutoff=cutoff
+                    bond_length=distances[i, j], bond_cutoff=cutoff
                 )
                 if bond_order > 0:
                     G.add_edge(i, j, bond_order=bond_order)
