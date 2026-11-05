@@ -1107,7 +1107,18 @@ class Molecule:
     def distances_matrix(self):
         """Return current N-by-N Cartesian distances in angstroms."""
         self._validate_matrix_positions()
+
+        # Include every atom pair. The diagonal contains self-distances.
         return cdist(self.positions, self.positions)
+ 
+    @property
+    def bonds_matrix(self):
+        """Return bonded rows [i, j, distance] with 1-based atom labels.
+
+        Distances are in angstroms. Each row corresponds to one bond
+        detected by to_graph() in this geometry.
+        """
+        return self.geometry_table(self._connected_geometry_indices(2))
 
     def _validate_geometry_indices(self, *indices):
         """Validate public, 1-based atom indices used by geometry methods."""
@@ -1135,6 +1146,7 @@ class Molecule:
     @property
     def angles_matrix(self):
         """Return connected angle rows [i, j, k, angle_degrees]."""
+        # For each connected triple i-j-k, measure the angle at j.
         return self.geometry_table(self._connected_geometry_indices(3))
 
     def get_angle_from_positions(self, position1, position2, position3):
@@ -1170,6 +1182,7 @@ class Molecule:
     def dihedrals_matrix(self):
         """Return connected torsion rows [i, j, k, l, dihedral_degrees].
         """
+        # For each connected path i-j-k-l, measure the torsion about j-k.
         return self.geometry_table(self._connected_geometry_indices(4))
 
     def get_dihedral_from_positions(
@@ -1212,6 +1225,8 @@ class Molecule:
     def _validate_matrix_positions(self):
         """Validate coordinates before computing geometry matrix properties."""
         positions = np.asarray(self.positions)
+
+        # Each atom needs one finite x, y and z coordinate.
         if (
             positions.shape != (self.num_atoms, 3)
             or not np.isfinite(positions).all()
@@ -1219,57 +1234,91 @@ class Molecule:
             raise ValueError("Geometry matrices need finite N-by-3 coordinates.")
 
     def _connected_geometry_indices(self, order):
-        """Enumerate distinct connected triples/quartets in this geometry."""
+        """Return connected pairs, triples or quartets as 1-based atom labels.
+
+        As in GROMACS, the middle atom of a triple is the centre of the
+        angle, and the middle two atoms of a quartet form the central bond
+        of a proper dihedral. Each path can be written in either direction.
+        For example, (5, 2, 3) and (3, 2, 5) describe the same angle at
+        atom 2. ChemSmart compares the two sequences from left to right
+        and keeps the one with the smaller number at the first position
+        where they differ. In this example, it keeps (3, 2, 5). ChemSmart
+        then sorts the rows by their atom labels. Other programs may list
+        the same coordinates in a different row order. To compare values,
+        match each coordinate by its atoms, taking care to identify the
+        same angle centre or central bond in both programs.
+        """
         from itertools import combinations
 
         self._validate_matrix_positions()
-        if order not in (3, 4):
-            raise ValueError("Connected geometry order must be 3 or 4.")
+        if order not in (2, 3, 4):
+            raise ValueError("Connected geometry order must be 2, 3 or 4.")
+
         graph = self.to_graph()
         indices = set()
-        if order == 3:
+
+        if order == 2:
+            # Each graph edge gives one bond. Convert its zero-based atom
+            # indices to one-based labels and put the smaller label first.
+            for first, second in graph.edges:
+                labelled = tuple(sorted((int(first) + 1, int(second) + 1)))
+                indices.add(labelled)
+        elif order == 3:
+            # Two neighbours of the same atom form an angle at that atom.
             for center in sorted(graph):
                 for first, last in combinations(sorted(graph[center]), 2):
                     indices.add((first + 1, center + 1, last + 1))
         else:
+            # Extend each central bond by one atom at either end.
             for second, third in graph.edges:
                 for first in graph[second]:
                     for last in graph[third]:
                         path = (first, second, third, last)
+                        # A proper torsion requires four distinct atoms.
                         if len(set(path)) == 4:
                             labelled = tuple(int(i + 1) for i in path)
+                            # A path and its reverse identify one torsion.
                             indices.add(min(labelled, labelled[::-1]))
+
+        # Keep the expected number of columns even when there are no paths.
         return np.asarray(sorted(indices), dtype=int).reshape(-1, order)
 
     def geometry_table(self, atom_indices):
-        """Evaluate explicit angle/torsion combinations, regardless of bonds."""
+        """Evaluate distances, angles or torsions for explicit atom tuples."""
         self._validate_matrix_positions()
         indices = np.asarray(atom_indices)
-        if indices.ndim != 2 or indices.shape[1] not in (3, 4):
-            raise ValueError("Provide an M-by-3 or M-by-4 atom-index array.")
+        if indices.ndim != 2 or indices.shape[1] not in (2, 3, 4):
+            raise ValueError(
+                "Provide an M-by-2, M-by-3 or M-by-4 atom-index array."
+            )
         if not np.issubdtype(indices.dtype, np.integer):
             raise TypeError("Geometry atom indices must be integers.")
+
         order = indices.shape[1]
+        # Preserve the input row order and put the value after the labels.
         table = np.empty((len(indices), order + 1), dtype=float)
         table[:, :order] = indices
         positions = np.asarray(self.positions, dtype=float)
-        method = (
-            self.get_angle_from_positions
-            if order == 3
-            else self.get_dihedral_from_positions
-        )
+
+        # Two atoms define a distance, three an angle and four a torsion.
+        method = {
+            2: lambda first, second: np.linalg.norm(first - second),
+            3: self.get_angle_from_positions,
+            4: self.get_dihedral_from_positions,
+        }[order]
+
         for row, atoms in enumerate(indices):
             self._validate_geometry_indices(*atoms)
             if len(set(atoms)) != order:
                 raise ValueError("Each geometry row needs distinct atoms.")
             try:
+                # Atom labels start at 1. Rows in positions start at 0.
                 table[row, order] = method(*positions[atoms - 1])
             except ValueError:
-                # Coordinates and indices have been validated above. The
-                # original angle/torsion methods reject degenerate vectors.
+                # Keep the row and mark an undefined angle or torsion as NaN.
                 table[row, order] = np.nan
-        return table
 
+        return table
     def copy(self):
         """
         Create a deep copy of the molecule.
