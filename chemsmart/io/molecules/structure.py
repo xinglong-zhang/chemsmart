@@ -1052,12 +1052,14 @@ class Molecule:
 
         return self._sterimol
 
-    @cached_property
+    @property
     def twod_descriptors(self):
         """A list of 2D descriptors"""
-        return Descriptors.CalcMolDescriptors(self.to_rdkit())
+        return Descriptors.CalcMolDescriptors(
+            self.to_rdkit(bond_method="rdkit")
+        )
 
-    @cached_property
+    @property
     def threed_descriptors(self):
         """
         Calculate 3D descriptors for the molecule.
@@ -1065,7 +1067,7 @@ class Molecule:
         Returns:
             dict: Dictionary containing 3D descriptors.
         """
-        rdmol = self.to_rdkit()
+        rdmol = self.to_rdkit(bond_method="rdkit")
         self._threed_descriptors = Descriptors3D.CalcMolDescriptors3D(rdmol)
         return self._threed_descriptors
 
