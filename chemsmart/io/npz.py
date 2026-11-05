@@ -300,7 +300,7 @@ class NPZFile(FileMixin):
                 raise ValueError(
                     f"NPZ {key} must contain one value per molecule."
                 )
-            if values.dtype.kind not in "iuf" or not np.isfinite(values).all():
+            if values.dtype.kind not in "iuf":
                 raise ValueError(
                     f"NPZ {key} must contain finite numeric values."
                 )
@@ -352,6 +352,11 @@ class NPZFile(FileMixin):
             raise ValueError(
                 f"NPZ structure {i + 1}: coordinates must be finite."
             )
+        for key, values in data.properties.items():
+            if not np.isfinite(values[i]):
+                raise ValueError(
+                    f"NPZ structure {i + 1}: {key} must be finite."
+                )
         energy = None
         if data.energies is not None:
             energy = float(data.energies[i])

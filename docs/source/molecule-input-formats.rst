@@ -491,6 +491,8 @@ When submitting multiple selected structures from an NPZ or multi-frame XYZ file
 writes a separate XYZ input for each job. Keep the generated ``chemsmart_inputs_*`` directory accessible to the compute
 nodes until all submitted jobs finish. For example, ``-i ':'`` selects all structures in the file.
 
+For multi-structure submission from other file formats, first convert the structures to a multi-frame XYZ file.
+
 .. warning::
 
    CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.

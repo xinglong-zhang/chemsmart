@@ -6,14 +6,16 @@ various queuing systems and cluster schedulers.
 """
 
 import logging
-import os
-import tempfile
 
 import click
 
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.cli.utils import (
+    prepare_structure_inputs,
+    prepared_structure_arguments,
+)
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -356,17 +358,9 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
         cli_args = _reconstruct_cli_args(ctx, job)
         if prepared_file is not None:
-            for option in ("--filename", "-f"):
-                if option in cli_args:
-                    cli_args[cli_args.index(option) + 1] = prepared_file
-                    break
-            else:
-                raise ValueError("Cannot locate the structure input filename.")
-            for option in ("--index", "-i", "--structure-index", "--si"):
-                if option in cli_args:
-                    position = cli_args.index(option)
-                    del cli_args[position : position + 2]
-            cli_args = ["--batch-label", str(job.label), *cli_args]
+            cli_args = prepared_structure_arguments(
+                cli_args, prepared_file, job.label
+            )
 
         jobrunner.server.submit(
             job=job,
@@ -387,23 +381,16 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
         molecule_indices = ctx.obj.get("molecule_indices")
         source = ctx.obj.get("filename")
-        prepare_inputs = (
-            source
-            and str(source).lower().endswith((".npz", ".xyz"))
-            and (len(jobs) > 1 or str(source).lower().endswith(".npz"))
-            and any(
-                command.get("name") in {"xtb", "gaussian", "orca"}
-                for command in ctx.obj["subcommand"]
-            )
-            and all(not getattr(item, "_batch_entry", None) for item in jobs)
+        prepared_jobs = prepare_structure_inputs(
+            jobs,
+            source,
+            ctx.obj["subcommand"],
+            prepare_single=bool(
+                source and str(source).lower().endswith(".npz")
+            ),
         )
-        input_dir = None
-        if prepare_inputs:
-            input_dir = tempfile.mkdtemp(
-                prefix="chemsmart_batch_inputs_", dir=os.getcwd()
-            )
         batch_cli_args = []
-        for index, single_job in enumerate(jobs):
+        for index, (single_job, input_file) in enumerate(prepared_jobs):
             structure_index = None
             if isinstance(molecule_indices, list) and len(
                 molecule_indices
@@ -413,23 +400,18 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
                 ctx,
                 single_job,
                 structure_index=structure_index,
-                batch_mode=True,
+                batch_mode=False,
             )
-            if input_dir is not None:
-                input_file = os.path.join(
-                    input_dir, f"structure_{index + 1:05d}.xyz"
+            if input_file is not None:
+                task_args = prepared_structure_arguments(
+                    task_args, input_file, single_job.label
                 )
-                single_job.molecule.write_xyz(input_file, mode="w")
-                for option in ("-f", "--filename"):
-                    if option in task_args:
-                        task_args[task_args.index(option) + 1] = input_file
-                        break
-                else:
-                    raise ValueError("Cannot locate the batch input filename.")
-                for option in ("-i", "--index", "--structure-index", "--si"):
-                    if option in task_args:
-                        pos = task_args.index(option)
-                        del task_args[pos : pos + 2]
+            else:
+                task_args = [
+                    "--batch-label",
+                    str(single_job.label),
+                    *task_args,
+                ]
             batch_cli_args.append(task_args)
             single_job.jobrunner = jobrunner
 
@@ -445,30 +427,11 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
-        source = ctx.obj.get("filename")
-        prepare = (
-            len(job) > 1
-            and source
-            and str(source).lower().endswith((".npz", ".xyz"))
-            and any(
-                c.get("name") in {"xtb", "gaussian", "orca"}
-                for c in ctx.obj["subcommand"]
-            )
-            and all(not getattr(item, "_batch_entry", None) for item in job)
+        prepared_jobs = prepare_structure_inputs(
+            job, ctx.obj.get("filename"), ctx.obj["subcommand"]
         )
-        input_dir = (
-            tempfile.mkdtemp(prefix="chemsmart_inputs_", dir=os.getcwd())
-            if prepare
-            else None
-        )
-        for index, single_job in enumerate(job, start=1):
+        for single_job, prepared_file in prepared_jobs:
             single_job.jobrunner = jobrunner
-            prepared_file = None
-            if input_dir:
-                prepared_file = os.path.join(
-                    input_dir, f"structure_{index:05d}.xyz"
-                )
-                single_job.molecule.write_xyz(prepared_file, mode="w")
             _process_single_job(job=single_job, prepared_file=prepared_file)
     else:
         job.jobrunner = jobrunner
