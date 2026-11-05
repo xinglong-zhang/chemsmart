@@ -433,15 +433,15 @@ Using CCDC deposition numbers requires the **licensed** `CSD Python API <https:/
 2. Activate the licence with the *CCDC Software Activation* tool.
 3. Depending on the installation, environment variables may be required so that the API can locate the CSD data and
    files (see the `CSD Python API installation notes <https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html>`_).
-   These can be provided in ``~/.chemsmart/ccdc/ccdc.envars``; a template is shipped at
-   ``chemsmart/settings/templates/.chemsmart/ccdc/ccdc.envars``:
+   These can be provided in ``~/.chemsmart/ccdc/ccdc.yaml``; a template is shipped at
+   ``chemsmart/settings/templates/.chemsmart/ccdc/ccdc.yaml``:
 
-.. code:: bash
+.. code:: yaml
 
-   # ~/.chemsmart/ccdc/ccdc.envars
-   export CSDHOME=/home/user/CCDC/ccdc-software
-   export CCDC_MOGUL_DATA=/home/user/CCDC/ccdc-data/mogul
-   export CCDC_ISOSTAR_DATA_DIRECTORY=/home/user/CCDC/ccdc-data/isostar
+   # ~/.chemsmart/ccdc/ccdc.yaml
+   CSDHOME: /home/user/CCDC/ccdc-software
+   CCDC_MOGUL_DATA: /home/user/CCDC/ccdc-data/mogul
+   CCDC_ISOSTAR_DATA_DIRECTORY: /home/user/CCDC/ccdc-data/isostar
    # ... other CSD variables as needed
 
 Chemsmart loads this file and exports the variables into the environment before importing the ``ccdc`` package;
