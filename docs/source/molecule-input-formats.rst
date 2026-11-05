@@ -77,6 +77,35 @@ Standard XYZ format for atomic coordinates:
 
    XYZ files do not contain charge or multiplicity information. You must specify these using ``-c`` and ``-m`` flags.
 
+NumPy Archives (.npz)
+---------------------
+
+The supported dataset layouts are DGL QM9 (``R``, ``Z``, ``N``) and official revQM9 (``coords``, ``charges``, optionally
+``elements``). In revQM9, ``charges`` are atomic numbers, not partial charges. If additional element identities are
+provided, they must agree. Coordinates must be in Angstrom.
+
+Dataset downloads:
+
+-  `qm9_eV.npz <https://data.dgl.ai/dataset/qm9_eV.npz>`_ (download hosted by DGL).
+-  `revQM9.npz <https://zenodo.org/records/10689884>`_ (dataset authors' Zenodo page).
+
+.. code:: bash
+
+   chemsmart sub -s server gaussian -p project -f revQM9.npz -i 1 -c 0 -m 1 opt
+
+The reader imports atomic species and coordinates. revQM9's total energy is assigned to ``molecule.energy``, in Hartree.
+DGL QM9's ``U0`` is assigned to ``molecule.U0`` because it is an atom-reference-adjusted 0 K energy, rather than the
+total molecular energy represented by ``molecule.energy``. For the supported QM9 and revQM9 layouts, the molecule read
+from the file has charge 0 and multiplicity 1, but job commands still require ``-c`` and ``-m``. The Python API defaults
+to the last structure. Other NPZ schemas and zero padding are not supported. Object arrays are read using restricted
+NumPy reconstruction.
+
+Supported per-molecule dataset properties are available as ``molecule.homo``, ``molecule.lumo``, and similar attributes,
+using original field names and values without unit conversion. ``molecule.dataset_source`` identifies the detected
+layout, not verified provenance. The ``atomization_test`` array in revQM9 has a different length from the structure
+arrays and is not imported. The NPZ database import preserves supported per-molecule properties; specify ``--dataset``
+to declare their source and units.
+
 SDF Files
 ---------
 
@@ -457,6 +486,12 @@ For multi-structure files, use ``-i`` to select a specific structure:
 
    # Use 1-based indexing
    chemsmart sub -s server gaussian -p project -f scan.log -i 15 sp
+
+When submitting multiple selected structures from an NPZ or multi-frame XYZ file to xTB, Gaussian, or ORCA, CHEMSMART
+writes a separate XYZ input for each job. Keep the generated ``chemsmart_inputs_*`` directory accessible to the compute
+nodes until all submitted jobs finish. For example, ``-i ':'`` selects all structures in the file.
+
+For multi-structure submission from other file formats, first convert the structures to a multi-frame XYZ file.
 
 .. warning::
 

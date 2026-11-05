@@ -299,6 +299,7 @@ def xtb(
 
     # obtain molecule structure from file or PubChem
     molecules = None
+    molecule_indices = None
     if filename is None and pubchem is None:
         raise ValueError(
             "[filename] or [pubchem] has not been specified!\n"
@@ -334,8 +335,8 @@ def xtb(
                 f"Obtained database molecule {molecules} from {filename}"
             )
         else:
-            molecules = Molecule.from_filepath(
-                filepath=filename, index=":", return_list=True
+            molecules, molecule_indices = Molecule.from_filepath_with_indices(
+                filepath=filename, index=index
             )
             assert (
                 molecules is not None
@@ -386,8 +387,7 @@ def xtb(
 
     # if user has specified an index to use to access particular structure
     # then return that structure as a list and track the original indices
-    molecule_indices = None
-    if index is not None and not is_chemsmart_db:
+    if index is not None and not filename and not is_chemsmart_db:
         molecules, molecule_indices = (
             return_objects_and_indices_from_string_index(
                 list_of_objects=molecules, index=index

@@ -12,6 +12,10 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.cli.utils import (
+    prepare_structure_inputs,
+    prepared_structure_arguments,
+)
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -318,11 +322,15 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             print(cli_args)
         return cli_args
 
-    def _process_single_job(job):
+    def _process_single_job(job, prepared_file=None):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
         cli_args = _reconstruct_cli_args(ctx, job)
+        if prepared_file is not None:
+            cli_args = prepared_structure_arguments(
+                cli_args, prepared_file, job.label
+            )
 
         jobrunner.server.submit(
             job=job,
@@ -337,9 +345,12 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
-        for single_job in job:
+        prepared_jobs = prepare_structure_inputs(
+            job, ctx.obj.get("filename"), ctx.obj["subcommand"]
+        )
+        for single_job, prepared_file in prepared_jobs:
             single_job.jobrunner = jobrunner
-            _process_single_job(job=single_job)
+            _process_single_job(job=single_job, prepared_file=prepared_file)
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)

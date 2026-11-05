@@ -114,6 +114,8 @@ class Molecule:
         Molecular point group string (e.g. "CS", "C2V"), if available.
     info: dict
         A dictionary containing additional information about the molecule.
+    dataset_source and dataset properties: optional
+        Original dataset fields and values, in their source units.
     twod_descriptors: dict
         The full set of RDKit 2D descriptors for a molecule.
     threed_descriptors: dict
@@ -151,6 +153,26 @@ class Molecule:
         rotational_constants=None,
         point_group=None,
         info=None,
+        dataset_source=None,
+        id=None,
+        A=None,
+        B=None,
+        C=None,
+        mu=None,
+        alpha=None,
+        homo=None,
+        lumo=None,
+        gap=None,
+        r2=None,
+        zpve=None,
+        U0=None,
+        U=None,
+        H=None,
+        G=None,
+        Cv=None,
+        atomization=None,
+        dipole=None,
+        inds=None,
     ):
         """
         Initialize molecular structure with atomic and quantum properties.
@@ -169,6 +191,27 @@ class Molecule:
             # initialise info as empty dict if it is None
             info = dict()
         self.info = info
+        # Dataset values retain their source units.
+        self.dataset_source = dataset_source
+        self.id = id
+        self.A = A
+        self.B = B
+        self.C = C
+        self.mu = mu
+        self.alpha = alpha
+        self.homo = homo
+        self.lumo = lumo
+        self.gap = gap
+        self.r2 = r2
+        self.zpve = zpve
+        self.U0 = U0
+        self.U = U
+        self.H = H
+        self.G = G
+        self.Cv = Cv
+        self.atomization = atomization
+        self.dipole = dipole
+        self.inds = inds
         self.structure_index_in_file = structure_index_in_file
         self._num_atoms = len(self.symbols)
         self.rotational_symmetry_number = rotational_symmetry_number
@@ -1264,6 +1307,37 @@ class Molecule:
             return molecule
 
     @classmethod
+    def from_filepath_with_indices(cls, filepath, index=None):
+        """Read selected structures and their original 1-based indices.
+
+        Returns:
+            tuple: The list of molecules, and the list of their indices in the
+            file, or None when no index was requested.
+        """
+        from chemsmart.utils.utils import (
+            return_objects_and_indices_from_string_index,
+        )
+
+        # An NPZ archive can hold every molecule of a dataset, so it builds
+        # only the selected ones, each of which records its own position.
+        selects_on_read = str(filepath).lower().endswith(".npz")
+        molecules = cls.from_filepath(
+            filepath=filepath,
+            index=index if selects_on_read and index is not None else ":",
+            return_list=True,
+        )
+        if molecules is None or index is None:
+            return molecules, None
+        if selects_on_read:
+            return molecules, [m.structure_index_in_file for m in molecules]
+        molecules, indices = return_objects_and_indices_from_string_index(
+            list_of_objects=molecules, index=index
+        )
+        if not isinstance(molecules, list):
+            return [molecules], [indices]
+        return molecules, indices
+
+    @classmethod
     def from_directorypath(cls, folder, program="xtb", index="-1", **kwargs):
         """
         Create molecule from a directory containing calculation output files.
@@ -1319,6 +1393,14 @@ class Molecule:
                     index=index,
                     return_list=return_list,
                 )
+
+        if basename.lower().endswith(".npz"):
+            return cls._read_npz_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+                dataset=kwargs.get("dataset"),
+            )
 
         if basename.endswith(".xyz"):
             logger.debug(f"Reading xyz file: {filepath}")
@@ -1429,6 +1511,16 @@ class Molecule:
             index=index, return_list=return_list
         )
         return molecules
+
+    @classmethod
+    def _read_npz_file(
+        cls, filepath, index="-1", return_list=False, dataset=None
+    ):
+        """Read molecular structures from a NumPy archive."""
+        from chemsmart.io.npz import NPZFile
+
+        npz_file = NPZFile(filename=filepath, dataset=dataset)
+        return npz_file.get_molecules(index=index, return_list=return_list)
 
     @staticmethod
     @file_cache()
