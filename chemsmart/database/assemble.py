@@ -427,12 +427,10 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
         self.failed_structures = {}
 
     def assemble(self):
+        self.failed_structures = {}
         schema = self.npz_file.schema
         source_hash = sha256_file(self.filename)
         source_size = file_size(self.filename)
-        molecules = self.npz_file.get_molecules(
-            index=self.index, return_list=True
-        )
         if self.dataset is None:
             logger.warning(
                 f"No dataset declared for {self.filename}: energies are "
@@ -440,9 +438,12 @@ class NPZAssembler(MoleculeInfoAssemblerMixin):
                 f"layout. Use --dataset {schema.dataset} to confirm this and "
                 f"record its units, method and basis."
             )
-        for molecule in molecules:
-            index = molecule.structure_index_in_file
+        for index, molecule, error in self.npz_file.iter_molecule_results(
+            index=self.index
+        ):
             try:
+                if error is not None:
+                    raise error
                 yield self._build_record(
                     molecule, schema, source_hash, source_size
                 )

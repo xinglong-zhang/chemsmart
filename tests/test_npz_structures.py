@@ -21,7 +21,13 @@ from chemsmart.database.database import Database
 from chemsmart.database.inspect import DatabaseInspector
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.npz import NPZFile
-from tests.helpers import make_cli_ctx_obj, write_revqm9_npz
+from tests.helpers import (
+    make_cli_ctx_obj,
+    npz_test_flaky,
+    npz_test_record,
+    npz_test_stored,
+    write_revqm9_npz,
+)
 
 
 class TestNPZStructures:
@@ -640,19 +646,38 @@ class TestNPZStructures:
 class TestNPZImportRobustness:
     """Long imports must keep their progress and report what they skipped."""
 
-    def _flaky(self, fails_on, error=RuntimeError("perception failed")):
-        original = NPZAssembler.get_molecule_info
-        calls = {"count": 0}
-
-        def get_molecule_info(assembler, molecule):
-            calls["count"] += 1
-            if calls["count"] == fails_on:
-                raise error
-            return original(assembler, molecule)
-
-        return patch.object(
-            NPZAssembler, "get_molecule_info", get_molecule_info
+    @pytest.mark.parametrize("invalid_field", ["coords", "energies"])
+    def test_invalid_structure_is_skipped_but_valid_records_are_saved(
+        self, tmp_path, invalid_field
+    ):
+        source = tmp_path / "mixed.npz"
+        coords = np.zeros((3, 1, 3))
+        energies = np.array([-1.0, -2.0, -3.0])
+        if invalid_field == "coords":
+            coords[1, 0, 0] = np.nan
+        else:
+            energies[1] = np.nan
+        np.savez(
+            source,
+            coords=coords,
+            charges=np.full((3, 1), 2),
+            energies=energies,
         )
+        db = Database(str(tmp_path / "records.db"))
+        db.create()
+        assembler = NPZAssembler(str(source), dataset="revqm9")
+        assert db.insert_records(assembler.assemble()) == 2
+        assert db.count_records() == 2
+        assert list(assembler.failed_structures) == [2]
+
+    def test_failed_structures_are_reset_on_retry(self, io_test_directory):
+        source = os.path.join(io_test_directory, "qm9_eV_subset.npz")
+        assembler = NPZAssembler(source, index="1", dataset="qm9")
+        with npz_test_flaky(fails_on=1):
+            assert list(assembler.assemble()) == []
+        assert assembler.failed_structures
+        assert len(list(assembler.assemble())) == 1
+        assert assembler.failed_structures == {}
 
     def test_failed_structure_is_skipped_and_reported(
         self, tmp_path, io_test_directory
@@ -661,7 +686,7 @@ class TestNPZImportRobustness:
         db = Database(str(tmp_path / "records.db"))
         db.create()
         assembler = NPZAssembler(source, dataset="qm9")
-        with self._flaky(fails_on=4):
+        with npz_test_flaky(fails_on=4):
             assert db.insert_records(assembler.assemble()) == 4
         assert db.count_records() == 4
         assert assembler.failed_structures == {4: "perception failed"}
@@ -674,7 +699,7 @@ class TestNPZImportRobustness:
         db = Database(str(tmp_path / "records.db"))
         db.create()
         assembler = NPZAssembler(source, dataset="qm9")
-        with self._flaky(fails_on=2, error=ImportError("needs Open Babel")):
+        with npz_test_flaky(fails_on=2, error=ImportError("needs Open Babel")):
             with pytest.raises(ImportError, match="Open Babel"):
                 db.insert_records(assembler.assemble())
         assert db.count_records() == 1
@@ -753,7 +778,7 @@ class TestNPZImportRobustness:
         self, tmp_path, io_test_directory, caplog
     ):
         source = os.path.join(io_test_directory, "qm9_eV_subset.npz")
-        with self._flaky(fails_on=2), caplog.at_level(logging.WARNING):
+        with npz_test_flaky(fails_on=2), caplog.at_level(logging.WARNING):
             result = CliRunner().invoke(
                 assemble, ["-f", source, "-o", str(tmp_path / "x.db")], obj={}
             )
@@ -835,15 +860,9 @@ class TestNPZSelection:
 class TestNPZEnergiesWithoutADeclaredDataset:
     """Energies are recorded either way, in each column's fixed unit."""
 
-    def _record(self, io_test_directory, filename, dataset=None):
-        source = os.path.join(io_test_directory, filename)
-        return next(
-            NPZAssembler(source, index="1", dataset=dataset).assemble()
-        )
-
     def test_revqm9_energies_match_a_declared_import(self, io_test_directory):
-        undeclared = self._record(io_test_directory, "revQM9_subset.npz")
-        declared = self._record(
+        undeclared = npz_test_record(io_test_directory, "revQM9_subset.npz")
+        declared = npz_test_record(
             io_test_directory, "revQM9_subset.npz", "revqm9"
         )
         assert undeclared.results == declared.results
@@ -854,7 +873,9 @@ class TestNPZEnergiesWithoutADeclaredDataset:
     def test_revqm9_total_energy_stays_in_hartree_and_orbitals_in_ev(
         self, io_test_directory
     ):
-        results = self._record(io_test_directory, "revQM9_subset.npz").results
+        results = npz_test_record(
+            io_test_directory, "revQM9_subset.npz"
+        ).results
         assert results["total_energy"] == pytest.approx(-40.47574250955533)
         assert results["homo_energy"] == pytest.approx(
             -0.4093204819908599 * Hartree
@@ -864,7 +885,9 @@ class TestNPZEnergiesWithoutADeclaredDataset:
         )
 
     def test_qm9_orbital_energies_are_recorded(self, io_test_directory):
-        results = self._record(io_test_directory, "qm9_eV_subset.npz").results
+        results = npz_test_record(
+            io_test_directory, "qm9_eV_subset.npz"
+        ).results
         assert results["homo_energy"] == pytest.approx(-10.54985436)
         # U0 is atom-reference-adjusted, so it is not a total energy.
         assert results["total_energy"] is None
@@ -872,8 +895,8 @@ class TestNPZEnergiesWithoutADeclaredDataset:
     def test_declaring_still_adds_what_it_alone_can_state(
         self, io_test_directory
     ):
-        undeclared = self._record(io_test_directory, "revQM9_subset.npz")
-        declared = self._record(
+        undeclared = npz_test_record(io_test_directory, "revQM9_subset.npz")
+        declared = npz_test_record(
             io_test_directory, "revQM9_subset.npz", "revqm9"
         )
         assert undeclared.provenance["program"] is None
@@ -910,22 +933,11 @@ class TestNPZEnergiesWithoutADeclaredDataset:
 class TestNPZValuesInDatabaseColumns:
     """Calculated values go in the column with the same meaning and unit."""
 
-    def _stored(self, tmp_path, io_test_directory, filename, *options):
-        source = os.path.join(io_test_directory, filename)
-        output = tmp_path / "records.db"
-        result = CliRunner().invoke(
-            assemble,
-            ["-f", source, "-i", "1", "-o", str(output), *options],
-            obj={},
-        )
-        assert result.exit_code == 0, (result.output, result.exception)
-        return Database(str(output)).get_record(record_index=1)
-
     @pytest.mark.parametrize("options", [[], ["--dataset", "qm9"]])
     def test_qm9_zero_point_energy_is_in_hartree(
         self, tmp_path, io_test_directory, options
     ):
-        record = self._stored(
+        record = npz_test_stored(
             tmp_path, io_test_directory, "qm9_eV_subset.npz", *options
         )
         # Methane's zero-point energy is about 28 kcal/mol.
@@ -937,7 +949,7 @@ class TestNPZValuesInDatabaseColumns:
     def test_qm9_rotational_constants_are_in_hz(
         self, tmp_path, io_test_directory, options
     ):
-        record = self._stored(
+        record = npz_test_stored(
             tmp_path, io_test_directory, "qm9_eV_subset.npz", *options
         )
         expected = [157.7118e9, 157.70997e9, 157.70699e9]
@@ -951,7 +963,7 @@ class TestNPZValuesInDatabaseColumns:
     def test_atom_referenced_energies_stay_out_of_absolute_columns(
         self, tmp_path, io_test_directory
     ):
-        record = self._stored(
+        record = npz_test_stored(
             tmp_path,
             io_test_directory,
             "qm9_eV_subset.npz",
@@ -997,13 +1009,13 @@ class TestNPZValuesInDatabaseColumns:
     def test_every_per_molecule_value_is_kept(
         self, tmp_path, io_test_directory, filename, fields
     ):
-        record = self._stored(tmp_path, io_test_directory, filename)
+        record = npz_test_stored(tmp_path, io_test_directory, filename)
         assert set(record["molecules"][0]["dataset_properties"]) == fields
 
     def test_revqm9_has_no_values_for_qm9_only_columns(
         self, tmp_path, io_test_directory
     ):
-        record = self._stored(
+        record = npz_test_stored(
             tmp_path,
             io_test_directory,
             "revQM9_subset.npz",

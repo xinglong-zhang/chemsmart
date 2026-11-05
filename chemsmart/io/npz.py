@@ -183,6 +183,20 @@ class NPZFile(FileMixin):
             return molecules
         return molecules[0]
 
+    def iter_molecule_results(self, index=":"):
+        """Yield one-based indices and either a molecule or its validation error.
+
+        Archive layout and selection errors are raised before iteration.
+        """
+        data = self._read_data()
+        selector = parse_index_specification(str(index))
+        indices = self._select_indices(selector, data.num_molecules, index)
+        for i in indices:
+            try:
+                yield i + 1, self._build_molecule(data, i), None
+            except (ValueError, TypeError, IndexError) as error:
+                yield i + 1, None, error
+
     def _select_indices(self, selector, num_molecules, index):
         """Return the zero-based structures chosen by a parsed index."""
         available = range(num_molecules)

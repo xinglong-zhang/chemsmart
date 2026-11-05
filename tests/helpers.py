@@ -1732,3 +1732,40 @@ def write_revqm9_npz(path):
         path, coords=coords, charges=numbers, elements=elements
     )
     return coords
+
+
+def npz_test_flaky(fails_on, error=RuntimeError("perception failed")):
+    from chemsmart.database.assemble import NPZAssembler
+
+    original = NPZAssembler.get_molecule_info
+    calls = {"count": 0}
+
+    def get_molecule_info(assembler, molecule):
+        calls["count"] += 1
+        if calls["count"] == fails_on:
+            raise error
+        return original(assembler, molecule)
+
+    return patch.object(NPZAssembler, "get_molecule_info", get_molecule_info)
+
+
+def npz_test_record(io_test_directory, filename, dataset=None):
+    from chemsmart.database.assemble import NPZAssembler
+
+    source = os.path.join(io_test_directory, filename)
+    return next(NPZAssembler(source, index="1", dataset=dataset).assemble())
+
+
+def npz_test_stored(tmp_path, io_test_directory, filename, *options):
+    from chemsmart.cli.database.assemble import assemble
+    from chemsmart.database.database import Database
+
+    source = os.path.join(io_test_directory, filename)
+    output = tmp_path / "records.db"
+    result = CliRunner().invoke(
+        assemble,
+        ["-f", source, "-i", "1", "-o", str(output), *options],
+        obj={},
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    return Database(str(output)).get_record(record_index=1)
