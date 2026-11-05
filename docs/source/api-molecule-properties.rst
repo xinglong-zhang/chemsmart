@@ -201,6 +201,104 @@ Atomic Radii
 -  ``atomic_radii_list`` (list) — Covalent radii (Å) for each atom, from ASE's ``covalent_radii`` table.
 -  ``vdw_radii_list`` (list) — Van der Waals radii (Å) for each atom, from ASE's ``vdW_radii`` table.
 
+Sterimol Parameters
+===================
+
+Sterimol parameters describe the size of a substituent along and around the bond that connects it to the rest of the
+molecule. They depend on which bond you choose, so calculate them with :meth:`calculate_sterimol_parameters`.
+``sterimol_parameter`` then holds the latest result.
+
+.. code:: python
+
+   import numpy as np
+
+   # Methane, treated as a methyl substituent with H (index 1) as the attachment point
+   methane = Molecule(
+       symbols=["C", "H", "H", "H", "H"],
+       positions=np.array(
+           [
+               [0.0, 0.0, 0.0],
+               [0.0, 0.0, 1.09],
+               [1.028, 0.0, -0.363],
+               [-0.514, 0.890, -0.363],
+               [-0.514, -0.890, -0.363],
+           ]
+       ),
+   )
+
+   print(methane.sterimol_parameter)  # None: nothing calculated yet
+
+   result = methane.calculate_sterimol_parameters(atom1=1, atom2=0)
+   print(result["L"], result["B1"], result["B5"])  # about 2.79, 1.71, 2.23
+
+   print(methane.sterimol_parameter is result)  # True
+
+-  ``L`` (float) — Furthest extent of the substituent along the ``atom1`` → ``atom2`` axis, in Å.
+-  ``B1`` (float) — Smallest width perpendicular to the axis, in Å: the minimum, over all perpendicular directions, of
+   the substituent's furthest extent in that direction.
+-  ``B5`` (float) — Largest distance of the substituent from the axis, in Å.
+-  ``pos`` (numpy.ndarray) — Aligned ``(N, 3)`` coordinates of all atoms, with ``atom1`` at the origin and ``atom2`` on
+   the +z axis. The molecule's own ``positions`` are not changed.
+
+**Arguments of** ``calculate_sterimol_parameters``:
+
+-  ``atom1`` (int) — **0-based** index of the atom the substituent is attached to, often a dummy H. It is left out of
+   the measurement.
+-  ``atom2`` (int) — **0-based** index of the first atom of the substituent.
+-  ``excluded_atoms`` (iterable of int, optional) — **0-based** indices of further atoms to leave out.
+
+.. warning::
+
+   Every atom except ``atom1`` counts as part of the substituent, and the rest of the molecule is not detected
+   automatically. If ``atom1`` has other neighbors, list the atoms on its side of the bond in ``excluded_atoms``, or
+   they will inflate the parameters.
+
+.. note::
+
+   -  Unlike :meth:`get_distance` and :meth:`get_angle`, these indices are 0-based.
+
+   -  Radii come from RDKit's periodic table (H = 1.20 Å, C = 1.70 Å), and ``L`` does not include Verloop's +0.40 Å
+      correction. Compare with other programs or literature values only after accounting for both, for example morfeus
+      adds the correction and uses H = 1.10 Å by default.
+
+   -  Assigning new ``positions`` resets ``sterimol_parameter`` to ``None``.
+
+RDKit Descriptors
+=================
+
+``twod_descriptors`` and ``threed_descriptors`` return every descriptor that RDKit provides, as a dictionary of
+descriptor name to value.
+
+.. code:: python
+
+   mol = Molecule.from_filepath("tests/data/GaussianTests/outputs/co2.log")
+
+   # Topological and physicochemical descriptors
+   descriptors_2d = mol.twod_descriptors
+   print(descriptors_2d["MolWt"])            # 44.009
+   print(descriptors_2d["TPSA"])             # 34.14
+   print(descriptors_2d["NumHAcceptors"])    # 2
+
+   # Shape descriptors calculated from the molecule's coordinates
+   descriptors_3d = mol.threed_descriptors
+   print(descriptors_3d["RadiusOfGyration"])  # about 0.99
+   print(descriptors_3d["Asphericity"])       # 1.0
+
+-  ``twod_descriptors`` (dict) — All descriptors from ``rdkit.Chem.Descriptors.CalcMolDescriptors``, such as ``MolWt``,
+   ``TPSA``, and ``NumRotatableBonds``. The exact set depends on the RDKit version (217 with RDKit 2025.03).
+
+-  ``threed_descriptors`` (dict) — All descriptors from ``rdkit.Chem.Descriptors3D.CalcMolDescriptors3D``: ``PMI1``,
+   ``PMI2``, ``PMI3``, ``NPR1``, ``NPR2``, ``RadiusOfGyration``, ``InertialShapeFactor``, ``Eccentricity``,
+   ``Asphericity``, ``SpherocityIndex``, and ``PBF``.
+
+.. note::
+
+   Bonds are perceived from the geometry with ``to_rdkit(bond_method="rdkit")``, so a distorted geometry or an incorrect
+   ``charge`` can change the results or raise an error. Both properties recalculate on every access, so store the result
+   in a variable if you need it repeatedly.
+
+For atomic-environment fingerprints, see :doc:`soap-descriptors`.
+
 **************************
  Structure Classification
 **************************

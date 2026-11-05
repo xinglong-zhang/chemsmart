@@ -9,6 +9,7 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 - [User feedback: dynamic getattr lookups](#user-feedback-dynamic-getattr-lookups)
 - [User feedback: test data and test support layout](#user-feedback-test-data-and-test-support-layout)
 - [User feedback: program name spelling](#user-feedback-program-name-spelling)
+- [User feedback: cached_property and property](#user-feedback-cached_property-and-property)
 - [PR #391](#pr-391)
 - [PR #475](#pr-475)
 - [PR #524](#pr-524)
@@ -59,6 +60,24 @@ In the conversation on 17 October 2026 (Asia/Singapore), the user asked whether 
 - **User statement:** "use "CHEMSMART" for program name and "chemsmart" for command call and nothing else. Update the docs and add this to reviewer skill".
 - **Inferred principle:** keeping exact spelling for imports, file paths, URLs, and the conda environment is the assistant's reading, because renaming them would break them. The user did not list these. Reporting this as a consistency finding follows the existing separation of style from correctness.
 - **Scope:** prose in docs, docstrings, comments, and messages. Auto-generated API pages keep module names as they are.
+
+## User feedback: cached_property and property
+
+- **Date and source:** conversation on 5 November 2026 while working on the `sterimol` branch for PR #729 (head `dff1d18be` plus uncommitted edits).
+- **Classification:** a general review principle, refining the earlier instruction to consider cost and invalidation. The test-support addition is a repository-specific convention that extends the entry above.
+- **User statements:**
+  - In commit `dff1d18be`, "use property instead of cached_property", the user changed `twod_descriptors` and `threed_descriptors` to `@property`.
+  - "check that all @cached_property is correct, where the property will not change and update to @property decorator where more appropriate".
+  - "Please move _rdkit_embed_and_optimize to tests/helpers.py and import it here", and that `signed_volume` should move "to shared support or inline its determinant expressions".
+  - The user asked for this skill to learn from "the guide for using @cache_property vs @property" in a ChatGPT conversation, "and your understand/your review and edits in this task".
+- **Source limitation:** the ChatGPT link returned only a login page, so the guide was not read and nothing here comes from it. Compare this entry with the guide if its text becomes available.
+- **Inferred principle:** the rule's wording, the tracing checklist, the separation of correctness findings from recommendations, and the advice on cost and invalidation are the assistant's synthesis from this work. The user supplied the criterion that a cached value must not change.
+- **Findings behind the rule:**
+  - All 16 `@cached_property` members of `Molecule` read `positions`, `symbols`, or `charge`, which can change after construction. Ten of them were tested and returned stale values after `mol.positions` was assigned, and `structure_id` was stale after `mol.charge` was assigned.
+  - `Molecule.vibrationally_displaced` copies the molecule and assigns new positions, so frames could inherit the source geometry's cached values.
+  - Uncached calls measured about 2 ms or less on a 33-atom molecule, but `distance_matrix` was read inside two pairwise loops, so it had to be computed once before each loop.
+  - A static scan of other `chemsmart` classes found no cached property reading an attribute its own class reassigns after `__init__`. The scan does not detect assignments made by outside callers.
+- **Scope:** this does not ban `@cached_property`. The conversion was applied to `Molecule` only, and parser and settings classes were left unchanged.
 
 ## PR #391
 

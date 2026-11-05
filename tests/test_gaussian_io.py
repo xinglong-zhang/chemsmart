@@ -1660,6 +1660,171 @@ class TestGaussian16Output:
             rtol=1e-6,
         )
 
+    @pytest.mark.parametrize("jobtype", ["opt", "sp"])
+    @pytest.mark.parametrize("orientation", ["Standard", "Input"])
+    @pytest.mark.parametrize("with_energy", [True, False])
+    def test_normal_link_preserves_only_geometry(
+        self, write_tmp_file, jobtype, orientation, with_energy
+    ):
+        """A link calculation's only geometry remains usable as input."""
+        energy_line = (
+            " SCF Done:  E(RHF) =  -1.1000000 A.U.\n" if with_energy else ""
+        )
+        outputfile = write_tmp_file(
+            "single_frame_link.log",
+            f""" ---------------------------------------------------------------------
+ # hf sto-3g stable=opt guess=mix
+ ---------------------------------------------------------------------
+ # {jobtype} hf sto-3g geom=check guess=read
+ ---------------------------------------------------------------------
+ Symbolic Z-matrix:
+ Charge =  0 Multiplicity = 1
+ H                     0.0000    0.0000    0.0000
+ H                     0.0000    0.0000    0.7400
+
+ NAtoms=      2 NQM=        2 NQMF=       0
+ {orientation} orientation:
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1          1           0        0.000000    0.000000    0.000000
+      2          1           0        0.000000    0.000000    0.740000
+ ---------------------------------------------------------------------
+{energy_line} Normal termination of Gaussian 16
+""",
+        )
+        output = Gaussian16Output(filename=outputfile)
+        assert output.is_link
+        assert output.normal_termination
+        assert output.jobtype == jobtype
+        assert len(output.all_structures) == 1
+
+        molecule = Molecule.from_filepath(outputfile, index="-1")
+        assert molecule.chemical_symbols == ["H", "H"]
+        np.testing.assert_allclose(
+            molecule.positions, [[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]]
+        )
+        assert molecule.energy == (-1.1 if with_energy else None)
+        assert molecule.is_optimized_structure
+
+    @pytest.mark.parametrize("normal_termination", [True, False])
+    @pytest.mark.parametrize("input_before_standard", [True, False])
+    def test_link_irc_uses_later_input_orientations(
+        self, write_tmp_file, normal_termination, input_before_standard
+    ):
+        """Input-only IRC frames must not be hidden by stability coordinates."""
+
+        def orientation_block(kind, bond_length):
+            return f""" {kind} orientation:
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1          1           0        0.000000    0.000000    0.000000
+      2          1           0        0.000000    0.000000    {bond_length:.6f}
+ ---------------------------------------------------------------------
+"""
+
+        forces_block = """ Center     Atomic                   Forces (Hartrees/Bohr)
+ Number     Number              X              Y              Z
+ -------------------------------------------------------------------
+      1          1           0.000000000    0.000000000    0.000010000
+      2          1           0.000000000    0.000000000   -0.000010000
+ -------------------------------------------------------------------
+"""
+        termination = (
+            " Normal termination of Gaussian 16\n"
+            if normal_termination
+            else " Error termination via Lnk1e\n"
+        )
+        contents = """ ---------------------------------------------------------------------
+ # hf sto-3g stable=opt guess=mix
+ ---------------------------------------------------------------------
+ Symbolic Z-matrix:
+ Charge =  0 Multiplicity = 1
+ H                     0.0000    0.0000    0.0000
+ H                     0.0000    0.0000    0.7400
+
+ NAtoms=      2 NQM=        2 NQMF=       0
+"""
+        if input_before_standard:
+            contents += orientation_block("Input", 0.74)
+        contents += orientation_block("Standard", 0.74)
+        contents += " SCF Done:  E(RHF) =  -1.1000000 A.U.\n"
+        contents += " Normal termination of Gaussian 16\n"
+        contents += """ ---------------------------------------------------------------------
+ # hf sto-3g irc=(forward,calcfc) geom=check guess=read
+ ---------------------------------------------------------------------
+"""
+        contents += orientation_block("Input", 0.74)
+        contents += " SCF Done:  E(RHF) =  -1.1000000 A.U.\n"
+        contents += forces_block
+        contents += orientation_block("Input", 0.76)
+        contents += " SCF Done:  E(RHF) =  -1.1200000 A.U.\n"
+        contents += forces_block
+        contents += orientation_block("Input", 0.76)
+        contents += termination
+        outputfile = write_tmp_file("input_only_link_irc.log", contents)
+
+        output = Gaussian16Output(filename=outputfile)
+        assert output.is_link
+        assert output.normal_termination == normal_termination
+        assert len(output.all_structures) == 2
+        assert [m.energy for m in output.all_structures] == [-1.1, -1.12]
+
+        molecule = Molecule.from_filepath(outputfile, index="-1")
+        np.testing.assert_allclose(
+            molecule.positions, [[0.0, 0.0, 0.0], [0.0, 0.0, 0.76]]
+        )
+        assert molecule.energy == -1.12
+        np.testing.assert_allclose(
+            molecule.forces, [[0.0, 0.0, 0.00001], [0.0, 0.0, -0.00001]]
+        )
+
+    def test_read_gaussian_link_irc_output_file(
+        self, gaussian_link_irc_outputfile
+    ):
+        """Real reverse IRC log that previously lost all usable geometries."""
+        output = Gaussian16Output(filename=gaussian_link_irc_outputfile)
+        assert output.is_link
+        assert output.normal_termination
+        assert len(output.standard_orientations) == 1
+        assert len(output.input_orientations) == 3
+        # This fixture prints the final IRC coordinates twice.
+        np.testing.assert_array_equal(
+            output.input_orientations[-1], output.input_orientations[-2]
+        )
+
+        structures = output.all_structures
+        assert len(structures) == 2
+        assert [m.energy for m in structures] == [
+            -2914.80018749,
+            -2914.80018860,
+        ]
+
+        # Exercise the same geometry-loading entry point as job submission.
+        molecule = Molecule.from_filepath(
+            gaussian_link_irc_outputfile, index="-1"
+        )
+        assert molecule.num_atoms == 80
+        assert molecule.charge == 1
+        assert molecule.multiplicity == 1
+        assert molecule.energy == -2914.80018860
+        np.testing.assert_array_equal(
+            molecule.positions, output.input_orientations[-1]
+        )
+        np.testing.assert_allclose(
+            molecule.positions[[0, -1]],
+            [
+                [1.754299, -0.622878, -0.219045],
+                [-8.337942, 0.932776, 0.563390],
+            ],
+            rtol=0,
+            atol=1e-6,
+        )
+        np.testing.assert_array_equal(molecule.forces, output.forces[-1])
+
     def test_read_gaussian_link_opt_output_file(
         self, gaussian_link_opt_outputfile
     ):
