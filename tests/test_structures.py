@@ -558,18 +558,18 @@ class TestStructures:
 
         # 2. Angle wraparound continuity (phi=0 vs phi=2*pi)
         theta = 1.0
-        for l in range(4):
-            for m in range(-l, l + 1):
-                y0 = MoleculeUnderTest._sph_harm_numpy(m, l, 0.0, theta)
+        for ell in range(4):
+            for m in range(-ell, ell + 1):
+                y0 = MoleculeUnderTest._sph_harm_numpy(m, ell, 0.0, theta)
                 y2pi = MoleculeUnderTest._sph_harm_numpy(
-                    m, l, 2 * np.pi, theta
+                    m, ell, 2 * np.pi, theta
                 )
                 assert abs(y0 - y2pi) < 1e-9
 
         # 3. Pole behavior (theta=0 forces Y_lm = 0 for m != 0)
-        for l in range(5):
-            for m in range(-l, l + 1):
-                y = MoleculeUnderTest._sph_harm_numpy(m, l, 0.7, 0.0)
+        for ell in range(5):
+            for m in range(-ell, ell + 1):
+                y = MoleculeUnderTest._sph_harm_numpy(m, ell, 0.7, 0.0)
                 if m != 0:
                     assert abs(y) < 1e-10
                 else:
@@ -579,30 +579,30 @@ class TestStructures:
         """Tests i_l recurrence relations, monotonicity, and continuity."""
         # 1. Check recurrence relation: i_{l-1}(x) - i_{l+1}(x) = ((2l+1)/x) * i_l(x)
         xs = np.linspace(0.5, 5.0, 10)
-        for l in range(1, 5):
+        for ell in range(1, 5):
             symbols, positions = self.water_like()
             MoleculeUnderTest = Molecule(symbols=symbols, positions=positions)
-            i_minus = MoleculeUnderTest._spherical_in_numpy(l - 1, xs)
-            i_curr = MoleculeUnderTest._spherical_in_numpy(l, xs)
-            i_plus = MoleculeUnderTest._spherical_in_numpy(l + 1, xs)
+            i_minus = MoleculeUnderTest._spherical_in_numpy(ell - 1, xs)
+            i_curr = MoleculeUnderTest._spherical_in_numpy(ell, xs)
+            i_plus = MoleculeUnderTest._spherical_in_numpy(ell + 1, xs)
             rec_lhs = i_minus - i_plus
-            rec_rhs = ((2 * l + 1) / xs) * i_curr
+            rec_rhs = ((2 * ell + 1) / xs) * i_curr
             assert np.allclose(rec_lhs, rec_rhs, rtol=1e-4)
 
         # 2. Smoothness / Continuity across historical threshold
         x_below, x_above = np.array([9.999e-5]), np.array([1.0001e-4])
-        for l in range(3):
-            v_below = MoleculeUnderTest._spherical_in_numpy(l, x_below)[0]
-            v_above = MoleculeUnderTest._spherical_in_numpy(l, x_above)[0]
+        for ell in range(3):
+            v_below = MoleculeUnderTest._spherical_in_numpy(ell, x_below)[0]
+            v_above = MoleculeUnderTest._spherical_in_numpy(ell, x_above)[0]
             rel_step = abs(v_below - v_above) / max(abs(v_below), 1e-300)
             assert rel_step < 1e-3
 
         # 3. Monotonicity for x >= 0
         xs_mono = np.linspace(0.01, 10, 100)
-        for l in range(3):
-            vals = MoleculeUnderTest._spherical_in_numpy(l, xs_mono) * np.exp(
-                xs_mono
-            )
+        for ell in range(3):
+            vals = MoleculeUnderTest._spherical_in_numpy(
+                ell, xs_mono
+            ) * np.exp(xs_mono)
             assert np.all(np.diff(vals) > -1e-9)
 
     def test_soap_basis_properties(self):
@@ -702,8 +702,7 @@ class TestStructures:
         assert np.allclose(v1, v2, atol=1e-6)
 
     def test_soap_api_boundaries_and_dimensions(self):
-        syms, pos = self.water_like()
-        mol = Molecule(syms, pos)
+        _, pos = self.water_like()
 
         # 1. Dimension check for single-species system
         n_max, l_max = 3, 2
@@ -885,8 +884,8 @@ class TestStructures:
 
         # 2. Small x Taylor expansion range (1e-12 <= x < 1e-2)
         x_small = np.array([1e-4, 5e-3])
-        for l in range(1, 4):
-            res = mol._spherical_in_numpy(l, x_small)
+        for ell in range(1, 4):
+            res = mol._spherical_in_numpy(ell, x_small)
             assert np.all(res > 0)
             assert np.all(np.isfinite(res))
 
@@ -897,9 +896,9 @@ class TestStructures:
 
         polar_south = np.pi
         azimuth = 0.5
-        for l in range(4):
-            for m in range(-l, l + 1):
-                y = mol._sph_harm_numpy(m, l, azimuth, polar_south)
+        for ell in range(4):
+            for m in range(-ell, ell + 1):
+                y = mol._sph_harm_numpy(m, ell, azimuth, polar_south)
                 if m != 0:
                     # sin(pi)^|m| = 0 for m != 0
                     assert abs(y) < 1e-10
@@ -1744,7 +1743,6 @@ class TestMoleculeAdvanced:
 
 
 class TestDescriptors:
-    from dbstep import Dbstep
     from rdkit.Chem import AllChem, Descriptors
 
     @staticmethod
@@ -1874,9 +1872,9 @@ class TestDescriptors:
 
         # By hand calculation
         # B1 = 1.70, B5 = 2.23, L = 2.79
-        assert bmin == 1.70
-        assert bmax == 2.23
-        assert length == 2.79
+        assert bmin == pytest.approx(1.70)
+        assert bmax == pytest.approx(2.23)
+        assert length == pytest.approx(2.79)
 
     def test_sterimol_symmetry(self):
         """Ensure close bmin and bmax on symmetric molecules"""
@@ -1933,9 +1931,106 @@ class TestDescriptors:
 
         # By hand calculation
         # B1 = 1.70, B5 = 2.23, L = 2.79
-        assert bmin == 1.70
-        assert bmax == 2.23
-        assert length == 2.79
+        assert bmin == pytest.approx(1.70)
+        assert bmax == pytest.approx(2.23)
+        assert length == pytest.approx(2.79)
+
+    def test_sterimol_does_not_modify_molecule(self, sterimol_methyl_geometry):
+        """Positions are untouched, also when atom2 lies on -z."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+
+        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        assert np.array_equal(mol.positions, positions)
+
+        # a second calculation starts from the same geometry
+        second = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        for key in ("L", "B1", "B5"):
+            assert second[key] == pytest.approx(first[key])
+
+    def test_sterimol_alignment_preserves_handedness(
+        self, sterimol_methyl_geometry
+    ):
+        """Aligning atom2 from -z must be a rotation, not an inversion."""
+
+        def signed_volume(pos):
+            return np.linalg.det(pos[1:4] - pos[0])
+
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        pos = mol.calculate_sterimol_parameters(atom1=1, atom2=0)["pos"]
+
+        assert pos[0] == pytest.approx([0.0, 0.0, 1.09])
+        assert signed_volume(pos) == pytest.approx(signed_volume(positions))
+
+    def test_sterimol_parameter_state(self, sterimol_methyl_geometry):
+        """The property reflects the latest calculation on this geometry."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        assert mol.sterimol_parameter is None
+
+        first = mol.calculate_sterimol_parameters(atom1=1, atom2=0)
+        assert mol.sterimol_parameter is first
+
+        second = mol.calculate_sterimol_parameters(atom1=2, atom2=0)
+        assert mol.sterimol_parameter is second
+        assert second["L"] != pytest.approx(first["L"])
+
+        mol.positions = positions + 1.0
+        assert mol.sterimol_parameter is None
+
+    def test_sterimol_excluded_atoms(self, sterimol_methyl_geometry):
+        """Excluded atoms behave as if they were absent from the molecule."""
+        symbols, positions = sterimol_methyl_geometry
+        mol = Molecule(symbols=symbols, positions=positions.copy())
+        result = mol.calculate_sterimol_parameters(
+            atom1=1, atom2=0, excluded_atoms=[2, 3, 4]
+        )
+        # only the carbon sphere is left, centred on the axis
+        assert result["L"] == pytest.approx(1.09 + 1.7)
+        assert result["B1"] == pytest.approx(1.7)
+        assert result["B5"] == pytest.approx(1.7)
+        assert len(result["pos"]) == len(symbols)
+
+        with pytest.raises(ValueError, match="cannot be in excluded_atoms"):
+            mol.calculate_sterimol_parameters(
+                atom1=1, atom2=0, excluded_atoms=[0]
+            )
+
+    def test_sterimol_matches_morfeus_reference(self):
+        """Compare an asymmetric substituent with an independent code.
+
+        Reference values come from morfeus-ml 0.8.0 (Sterimol, using the same
+        RDKit radii, 36000 rotation vectors, L_value_uncorrected).
+        """
+        symbols = ["C"] * 5 + ["F", "Cl"] + ["H"] * 10  # CH3-CH(CH3)-CH2-CHFCl
+        positions = np.array(
+            [
+                [-1.0144, 1.0305, 0.9144],
+                [-0.5694, 0.4225, -0.4231],
+                [-1.2529, -0.9297, -0.664],
+                [0.9715, 0.3516, -0.5595],
+                [1.6781, -0.5734, 0.4436],
+                [1.4033, -1.899, 0.1621],
+                [3.441, -0.3363, 0.3383],
+                [-0.4859, 1.99, 1.098],
+                [-2.1056, 1.2374, 0.8889],
+                [-0.8143, 0.3382, 1.7586],
+                [-0.9238, 1.1101, -1.2233],
+                [-2.3501, -0.7845, -0.7606],
+                [-0.8811, -1.3889, -1.6046],
+                [-1.071, -1.6266, 0.1808],
+                [1.3772, 1.3807, -0.4425],
+                [1.2285, 0.0227, -1.5904],
+                [1.369, -0.3454, 1.4833],
+            ]
+        )
+        mol = Molecule(symbols=symbols, positions=positions)
+        result = mol.calculate_sterimol_parameters(atom1=7, atom2=0)
+
+        assert result["L"] == pytest.approx(4.87845, abs=1e-4)
+        assert result["B5"] == pytest.approx(6.41933, abs=1e-4)
+        assert result["B1"] == pytest.approx(1.74748, abs=1e-3)
 
 
 class TestCoordinateBlockAdvanced:

@@ -3113,3 +3113,19 @@ def legacy_server_yaml(tmp_path):
     yaml_path = tmp_path / "legacy_server.yaml"
     yaml_path.write_text(_LEGACY_SERVER_YAML)
     return str(yaml_path)
+
+
+@pytest.fixture()
+def sterimol_methyl_geometry():
+    """Symbols and positions of a CH4 model with H(1)->C(0) along -z."""
+    symbols = ["C", "H", "H", "H", "H"]
+    positions = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [1.0, 2.0, 4.09],
+            [1.0, 0.97, 2.636],
+            [1.892, 1.485, 2.636],
+            [0.108, 1.485, 2.636],
+        ]
+    )
+    return symbols, positions

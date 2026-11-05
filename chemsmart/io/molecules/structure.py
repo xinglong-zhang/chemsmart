@@ -113,9 +113,10 @@ class Molecule:
     threed_descriptors: dict | None
         Descriptors derived from a molecule’s 3D structure
     sterimol_parameter: dict | None
-        Directional steric descriptors (L, Bmin, Bmax).
+        Latest result of calculate_sterimol_parameters() (L, B1, B5, pos),
+        or None if not calculated yet.
     soap: numpy.ndarray | None
-        3D structure representation for machine learning. 
+        3D structure representation for machine learning.
     """
 
     def __init__(
@@ -176,6 +177,7 @@ class Molecule:
         )
         self.rotational_constants = rotational_constants
         self.point_group = point_group
+        self._sterimol = None
 
         # Define bond order classification multipliers (avoiding redundancy)
         # use the relationship between bond orders and bond
@@ -287,6 +289,8 @@ class Molecule:
             raise ValueError(f"positions must be (N, 3); got {arr.shape}")
         # store a copy to avoid accidental aliasing
         self._positions = arr.copy()
+        # geometry-dependent result is no longer valid
+        self._sterimol = None
 
     @property
     def empirical_formula(self):
@@ -946,30 +950,61 @@ class Molecule:
             return [result[-1]]
         return result
 
-    @cached_property
+    @property
     def sterimol_parameter(self):
-        if self._sterimol is None: 
-            self.calculate_sterimol_parameters(self)
+        """
+        Result of the latest calculate_sterimol_parameters() call.
+
+        Sterimol parameters depend on the chosen atom1/atom2 axis, so they
+        cannot be computed on demand. Returns None if they have not been
+        calculated yet, or if the positions were reassigned since.
+        """
         return self._sterimol
 
-    def calculate_sterimol_parameters(self, atom1: int, atom2: int):
-        """Sterimol Parameters: B1, B5, and L"""
-        # Translate and Rotate to place atom1 and atom2 on z-axis
-        positions = self.positions
-        positions -= self.positions[atom1]
+    def calculate_sterimol_parameters(
+        self, atom1: int, atom2: int, excluded_atoms=None
+    ):
+        """
+        Calculate the Sterimol parameters L, B1 and B5 of a substituent.
 
-        # Rodringues Rotation to rotate atom2 on z-axis
-        # v: rotational axis, z: z-axis, theta: rotational angle
-        z = np.array([0.0, 0.0, 1.0])
+        The molecule is not modified. Van der Waals radii come from the RDKit
+        periodic table, and L is reported without Verloop's +0.40 A
+        correction.
+
+        Args:
+            atom1 (int): 0-based index of the atom the substituent is bonded
+                to (often a dummy H). It is left out of the measurement and
+                defines the origin of the axis.
+            atom2 (int): 0-based index of the first substituent atom. The
+                atom1->atom2 vector defines the +z axis.
+            excluded_atoms (Iterable[int] | None): 0-based indices of further
+                atoms to leave out. All atoms other than atom1 count as the
+                substituent, so when atom1 has other neighbours, list the
+                rest of the molecule here.
+
+        Returns:
+            dict: "L", "B1" and "B5" in Angstrom, and "pos", the (N, 3)
+            aligned coordinates of all atoms.
+
+        Raises:
+            ValueError: If atom1 and atom2 overlap, or atom2 is excluded.
+        """
+        # Work on a copy so that the molecule's own coordinates are untouched
+        positions = np.array(self.positions, dtype=float)
+        positions -= positions[atom1].copy()
+
+        # Rodrigues rotation to place atom2 on the +z axis
+        # v: rotation axis, z_axis: target direction, theta: rotation angle
+        z_axis = np.array([0.0, 0.0, 1.0])
         if np.isclose(np.linalg.norm(positions[atom2]), 0.0):
             raise ValueError(
                 "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
             )
         norm_atom2 = positions[atom2] / np.linalg.norm(positions[atom2])
-        v = np.cross(norm_atom2, z)
+        v = np.cross(norm_atom2, z_axis)
         if not np.isclose(np.linalg.norm(v), 0):
             v /= np.linalg.norm(v)
-            cos_theta = np.dot(z, norm_atom2)
+            cos_theta = np.dot(z_axis, norm_atom2)
             theta = np.arccos(np.clip(cos_theta, -1, 1))
 
             k = np.array(
@@ -981,50 +1016,42 @@ class Molecule:
             positions = positions @ r.T
 
         elif positions[atom2][2] < 0:
-            # Atom2 on negative z, flip
-            positions *= -1
+            # Atom2 on -z: rotate 180 degrees about x. Negating all coordinates
+            # would be an inversion, which turns the molecule into its mirror
+            # image.
+            positions = positions * np.array([1.0, -1.0, -1.0])
 
-        old_pos = positions
+        # Select the atoms that make up the substituent
+        included = np.ones(len(positions), dtype=bool)
+        included[atom1] = False
+        if excluded_atoms is not None:
+            included[list(excluded_atoms)] = False
+        if not included[atom2] and atom1 != atom2:
+            raise ValueError(f"atom2 ({atom2}) cannot be in excluded_atoms.")
 
-        # Compute Sterimol
-        x, y, z = positions.T
-        # VDW radii
         pt = rdchem.GetPeriodicTable()
-        radii_list = []
+        radii = np.array([pt.GetRvdw(str(symb)) for symb in self.symbols])
+        radii = radii[included]
+        xy = positions[included, :2]
+        z = positions[included, 2]
 
-        radii_list = [pt.GetRvdw(symb) for symb in self.symbols]
-        radii = np.array(radii_list)
-
-        # Mask the atom1
-        x = np.delete(x, atom1)
-        y = np.delete(y, atom1)
-        z = np.delete(z, atom1)
-        radii = np.delete(radii, atom1)
-        positions = np.delete(positions, obj=atom1, axis=0)
-
-        # Compute L
+        # L: furthest extent along the atom1->atom2 axis
         length = np.max(z + radii)
 
-        # Compute B5
-        radial_dist = np.hypot(x, y)
-        b5 = np.max(radial_dist + radii)
-        # Compute B1
-        # Create a normalised rotating vector on xy-plane and project every atom on it
-        b_vals = []
-        for j in range(361):
-            phi = 2 * np.pi / 360 * j
-            cos_phi, sin_phi = np.cos(phi), np.sin(phi)
-            # unit vector for projection
-            u = np.array([cos_phi, sin_phi, 0])
-            proj = positions @ u.T + radii
-            b_vals.append(np.max(proj))
-        b1 = np.min(b_vals)
+        # B5: largest distance from the axis
+        b5 = np.max(np.hypot(xy[:, 0], xy[:, 1]) + radii)
+
+        # B1: smallest, over all directions perpendicular to the axis, of the
+        # substituent's furthest extent in that direction
+        phi = np.linspace(0, 2 * np.pi, 3600, endpoint=False)
+        directions = np.column_stack((np.cos(phi), np.sin(phi)))
+        b1 = np.min(np.max(directions @ xy.T + radii, axis=1))
 
         self._sterimol = {
             "L": length,
             "B1": b1,
             "B5": b5,
-            "pos": old_pos,
+            "pos": positions,
         }
 
         return self._sterimol
@@ -3096,7 +3123,6 @@ class Molecule:
             self.compute_soap(self)
         return self._soap
 
-
     def compute_soap(
         self,
         r_cut=5.0,
@@ -3208,20 +3234,20 @@ class Molecule:
         for a, species_a in enumerate(species):
             for species_b in species[a:]:
                 same_species = species_a == species_b
-                for l in range(l_max + 1):
+                for ell in range(l_max + 1):
                     for n in range(n_max):
                         n_prime_range = (
                             range(n, n_max) if same_species else range(n_max)
                         )
                         for n_prime in n_prime_range:
                             value = sum(
-                                coeffs_by_species[species_a][(n, l, m)]
+                                coeffs_by_species[species_a][(n, ell, m)]
                                 * np.conj(
                                     coeffs_by_species[species_b][
-                                        (n_prime, l, m)
+                                        (n_prime, ell, m)
                                     ]
                                 )
-                                for m in range(-l, l + 1)
+                                for m in range(-ell, ell + 1)
                             )
                             features.append(value.real)
         return np.array(features)
@@ -3237,10 +3263,10 @@ class Molecule:
         jac = radial_basis["jac"]
 
         coeffs = {
-            (n, l, m): 0j
+            (n, ell, m): 0j
             for n in range(n_max)
-            for l in range(l_max + 1)
-            for m in range(-l, l + 1)
+            for ell in range(l_max + 1)
+            for m in range(-ell, ell + 1)
         }
 
         for pos in neighbor_positions:
@@ -3252,11 +3278,11 @@ class Molecule:
 
             f_cut = self._cosine_cutoff(r_j, r_cut)
 
-            for l in range(l_max + 1):
+            for ell in range(l_max + 1):
                 bessel_arg = r_nodes * r_j / sigma**2
 
                 # Scaled modified spherical Bessel function: i_l_scaled = exp(-x) * i_l(x)
-                i_l_scaled = self._spherical_in_numpy(l, bessel_arg)
+                i_l_scaled = self._spherical_in_numpy(ell, bessel_arg)
 
                 # Combine arguments in log-space/scaled form to eliminate floating point overflow
                 log_env = -((r_nodes - r_j) ** 2) / (2 * sigma**2)
@@ -3270,15 +3296,15 @@ class Molecule:
                 )
                 radial_integral_n = np.sum(integrand * weights, axis=1) * jac
 
-                for m in range(-l, l + 1):
+                for m in range(-ell, ell + 1):
                     y_lm_conj = np.conj(
-                        self._sph_harm_numpy(m, l, azimuth_j, polar_j)
+                        self._sph_harm_numpy(m, ell, azimuth_j, polar_j)
                     )
                     contribution = (
                         4 * np.pi * f_cut * y_lm_conj * radial_integral_n
                     )
                     for n in range(n_max):
-                        coeffs[(n, l, m)] += contribution[n]
+                        coeffs[(n, ell, m)] += contribution[n]
 
         return coeffs
 
@@ -3287,10 +3313,10 @@ class Molecule:
     # =========================================================================
 
     @staticmethod
-    def _spherical_in_numpy(l, x):
+    def _spherical_in_numpy(ell, x):
         """Computes scaled modified spherical Bessel function exp(-x) * i_l(x).
 
-        Uses downward Miller recurrence for numerical stability across arbitrary l and x.
+        Uses downward Miller recurrence for numerical stability across arbitrary ell and x.
         """
         x = np.asarray(x, dtype=float)
         shape = x.shape
@@ -3299,21 +3325,21 @@ class Molecule:
 
         for i, val in enumerate(x_flat):
             if val < 1e-12:
-                res[i] = 1.0 if l == 0 else 0.0
+                res[i] = 1.0 if ell == 0 else 0.0
             elif val < 1e-2:
                 # Taylor expansion for small arguments
                 val2 = val * val
                 i0 = np.exp(-val) * (1.0 + val2 / 6.0 + val2**2 / 120.0)
-                if l == 0:
+                if ell == 0:
                     res[i] = i0
                 else:
-                    # Series approximation for higher l at small x
-                    double_fact = np.prod(np.arange(1, 2 * l + 2, 2))
-                    res[i] = np.exp(-val) * (val**l) / double_fact
+                    # Series approximation for higher ell at small x
+                    double_fact = np.prod(np.arange(1, 2 * ell + 2, 2))
+                    res[i] = np.exp(-val) * (val**ell) / double_fact
             else:
                 # Downward Miller Recurrence
-                # Estimate starting degree N_start > l to guarantee convergence
-                n_start = int(l + np.sqrt(40 * l + val) + 15)
+                # Estimate starting degree N_start > ell to guarantee convergence
+                n_start = int(ell + np.sqrt(40 * ell + val) + 15)
 
                 f_next = 0.0
                 f_curr = 1e-100  # Arbitrary tiny starting value
@@ -3323,7 +3349,7 @@ class Molecule:
 
                 for k in range(n_start, 0, -1):
                     f_prev = f_next + ((2 * k + 1) / val) * f_curr
-                    if k - 1 == l:
+                    if k - 1 == ell:
                         i_l_unnorm = f_prev
                     if k - 1 == 0:
                         i_0_unnorm = f_prev
@@ -3337,7 +3363,7 @@ class Molecule:
         return res.reshape(shape)
 
     @staticmethod
-    def _sph_harm_numpy(m, l, azimuth, polar):
+    def _sph_harm_numpy(m, ell, azimuth, polar):
         """Complex Spherical Harmonics Y_lm(azimuth, polar) in pure NumPy."""
         import math
 
@@ -3354,9 +3380,9 @@ class Molecule:
                 fact *= 2 * i - 1
             p_curr = ((-1) ** abs_m) * fact * (sint**abs_m)
 
-        if l > abs_m:
+        if ell > abs_m:
             p_next = x * (2 * abs_m + 1) * p_curr
-            for k in range(abs_m + 2, l + 1):
+            for k in range(abs_m + 2, ell + 1):
                 p_2 = ((2 * k - 1) * x * p_next - (k + abs_m - 1) * p_curr) / (
                     k - abs_m
                 )
@@ -3367,8 +3393,8 @@ class Molecule:
             p_lm = p_curr
 
         # 2. Orthonormal normalization factor
-        num = (2 * l + 1) * math.factorial(l - abs_m)
-        den = 4.0 * np.pi * math.factorial(l + abs_m)
+        num = (2 * ell + 1) * math.factorial(ell - abs_m)
+        den = 4.0 * np.pi * math.factorial(ell + abs_m)
         norm = np.sqrt(num / den)
 
         # 3. Y_lm construction
