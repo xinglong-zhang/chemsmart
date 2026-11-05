@@ -487,6 +487,10 @@ For multi-structure files, use ``-i`` to select a specific structure:
    # Use 1-based indexing
    chemsmart sub -s server gaussian -p project -f scan.log -i 15 sp
 
+When submitting multiple selected structures from an NPZ or multi-frame XYZ file to xTB, Gaussian, or ORCA, CHEMSMART
+writes a separate XYZ input for each job. Keep the generated ``chemsmart_inputs_*`` directory accessible to the compute
+nodes until all submitted jobs finish. For example, ``-i ':'`` selects all structures in the file.
+
 .. warning::
 
    CHEMSMART uses **1-based indexing** to match most molecular visualization software, unlike Python's 0-based indexing.

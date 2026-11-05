@@ -9,6 +9,13 @@ def build_jobs(ctx, job_cls, settings, skip_completed, kwargs):
     molecules = ctx.obj["molecules"]
     molecule_indices = ctx.obj["molecule_indices"]
     label = ctx.obj["label"]
+    batch_label = ctx.obj.get("batch_label")
+    if batch_label is not None:
+        if len(molecules) != 1:
+            raise ValueError(
+                "A batch subtask must resolve to exactly one molecule."
+            )
+        label = batch_label
 
     if len(molecules) > 1 and molecule_indices is not None:
         jobs = []
