@@ -27,6 +27,7 @@ from chemsmart.database.utils import (
     is_custom_basis,
     is_custom_solvent,
     sha256_content,
+    sha256_file,
     standardize_basis_set,
     utcnow_iso,
 )
@@ -34,6 +35,7 @@ from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.io import get_program_type_from_file
 
@@ -367,6 +369,27 @@ class ORCAAssembler(BaseAssembler):
         return calculation_results
 
 
+class PySCFAssembler(BaseAssembler):
+    """Assemble a database record from a PySCF calculation.
+
+    Short because ``BaseAssembler`` already does the work and ``PySCFOutput``
+    exposes the same property surface as the log-parsing readers -- the
+    difference is that its numbers come from a structured results file rather
+    than from regex over printed text.
+    """
+
+    OUTPUT_CLASS = PySCFOutput
+    PROGRAM = "PySCF"
+
+    def build_provenance(self):
+        """Identify the record by the results file that holds its numbers."""
+        provenance = super().build_provenance()
+        resultsfile = self.output.resultsfile
+        provenance["source_file_hash"] = sha256_file(resultsfile)
+        provenance["source_size"] = file_size(resultsfile)
+        return provenance
+
+
 class XTBAssembler(BaseAssembler):
     OUTPUT_CLASS = XTBOutput
     PROGRAM = "xTB"
@@ -430,9 +453,15 @@ class SingleFileAssembler:
                 index=self.index,
                 include_failed=self.include_failed,
             )
+        if program == "pyscf":
+            return PySCFAssembler(
+                filename=path,
+                index=self.index,
+                include_failed=self.include_failed,
+            )
         raise ValueError(
             f"Unsupported file '{path}'. "
-            "Only 'gaussian' and 'orca' output files are supported."
+            "Only 'gaussian', 'orca' and 'pyscf' output files are supported."
         )
 
 

@@ -1,13 +1,13 @@
-# Contributing to chemsmart
+# Contributing to CHEMSMART
 
-Welcome to the **chemsmart** project! We appreciate contributions from the community to enhance this Chemistry Simulation and Modeling Automation Toolkit. This guide outlines the steps to contribute effectively.
+Welcome to the **CHEMSMART** project! We appreciate contributions from the community to enhance this Chemistry Simulation and Modeling Automation Toolkit. This guide outlines the steps to contribute effectively.
 
 **Note**: This project requires **Python 3.10**. Instructions are tailored for Linux-based systems (Linux, macOS, BSD, etc.).
 
 ## Getting Started
 
 ### 1. Fork the Repository
-- Navigate to the [chemsmart GitHub repository](https://github.com/xinglong-zhang/chemsmart).
+- Navigate to the [CHEMSMART GitHub repository](https://github.com/xinglong-zhang/chemsmart).
 - Click the **Fork** button to create a copy of the repository under your GitHub account.
 - Clone your fork to your local machine:
   ```bash
@@ -56,7 +56,7 @@ We recommend using a Conda environment to manage dependencies.
   ```
   Ensure all tests pass before proceeding.
 
-### 3. Configure chemsmart
+### 3. Configure CHEMSMART
 - Run the configuration to set up user-specific settings (e.g., paths to Gaussian/ORCA, HPC server details):
   ```bash
   make configure
@@ -166,4 +166,4 @@ Releases follow [Semantic Versioning](https://semver.org/) (e.g., `X.Y.Z`). To c
 - For questions, contact the maintainers via GitHub or email (xinglong.zhang@cuhk.edu.hk).
 - Refer to the [README.md](README.md) for setup and usage details.
 
-Thank you for contributing to chemsmart!
+Thank you for contributing to CHEMSMART!

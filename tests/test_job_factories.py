@@ -22,6 +22,8 @@ from chemsmart.jobs.mol.visualize import PyMOLVisualizationJob
 from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAInpJob, ORCAJob
 from chemsmart.jobs.orca.opt import ORCAOptJob
 from chemsmart.jobs.orca.settings import ORCAJobSettings
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
 from chemsmart.jobs.thermochemistry.boltzmann import (
     BoltzmannAverageThermochemistryJob,
 )
@@ -162,6 +164,30 @@ class TestPyMOLFactories:
             label="irc",
             **runner_options,
         )
+        assert_runner_was_configured(job, runner_options)
+
+
+class TestPySCFFactories:
+    def test_from_filename(self, pyscf_water_xyz, runner_options):
+        job = PySCFSinglePointJob.from_filename(
+            pyscf_water_xyz,
+            settings=PySCFJobSettings(functional="b3lyp", basis="def2-svp"),
+            label="from_file",
+            **runner_options,
+        )
+        assert_runner_was_configured(job, runner_options)
+
+    def test_from_pubchem(self, pyscf_water_xyz, runner_options):
+        molecule = Molecule.from_filepath(pyscf_water_xyz)
+        with patch.object(Molecule, "from_pubchem", return_value=molecule):
+            job = PySCFSinglePointJob.from_pubchem(
+                "962",
+                settings=PySCFJobSettings(
+                    functional="b3lyp", basis="def2-svp"
+                ),
+                label="fetched",
+                **runner_options,
+            )
         assert_runner_was_configured(job, runner_options)
 
 

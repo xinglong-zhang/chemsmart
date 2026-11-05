@@ -67,6 +67,16 @@ computational chemistry software.
 
 .. toctree::
    :maxdepth: 2
+   :caption: PySCF Jobs
+
+   pyscf-cli-options
+   pyscf-structure-optimization
+   pyscf-frequency-calculations
+   pyscf-gpu-acceleration
+   pyscf-results
+
+.. toctree::
+   :maxdepth: 2
    :caption: xTB Jobs
 
    xtb-cli-options

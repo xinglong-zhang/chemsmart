@@ -1,5 +1,6 @@
 """Tests for chemsmart.cli.config.Config class."""
 
+import platform
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -7,14 +8,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
+import chemsmart
 from chemsmart.cli.config import (
     Config,
     add_lines_in_yaml_files,
     config,
+    set_program_exefolder,
     update_yaml_files,
 )
 from chemsmart.utils.io import update_powershell_profiles, update_windows_env
-from tests.helpers import invoke_config_server
+from tests.helpers import invoke_config_server, read_yaml_file
 
 
 class TestConfig:
@@ -854,6 +857,159 @@ class TestConfigurePathsInteractively:
             cfg.configure_paths_interactively()
 
         mock_update.assert_not_called()
+
+
+class TestConfigPySCF:
+    """Tests for the ``chemsmart config pyscf`` command."""
+
+    @staticmethod
+    def _interpreter_name():
+        return "python.exe" if platform.system() == "Windows" else "python"
+
+    @staticmethod
+    def _invoke(dest, args):
+        """Invoke ``chemsmart config pyscf`` against an isolated dest."""
+        with patch.object(
+            Config,
+            "chemsmart_dest",
+            new_callable=lambda: property(lambda self: dest),
+        ):
+            return CliRunner().invoke(config, ["pyscf"] + args)
+
+    def test_missing_folder_is_rejected(self, tmp_path):
+        """A path that is not a directory must not be recorded."""
+        dest = tmp_path / ".chemsmart"
+        missing = tmp_path / "no_such_bin"
+        result = self._invoke(dest, ["-f", str(missing)])
+        assert result.exit_code != 0
+        assert "PySCF bin directory not found" in result.output
+
+    def test_folder_without_interpreter_is_rejected(self, tmp_path):
+        """A bin directory with no python must not be recorded."""
+        dest = tmp_path / ".chemsmart"
+        empty_bin = tmp_path / "bin"
+        empty_bin.mkdir()
+        result = self._invoke(dest, ["-f", str(empty_bin)])
+        assert result.exit_code != 0
+        assert "No Python interpreter found" in result.output
+
+    def test_server_yaml_without_a_pyscf_block_gains_one(self, tmp_path):
+        """A server file older than PySCF support must not be skipped."""
+        dest = tmp_path / ".chemsmart"
+        server_dir = dest / "server"
+        server_dir.mkdir(parents=True)
+        server_yaml = server_dir / "old.yaml"
+        server_yaml.write_text("GAUSSIAN:\n    EXEFOLDER: /opt/g16\n")
+
+        pyscf_bin = tmp_path / "bin"
+        pyscf_bin.mkdir()
+        (pyscf_bin / self._interpreter_name()).touch()
+
+        result = self._invoke(dest, ["-f", str(pyscf_bin)])
+        assert result.exit_code == 0, result.output
+
+        parsed = read_yaml_file(server_yaml)
+        assert parsed["PYSCF"]["EXEFOLDER"] == str(pyscf_bin)
+        assert parsed["GAUSSIAN"]["EXEFOLDER"] == "/opt/g16"
+
+    def test_interpreter_folder_is_written_to_server_yaml(self, tmp_path):
+        """A valid bin directory is recorded as the PYSCF EXEFOLDER."""
+        dest = tmp_path / ".chemsmart"
+        server_dir = dest / "server"
+        server_dir.mkdir(parents=True)
+        server_yaml = server_dir / "local.yaml"
+        server_yaml.write_text(
+            "PYSCF:\n"
+            "    # EXEFOLDER: ~/miniconda3/envs/pyscf-gpu/bin\n"
+            "    LOCAL_RUN: True\n"
+            "    SCRATCH: False\n"
+        )
+
+        pyscf_bin = tmp_path / "bin"
+        pyscf_bin.mkdir()
+        (pyscf_bin / self._interpreter_name()).touch()
+
+        result = self._invoke(dest, ["-f", str(pyscf_bin)])
+        assert result.exit_code == 0, result.output
+
+        updated = server_yaml.read_text()
+        assert "EXEFOLDER" in updated
+        assert str(pyscf_bin) in updated
+        # The rest of the block must survive a targeted field update.
+        assert "LOCAL_RUN: True" in updated
+        assert "SCRATCH: False" in updated
+
+
+class TestSetProgramExefolder:
+    """Targeted EXEFOLDER updates that leave the rest of the file alone."""
+
+    def _set(self, tmp_path, text):
+        server_yaml = tmp_path / "server.yaml"
+        server_yaml.write_text(text)
+        set_program_exefolder(tmp_path, "PYSCF", "/env/bin")
+        return server_yaml
+
+    def test_packaged_server_template_is_updated(self, tmp_path):
+        template = (
+            Path(chemsmart.__file__).parent
+            / "settings"
+            / "templates"
+            / "server.yaml"
+        )
+        server_yaml = tmp_path / "server.yaml"
+        server_yaml.write_text(template.read_text())
+        before = read_yaml_file(server_yaml)
+
+        set_program_exefolder(tmp_path, "PYSCF", "/env/bin")
+
+        after = read_yaml_file(server_yaml)
+        assert after["PYSCF"]["EXEFOLDER"] == "/env/bin"
+        assert after["GAUSSIAN"] == before["GAUSSIAN"]
+        assert after["ORCA"] == before["ORCA"]
+
+    def test_block_without_the_field_gains_it_before_the_next_block(
+        self, tmp_path
+    ):
+        server_yaml = self._set(
+            tmp_path,
+            "PYSCF:\n    SCRATCH: False\nGAUSSIAN:\n    EXEFOLDER: /g16\n",
+        )
+        parsed = read_yaml_file(server_yaml)
+        assert parsed["PYSCF"] == {"SCRATCH": False, "EXEFOLDER": "/env/bin"}
+        assert parsed["GAUSSIAN"]["EXEFOLDER"] == "/g16"
+
+    def test_block_at_end_of_file_gains_the_field(self, tmp_path):
+        server_yaml = self._set(tmp_path, "PYSCF:\n    SCRATCH: False\n")
+        assert read_yaml_file(server_yaml)["PYSCF"]["EXEFOLDER"] == "/env/bin"
+
+    @pytest.mark.parametrize(
+        "field",
+        ["EXEFOLDER:", "# EXEFOLDER:", "EXEFOLDER: /old", "# EXEFOLDER: /old"],
+    )
+    def test_existing_or_commented_field_is_replaced(self, tmp_path, field):
+        server_yaml = self._set(tmp_path, f"PYSCF:\n    {field}\n")
+        assert read_yaml_file(server_yaml) == {
+            "PYSCF": {"EXEFOLDER": "/env/bin"}
+        }
+
+    def test_file_without_a_trailing_newline_stays_valid(self, tmp_path):
+        server_yaml = self._set(tmp_path, "GAUSSIAN:\n    EXEFOLDER: /g16")
+        parsed = read_yaml_file(server_yaml)
+        assert parsed["GAUSSIAN"]["EXEFOLDER"] == "/g16"
+        assert parsed["PYSCF"]["EXEFOLDER"] == "/env/bin"
+
+    def test_missing_directory_is_a_no_op(self, tmp_path):
+        missing = tmp_path / "no_such_dir"
+        set_program_exefolder(missing, "PYSCF", "/env/bin")
+        assert not missing.exists()
+
+    def test_config_exposes_the_pyscf_folder(self, tmp_path):
+        with patch.object(
+            Config,
+            "chemsmart_dest",
+            new_callable=lambda: property(lambda self: tmp_path),
+        ):
+            assert Config().chemsmart_pyscf == tmp_path / "pyscf"
 
 
 class TestUpdateYamlFilesFunction:

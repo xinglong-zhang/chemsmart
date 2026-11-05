@@ -1156,7 +1156,7 @@ After creating a custom server configuration file:
 
 #. Save it in ``~/.chemsmart/server/`` with a descriptive name (e.g., ``myserver.yaml``)
 
-#. Use it with chemsmart commands via the ``-s`` flag:
+#. Use it with ``chemsmart`` commands via the ``-s`` flag:
 
    .. code:: bash
 

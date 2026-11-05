@@ -96,7 +96,7 @@ class TestAssembleCommand:
         assert result.exit_code != 0
         assert isinstance(result.exception, ValueError)
 
-    def test_no_program_uses_both_supported_programs(self, mocker, tmp_path):
+    def test_no_program_scans_all_supported_programs(self, mocker, tmp_path):
         mock_folder = MagicMock()
         mock_folder.get_all_output_files_in_current_folder_and_subfolders_by_program.return_value = (
             []
@@ -106,10 +106,15 @@ class TestAssembleCommand:
         )
         result = invoke(["assemble", "-d", str(tmp_path)])
         assert result.exit_code == 0, result.output
-        assert (
-            mock_folder.get_all_output_files_in_current_folder_and_subfolders_by_program.call_count
-            == 3
+        scan = (
+            mock_folder.get_all_output_files_in_current_folder_and_subfolders_by_program
         )
+        assert {call.kwargs["program"] for call in scan.call_args_list} == {
+            "gaussian",
+            "orca",
+            "pyscf",
+            "xtb",
+        }
 
     def test_no_files_found_returns_none(self, mocker, tmp_path):
         mocker.patch.object(

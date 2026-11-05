@@ -19,6 +19,7 @@ from chemsmart.jobs.nciplot.runner import (
     NCIPLOTJobRunner,
 )
 from chemsmart.jobs.orca.runner import FakeORCAJobRunner
+from chemsmart.jobs.pyscf.runner import FakePySCFJobRunner
 from chemsmart.jobs.thermochemistry.runner import ThermochemistryJobRunner
 from chemsmart.jobs.xtb.runner import FakeXTBJobRunner
 from chemsmart.settings.server import Server
@@ -71,6 +72,18 @@ def orca_jobrunner_no_scratch(pbs_server):
 @pytest.fixture()
 def orca_jobrunner_scratch(tmpdir, pbs_server):
     return FakeORCAJobRunner(
+        scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
+    )
+
+
+@pytest.fixture()
+def pyscf_jobrunner_no_scratch(pbs_server):
+    return FakePySCFJobRunner(server=pbs_server, scratch=False, fake=True)
+
+
+@pytest.fixture()
+def pyscf_jobrunner_scratch(tmpdir, pbs_server):
+    return FakePySCFJobRunner(
         scratch_dir=tmpdir, server=pbs_server, scratch=True, fake=True
     )
 

@@ -190,6 +190,7 @@ For specific job types, see the detailed tutorials:
 
 -  :doc:`gaussian-cli-options`
 -  :doc:`orca-cli-options`
+-  :doc:`pyscf-cli-options`
 -  :doc:`xtb-cli-options`
 -  :doc:`crest-cli-options`
 -  :doc:`pymol-cli-options`

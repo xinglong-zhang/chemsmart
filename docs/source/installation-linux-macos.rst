@@ -18,7 +18,7 @@ more information.
 
       git clone https://github.com/xinglong-zhang/chemsmart.git
 
-#. Change to the chemsmart directory and create the environment:
+#. Change to the ``chemsmart`` directory and create the environment:
 
    .. code:: bash
 

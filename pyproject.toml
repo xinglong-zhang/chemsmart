@@ -33,6 +33,7 @@ dependencies = [
     "types-PyYAML",
     "scipy==1.15.2",
     "pandas==2.2.3",
+    "h5py>=3.8.0",
     "openpyxl==3.1.5",
     "requests>=2.32.3",
     "tenacity>=9.1.2",
@@ -48,11 +49,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pyscf = [
+    "pyscf>=2.14.0",
+    "geometric",
+]
 test = [
     "pytest",
     "pytest-mock",
     "coverage",
     "pytest-cov",
+    # Real driver tests. PySCF publishes no Windows wheels; they skip there.
+    "pyscf>=2.14.0; sys_platform != 'win32'",
+    "geometric; sys_platform != 'win32'",
 ]
 dev = [
     "pre-commit>=3.6.0",

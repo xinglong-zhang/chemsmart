@@ -13,6 +13,10 @@ from chemsmart.utils.mixins import RegistryMixin
 logger = logging.getLogger(__name__)
 
 
+class JobFailedError(RuntimeError):
+    """A job ran but did not produce a usable result."""
+
+
 class Job(RegistryMixin):
     """Class that encapsulates and runs a task.
     Args:

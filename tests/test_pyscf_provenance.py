@@ -1,0 +1,312 @@
+"""Focused tests for the versioned PySCF provenance artifact.
+
+These tests construct temporary HDF5 files only. No PySCF calculation or
+optional chemistry solver is executed.
+"""
+
+import ast
+import sys
+from unittest.mock import patch
+
+import h5py
+import numpy as np
+import pytest
+
+from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.pyscf import driver
+from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
+from chemsmart.jobs.pyscf.settings import PySCFJobSettings
+from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
+from chemsmart.jobs.pyscf.writer import (
+    H5_NULL_ATTRIBUTE,
+    RESULTS_SCHEMA_VERSION,
+    PySCFScriptWriter,
+    write_pyscf_h5,
+)
+from tests.helpers import make_pyscf_results_payload
+
+
+def test_v2_groups_round_trip_typed_status_nulls_and_exact_arrays(tmp_path):
+    path = tmp_path / "label.h5"
+    spec, provenance, status, results = make_pyscf_results_payload()
+
+    write_pyscf_h5(
+        path,
+        spec=spec,
+        provenance=provenance,
+        status=status,
+        results=results,
+    )
+
+    with h5py.File(path, "r") as handle:
+        assert handle.attrs["schema_version"] == RESULTS_SCHEMA_VERSION
+        for name in ("spec", "provenance", "status", "results"):
+            assert isinstance(handle[name], h5py.Group)
+        null = handle["provenance/gpu4pyscf_version"]
+        assert null.shape == (0,)
+        assert bool(null.attrs[H5_NULL_ATTRIBUTE]) is True
+
+    observed_spec, observed_provenance, observed_status, observed_results = (
+        read_pyscf_h5(path)
+    )
+    assert observed_spec == spec
+    assert observed_provenance == provenance
+    assert observed_status == status
+    for key, expected in results.items():
+        if isinstance(expected, str):
+            assert observed_results[key] == expected
+        else:
+            np.testing.assert_array_equal(observed_results[key], expected)
+            assert observed_results[key].dtype == expected.dtype
+
+    output = PySCFOutput(tmp_path / "label.out")
+    assert output.normal_termination is True
+    assert output.failure is None
+    assert output.engine == "cpu"
+    assert output.settings_digest == "settings-sha256"
+    assert output.project_yaml_digest == "project-sha256"
+    assert output.point_group == "C2v"
+    np.testing.assert_array_equal(output.forces, results["forces"])
+
+
+def test_generated_standalone_encoder_writes_same_v2_contract(tmp_path):
+    """Exercise only the generated script's encoder, never its chemistry."""
+    source = PySCFScriptWriter.render(
+        {"schema_version": RESULTS_SCHEMA_VERSION, "label": "encoder-only"}
+    )
+    namespace = {"__name__": "chemsmart_generated_encoder_test"}
+    exec(compile(source, "<generated-pyscf-driver>", "exec"), namespace)
+
+    path = tmp_path / "generated.h5"
+    spec, provenance, status, results = make_pyscf_results_payload()
+    namespace["write_pyscf_h5"](
+        path, spec=spec, provenance=provenance, status=status, results=results
+    )
+
+    observed = read_pyscf_h5(path)
+    assert observed[:3] == (spec, provenance, status)
+    for key, expected in results.items():
+        if isinstance(expected, str):
+            assert observed[3][key] == expected
+        else:
+            np.testing.assert_array_equal(observed[3][key], expected)
+
+
+def test_generated_driver_preserves_imaginary_modes_as_negative_values():
+    source = PySCFScriptWriter.render(
+        {"schema_version": RESULTS_SCHEMA_VERSION, "label": "source-only"}
+    )
+
+    assert "imaginary_freq=False" in source
+
+
+def test_solvent_resolution_is_deferred_to_target_interpreter():
+    source = PySCFScriptWriter.render(
+        {"schema_version": RESULTS_SCHEMA_VERSION, "label": "source-only"}
+    )
+
+    assert "from pyscf.solvent.smd import solvent_db" in source
+    assert 'config["solvent_eps"] = eps' in source
+
+
+def test_non_opt_spec_does_not_claim_optimizer_settings():
+    settings = PySCFJobSettings(
+        jobtype="sp",
+        functional="pbe0",
+        basis="def2-svp",
+        engine="cpu",
+        charge=0,
+        multiplicity=1,
+    )
+    molecule = Molecule(
+        symbols=["H", "H"],
+        positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.7]]),
+        charge=0,
+        multiplicity=1,
+    )
+    job = PySCFSinglePointJob(
+        molecule=molecule, settings=settings, label="h2_sp"
+    )
+
+    config = PySCFScriptWriter(job).build_config()
+
+    assert config["opt_solver"] is None
+    assert config["opt_maxsteps"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "expected", "injected"),
+    [
+        ("xc", "b3lyp", "pbe"),
+        ("spin", 0, 2),
+        ("solvent_id", "water", "ethanol"),
+    ],
+)
+def test_v2_round_trip_does_not_mask_injected_spec_mismatch(
+    tmp_path, field, expected, injected
+):
+    """An applied-setting mismatch must survive exact HDF5 round-trip."""
+    path = tmp_path / f"wrong-{field}.h5"
+    spec, provenance, status, results = make_pyscf_results_payload()
+    assert spec[field] == expected
+    spec[field] = injected
+
+    write_pyscf_h5(
+        path,
+        spec=spec,
+        provenance=provenance,
+        status=status,
+        results=results,
+    )
+
+    observed_spec, _, _, _ = read_pyscf_h5(path)
+    assert observed_spec[field] == injected
+    assert observed_spec[field] != expected
+
+
+def test_schema_version_layout_mismatch_is_rejected(tmp_path):
+    path = tmp_path / "wrong-layout.h5"
+    with h5py.File(path, "w") as handle:
+        handle.attrs["schema_version"] = RESULTS_SCHEMA_VERSION
+        handle.create_dataset("spec", data="{}")
+        handle.create_group("provenance")
+        handle.create_group("status")
+        handle.create_group("results")
+
+    with pytest.raises(ValueError, match=r"2\.0 requires /spec to be a group"):
+        read_pyscf_h5(path)
+
+
+def test_settings_digest_ignores_provenance_only_fields_but_not_engine():
+    config = {
+        "schema_version": "2.0",
+        "chemsmart_version": "3.1.4",
+        "label": "label-a",
+        "program": "pyscf",
+        "jobtype": "sp",
+        "engine": "cpu",
+        "stages": ["scf"],
+        "symbols": ["H", "H"],
+        "positions": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.7]],
+        "basis": "def2-svp",
+        "xc": "b3lyp",
+        "num_threads": 2,
+        "max_memory_mb": 1024.0,
+        "project_yaml_digest": "project-a",
+    }
+    baseline = PySCFScriptWriter.settings_digest(config)
+
+    provenance_change = dict(
+        config,
+        schema_version="3.0",
+        chemsmart_version="3.2.0",
+        label="label-b",
+        num_threads=8,
+        max_memory_mb=4096.0,
+        project_yaml_digest="project-b",
+    )
+    assert PySCFScriptWriter.settings_digest(provenance_change) == baseline
+
+    engine_change = dict(config, engine="gpu")
+    assert PySCFScriptWriter.settings_digest(engine_change) != baseline
+
+
+def test_generated_driver_never_imports_chemsmart():
+    """The driver must run in an environment without chemsmart installed."""
+    source = PySCFScriptWriter.render(
+        {"schema_version": RESULTS_SCHEMA_VERSION, "label": "source-only"}
+    )
+    imported = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported.add(node.module.split(".")[0])
+    assert "chemsmart" not in imported
+    assert {"pyscf", "h5py", "numpy"} <= imported
+
+
+def test_writer_leaves_no_temporary_file_behind(tmp_path):
+    path = tmp_path / "atomic.h5"
+    spec, provenance, status, results = make_pyscf_results_payload()
+    write_pyscf_h5(
+        path, spec=spec, provenance=provenance, status=status, results=results
+    )
+    assert [item.name for item in tmp_path.iterdir()] == ["atomic.h5"]
+
+
+class TestResultsEncoding:
+    def _round_trip(self, tmp_path, value):
+        path = tmp_path / "encoded.h5"
+        write_pyscf_h5(
+            path,
+            spec={"value": value},
+            provenance={},
+            status={},
+            results={},
+        )
+        return read_pyscf_h5(path)[0]["value"]
+
+    def test_string_lists_round_trip(self, tmp_path):
+        assert self._round_trip(tmp_path, ["O", "H", "H"]) == ["O", "H", "H"]
+
+    def test_object_array_of_strings_round_trips(self, tmp_path):
+        value = np.array(["scf", "opt"], dtype=object)
+        assert self._round_trip(tmp_path, value) == ["scf", "opt"]
+
+    def test_nested_mappings_and_nulls_round_trip(self, tmp_path):
+        value = {"inner": {"present": 1.5, "absent": None}}
+        assert self._round_trip(tmp_path, value) == value
+
+    def test_unsupported_objects_are_refused_not_stringified(self, tmp_path):
+        value = np.array([object()], dtype=object)
+        with pytest.raises(TypeError, match="object-valued"):
+            self._round_trip(tmp_path, value)
+
+
+class TestOptionalProperties:
+    def test_failure_is_recorded_rather_than_raised(self, capsys):
+        results = {}
+        status = {"skipped_properties": {}}
+
+        def not_implemented():
+            raise NotImplementedError("no gradient for this model")
+
+        driver._record_optional(results, status, "forces", not_implemented)
+
+        assert "forces" not in results
+        assert (
+            status["skipped_properties"]["forces"]
+            == "NotImplementedError: no gradient for this model"
+        )
+        assert "no gradient for this model" in capsys.readouterr().err
+
+    def test_success_is_stored(self):
+        results = {}
+        status = {"skipped_properties": {}}
+        driver._record_optional(results, status, "forces", lambda: [1.0])
+        assert results == {"forces": [1.0]}
+        assert status["skipped_properties"] == {}
+
+
+def test_missing_pyscf_still_produces_a_failure_record(
+    tmp_path, monkeypatch, pyscf_driver_config, pyscf_h2_molecule
+):
+    """Setting the module to None makes ``import pyscf`` fail as if absent."""
+    monkeypatch.chdir(tmp_path)
+    config = pyscf_driver_config(
+        PySCFSinglePointJob,
+        pyscf_h2_molecule,
+        "sp",
+        label="absent",
+        functional="b3lyp",
+        basis="sto-3g",
+    )
+    with patch.dict(sys.modules, {"pyscf": None}):
+        assert driver.main(config) == 1
+
+    output = PySCFOutput(tmp_path / "absent.out")
+    assert output.normal_termination is False
+    assert output.failure["stage"] == "initialization"
+    assert output.failure["type"] == "ModuleNotFoundError"
+    assert output.version is None

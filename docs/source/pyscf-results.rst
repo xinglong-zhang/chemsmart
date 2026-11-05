@@ -1,0 +1,117 @@
+#######################
+ Reading PySCF Results
+#######################
+
+This page covers the files a PySCF job produces and how to reuse them.
+
+**************
+ Result Files
+**************
+
+A finished job leaves four files sharing the job label:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   -  -  File
+      -  Contents
+   -  -  ``LABEL.h5``
+      -  Structured results; this is the file CHEMSMART reads
+   -  -  ``LABEL.out``
+      -  PySCF's own log, for reading by eye
+   -  -  ``LABEL.py``
+      -  The generated driver script that was executed
+   -  -  ``LABEL.err``
+      -  Anything the calculation wrote to standard error
+
+An optimization with the packaged ``test`` project produces:
+
+.. code:: text
+
+   molecule_opt_gas_phase.h5
+   molecule_opt_gas_phase.out
+   molecule_opt_gas_phase.py
+   molecule_opt_gas_phase.err
+
+The ``.out`` log is not parsed for numbers. Every quantity is read from the ``.h5`` file, so keep it even if you discard
+the log. If the job stops while starting up, for example on an unusable basis set, the ``.out`` can be empty or missing;
+the ``.h5`` and ``.err`` files record why.
+
+``chemsmart run`` exits with a non-zero status and prints the reason when a PySCF job fails, including an SCF or
+geometry optimization that did not converge. In a multi-structure run, the remaining structures still run first. A rerun
+under the same label deletes the old ``.h5`` first, so a run that dies early cannot be mistaken for the earlier result.
+
+A PySCF job stores only its final structure, so ``-i`` can select only that structure from a PySCF output. Results that
+could not be computed are listed with the reason under ``status/skipped_properties``.
+
+.. warning::
+
+   ``LABEL.py`` is regenerated on every run. Edit the project YAML or the command-line options instead; an edited script
+   no longer matches the settings recorded with the job.
+
+********************************
+ What the Results File Contains
+********************************
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   -  -  Group
+      -  Contents
+   -  -  ``spec``
+      -  Settings as applied: method, basis, charge, spin, grid, solvent, engine, stages
+   -  -  ``provenance``
+      -  PySCF and GPU4PySCF versions, thread count, timings, settings digests
+   -  -  ``status``
+      -  Per-stage convergence, normal termination, and any failure with its traceback
+   -  -  ``results``
+      -  The computed quantities
+
+Every job writes the SCF energies in Hartree, the geometry in Angstrom, the atomic numbers, the orbital energies and
+occupations, and the detected point group. The last entry of the energy array is the final energy.
+
+A ``hess`` stage adds the Hessian, harmonic frequencies in cm⁻¹, normal modes, reduced masses, and force constants.
+Forces in Hartree/Bohr, Mulliken charges, and the dipole moment in Debye are written where the method and solvent
+support them, and are absent otherwise.
+
+``spec`` holds the applied settings, not the requested ones, including values PySCF resolves at run time such as the
+number of basis functions and the dielectric constant of the chosen solvent.
+
+******************
+ Reusing a Result
+******************
+
+Pass the ``.out`` file wherever a geometry is expected:
+
+.. code:: bash
+
+   chemsmart sub pyscf -p test -f molecule_opt_gas_phase.out hess
+
+Solvent-phase single point on an optimized structure:
+
+.. code:: bash
+
+   chemsmart sub pyscf -p test -f molecule_opt_gas_phase.out sp
+
+The ``.h5`` file can also be given directly, and is all that is needed. If the calculation failed before producing a
+geometry, reading either file reports the recorded failure.
+
+******************
+ Previewing a Job
+******************
+
+``--fake`` writes the driver script and placeholder results without running any chemistry:
+
+.. code:: bash
+
+   chemsmart run --fake pyscf -p test -f molecule.xyz opt
+
+Preview a GPU job on a machine with no device:
+
+.. code:: bash
+
+   chemsmart run --fake pyscf -p test -f molecule.xyz --gpu sp
+
+The results file reports a PySCF version of ``0.0.0-fake``, so a preview is never mistaken for a calculation.

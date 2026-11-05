@@ -8,6 +8,7 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 - [User clarification: class layout](#user-clarification-class-layout)
 - [User feedback: dynamic getattr lookups](#user-feedback-dynamic-getattr-lookups)
 - [User feedback: test data and test support layout](#user-feedback-test-data-and-test-support-layout)
+- [User feedback: program name spelling](#user-feedback-program-name-spelling)
 - [User feedback: cached_property and property](#user-feedback-cached_property-and-property)
 - [PR #391](#pr-391)
 - [PR #475](#pr-475)
@@ -51,6 +52,14 @@ In the conversation on 17 October 2026 (Asia/Singapore), the user asked whether 
 - **Inferred principle:** the wording of the rules is the assistant's synthesis, authorised for incorporation by "learn this". The user did not list which data cannot be real; the corrupt-file, network and hardware examples come from what the assistant kept synthetic in that work. Applying the helper rule only to new or changed tests is also the assistant's limit, since 9 test files on `main` keep private helpers.
 - **Rationale:** real PySCF runs and outputs test what the code actually consumes, and small calculations ran in about a second in total. `tests/conftest.py` and `tests/helpers.py` already state the layout.
 - **Scope:** "where appropriate" is part of the user's statement, so this is a preference with judgement, not a ban on synthetic data.
+
+## User feedback: program name spelling
+
+- **Date and source:** conversation on 3 November 2026, after PySCF documentation for PR #722 used bare `chemsmart` as the program name in prose.
+- **Classification:** repository-specific convention. It tightens the earlier rule and the PR #677 comment "Please do not use `ChemSmart`, use `CHEMSMART` instead!".
+- **User statement:** "use "CHEMSMART" for program name and "chemsmart" for command call and nothing else. Update the docs and add this to reviewer skill".
+- **Inferred principle:** keeping exact spelling for imports, file paths, URLs, and the conda environment is the assistant's reading, because renaming them would break them. The user did not list these. Reporting this as a consistency finding follows the existing separation of style from correctness.
+- **Scope:** prose in docs, docstrings, comments, and messages. Auto-generated API pages keep module names as they are.
 
 ## User feedback: cached_property and property
 

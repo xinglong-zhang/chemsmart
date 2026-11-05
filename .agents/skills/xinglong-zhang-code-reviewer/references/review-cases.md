@@ -100,6 +100,39 @@ def test_rejects_arbitrary_pickle_globals(tmp_path):
 
 Also do not ask for a mass migration of private helpers in test files the PR does not change.
 
+## Program name spelling
+
+Source: [User feedback: program name spelling](review-evidence.md#user-feedback-program-name-spelling).
+
+### Situation
+
+A documentation page uses the lowercase name, or another spelling, for the program:
+
+```rst
+Point chemsmart at the ``bin`` directory, because ChemSmart reads the results.
+```
+
+### Expected behaviour
+
+Ask for `CHEMSMART` wherever the text means the program: "Point CHEMSMART at the ``bin`` directory, because CHEMSMART reads the results." Report this as a consistency finding, not a correctness defect, and list repeated uses together.
+
+### Counterexample: this should not be flagged
+
+These are the command, or names that must match the code or the system:
+
+```rst
+Run ``chemsmart sub pyscf -p test -f molecule.xyz sp``.
+
+.. code:: bash
+
+   conda activate chemsmart
+   cd chemsmart
+
+.. automodule:: chemsmart.cli.run
+
+See https://chemsmart.readthedocs.io and ``~/.chemsmart/server/SLURM.yaml``.
+```
+
 ## Cached values on mutable objects
 
 Source: [User feedback: cached_property and property](review-evidence.md#user-feedback-cached_property-and-property).
