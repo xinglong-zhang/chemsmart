@@ -1,5 +1,8 @@
 import inspect
 import logging
+import os
+import shlex
+import sys
 from abc import abstractmethod
 from typing import Optional
 
@@ -249,10 +252,10 @@ class Submitter(RegistryMixin):
         Get the executable configuration for the job's program.
 
         Returns:
-            Executable: Instance of the appropriate executable handler
+            Executable | None: Instance of the appropriate executable handler
             (GaussianExecutable, ORCAExecutable, XTBExecutable, or
             NCIPLOTExecutable)
-            based on `job.PROGRAM`.
+            based on `job.PROGRAM`, or None for a job that runs in Python.
 
         Raises:
             ValueError: If the job's program is not supported.
@@ -267,7 +270,9 @@ class Submitter(RegistryMixin):
             executable = CRESTExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
-
+        elif self.job.PROGRAM.lower() == "sterimol":
+            # Runs in Python, so there is no program section in server.yaml
+            executable = None
         else:
             # Need to add programs here to be
             # supported for other types of programs
@@ -477,10 +482,29 @@ class Submitter(RegistryMixin):
         Args:
             f: File handle for writing program-specific setup.
         """
+        if self.executable is None:
+            self._write_python_environment(f)
+            return
         self._write_program_specific_conda_env(f)
         self._write_load_program_specific_modules(f)
         self._write_source_program_specific_script(f)
         self._write_program_specific_environment_variables(f)
+
+    @staticmethod
+    def _write_python_environment(f):
+        """
+        Make the run script find the Python that submitted the job.
+
+        A job without an executable has no conda environment configured in
+        server.yaml, and not every scheduler passes on the submitting shell's
+        environment. PBS, for example, does not by default.
+
+        Args:
+            f: File handle for writing the environment setup.
+        """
+        python_dir = shlex.quote(os.path.dirname(sys.executable))
+        f.write("# python environment\n")
+        f.write(f"export PATH={python_dir}:$PATH\n\n")
 
     def _write_program_specific_conda_env(self, f):
         """
