@@ -206,7 +206,8 @@ Sterimol Parameters
 
 Sterimol parameters describe the size of a substituent along and around the bond that connects it to the rest of the
 molecule. They depend on which bond you choose, so calculate them with :meth:`calculate_sterimol_parameters`.
-``sterimol_parameter`` then holds the latest result.
+``sterimol_parameter`` then holds the latest result. See :doc:`sterimol-parameters` for the command line interface and
+how to interpret the values.
 
 .. code:: python
 
@@ -251,7 +252,7 @@ molecule. They depend on which bond you choose, so calculate them with :meth:`ca
 
    Every atom except ``atom1`` counts as part of the substituent, and the rest of the molecule is not detected
    automatically. If ``atom1`` has other neighbors, list the atoms on its side of the bond in ``excluded_atoms``, or
-   they will inflate the parameters.
+   they will inflate the parameters. :meth:`get_substituent_atoms` returns the atoms on the ``atom2`` side of the bond.
 
 .. note::
 

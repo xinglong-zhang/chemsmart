@@ -5,6 +5,9 @@ import os
 import numpy as np
 import pytest
 
+from chemsmart.io.molecules.structure import Molecule
+from tests.helpers import rdkit_embed_and_optimize, write_xyz_file
+
 
 # test for structure.py
 @pytest.fixture()
@@ -506,3 +509,71 @@ def sterimol_methyl_geometry():
         ]
     )
     return symbols, positions
+
+
+@pytest.fixture()
+def sterimol_halo_chain_geometry():
+    """Symbols and positions of CH3-CH(CH3)-CH2-CHFCl, with no symmetry.
+
+    Atoms (1-based): C1 and C3 methyl, C2 methine, C4 methylene, C5 CHFCl,
+    F6, Cl7. Hydrogens: H8-H10 on C1, H11 on C2, H12-H14 on C3, H15-H16 on C4,
+    H17 on C5. The C5-F6 bond is 1.383 A.
+    """
+    symbols = ["C"] * 5 + ["F", "Cl"] + ["H"] * 10
+    positions = np.array(
+        [
+            [-1.0144, 1.0305, 0.9144],
+            [-0.5694, 0.4225, -0.4231],
+            [-1.2529, -0.9297, -0.664],
+            [0.9715, 0.3516, -0.5595],
+            [1.6781, -0.5734, 0.4436],
+            [1.4033, -1.899, 0.1621],
+            [3.441, -0.3363, 0.3383],
+            [-0.4859, 1.99, 1.098],
+            [-2.1056, 1.2374, 0.8889],
+            [-0.8143, 0.3382, 1.7586],
+            [-0.9238, 1.1101, -1.2233],
+            [-2.3501, -0.7845, -0.7606],
+            [-0.8811, -1.3889, -1.6046],
+            [-1.071, -1.6266, 0.1808],
+            [1.3772, 1.3807, -0.4425],
+            [1.2285, 0.0227, -1.5904],
+            [1.369, -0.3454, 1.4833],
+        ]
+    )
+    return symbols, positions
+
+
+@pytest.fixture()
+def sterimol_halo_chain_xyz_file(tmp_path, sterimol_halo_chain_geometry):
+    """The halo chain as a single-structure xyz file."""
+    symbols, positions = sterimol_halo_chain_geometry
+    return write_xyz_file(tmp_path / "chain.xyz", symbols, [positions])
+
+
+@pytest.fixture()
+def sterimol_trajectory_xyz_file(tmp_path, sterimol_halo_chain_geometry):
+    """Two frames: the halo chain, then the same with F6 moved 0.05 A in -y.
+
+    F6 sets B5 of the 2->4 substituent, so the two frames give different values.
+    """
+    symbols, positions = sterimol_halo_chain_geometry
+    moved = positions.copy()
+    moved[5, 1] -= 0.05
+    return write_xyz_file(tmp_path / "traj.xyz", symbols, [positions, moved])
+
+
+@pytest.fixture()
+def sterimol_toluene_molecule():
+    """Toluene: C1 methyl, C2-C7 ring, H8-H10 methyl, H11-H15 ring."""
+    return Molecule.from_rdkit_mol(rdkit_embed_and_optimize("Cc1ccccc1"))
+
+
+@pytest.fixture()
+def sterimol_toluene_xyz_file(tmp_path, sterimol_toluene_molecule):
+    """Toluene as an xyz file."""
+    return write_xyz_file(
+        tmp_path / "toluene.xyz",
+        sterimol_toluene_molecule.chemical_symbols,
+        [sterimol_toluene_molecule.positions],
+    )
