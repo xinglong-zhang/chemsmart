@@ -73,7 +73,7 @@ def click_iterate_options(f):
     @click.option(
         "-s",
         "--sphere-direction-samples-number",
-        "sphere_direction_samples_num",
+        "sphere_direction_samples_number",
         default=96,
         type=int,
         show_default=True,
@@ -82,7 +82,7 @@ def click_iterate_options(f):
     @click.option(
         "-a",
         "--axial-rotations-sample-number",
-        "axial_rotations_sample_num",
+        "axial_rotations_sample_number",
         default=6,
         type=int,
         show_default=True,
@@ -98,9 +98,9 @@ def click_iterate_options(f):
     @click.option(
         "-o",
         "--outputfile",
-        default="iterate_out",
+        default=None,
         type=str,
-        show_default=True,
+        show_default="iterate_out",
         help="Output filename (without .xyz extension) for generated structures. Use only with --no-separate-outputs.",
     )
     @functools.wraps(f)
@@ -123,8 +123,8 @@ def iterate(
     timeout,
     outputfile,
     generate_template_path,
-    sphere_direction_samples_num,
-    axial_rotations_sample_num,
+    sphere_direction_samples_number,
+    axial_rotations_sample_number,
     directory,
     separate_outputs,
     **kwargs,
@@ -221,8 +221,8 @@ def iterate(
     job_settings = IterateJobSettings(
         config_file=filename,
         method=method,
-        sphere_direction_samples_num=sphere_direction_samples_num,
-        axial_rotations_sample_num=axial_rotations_sample_num,
+        sphere_direction_samples_num=sphere_direction_samples_number,
+        axial_rotations_sample_num=axial_rotations_sample_number,
     )
     job_settings.skeleton_list = config["skeletons"]
     job_settings.substituent_list = config["substituents"]
@@ -234,9 +234,10 @@ def iterate(
     job = IterateJob(
         settings=job_settings,
         jobrunner=jobrunner,
+        label=os.path.splitext(os.path.basename(filename))[0],
         nprocs=nprocs,
         timeout=timeout,
-        outputfile=outputfile,
+        outputfile=outputfile or "iterate_out",
         separate_outputs=separate_outputs,
         output_directory=directory,
     )
@@ -259,6 +260,9 @@ def iterate_process_pipeline(ctx, *args, **kwargs):
     logger.debug(f"Context object: {ctx.obj}")
 
     job = ctx.obj.get("job")
+
+    if ctx.obj.get("submitting"):
+        return job
 
     if ctx.invoked_subcommand is None and job is not None:
         # If no subcommand is invoked, run the iterate job

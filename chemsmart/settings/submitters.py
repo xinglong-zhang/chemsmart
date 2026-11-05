@@ -21,6 +21,9 @@ user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 
+# These jobs run in Python, so server.yaml has no program section for them
+PYTHON_PROGRAMS = ("iterate", "sterimol", "thermochemistry")
+
 
 class RunScript:
     """
@@ -270,8 +273,7 @@ class Submitter(RegistryMixin):
             executable = CRESTExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "sterimol":
-            # Runs in Python, so there is no program section in server.yaml
+        elif self.job.PROGRAM.lower() in PYTHON_PROGRAMS:
             executable = None
         else:
             # Need to add programs here to be

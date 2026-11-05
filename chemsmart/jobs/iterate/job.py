@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Type
 
 from chemsmart.jobs.iterate.settings import IterateJobSettings
@@ -24,6 +25,7 @@ class IterateJob(Job):
         self,
         settings=None,
         jobrunner=None,
+        label="iterate_job",
         nprocs=1,
         timeout=120,
         outputfile="iterate_out",
@@ -40,6 +42,8 @@ class IterateJob(Job):
             Job settings containing skeleton_list, substituent_list, algorithm
         jobrunner : IterateJobRunner, optional
             Job runner instance for executing combinations
+        label : str, optional
+            Job label, used to name submission scripts and scheduler jobs.
         nprocs : int, optional
             Number of processes for parallel execution. Default 1.
         timeout : int, optional
@@ -59,7 +63,7 @@ class IterateJob(Job):
         # molecule, pass None and a default label
         super().__init__(
             molecule=None,
-            label="iterate_job",
+            label=label,
             jobrunner=jobrunner,
             skip_completed=False,  # IterateJob doesn't support skip_completed
             **kwargs,
@@ -93,6 +97,10 @@ class IterateJob(Job):
         if self._outputfile.endswith(".xyz"):
             return self._outputfile
         return f"{self._outputfile}.xyz"
+
+    def _job_is_complete(self) -> bool:
+        """Return True if the single output file exists."""
+        return not self.separate_outputs and os.path.exists(self.outputfile)
 
     def run(self) -> str:
         """

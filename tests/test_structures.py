@@ -2137,6 +2137,126 @@ class TestToGraphConnectivity:
         assert orders(vectorized) == orders(non_vectorized)
 
 
+class TestToRdkitConnectivity:
+    """to_rdkit() finds the bonds that to_graph() does, on the same molecules."""
+
+    @staticmethod
+    def bonds(rdkit_mol):
+        return {
+            frozenset((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())): (
+                bond.GetBondTypeAsDouble()
+            )
+            for bond in rdkit_mol.GetBonds()
+        }
+
+    def test_finds_long_bond_as_single_bond(
+        self, sterimol_halo_chain_geometry
+    ):
+        """Without the 1.383 A C5-F6 bond, F would be a separate fragment."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        rdkit_mol = mol.to_rdkit()
+
+        assert self.bonds(rdkit_mol)[frozenset((4, 5))] == 1.0
+        assert len(Chem.GetMolFrags(rdkit_mol)) == 1
+
+    def test_default_keeps_every_bond_type_of_the_explicit_buffer(
+        self, sterimol_halo_chain_geometry
+    ):
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        default = self.bonds(mol.to_rdkit())
+        explicit = self.bonds(mol.to_rdkit(bond_cutoff_buffer=0.05))
+
+        assert {b: default[b] for b in explicit} == explicit
+        assert set(default) - set(explicit) == {frozenset((4, 5))}
+
+    def test_explicit_buffer_does_not_add_long_bonds(
+        self, sterimol_halo_chain_geometry
+    ):
+        """Callers that choose a buffer get exactly that cutoff."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        bonds = self.bonds(mol.to_rdkit(bond_cutoff_buffer=0.05))
+        assert frozenset((4, 5)) not in bonds
+
+    def test_does_not_add_long_bonds_to_hydrogen(
+        self, sterimol_methyl_geometry
+    ):
+        """A hydrogen 1.20 A away stays unbonded."""
+        symbols, positions = sterimol_methyl_geometry
+        stretched = positions.copy()
+        stretched[1] = positions[0] + [0.0, 0.0, 1.20]
+        mol = Molecule(symbols=symbols, positions=stretched)
+        assert frozenset((0, 1)) not in self.bonds(mol.to_rdkit())
+
+    def test_ignores_distant_atoms(self, sterimol_methyl_geometry):
+        """Beyond the connectivity buffer, atoms remain unbonded."""
+        symbols, positions = sterimol_methyl_geometry
+        far_away = np.vstack([positions, positions[0] + [1.0, 1.5, 0.0]])
+        mol = Molecule(symbols=[*symbols, "F"], positions=far_away)
+        assert frozenset((0, 5)) not in self.bonds(mol.to_rdkit())
+
+    def test_finds_stretched_carbon_carbon_bond(
+        self, gaussian_singlet_opt_outfile
+    ):
+        """C3-C11 is 1.573 A in this optimized structure."""
+        mol = Molecule.from_filepath(gaussian_singlet_opt_outfile)
+        assert frozenset((2, 10)) in self.bonds(mol.to_rdkit())
+        assert mol.to_graph().has_edge(2, 10)
+
+    @pytest.mark.parametrize(
+        "molecule_fixture",
+        [
+            "sterimol_halo_chain_geometry",
+            "sterimol_methyl_geometry",
+        ],
+    )
+    def test_matches_to_graph_connectivity(self, request, molecule_fixture):
+        symbols, positions = request.getfixturevalue(molecule_fixture)
+        mol = Molecule(symbols=symbols, positions=positions)
+        assert set(self.bonds(mol.to_rdkit())) == {
+            frozenset((int(i), int(j))) for i, j in mol.to_graph().edges
+        }
+
+    def test_finds_the_bonds_of_the_large_to_graph_test_molecule(
+        self, single_molecule_xyz_file
+    ):
+        """No long bonds here: both methods still find the same 78 bonds."""
+        mol = Molecule.from_filepath(single_molecule_xyz_file)
+        graph_bonds = {
+            frozenset((int(i), int(j))) for i, j in mol.to_graph().edges
+        }
+        assert len(graph_bonds) == 78
+        assert set(self.bonds(mol.to_rdkit())) == graph_bonds
+
+    def test_matches_to_graph_connectivity_for_rings(
+        self, sterimol_toluene_molecule
+    ):
+        mol = sterimol_toluene_molecule
+        assert set(self.bonds(mol.to_rdkit())) == {
+            frozenset((int(i), int(j))) for i, j in mol.to_graph().edges
+        }
+
+    def test_vectorized_version_agrees(self, sterimol_halo_chain_geometry):
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        empty = Chem.RWMol()
+        for symbol in symbols:
+            empty.AddAtom(Chem.Atom(symbol))
+        vectorized = mol._add_bonds_to_rdkit_mol_vectorized(empty)
+        assert self.bonds(vectorized) == self.bonds(mol.to_rdkit())
+
+    def test_pdb_output_uses_the_same_bonds(
+        self, sterimol_halo_chain_geometry
+    ):
+        """to_pdb() must not pin its own buffer and miss the long bond."""
+        symbols, positions = sterimol_halo_chain_geometry
+        mol = Molecule(symbols=symbols, positions=positions)
+        assert mol.to_pdb() != mol.to_pdb(bond_cutoff_buffer=0.05)
+        assert "CONECT" in mol.to_pdb()
+
+
 class TestDerivedPropertiesFollowState:
     """Geometry-derived properties must not outlive the state they use."""
 

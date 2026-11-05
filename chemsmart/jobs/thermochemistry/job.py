@@ -188,7 +188,7 @@ class ThermochemistryJob(Job):
         Returns:
             bool: True if output file exists, False otherwise
         """
-        return os.path.exists(self.settings.outputfile)
+        return os.path.exists(self.settings.outputfile or self.outputfile)
 
     def _run(self, **kwargs):
         """

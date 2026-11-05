@@ -5,10 +5,12 @@ no pytest fixtures. Import them directly, e.g.
 Fixtures live in ``tests/fixtures/`` (loaded by ``tests/conftest.py``).
 """
 
+import ast
 import importlib
 import json
 import logging
 import os
+import re
 import shutil
 from pathlib import Path
 from textwrap import dedent
@@ -27,6 +29,7 @@ from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.nciplot.nciplot import nciplot
 from chemsmart.cli.run import run
+from chemsmart.cli.sub import sub
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
@@ -1721,6 +1724,19 @@ def assert_runner_was_configured(job, options):
     assert job.jobrunner.scratch is False
     assert job.jobrunner.fake is True
     assert not set(options) & set(job.kwargs)
+
+
+def submit_for_test(server_yaml_file, *args):
+    """Run ``chemsmart sub --test`` with ``args``, writing scripts only."""
+    return CliRunner().invoke(
+        sub, ["-s", server_yaml_file, "--test", *map(str, args)]
+    )
+
+
+def run_generated_script_command(run_script):
+    """Run the command of a generated run script, as a compute node would."""
+    match = re.search(r"run\((\[.*\])\)", Path(run_script).read_text())
+    return CliRunner().invoke(run, ast.literal_eval(match.group(1)))
 
 
 def invoke_sterimol(*args):

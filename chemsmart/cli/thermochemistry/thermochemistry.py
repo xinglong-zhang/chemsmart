@@ -407,6 +407,16 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
     jobs = ctx.obj.get("jobs", [])
     outputfile = ctx.obj.get("outputfile", None)
     logger.debug(f"Jobs to process:{jobs}")
+    if ctx.obj.get("submitting"):
+        # One job is enough: its script repeats this whole command on the
+        # compute node, for all files.
+        if ctx.invoked_subcommand is not None:
+            return args[0]
+        if not jobs:
+            raise click.ClickException(
+                "No thermochemistry output files to submit."
+            )
+        return jobs[0]
     if ctx.invoked_subcommand is None:
         # If no subcommand is invoked, run the thermochemistry jobs
         logger.info("Running thermochemistry calculations on specified jobs.")

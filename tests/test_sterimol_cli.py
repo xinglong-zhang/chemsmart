@@ -5,7 +5,6 @@ rotation vectors, L_value_uncorrected, and the same excluded atoms). L and B5
 are analytical. B1 is sampled more coarsely here, so it has a wider tolerance.
 """
 
-import ast
 import json
 import os
 import re
@@ -14,11 +13,11 @@ import sys
 import pytest
 from click.testing import CliRunner
 
-from chemsmart.cli.run import run
 from chemsmart.cli.sub import sub
 from tests.helpers import (
     assert_sterimol_matches,
     invoke_sterimol,
+    run_generated_script_command,
     run_sterimol_to_json,
 )
 
@@ -400,8 +399,7 @@ class TestSterimolSubmission:
         assert result.exit_code == 0, result.output
 
         run_script = tmp_path / "chemsmart_run_sterimol_chain_2_4_i1.py"
-        match = re.search(r"run\((\[.*\])\)", run_script.read_text())
-        node_result = CliRunner().invoke(run, ast.literal_eval(match.group(1)))
+        node_result = run_generated_script_command(run_script)
         assert node_result.exit_code == 0, node_result.output
 
         report = json.loads(
