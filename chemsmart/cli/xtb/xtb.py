@@ -9,7 +9,6 @@ from chemsmart.cli.job import (
     click_file_label_and_index_options,
     click_filename_options,
     click_pubchem_options,
-    load_molecules_with_indices,
 )
 from chemsmart.database.utils import is_chemsmart_database
 from chemsmart.io.molecules.structure import Molecule
@@ -342,7 +341,7 @@ def xtb(
                 and ctx.find_root().params.get("num_nodes") is not None
             ):
                 index = ":"
-            molecules, molecule_indices = load_molecules_with_indices(
+            molecules, molecule_indices = Molecule.from_filepath_with_indices(
                 filepath=filename, index=index
             )
             assert (

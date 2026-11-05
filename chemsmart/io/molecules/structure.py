@@ -1153,6 +1153,37 @@ class Molecule:
             return molecule
 
     @classmethod
+    def from_filepath_with_indices(cls, filepath, index=None):
+        """Read selected structures and their original 1-based indices.
+
+        Returns:
+            tuple: The list of molecules, and the list of their indices in the
+            file, or None when no index was requested.
+        """
+        from chemsmart.utils.utils import (
+            return_objects_and_indices_from_string_index,
+        )
+
+        # An NPZ archive can hold every molecule of a dataset, so it builds
+        # only the selected ones, each of which records its own position.
+        selects_on_read = str(filepath).lower().endswith(".npz")
+        molecules = cls.from_filepath(
+            filepath=filepath,
+            index=index if selects_on_read and index is not None else ":",
+            return_list=True,
+        )
+        if molecules is None or index is None:
+            return molecules, None
+        if selects_on_read:
+            return molecules, [m.structure_index_in_file for m in molecules]
+        molecules, indices = return_objects_and_indices_from_string_index(
+            list_of_objects=molecules, index=index
+        )
+        if not isinstance(molecules, list):
+            return [molecules], [indices]
+        return molecules, indices
+
+    @classmethod
     def from_directorypath(cls, folder, program="xtb", index="-1", **kwargs):
         """
         Create molecule from a directory containing calculation output files.

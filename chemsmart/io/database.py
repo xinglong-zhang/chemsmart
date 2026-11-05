@@ -5,6 +5,7 @@ from chemsmart.database.utils import (
     resolve_record,
     sort_structure_dicts_by_energy,
 )
+from chemsmart.io.npz import DATASET_PROPERTY_KEYS
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import string2index_1based
 
@@ -23,6 +24,12 @@ class DatabaseFile(FileMixin):
         if vibrational_modes is not None:
             vibrational_modes = [np.array(mode) for mode in vibrational_modes]
         positions = struct_dict.get("positions")
+        properties = struct_dict.get("dataset_properties", {})
+        dataset_values = {
+            name: properties[name]["value"]
+            for name in DATASET_PROPERTY_KEYS
+            if name in properties
+        }
         return Molecule(
             symbols=struct_dict.get("chemical_symbols"),
             positions=(np.array(positions) if positions is not None else None),
@@ -56,6 +63,8 @@ class DatabaseFile(FileMixin):
                 else None
             ),
             point_group=struct_dict.get("point_group"),
+            dataset_source=struct_dict.get("dataset_source"),
+            **dataset_values,
         )
 
     def get_molecule_by_structure_id(self, structure_id, return_list=False):

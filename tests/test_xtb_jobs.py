@@ -1,0 +1,226 @@
+import os
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from chemsmart.jobs.xtb.job import XTBJob
+from chemsmart.jobs.xtb.opt import XTBOptJob
+from chemsmart.jobs.xtb.settings import XTBJobSettings
+from tests.helpers import write_text_file
+
+
+class TestXTBJobs:
+    def test_opt_job_with_constraints(
+        self, temporary_working_dir, water_molecule, xtb_jobrunner_no_scratch
+    ):
+        settings = XTBJobSettings(
+            charge=0,
+            multiplicity=1,
+            jobtype="opt",
+            freq=False,
+            solvent_model="alpb",
+            solvent_id="water",
+            constraints=[[1, 2]],
+            force_constant=0.5,
+            gfn_version="gfn2",
+        )
+        job = XTBOptJob(
+            molecule=water_molecule,
+            settings=settings,
+            label="water_opt",
+            jobrunner=xtb_jobrunner_no_scratch,
+        )
+        assert isinstance(job, XTBOptJob)
+        assert xtb_jobrunner_no_scratch.run(job) == 0
+
+        folder = Path(job.folder)
+        assert (folder / f"{job.label}.xyz").is_file()
+        assert (folder / f"{job.label}.inp").is_file()
+        assert (folder / f"{job.label}.out").is_file()
+
+        inp = (folder / f"{job.label}.inp").read_text()
+        assert "$constrain" in inp
+        assert "distance: 1, 2" in inp
+        assert "force constant=0.5" in inp
+
+        out = (folder / f"{job.label}.out").read_text()
+        assert "--opt" in out
+        assert f"--input {job.label}.inp" in out
+        assert "--gfn 2" in out
+        assert "--alpb water" in out
+
+
+class TestXTBJobConstruction:
+    def test_rejects_invalid_settings_type(self, a_molecule):
+        with pytest.raises(ValueError, match="Settings must be instance"):
+            XTBJob(molecule=a_molecule, settings="not-settings")
+
+    def test_rejects_invalid_molecule_type(self, xtb_settings):
+        with pytest.raises(ValueError, match="Molecule must be instance"):
+            XTBJob(molecule="not-a-molecule", settings=xtb_settings)
+
+    def test_label_defaults_to_chemical_formula(
+        self, a_molecule, xtb_settings
+    ):
+        job = XTBJob(molecule=a_molecule, settings=xtb_settings)
+        assert job.label == a_molecule.get_chemical_formula(empirical=True)
+
+    def test_custom_label_used(self, a_molecule, xtb_settings):
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        assert job.label == "mylabel"
+
+    @pytest.mark.parametrize("label", ["mylabel", None])
+    def test_construction_does_not_create_job_folder(
+        self, a_molecule, xtb_settings, tmp_path, monkeypatch, label
+    ):
+        """Building a job only computes ``<cwd>/<label>``; the folder is
+        created by the job runner when the job actually runs (regression:
+        it used to be created at construction time, leaving empty folders
+        such as ``mylabel/`` or ``H2O/`` wherever a job object was built).
+        ``label=None`` covers the default chemical-formula label."""
+        monkeypatch.chdir(tmp_path)
+        job = XTBJob(molecule=a_molecule, settings=xtb_settings, label=label)
+        assert job.folder == os.path.join(os.getcwd(), job.label)
+        assert not os.path.exists(job.folder)
+        assert os.listdir(tmp_path) == []
+
+    def test_settings_class_returns_expected_type(self):
+        assert XTBJob.settings_class() is XTBJobSettings
+
+
+class TestXTBJobPaths:
+    def test_all_path_properties(self, a_molecule, xtb_settings):
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        assert job.xyzfile == os.path.join(job.folder, "mylabel.xyz")
+        assert job.inputfile == os.path.join(job.folder, "mylabel.inp")
+        assert job.outputfile == os.path.join(job.folder, "mylabel.out")
+        assert job.errfile == os.path.join(job.folder, "mylabel.err")
+        assert job.restartfile == os.path.join(job.folder, "xtbrestart")
+
+    def test_base_folder_returns_determine_folder(
+        self, a_molecule, xtb_settings
+    ):
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        assert job.base_folder() == job._determine_folder()
+
+    def test_determine_folder_skips_label_subfolder_when_label_falsy(
+        self, a_molecule, xtb_settings, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        job.label = ""
+        assert job._determine_folder() == os.path.abspath(str(tmp_path))
+
+
+class TestXTBJobBackupAndOutput:
+    def test_backup_files_copies_all_tracked_files(
+        self, a_molecule, xtb_settings, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        for f in [
+            job.xyzfile,
+            job.inputfile,
+            job.outputfile,
+            job.restartfile,
+        ]:
+            write_text_file(f, "data")
+
+        job._backup_files()
+
+        backups = job._previous_backup_folders()
+        assert len(backups) == 1
+        assert os.path.exists(os.path.join(backups[0], "mylabel.xyz"))
+        assert os.path.exists(os.path.join(backups[0], "mylabel.inp"))
+        assert os.path.exists(os.path.join(backups[0], "mylabel.out"))
+        assert os.path.exists(os.path.join(backups[0], "xtbrestart"))
+
+    def test_output_none_when_outputfile_missing(
+        self, a_molecule, xtb_settings, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        assert job._output() is None
+
+    def test_output_returns_xtb_output_when_present(
+        self, a_molecule, xtb_settings, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        write_text_file(job.outputfile, "dummy output")
+
+        mock_output = MagicMock()
+        with patch(
+            "chemsmart.io.xtb.output.XTBOutput",
+            return_value=mock_output,
+        ) as mock_cls:
+            result = job._output()
+
+        mock_cls.assert_called_once_with(folder=job.folder)
+        assert result is mock_output
+
+    def test_output_none_on_exception(
+        self, a_molecule, xtb_settings, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        job = XTBJob(
+            molecule=a_molecule, settings=xtb_settings, label="mylabel"
+        )
+        write_text_file(job.outputfile, "dummy output")
+
+        with patch(
+            "chemsmart.io.xtb.output.XTBOutput",
+            side_effect=RuntimeError("boom"),
+        ):
+            assert job._output() is None
+
+
+class TestXTBJobRun:
+    def test_run_delegates_to_jobrunner(self, a_molecule, xtb_settings):
+        mock_runner = MagicMock()
+        job = XTBJob(
+            molecule=a_molecule,
+            settings=xtb_settings,
+            jobrunner=mock_runner,
+        )
+        job._run()
+        mock_runner.run.assert_called_once_with(job)
+
+
+class TestXTBJobFactories:
+    def test_from_filename_builds_job(
+        self, single_molecule_xyz_file, xtb_settings
+    ):
+        mock_jobrunner = MagicMock()
+        job = XTBJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=xtb_settings,
+            jobrunner=mock_jobrunner,
+        )
+        assert isinstance(job, XTBJob)
+        assert job.jobrunner is mock_jobrunner
+
+    def test_from_filename_without_jobrunner_leaves_it_none(
+        self, single_molecule_xyz_file, xtb_settings
+    ):
+        job = XTBJob.from_filename(
+            filename=single_molecule_xyz_file,
+            settings=xtb_settings,
+        )
+        assert isinstance(job, XTBJob)
+        assert job.jobrunner is None
