@@ -73,6 +73,14 @@ def click_external_backend_options(f):
         "-o device=cuda, or for xtb -o method=gfn2 -o alpb=water.",
     )
     @click.option(
+        "--log-backend-output/--no-log-backend-output",
+        default=False,
+        show_default=True,
+        help="Also copy the backend program's own output (e.g. xtb's) "
+        "into <label>_external.log. One line per request is always "
+        "logged there.",
+    )
+    @click.option(
         "--python",
         "python_executable",
         default=None,

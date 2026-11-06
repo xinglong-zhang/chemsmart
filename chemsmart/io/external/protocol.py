@@ -20,6 +20,7 @@ gradient, and supplies a Hessian when the request asks for one.
 """
 
 import sys
+import time
 import traceback
 from dataclasses import dataclass
 from typing import Optional
@@ -28,6 +29,11 @@ import numpy as np
 
 from chemsmart.io.external.backends import build_engine
 from chemsmart.io.external.hessian import DEFAULT_FD_STEP, compute_hessian
+from chemsmart.io.external.runlog import (
+    ExternalRunLog,
+    capture_warnings,
+    safely,
+)
 
 
 @dataclass
@@ -117,10 +123,16 @@ class ExternalProtocol:
         sys.stderr.write("chemsmart external calculation failed:\n")
         sys.stderr.write(error)
 
-    def run(self, config, invocation, engine=None):
-        """Answer one request; return a status message."""
+    def answer(self, config, invocation, engine=None):
+        """Read, evaluate and write one request.
+
+        Returns ``(request, result, engine)``. When
+        ``config["log_backend_output"]`` is set, the engine keeps its
+        programs' output for the per-job log.
+        """
         request = self.read_request(invocation)
         engine = engine or build_engine(config)
+        engine.keep_output = bool(config.get("log_backend_output"))
         result = evaluate(
             engine,
             request,
@@ -128,20 +140,50 @@ class ExternalProtocol:
             fd_step=config.get("fd_step", DEFAULT_FD_STEP),
         )
         self.write_result(invocation, request, result)
+        return request, result, engine
+
+    def run(self, config, invocation, engine=None):
+        """Answer one request; return a status message."""
+        _, result, _ = self.answer(config, invocation, engine)
         return result.summary(config["backend"])
 
     def main(self, config, argv=None):
-        """Launcher entry point; returns the process exit code."""
+        """Launcher entry point; returns the process exit code.
+
+        Each request is recorded in the per-job external log when the
+        host job was started with one (see
+        :mod:`chemsmart.io.external.runlog`).
+        """
         argv = sys.argv[1:] if argv is None else list(argv)
         try:
             invocation = self.parse_arguments(argv)
         except ValueError as exc:
             sys.stderr.write(f"{exc}\n")
             return 1
-        try:
-            message = self.run(config, invocation)
-        except Exception:
-            self.report_failure(invocation, traceback.format_exc())
-            return 1
-        self.report_success(invocation, message)
+        run_log = ExternalRunLog.from_environment(self.host, config)
+        start = time.perf_counter()
+        with capture_warnings() as warnings:
+            try:
+                request, result, engine = self.answer(config, invocation)
+            except Exception:
+                error = traceback.format_exc()
+                if run_log is not None:
+                    safely(
+                        run_log.record_failure,
+                        error,
+                        time.perf_counter() - start,
+                        warnings,
+                    )
+                self.report_failure(invocation, error)
+                return 1
+        if run_log is not None:
+            safely(
+                run_log.record,
+                request,
+                result,
+                time.perf_counter() - start,
+                warnings,
+                engine.drain_output(),
+            )
+        self.report_success(invocation, result.summary(config["backend"]))
         return 0

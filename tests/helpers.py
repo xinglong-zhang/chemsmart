@@ -2083,3 +2083,30 @@ def write_json_external_request(path, numbers, positions, deriv=1):
         )
     )
     return str(path)
+
+
+def read_external_log_records(path):
+    """Return the request lines of a chemsmart per-job external log."""
+    import re
+
+    from chemsmart.utils.repattern import external_log_step_pattern
+
+    return [
+        line
+        for line in Path(path).read_text().splitlines()
+        if re.match(external_log_step_pattern, line)
+    ]
+
+
+def run_json_external_request(directory, config, deriv=1, name="request"):
+    """Answer one H2 :class:`JSONExternalProtocol` request through
+    ``main``; return the exit code."""
+    request = write_json_external_request(
+        Path(directory) / f"{name}.json",
+        [1, 1],
+        [[0, 0, 0], [0, 0, 1.0]],
+        deriv=deriv,
+    )
+    return JSONExternalProtocol().main(
+        config, [request, str(Path(directory) / f"{name}_result.json")]
+    )

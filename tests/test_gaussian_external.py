@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV
 from chemsmart.io.gaussian.external import (
     main,
     read_external_input,
@@ -357,6 +358,45 @@ class TestExternalSettings:
         com = open(gaussian_jobrunner_no_scratch.job_inputfile).read()
         assert f"External={emt_external_calculator.route_value}" in com
         assert (tmp_path / emt_external_calculator.script_filename).is_file()
+
+    def test_runner_points_launcher_at_job_log(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        emt_external_calculator,
+        monkeypatch,
+    ):
+        runner = gaussian_jobrunner_no_scratch
+        molecule = Molecule.from_filepath(single_molecule_xyz_file)
+        external_job = GaussianOptJob(
+            molecule=molecule,
+            settings=GaussianJobSettings(
+                charge=0, multiplicity=1, external=emt_external_calculator
+            ),
+            label="mol_opt_ase",
+            jobrunner=runner,
+        )
+        external_job.folder = str(tmp_path)
+        runner._prerun(external_job)
+        env = runner._update_os_environ(external_job)
+        assert env[EXTERNAL_LOG_ENV] == str(
+            tmp_path / f"{external_job.label}_external.log"
+        )
+
+        # a DFT job never inherits a log path from the environment
+        monkeypatch.setenv(EXTERNAL_LOG_ENV, "/elsewhere/other_external.log")
+        dft_job = GaussianOptJob(
+            molecule=molecule,
+            settings=GaussianJobSettings(
+                functional="b3lyp", basis="def2svp", charge=0, multiplicity=1
+            ),
+            label="mol_opt",
+            jobrunner=runner,
+        )
+        dft_job.folder = str(tmp_path)
+        runner._prerun(dft_job)
+        assert EXTERNAL_LOG_ENV not in runner._update_os_environ(dft_job)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────

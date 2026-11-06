@@ -393,6 +393,7 @@ class JobRunner(RegistryMixin):
 
     def _update_os_environ(self, job):
         env = os.environ.copy()
+        self._set_external_log_environ(job, env)
         env_vars = self.executable.env if self.executable else None
         if not env_vars:
             return env
@@ -402,6 +403,28 @@ class JobRunner(RegistryMixin):
                 v = os.path.expanduser(v)
             env[k] = str(v)
         return env
+
+    def _set_external_log_environ(self, job, env):
+        """Point external launchers at ``<label>_external.log``.
+
+        For jobs on an external level of theory (``settings.external``),
+        the host program passes its environment to the launcher, which
+        appends one record per request to this file (see
+        :mod:`chemsmart.io.external.runlog`). Lives in the running
+        directory, so it is copied back from scratch with ``<label>*``.
+        """
+        from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV
+        from chemsmart.jobs.external import ExternalCalculator
+
+        external = getattr(getattr(job, "settings", None), "external", None)
+        if not isinstance(external, ExternalCalculator):
+            env.pop(EXTERNAL_LOG_ENV, None)  # never inherit another job's
+            return
+        directory = getattr(self, "running_directory", None) or job.folder
+        env[EXTERNAL_LOG_ENV] = os.path.abspath(
+            os.path.join(directory, external.log_filename(job.label))
+        )
+        logger.info(f"External level of theory log: {env[EXTERNAL_LOG_ENV]}")
 
     def run(self, job, **kwargs):
         """Main method to run a job. The run consists of

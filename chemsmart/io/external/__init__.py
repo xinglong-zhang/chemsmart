@@ -13,7 +13,11 @@ This package holds everything that does not depend on the host:
 - :mod:`~chemsmart.io.external.hessian`: analytic/finite-difference
   Hessians;
 - :mod:`~chemsmart.io.external.protocol`: :class:`ExternalProtocol`, the
-  base each host's file exchange implements, and the shared driver.
+  base each host's file exchange implements, and the shared driver;
+- :mod:`~chemsmart.io.external.runlog`: the per-job log
+  ``<label>_external.log`` (one line per request: step, derivatives,
+  energy, max/RMS gradient, Hessian source, wall time; plus backend
+  warnings and, optionally, backend program output).
 
 Adding a backend
     Register a ``build(options, calculator)`` function with
@@ -34,7 +38,10 @@ Adding a host program
     3. Host hooks: an ``external`` attribute on the host's job settings,
        the route/input keyword in its writer, and
        ``external.write_script(running_directory, server=...)`` in its
-       job runner's ``_write_input``.
+       job runner's ``_write_input``. The per-job log needs nothing:
+       :class:`~chemsmart.jobs.runner.JobRunner` sets
+       :data:`EXTERNAL_LOG_ENV` for every external job, and the shared
+       driver writes the records.
     4. ``chemsmart/cli/<host>/external.py``: a group using
        :func:`chemsmart.cli.external.click_external_backend_options`,
        :func:`~chemsmart.cli.external.build_external_calculator` and
@@ -74,16 +81,19 @@ from chemsmart.io.external.protocol import (
     ExternalResult,
     evaluate,
 )
+from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV, ExternalRunLog
 
 __all__ = [
     "ASEEngine",
     "DEFAULT_FD_STEP",
     "ENTRY_POINT_GROUP",
+    "EXTERNAL_LOG_ENV",
     "ExternalBackend",
     "ExternalEngine",
     "ExternalProtocol",
     "ExternalRequest",
     "ExternalResult",
+    "ExternalRunLog",
     "HESSIAN_MODES",
     "XTBEngine",
     "available_backends",

@@ -7,6 +7,7 @@ and analytic/finite-difference Hessians. Shared by the Gaussian
 
 import importlib.metadata
 import json
+import re
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -34,9 +35,13 @@ from chemsmart.io.external import (
     register_backend,
     validate_backend,
 )
+from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV, gradient_statistics
+from chemsmart.utils.repattern import external_log_step_pattern
 from tests.helpers import (
     JSONExternalProtocol,
     QuadraticEngine,
+    read_external_log_records,
+    run_json_external_request,
     write_json_external_request,
 )
 
@@ -534,3 +539,146 @@ class TestExternalProtocol:
         ):
             with pytest.raises(NotImplementedError):
                 method(*args)
+
+
+# ── Per-job external log ──────────────────────────────────────────────────
+
+
+class TestExternalRunLog:
+    def test_nothing_logged_without_environment(
+        self, tmp_path, harmonic_backend, monkeypatch
+    ):
+        monkeypatch.delenv(EXTERNAL_LOG_ENV, raising=False)
+        assert (
+            run_json_external_request(tmp_path, {"backend": harmonic_backend})
+            == 0
+        )
+        assert not list(tmp_path.glob("*.log"))
+
+    def test_one_record_per_request(
+        self, tmp_path, external_run_log, harmonic_backend
+    ):
+        config = {"backend": harmonic_backend, "hessian": "analytic"}
+        assert run_json_external_request(tmp_path, config) == 0
+        assert run_json_external_request(tmp_path, config, deriv=2) == 0
+
+        text = external_run_log.read_text()
+        assert text.startswith(
+            "# chemsmart external log: host JSON, backend harmonic\n"
+        )
+        assert text.count("# config:") == 1  # header written once
+        first, second = read_external_log_records(external_run_log)
+        assert " step    1  deriv 1  E = " in first
+        assert "hessian -" in first
+        assert " step    2  deriv 2  " in second
+        assert "hessian analytic" in second
+        assert re.search(r"\d+\.\d\d s$", first)
+
+    def test_gradient_statistics_logged(
+        self, tmp_path, external_run_log, harmonic_backend, harmonic_hessian
+    ):
+        run_json_external_request(tmp_path, {"backend": harmonic_backend})
+        result = json.loads((tmp_path / "request_result.json").read_text())
+        gradient = np.asarray(result["gradient"]).ravel()
+        (record,) = read_external_log_records(external_run_log)
+        assert f"max|g| = {np.max(np.abs(gradient)):.3e}" in record
+        assert f"rms|g| = {np.sqrt(np.mean(gradient**2)):.3e}" in record
+        assert f"E = {result['energy']:.12f} Eh" in record
+
+    def test_backend_warnings_logged_under_their_request(
+        self, tmp_path, external_run_log, inconsistent_hessian_backend
+    ):
+        run_json_external_request(
+            tmp_path, {"backend": inconsistent_hessian_backend}, deriv=2
+        )
+        lines = external_run_log.read_text().splitlines()
+        record = next(
+            i for i, line in enumerate(lines) if " step    1 " in line
+        )
+        assert "hessian fd" in lines[record]
+        assert lines[record + 1].startswith("    warning: Analytic Hessian")
+
+    def test_failures_logged_and_numbered(
+        self, tmp_path, external_run_log, harmonic_backend
+    ):
+        run_json_external_request(tmp_path, {"backend": harmonic_backend})
+        code = JSONExternalProtocol().main(
+            {"backend": harmonic_backend},
+            [str(tmp_path / "missing.json"), str(tmp_path / "out.json")],
+        )
+        assert code == 1
+        records = read_external_log_records(external_run_log)
+        assert " step    2  FAILED after " in records[1]
+        assert "FileNotFoundError" in records[1]
+        assert "    Traceback (most recent call last):" in (
+            external_run_log.read_text()
+        )
+
+    @pytest.mark.parametrize("keep", [True, False])
+    def test_backend_output_only_when_requested(
+        self, tmp_path, external_run_log, fake_xtb_executable, keep
+    ):
+        executable, _ = fake_xtb_executable
+        config = {
+            "backend": "xtb",
+            "options": {"executable": executable},
+            "log_backend_output": keep,
+        }
+        assert run_json_external_request(tmp_path, config) == 0
+        text = external_run_log.read_text()
+        assert ("fake xtb: normal termination" in text) is keep
+        assert ("--- output of: " in text) is keep
+
+    def test_log_problems_never_fail_the_request(
+        self, tmp_path, harmonic_backend, monkeypatch, capsys
+    ):
+        blocker = tmp_path / "not_a_directory"
+        blocker.write_text("")
+        monkeypatch.setenv(EXTERNAL_LOG_ENV, str(blocker / "job.log"))
+        assert (
+            run_json_external_request(tmp_path, {"backend": harmonic_backend})
+            == 0
+        )
+        assert "chemsmart external log not written" in capsys.readouterr().err
+        assert (tmp_path / "request_result.json").is_file()
+
+    def test_concurrent_requests_get_unique_steps(
+        self, tmp_path, external_run_log, harmonic_backend
+    ):
+        """ORCA can evaluate numerical-Hessian displacements in parallel;
+        the file lock keeps records whole and step numbers unique."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        config = {"backend": harmonic_backend}
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            codes = list(
+                pool.map(
+                    lambda i: run_json_external_request(
+                        tmp_path, config, name=f"request{i}"
+                    ),
+                    range(16),
+                )
+            )
+        assert codes == [0] * 16
+        steps = sorted(
+            int(re.match(external_log_step_pattern, line)[1])
+            for line in read_external_log_records(external_run_log)
+        )
+        assert steps == list(range(1, 17))
+
+    def test_gradient_statistics_without_gradient(self):
+        assert gradient_statistics(None) == (None, None)
+        assert gradient_statistics([]) == (None, None)
+
+    def test_logs_without_file_locking(
+        self, tmp_path, external_run_log, harmonic_backend, monkeypatch
+    ):
+        """Platforms without fcntl (Windows) still get records."""
+        from chemsmart.io.external import runlog
+
+        monkeypatch.setattr(runlog, "fcntl", None)
+        assert (
+            run_json_external_request(tmp_path, {"backend": harmonic_backend})
+            == 0
+        )
+        assert len(read_external_log_records(external_run_log)) == 1

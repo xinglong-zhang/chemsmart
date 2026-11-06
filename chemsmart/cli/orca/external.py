@@ -39,7 +39,9 @@ from chemsmart.utils.cli import MyGroup
 @orca.group("external", cls=MyGroup)
 @click_external_backend_options
 @click.pass_context
-def external(ctx, backend, calculator, options, python_executable):
+def external(
+    ctx, backend, calculator, options, log_backend_output, python_executable
+):
     """Run an ORCA job on an external level of theory (ML potential,
     xTB, or any ASE calculator) through ORCA's ExtOpt interface."""
     spec = build_external_calculator(
@@ -48,6 +50,7 @@ def external(ctx, backend, calculator, options, python_executable):
         backend=backend,
         calculator=calculator,
         python_executable=python_executable,
+        log_backend_output=log_backend_output,
     )
     use_external_level_of_theory(ctx, spec)
 

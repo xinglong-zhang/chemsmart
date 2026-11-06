@@ -22,6 +22,7 @@ from ase import Atoms
 from ase.calculators.emt import EMT
 from ase.units import Bohr, Hartree
 
+from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.external import (
     main,
@@ -41,6 +42,7 @@ from chemsmart.jobs.orca.settings import (
 )
 from tests.helpers import (
     make_orca_writer,
+    read_external_log_records,
     run_h2_orca_external,
     run_orca_external_cli,
     write_orca_external_input,
@@ -233,11 +235,37 @@ class TestORCAExternalCalculator:
         assert orca_calc.script_filename != gaussian_calc.script_filename
         assert orca_calc != gaussian_calc
 
+    def test_launcher_logs_each_request_like_orca_runs_it(
+        self, tmp_path, emt_orca_external_calculator, au2_orca_external_input
+    ):
+        """The job log path reaches the launcher through the environment
+        ORCA passes on; two requests give steps 1 and 2."""
+        script = emt_orca_external_calculator.write_script(tmp_path)
+        au2_orca_external_input()
+        log = tmp_path / "mol_opt_ase_external.log"
+        env = {**os.environ, EXTERNAL_LOG_ENV: str(log)}
+        for _ in range(2):
+            result = subprocess.run(
+                [script, "job_EXT.extinp.tmp"],
+                capture_output=True,
+                text=True,
+                cwd=tmp_path,
+                env=env,
+            )
+            assert result.returncode == 0, result.stderr
+        records = read_external_log_records(log)
+        assert [" step    1 " in records[0], " step    2 " in records[1]] == [
+            True,
+            True,
+        ]
+        assert "host ORCA, backend ase" in log.read_text()
+
     def test_has_no_hessian_options(self, xtb_orca_external_calculator):
         assert xtb_orca_external_calculator.config == {
             "backend": "xtb",
             "calculator": None,
             "options": {"method": "gfn2", "alpb": "water"},
+            "log_backend_output": False,
         }
         with pytest.raises(TypeError):
             ORCAExternalCalculator(backend="xtb", hessian="fd")
@@ -380,6 +408,32 @@ class TestORCAExternalWriter:
         assert "%cpcm" not in inp
         assert os.access(launcher, os.X_OK)
 
+    def test_runner_points_launcher_at_job_log(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        orca_jobrunner_scratch,
+        emt_orca_external_calculator,
+    ):
+        runner = orca_jobrunner_scratch
+        job = ORCAOptJob(
+            molecule=Molecule.from_filepath(single_molecule_xyz_file),
+            settings=ORCAJobSettings(
+                charge=0, multiplicity=1, external=emt_orca_external_calculator
+            ),
+            label="mol_opt_ase",
+            jobrunner=runner,
+        )
+        job.folder = str(tmp_path)
+        runner._prerun(job)
+        env = runner._update_os_environ(job)
+        # written in scratch, next to the launcher; copied back as <label>*
+        assert env[EXTERNAL_LOG_ENV] == os.path.join(
+            os.path.abspath(runner.running_directory),
+            f"{job.label}_external.log",
+        )
+        assert os.path.basename(env[EXTERNAL_LOG_ENV]).startswith(job.label)
+
     def test_ts_hessian_is_numerical(
         self, single_molecule_xyz_file, xtb_orca_external_calculator
     ):
@@ -485,6 +539,19 @@ class TestORCAExternalCLI:
         assert external.python == "/usr/bin/python3"
         assert "ExtOpt" in settings.route_string
         assert "B3LYP" not in settings.route_string.upper()
+
+    def test_log_backend_output_flag(self, single_molecule_xyz_file):
+        result, settings = run_orca_external_cli(
+            single_molecule_xyz_file,
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            "-b",
+            "xtb",
+            "--log-backend-output",
+            "opt",
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.external.log_backend_output is True
+        assert settings.external.config["log_backend_output"] is True
 
     def test_user_label_is_kept(self, single_molecule_xyz_file):
         job_cls = MagicMock(name="ORCASinglePointJob")

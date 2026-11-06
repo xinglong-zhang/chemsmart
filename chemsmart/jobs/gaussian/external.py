@@ -43,12 +43,14 @@ class GaussianExternalCalculator(ExternalCalculator):
         hessian="auto",
         fd_step=DEFAULT_FD_STEP,
         python_executable=None,
+        log_backend_output=False,
     ):
         super().__init__(
             backend,
             calculator=calculator,
             options=options,
             python_executable=python_executable,
+            log_backend_output=log_backend_output,
         )
         if hessian not in HESSIAN_MODES:
             raise ValueError(

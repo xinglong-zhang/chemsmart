@@ -53,7 +53,14 @@ from chemsmart.utils.cli import MyGroup
 )
 @click.pass_context
 def external(
-    ctx, backend, calculator, options, python_executable, hessian, fd_step
+    ctx,
+    backend,
+    calculator,
+    options,
+    log_backend_output,
+    python_executable,
+    hessian,
+    fd_step,
 ):
     """Run a Gaussian job on an External level of theory (ML potential,
     xTB, or any ASE calculator)."""
@@ -65,6 +72,7 @@ def external(
         hessian=hessian,
         fd_step=fd_step,
         python_executable=python_executable,
+        log_backend_output=log_backend_output,
     )
     use_external_level_of_theory(ctx, spec)
 

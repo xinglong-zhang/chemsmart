@@ -54,6 +54,7 @@ def fake_xtb_executable(tmp_path, xtb_output_directory, monkeypatch):
         "if '--fail' in sys.argv:\n"
         "    print('xtb: boom')\n"
         "    sys.exit(3)\n"
+        "print('fake xtb: normal termination')\n"
         "for name in ('gradient', 'hessian'):\n"
         "    shutil.copy(f'{source}/{name}', name)\n"
     )
@@ -109,3 +110,31 @@ def harmonic_backend(isolated_backend_registry, harmonic_hessian):
         return QuadraticEngine(harmonic_hessian, analytic=harmonic_hessian)
 
     return "harmonic"
+
+
+@pytest.fixture()
+def external_run_log(tmp_path, monkeypatch):
+    """Path of a per-job external log the launcher will append to.
+
+    Sets ``CHEMSMART_EXTERNAL_LOG`` as chemsmart's job runners do for
+    external jobs.
+    """
+    from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV
+
+    path = tmp_path / "job_external.log"
+    monkeypatch.setenv(EXTERNAL_LOG_ENV, str(path))
+    return path
+
+
+@pytest.fixture()
+def inconsistent_hessian_backend(isolated_backend_registry, harmonic_hessian):
+    """A registered backend whose analytic Hessian has the wrong sign, so
+    ``hessian="auto"`` logs a warning and falls back to finite
+    differences."""
+    from tests.helpers import QuadraticEngine
+
+    @isolated_backend_registry.register_backend("wrong-sign-hessian")
+    def build(options, calculator):
+        return QuadraticEngine(harmonic_hessian, analytic=-harmonic_hessian)
+
+    return "wrong-sign-hessian"

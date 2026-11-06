@@ -29,7 +29,22 @@ class ExternalEngine:
 
     All public methods take positions in Angstrom and return atomic
     units: Hartree, Hartree/Bohr and Hartree/Bohr^2.
+
+    Engines that run programs can keep their output for the per-job
+    external log: when :attr:`keep_output` is set, they call
+    :meth:`_record_output`, and the driver collects the text with
+    :meth:`drain_output`.
     """
+
+    keep_output = False
+
+    def _record_output(self, label, text):
+        if self.keep_output:
+            self.__dict__.setdefault("_outputs", []).append((label, text))
+
+    def drain_output(self):
+        """Return and forget the recorded ``(label, text)`` outputs."""
+        return self.__dict__.pop("_outputs", [])
 
     def energy_and_gradient(self, numbers, positions, charge, multiplicity):
         raise NotImplementedError
@@ -162,9 +177,11 @@ class XTBEngine(ExternalEngine):
                     stdout=out,
                     stderr=subprocess.STDOUT,
                 )
+            with open(os.path.join(workdir, "xtb.out")) as fh:
+                output = fh.read()
+            self._record_output(" ".join(command), output)
             if result.returncode != 0:
-                with open(os.path.join(workdir, "xtb.out")) as fh:
-                    tail = fh.read()[-2000:]
+                tail = output[-2000:]
                 raise RuntimeError(
                     f"xtb failed (exit {result.returncode}): "
                     f"{' '.join(command)}\n{tail}"
