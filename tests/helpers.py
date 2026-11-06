@@ -2112,3 +2112,14 @@ def run_json_external_request(directory, config, deriv=1, name="request"):
     return JSONExternalProtocol().main(
         config, [request, str(Path(directory) / f"{name}_result.json")]
     )
+
+
+def write_external_job_outputs(folder, label):
+    """Create an external job's ``<label>_external.log`` and one kept step
+    in ``<label>_external/`` inside ``folder``; return their paths."""
+    log = Path(folder) / f"{label}_external.log"
+    log.write_text("# CHEMSMART external log\n")
+    step = Path(folder) / f"{label}_external" / "step_0001_20261107-090000"
+    step.mkdir(parents=True)
+    (step / "xtb.out").write_text("xtb output")
+    return log, step.parent

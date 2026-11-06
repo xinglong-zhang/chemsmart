@@ -174,6 +174,15 @@ class ExternalCalculator:
         copied back from scratch with the job's other files."""
         return f"{label}_external.log"
 
+    @classmethod
+    def output_folder_name(cls, label):
+        """Folder of kept backend outputs (``keep_backend_output``):
+        the log name without ``.log``, e.g. ``<label>_external``. The
+        launcher derives it from the log path the same way
+        (:attr:`chemsmart.io.external.runlog.ExternalRunLog.backend_output_folder`).
+        """
+        return os.path.splitext(cls.log_filename(label))[0]
+
     def write_script(self, directory, server=None):
         """Write the executable launcher into ``directory``; return path."""
         os.makedirs(directory, exist_ok=True)

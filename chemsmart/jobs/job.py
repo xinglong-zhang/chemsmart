@@ -196,6 +196,23 @@ class Job(RegistryMixin):
     def _backup_files(self):
         raise NotImplementedError
 
+    def _backup_external_outputs(self, external, folder, **kwargs):
+        """Back up an external job's ``<label>_external.log`` and
+        ``<label>_external/`` into ``folder``.
+
+        Called by host ``_backup_files`` implementations with their
+        ``settings.external``; does nothing when it is ``None``.
+        """
+        if external is None:
+            return
+        for name in (
+            external.log_filename(self.label),
+            external.output_folder_name(self.label),
+        ):
+            self.backup_file(
+                os.path.join(self.folder, name), folder=folder, **kwargs
+            )
+
     def backup_file(self, file, folder=None, remove=False):
         if not os.path.exists(file):
             return

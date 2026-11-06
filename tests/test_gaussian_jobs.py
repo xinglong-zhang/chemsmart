@@ -37,7 +37,7 @@ from chemsmart.jobs.gaussian.wbi import GaussianWBIJob
 from chemsmart.jobs.gaussian.writer import GaussianInputWriter
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.gaussian import GaussianProjectSettings
-from tests.helpers import make_uvvis_job
+from tests.helpers import make_uvvis_job, write_external_job_outputs
 
 
 class TestGaussianJobs:
@@ -747,6 +747,75 @@ class TestGaussianJobPaths:
 
 
 class TestGaussianJobBackupAndOutput:
+    def test_backup_files_include_external_log_and_outputs(
+        self,
+        a_molecule,
+        gaussian_settings,
+        emt_external_calculator,
+        tmp_path,
+        monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        settings = gaussian_settings.copy()
+        settings.external = emt_external_calculator
+        job = GaussianJob(
+            molecule=a_molecule, settings=settings, label="mylabel"
+        )
+        log, outputs = write_external_job_outputs(tmp_path, "mylabel")
+
+        job._backup_files()
+
+        (backup,) = job._previous_backup_folders()
+        assert open(os.path.join(backup, log.name)).read() == log.read_text()
+        assert os.path.isfile(
+            os.path.join(
+                backup, outputs.name, "step_0001_20261107-090000", "xtb.out"
+            )
+        )
+        assert log.exists() and outputs.exists()  # copied, not moved
+
+    def test_backup_with_remove_clears_external_outputs(
+        self,
+        a_molecule,
+        gaussian_settings,
+        emt_external_calculator,
+        tmp_path,
+        monkeypatch,
+    ):
+        """``remove=True`` leaves the job folder ready for a fresh run."""
+        monkeypatch.chdir(tmp_path)
+        settings = gaussian_settings.copy()
+        settings.external = emt_external_calculator
+        job = GaussianJob(
+            molecule=a_molecule, settings=settings, label="mylabel"
+        )
+        log, outputs = write_external_job_outputs(tmp_path, "mylabel")
+
+        job._backup_files(remove=True)
+
+        (backup,) = job._previous_backup_folders()
+        assert not log.exists() and not outputs.exists()
+        assert os.path.isdir(os.path.join(backup, outputs.name))
+
+    def test_backup_files_ignore_external_outputs_of_host_jobs(
+        self, a_molecule, gaussian_settings, tmp_path, monkeypatch
+    ):
+        """Without an external level of theory, same-named files are not
+        this job's and are left alone."""
+        monkeypatch.chdir(tmp_path)
+        job = GaussianJob(
+            molecule=a_molecule, settings=gaussian_settings, label="mylabel"
+        )
+        log, _ = write_external_job_outputs(tmp_path, "mylabel")
+        for path in (job.inputfile, job.outputfile):
+            with open(path, "w") as fh:
+                fh.write("data")
+
+        job._backup_files()
+
+        (backup,) = job._previous_backup_folders()
+        assert not os.path.exists(os.path.join(backup, log.name))
+
     def test_backup_files_copies_input_and_output(
         self, a_molecule, gaussian_settings, tmp_path, monkeypatch
     ):

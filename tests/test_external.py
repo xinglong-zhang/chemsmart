@@ -37,7 +37,11 @@ from chemsmart.io.external import (
     register_backend,
     validate_backend,
 )
-from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV, gradient_statistics
+from chemsmart.io.external.runlog import (
+    EXTERNAL_LOG_ENV,
+    ExternalRunLog,
+    gradient_statistics,
+)
 from chemsmart.utils.repattern import external_log_step_pattern
 from tests.helpers import (
     JSONExternalProtocol,
@@ -754,3 +758,18 @@ class TestRejectExternalLevelOfTheory:
         """No parent, a host level of theory, or a mock (whose ``external``
         attribute is a truthy MagicMock) is not an external backend."""
         reject_external_level_of_theory(parent, "qmmm")
+
+
+class TestExternalOutputNames:
+    def test_job_and_launcher_agree_on_output_folder(
+        self, tmp_path, emt_orca_external_calculator
+    ):
+        """The job side (backups) and the launcher side (kept outputs)
+        derive the backend-output folder from the same log name."""
+        calc = emt_orca_external_calculator
+        log = tmp_path / calc.log_filename("mol_opt_ase")
+        run_log = ExternalRunLog(str(log), "ORCA", calc.config)
+        assert calc.output_folder_name("mol_opt_ase") == "mol_opt_ase_external"
+        assert run_log.backend_output_folder == str(
+            tmp_path / calc.output_folder_name("mol_opt_ase")
+        )
