@@ -1,6 +1,7 @@
 """Gaussian writer, pKa/UV-Vis job and data-file fixtures."""
 
 import os
+import sys
 from unittest.mock import patch
 
 import numpy as np
@@ -1095,6 +1096,39 @@ def xtb_output_directory(tmp_path):
     body = "\n".join(" ".join(f"{v:.6f}" for v in row) for row in hessian)
     (tmp_path / "hessian").write_text(f"$hessian\n{body}\n$end\n")
     return str(tmp_path)
+
+
+@pytest.fixture()
+def fake_xtb_executable(tmp_path, xtb_output_directory, monkeypatch):
+    """Stand-in ``xtb`` binary for :class:`XTBEngine` subprocess tests.
+
+    It copies the canned ``gradient``/``hessian`` files from
+    :func:`xtb_output_directory` into its working directory, records its
+    arguments and ``coord.xyz`` in ``calls.log``, and exits with status 3
+    when given ``--fail``. The test runs from ``tmp_path`` so the engine's
+    temporary ``xtb_*`` folders stay out of the repository.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "calls.log"
+    script = bin_dir / "xtb"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import shutil, sys\n"
+        f"log = {str(log)!r}\n"
+        f"source = {xtb_output_directory!r}\n"
+        "with open(log, 'a') as fh:\n"
+        "    fh.write(' '.join(sys.argv[1:]) + '\\n')\n"
+        "    fh.write(open('coord.xyz').read())\n"
+        "if '--fail' in sys.argv:\n"
+        "    print('xtb: boom')\n"
+        "    sys.exit(3)\n"
+        "for name in ('gradient', 'hessian'):\n"
+        "    shutil.copy(f'{source}/{name}', name)\n"
+    )
+    script.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    return str(script), log
 
 
 @pytest.fixture()

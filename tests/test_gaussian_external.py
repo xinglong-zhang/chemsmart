@@ -23,6 +23,7 @@ from ase.units import Bohr, Hartree
 
 from chemsmart.io.gaussian.external import (
     ASEEngine,
+    ExternalEngine,
     XTBEngine,
     build_engine,
     compute_hessian,
@@ -88,6 +89,15 @@ class TestExternalFileFormats:
         # off-diagonal coupling lands at lower-triangle position (3, 0)
         assert values[6] == pytest.approx(-0.1)
 
+    def test_gradient_without_hessian_has_no_second_derivative_block(
+        self, tmp_path
+    ):
+        out = tmp_path / "out"
+        write_external_output(out, -1.0, np.ones((2, 3)), dipole=[1, 2, 3])
+        lines = out.read_text().splitlines()
+        assert len(lines) == 1 + 2
+        assert [float(v) for v in lines[0].split()] == [-1.0, 1.0, 2.0, 3.0]
+
 
 # ── Engines ───────────────────────────────────────────────────────────────
 
@@ -138,6 +148,38 @@ class TestASEEngine:
             is None
         )
 
+    def test_get_hessian_converted_to_atomic_units(self):
+        hessian_ev = np.arange(36.0).reshape(6, 6)
+
+        def factory(charge, multiplicity):
+            calc = EMT()
+            # flat output must be reshaped to (3N, 3N)
+            calc.get_hessian = lambda atoms: hessian_ev.ravel()
+            return calc
+
+        hessian = ASEEngine(factory).analytic_hessian(
+            [79, 79], [[0, 0, 0], [0, 0, 2.88]], 0, 1
+        )
+        np.testing.assert_allclose(hessian, hessian_ev * Bohr**2 / Hartree)
+
+    def test_failing_get_hessian_means_no_analytic_hessian(self, caplog):
+        def factory(charge, multiplicity):
+            calc = EMT()
+            calc.get_hessian = MagicMock(side_effect=RuntimeError("no model"))
+            return calc
+
+        hessian = ASEEngine(factory).analytic_hessian(
+            [79, 79], [[0, 0, 0], [0, 0, 2.88]], 0, 1
+        )
+        assert hessian is None
+        assert "no model" in caplog.text
+
+    def test_base_engine_contract(self):
+        engine = ExternalEngine()
+        with pytest.raises(NotImplementedError):
+            engine.energy_and_gradient([1], [[0, 0, 0]], 0, 1)
+        assert engine.analytic_hessian([1], [[0, 0, 0]], 0, 1) is None
+
 
 class TestXTBEngine:
     def test_command_carries_charge_uhf_method_and_solvent(self):
@@ -167,6 +209,57 @@ class TestXTBEngine:
         with pytest.raises(ValueError):
             XTBEngine(**kwargs)
 
+    def test_gbsa_and_string_args_in_command(self):
+        engine = XTBEngine(gbsa="thf", args="--acc 0.1 --etemp 500")
+        command = engine._command("--hess", charge=0, multiplicity=1)
+        assert command[-6:] == [
+            "--gbsa",
+            "thf",
+            "--acc",
+            "0.1",
+            "--etemp",
+            "500",
+        ]
+        assert "--alpb" not in command
+
+    def test_energy_and_gradient_runs_xtb(self, fake_xtb_executable):
+        executable, log = fake_xtb_executable
+        energy, gradient = XTBEngine(
+            executable=executable
+        ).energy_and_gradient([1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1)
+        assert energy == pytest.approx(-0.9822404321)
+        assert gradient.shape == (2, 3)
+        calls = log.read_text()
+        assert "coord.xyz --grad --chrg 0 --uhf 0 --gfn 2" in calls
+        assert "H " in calls and "0.7400000000" in calls
+        # temporary xtb_* working folders are removed afterwards
+        assert not list(log.parent.glob("xtb_*"))
+
+    def test_analytic_hessian_runs_xtb(self, fake_xtb_executable):
+        executable, log = fake_xtb_executable
+        hessian = XTBEngine(executable=executable).analytic_hessian(
+            [1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1
+        )
+        assert hessian.shape == (6, 6)
+        assert "--hess" in log.read_text()
+
+    def test_xtb_failure_raises_with_output_tail(self, fake_xtb_executable):
+        executable, _ = fake_xtb_executable
+        engine = XTBEngine(executable=executable, args=["--fail"])
+        with pytest.raises(RuntimeError, match=r"exit 3(.|\n)*xtb: boom"):
+            engine.energy_and_gradient([1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1)
+
+    def test_xtb_hessian_failure_returns_none(
+        self, fake_xtb_executable, caplog
+    ):
+        executable, _ = fake_xtb_executable
+        engine = XTBEngine(executable=executable, args=["--fail"])
+        hessian = engine.analytic_hessian(
+            [1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1
+        )
+        assert hessian is None
+        assert "xtb Hessian unavailable" in caplog.text
+
     def test_parse_gradient_file(self, xtb_output_directory):
         energy, gradient = parse_xtb_gradient_file(xtb_output_directory, 2)
         assert energy == pytest.approx(-0.9822404321)
@@ -182,6 +275,28 @@ class TestXTBEngine:
     def test_parse_hessian_rejects_wrong_size(self, xtb_output_directory):
         with pytest.raises(ValueError, match="expected 9"):
             parse_xtb_hessian_file(xtb_output_directory, 1)
+
+    def test_parse_gradient_rejects_truncated_file(self, tmp_path):
+        (tmp_path / "gradient").write_text(
+            "$grad\n"
+            "  cycle = 1    SCF energy =    -1.0   |dE/xyz| =  0.0\n"
+            "  0.0  0.0  0.0  h\n"
+            "  0.0  0.0  1.4  h\n"
+            "  0.0  0.0  -1.0D-02\n"
+        )
+        with pytest.raises(ValueError, match="gradient shape"):
+            parse_xtb_gradient_file(str(tmp_path), 2)
+
+    def test_parse_hessian_skips_header_and_tolerates_missing_end(
+        self, tmp_path
+    ):
+        (tmp_path / "hessian").write_text(
+            "written by xtb\n$hessian\n"
+            + " ".join(f"{float(v)}D+00" for v in range(9))
+            + "\n"
+        )
+        hessian = parse_xtb_hessian_file(str(tmp_path), 1)
+        np.testing.assert_allclose(hessian, np.arange(9.0).reshape(3, 3))
 
 
 # ── Hessians ──────────────────────────────────────────────────────────────
@@ -232,6 +347,29 @@ class TestHessian:
         )
         assert source == "fd"
 
+    def test_analytic_mode_trusts_engine_without_spot_check(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        asymmetric = harmonic_hessian.copy()
+        asymmetric[0, 3] = 0.0  # symmetrised to -0.05
+        engine = QuadraticEngine(harmonic_hessian, analytic=asymmetric)
+        hessian, source = compute_hessian(
+            engine, harmonic_external_request, mode="analytic"
+        )
+        assert source == "analytic"
+        assert hessian[0, 3] == hessian[3, 0] == pytest.approx(-0.05)
+        assert engine.gradient_calls == 0
+
+    def test_unknown_mode_rejected(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        with pytest.raises(ValueError, match="hessian mode"):
+            compute_hessian(
+                QuadraticEngine(harmonic_hessian),
+                harmonic_external_request,
+                mode="exact",
+            )
+
     def test_analytic_mode_requires_analytic_hessian(
         self, harmonic_hessian, harmonic_external_request
     ):
@@ -277,6 +415,66 @@ class TestBuildEngineAndDriver:
         ):
             engine.factory(1, 2)
         fake.AIMNet2ASE.assert_called_once_with("aimnet2", charge=1, mult=2)
+
+    def test_uma_preset_builds_fairchem_calculator(self):
+        engine = build_engine(
+            {"backend": "uma", "options": {"device": "cuda", "seed": 1}}
+        )
+        fake = MagicMock()
+        with patch.dict(
+            sys.modules, {"fairchem": fake, "fairchem.core": fake}
+        ):
+            calc = engine.factory(0, 1)
+        fake.pretrained_mlip.get_predict_unit.assert_called_once_with(
+            "uma-s-1", device="cuda"
+        )
+        fake.FAIRChemCalculator.assert_called_once_with(
+            fake.pretrained_mlip.get_predict_unit.return_value,
+            task_name="omol",
+            seed=1,
+        )
+        assert calc is fake.FAIRChemCalculator.return_value
+
+    @pytest.mark.parametrize(
+        "config, message",
+        [
+            ({"backend": "orca"}, "Unknown External backend"),
+            ({"backend": "ase", "calculator": "EMT"}, "dotted path"),
+        ],
+    )
+    def test_bad_backend_config_rejected(self, config, message):
+        with pytest.raises(ValueError, match=message):
+            build_engine(config)
+
+    def test_run_energy_only_for_deriv_0(self, tmp_path, au2_external_input):
+        out = tmp_path / "out"
+        message = run(
+            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
+            au2_external_input(deriv=0),
+            out,
+        )
+        assert "Hessian" not in message
+        assert len(out.read_text().splitlines()) == 1
+
+    def test_main_writes_status_to_message_file(
+        self, tmp_path, au2_external_input
+    ):
+        out, msg = tmp_path / "out", tmp_path / "msg"
+        code = main(
+            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
+            [
+                "--extra",
+                "R",
+                au2_external_input(),
+                str(out),
+                str(msg),
+                "f",
+                "m",
+            ],
+        )
+        assert code == 0
+        assert msg.read_text().startswith("ase: E = ")
+        assert len(out.read_text().splitlines()) == 1 + 2
 
     def test_run_writes_hessian_block_for_deriv_2(
         self, tmp_path, au2_external_input
@@ -368,6 +566,21 @@ class TestGaussianExternalCalculator:
         # the launcher name is unchanged by server-resolved defaults
         assert os.path.basename(path) == calc.script_filename
 
+    def test_missing_server_xtb_config_leaves_xtb_on_path(self, tmp_path):
+        calc = GaussianExternalCalculator(backend="xtb")
+        server = MagicMock()
+        server.name = "laptop"
+        with patch(
+            "chemsmart.settings.executable.XTBExecutable.from_servername",
+            side_effect=FileNotFoundError("no xtb section"),
+        ):
+            path = calc.write_script(tmp_path, server=server)
+        assert "'executable'" not in open(path).read()
+
+    def test_not_equal_to_other_types(self, xtb_external_calculator):
+        assert xtb_external_calculator != xtb_external_calculator.to_dict()
+        assert "GaussianExternalCalculator(" in repr(xtb_external_calculator)
+
     def test_launcher_answers_gaussian_like_gaussian_does(
         self, tmp_path, emt_external_calculator, au2_external_input
     ):
@@ -451,6 +664,19 @@ class TestExternalSettings:
         assert "scrf" not in settings.route_string
         assert settings.genecp is False
         assert "solvation is ignored" in caplog.text
+
+    def test_forces_and_additional_route_parameters_kept(
+        self, xtb_external_calculator
+    ):
+        settings = GaussianJobSettings(
+            jobtype="sp",
+            forces=True,
+            additional_route_parameters="nosymm",
+            external=xtb_external_calculator,
+        )
+        assert settings.route_string == (
+            f"# External={xtb_external_calculator.route_value} force nosymm"
+        )
 
     def test_copy_preserves_external(self, xtb_external_calculator):
         settings = GaussianJobSettings(external=xtb_external_calculator)
@@ -536,6 +762,23 @@ class TestExternalCLI:
         assert external.calculator == "ase.calculators.lj.LennardJones"
         assert external.options == {"sigma": 0.5}
         assert external.hessian == "fd"
+
+    def test_user_label_is_kept(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        job_cls = MagicMock(name="GaussianOptJob")
+        result, _ = run_gaussian_external_cli(
+            single_molecule_xyz_file,
+            gaussian_jobrunner_no_scratch,
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            "-b",
+            "xtb",
+            "opt",
+            gaussian_args=("-l", "my_label"),
+            job_cls=job_cls,
+        )
+        assert result.exit_code == 0, result.output
+        assert job_cls.call_args.kwargs["label"] == "my_label"
 
     def test_malformed_option_is_rejected(
         self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch

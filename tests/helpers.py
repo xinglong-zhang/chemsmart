@@ -1824,16 +1824,24 @@ def write_gaussian_external_input(
 
 
 def run_gaussian_external_cli(
-    xyz_file, jobrunner, job_class_path, *external_args, **kwargs
+    xyz_file,
+    jobrunner,
+    job_class_path,
+    *external_args,
+    gaussian_args=(),
+    **kwargs,
 ):
-    """Invoke ``gaussian -p gas_solv -f <xyz> -c 0 -m 1 external <args>``.
+    """Invoke ``gaussian -p gas_solv -f <xyz> -c 0 -m 1 [gaussian_args]
+    external <args>``.
 
     Returns ``(result, settings)`` like
     :func:`run_gaussian_and_capture_settings`, which receives ``kwargs``.
     """
     return run_gaussian_and_capture_settings(
         job_class_path,
-        ["-p", "gas_solv", "-f", xyz_file, "-c", "0", "-m", "1", "external"]
+        ["-p", "gas_solv", "-f", xyz_file, "-c", "0", "-m", "1"]
+        + list(gaussian_args)
+        + ["external"]
         + list(external_args),
         make_cli_ctx_obj(jobrunner),
         **kwargs,
