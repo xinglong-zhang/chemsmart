@@ -319,11 +319,14 @@ CIF files contain crystallographic data including atomic coordinates and unit ce
 .. note::
 
    -  CIF files are commonly used for crystallographic data
-   -  Chemsmart uses ASE (Atomic Simulation Environment) to parse CIF files; ASE expands the crystal symmetry, so
-      the structure read from a CIF file is the **crystallographic unit cell**, not a discrete molecule. To obtain
-      the deposited discrete molecule from a CCDC deposition number, use ``Molecule.from_ccdc()`` with a licensed
-      local CSD Python API installation (see below).
+
+   -  Chemsmart uses ASE (Atomic Simulation Environment) to parse CIF files; ASE expands the crystal symmetry, so the
+      structure read from a CIF file is the **crystallographic unit cell**, not a discrete molecule. To obtain the
+      deposited discrete molecule from a CCDC deposition number, use ``Molecule.from_ccdc()`` with a licensed local CSD
+      Python API installation (see below).
+
    -  For multi-structure CIF files, use ``-i`` to select a specific structure
+
    -  Charge and multiplicity must be specified with ``-c`` and ``-m`` flags
 
 *********************
@@ -416,25 +419,28 @@ deposition number.
 
 Two retrieval routes are supported, tried in order:
 
-1. **Local CSD Python API (preferred).** If the licensed ``ccdc`` package (CSD Python API) is installed and activated,
-   the structure is retrieved directly from the local CSD installation and the deposited *discrete molecule* is
-   returned (e.g., one benzene molecule, C6H6, for CCDC 725244). This is the recommended route for users with a CSD
-   licence.
-2. **HTTP download (fallback).** Otherwise the CIF file is downloaded from the CCDC web service and parsed with ASE.
+#. **Local CSD Python API (preferred).** If the licensed ``ccdc`` package (CSD Python API) is installed and activated,
+   the structure is retrieved directly from the local CSD installation and the deposited *discrete molecule* is returned
+   (e.g., one benzene molecule, C6H6, for CCDC 725244). This is the recommended route for users with a CSD licence.
+
+#. **HTTP download (fallback).** Otherwise the CIF file is downloaded from the CCDC web service and parsed with ASE.
    Note that this route returns the crystallographic structure read from the CIF (i.e., the symmetry-expanded unit
    cell), not a discrete molecule.
 
 **CSD Python API requirement and configuration:**
 
-Using CCDC deposition numbers requires the **licensed** `CSD Python API <https://www.ccdc.cam.ac.uk/solutions/csd-core/components/csd-python-api/>`_
-(the ``ccdc`` package) in the Python environment running chemsmart:
+Using CCDC deposition numbers requires the **licensed** `CSD Python API
+<https://www.ccdc.cam.ac.uk/solutions/csd-core/components/csd-python-api/>`_ (the ``ccdc`` package) in the Python
+environment running chemsmart:
 
-1. Install ``csd-python-api`` into the chemsmart environment (a CSD licence is required).
-2. Activate the licence with the *CCDC Software Activation* tool.
-3. Depending on the installation, environment variables may be required so that the API can locate the CSD data and
-   files (see the `CSD Python API installation notes <https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html>`_).
-   These can be provided in ``~/.chemsmart/ccdc/ccdc.yaml``; a template is shipped at
-   ``chemsmart/settings/templates/.chemsmart/ccdc/ccdc.yaml``:
+#. Install ``csd-python-api`` into the chemsmart environment (a CSD licence is required).
+
+#. Activate the licence with the *CCDC Software Activation* tool.
+
+#. Depending on the installation, environment variables may be required so that the API can locate the CSD data and
+   files (see the `CSD Python API installation notes
+   <https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html>`_). These can be provided in
+   ``~/.chemsmart/ccdc/ccdc.yaml``; a template is shipped at ``chemsmart/settings/templates/.chemsmart/ccdc/ccdc.yaml``:
 
 .. code:: yaml
 
@@ -445,8 +451,8 @@ Using CCDC deposition numbers requires the **licensed** `CSD Python API <https:/
    # ... other CSD variables as needed
 
 Chemsmart loads this file and exports the variables into the environment before importing the ``ccdc`` package;
-variables already set in the shell take precedence and are not overwritten. If the CSD Python API is not installed
-or not activated, chemsmart issues a warning explaining the requirement and falls back to the HTTP route.
+variables already set in the shell take precedence and are not overwritten. If the CSD Python API is not installed or
+not activated, chemsmart issues a warning explaining the requirement and falls back to the HTTP route.
 
 .. tip::
 
@@ -459,8 +465,8 @@ or not activated, chemsmart issues a warning explaining the requirement and fall
 
 **Configuring CCDC URL:**
 
-The CCDC base URL for the HTTP fallback route can be configured via environment variable if you need to use a
-different endpoint:
+The CCDC base URL for the HTTP fallback route can be configured via environment variable if you need to use a different
+endpoint:
 
 .. code:: bash
 
@@ -469,9 +475,9 @@ different endpoint:
 
 .. warning::
 
-   The default CCDC URL is a placeholder. Users should verify and configure the actual CCDC API endpoint based on
-   their institutional access and licensing requirements. Users with a CSD licence should rely on the local CSD
-   Python API route instead.
+   The default CCDC URL is a placeholder. Users should verify and configure the actual CCDC API endpoint based on their
+   institutional access and licensing requirements. Users with a CSD licence should rely on the local CSD Python API
+   route instead.
 
 **Caching:**
 
