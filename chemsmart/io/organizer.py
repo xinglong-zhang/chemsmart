@@ -50,7 +50,7 @@ class FileOrganizer:
         directory (str): Directory in which the files are searched.
         filename (str): Excel filename to be used for organizing data.
         sheetname (str): Excel sheetname to be used for organizing data.
-        type (str): File type to be searched for.
+        filetype (str): File type to be searched for.
         cols (str): Columns to be read from Excel file.
         skip (int): Number of rows to be skipped in Excel file.
         row (int): Number of rows to be read in Excel file.
@@ -62,7 +62,7 @@ class FileOrganizer:
         directory=None,
         filename=None,
         sheetname=None,
-        type="log",
+        filetype="log",
         cols="B:D",
         skip=2,
         row=100,
@@ -74,7 +74,7 @@ class FileOrganizer:
         assert os.path.exists(filename), f"{filename} does not exist!"
         self.filename = filename
         self.sheetname = sheetname
-        self.type = type
+        self.filetype = filetype
         self.cols = cols
         self.skip = skip
         self.row = row
@@ -169,10 +169,10 @@ class FileOrganizer:
         Returns:
             None
         """
-        if self.type not in old_filename:
-            old_filename += f".{self.type}"
-        if self.type not in new_filename:
-            new_filename += f".{self.type}"
+        if self.filetype not in old_filename:
+            old_filename += f".{self.filetype}"
+        if self.filetype not in new_filename:
+            new_filename += f".{self.filetype}"
 
         absolute_file_path, _ = search_file(old_filename)
         new_file_path = os.path.join(

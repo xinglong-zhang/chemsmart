@@ -5,7 +5,7 @@ contact our team if you have questions or feedback.
  Gaussian QM/MM ONIOM Calculations Guide
 #########################################
 
-ChemSmart provides comprehensive tools for multiscale QM/MM calculations using Gaussian's ONIOM (Our own N-layered
+CHEMSMART provides comprehensive tools for multiscale QM/MM calculations using Gaussian's ONIOM (Our own N-layered
 Integrated molecular Orbital and molecular Mechanics) methodology. This section covers various QM/MM schemes for
 accurate treatment of large molecular systems including enzymes, organometallic complexes, and materials.
 
@@ -14,7 +14,7 @@ accurate treatment of large molecular systems including enzymes, organometallic 
 **********
 
 Gaussian ONIOM calculations enable efficient treatment of large molecular systems by partitioning them into multiple
-layers with different levels of theory. ChemSmart supports flexible ONIOM calculation setups:
+layers with different levels of theory. CHEMSMART supports flexible ONIOM calculation setups:
 
 **2-Layer ONIOM**: High(QM):Low(MM) - **High level**: Quantum mechanics (DFT, ab initio, MP2, etc.) - **Low level**:
 Molecular mechanics force fields (AMBER, UFF, DREIDING)
@@ -34,7 +34,10 @@ The basic command structure for Gaussian ONIOM QM/MM calculations is:
 
 .. code:: console
 
-   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] qmmm [QMMM_OPTIONS]
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <JOBTYPE> qmmm [QMMM_OPTIONS]
+
+where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, ``modred``, or ``qrc``. There is no standalone ``qmmm``
+command.
 
 ************************
  QM/MM-Specific Options
@@ -51,10 +54,6 @@ Job Type and Theory Levels
       -  Type
       -  Description
 
-   -  -  ``-j, --jobtype``
-      -  Choice
-      -  ONIOM job type: sp, opt, freq, ts, irc
-
    -  -  ``-hx, --high-level-functional``
       -  string
       -  DFT functional for high layer (e.g., B3LYP, M06-2X, wB97X-D)
@@ -63,7 +62,7 @@ Job Type and Theory Levels
       -  string
       -  Basis set for high layer (e.g., 6-31G*, def2-TZVP, cc-pVTZ)
 
-   -  -  ``-hf, --high-level-force-field``
+   -  -  ``-hff, --high-level-force-field``
       -  string
       -  Force field for high layer (if MM, rare)
 
@@ -75,7 +74,7 @@ Job Type and Theory Levels
       -  string
       -  Basis set for medium layer
 
-   -  -  ``-mf, --medium-level-force-field``
+   -  -  ``-mff, --medium-level-force-field``
       -  string
       -  Force field for medium layer
 
@@ -87,7 +86,7 @@ Job Type and Theory Levels
       -  string
       -  Basis set for low layer (if QM, uncommon)
 
-   -  -  ``-lf, --low-level-force-field``
+   -  -  ``-lff, --low-level-force-field``
       -  string
       -  Force field for low layer (AMBER=HardFirst, UFF, DREIDING)
 
@@ -114,13 +113,37 @@ Atom Partitioning
       -  string
       -  Atom indices for low layer (usually auto-assigned)
 
-   -  -  ``-b, --bonded-atoms``
+   -  -  ``-ba, --bonded-atoms``
       -  string
-      -  Bonds crossing layer boundaries: e.g., '(1,2),(5,6)'
+      -  Bonds crossing layer boundaries, e.g. ``'[[3, 4], [5, 6]]'``. Optional; cut covalent bonds are assigned from
+         molecular connectivity if omitted.
 
-   -  -  ``-s, --scale-factors``
+   -  -  ``-sf, --scale-factors``
       -  dict
-      -  Custom link atom scale factors: {(atom1,atom2): [low,med,high]}
+      -  Custom link atom scale factors, e.g. ``'{[3, 4]: [0.709, 0.709, 0.709]}'``.
+
+MM Atom Types and Parameters
+============================
+
+Required for AMBER (and similar) force fields unless the input ``.com`` already contains ``Element-Type-Charge`` labels
+and SoftFirst/HardFirst parameter lines.
+
+.. list-table:: MM Parameter Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-mai, --mm-atom-info``
+      -  path
+      -  File with MM atom types and partial charges. Format: ``[index] type charge [link_type link_charge]``.
+
+   -  -  ``-mpf, --mm-parameters-file``
+      -  path
+      -  Optional SoftFirst/HardFirst MM parameter lines to append after the molecule specification. Not needed if
+         already present in the input ``.com``.
 
 Charge and Multiplicity
 =======================
@@ -133,27 +156,27 @@ Charge and Multiplicity
       -  Type
       -  Description
 
-   -  -  ``-cr, --real-charge``
+   -  -  ``-ct, --charge-total``
       -  int
       -  Charge of complete molecular system
 
-   -  -  ``-mr, --real-multiplicity``
+   -  -  ``-mt, --mult-total``
       -  int
       -  Spin multiplicity of complete system (2S+1)
 
-   -  -  ``-ci, --int-charge``
+   -  -  ``-ci, --charge-intermediate``
       -  int
       -  Charge of high+medium layers (3-layer only)
 
-   -  -  ``-mi, --int-multiplicity``
+   -  -  ``-mi, --mult-intermediate``
       -  int
       -  Multiplicity of high+medium layers
 
-   -  -  ``-cm, --model-charge``
+   -  -  ``-ch, --charge-high``
       -  int
       -  Charge of high layer only
 
-   -  -  ``-mm, --model-multiplicity``
+   -  -  ``-mh, --mult-high``
       -  int
       -  Multiplicity of high layer only
 
@@ -168,7 +191,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb qmmm -j opt -hx B3LYP -hb 6-31G* -lf AMBER=HardFirst -ha 1-25 -cr 0 -mr 1 -cm 0 -mm 1 -b "(25,26)"
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[25, 26]]' -mai mm_atoms.dat
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -177,7 +200,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz qmmm -j freq -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lf UFF -ha 1-10 -ma 11-50 -cr -1 -mr 2 -ci 0 -mi 1 -cm 0 -mm 1 -b "(10,11),(50,51)"
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba '[[10, 11], [50, 51]]'
 
 Transition State Search
 =======================
@@ -186,16 +209,17 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com qmmm -j ts -hx wB97X-D -hb 6-311++G(d,p) -lf AMBER=HardFirst -ha 1-30 -cr 0 -mr 1 -cm 0 -mm 1 -b "(30,31)" -s "{(30,31): [0.709, 0.709, 0.709]}"
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[30, 31]]' -sf '{[30, 31]: [0.709, 0.709, 0.709]}'
 
 Frequency Analysis
 ==================
 
-Vibrational analysis of QM/MM optimized structure:
+Vibrational analysis of a QM/MM optimized structure. Enable frequencies via the project settings (``freq: true``). The
+``opt qmmm`` parent command is used since there is no standalone ``freq`` parent command:
 
 .. code:: console
 
-   chemsmart sub gaussian -p freq_qmmm -f optimized.com qmmm -j freq -hx B3LYP -hb 6-31G* -lf AMBER=HardFirst -ha 1-20 -cr 0 -mr 1 -cm 0 -mm 1
+   chemsmart sub gaussian -p freq_qmmm -f optimized.com opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1
 
 Single Point Energy
 ===================
@@ -204,7 +228,7 @@ High-accuracy single point calculation on QM/MM geometry:
 
 .. code:: console
 
-   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz qmmm -j sp -hx CCSD(T) -hb aug-cc-pVDZ -lf AMBER=HardFirst -ha 1-15 -cr 0 -mr 1 -cm 0 -mm 1
+   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hx CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
 
 ***********************************
  GaussianQMMMJobSettings Reference
@@ -292,7 +316,8 @@ Settings Atom Partitioning
 
    -  -  ``bonded_atoms``
       -  list
-      -  Bonds crossing boundaries: [(atom1, atom2), (atom3, atom4)]
+      -  Bonds crossing boundaries: [(atom1, atom2), ...]. Optional; cut covalent bonds are assigned from connectivity
+         if omitted.
 
    -  -  ``scale_factors``
       -  dict
@@ -342,6 +367,8 @@ Link Atom Handling
 ONIOM automatically handles covalent bonds crossing layer boundaries by:
 
 -  **Link atom placement**: Hydrogen atoms placed along cut bonds
+-  **Automatic assignment**: Cut covalent bonds are detected from molecular connectivity unless ``bonded_atoms`` is
+   given
 -  **Scale factor control**: Distance scaling for optimal QM/MM interface
 -  **Charge redistribution**: Prevents charge buildup at boundaries
 -  **Geometric constraints**: Maintains chemical sensibility
@@ -378,53 +405,37 @@ Gaussian supports multiple MM force fields:
 YAML Configuration Files
 ========================
 
-Create project-specific ONIOM settings in YAML format:
+Create project-specific ONIOM settings in YAML format. Charge and multiplicity are not set in the project YAML; pass
+them on the command line (``-ct``, ``-mt``, ``-ch``, ``-mh``, and for 3-layer jobs ``-ci``, ``-mi``).
 
 **Basic 2-Layer QM/MM** (``~/.chemsmart/gaussian/qmmm.yaml``):
 
 .. code:: yaml
 
    # Basic enzyme active site calculation
-   jobtype: "opt"
    high_level_functional: "B3LYP"
    high_level_basis: "6-31G*"
    low_level_force_field: "AMBER=HardFirst"
-   real_charge: 0
-   real_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
 
 **3-Layer ONIOM Configuration** (``~/.chemsmart/gaussian/oniom3.yaml``):
 
 .. code:: yaml
 
    # Advanced organometallic catalyst
-   jobtype: "freq"
    high_level_functional: "M06-2X"
    high_level_basis: "def2-TZVP"
    medium_level_functional: "B3LYP"
    medium_level_basis: "6-31G*"
    low_level_force_field: "UFF"
-   real_charge: -1
-   real_multiplicity: 2
-   int_charge: 0
-   int_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
 
 **Transition State Configuration** (``~/.chemsmart/gaussian/ts_oniom.yaml``):
 
 .. code:: yaml
 
    # Enzyme transition state search
-   jobtype: "ts"
    high_level_functional: "wB97X-D"
    high_level_basis: "6-311++G(d,p)"
    low_level_force_field: "AMBER=HardFirst"
-   real_charge: 0
-   real_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
 
 **Using Project Configuration**
 
@@ -432,7 +443,7 @@ Use the YAML configuration with the project flag:
 
 .. code:: console
 
-   chemsmart sub gaussian -p qmmm -f system.pdb qmmm -ha 1-20 -b "(20,21)"
+   chemsmart sub gaussian -p qmmm -f system.pdb opt qmmm -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[20,21]]'
 
 Python Configuration
 ====================
@@ -445,21 +456,19 @@ Programmatic configuration using the settings class:
 
    # Create basic 2-layer QM/MM settings
    qmmm_settings = GaussianQMMMJobSettings(
-       jobtype="opt",
        high_level_functional="B3LYP",
        high_level_basis="6-31G*",
        low_level_force_field="AMBER=HardFirst",
        high_level_atoms="1-25",
        bonded_atoms=[(25, 26)],
-       real_charge=0,
-       real_multiplicity=1,
-       model_charge=0,
-       model_multiplicity=1,
+       charge_total=0,
+       mult_total=1,
+       charge_high=0,
+       mult_high=1,
    )
 
    # 3-layer ONIOM configuration
    oniom3_settings = GaussianQMMMJobSettings(
-       jobtype="freq",
        high_level_functional="M06-2X",
        high_level_basis="def2-TZVP",
        medium_level_functional="B3LYP",
@@ -468,12 +477,12 @@ Programmatic configuration using the settings class:
        high_level_atoms=[1, 2, 3, 4, 5],
        medium_level_atoms=list(range(6, 21)),
        bonded_atoms=[(5, 6), (20, 21)],
-       real_charge=-1,
-       real_multiplicity=2,
-       int_charge=0,
-       int_multiplicity=1,
-       model_charge=0,
-       model_multiplicity=1,
+       charge_total=-1,
+       mult_total=2,
+       charge_intermediate=0,
+       mult_intermediate=1,
+       charge_high=0,
+       mult_high=1,
        scale_factors={(5, 6): [0.709, 0.709, 0.709]},
    )
 
@@ -487,7 +496,7 @@ Required Parameters
 -  **Layer definition**: Must specify theory level for each layer (QM or MM)
 -  **Atom partitioning**: Must define ``high_level_atoms`` for all calculations
 -  **Charges/multiplicities**: Must specify charge and multiplicity for all layers
--  **Boundary bonds**: Should specify ``bonded_atoms`` for covalent QM/MM boundaries
+-  **Boundary bonds**: Cut covalent bonds are assigned as link atoms automatically; ``bonded_atoms`` may override this
 
 Validation Rules
 ================
@@ -563,6 +572,7 @@ For more advanced ONIOM workflows, see:
  See Also
 **********
 
--  :doc:`gaussian_generalcliforallgaussianjobs` - General Gaussian CLI options
--  :doc:`configuration_setuptheprojectsettings` - Project configuration guide
--  :doc:`gaussian_submitstructureoptimizationjobs` - Structure optimization methods
+-  :doc:`gaussian-cli-options` - General Gaussian CLI options
+-  :doc:`configuration-project-settings` - Project configuration guide
+-  :doc:`gaussian-structure-optimization` - Structure optimization methods
+-  :doc:`gaussian-qmmm-jobs` - Gaussian QM/MM jobs overview

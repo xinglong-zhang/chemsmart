@@ -2,7 +2,20 @@
  Project Settings
 ##################
 
-Configure project-specific settings for Gaussian and ORCA calculations.
+Configure project-specific settings for Gaussian, ORCA, xTB, and CREST calculations.
+
+****************************
+ Updating Project Templates
+****************************
+
+To add project directories and files introduced in newer CHEMSMART version, run:
+
+.. code:: bash
+
+   chemsmart update projects
+
+The command only adds missing project directories and files. Existing project files and user-created files are
+preserved. Running ``make configure`` performs this update automatically.
 
 ***************************
  Gaussian Project Settings
@@ -225,7 +238,7 @@ This configuration:
    -  MDCI (Modified Davidson Configuration Interaction) cutoff parameters
 
 This workflow is efficient for obtaining highly accurate energies on DFT-optimized geometries, commonly used for
-thermochemistry and reaction energetics. One can simply use Gaussian .log file as input for chemsmart to automatically
+thermochemistry and reaction energetics. One can simply use Gaussian .log file as input for CHEMSMART to automatically
 create ORCA single-point .inp file in a single command (see later examples).
 
 Key ORCA-Specific Parameters
@@ -241,11 +254,311 @@ Key ORCA-Specific Parameters
 -  ``mdci_cutoff``: MDCI method cutoff settings (``Loose``, ``Normal``, ``Tight``)
 -  ``mdci_density``: Density treatment in MDCI (must be the string ``"None"``, not YAML null value)
 
+Example: Custom Solvent Parameters for ORCA
+===========================================
+
+For non-standard solvents in ORCA, custom solvent parameters are written directly into the model's solvent block. Unlike
+Gaussian (where ``custom_solvent`` is appended after the molecular coordinates), ORCA reads these parameters from the
+appropriate block (``%cpcm`` or ``%cosmors``).
+
+Supported solvent models and their corresponding ORCA blocks:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 30 55
+
+   -  -  Model
+      -  Route keyword
+      -  Block written
+
+   -  -  ``cpcm``
+      -  ``CPCM(solvent)`` or bare ``CPCM``
+      -  ``%cpcm … end``
+
+   -  -  ``cpcmc``
+      -  ``CPCMC(solvent)`` or bare ``CPCMC``
+      -  ``%cpcm … end`` (CPCM with COSMO epsilon function; replaces legacy COSMO removed in ORCA 4.0)
+
+   -  -  ``smd``
+      -  ``SMD(solvent)`` or bare ``SMD``
+      -  ``%cpcm … end`` only if ``custom_solvent`` / ``-so`` options present
+
+   -  -  ``cosmors``
+      -  ``COSMORS(solvent)`` or bare ``COSMORS``
+      -  ``%cosmors … end``
+
+**CPCM with custom dielectric** (``~/.chemsmart/orca/custom.yaml``):
+
+.. code:: yaml
+
+   gas:
+     functional: m062x
+     basis: def2-svp
+     defgrid: DEFGRID3
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     defgrid: DEFGRID3
+     freq: False
+     solvent_model: cpcm
+     custom_solvent : |
+       Epsilon 16.7
+       Refrac 1.275
+
+This produces the following ORCA input for the ``solv`` job type:
+
+.. code:: text
+
+   ! CPCM M062X def2-tzvp DEFGRID3 ...
+   %cpcm
+     Epsilon 16.7
+     Refrac 1.275
+   end
+
+**CPCMC with custom dielectric** (CPCM + COSMO epsilon; use instead of legacy COSMO):
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: cpcmc
+     custom_solvent : |
+       Epsilon 16.7
+       Refrac 1.275
+
+This produces:
+
+.. code:: text
+
+   ! CPCMC M062X def2-tzvp ...
+   %cpcm
+     Epsilon 16.7
+     Refrac 1.275
+   end
+
+**openCOSMO-RS with named solvent and full parameter block:**
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: cosmors
+     solvent_id: water
+     custom_solvent : |
+       aeff              5.925
+       lnalpha           0.202
+       lnchb             0.166
+       chbt              1.50
+       sigmahb           9.61e-3
+       rav               0.50
+       fcorr             2.40
+       ravcorr           1.00
+       astd              41.624
+       zcoord            10.0
+       dgsolv_eta       -4.4480
+       dgsolv_omegaring  0.2630
+       temp              298.15
+       dftfunc           "BP86"
+       dftbas            "def2-TZVPD"
+       solventfilename   "water"
+       orbs_vac          false
+
+This produces:
+
+.. code:: text
+
+   ! COSMORS(water) M062X def2-tzvp ...
+   %cosmors
+     aeff              5.925
+     lnalpha           0.202
+     lnchb             0.166
+     chbt              1.50
+     sigmahb           9.61e-3
+     rav               0.50
+     fcorr             2.40
+     ravcorr           1.00
+     astd              41.624
+     zcoord            10.0
+     dgsolv_eta       -4.4480
+     dgsolv_omegaring  0.2630
+     temp              298.15
+     dftfunc           "BP86"
+     dftbas            "def2-TZVPD"
+     solventfilename   "water"
+     orbs_vac          false
+   end
+
+.. note::
+
+   **ORCA 6.1 duplicate-keyword guard:** When ``solvent_id`` is set, ``COSMORS(solvent_id)`` already encodes the solvent
+   in the route line. Writing ``solvent "name"`` inside the ``%cosmors`` block too would cause ORCA to raise an ``INPUT
+   ERROR: DUPLICATED KEYWORD``. CHEMSMART automatically filters out any ``solvent "..."`` lines from the ``%cosmors``
+   block when ``solvent_id`` is set.
+
+   ``solventfilename "..."`` is a **different** keyword (it points to a ``.cosmorsxyz`` file) and is **never** filtered.
+
+   If you want the solvent name to go into the ``%cosmors`` block only (omitting it from the route), leave
+   ``solvent_id`` unset and add ``solvent "name"`` to ``custom_solvent`` — the route will then use bare ``COSMORS``
+   without parentheses.
+
+All other parameters listed in the ``custom_solvent`` block correspond directly to keywords in the ORCA ``%cosmors``
+section. Any subset of these can be used — only the parameters you want to override from their defaults need to be
+listed.
+
+.. note::
+
+   **Using a custom ``.cosmorsxyz`` file via ``-sf``:** If you have a custom solvent file (e.g.
+   ``mysolvent.cosmorsxyz``), specify it via the ``-sf`` / ``--solventfilename`` CLI option instead of (or in addition
+   to) the YAML ``custom_solvent`` block:
+
+   .. code::
+
+      chemsmart sub orca -p myproject -f molecule.xyz -c 0 -m 1 \
+          -sm cosmors -si mysolvent -sf /path/to/mysolvent.cosmorsxyz sp
+
+   The file is copied to the running directory (scratch or job folder) and ``solventfilename "mysolvent"`` is injected
+   into the ``%cosmors`` block automatically. If scratch is enabled, CHEMSMART also detects ``solventfilename "..."``
+   entries in the written input and copies the corresponding ``.cosmorsxyz`` file to scratch so ORCA can locate it.
+
+**SMD with named solvent and extra parameters:**
+
+.. code:: yaml
+
+   solv:
+     functional: m062x
+     basis: def2-tzvp
+     solvent_model: smd
+     solvent_id: water
+     custom_solvent : |
+       Epsilon 78.36
+       Refrac 1.33
+
+This produces:
+
+.. code:: text
+
+   ! SMD(water) M062X def2-tzvp ...
+   %cpcm
+     Epsilon 78.36
+     Refrac 1.33
+   end
+
+.. note::
+
+   The ``custom_solvent`` block and ``-so``/``--solvent-options`` CLI parameters all appear together in a single solvent
+   block, in that order: ``custom_solvent`` lines first, then any extra options from ``-so``.
+
+   For SMD in ORCA 6.0, the model is activated by the ``SMD(solvent)`` route keyword alone — no ``SMD true`` /
+   ``SMDsolvent`` lines are needed in the ``%cpcm`` block.
+
+**********************
+ xTB Project Settings
+**********************
+
+The ``~/.chemsmart/xtb/`` directory contains xTB project settings files. Supported job types are ``sp``, ``opt``, and
+``hess``. For xTB optimization jobs, CHEMSMART follows the same convention as Gaussian: ``opt`` defaults to ``freq:
+true``, which renders an xTB ``--ohess`` job unless ``freq: false`` is set explicitly. The ``xtb`` executable is used
+for execution; install xTB so that it is available from the conda environment or ``PATH`` configured in the server YAML
+``XTB`` section.
+
+Example project file (``~/.chemsmart/xtb/test.yaml``):
+
+.. code:: yaml
+
+   sp:
+     gfn_version: gfn2
+     solvent_model: null
+     solvent_id: null
+     grad: false
+
+   opt:
+     gfn_version: gfn2
+     optimization_level: vtight
+     freq: true
+     solvent_model: null
+     solvent_id: null
+     grad: false
+
+   hess:
+     gfn_version: gfn2
+     solvent_model: null
+     solvent_id: null
+     grad: false
+
+Common keys:
+
+-  ``gfn_version``: ``gfn0``, ``gfn1``, ``gfn2``, or ``gfnff``
+-  ``optimization_level``: used by ``opt`` (``crude`` … ``extreme``; packaged default is ``vtight``)
+-  ``freq``: for ``opt`` jobs, ``true`` renders ``--ohess`` and ``false`` renders plain ``--opt``; default is ``true``
+-  ``grad``: whether to pass ``--grad``
+-  ``solvent_model`` / ``solvent_id``: implicit solvent; **both** must be set for solvent flags to be rendered
+-  ``additional_flags``: optional extra CLI tokens appended to the xTB command
+
+Solvent example:
+
+.. code:: yaml
+
+   opt:
+     gfn_version: gfn2
+     optimization_level: vtight
+     freq: true
+     solvent_model: alpb
+     solvent_id: water
+     grad: false
+
+A packaged template is available as ``template_xtb_simple.yaml`` under the CHEMSMART settings templates directory. Copy
+it into ``~/.chemsmart/xtb/`` and rename it for your project.
+
+************************
+ CREST Project Settings
+************************
+
+The ``~/.chemsmart/crest/`` directory contains CREST project settings files. Currently, the supported job type is
+``conformers``. The ``crest`` executable is used for execution; install CREST (and typically ``xtb``) so that they are
+available from the conda environment or ``PATH`` configured in the server YAML ``CREST`` section.
+
+Example project file (``~/.chemsmart/crest/test.yaml``):
+
+.. code:: yaml
+
+   conformers:
+     gfn_version: gfn2
+     energy_window: 6.0
+     optimization_level: vtight
+     nci: false
+
+Solvent example (``~/.chemsmart/crest/test2.yaml``):
+
+.. code:: yaml
+
+   conformers:
+     gfn_version: gfn2
+     energy_window: 6.0
+     optimization_level: vtight
+     solvent_model: gbsa
+     solvent_id: water
+
+Common keys:
+
+-  ``gfn_version``: ``gfn1``, ``gfn2``, ``gfnff``, or ``gfn2//gfnff``
+-  ``energy_window``: energy window for the conformer ensemble (kcal/mol)
+-  ``optimization_level``: ANCOPT level (``crude`` … ``extreme``; packaged default is ``vtight``)
+-  ``solvent_model`` / ``solvent_id``: implicit solvent (``gbsa`` or ``alpb``); both should be set together
+-  ``nci``: enable non-covalent interaction search mode when ``true``
+-  ``quick_mode``, ``rmsd_threshold``, ``energy_threshold``, and related MD/ensemble keys: optional CREST fine-tuning
+   (see :doc:`crest-cli-options`)
+
+A packaged template is available as ``template_crest_simple.yaml`` under the CHEMSMART settings templates directory.
+Copy it into ``~/.chemsmart/crest/`` and rename it for your project.
+
 *******************
  Scratch Directory
 *******************
 
-Set up scratch directories for Gaussian and ORCA jobs:
+Set up a scratch directory path for Gaussian, ORCA, xTB, CREST, and NCIPLOT jobs. Scratch **mode** (on/off) is resolved
+by ``JobRunner.from_job`` for CLI jobs; see :ref:`scratch-behavior` in :doc:`configuration-server-settings`.
 
 .. code:: bash
 

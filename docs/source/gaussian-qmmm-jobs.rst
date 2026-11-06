@@ -5,7 +5,7 @@ contact our team if you have questions or feedback.
  Gaussian QM/MM ONIOM Calculations Guide
 #########################################
 
-ChemSmart provides comprehensive tools for multiscale QM/MM calculations using Gaussian's ONIOM (Our own N-layered
+CHEMSMART provides comprehensive tools for multiscale QM/MM calculations using Gaussian's ONIOM (Our own N-layered
 Integrated molecular Orbital and molecular Mechanics) methodology. This section covers various QM/MM schemes for
 accurate treatment of large molecular systems including enzymes, organometallic complexes, and materials.
 
@@ -14,7 +14,7 @@ accurate treatment of large molecular systems including enzymes, organometallic 
 **********
 
 Gaussian ONIOM calculations enable efficient treatment of large molecular systems by partitioning them into multiple
-layers with different levels of theory. ChemSmart supports flexible ONIOM calculation setups:
+layers with different levels of theory. CHEMSMART supports flexible ONIOM calculation setups:
 
 **2-Layer ONIOM**: High(QM):Low(MM) - **High level**: Quantum mechanics (DFT, ab initio, MP2, etc.) - **Low level**:
 Molecular mechanics force fields (AMBER, UFF, DREIDING)
@@ -34,7 +34,9 @@ The basic command structure for Gaussian ONIOM QM/MM calculations is:
 
 .. code:: console
 
-   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] qmmm [QMMM_OPTIONS]
+   chemsmart sub [OPTIONS] gaussian [GAUSSIAN_OPTIONS] <JOBTYPE> qmmm [QMMM_OPTIONS]
+
+where ``<JOBTYPE>`` is one of ``opt``, ``ts``, ``sp``, ``scan``, ``modred``, or ``qrc``.
 
 ************************
  QM/MM-Specific Options
@@ -51,7 +53,7 @@ Job Type and Theory Levels
       -  Type
       -  Description
 
-   -  -  ``-hf, --high-level-functional``
+   -  -  ``-hx, --high-level-functional``
       -  string
       -  DFT functional for high layer (e.g., B3LYP, M06-2X, wB97X-D)
 
@@ -63,7 +65,7 @@ Job Type and Theory Levels
       -  string
       -  Force field for high layer (if MM, uncommon)
 
-   -  -  ``-mf, --medium-level-functional``
+   -  -  ``-mx, --medium-level-functional``
       -  string
       -  DFT functional for medium layer
 
@@ -75,7 +77,7 @@ Job Type and Theory Levels
       -  string
       -  Force field for medium layer
 
-   -  -  ``-lf, --low-level-functional``
+   -  -  ``-lx, --low-level-functional``
       -  string
       -  DFT functional for low layer (if QM, uncommon)
 
@@ -112,11 +114,35 @@ Atom Partitioning
 
    -  -  ``-ba, --bonded-atoms``
       -  string
-      -  Bonds crossing layer boundaries: e.g., '(1,2),(5,6)'
+      -  Bonds crossing layer boundaries, e.g. ``'[[1, 2], [5, 6]]'``. Optional; cut covalent bonds are assigned from
+         molecular connectivity if omitted.
 
    -  -  ``-sf, --scale-factors``
       -  dict
-      -  Custom link atom scale factors: {(atom1,atom2): [low,med,high]}
+      -  Custom link atom scale factors, e.g. ``'{[3, 4]: [0.709, 0.709, 0.709]}'``.
+
+MM Atom Types and Parameters
+============================
+
+Required for AMBER (and similar) force fields unless the input ``.com`` already contains ``Element-Type-Charge`` labels
+and SoftFirst/HardFirst parameter lines.
+
+.. list-table:: MM Parameter Options
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-mai, --mm-atom-info``
+      -  path
+      -  File with MM atom types and partial charges. Format: ``[index] type charge [link_type link_charge]``.
+
+   -  -  ``-mpf, --mm-parameters-file``
+      -  path
+      -  Optional SoftFirst/HardFirst MM parameter lines to append after the molecule specification. Not needed if
+         already present in the input ``.com``.
 
 Charge and Multiplicity
 =======================
@@ -164,7 +190,7 @@ Basic enzyme QM/MM calculation with DFT for active site and AMBER for protein:
 
 .. code:: console
 
-   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba "(25,26)"
+   chemsmart sub gaussian -p enzyme_qmmm -f protein.pdb opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-25 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[25, 26]]' -mai mm_atoms.dat
 
 3-Layer Organometallic Catalyst
 ===============================
@@ -173,7 +199,7 @@ Multi-layer calculation with high-accuracy DFT for metal center:
 
 .. code:: console
 
-   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz freq qmmm -hf M06-2X -hb def2-TZVP -mf B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba "(10,11),(50,51)"
+   chemsmart sub gaussian -p catalyst_oniom -f complex.xyz opt qmmm -hx M06-2X -hb def2-TZVP -mx B3LYP -mb 6-31G* -lff UFF -ha 1-10 -ma 11-50 -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1 -ba '[[10, 11], [50, 51]]'
 
 Transition State Search
 =======================
@@ -182,16 +208,18 @@ ONIOM transition state optimization for enzyme catalysis:
 
 .. code:: console
 
-   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hf wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -rc 0 -rm 1 -mc 0 -mm 1 -ba "(30,31)" -sf "{(30,31): [0.709, 0.709, 0.709]}"
+   chemsmart sub gaussian -p ts_qmmm -f reactant.com ts qmmm -hx wB97X-D -hb 6-311++G(d,p) -lff AMBER=HardFirst -ha 1-30 -ct 0 -mt 1 -ch 0 -mh 1 -ba '[[30, 31]]' -sf '{[30, 31]: [0.709, 0.709, 0.709]}'
 
 Frequency Analysis
 ==================
 
-Vibrational analysis of QM/MM optimized structure:
+Vibrational analysis of a QM/MM optimized structure. Enable frequencies via the project settings (``freq: true``) or by
+passing ``-r freq`` to add the keyword to the route. The ``opt qmmm`` parent command is used since there is no
+standalone ``freq`` parent command:
 
 .. code:: console
 
-   chemsmart sub gaussian -p freq_qmmm -f optimized.com freq qmmm -hf B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -rc 0 -rm 1 -mc 0 -mm 1
+   chemsmart sub gaussian -p freq_qmmm -f optimized.com opt qmmm -hx B3LYP -hb 6-31G* -lff AMBER=HardFirst -ha 1-20 -ct 0 -mt 1 -ch 0 -mh 1
 
 Single Point Energy
 ===================
@@ -200,7 +228,7 @@ High-accuracy single point calculation on QM/MM geometry:
 
 .. code:: console
 
-   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hf CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -rc 0 -rm 1 -mc 0 -mm 1
+   chemsmart sub gaussian -p sp_qmmm -f geometry.xyz sp qmmm -hx CCSD(T) -hb aug-cc-pVDZ -lff AMBER=HardFirst -ha 1-15 -ct 0 -mt 1 -ch 0 -mh 1
 
 ***********************************
  GaussianQMMMJobSettings Reference
@@ -302,7 +330,8 @@ Settings Atom Partitioning
 
    -  -  ``bonded_atoms``
       -  list
-      -  Bonds crossing boundaries: [(atom1, atom2), (atom3, atom4)]
+      -  Bonds crossing boundaries: [(atom1, atom2), ...]. Optional; cut covalent bonds are assigned from connectivity
+         if omitted.
 
    -  -  ``scale_factors``
       -  dict
@@ -352,6 +381,8 @@ Link Atom Handling
 ONIOM automatically handles covalent bonds crossing layer boundaries by:
 
 -  **Link atom placement**: Hydrogen atoms placed along cut bonds
+-  **Automatic assignment**: Cut covalent bonds are detected from molecular connectivity unless ``bonded_atoms`` is
+   given
 -  **Scale factor control**: Distance scaling for optimal QM/MM interface
 -  **Charge redistribution**: Prevents charge buildup at boundaries
 -  **Geometric constraints**: Maintains chemical sensibility
@@ -388,49 +419,36 @@ Gaussian supports multiple MM force fields:
 YAML Configuration Files
 ========================
 
-Create project-specific ONIOM settings in YAML format:
+Create project-specific ONIOM settings in YAML format. Charge and multiplicity are not set in the project YAML; pass
+them on the command line (``-ct``, ``-mt``, ``-ch``, ``-mh``, and for 3-layer jobs ``-ci``, ``-mi``).
 
 **Basic 2-Layer QM/MM** (``~/.chemsmart/gaussian/qmmm.yaml``):
 
 .. code:: yaml
 
    # Basic enzyme active site calculation
-   jobtype: "opt"
    high_level_functional: "B3LYP"
    high_level_basis: "6-31G*"
    low_level_force_field: "AMBER=HardFirst"
-   real_charge: 0
-   real_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
 
 **3-Layer ONIOM Configuration** (``~/.chemsmart/gaussian/oniom3.yaml``):
 
 .. code:: yaml
 
    # Advanced organometallic catalyst
-   jobtype: "freq"
    high_level_functional: "M06-2X"
    high_level_basis: "def2-TZVP"
    medium_level_functional: "B3LYP"
    medium_level_basis: "6-31G*"
    low_level_force_field: "UFF"
-   real_charge: -1
-   real_multiplicity: 2
-   int_charge: 0
-   int_multiplicity: 1
-   model_charge: 0
-   model_multiplicity: 1
-   bonded_atoms: [(10, 11), (50, 51)]
-   scale_factors:
-     (10, 11): [0.709, 0.709, 0.709]
-     (50, 51): [0.709, 0.709, 0.709]
+   bonded_atoms: [[10, 11], [50, 51]]
+   scale_factors: "{[10, 11]: [0.709, 0.709, 0.709], [50, 51]: [0.709, 0.709, 0.709]}"
 
 Usage with project settings:
 
 .. code:: console
 
-   chemsmart sub gaussian -p qmmm -f complex.xyz qmmm -ha "1-10" -ma "11-50"
+   chemsmart sub gaussian -p qmmm -f complex.xyz opt qmmm -ha "1-10" -ma "11-50" -ct -1 -mt 2 -ci 0 -mi 1 -ch 0 -mh 1
 
 *****************
  Troubleshooting
@@ -456,4 +474,4 @@ Common Issues and Solutions
    -  Consider semi-empirical methods for large QM2 regions
    -  Balance QM region size with computational resources
 
-For additional support and examples, see the ChemSmart community forums and documentation repository.
+For additional support and examples, see the CHEMSMART community forums and documentation repository.

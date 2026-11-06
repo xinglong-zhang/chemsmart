@@ -33,12 +33,16 @@ def inp(ctx, skip_completed, **kwargs):
     Only requires the file that is to be run.
     """
     filename = ctx.obj["filename"]
+    jobrunner = ctx.obj.get("jobrunner")
     logger.info(f"Creating ORCA input job from file: {filename}")
 
     from chemsmart.jobs.orca.job import ORCAInpJob
 
     job = ORCAInpJob.from_filename(
-        filename=filename, skip_completed=skip_completed, **kwargs
+        filename=filename,
+        jobrunner=jobrunner,
+        skip_completed=skip_completed,
+        **kwargs,
     )
     logger.debug(f"Created ORCA input job: {job}")
     return job

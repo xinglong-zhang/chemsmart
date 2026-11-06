@@ -10,10 +10,7 @@ from chemsmart.cli.gaussian.gaussian import (
 # Import and register qmmm subcommand
 from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import (
-    MyGroup,
-    get_setting_from_jobtype_for_gaussian,
-)
+from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_gaussian
 from chemsmart.utils.utils import check_charge_and_multiplicity
 
 logger = logging.getLogger(__name__)
@@ -47,6 +44,11 @@ def modred(
     modred_settings = get_setting_from_jobtype_for_gaussian(
         project_settings, jobtype, coordinates, step_size, num_steps
     )
+
+    # Merge gaussian-level CLI overrides (e.g. -c/--charge, -m/--multiplicity).
+    job_settings = ctx.obj["job_settings"]
+    keywords = ctx.obj["keywords"]
+    modred_settings = modred_settings.merge(job_settings, keywords=keywords)
 
     # job setting from filename or default, with updates from user in cli
     # specified in keywords

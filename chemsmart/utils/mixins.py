@@ -16,14 +16,25 @@ Key mixin classes:
 """
 
 import inspect
+import logging
 import os
 import re
+from datetime import datetime
 from functools import cached_property
 
 from ase import units
 
+from chemsmart.io.crest.route import CRESTRoute
 from chemsmart.io.gaussian.route import GaussianRoute
 from chemsmart.io.orca.route import ORCARoute
+from chemsmart.io.xtb.route import XTBRoute
+from chemsmart.utils.repattern import (
+    gaussian_date_pattern,
+    orca_date_pattern,
+    xtb_date_pattern,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class FileMixin:
@@ -83,7 +94,7 @@ class FileMixin:
         Returns:
             list: List of strings, each representing a line from the file.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return [line.strip() for line in f.readlines()]
 
     @cached_property
@@ -94,7 +105,7 @@ class FileMixin:
         Returns:
             str: Complete file contents as a single string.
         """
-        with open(self.filepath, "r") as f:
+        with open(self.filepath, "r", encoding="utf-8") as f:
             return f.read()
 
     @cached_property
@@ -202,7 +213,10 @@ class FileMixin:
             list or None: List of SOMO energies, or None for closed-shell.
         """
         if self.multiplicity != 1:
-            return self.alpha_occ_eigenvalues[-self.num_unpaired_electrons :]
+            if self.alpha_occ_eigenvalues:
+                return self.alpha_occ_eigenvalues[
+                    -self.num_unpaired_electrons :
+                ]
         return None
 
     @cached_property
@@ -392,6 +406,55 @@ class FileMixin:
         else:
             return None
 
+    def validate_frequencies(self, ignore_threshold=-15.0):
+        """
+        Validate vibrational frequencies based on the job type and return a report.
+
+        - For an "OPT" job, it checks for zero imaginary frequencies.
+        - For a "TS" job, it checks for exactly one imaginary frequency.
+        - For other job types, validation is not performed.
+
+        Args:
+            ignore_threshold (float): Frequencies above this threshold are ignored.
+
+        Returns:
+            dict: A dictionary containing the validation results.
+        """
+        imaginary_freqs = []
+        if self.vibrational_frequencies is not None:
+            imaginary_freqs = [
+                freq
+                for freq in self.vibrational_frequencies
+                if freq < ignore_threshold
+            ]
+
+        num_imaginary = len(imaginary_freqs)
+        job_type = self.jobtype.upper() if self.jobtype else ""
+
+        is_valid_minimum = False
+        is_valid_ts = False
+        detected_job_type = "UNKNOWN"
+
+        if "OPT" in job_type:
+            is_valid_minimum = num_imaginary == 0
+            detected_job_type = "OPT"
+        elif "TS" in job_type:
+            is_valid_ts = num_imaginary == 1
+            detected_job_type = "TS"
+        elif self.jobtype:
+            detected_job_type = self.jobtype.upper()
+
+        if self.vibrational_frequencies is None and "OPT" in job_type:
+            is_valid_minimum = True
+
+        return {
+            "detected_job_type": detected_job_type,
+            "total_imaginary_frequencies": num_imaginary,
+            "imaginary_frequencies_list": imaginary_freqs,
+            "is_valid_minimum": is_valid_minimum,
+            "is_valid_ts": is_valid_ts,
+        }
+
 
 class GaussianFileMixin(FileMixin):
     """
@@ -401,6 +464,39 @@ class GaussianFileMixin(FileMixin):
     route string parsing, job type detection, and settings extraction.
     Handles Gaussian input/output file formats and job parameters.
     """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for i, line in enumerate(self.contents):
+            if (
+                "******************************************" in line
+                and i + 1 < len(self.contents)
+            ):
+                next_line = self.contents[i + 1]
+                if "Gaussian" in next_line:
+                    version_line = next_line
+                    version = version_line.split()[2].split("-")[1]
+                    return version
+        return None
+
+    @property
+    def file_date(self):
+        if not self.contents:
+            return None
+        last_line = self.contents[-1]
+        match = re.search(gaussian_date_pattern, last_line)
+        if match:
+            time_info = match.group(1)
+            try:
+                return datetime.strptime(
+                    time_info, "%a %b %d %H:%M:%S %Y"
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+        return None
 
     def _get_chk(self):
         """
@@ -480,14 +576,26 @@ class GaussianFileMixin(FileMixin):
         """
         Check if file contains a Gaussian link job.
 
-        Searches for link job indicators such as 'stable=opt' in
-        route lines to determine if this is a multi-step job.
+        Searches for link job indicators such as ``stable=opt`` in complete
+        route blocks. Gaussian may wrap a route across multiple lines.
 
         Returns:
             bool: True if link job detected, False otherwise.
         """
-        for line in self.contents:
-            if line.startswith("#") and "stable=opt" in line:
+        lines = self.contents
+        for i, line in enumerate(lines):
+            if not line.startswith("#"):
+                continue
+
+            route_lines = [line]
+            for continuation in lines[i + 1 :]:
+                if not continuation or continuation.startswith(
+                    ("------", "#")
+                ):
+                    break
+                route_lines.append(continuation)
+
+            if "stable=opt" in "".join(route_lines).lower():
                 return True
         return False
 
@@ -718,6 +826,11 @@ class GaussianFileMixin(FileMixin):
         return self.route_object.functional
 
     @property
+    def method(self):
+        """Get the computational method from route string."""
+        return self.route_object.method
+
+    @property
     def basis(self):
         """
         Get basis set from route string.
@@ -850,6 +963,16 @@ class GaussianFileMixin(FileMixin):
 
         title = f"Job prepared from Gaussian file {filename}"
 
+        # Gaussian output files expose custom SMD parameters as a dictionary
+        # for convenient programmatic inspection, whereas job settings use
+        # the free-form text that is written back to a Gaussian input file.
+        # Convert only at this boundary so both APIs keep their intended type.
+        custom_solvent = self.custom_solvent
+        if isinstance(custom_solvent, dict):
+            custom_solvent = "\n".join(
+                f"{key}={value}" for key, value in custom_solvent.items()
+            )
+
         return GaussianJobSettings(
             ab_initio=self.ab_initio,
             functional=self.functional,
@@ -874,7 +997,7 @@ class GaussianFileMixin(FileMixin):
             heavy_elements=self.heavy_elements,
             heavy_elements_basis=self.heavy_elements_basis,
             light_elements_basis=self.light_elements_basis,
-            custom_solvent=self.custom_solvent,
+            custom_solvent=custom_solvent,
             append_additional_info=None,
             forces=False,
         )
@@ -888,6 +1011,32 @@ class ORCAFileMixin(FileMixin):
     route string parsing, solvent model detection, and MDCI parameter
     extraction. Handles ORCA input/output file formats and job settings.
     """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "Program Version" in line:
+                version = line.split()[2]
+                return version
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "Starting time:" in line:
+                match = re.search(orca_date_pattern, line)
+                if match:
+                    time_info = match.group(1)
+                    try:
+                        return datetime.strptime(
+                            time_info, "%a %b %d %H:%M:%S %Y"
+                        ).strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
 
     @cached_property
     def contents_string(self):
@@ -950,28 +1099,31 @@ class ORCAFileMixin(FileMixin):
         return None
 
     @property
+    def solvent_on(self):
+        return self.solvent_model is not None and self.solvent_id is not None
+
+    @property
     def solvent_model(self):
         """
         Determine solvent model type from ORCA input file.
 
-        Scans the "%cpcm" block to detect CPCM/SMD usage. Returns "smd" if a
-        "%cpcm" block is present and contains "smd true"; returns "cpcm" if a
-        "%cpcm" block is present without the SMD flag; returns None otherwise.
-        Note: the route line is not parsed for solvent specification here.
+        First checks the ``%cpcm`` block (old-style ORCA inputs with
+        ``SMD true``/``SMDsolvent``): returns ``"smd"`` if the block contains
+        ``smd true``, ``"cpcm"`` if the block exists without the SMD flag.
+
+        If no ``%cpcm`` block is found, falls back to checking the route line
+        for ORCA 6.0 style simple-input keywords: ``COSMORS``, ``CPCMC``,
+        ``SMD``, or ``CPCM`` (matched as whole words, case-insensitively).
 
         Returns:
-            str or None: "cpcm", "smd", or None if no solvent model found.
+            str or None: One of ``"cpcm"``, ``"cpcmc"``, ``"smd"``,
+            ``"cosmors"``, or ``None`` if no solvent model is found.
         """
         cpcm = False
         smd = False
 
         for i, line in enumerate(self.contents):
-            # not even needed to test the route string for solvent
-            # if '!' in line and 'cpcm' in line:
-            #    cpcm = True
-
-            # solvent specification not in the route string
-            # but in the %cpcm block (ORCA_Test_0829.inp)
+            # solvent specification in the %cpcm block (old-style ORCA)
             if "%cpcm" in line.lower():
                 cpcm = True
                 next_lines = self.contents[i + 1 :]
@@ -983,6 +1135,23 @@ class ORCAFileMixin(FileMixin):
             if smd:
                 return "smd"
             return "cpcm"
+
+        # Fallback: detect ORCA 6.0 style keyword from the route line.
+        # Check in priority order (most specific first).
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        if re.search(r"\bcosmors\b", route_lower):
+            return "cosmors"
+        if re.search(r"\bcpcmc\b", route_lower):
+            return "cpcmc"
+        if re.search(r"\bsmd\b", route_lower):
+            return "smd"
+        if re.search(r"\bcpcm\b", route_lower):
+            return "cpcm"
         return None
 
     @property
@@ -990,35 +1159,43 @@ class ORCAFileMixin(FileMixin):
         """
         Extract solvent identifier from ORCA input file.
 
-        Searches for solvent specification in quoted strings and
-        validates that exactly one solvent is specified.
+        First searches for a solvent name in lines that contain a solvent
+        keyword (``solvent``, ``SMDsolvent``), explicitly excluding
+        ``solventfilename`` lines (which point to a file, not a solvent name).
+
+        If no match is found in the file body, falls back to extracting the
+        solvent name from the route line using ``MODEL(solvent)`` patterns
+        (e.g. ``COSMORS(water)``, ``SMD(cyclohexane)``).
 
         Returns:
             str or None: Solvent identifier or None if not found.
-
-        Raises:
-            Exception: If solvent not in quotes or multiple solvents found.
         """
-        pattern = re.compile(
-            r'"([^"]*)"'
-        )  # pattern to find text between double quotes
         for line in self.contents:
-            line_lower = line.lower()
-            if "solvent" in line_lower:
-                if not pattern.search(line_lower):
-                    raise Exception(
-                        "Your input file specifies solvent but solvent is not in quotes, "
-                        "thus, your input file is not valid to run for ORCA!"
-                    )
-
-                # Find all matches of the pattern in the line
-                matches = pattern.findall(line_lower)
+            if line.startswith("Solvent name"):
+                return line.split()[-1]
+        for line in self.contents:
+            if "solvent" in line.lower() and not re.search(
+                r"\bsolventfilename\b", line.lower()
+            ):
+                pattern = re.compile(r'"([^"]*)"')
+                matches = pattern.findall(line.lower())
                 if len(matches) == 1:
                     return matches[0]
-
                 raise Exception(
-                    f"{len(matches)} solvents found! Only can specify 1 solvent!"
+                    "Your input file specifies solvent but solvent is not in quotes, "
+                    "thus, your input file is not valid to run for ORCA!"
                 )
+
+        # Fallback: extract solvent from route-line pattern 'MODEL(solvent)'.
+        try:
+            route_lower = (
+                self.route_string.lower() if self.route_string else ""
+            )
+        except NotImplementedError:
+            route_lower = ""
+        m = re.search(r"\b(?:cosmors|cpcmc|smd|cpcm)\(([^)]+)\)", route_lower)
+        if m:
+            return m.group(1)
         return None
 
     # properties from orca route string
@@ -1081,6 +1258,11 @@ class ORCAFileMixin(FileMixin):
             str or None: Ab initio method name or None if not specified.
         """
         return self.route_object.ab_initio
+
+    @property
+    def method(self):
+        """Get the computational method from ORCA route string."""
+        return self.route_object.method
 
     @property
     def dispersion(self):
@@ -1261,6 +1443,335 @@ class ORCAFileMixin(FileMixin):
         )
 
 
+class XTBFileMixin(FileMixin):
+    """
+    Mixin class for xTB computational chemistry files.
+
+    Extends FileMixin with xTB-specific functionality including
+    program call parsing, job type detection, and settings extraction.
+    Handles xTB file formats and calculation parameters.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        for line in self.contents:
+            if "xtb version" in line:
+                parts = line.split()
+                if "version" in parts:
+                    idx = parts.index("version")
+                    if idx + 1 < len(parts):
+                        return parts[idx + 1]
+        return None
+
+    @property
+    def file_date(self):
+        for line in self.contents:
+            if "finished run on" in line:
+                match = re.search(xtb_date_pattern, line)
+                if match:
+                    date_str = match.group(1)  # YYYY/MM/DD
+                    time_str = match.group(2)  # HH:MM:SS
+                    try:
+                        # Convert from YYYY/MM/DD HH:MM:SS to YYYY-MM-DD HH:MM:SS
+                        date_obj = datetime.strptime(
+                            f"{date_str} {time_str}", "%Y/%m/%d %H:%M:%S"
+                        )
+                        return date_obj.strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        continue
+        return None
+
+    @property
+    def route_string(self):
+        """
+        Get the program call from xTB main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Program call for xTB calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get program call from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed xTB route object from the program call.
+
+        Creates an XTBRoute object from the program call to
+        provide structured access to calculation parameters.
+
+        Returns:
+            XTBRoute: Parsed xTB route object.
+        """
+        return XTBRoute(route_string=self.route_string)
+
+    @property
+    def method(self):
+        """Get the computational method from the xTB program call or output Hamiltonian."""
+        gfn = self.route_object.method
+        if gfn:
+            return gfn
+        hamiltonian = self.hamiltonian
+        if hamiltonian:
+            return hamiltonian.lower().split("-")[0]
+        return None
+
+    @property
+    def basis(self):
+        """Return default xTB basis set specification."""
+        return self.route_object.basis
+
+    @property
+    def custom_solvent(self):
+        """xTB does not use Gaussian/ORCA-style inline custom solvent blocks."""
+        return None
+
+    @property
+    def jobtype(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type (e.g. 'sp', 'opt', 'hess', 'md')
+        """
+        return self.route_object.jobtype
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn0', 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def optimization_level(self):
+        """
+        Extract optimization level from route string.
+
+        Returns:
+            str or None: Optimization level (e.g., 'loose', 'normal', 'tight')
+        """
+        return self.route_object.optimization_level
+
+    @property
+    def solvent_model(self):
+        """
+        Extract solvent model from route string.
+
+        Returns:
+            str or None: Solvent model (e.g., 'alpb', 'gbsa', 'cosmo')
+        """
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """
+        Extract solvent identity from route string.
+
+        Returns:
+            str or None: Solvent identity (e.g., 'water', 'toluene')
+        """
+        return self.route_object.solvent_id
+
+    @property
+    def charge(self):
+        """
+        Extract molecular charge from route string.
+
+        Returns:
+            int or None: Molecular charge
+        """
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """
+        Extract number of unpaired electrons from route string.
+
+        Returns:
+            int or None: Number of unpaired electrons (Nalpha - Nbeta)
+        """
+        return self.route_object.uhf
+
+    @property
+    def freq(self):
+        """
+        Check if frequency calculation is requested.
+
+        Returns:
+            bool: True if frequency calculation is specified
+        """
+        return self.route_object.freq
+
+    @property
+    def grad(self):
+        """
+        Check if gradient calculation is requested.
+
+        Returns:
+            bool: True if gradient calculation is specified
+        """
+        return self.route_object.grad
+
+
+class CRESTFileMixin(FileMixin):
+    """
+    Mixin class for CREST computational chemistry output files.
+
+    Extends FileMixin with CREST-specific functionality including
+    route string parsing, job type detection, and settings extraction.
+    Handles CREST file formats and calculation parameters.
+    """
+
+    @property
+    def version(self):
+        return self._get_version()
+
+    def _get_version(self):
+        """
+        Extract CREST version from the banner line.
+
+        Example line:
+            Version 3.0.2, Tue, 05 August 16:25:20, 08/05/2025
+        """
+        for line in self.contents:
+            stripped = line.strip()
+            if stripped.startswith("Version "):
+                # "Version 3.0.2, ..." → "3.0.2"
+                return (
+                    stripped.split(",", 1)[0].replace("Version ", "").strip()
+                )
+        return None
+
+    @property
+    def route_string(self):
+        """
+        Get the route string from CREST main output file.
+
+        Returns the computational route string as defined in the
+        program call. Implementation is provided by subclasses.
+
+        Returns:
+            str: Program call for CREST calculations.
+        """
+        return self._get_route()
+
+    def _get_route(self):
+        """
+        Get program call from file contents.
+
+        Default implementation that must be overridden by subclasses
+        to provide specific route string extraction logic.
+
+        Raises:
+            NotImplementedError: Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement `_get_route`.")
+
+    @property
+    def route_object(self):
+        """
+        Get parsed CREST route object from the program call.
+
+        Creates a CRESTRoute object from the program call to
+        provide structured access to calculation parameters.
+
+        Returns:
+            CRESTRoute: Parsed CREST route object.
+        """
+        return CRESTRoute(route_string=self.route_string)
+
+    @property
+    def method(self):
+        """Get the computational method from CREST route string."""
+        return self.route_object.method
+
+    @property
+    def basis(self):
+        """Return default xTB basis set specification."""
+        return self.route_object.basis
+
+    @property
+    def custom_solvent(self):
+        """CREST does not use Gaussian/ORCA-style inline custom solvent blocks."""
+        return None
+
+    @property
+    def jobtype(self):
+        """
+        Extract the primary job type from the route.
+
+        Returns:
+            str: Job type (always 'conformers' for CREST).
+        """
+        return self.route_object.jobtype
+
+    @property
+    def gfn_version(self):
+        """
+        Extract GFN version from route string.
+
+        Returns:
+            str or None: GFN version identifier (e.g., 'gfn1', 'gfn2', 'gfnff')
+        """
+        return self.route_object.gfn_version
+
+    @property
+    def charge(self):
+        """Molecular charge from the CREST command line."""
+        return self.route_object.charge
+
+    @property
+    def uhf(self):
+        """Number of unpaired electrons from the CREST command line."""
+        return self.route_object.uhf
+
+    @property
+    def multiplicity(self):
+        """Spin multiplicity (uhf + 1)."""
+        return self.route_object.multiplicity
+
+    @property
+    def solvent_model(self):
+        """Implicit solvent model ('alpb' or 'gbsa')."""
+        return self.route_object.solvent_model
+
+    @property
+    def solvent_id(self):
+        """Solvent identifier."""
+        return self.route_object.solvent_id
+
+    @property
+    def optimization_level(self):
+        """Optimization convergence level."""
+        return self.route_object.optimization_level
+
+    @property
+    def constrained(self):
+        """Whether --cinp constraint input file was specified."""
+        return self.route_object.constrained
+
+
 class YAMLFileMixin(FileMixin):
     """
     Mixin class for YAML file handling and parsing.
@@ -1428,7 +1939,7 @@ class FolderMixin:
     Mixin class for folder operations and file discovery.
 
     Provides methods for searching and filtering files within directories
-    based on file extensions, regular expressions, and other criteria.
+    based on contents, file extensions, regular expressions, and other criteria.
     Supports both current directory and recursive subdirectory searches.
 
     Attributes:
@@ -1436,26 +1947,201 @@ class FolderMixin:
             set this attribute (e.g., via BaseFolder or a subclass).
     """
 
+    @property
+    def folderpath(self):
+        """
+        Get the absolute path of the folder.
+
+        Returns:
+            str: Absolute folder path.
+        """
+        return os.path.abspath(self.folder)
+
+    @staticmethod
+    def _normalize_file_suffix(filetype):
+        """
+        Normalize a file-type argument to a dotted suffix.
+
+        Callers may pass ``\"xyz\"`` or ``\".xyz\"``. Matching always uses a
+        leading-dot suffix so ``filetype=\"xyz\"`` matches ``foo.xyz`` but not
+        ``foo.extxyz``.
+        """
+        if not filetype:
+            return filetype
+        return filetype if filetype.startswith(".") else f".{filetype}"
+
+    def _get_all_output_files_by_program(self, program=None, recursive=False):
+        """
+        Obtain a list of quantum chemistry output files by program.
+        File discovery is performed in two stages:
+        (1) lightweight suffix-based filtering for efficiency;
+        (2) program detection using get_program_type_from_file method.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+            recursive (bool): Whether to search recursively in subdirectories.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+
+        Raises:
+            ValueError: If an unsupported program name is provided.
+        """
+        from chemsmart.utils.io import (
+            ALL_SUFFIXES,
+            PROGRAM_INFO,
+            get_program_type_from_file,
+        )
+
+        # Validate program parameter
+        if program is not None and program not in PROGRAM_INFO:
+            valid_programs = ", ".join(sorted(PROGRAM_INFO))
+            raise ValueError(
+                f"Unsupported program '{program}'. "
+                f"Supported programs: {valid_programs}."
+            )
+
+        candidate_files = []
+        if recursive:
+            for subdir, _dirs, files in os.walk(self.folder):
+                for file in files:
+                    filepath = os.path.join(subdir, file)
+                    # Skip directories and empty files
+                    if not os.path.isfile(filepath):
+                        continue
+                    if os.stat(filepath).st_size == 0:
+                        continue
+                    if program is None:
+                        if file.endswith(ALL_SUFFIXES):
+                            candidate_files.append(filepath)
+                    else:
+                        if file.endswith(
+                            tuple(PROGRAM_INFO[program]["suffixes"])
+                        ):
+                            candidate_files.append(filepath)
+        else:
+            for file in os.listdir(self.folder):
+                filepath = os.path.join(self.folder, file)
+                # Skip directories and empty files
+                if not os.path.isfile(filepath):
+                    continue
+                if os.stat(filepath).st_size == 0:
+                    continue
+                # Filter by suffix first for efficiency
+                if program is None:
+                    if file.endswith(ALL_SUFFIXES):
+                        candidate_files.append(filepath)
+                else:
+                    if file.endswith(tuple(PROGRAM_INFO[program]["suffixes"])):
+                        candidate_files.append(filepath)
+
+        matched_files = []
+        for filepath in candidate_files:
+            detected_program = get_program_type_from_file(filepath)
+            if detected_program == "unknown":
+                continue
+            if program is None or detected_program == program:
+                matched_files.append(filepath)
+        return matched_files
+
+    def get_all_output_files_in_current_folder_by_program(self, program=None):
+        """
+        Obtain a list of quantum chemistry output files in the current folder by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=False
+        )
+
+    def get_all_output_files_in_current_folder_and_subfolders_by_program(
+        self, program=None
+    ):
+        """
+        Obtain quantum chemistry output files in folder and all subfolders by program.
+
+        Args:
+            program (str | None): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+                                  If None, returns all detected output files from supported programs.
+
+        Returns:
+            list[str]: Full file paths matching the specified program.
+        """
+        return self._get_all_output_files_by_program(
+            program=program, recursive=True
+        )
+
+    def is_program_calculation_directory(self, program):
+        """
+        Check if the current folder contains output files from a specific program.
+
+        Args:
+            program (str): Target QC program (e.g., "xtb", "crest", "gaussian", "orca").
+
+        Returns:
+            bool: True if the folder contains at least one output file from
+                  the specified program, False otherwise.
+        """
+        if not os.path.isdir(self.folder):
+            return False
+        return bool(
+            self.get_all_output_files_in_current_folder_by_program(program)
+        )
+
+    def get_program_type_from_folder(self):
+        """
+        Detect the type of calculation folder based on programs.
+
+        Note:
+            Folder-level detection is currently only supported for xtb and crest
+            programs. Other supported programs like gaussian and orca require
+            file-level detection (see get_program_type_from_file).
+
+        Returns:
+            str: Program name ("xtb", "crest"), "mixed" if multiple programs detected,
+             or "unknown" if the format cannot be detected.
+        """
+        from chemsmart.utils.io import PROGRAMS_WITH_FOLDER_DETECTION
+
+        programs = []
+        for program in PROGRAMS_WITH_FOLDER_DETECTION:
+            if self.is_program_calculation_directory(program):
+                programs.append(program)
+        if len(programs) == 1:
+            return programs[0]
+        elif len(programs) > 1:
+            return "mixed"
+        return "unknown"
+
     def get_all_files_in_current_folder_by_suffix(self, filetype):
         """
         Obtain a list of files of specified type in the current folder.
 
         Non-recursively lists files in `self.folder` whose names end with
-        `filetype`. Empty files are excluded.
+        the normalized dotted suffix (see ``_normalize_file_suffix``).
+        Empty files are excluded.
 
         Args:
-            filetype (str): File name suffix to match (e.g., '.log', '.out').
+            filetype (str): File name suffix to match (e.g., ``'log'``,
+                ``'.log'``, ``'out'``).
 
         Returns:
             list[str]: Full file paths matching the suffix.
         """
+        suffix = self._normalize_file_suffix(filetype)
         all_files = []
         for file in os.listdir(self.folder):
             # Check that the file is not empty:
             if os.stat(os.path.join(self.folder, file)).st_size == 0:
                 continue
             # Collect files of specified type
-            if file.endswith(filetype):
+            if file.endswith(suffix):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
 
@@ -1466,21 +2152,83 @@ class FolderMixin:
         Obtain files of specified type in folder and all subfolders.
 
         Recursively searches `self.folder` for files whose names end with
-        `filetype`. Unlike the non-recursive variant, empty files are not
-        filtered out here.
+        the normalized dotted suffix. Unlike the non-recursive variant,
+        empty files are not filtered out here.
 
         Args:
-            filetype (str): File name suffix to match.
+            filetype (str): File name suffix to match (e.g., ``'xyz'`` or
+                ``'.xyz'``). ``'xyz'`` matches ``foo.xyz`` but not
+                ``foo.extxyz``.
 
         Returns:
             list[str]: Full file paths matching the suffix.
         """
+        suffix = self._normalize_file_suffix(filetype)
         all_files = []
         for subdir, _dirs, files in os.walk(self.folder):
             # subdir is the full path to the subdirectory
             for file in files:
-                if file.endswith(filetype):
+                if file.endswith(suffix):
                     all_files.append(os.path.join(subdir, file))
+        return all_files
+
+    def get_all_files_in_current_folder_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in the current folder matching a program.
+
+        Non-recursively lists files in `self.folder` whose names end with
+        the normalized dotted suffix and are detected as output files from
+        the specified program. Empty files are excluded.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        suffix = self._normalize_file_suffix(filetype)
+        all_files = []
+        for file in os.listdir(self.folder):
+            filepath = os.path.join(self.folder, file)
+            # Check that the file is not empty:
+            if not os.path.isfile(filepath) or os.stat(filepath).st_size == 0:
+                continue
+            # Collect files of specified type and program
+            if file.endswith(suffix):
+                detected_program = get_program_type_from_file(filepath)
+                if detected_program == program:
+                    all_files.append(filepath)
+        return all_files
+
+    def get_all_files_in_current_folder_and_subfolders_by_program_and_suffix(
+        self, program, filetype
+    ):
+        """
+        Obtain files of specified type in folder and subfolders matching a program.
+
+        Recursively searches `self.folder` for files whose names end with
+        the normalized dotted suffix and are detected as output files from
+        the specified program. Unlike the non-recursive variant, empty files
+        are not filtered out here.
+
+        Args:
+            program (str): Target QC program (e.g., "gaussian", "orca", "xtb", "crest").
+            filetype (str): File name suffix to match (e.g., '.log', '.out').
+        """
+        from chemsmart.utils.io import get_program_type_from_file
+
+        suffix = self._normalize_file_suffix(filetype)
+        all_files = []
+        for subdir, _dirs, files in os.walk(self.folder):
+            # subdir is the full path to the subdirectory
+            for file in files:
+                if file.endswith(suffix):
+                    filepath = os.path.join(subdir, file)
+                    detected_program = get_program_type_from_file(filepath)
+                    if detected_program == program:
+                        all_files.append(filepath)
         return all_files
 
     def get_all_files_in_current_folder_and_subfolders_matching_regex(
@@ -1532,3 +2280,32 @@ class FolderMixin:
             if re.match(regex, file):
                 all_files.append(os.path.join(self.folder, file))
         return all_files
+
+
+class FolderOutputMixin:
+    """Mixin for output classes that read from a calculation folder."""
+
+    FILE_PARSERS = ()
+
+    def __getattr__(self, name):
+        """Delegate attribute access to internal file parsers.
+
+        Searches the file parsers specified by FILE_PARSERS in order and returns the requested
+        attribute from the first parser that provides it. Parser attributes that are None or do
+        not provide the requested attribute are skipped. Raises AttributeError when no parser
+        provides the requested attribute.
+        """
+        for file_parser in self.FILE_PARSERS:
+            try:
+                parser = object.__getattribute__(self, file_parser)
+                if parser is not None:
+                    try:
+                        return getattr(parser, name)
+                    except AttributeError:
+                        continue
+            except Exception as e:
+                logger.debug(f"Failed to access parser {file_parser}: {e}")
+                continue
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )

@@ -53,7 +53,9 @@ class ThermochemistryJobRunner(JobRunner):
 
         Args:
             server: Server configuration for job execution
-            scratch (bool, optional): Whether to use scratch directory
+            scratch (bool or None): ``True``/``False`` force on/off;
+                ``None`` uses class ``SCRATCH`` (``False``). CLI jobs should
+                use ``JobRunner.from_job``.
             fake (bool): Whether to run in fake mode for testing
             scratch_dir (str, optional): Path to scratch directory
             **kwargs: Additional keyword arguments for parent class
@@ -113,7 +115,7 @@ class ThermochemistryJobRunner(JobRunner):
             job: Thermochemistry job instance to configure
         """
         # Create scratch job directory
-        scratch_job_dir = os.path.join(self.scratch_dir, job.label)
+        scratch_job_dir = os.path.join(self.scratch_dir, job.execution_name)
         if not os.path.exists(scratch_job_dir):
             with suppress(FileExistsError):
                 os.makedirs(scratch_job_dir)

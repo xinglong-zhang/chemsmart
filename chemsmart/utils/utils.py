@@ -1,11 +1,12 @@
 """
-General utility functions and classes for Chemsmart.
+General utility functions and classes for CHEMSMART.
 
 Provides a collection of utility functions for file handling, caching,
 data structures, text processing, and system operations. Includes
 specialized decorators for function caching and ordered set implementation.
 """
 
+import ast
 import copy
 import hashlib
 import logging
@@ -278,27 +279,115 @@ def write_list_of_lists_as_a_string_with_empty_line_between_lists(
 
 def get_list_from_string_range(string_of_range):
     """
-    Use 1-indexed.
-    See chemsmart/tests/GaussianUtilsTest.py::
-    GetListFromStringRangeTest::test_get_list_from_string_range
-    :param string_of_range: accepts string of range.
-    e.g., s='[1-3,28-31,34-41]' or s='1-3,28-31,34-41'
-    :return: list of range.
-    """
-    if "[" in string_of_range:
-        string_of_range = string_of_range.replace("[", "")
-        string_of_range = string_of_range.replace("]", "")
+    Parse 1-indexed index ranges from a string.
 
-    string_ranges = string_of_range.split(",")
+    Accepts hyphen or colon ranges, comma or whitespace separators,
+    optional square brackets, and Unicode dashes.
+
+    Examples:
+        ``'1-3,28-31,34-41'``
+        ``'[1-3,28-31,34-41]'``
+        ``'1:15 20'``
+        ``'397–469'``
+
+    Args:
+        string_of_range: Range specification string.
+
+    Returns:
+        list: 1-indexed integer indices.
+
+    Raises:
+        ValueError: If the string is empty or contains an invalid token.
+    """
+    if string_of_range is None:
+        raise ValueError(
+            "Could not parse atom indices from None. "
+            "Pass a range such as '1-10,15' or '1:10 15'."
+        )
+    if not isinstance(string_of_range, str):
+        raise TypeError(
+            "Expected a string of index ranges, "
+            f"got {type(string_of_range).__name__}."
+        )
+
+    original = string_of_range
+    text = string_of_range.strip()
+    for dash in ("\u2013", "\u2014", "\u2212"):
+        text = text.replace(dash, "-")
+    text = text.replace("[", "").replace("]", "")
+    text = re.sub(r"\s*-\s*", "-", text)
+    text = re.sub(r"\s*:\s*", ":", text)
+
+    if not text:
+        raise ValueError(
+            "Could not parse atom indices from an empty string. "
+            "Pass a range such as '1-10,15' or '1:10 15'."
+        )
+
     indices = []
-    for s in string_ranges:
-        if "-" in s:
-            each_range = s.split("-")
-            for i in range(int(each_range[0]), int(each_range[1]) + 1):
-                indices.append(i)
-        else:
-            indices.append(int(s))
+    for token in re.split(r"[,\s]+", text):
+        if not token:
+            continue
+        try:
+            if ":" in token:
+                start_s, end_s = token.split(":", 1)
+                start, end = int(start_s), int(end_s)
+                if start <= 0 or end <= 0 or start > end:
+                    raise ValueError(
+                        f"Invalid atom index range {token!r}. "
+                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+                    )
+                indices.extend(range(start, end + 1))
+            elif "-" in token and not token.startswith("-"):
+                start_s, end_s = token.split("-", 1)
+                start, end = int(start_s), int(end_s)
+                if start <= 0 or end <= 0 or start > end:
+                    raise ValueError(
+                        f"Invalid atom index range {token!r}. "
+                        "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+                    )
+                indices.extend(range(start, end + 1))
+            else:
+                value = int(token)
+                if value <= 0:
+                    raise ValueError(
+                        f"Invalid atom index {token!r}. "
+                        "Expected 1-indexed indices such as '1,15' or '15'."
+                    )
+                indices.append(value)
+        except ValueError:
+            raise ValueError(
+                f"Invalid atom index token {token!r} in {original!r}. "
+                "Expected 1-indexed ranges such as '1-10,15' or '1:10 15'."
+            ) from None
+
+    if not indices:
+        raise ValueError(
+            f"Could not parse atom indices from {original!r}. "
+            "Pass a range such as '1-10,15' or '1:10 15'."
+        )
     return indices
+
+
+def parse_qmmm_scale_factors(scale_factors):
+    """Parse QM/MM scale factors to ``{(atom1, atom2): [factors, ...]}``.
+
+    String input may use list or tuple keys, e.g. ``'{[3, 4]: [0.709]}'``.
+    """
+    if isinstance(scale_factors, str):
+        tree = ast.parse(scale_factors, mode="eval")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                node.keys = [
+                    (
+                        ast.Tuple(elts=key.elts, ctx=key.ctx)
+                        if isinstance(key, ast.List)
+                        else key
+                    )
+                    for key in node.keys
+                ]
+        return ast.literal_eval(tree)
+    return scale_factors
 
 
 def convert_list_to_gaussian_frozen_list(list_of_indices, molecule):
@@ -525,7 +614,7 @@ def convert_string_index_from_1_based_to_0_based(
                                 0-based indexing.
 
     Raises:
-        ValueError: If index is 0 (invalid for 1-based indexing).
+        ValueError: If index is 0 or has invalid format.
     """
     # If already an int or slice, handle directly
     if isinstance(index, int):
@@ -1393,7 +1482,7 @@ def check_charge_and_multiplicity(settings):
     """
     if settings.charge is None or settings.multiplicity is None:
         raise ValueError(
-            "Charge and multiplicity must be set for Gaussian jobs."
+            "Charge and multiplicity must be set for Gaussian/ORCA jobs."
         )
 
 
@@ -1838,3 +1927,186 @@ def convert_string_to_slices(index_str):
         else:
             result.append(int(item) - 1)
     return result
+
+
+def to_graph_wrapper(
+    mol, bond_cutoff_buffer: float = 0.0, adjust_H: bool = True
+):
+    """
+    Global helper function to call Molecule.to_graph() for multiprocessing.
+
+    Provides a picklable wrapper for the Molecule.to_graph() method that
+    can be used with multiprocessing pools.
+
+    Args:
+        mol (Molecule): Molecule instance to convert to graph.
+        bond_cutoff_buffer (float): Buffer for bond cutoff distance.
+        adjust_H (bool): Whether to adjust hydrogen bond detection.
+
+    Returns:
+        networkx.Graph: Molecular graph representation.
+    """
+    return mol.to_graph(
+        bond_cutoff_buffer=bond_cutoff_buffer, adjust_H=adjust_H
+    )
+
+
+def find_irmsd_command():
+    """
+    Find the irmsd command, checking multiple sources.
+
+    Priority:
+    1. IRMSD_PATH environment variable (full path to irmsd executable)
+    2. IRMSD_CONDA_ENV environment variable (conda environment name)
+    3. irmsd in current PATH
+
+    Returns:
+        str or None: Full path to irmsd command, or None if not found.
+
+    Example:
+        # Check availability
+        if find_irmsd_command():
+            print("irmsd is available")
+
+        # Get path
+        irmsd_path = find_irmsd_command()
+    """
+    import shutil
+    import subprocess
+
+    # Option 1: IRMSD_PATH environment variable (highest priority)
+    irmsd_path = os.environ.get("IRMSD_PATH")
+    if (
+        irmsd_path
+        and os.path.isfile(irmsd_path)
+        and os.access(irmsd_path, os.X_OK)
+    ):
+        return irmsd_path
+
+    # Option 2: IRMSD_CONDA_ENV environment variable
+    conda_env = os.environ.get("IRMSD_CONDA_ENV")
+    if conda_env:
+        # Try to find conda base path from environment
+        conda_base = os.environ.get("CONDA_PREFIX_1") or os.environ.get(
+            "CONDA_PREFIX"
+        )
+        if conda_base:
+            # Go up to envs directory
+            if "envs" in conda_base:
+                envs_dir = conda_base.rsplit("envs", 1)[0] + "envs"
+            else:
+                envs_dir = os.path.join(os.path.dirname(conda_base), "envs")
+
+            irmsd_path = os.path.join(envs_dir, conda_env, "bin", "irmsd")
+            if os.path.isfile(irmsd_path) and os.access(irmsd_path, os.X_OK):
+                return irmsd_path
+
+        # Try common conda locations
+        for base in [
+            os.path.expanduser("~/anaconda3"),
+            os.path.expanduser("~/miniconda3"),
+            "/opt/anaconda3",
+            "/opt/miniconda3",
+            os.path.expanduser("~/.conda"),
+        ]:
+            irmsd_path = os.path.join(base, "envs", conda_env, "bin", "irmsd")
+            if os.path.isfile(irmsd_path) and os.access(irmsd_path, os.X_OK):
+                return irmsd_path
+
+        # Fallback: use conda run to find irmsd (handles unusual conda installations)
+        try:
+            result = subprocess.run(
+                ["conda", "run", "-n", conda_env, "which", "irmsd"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                irmsd_path = result.stdout.strip()
+                if os.path.isfile(irmsd_path) and os.access(
+                    irmsd_path, os.X_OK
+                ):
+                    return irmsd_path
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            # conda not available or timeout, continue to next option
+            pass
+
+    # Option 3: irmsd in current PATH
+    irmsd_in_path = shutil.which("irmsd")
+    if irmsd_in_path:
+        return irmsd_in_path
+
+    return None
+
+
+def deduplicate_string_keywords(route_string, keywords):
+    """Remove repeated route keywords, keeping the most informative form.
+
+    Parameters
+    ----------
+    route_string : str
+        Route string such as:
+        "! m062x def2-tzvp cosmors defgrid2 COSMORS(water)"
+    keywords : str or list[str] or tuple[str]
+        Keyword(s) to deduplicate, e.g. "cosmors" or ["cosmors", "smd"].
+
+    Returns
+    -------
+    str
+        Cleaned route string.
+
+    Notes
+    -----
+    - Matching is case-insensitive.
+    - If both ``keyword`` and ``keyword(...)`` appear, the latter is kept.
+    - If the same keyword appears multiple times with the same information
+      content, the first one is kept.
+    - This assumes the route string is whitespace-tokenized.
+    """
+    if not route_string or not keywords:
+        return route_string
+
+    if isinstance(keywords, str):
+        keywords = [keywords]
+
+    keyword_set = {k.lower() for k in keywords}
+    tokens = route_string.split()
+
+    def keyword_base(token):
+        """Return the base keyword, e.g. 'cosmors' from 'COSMORS(water)'."""
+        stripped = token.strip(",")
+        return stripped.split("(", 1)[0].lower()
+
+    def token_score(token):
+        """Score how informative a token is."""
+        stripped = token.strip(",")
+        has_args = "(" in stripped and ")" in stripped
+        return (has_args, len(stripped))
+
+    # Count matching tokens and find the best token index for each keyword
+    counts = {}
+    best_index = {}
+    best_score = {}
+
+    for i, token in enumerate(tokens):
+        base = keyword_base(token)
+        if base not in keyword_set:
+            continue
+
+        counts[base] = counts.get(base, 0) + 1
+        score = token_score(token)
+
+        if base not in best_score or score > best_score[base]:
+            best_score[base] = score
+            best_index[base] = i
+
+    # Rebuild tokens, removing duplicates but keeping the best one
+    new_tokens = []
+    for i, token in enumerate(tokens):
+        base = keyword_base(token)
+        if base in keyword_set and counts.get(base, 0) > 1:
+            if i != best_index[base]:
+                continue
+        new_tokens.append(token)
+
+    return " ".join(new_tokens)

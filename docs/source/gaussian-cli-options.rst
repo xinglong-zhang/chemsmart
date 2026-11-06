@@ -56,10 +56,23 @@ Project and File Options
       -  string
       -  Query structure from PubChem (name, SMILES, CID)
 
+   -  -  ``--ri, --record-index``
+      -  int
+      -  Select a record from a CHEMSMART database by its 1-based index
+
+   -  -  ``--rid, --record-id``
+      -  string
+      -  Select a record from a CHEMSMART database by its ID
+
+   -  -  ``--sid, --structure-id``
+      -  string
+      -  Select a structure from a CHEMSMART database by its ID
+
 .. note::
 
    -  ``-p`` uses the project name without the ``.yaml`` extension.
-   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, or ``.out``.
+   -  ``-f`` accepts various formats: ``.xyz``, ``.com``, ``.gjf``, ``.log``, ``.inp``, ``.out``, or a CHEMSMART
+      database ``.db`` file.
 
 Specifying Output Filenames
 ---------------------------
@@ -87,13 +100,13 @@ Use ``-i`` to select a specific structure from multi-structure files:
 
 .. code:: bash
 
-   chemsmart sub gaussian -p test -f molecules.db -i 5 -c 0 -m 1 opt
+   chemsmart sub gaussian -p test -f molecules.xyz -i 5 -c 0 -m 1 opt
 
-This uses the 5th structure (1-indexed) from the ASE database file.
+This uses the 5th structure (1-indexed) from the XYZ file.
 
 .. warning::
 
-   Chemsmart uses 1-based indexing to match most molecular visualization software.
+   CHEMSMART uses 1-based indexing to match most molecular visualization software.
 
 Using PubChem
 -------------
@@ -227,6 +240,73 @@ Examples:
    # Add route parameters
    chemsmart sub gaussian -p test -f molecule.com -r nosymm opt
 
+Solvent Options
+===============
+
+Solvent settings can be specified at the Gaussian group level, which means they apply to **any** subcommand (``opt``,
+``td``, ``sp``, ``ts``, etc.). This is useful when the project settings define a gas-phase calculation but you want to
+add solvation for a particular run without modifying the project file.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 15 50
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``--remove-solvent/--no-remove-solvent``
+      -  bool
+      -  Remove solvent from the job, overriding project settings (default: disabled)
+
+   -  -  ``-sm, --solvent-model``
+      -  string
+      -  Implicit solvent model (e.g. ``smd``, ``cpcm``, ``iefpcm``)
+
+   -  -  ``-si, --solvent-id``
+      -  string
+      -  Solvent identifier (e.g. ``water``, ``toluene``, ``dichloromethane``)
+
+   -  -  ``-so, --solvent-options``
+      -  string
+      -  Additional options appended inside the ``scrf=()`` keyword (e.g. ``iterative``)
+
+.. note::
+
+   Both ``-sm`` and ``-si`` must be provided together; specifying only one will raise an error when Gaussian processes
+   the input file. ``-so`` is only applied when solvent is active — it is ignored when ``--remove-solvent`` is used.
+
+Examples:
+
+.. code:: bash
+
+   # Gas phase optimization (project default)
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -a no_solv opt
+
+   # Solvated optimization with SMD/water (overrides project gas-phase settings)
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -a solv opt
+
+   # Solvated optimization with additional iterative SCRF option
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -so iterative -a solv opt
+
+   # Solvated TD-DFT calculation
+   chemsmart sub gaussian -p anomer -f molecule.xyz -c 0 -m 1 -sm smd -si water -so iterative -a solv_td td
+
+   # Remove solvent when project settings include one
+   chemsmart sub gaussian -p solv_project -f molecule.xyz -c 0 -m 1 --remove-solvent opt
+
+The solvated opt example above produces a route line of the form:
+
+.. code:: text
+
+   # opt freq b3lyp def2svp scrf=(smd,solvent=water,iterative)
+
+and the solvated TD-DFT example gives:
+
+.. code:: text
+
+   # freq cam-b3lyp def2svp scrf=(smd,solvent=water,iterative) TD(singlets,nstates=3,root=1)
+
 ***********************
  Available Subcommands
 ***********************
@@ -274,6 +354,8 @@ Transition State Search
       -  Intrinsic reaction coordinate calculations
    -  -  ``scan``
       -  Potential energy surface scanning
+   -  -  ``qrc``
+      -  Quick reaction coordinate calculations
 
 Electronic Structure Properties
 ===============================
@@ -313,6 +395,12 @@ Other Jobs
    -  -  ``userjob``
       -  Custom user-defined jobs
 
+QM/MM
+=====
+
+``qmmm`` is nested under a parent job type. Use ``<JOBTYPE> qmmm`` where ``<JOBTYPE>`` is ``opt``, ``ts``, ``sp``,
+``scan``, ``modred``, or ``qrc``. There is no standalone ``qmmm`` command. See :doc:`gaussian-qmmm-jobs`.
+
 ************
  Next Steps
 ************
@@ -325,3 +413,4 @@ For detailed information on each job type:
 -  :doc:`gaussian-qrc`
 -  :doc:`gaussian-electronic-structure`
 -  :doc:`gaussian-other-jobs`
+-  :doc:`gaussian-qmmm-jobs`

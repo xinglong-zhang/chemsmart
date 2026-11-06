@@ -6,6 +6,8 @@ __pycache__/
 .idea/*
 *.idea/
 *.idea/*
+*.vscode/
+*.vscode/*
 
 
 # C extensions
@@ -51,6 +53,7 @@ htmlcov/
 .cache
 nosetests.xml
 coverage.xml
+coverage-soap.xml
 *.cover
 *.py,cover
 .hypothesis/
@@ -139,3 +142,6 @@ dmypy.json
 #macos
 .DS_Store
 .idea/
+
+# Editor settings
+.vscode/

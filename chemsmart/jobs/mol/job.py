@@ -11,7 +11,6 @@ import os
 
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -46,6 +45,7 @@ class PyMOLJob(Job):
         self,
         molecule=None,
         label=None,
+        source_basename=None,
         jobrunner=None,
         pymol_script=None,
         style=None,
@@ -71,9 +71,15 @@ class PyMOLJob(Job):
         Args:
             molecule: Molecule or list[Molecule] to visualize.
             label: Job identifier string (default: None).
+            source_basename: Basename of source calculation/input files
+                used for processing steps like chk/fchk/cube handling.
             jobrunner: Runner for executing the job (default: None).
             pymol_script: Custom PyMOL script path (default: None).
-            style: Visualization style settings (default: None).
+            style: Visualization style: ``pymol``, ``cylview``, or
+                ``cylview_flat`` (default: None).
+                Use :class:`PyMOLScientificStyleVisualizationJob` for derived
+                ``zhang_group_scientific_styles.py`` options such as ``glossy`` or
+                ``editorial_minimal``.
             trace: Whether to trace molecular paths (default: None).
             vdw: Van der Waals representation settings (default: None).
             quiet_mode: Run PyMOL in quiet mode (default: True).
@@ -91,6 +97,9 @@ class PyMOLJob(Job):
         super().__init__(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
+        if source_basename is None:
+            source_basename = label
+        self.source_basename = source_basename
         self.pymol_script = pymol_script
         self.style = style
         self.trace = trace
@@ -280,41 +289,25 @@ class PyMOLJob(Job):
         if label is None:
             # by default, if no label is given and the job is read in
             # from a file, the label is set to the file basename
-            label = os.path.basename(filename).split(".")[0]
+            label = os.path.splitext(os.path.basename(filename))[0]
 
-        logger.info(f"Num of molecules read: {len(molecules)}.")
+        source_basename = os.path.splitext(os.path.basename(filename))[0]
+
         molecules = molecules[string2index_1based(index)]
         logger.info(f"Num of molecules to use: {len(molecules)}.")
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    label=label,
-                    pymol_script=pymol_script,
-                    style=style,
-                    vdw=vdw,
-                    quiet_mode=quiet_mode,
-                    command_line_only=command_line_only,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            label=label,
-            jobrunner=jobrunner,
-            pymol_script=pymol_script,
-            style=style,
-            vdw=vdw,
-            quiet_mode=quiet_mode,
-            command_line_only=command_line_only,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecules,
+                label=label,
+                source_basename=source_basename,
+                pymol_script=pymol_script,
+                style=style,
+                vdw=vdw,
+                quiet_mode=quiet_mode,
+                command_line_only=command_line_only,
+            ),
             **kwargs,
         )
 
@@ -337,24 +330,11 @@ class PyMOLJob(Job):
         """
         molecules = Molecule.from_pubchem(identifier=identifier)
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecules,
+                label=label,
+            ),
             **kwargs,
         )

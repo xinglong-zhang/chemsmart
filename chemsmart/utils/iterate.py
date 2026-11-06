@@ -25,7 +25,7 @@ ALLOWED_SUBSTITUENT_KEYS = {
     "link_index",
 }
 
-ITERATE_TEMPLATE = """# Chemsmart Iterate Configuration Template
+ITERATE_TEMPLATE = """# CHEMSMART Iterate Configuration Template
 # =========================================
 # This template defines skeletons and
 # substituents for iterative structure generation.

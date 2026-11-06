@@ -1,5 +1,5 @@
 """
-Logging utilities for ChemSmart applications.
+Logging utilities for CHEMSMART applications.
 
 Provides customized logging functionality with deduplication capabilities
 and configurable output streams. Supports both file and console logging
@@ -134,6 +134,7 @@ def create_logger(
     level = logging.DEBUG if debug else logging.INFO
     logger.setLevel(level)
     logger.handlers = []
+    logger.filters = []
     formatter = logging.Formatter(
         "{asctime} - {levelname:6s} - [{name}] {message}",
         style="{",

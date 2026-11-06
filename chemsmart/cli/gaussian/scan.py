@@ -9,13 +9,8 @@ from chemsmart.cli.gaussian.gaussian import (
 )
 from chemsmart.cli.gaussian.qmmm import create_qmmm_subcommand
 from chemsmart.cli.job import click_job_options
-from chemsmart.utils.cli import (
-    MyGroup,
-    get_setting_from_jobtype_for_gaussian,
-)
+from chemsmart.utils.cli import MyGroup, get_setting_from_jobtype_for_gaussian
 from chemsmart.utils.utils import check_charge_and_multiplicity
-
-logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 

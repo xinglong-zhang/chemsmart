@@ -1,14 +1,14 @@
 #########################
- Chemsmart Documentation
+ CHEMSMART Documentation
 #########################
 
 .. image:: _static/chemsmart_logo.png
    :width: 400
    :align: center
 
-Chemsmart is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
-files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, and other computational
-chemistry software.
+CHEMSMART is a Python-based toolkit for automating quantum chemistry workflows. It provides tools for creating input
+files, submitting jobs to HPC clusters, and analyzing simulation results from Gaussian, ORCA, xTB, CREST, and other
+computational chemistry software.
 
 .. toctree::
    :maxdepth: 2
@@ -16,8 +16,9 @@ chemistry software.
 
    introduction
    installation-linux-macos
-   installation-windows-gitbash
    installation-windows-wsl
+   installation-windows-gitbash
+   installation-windows-powershell
    installation-hpc-cluster
 
 .. toctree::
@@ -36,6 +37,8 @@ chemistry software.
 
    cli-overview
    molecule-input-formats
+   convert-cli-options
+   chemdraw-organometallic
 
 .. toctree::
    :maxdepth: 2
@@ -48,6 +51,7 @@ chemistry software.
    gaussian-qrc
    gaussian-electronic-structure
    gaussian-qmmm-jobs
+   gaussian_submitqmmmjobs
    gaussian-other-jobs
 
 .. toctree::
@@ -59,19 +63,69 @@ chemistry software.
    orca-transition-state
    orca-direct-input
    orca-multiscale-calculations
+   orca_submitqmmmjobs
 
 .. toctree::
    :maxdepth: 2
+   :caption: xTB Jobs
+
+   xtb-cli-options
+   xtb-structure-optimization
+
+.. toctree::
+   :maxdepth: 2
+   :caption: CREST Jobs
+
+   crest-cli-options
+   crest-conformational-search
+
+..
+   .. toctree::
+
+..
+   :maxdepth: 2
+
+..
    :caption: ITERATE
 
+..
+
+..
    iterate-cli-options
+
+..
    iterate-structure-generation
+
+.. toctree::
+   :maxdepth: 2
+   :caption: pKa Calculations
+
+   pka-calculations
 
 .. toctree::
    :maxdepth: 2
    :caption: Thermochemistry
 
    thermochemistry-analysis
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Descriptors
+
+   soap-descriptors
+   sterimol-parameters
+
+..
+   .. toctree::
+      :maxdepth: 2
+      :caption: Database
+
+      database-overview
+      database-assemble
+      database-query
+      database-inspect
+      database-export
+      database-workflow
 
 .. toctree::
    :maxdepth: 2
@@ -82,6 +136,14 @@ chemistry software.
    pymol-reaction-analysis
    pymol-electronic-structure
    pymol-interaction-analysis
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Grouper Tool
+
+   grouper-cli-options
+   grouper-strategies
+   grouper-crest-or-traj-workflow
 
 .. toctree::
    :maxdepth: 2
@@ -96,6 +158,16 @@ chemistry software.
    scripts-overview
    scripts-data-management
    scripts-electronic-analysis
+
+.. toctree::
+   :maxdepth: 2
+   :caption: The Molecule Object
+
+   api-molecule-overview
+   api-molecule-creating
+   api-molecule-manipulation
+   api-molecule-properties
+   api-molecule-geometry
 
 .. toctree::
    :maxdepth: 2

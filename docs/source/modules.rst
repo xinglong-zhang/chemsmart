@@ -1,5 +1,5 @@
 ###################
- Chemsmart Modules
+ CHEMSMART Modules
 ###################
 
 .. toctree::

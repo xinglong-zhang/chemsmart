@@ -1,0 +1,12 @@
+# Default ORCA settings for calculations
+# NEB jobs will use gas settings, with NEB-specific options (joboption, nimages,
+# preopt_ends, ending_xyzfile, etc.) supplied via CLI options.
+gas:
+  functional: m062x  # quotes required for string with spaces
+  basis: def2-svp
+solv:
+  functional: m062x
+  basis: def2-tzvp
+  freq: False
+  solvent_model: smd
+  solvent_id: cyclohexane

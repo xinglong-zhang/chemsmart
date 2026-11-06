@@ -9,8 +9,15 @@ from chemsmart.utils.geometry import (
     calculate_molecular_volume_vdp,
     calculate_moments_of_inertia,
     calculate_vdw_volume,
+    calculate_voronoi_dirichlet_occupied_volume,
+    canonicalize_positions,
+    clean_rotational_constants_by_geometry,
+    get_coordinating_atoms,
     is_collinear,
 )
+from chemsmart.utils.periodictable import PeriodicTable
+
+_pt = PeriodicTable()
 
 
 class TestIsCollinear:
@@ -123,6 +130,222 @@ class TestCalculateMomentsOfInertia:
         moi_tensor, evals, evecs = calculate_moments_of_inertia(mass, coords)
 
         assert all(e >= -1e-10 for e in evals)
+
+
+class TestCleanRotationalConstantsByGeometry:
+    def test_gaussian_mode_preserves_values(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [10.0, 2.0, 1.5],
+            mode="gaussian",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [10.0, 2.0, 1.5])
+        assert status == "gaussian"
+
+    def test_gaussian_mode_preserves_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 8.30647],
+            mode="gaussian",
+            return_status=True,
+        )
+        assert np.isinf(cleaned[0])
+        assert np.allclose(cleaned[1:], [8.30647, 8.30647])
+        assert status == "gaussian_overflow"
+
+    def test_physical_mode_exact_linear_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_near_linear_overflow(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.306470, 8.306471],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [0.5 * (8.306470 + 8.306471)])
+        assert status == "linear"
+
+    def test_physical_mode_huge_axial_constant(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [10919209500.9483, 8.3064670, 8.3064670],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.3064670])
+        assert status == "quasi_linear"
+
+    def test_physical_mode_zero_axial_constant(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [0.0, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_nonlinear(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [609.8308225, 5.8331025, 5.7778368],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [609.8308225, 5.8331025, 5.7778368])
+        assert status == "nonlinear"
+
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValueError):
+            clean_rotational_constants_by_geometry([1.0, 2.0, 3.0], mode="bad")
+
+    def test_physical_mode_single_value_is_linear(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [8.30647])
+        assert status == "linear"
+
+    def test_physical_mode_wrong_size_is_unknown(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [1.0, 2.0],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [1.0, 2.0])
+        assert status == "unknown"
+
+    def test_physical_mode_non_finite_bc_is_unknown(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [5.0, np.inf, 5.0],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.isinf(cleaned[1])
+        assert status == "unknown"
+
+    def test_physical_mode_inf_axial_bc_not_close_is_nonlinear(self):
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [np.inf, 8.30647, 2.0],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [np.inf, 8.30647, 2.0], equal_nan=False)
+        assert status == "nonlinear"
+
+    def test_physical_mode_finite_axial_bc_close_but_not_equal(self):
+        """B and C are near-degenerate (isclose but not ==) with a
+        moderate axial constant -- neither zero nor huge -- covering
+        the collapsible-but-nonlinear result via the isclose branch."""
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [5.0, 8.306470, 8.306471],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [5.0, 8.306470, 8.306471])
+        assert status == "nonlinear"
+
+    def test_physical_mode_collapsible_bc_moderate_axial_is_nonlinear(self):
+        """B == C exactly (collapsible), but the axial constant is
+        neither ~0 nor huge relative to B_perp, so the result must
+        stay "nonlinear" rather than "linear"/"quasi_linear"."""
+        cleaned, status = clean_rotational_constants_by_geometry(
+            [5.0, 8.30647, 8.30647],
+            mode="physical",
+            return_status=True,
+        )
+        assert np.allclose(cleaned, [5.0, 8.30647, 8.30647])
+        assert status == "nonlinear"
+
+    def test_return_status_false_returns_only_cleaned_array(self):
+        """With the default return_status=False, only the cleaned
+        array is returned (not a tuple)."""
+        cleaned = clean_rotational_constants_by_geometry(
+            [5.0, 8.30647, 8.30647], mode="physical"
+        )
+        assert np.allclose(cleaned, [5.0, 8.30647, 8.30647])
+
+
+class TestCalculateVoronoiDirichletOccupiedVolume:
+    def test_mismatched_lengths_raises(self):
+        with pytest.raises(ValueError, match="Number of coordinates"):
+            calculate_voronoi_dirichlet_occupied_volume(
+                coords=[[0, 0, 0], [1, 0, 0]],
+                radii=[1.0],
+            )
+
+    def test_non_3d_coordinates_raises(self):
+        with pytest.raises(ValueError, match="must be 3D"):
+            calculate_voronoi_dirichlet_occupied_volume(
+                coords=[[0, 0], [1, 0]],
+                radii=[1.0, 1.0],
+            )
+
+    def test_returns_positive_volume_for_simple_cluster(self):
+        coords = [
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [0.0, 1.5, 0.0],
+            [0.0, 0.0, 1.5],
+        ]
+        radii = [1.0, 1.0, 1.0, 1.0]
+        volume = calculate_voronoi_dirichlet_occupied_volume(coords, radii)
+        assert volume > 0
+
+    def test_explicit_dispersion_used_as_padding(self):
+        coords = [[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]]
+        radii = [1.0, 1.0]
+        volume = calculate_voronoi_dirichlet_occupied_volume(
+            coords, radii, dispersion=3.0
+        )
+        assert volume > 0
+
+    def test_voronoi_tessellation_failure_raises_runtime_error(self, mocker):
+        mocker.patch(
+            "scipy.spatial.Voronoi", side_effect=Exception("qhull failure")
+        )
+        with pytest.raises(
+            RuntimeError, match="Voronoi-Dirichlet tessellation failed"
+        ):
+            calculate_voronoi_dirichlet_occupied_volume(
+                coords=[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]],
+                radii=[1.0, 1.0],
+            )
+
+    def test_unbounded_region_is_skipped(self, mocker):
+        """An atom whose Voronoi cell still contains a vertex at
+        infinity (-1 in its region) after mirroring is excluded from
+        the sum rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[-1, 0, 1]]
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_voronoi_dirichlet_occupied_volume(
+            coords=[[0.0, 0.0, 0.0]],
+            radii=[1.0],
+        )
+        assert volume == 0.0
+
+    def test_convex_hull_failure_is_skipped(self, mocker):
+        """An atom whose Voronoi cell vertices cannot form a valid
+        convex hull (e.g. degenerate/coplanar) is excluded from the
+        sum rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[0, 1, 2]]
+        fake_vor.vertices = np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+        )
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_voronoi_dirichlet_occupied_volume(
+            coords=[[0.0, 0.0, 0.0]],
+            radii=[1.0],
+        )
+        assert volume == 0.0
 
 
 class TestCalculateCrudeOccupiedVolume:
@@ -271,3 +494,327 @@ class TestCalculateMolecularVolumeVDP:
         )
         # Volume can be 0 for some configurations depending on tessellation
         assert volume >= 0
+
+    def test_voronoi_tessellation_failure_raises_runtime_error(self, mocker):
+        mocker.patch(
+            "scipy.spatial.Voronoi", side_effect=Exception("qhull failure")
+        )
+        with pytest.raises(RuntimeError, match="Voronoi tessellation failed"):
+            calculate_molecular_volume_vdp(
+                coordinates=[[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]],
+                vdw_radii=[1.0, 1.0],
+            )
+
+    def test_unbounded_region_is_skipped(self, mocker):
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[-1, 0, 1]]
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_molecular_volume_vdp(
+            coordinates=[[0.0, 0.0, 0.0]],
+            vdw_radii=[1.0],
+            dummy_points=False,
+        )
+        assert volume == 0.0
+
+    def test_region_with_fewer_than_four_vertices_is_skipped(self, mocker):
+        """A Voronoi cell with fewer than 4 vertices cannot form a
+        tetrahedral volume and is skipped rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[0, 1, 2]]
+        fake_vor.vertices = np.array(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        )
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        volume = calculate_molecular_volume_vdp(
+            coordinates=[[0.0, 0.0, 0.0]],
+            vdw_radii=[1.0],
+            dummy_points=False,
+        )
+        assert volume == 0.0
+
+    def test_delaunay_failure_is_skipped(self, mocker):
+        """A Voronoi cell whose >=4 vertices are degenerate (e.g.
+        coplanar) makes Delaunay raise ValueError, which is caught and
+        the region skipped rather than crashing."""
+        fake_vor = mocker.Mock()
+        fake_vor.point_region = [0]
+        fake_vor.regions = [[0, 1, 2, 3]]
+        fake_vor.vertices = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [1.0, 1.0, 0.0],
+            ]
+        )
+        mocker.patch("scipy.spatial.Voronoi", return_value=fake_vor)
+        mocker.patch(
+            "scipy.spatial.Delaunay", side_effect=ValueError("degenerate")
+        )
+        volume = calculate_molecular_volume_vdp(
+            coordinates=[[0.0, 0.0, 0.0]],
+            vdw_radii=[1.0],
+            dummy_points=False,
+        )
+        assert volume == 0.0
+
+    def test_voronoi_failure_raises_runtime_error(self):
+        """Collinear points with no dummy padding give qhull too few
+        points to construct a Voronoi diagram, which must surface as a
+        RuntimeError rather than qhull's own raw exception."""
+        coords = [[0, 0, 0], [1, 0, 0], [2, 0, 0]]
+        radii = [1.0, 1.0, 1.0]
+        with pytest.raises(RuntimeError, match="Voronoi tessellation failed"):
+            calculate_molecular_volume_vdp(coords, radii, dummy_points=False)
+
+
+class TestCanonicalizePositions:
+    """Tests for the canonicalize_positions function."""
+
+    def test_center_of_mass_at_origin(self):
+        """Centre of mass of canonical positions must be at the origin."""
+        masses = [12.0, 16.0, 16.0]
+        coords = np.array(
+            [
+                [-2.184891, -0.000000, -0.000000],
+                [2.184891, -0.000000, -0.000000],
+                [0.000000, 0.000000, 0.000000],
+            ]
+        )
+        result = canonicalize_positions(masses, coords)
+        com = np.average(result, axis=0, weights=masses)
+        assert np.allclose(com, 0.0, atol=1e-6)
+
+    def test_single_atom_returns_origin(self):
+        """A single atom must be placed at the origin."""
+        masses = [12.0]
+        coords = [[5.0, 3.0, -1.0]]
+        result = canonicalize_positions(masses, coords)
+        assert np.allclose(result, [[0.0, 0.0, 0.0]])
+
+    def test_diatomic_aligned_along_z(self):
+        """A diatomic molecule must be aligned along the z-axis."""
+        masses = [14.0, 14.0]
+        coords = [[1.0, 2.0, 3.0], [2.0, 4.0, 5.0]]
+        result = canonicalize_positions(masses, coords)
+        # bond length = ||r2 - r1|| = sqrt(1^2 + 2^2 + 2^2) = 3
+        # canonical positions = (0,0,±|v|/2) = (0,0,±1.5)
+        assert np.allclose(result, [[0.0, 0.0, -1.5], [0.0, 0.0, 1.5]])
+
+    def test_diatomic_zero_length_bond_returns_shifted(self):
+        """Two atoms at the same position give a zero-length bond
+        vector; canonicalize_positions must return the (zero) shifted
+        coordinates rather than dividing by a zero norm."""
+        result = canonicalize_positions(
+            [1.0, 1.0], [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]
+        )
+        assert np.allclose(result, [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+
+    def test_diatomic_bond_along_x_uses_y_axis_trial(self):
+        """When the bond vector is nearly parallel to the default trial
+        axis ([1,0,0]), the fallback trial axis ([0,1,0]) must be used
+        to build a valid right-handed frame."""
+        result = canonicalize_positions(
+            [14.0, 14.0], [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+        )
+        assert np.allclose(result, [[0.0, 0.0, -0.5], [0.0, 0.0, 0.5]])
+
+    def test_diatomic_heavier_first_atom_flips_z_sign(self):
+        """masses[0] > masses[1] triggers an unconditional z-sign flip."""
+        result = canonicalize_positions(
+            [20.0, 5.0], [[1.0, 2.0, 3.0], [2.0, 4.0, 5.0]]
+        )
+        assert result[0, 2] > 0
+        assert result[1, 2] < 0
+
+    def test_diatomic_heavier_second_atom_no_flip(self):
+        """masses[0] < masses[1] takes neither sign-flip branch."""
+        result = canonicalize_positions(
+            [5.0, 20.0], [[1.0, 2.0, 3.0], [2.0, 4.0, 5.0]]
+        )
+        assert result[0, 2] < 0
+        assert result[1, 2] > 0
+
+    def test_diatomic_equal_masses_z_sign_flip_branch_is_unreachable(self):
+        """For equal masses, COM is the exact midpoint, so
+        shifted[0] == -shifted[1] and z_hat is built from
+        shifted[1] - shifted[0]. This makes rotated[0, 2] =
+        shifted[0] . z_hat = -norm(vec) / 2, which is always
+        negative -- so "if rotated[0, 2] > 0:" can never be True and
+        the equal-mass sign-flip body is dead code. See
+        BUGS_FOUND.md for the full writeup. Sampled many random bond
+        directions to confirm this holds generally, not just for one
+        geometry."""
+        rng = np.random.default_rng(0)
+        for _ in range(200):
+            v = rng.normal(size=3)
+            v = v / np.linalg.norm(v)
+            coords = [[0.0, 0.0, 0.0], (v * 2.0).tolist()]
+            result = canonicalize_positions([14.0, 14.0], coords)
+            assert result[0, 2] <= 0
+
+    def test_translation_invariance(self):
+        """Translating all atoms by a constant vector must not change the result."""
+        masses = [12.0, 1.0, 1.0, 1.0, 1.0]
+        coords = np.array(
+            [
+                [0, 0, 0],
+                [1.09, 0, 0],
+                [-1.09, 0, 0],
+                [0, 1.09, 0],
+                [0, -1.09, 0],
+            ]
+        )
+        shifted = coords + np.array([10.0, -20.0, 30.0])
+        canon_shifted = canonicalize_positions(masses, shifted)
+        canon_original = canonicalize_positions(masses, coords)
+        assert np.allclose(canon_original, canon_shifted, atol=1e-6)
+
+    def test_rotation_invariance(self):
+        """Rotating all atoms must not change the canonical positions."""
+        masses = [12.0, 16.0, 1.0, 1.0]
+        coords = np.array(
+            [
+                [-0.6123, 0.0000, 0.0000],
+                [0.6123, 0.0000, 0.0000],
+                [-1.2000, 0.2426, -0.8998],
+                [-1.2000, -0.2424, 0.8998],
+            ]
+        )
+        # Apply a rotation matrix (90° around z-axis)
+        theta = np.pi / 2
+        R = np.array(
+            [
+                [np.cos(theta), -np.sin(theta), 0],
+                [np.sin(theta), np.cos(theta), 0],
+                [0, 0, 1],
+            ]
+        )
+        rotated = coords @ R.T
+        canon_original = canonicalize_positions(masses, coords)
+        canon_rotated = canonicalize_positions(masses, rotated)
+        assert np.allclose(canon_original, canon_rotated, atol=1e-6)
+
+
+class TestGetCoordinatingAtoms:
+    """Tests for covalent-radius-ratio coordination spheres."""
+
+    def test_primary_donor_and_secondary_ligand(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_n = _pt.covalent_radius("N")
+        r_c = _pt.covalent_radius("C")
+        primary_dist = 1.05 * (r_mn + r_n)
+        secondary_dist = 1.25 * (r_mn + r_c)
+        elements = ["Mn", "N", "C"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [primary_dist, 0.0, 0.0],
+                [secondary_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_hydride_within_cutoff_is_primary(self):
+        elements = ["Mn", "H"]
+        coordinates = np.array([[0.0, 0.0, 0.0], [1.5, 0.0, 0.0]])
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == []
+
+    def test_distant_atom_excluded(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        far_dist = 1.50 * (r_mn + r_c)
+        elements = ["Mn", "C"]
+        coordinates = np.array([[0.0, 0.0, 0.0], [far_dist, 0.0, 0.0]])
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == []
+        assert secondary == []
+
+    def test_geometric_expansion_captures_terminal_co_oxygen(self):
+        """XYZ-safe expansion: CO oxygen near primary C, even if far from Mn."""
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        co_bond = 1.15
+        o_dist = c_dist + co_bond
+        # Terminal O should sit outside the secondary radius-ratio shell.
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_geometric_expansion_excludes_atom_beyond_cutoff(self):
+        """An atom too far from every primary-sphere atom is left out
+        of the expansion (the np.min(partner_dists) <= expand_cutoff
+        check evaluates False and the loop continues, unlike the CO
+        oxygen case above where it evaluates True)."""
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        o_dist = c_dist + 1.15
+        far_dist = c_dist + 20.0
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+                [far_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(0, elements, coordinates)
+
+        assert primary == [1]
+        assert secondary == [2]
+
+    def test_geometric_expansion_can_be_disabled(self):
+        r_mn = _pt.covalent_radius("Mn")
+        r_c = _pt.covalent_radius("C")
+        r_o = _pt.covalent_radius("O")
+        c_dist = 1.05 * (r_mn + r_c)
+        o_dist = c_dist + 1.15
+        assert o_dist / (r_mn + r_o) > 1.35
+
+        elements = ["Mn", "C", "O"]
+        coordinates = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [c_dist, 0.0, 0.0],
+                [o_dist, 0.0, 0.0],
+            ]
+        )
+
+        primary, secondary = get_coordinating_atoms(
+            0, elements, coordinates, expand_cutoff=0
+        )
+
+        assert primary == [1]
+        assert secondary == []

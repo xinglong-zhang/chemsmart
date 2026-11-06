@@ -88,7 +88,9 @@ class GaussianExternalJob(GaussianJob):
         target_dir = directory or self.folder
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)
-            logger.debug(f"Created directory for external script: {target_dir}")
+            logger.debug(
+                f"Created directory for external script: {target_dir}"
+            )
 
         script_path = self.external_script.write(directory=target_dir)
         logger.info(f"Wrote Gaussian External script to: {script_path}")

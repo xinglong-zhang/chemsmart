@@ -13,7 +13,6 @@ from typing import Type
 from chemsmart.analysis.thermochemistry import Thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
 
 logger = logging.getLogger(__name__)
@@ -25,12 +24,12 @@ class ThermochemistryJob(Job):
 
     This class handles the calculation of thermodynamic properties such as
     enthalpy, entropy, and Gibbs free energy from frequency calculations
-    in Gaussian or ORCA output files.
+    in Gaussian, ORCA, or xTB output files.
 
     Attributes:
         PROGRAM (str): Program identifier ('Thermochemistry').
         TYPE (str): Job type identifier ('thermochemistry').
-        filename (str | None): Path to the QC output file (.log/.out).
+        filename (str): Path to the QC output file (.log/.out).
         molecule (Molecule | None): Molecular structure used for context.
         settings (ThermochemistryJobSettings): Thermochemistry configuration.
         label (str): Job identifier used for file naming.
@@ -68,6 +67,9 @@ class ThermochemistryJob(Job):
         super().__init__(
             molecule=molecule, label=label, jobrunner=jobrunner, **kwargs
         )
+
+        if filename is None:
+            raise ValueError("'filename' must be provided.")
 
         # Validate file extension
         if not filename.endswith((".log", ".out")):
@@ -241,29 +243,14 @@ class ThermochemistryJob(Job):
         if label is None:
             label = os.path.splitext(os.path.basename(filename))[0]
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    filename=filename,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            filename=filename,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecule,
+                settings=settings,
+                label=label,
+                filename=filename,
+            ),
             **kwargs,
         )
 
@@ -279,11 +266,6 @@ class ThermochemistryJob(Job):
             ValueError: If no input file is provided
             Exception: If calculation fails during processing
         """
-        if not self.filename:
-            raise ValueError(
-                "No input file provided for thermochemistry calculation."
-            )
-
         # Set default output file if not specified
         if self.settings.outputfile is None:
             self.settings.outputfile = self.outputfile

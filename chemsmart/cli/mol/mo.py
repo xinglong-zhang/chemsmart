@@ -33,6 +33,9 @@ def mo(
     number,
     homo,
     lumo,
+    swap,
+    color_positive,
+    color_negative,
     isosurface_value,
     transparency_value,
     surface_quality,
@@ -55,6 +58,7 @@ def mo(
 
     # get label for the job
     label = ctx.obj["label"]
+    source_basename = ctx.obj["source_basename"]
     if coordinates is not None:
         logger.debug(f"Coordinates for visualization: {coordinates}")
         try:
@@ -72,6 +76,7 @@ def mo(
     return PyMOLMOJob(
         molecule=molecules,
         label=label,
+        source_basename=source_basename,
         pymol_script=file,
         style=style,
         trace=trace,
@@ -82,6 +87,9 @@ def mo(
         number=number,
         homo=homo,
         lumo=lumo,
+        swap=swap,
+        color_positive=color_positive,
+        color_negative=color_negative,
         isosurface_value=isosurface_value,
         transparency_value=transparency_value,
         surface_quality=surface_quality,

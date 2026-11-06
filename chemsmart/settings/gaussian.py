@@ -8,10 +8,10 @@ from chemsmart.jobs.gaussian.settings import (
     GaussianQMMMJobSettings,
     GaussianTDDFTJobSettings,
 )
-from chemsmart.settings.user import ChemsmartUserSettings
+from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
-user_settings = ChemsmartUserSettings()
+user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 project_settings_registry: list[str] = []
@@ -198,7 +198,7 @@ class GaussianProjectSettings(RegistryMixin):
 
         Searches for project configuration in the following order:
         1. User-defined project settings directory
-        2. Chemsmart test project configurations
+        2. CHEMSMART test project configurations
 
         Args:
             project (str): Name of the project configuration to load.
@@ -261,7 +261,7 @@ class GaussianProjectSettings(RegistryMixin):
             settings instance if found, None otherwise.
         """
         project_name_yaml_path = os.path.join(
-            ChemsmartUserSettings().user_gaussian_settings_dir,
+            CHEMSMARTUserSettings().user_gaussian_settings_dir,
             f"{project_name}.yaml",
         )
         user_settings_manager = GaussianProjectSettingsManager(

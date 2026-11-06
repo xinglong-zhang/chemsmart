@@ -97,9 +97,21 @@ class GaussianIRCJob(GaussianJob):
         ircf_settings = deepcopy(self.settings)
         label = self.label
         if self.label is not None:
-            label = self.label + "f"
-            if self.settings.flat_irc:
-                label += "_flat"
+            if self.settings.direction is None:
+                # No direction specified: derive forward sub-job label.
+                # Auto-generated labels end with "_irc" (e.g. "file_irc"),
+                # so we append "f" directly → "file_ircf".
+                # Custom labels (e.g. "-l label") do not contain "_irc",
+                # so we append "_ircf" → "label_ircf".
+                if label.endswith("_irc"):
+                    label = label + "f"
+                else:
+                    label = label + "_ircf"
+                if self.settings.flat_irc:
+                    label += "_flat"
+            # When direction is already set, update_irc_label has already
+            # embedded the direction (and _flat if applicable) in the
+            # parent label, so the sub-job reuses it unchanged.
 
         ircf_settings.jobtype = "ircf"
         return GaussianGeneralJob(
@@ -124,9 +136,22 @@ class GaussianIRCJob(GaussianJob):
         ircr_settings = deepcopy(self.settings)
         label = self.label
         if self.label is not None:
-            label = self.label + "r"
-            if self.settings.flat_irc:
-                label += "_flat"
+            if self.settings.direction is None:
+                # No direction specified: derive reverse sub-job label.
+                # Auto-generated labels end with "_irc" (e.g. "file_irc"),
+                # so we append "r" directly → "file_ircr".
+                # Custom labels (e.g. "-l label") do not contain "_irc",
+                # so we append "_ircr" → "label_ircr".
+                if label.endswith("_irc"):
+                    label = label + "r"
+                else:
+                    label = label + "_ircr"
+                if self.settings.flat_irc:
+                    label += "_flat"
+            # When direction is already set, update_irc_label has already
+            # embedded the direction (and _flat if applicable) in the
+            # parent label, so the sub-job reuses it unchanged.
+
         ircr_settings.jobtype = "ircr"
         return GaussianGeneralJob(
             molecule=self.molecule,

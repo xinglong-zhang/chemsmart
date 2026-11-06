@@ -15,7 +15,6 @@ import subprocess
 import sys
 import textwrap
 
-
 import numpy as np
 import pytest
 
@@ -25,9 +24,11 @@ from chemsmart.jobs.gaussian.external import GaussianExternalJob
 from chemsmart.jobs.gaussian.settings import GaussianExternalJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
 
+
 # ── Stub calculator without todict() (used for the pickle-fallback test) ─
 class _NoDictCalc:
     """Minimal pickle-able calculator stub that has no todict() method."""
+
     pass
 
 
@@ -39,7 +40,10 @@ _GRAD_CONV = _BOHR_TO_ANG / _EV_PER_HA  # (eV/Å) → (Ha/Bohr)
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-def _write_gaussian_external_input(path, positions_ang, atomic_numbers, deriv=1):
+
+def _write_gaussian_external_input(
+    path, positions_ang, atomic_numbers, deriv=1
+):
     """Write a minimal Gaussian External input file (positions in Bohr)."""
     natoms = len(atomic_numbers)
     with open(path, "w") as fh:
@@ -48,12 +52,11 @@ def _write_gaussian_external_input(path, positions_ang, atomic_numbers, deriv=1)
             xb = x / _BOHR_TO_ANG
             yb = y / _BOHR_TO_ANG
             zb = z_coord / _BOHR_TO_ANG
-            fh.write(
-                f"{z:10d}{xb:20.12f}{yb:20.12f}{zb:20.12f}{0.0:20.12f}\n"
-            )
+            fh.write(f"{z:10d}{xb:20.12f}{yb:20.12f}{zb:20.12f}{0.0:20.12f}\n")
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────
+
 
 class TestGaussianExternalIntegration:
     """End-to-end tests for the Gaussian External calculator interface."""
@@ -202,8 +205,16 @@ class TestGaussianExternalIntegration:
 
         # Run the generated script exactly as Gaussian would
         result = subprocess.run(
-            [sys.executable, script_path,
-             "R", input_file, output_file, msg_file, fchk_file, matel_file],
+            [
+                sys.executable,
+                script_path,
+                "R",
+                input_file,
+                output_file,
+                msg_file,
+                fchk_file,
+                matel_file,
+            ],
             capture_output=True,
             text=True,
         )
@@ -226,7 +237,9 @@ class TestGaussianExternalIntegration:
 
         for i, line in enumerate(lines[1:], start=1):
             grad = line.split()
-            assert len(grad) == 3, f"Gradient line {i} should have 3 components"
+            assert (
+                len(grad) == 3
+            ), f"Gradient line {i} should have 3 components"
             assert all(np.isfinite(float(g)) for g in grad)
 
         # Sanity-check units: EMT Au2 energy is ~few eV; in Ha that's ~0.1-1 Ha
@@ -234,6 +247,7 @@ class TestGaussianExternalIntegration:
 
 
 # ── Real Gaussian run ─────────────────────────────────────────────────────
+
 
 def _find_g16():
     """Return the g16 executable path, or None if Gaussian is not available."""

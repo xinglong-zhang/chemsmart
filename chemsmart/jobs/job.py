@@ -6,7 +6,7 @@ import shutil
 import time
 from abc import abstractmethod
 from contextlib import suppress
-from typing import Optional
+from typing import Callable, Optional, Sequence
 
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -46,6 +46,13 @@ class Job(RegistryMixin):
         self.kwargs = kwargs
 
     @property
+    def execution_name(self):
+        """Program-prefixed name for scheduling, scripts, and scratch."""
+        if self.label is None or self.PROGRAM is None:
+            return self.label
+        return f"{self.PROGRAM.lower()}_{self.label}"
+
+    @property
     def folder(self):
         return self._folder
 
@@ -83,6 +90,82 @@ class Job(RegistryMixin):
             logger.info(f"{self} is already complete, not running.")
             return
         self._run(**kwargs)
+
+    @staticmethod
+    def _propagate_runner(
+        runner, job, *, num_cores=None, mem_gb=None, num_gpus=None
+    ):
+        """Copy *runner* onto *job*, optionally patching resource fields.
+
+        This is the **single, centralised** mechanism for propagating a
+        runner to a child job.  Every call site that needs to hand a runner
+        to a child should use this helper rather than assigning directly, so
+        that:
+
+        * The child always receives its own ``.copy()`` — no shared-reference
+          mutations between siblings.
+        * Resource overrides (e.g. splitting cores across parallel workers)
+          are applied in one place, making future additions (``num_gpus``,
+          ``mem_per_cpu``, …) a single-line change.
+
+        Args:
+            runner: The parent runner to propagate, or ``None``.
+            job (Job): The child job that will receive the runner copy.
+            num_cores (int, optional): Override ``runner.num_cores`` on the copy.
+            mem_gb (int, optional): Override ``runner.mem_gb`` on the copy.
+            num_gpus (int, optional): Override ``runner.num_gpus`` on the copy.
+
+        Returns:
+            The runner copy that was assigned, or ``None`` if *runner* was falsy.
+        """
+        if not runner:
+            return None
+        child_runner = runner.copy()
+        if num_cores is not None:
+            child_runner.num_cores = num_cores
+        if mem_gb is not None:
+            child_runner.mem_gb = mem_gb
+        if num_gpus is not None:
+            child_runner.num_gpus = num_gpus
+        job.jobrunner = child_runner
+        return child_runner
+
+    @staticmethod
+    def _execute_phase_jobs(
+        *,
+        parent_runner,
+        jobs: Optional[Sequence],
+        jobs_factory: Optional[Callable[[], Optional[Sequence]]] = None,
+        stop_on_incomplete: bool = False,
+        before_run: Optional[Callable[[], None]] = None,
+        logger_obj: Optional[logging.Logger] = None,
+        phase_label: str = "phase",
+    ) -> None:
+        """Run a phase of child jobs using shared orchestration semantics.
+
+        This centralizes the repeated pattern of optional pre-phase refresh,
+        per-job runner propagation, and fail-fast behavior.
+        """
+        if before_run is not None:
+            before_run()
+
+        if jobs_factory is not None:
+            jobs = jobs_factory()
+
+        if not jobs:
+            return
+
+        for child_job in jobs:
+            if logger_obj is not None:
+                logger_obj.info(f"Running {phase_label} job: {child_job}")
+            Job._propagate_runner(parent_runner, child_job)
+            child_job.run()
+            if stop_on_incomplete and not child_job.is_complete():
+                if logger_obj is not None:
+                    logger_obj.info(
+                        f"Job {child_job} incomplete, breaking {phase_label} loop."
+                    )
+                break
 
     @abstractmethod
     def _run(self, **kwargs):
@@ -168,6 +251,41 @@ class Job(RegistryMixin):
 
     def is_complete(self):
         return self._job_is_complete()
+
+    @classmethod
+    def _create_with_jobrunner(cls, jobrunner, job_args, **kwargs):
+        """Create a job, selecting a job runner for it if none was given.
+
+        ``server``, ``scratch`` and ``fake`` configure the runner rather than
+        the job, so they are taken out of ``kwargs`` and passed to
+        ``JobRunner.from_job`` once. Other keyword arguments are given to both
+        the job and the runner, which ignore what they do not use.
+
+        Args:
+            jobrunner: The JobRunner to use, or None to select one from the
+                job's TYPE.
+            job_args (dict): Arguments identifying this job, such as its
+                molecule, settings and label.
+            **kwargs: Runner options and additional job arguments.
+
+        Returns:
+            Job: The new job, with its job runner attached.
+        """
+        # Imported here because chemsmart.jobs.runner imports this module.
+        from chemsmart.jobs.runner import JobRunner
+
+        server = kwargs.pop("server", None)
+        scratch = kwargs.pop("scratch", None)
+        fake = kwargs.pop("fake", False)
+        if jobrunner is None:
+            jobrunner = JobRunner.from_job(
+                cls(jobrunner=None, **job_args, **kwargs),
+                server=server,
+                scratch=scratch,
+                fake=fake,
+                **kwargs,
+            )
+        return cls(jobrunner=jobrunner, **job_args, **kwargs)
 
     @classmethod
     def from_molecule(cls, molecule, label, jobrunner=None, **kwargs):

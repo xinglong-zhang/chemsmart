@@ -1,7 +1,7 @@
 """
-CLI utilities for ChemSmart.
+CLI utilities for CHEMSMART.
 
-Provides helpers and Click integrations used by the ChemSmart command line
+Provides helpers and Click integrations used by the CHEMSMART command line
 tools, including:
 
 - Custom Click `Group`/`Command` that persist subcommand metadata on the
@@ -420,6 +420,8 @@ def get_setting_from_jobtype_for_gaussian(
         settings = project_settings.nci_settings()
     elif jobtype.lower() == "qmmm":
         settings = project_settings.qmmm_settings()
+    elif jobtype.lower() == "neb":
+        settings = project_settings.neb_settings()
 
     if coordinates is not None:
         modred_info = ast.literal_eval(coordinates)
@@ -436,6 +438,15 @@ def get_setting_from_jobtype_for_gaussian(
             # explicit type conversion
             step_size_info = [float(size) for size in step_size_info]
             num_steps_info = [int(num) for num in num_steps_info]
+
+            # broadcast single step_size/num_steps to all coordinates
+            coords_num = (
+                len(modred_info) if isinstance(modred_info[0], list) else 1
+            )
+            if len(step_size_info) == 1 and coords_num > 1:
+                step_size_info = step_size_info * coords_num
+            if len(num_steps_info) == 1 and coords_num > 1:
+                num_steps_info = num_steps_info * coords_num
 
             check_scan_parameters_consistency_gaussian(
                 modred_info, step_size_info, num_steps_info
@@ -578,6 +589,8 @@ def get_setting_from_jobtype_for_orca(
         settings = project_settings.nci_settings()
     elif jobtype.lower() == "qmmm":
         settings = project_settings.qmmm_settings()
+    elif jobtype.lower() == "neb":
+        settings = project_settings.neb_settings()
 
     if coordinates is not None:
         modred_info = ast.literal_eval(coordinates)
@@ -598,6 +611,17 @@ def get_setting_from_jobtype_for_orca(
             dist_start_info = [float(dist) for dist in dist_start_info]
             dist_end_info = [float(dist) for dist in dist_end_info]
             num_steps_info = [int(num) for num in num_steps_info]
+
+            # broadcast single dist_start/dist_end/num_steps to all coordinates
+            coords_num = (
+                len(modred_info) if isinstance(modred_info[0], list) else 1
+            )
+            if len(dist_start_info) == 1 and coords_num > 1:
+                dist_start_info = dist_start_info * coords_num
+            if len(dist_end_info) == 1 and coords_num > 1:
+                dist_end_info = dist_end_info * coords_num
+            if len(num_steps_info) == 1 and coords_num > 1:
+                num_steps_info = num_steps_info * coords_num
 
             check_scan_parameters_consistency_orca(
                 modred_info, dist_start_info, dist_end_info, num_steps_info
@@ -638,7 +662,7 @@ def check_scan_coordinates_orca(coordinates, dist_start, dist_end, num_steps):
         "Use flags `-c -a -b -n` for coordinates, starting distance, ending distance and num-steps respectively.\n"
         "Example usage: `-c [[2,3],[6,7]] -x 3.0 -y 1.2 -n 15` to scan the distance between atom 2 and atom 3 "
         "and distance between atom 6 and 7 from distance 3.0 Angstrom to 1.2 Angstrom in 15 points.\n "
-        "Note: all indices should be 1-indexed. Chemsmart has already taken care of converting 0-indexed "
+        "Note: all indices should be 1-indexed. CHEMSMART has already taken care of converting 0-indexed "
         "(used in ORCA) to 1-indexed (used in visualization software such as PyMOL, Gaussview, etc)."
     )
 
@@ -703,7 +727,12 @@ def update_irc_label(label, direction, flat_irc):
     Update the job label based on IRC direction and flat IRC flag.
 
     Appends 'f' for forward direction, 'r' for reverse direction,
-    and '_flat' if flat_irc is True.
+    and '_flat' if flat_irc is True and a direction is specified.
+
+    When direction is None (both forward and reverse IRC sub-jobs will be
+    created), the '_flat' suffix is not added here because the sub-jobs
+    created by ``_ircf_job()`` / ``_ircr_job()`` append the direction and
+    '_flat' suffix themselves, avoiding double-application.
 
     Args:
         label (str): Original job label.
@@ -722,7 +751,7 @@ def update_irc_label(label, direction, flat_irc):
             raise ValueError(
                 "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
             )
-    if flat_irc:
+    if flat_irc and not label.endswith("_flat"):
         label += "_flat"
     return label
 

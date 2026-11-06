@@ -12,9 +12,9 @@ Gaussian calculations in computational workflows.
 """
 
 from .crest import GaussianCrestJob
-from .external import GaussianExternalJob
 from .custom import GaussianCustomJob
 from .dias import GaussianDIASJob
+from .external import GaussianExternalJob
 from .irc import GaussianIRCJob
 from .job import GaussianComJob, GaussianGeneralJob, GaussianJob
 from .link import GaussianLinkJob
