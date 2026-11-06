@@ -21,6 +21,9 @@ user_settings = CHEMSMARTUserSettings()
 
 logger = logging.getLogger(__name__)
 
+# These jobs run in Python, so server.yaml has no program section for them
+PYTHON_PROGRAMS = ("grouper", "iterate", "sterimol", "thermochemistry")
+
 
 class RunScript:
     """
@@ -270,8 +273,7 @@ class Submitter(RegistryMixin):
             executable = CRESTExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "sterimol":
-            # Runs in Python, so there is no program section in server.yaml
+        elif self.job.PROGRAM.lower() in PYTHON_PROGRAMS:
             executable = None
         else:
             # Need to add programs here to be
@@ -635,14 +637,16 @@ class Submitter(RegistryMixin):
         Write the final job execution commands.
 
         Makes the run script executable and executes it in the background,
-        then waits for completion.
+        then waits for it. Waiting for that process gives the script its exit
+        status, so that the scheduler sees a failed job; a bare ``wait`` always
+        succeeds.
 
         Args:
             f: File handle for writing job execution commands.
         """
         f.write(f"chmod +x ./{self.run_script}\n")
         f.write(f"./{self.run_script} &\n")
-        f.write("wait\n")
+        f.write('wait "$!"\n')
 
     @classmethod
     def from_scheduler_type(cls, scheduler_type, **kwargs):
