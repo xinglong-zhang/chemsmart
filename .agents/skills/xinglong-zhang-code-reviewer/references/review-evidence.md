@@ -12,6 +12,7 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 - [User feedback: external level of theory, PR #732](#user-feedback-external-level-of-theory-pr-732)
 - [Extended historical sample](#extended-historical-sample)
 - [Technical review of the guidance](#technical-review-of-the-guidance)
+- [User feedback: duplicate and redefinition checks](#user-feedback-duplicate-and-redefinition-checks)
 - [PR #391](#pr-391)
 - [PR #475](#pr-475)
 - [PR #524](#pr-524)
@@ -125,6 +126,18 @@ Retrieved on 7 November 2026: all 943 inline review comments by `xinglong-zhang`
   - **Structure identity.** The suggestion to "hash something that uniquely defines the molecule (e.g., energy + forces (if any) + 3D coordinates)" ([#454](https://github.com/xinglong-zhang/chemsmart/pull/454#discussion_r2727736692)) would make identity depend on the method and on exact floats. The implemented `Molecule.structure_id` hashes canonical geometry, charge and multiplicity, which is better; its docstring notes that canonicalisation is not strictly guaranteed.
   - **Attribute checks at generic boundaries.** The assistant's rule from PR #732 to use `isinstance` at boundaries is now secondary to declaring the attribute (default `None`) on a common base class, which removes the introspection; the review evidence from [#702](https://github.com/xinglong-zhang/chemsmart/pull/702#discussion_r4296425125) prefers that approach.
 - **Refinements:** tolerances when comparing unit-converted values from different CODATA sources; reading files lazily for program detection ([#326](https://github.com/xinglong-zhang/chemsmart/pull/326#discussion_r2514384453)); tests for new regex patterns, including lines that must not match ([#310](https://github.com/xinglong-zhang/chemsmart/pull/310)).
+
+## User feedback: duplicate and redefinition checks
+
+- **Date and source:** conversation on 7 November 2026.
+- **User statements:** "improve the skills so that it also checks for duplicate or re-definition of variables (e.g., constants, regex patterns) and class methods and functions", then, while the check was being built: "the duplicate function, is generally defined, even if it may be named differently by different contributors".
+- **Classification:** a general review principle with a repository-specific tool. The second statement sets the criterion: duplicates are judged by behaviour, not by name.
+- **Implementation:** `scripts/find_duplicates.py` (standard library only). It normalises functions by dropping docstrings and renaming parameters and local variables before hashing, and scores near-copies by the Jaccard similarity of 3-token windows in which every local name is one token. An extra local variable therefore does not shift every later placeholder; numbering placeholders made a near-copy score 0.59 instead of 0.79 during development. Numeric constants are also compared with `ase.units` values when `ase` is installed.
+- **Validation:**
+  - A fixture repository with one positive and at least one negative per finding kind (property setters, `@overload`, local variables, `try`/`except` and `if`/`else` alternatives, small numbers, and a different routine of similar size scoring 0.10). All behaved as expected.
+  - PR #732 at commit `d0a88b539` reports `BOHR_TO_ANG` and `EV_PER_HA` as near-copies of `ase.units.Bohr` and `ase.units.Ha`, the duplication the user had corrected; at head `541ca4283` it reports nothing.
+  - On the whole codebase (about 4 s) it finds real duplicates, e.g. identical `*_process_pipeline` callbacks in the `crest`, `gaussian`, `mol` and `xtb` CLIs, `pka` in the Gaussian and ORCA CLIs, `sum_time_hours` in the CREST and xTB parsers, and the `_get_all_files_*` family in `chemsmart/analysis/dias.py`.
+- **Limits:** the script reports candidates, not defects. The 0.75 default was chosen by reading sampled hits at 0.70 to 0.90 on this repository; it is a judgement, adjustable with `--similarity`. `--head` reads code at the reviewed revision, so line numbers match the diff even when another branch is checked out.
 
 ## PR #391
 

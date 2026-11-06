@@ -361,3 +361,39 @@ def uhf(self):
     return self.multiplicity - 1
 ```
 
+## Duplicates under different names
+
+Source: [User feedback: duplicate and redefinition checks](review-evidence.md#user-feedback-duplicate-and-redefinition-checks).
+
+### Situation
+
+A PR adds a torsion function to a new module; `Molecule` already computes dihedrals:
+
+```python
+def compute_torsion(a, b, c, d):
+    first = np.asarray(a) - np.asarray(b)
+    axis = np.asarray(c) - np.asarray(b)
+    ...
+    return np.degrees(np.arctan2(sin_part, cos_part))
+```
+
+### Expected behaviour
+
+Run `scripts/find_duplicates.py --base main`. It reports `same-body` against the existing dihedral routine even though the function, parameter and variable names all differ. Read both, then report an OOP/API finding asking the PR to call the existing method, `molecule.get_dihedral_from_positions(...)` (or `molecule.get_dihedral(i, j, k, l)` with 1-based atom indices), not to keep a second implementation. A `similar-body` hit for a variant that returns radians suggests one function with a `degrees` argument.
+
+### Counterexample: this should not be flagged
+
+Same-looking code that is a deliberate per-subclass hook, or shape-alike boilerplate with different meaning:
+
+```python
+class GaussianJobRunner(JobRunner):
+    def _get_command(self, job):
+        return f"{self._get_executable()} {self.job_inputfile}"
+
+class ORCAJobRunner(JobRunner):
+    def _get_command(self, job):
+        return f"{self._get_executable()} {self.job_inputfile}"
+```
+
+Each overrides the abstract hook; ask for a parent default only if more runners repeat it, and keep it out of an unrelated PR.
+
