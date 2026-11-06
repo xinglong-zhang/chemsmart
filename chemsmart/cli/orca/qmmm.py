@@ -5,6 +5,7 @@ import logging
 
 import click
 
+from chemsmart.cli.external import reject_external_level_of_theory
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import get_list_from_string_range
@@ -261,6 +262,9 @@ def create_orca_qmmm_subcommand(parent_command):
         from chemsmart.jobs.orca.settings import ORCAQMMMJobSettings
 
         parent_settings = ctx.obj.get("parent_settings")
+        # WIP: QM/MM with an external layer is not supported yet; see
+        # reject_external_level_of_theory for what supporting it involves
+        reject_external_level_of_theory(parent_settings, "qmmm")
         parent_kwargs = ctx.obj.get("parent_kwargs", {})
         parent_skip_completed = ctx.obj.get("parent_skip_completed")
         parent_jobtype = ctx.obj.get("parent_jobtype")

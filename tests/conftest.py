@@ -10,6 +10,7 @@ pytest_plugins = [
     "tests.fixtures.io",
     "tests.fixtures.thermochemistry",
     "tests.fixtures.cli",
+    "tests.fixtures.external",
     "tests.fixtures.gaussian",
     "tests.fixtures.orca",
     "tests.fixtures.common",

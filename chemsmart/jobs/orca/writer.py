@@ -66,6 +66,8 @@ class ORCAInputWriter(InputWriter):
         else:
             folder = self.job.folder
         job_inputfile = os.path.join(folder, f"{self.job.label}.inp")
+        # the ProgExt launcher of external jobs lives next to the input
+        self._target_folder = folder
         logger.debug(f"Writing ORCA input file: {job_inputfile}")
         f = open(job_inputfile, "w")
         if self.job.settings.input_string:
@@ -108,6 +110,9 @@ class ORCAInputWriter(InputWriter):
             f: File object to write to
         """
         logger.debug("Writing complete ORCA input file")
+        if getattr(self.settings, "external", None) is not None:
+            self._write_all_external(f)
+            return
         self._write_route_section(f)
         self._write_processors(f)
         self._write_memory(f)
@@ -133,6 +138,56 @@ class ORCAInputWriter(InputWriter):
         # )  # followed by user defined solvent parameters
         # self._append_job_specific_info(f)
         # self._append_other_additional_info(f)
+
+    def _write_all_external(self, f):
+        """
+        Write an input for an external level of theory (``! ExtOpt``).
+
+        ORCA's optimiser, constraint, scan, TS-Hessian and IRC blocks are
+        kept; blocks configuring ORCA's own electronic structure (SCF,
+        solvation, MDCI, properties, TDDFT, relativity) are not written.
+
+        Args:
+            f: File object to write to
+
+        Raises:
+            ValueError: For QM/MM and NEB settings, which are not
+                supported with an external level of theory.
+        """
+        # WIP: QM/MM with an external QM region is not supported yet (see
+        # chemsmart.cli.external.reject_external_level_of_theory)
+        if isinstance(
+            self.settings, (ORCAQMMMJobSettings, ORCANEBJobSettings)
+        ):
+            raise ValueError(
+                f"{type(self.settings).__name__} cannot be combined with "
+                "an external level of theory."
+            )
+        logger.debug("Writing ORCA input file for an external backend")
+        self._write_route_section(f)
+        self._write_processors(f)
+        self._write_memory(f)
+        self._write_external_block(f)
+        self._write_modred_block(f)
+        self._write_hessian_block(f)
+        self._write_irc_block(f)
+        self._write_constrained_atoms(f)
+        self._write_charge_and_multiplicity(f)
+        self._write_cartesian_coordinates(f)
+
+    def _write_external_block(self, f):
+        """
+        Write the ``%method`` block pointing ORCA at the external launcher.
+
+        Args:
+            f: File object to write to
+        """
+        external = self.settings.external
+        folder = getattr(self, "_target_folder", None) or self.job.folder
+        f.write(f"# External level of theory: {external.backend}\n")
+        f.write("%method\n")
+        f.write(f'  ProgExt "{external.progext(folder)}"\n')
+        f.write("end\n")
 
     def _write_self(self, f):
         """
@@ -759,8 +814,12 @@ class ORCAInputWriter(InputWriter):
         f.write(
             "  Calc_Hess True  # calc initial Hessian\n"
         )  # for ts job, initial hessian is required
+        # external backends give gradients only: ORCA differentiates them
+        numhess = self.settings.numhess or (
+            getattr(self.settings, "external", None) is not None
+        )
         f.write(
-            f"  NumHess {self.settings.numhess}  # Request numerical Hessian (if analytical not available)\n"
+            f"  NumHess {numhess}  # Request numerical Hessian (if analytical not available)\n"
         )
         f.write(
             f"  Recalc_Hess {self.settings.recalc_hess}   # Recalculate the Hessian every 5 step\n"
@@ -878,15 +937,14 @@ class ORCAInputWriter(InputWriter):
         irc_specific_keys = set(irc_settings_keys) - set(parent_settings_keys)
 
         if not any(
-            getattr(self.settings, key) is not None
-            for key in irc_specific_keys
+            self._irc_option(key) is not None for key in irc_specific_keys
         ):
             return
 
         # write irc block if any option value is not None:
         f.write("%irc\n")
         for key in irc_specific_keys:
-            value = getattr(self.settings, key)
+            value = self._irc_option(key)
             if value is None:
                 continue  # ignore the rest of the code and go to next in the for loop
             # only write into IRC input if the value is not None
@@ -940,6 +998,21 @@ class ORCAInputWriter(InputWriter):
             else:  # all other keys with given values
                 f.write(f"  {key} {value}\n")
         f.write("end\n")
+
+    def _irc_option(self, key):
+        """IRC setting ``key``, with the external-backend default applied.
+
+        External backends provide gradients only, so ORCA's default
+        analytic initial Hessian is replaced by a numerical one.
+        """
+        value = getattr(self.settings, key)
+        if (
+            key == "inithess"
+            and getattr(self.settings, "external", None) is not None
+            and (value is None or str(value).lower() == "calc_anfreq")
+        ):
+            return "calc_numfreq"
+        return value
 
     @property
     def neb_block(self):

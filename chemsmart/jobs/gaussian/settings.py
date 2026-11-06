@@ -88,6 +88,7 @@ class GaussianJobSettings(MolecularJobSettings):
         append_additional_info=None,
         forces=False,
         input_string=None,
+        external=None,
         **kwargs,
     ):
         """
@@ -124,6 +125,10 @@ class GaussianJobSettings(MolecularJobSettings):
             append_additional_info (str, optional): Additional input content.
             forces (bool): Calculate forces.
             input_string (str, optional): Custom input string.
+            external (GaussianExternalCalculator or dict, optional):
+                External level of theory (ML potential, xTB, any ASE
+                calculator). When set, it replaces the QM method in the
+                route with ``External=...``.
             **kwargs: Additional keyword arguments.
 
         Raises:
@@ -161,6 +166,14 @@ class GaussianJobSettings(MolecularJobSettings):
         self.append_additional_info = append_additional_info
         self._route_string = None
 
+        if isinstance(external, dict):
+            from chemsmart.jobs.gaussian.external import (
+                GaussianExternalCalculator,
+            )
+
+            external = GaussianExternalCalculator.from_dict(external)
+        self.external = external
+
         if gen_genecp_file is not None and "~" in gen_genecp_file:
             gen_genecp_file = os.path.expanduser(gen_genecp_file)
             logger.debug(f"Expanded GenECP file path: {gen_genecp_file}")
@@ -189,6 +202,8 @@ class GaussianJobSettings(MolecularJobSettings):
         Returns:
             bool: True if GenECP is configured, False otherwise.
         """
+        if self.external is not None:
+            return False
         return (
             self.gen_genecp_file is not None or self.heavy_elements is not None
         )
@@ -651,6 +666,9 @@ class GaussianJobSettings(MolecularJobSettings):
 
     def _get_level_of_theory_string(self):
         """Get level of theory string for route."""
+        if self.external is not None:
+            return self._get_external_level_of_theory_string()
+
         route_string = ""
 
         # Determine computational method and add to route string
@@ -772,6 +790,26 @@ class GaussianJobSettings(MolecularJobSettings):
         elif self.jobtype == "wbi":
             route_string += " pop=nboread"  # write bond order matrix
             logger.debug("Added WBI-specific pop=nboread keyword")
+        return route_string
+
+    def _get_external_level_of_theory_string(self):
+        """
+        Route fragment for an External level of theory.
+
+        The QM method, basis set and Gaussian solvation are not used: the
+        External program supplies energies and derivatives. Implicit
+        solvation, if wanted, belongs to the backend (e.g. xtb ``alpb``).
+        """
+        if self.solvent_model is not None or self.custom_solvent is not None:
+            logger.warning(
+                "Gaussian solvation is ignored for External calculations; "
+                "configure solvation in the External backend instead."
+            )
+        route_string = f" External={self.external.route_value}"
+        if self.forces:
+            route_string += " force"
+        if self.additional_route_parameters is not None:
+            route_string += f" {self.additional_route_parameters}"
         return route_string
 
     @property

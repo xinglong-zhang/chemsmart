@@ -318,6 +318,7 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
             sp_settings: Settings for single point calculations.
             td_settings: Settings for TD-DFT calculations.
             wbi_settings: Settings for Wiberg bond index calculations.
+            qmmm_settings: Settings for QM/MM ONIOM jobs.
         """
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings

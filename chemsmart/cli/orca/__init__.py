@@ -7,6 +7,7 @@ including geometry optimizations, transition state searches, IRC calculations,
 single point calculations, and constrained optimizations.
 """
 
+from .external import external
 from .inp import inp
 from .irc import irc
 from .modred import modred
@@ -23,6 +24,7 @@ from .tddft import td
 from .ts import ts
 
 __all__ = [
+    "external",
     "inp",
     "irc",
     "modred",

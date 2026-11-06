@@ -12,6 +12,10 @@ orca_line_integer_followed_by_floats = (
 )
 raw_energy_value_pattern = r"(-\d+\.\d+)"
 
+# One keyword of an ORCA simple-input (route) line such as "! Opt Freq",
+# i.e. any run of characters other than whitespace and "!"
+orca_route_keyword_pattern = r"[^\s!]+"
+
 element_token = r"[A-Z][a-z]?"
 orca_mayer_population_analysis_line_pattern = rf"^\s*(?:\+?\d+)\s+{element_token}(?:\s+{float_pattern_with_exponential}){{6}}\s*$"
 
@@ -37,6 +41,10 @@ mp2_energy_pattern = r"EUMP2\s*=\s*(.*)"
 oniom_gridpoint_pattern = r"ONIOM:\s+gridpoint\s+(\d+)\s+method:\s+(\w+)\s+system:\s+(\w+)\s+energy:\s+([+-]?\d*\.\d+|\d+)"
 oniom_energy_pattern = r"ONIOM:\s+extrapolated energy\s*=\s*(.*)"
 xyz_energy_pattern = r"Energy\(Hartree\):\s*(-?\d+\.\d+)"
+# Request record in a chemsmart per-job external log
+# (chemsmart.io.external.runlog), e.g.
+#   2026-11-06 22:10:03  step    3  deriv 1  E = -40.1234567890 Eh ...
+external_log_step_pattern = r"^\S+ \S+\s+step\s+(\d+)\b"
 
 # standard coordinate pattern with (symbol x y z)
 standard_coord_pattern = (

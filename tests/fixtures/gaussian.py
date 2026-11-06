@@ -5,11 +5,15 @@ from unittest.mock import patch
 
 import pytest
 
+from chemsmart.jobs.gaussian.external import GaussianExternalCalculator
+from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 from tests.helpers import (
     ConcreteGaussianProjectSettings,
     FakePKaSettings,
+    find_g16,
     make_pka_sub_job_factory,
+    write_gaussian_external_input,
 )
 
 ############ Gaussian Writer Fixtures ##################
@@ -1018,3 +1022,79 @@ def concrete_gaussian_project_settings():
     """A fresh hardcoded (non-YAML) :class:`ConcreteGaussianProjectSettings`
     instance, exercising ``GaussianProjectSettings``' default methods."""
     return ConcreteGaussianProjectSettings()
+
+
+############ Gaussian External Fixtures ##################
+
+
+@pytest.fixture(scope="session")
+def g16_executable():
+    """Path to the real ``g16`` binary; skips if Gaussian is absent."""
+    g16 = find_g16()
+    if g16 is None:
+        pytest.skip(
+            "Gaussian g16 not available (add to PATH or set GAUSS_EXEDIR)"
+        )
+    return g16
+
+
+@pytest.fixture()
+def emt_external_calculator():
+    """External backend running ASE's EMT (no model files needed)."""
+    return GaussianExternalCalculator(
+        backend="ase", calculator="ase.calculators.emt.EMT"
+    )
+
+
+@pytest.fixture()
+def xtb_external_calculator():
+    """xtb External backend with a fixed interpreter for route checks."""
+    return GaussianExternalCalculator(
+        backend="xtb",
+        options={"method": "gfn2", "alpb": "water"},
+        python_executable="/opt/conda/bin/python",
+    )
+
+
+@pytest.fixture()
+def au2_external_input(tmp_path):
+    """Factory writing a Gaussian External input for Au2 (2.88 Angstrom).
+
+    EMT is parametrised for Au, so Au2 runs through the ASE backend.
+    """
+
+    def make(deriv=1, charge=0, multiplicity=1):
+        return write_gaussian_external_input(
+            tmp_path / f"au2_deriv{deriv}.EIn",
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 2.88]],
+            [79, 79],
+            deriv=deriv,
+            charge=charge,
+            multiplicity=multiplicity,
+        )
+
+    return make
+
+
+@pytest.fixture()
+def lj_external_calculator():
+    """ASE LennardJones External backend; sigma=0.5 Angstrom puts H2
+    (r=0.74 Angstrom) in the attractive well. No analytic Hessian, so
+    Hessian requests use finite differences."""
+    return GaussianExternalCalculator(
+        backend="ase",
+        calculator="ase.calculators.lj.LennardJones",
+        options={"sigma": 0.5, "epsilon": 0.01},
+    )
+
+
+@pytest.fixture()
+def external_dft_settings():
+    """Project-like DFT settings that an External backend must override."""
+    return GaussianJobSettings(
+        functional="b3lyp",
+        basis="def2svp",
+        charge=0,
+        multiplicity=1,
+        freq=True,
+    )
