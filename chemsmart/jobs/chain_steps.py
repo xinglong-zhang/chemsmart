@@ -799,7 +799,7 @@ def _jobs_from_cli_result(result):
 
 
 def _step_slug(step):
-    """Phase and child-label token for one step."""
+    """Drop duplicate "thermochemistry" from the slug."""
     if step.program == "thermochemistry":
         return step.program
     return f"{step.program}_{step.job}"
