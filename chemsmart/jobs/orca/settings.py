@@ -87,6 +87,9 @@ class ORCAJobSettings(MolecularJobSettings):
         forces (bool): Calculate forces.
         input_string (str | None): Predefined input content to write directly.
         invert_constraints (bool): Invert modred constraints if True.
+        external (ORCAExternalCalculator | None): External level of theory
+            (ML potential, xTB, any ASE calculator). When set, the route
+            uses ``ExtOpt`` in place of the QM method and basis.
     """
 
     def __init__(
@@ -128,6 +131,7 @@ class ORCAJobSettings(MolecularJobSettings):
         forces=False,
         input_string=None,
         invert_constraints=False,
+        external=None,
         **kwargs,
     ):
         """
@@ -175,6 +179,9 @@ class ORCAJobSettings(MolecularJobSettings):
             forces: Whether to calculate forces
             input_string: Custom input string
             invert_constraints: Whether to invert constraints
+            external: External level of theory
+                (:class:`~chemsmart.jobs.orca.external.ORCAExternalCalculator`
+                or an equivalent dict)
             **kwargs: Additional keyword arguments
         """
         super().__init__(
@@ -219,6 +226,12 @@ class ORCAJobSettings(MolecularJobSettings):
         self.invert_constraints = invert_constraints
         self.additional_solvent_options = additional_solvent_options
         self.solventfilename = solventfilename
+
+        if isinstance(external, dict):
+            from chemsmart.jobs.orca.external import ORCAExternalCalculator
+
+            external = ORCAExternalCalculator.from_dict(external)
+        self.external = external
 
         # Validate frequency and force settings
         if forces is True and (freq is True or numfreq is True):
@@ -545,6 +558,9 @@ class ORCAJobSettings(MolecularJobSettings):
         if self.freq and self.numfreq:
             raise ValueError("Cannot specify both freq and numfreq!")
 
+        if self.external is not None:
+            return self._get_external_route_string(route_string)
+
         if self.freq:
             route_string += " Freq"
         elif self.numfreq:
@@ -620,8 +636,12 @@ class ORCAJobSettings(MolecularJobSettings):
                 route_string, self.solvent_model
             )
 
-        # Append additional route parameters (e.g. ``-r "Opt Freq"``) while
-        # avoiding duplicates that the structured fields already wrote.
+        return self._append_additional_route_parameters(route_string)
+
+    def _append_additional_route_parameters(self, route_string):
+        """Append additional route parameters (e.g. ``-r "Opt Freq"``)
+        while avoiding duplicates that the structured fields already
+        wrote."""
         if self.additional_route_parameters is not None:
             extras = str(self.additional_route_parameters).strip()
             if extras:
@@ -638,6 +658,31 @@ class ORCAJobSettings(MolecularJobSettings):
                     route_string += " " + " ".join(remaining)
 
         return route_string
+
+    def _get_external_route_string(self, route_string):
+        """
+        Complete the route for an external level of theory.
+
+        ``route_string`` already holds the job keyword (``! Opt``,
+        ``! OptTS``, ``! IRC``, ...). ``ExtOpt`` replaces the QM method;
+        basis, grid, SCF and solvation keywords do not apply because the
+        external program supplies energies and gradients. Analytic
+        frequencies are unavailable, so ``freq`` becomes ``NumFreq``.
+        Implicit solvation, if wanted, belongs to the backend (e.g. xtb
+        ``alpb``).
+        """
+        route_string = route_string.rstrip()  # "!" alone for sp jobs
+        if self.freq and self.numfreq:
+            raise ValueError("Cannot specify both freq and numfreq!")
+        if self.freq or self.numfreq:
+            route_string += " NumFreq"
+        if self.solvent_model is not None or self.solvent_id is not None:
+            logger.warning(
+                "ORCA solvation is ignored for external calculations; "
+                "configure solvation in the external backend instead."
+            )
+        route_string += " ExtOpt"
+        return self._append_additional_route_parameters(route_string)
 
     def _get_level_of_theory(self):
         """

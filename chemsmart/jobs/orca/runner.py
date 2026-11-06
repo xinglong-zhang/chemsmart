@@ -369,6 +369,11 @@ class ORCAJobRunner(JobRunner):
         input_writer = ORCAInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
 
+        # ProgExt launcher for an external level of theory (! ExtOpt)
+        external = getattr(job.settings, "external", None)
+        if external is not None:
+            external.write_script(self.running_directory, server=self.server)
+
         # Copy any .cosmorsxyz files referenced in the written input to the
         # running directory.  The writer already copies the file when
         # settings.solventfilename is set explicitly, but this also handles

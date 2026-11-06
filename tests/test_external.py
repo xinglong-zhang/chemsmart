@@ -1,0 +1,374 @@
+"""
+Tests for the program-neutral external backends in
+:mod:`chemsmart.io.external`: ASE and xtb engines, ML-potential presets,
+and analytic/finite-difference Hessians. Shared by the Gaussian
+(``External=``) and ORCA (``ExtOpt``) interfaces.
+"""
+
+import sys
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+from ase import Atoms
+from ase.calculators.emt import EMT
+from ase.units import Bohr, Hartree
+
+from chemsmart.io.external import (
+    ASEEngine,
+    ExternalEngine,
+    XTBEngine,
+    build_engine,
+    compute_hessian,
+    finite_difference_hessian,
+    parse_xtb_gradient_file,
+    parse_xtb_hessian_file,
+)
+from tests.helpers import QuadraticEngine
+
+# ── Engines ───────────────────────────────────────────────────────────────
+
+
+class TestASEEngine:
+    def test_energy_and_gradient_units_and_sign(self):
+        positions = [[0.0, 0.0, 0.0], [0.0, 0.0, 2.88]]
+        reference = Atoms("Au2", positions=positions)
+        reference.calc = EMT()
+        engine = ASEEngine(lambda charge, multiplicity: EMT())
+
+        energy, gradient = engine.energy_and_gradient(
+            [79, 79], positions, 0, 1
+        )
+
+        assert energy == pytest.approx(
+            reference.get_potential_energy() / Hartree
+        )
+        np.testing.assert_allclose(
+            gradient, -reference.get_forces() * Bohr / Hartree
+        )
+
+    def test_charge_and_spin_reach_calculator_and_atoms(self):
+        seen = {}
+
+        def factory(charge, multiplicity):
+            seen["args"] = (charge, multiplicity)
+            calc = EMT()
+            original = calc.calculate
+
+            def calculate(atoms=None, *args, **kwargs):
+                seen["info"] = dict(atoms.info)
+                return original(atoms, *args, **kwargs)
+
+            calc.calculate = calculate
+            return calc
+
+        ASEEngine(factory).energy_and_gradient(
+            [79, 79], [[0, 0, 0], [0, 0, 2.88]], -1, 2
+        )
+        assert seen["args"] == (-1, 2)
+        assert seen["info"] == {"charge": -1, "spin": 2}
+
+    def test_no_get_hessian_means_no_analytic_hessian(self):
+        engine = ASEEngine(lambda charge, multiplicity: EMT())
+        assert (
+            engine.analytic_hessian([79, 79], [[0, 0, 0], [0, 0, 2.88]], 0, 1)
+            is None
+        )
+
+    def test_get_hessian_converted_to_atomic_units(self):
+        hessian_ev = np.arange(36.0).reshape(6, 6)
+
+        def factory(charge, multiplicity):
+            calc = EMT()
+            # flat output must be reshaped to (3N, 3N)
+            calc.get_hessian = lambda atoms: hessian_ev.ravel()
+            return calc
+
+        hessian = ASEEngine(factory).analytic_hessian(
+            [79, 79], [[0, 0, 0], [0, 0, 2.88]], 0, 1
+        )
+        np.testing.assert_allclose(hessian, hessian_ev * Bohr**2 / Hartree)
+
+    def test_failing_get_hessian_means_no_analytic_hessian(self, caplog):
+        def factory(charge, multiplicity):
+            calc = EMT()
+            calc.get_hessian = MagicMock(side_effect=RuntimeError("no model"))
+            return calc
+
+        hessian = ASEEngine(factory).analytic_hessian(
+            [79, 79], [[0, 0, 0], [0, 0, 2.88]], 0, 1
+        )
+        assert hessian is None
+        assert "no model" in caplog.text
+
+    def test_base_engine_contract(self):
+        engine = ExternalEngine()
+        with pytest.raises(NotImplementedError):
+            engine.energy_and_gradient([1], [[0, 0, 0]], 0, 1)
+        assert engine.analytic_hessian([1], [[0, 0, 0]], 0, 1) is None
+
+
+class TestXTBEngine:
+    def test_command_carries_charge_uhf_method_and_solvent(self):
+        engine = XTBEngine(
+            executable="/opt/xtb/bin/xtb", method="GFN2-xTB", alpb="water"
+        )
+        command = engine._command("--grad", charge=-1, multiplicity=2)
+        assert command == [
+            "/opt/xtb/bin/xtb",
+            "coord.xyz",
+            "--grad",
+            "--chrg",
+            "-1",
+            "--uhf",
+            "1",
+            "--gfn",
+            "2",
+            "--alpb",
+            "water",
+        ]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [{"method": "pm7"}, {"alpb": "water", "gbsa": "water"}],
+    )
+    def test_invalid_configuration_rejected(self, kwargs):
+        with pytest.raises(ValueError):
+            XTBEngine(**kwargs)
+
+    def test_gbsa_and_string_args_in_command(self):
+        engine = XTBEngine(gbsa="thf", args="--acc 0.1 --etemp 500")
+        command = engine._command("--hess", charge=0, multiplicity=1)
+        assert command[-6:] == [
+            "--gbsa",
+            "thf",
+            "--acc",
+            "0.1",
+            "--etemp",
+            "500",
+        ]
+        assert "--alpb" not in command
+
+    def test_energy_and_gradient_runs_xtb(self, fake_xtb_executable):
+        executable, log = fake_xtb_executable
+        energy, gradient = XTBEngine(
+            executable=executable
+        ).energy_and_gradient([1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1)
+        assert energy == pytest.approx(-0.9822404321)
+        assert gradient.shape == (2, 3)
+        calls = log.read_text()
+        assert "coord.xyz --grad --chrg 0 --uhf 0 --gfn 2" in calls
+        assert "H " in calls and "0.7400000000" in calls
+        # temporary xtb_* working folders are removed afterwards
+        assert not list(log.parent.glob("xtb_*"))
+
+    def test_analytic_hessian_runs_xtb(self, fake_xtb_executable):
+        executable, log = fake_xtb_executable
+        hessian = XTBEngine(executable=executable).analytic_hessian(
+            [1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1
+        )
+        assert hessian.shape == (6, 6)
+        assert "--hess" in log.read_text()
+
+    def test_xtb_failure_raises_with_output_tail(self, fake_xtb_executable):
+        executable, _ = fake_xtb_executable
+        engine = XTBEngine(executable=executable, args=["--fail"])
+        with pytest.raises(RuntimeError, match=r"exit 3(.|\n)*xtb: boom"):
+            engine.energy_and_gradient([1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1)
+
+    def test_xtb_hessian_failure_returns_none(
+        self, fake_xtb_executable, caplog
+    ):
+        executable, _ = fake_xtb_executable
+        engine = XTBEngine(executable=executable, args=["--fail"])
+        hessian = engine.analytic_hessian(
+            [1, 1], [[0, 0, 0], [0, 0, 0.74]], 0, 1
+        )
+        assert hessian is None
+        assert "xtb Hessian unavailable" in caplog.text
+
+    def test_parse_gradient_file(self, xtb_output_directory):
+        energy, gradient = parse_xtb_gradient_file(xtb_output_directory, 2)
+        assert energy == pytest.approx(-0.9822404321)
+        np.testing.assert_allclose(
+            gradient, [[0, 0, -0.012345678901234], [0, 0, 0.012345678901234]]
+        )
+
+    def test_parse_hessian_file(self, xtb_output_directory):
+        hessian = parse_xtb_hessian_file(xtb_output_directory, 2)
+        assert hessian.shape == (6, 6)
+        assert hessian[1, 0] == pytest.approx(6.0)
+
+    def test_parse_hessian_rejects_wrong_size(self, xtb_output_directory):
+        with pytest.raises(ValueError, match="expected 9"):
+            parse_xtb_hessian_file(xtb_output_directory, 1)
+
+    def test_parse_gradient_rejects_truncated_file(self, tmp_path):
+        (tmp_path / "gradient").write_text(
+            "$grad\n"
+            "  cycle = 1    SCF energy =    -1.0   |dE/xyz| =  0.0\n"
+            "  0.0  0.0  0.0  h\n"
+            "  0.0  0.0  1.4  h\n"
+            "  0.0  0.0  -1.0D-02\n"
+        )
+        with pytest.raises(ValueError, match="gradient shape"):
+            parse_xtb_gradient_file(str(tmp_path), 2)
+
+    def test_parse_hessian_skips_header_and_tolerates_missing_end(
+        self, tmp_path
+    ):
+        (tmp_path / "hessian").write_text(
+            "written by xtb\n$hessian\n"
+            + " ".join(f"{float(v)}D+00" for v in range(9))
+            + "\n"
+        )
+        hessian = parse_xtb_hessian_file(str(tmp_path), 1)
+        np.testing.assert_allclose(hessian, np.arange(9.0).reshape(3, 3))
+
+
+# ── Hessians ──────────────────────────────────────────────────────────────
+
+
+class TestHessian:
+    def test_finite_difference_recovers_harmonic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        engine = QuadraticEngine(harmonic_hessian)
+        hessian = finite_difference_hessian(engine, harmonic_external_request)
+        np.testing.assert_allclose(hessian, harmonic_hessian, atol=1e-8)
+        assert engine.gradient_calls == 2 * 6
+
+    def test_auto_uses_consistent_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        engine = QuadraticEngine(
+            harmonic_hessian, analytic=harmonic_hessian.copy()
+        )
+        hessian, source = compute_hessian(engine, harmonic_external_request)
+        assert source == "analytic"
+        np.testing.assert_allclose(hessian, harmonic_hessian)
+        assert engine.gradient_calls == 2  # one spot-check column
+
+    def test_auto_rejects_wrong_sign_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        engine = QuadraticEngine(harmonic_hessian, analytic=-harmonic_hessian)
+        hessian, source = compute_hessian(engine, harmonic_external_request)
+        assert source == "fd"
+        np.testing.assert_allclose(hessian, harmonic_hessian, atol=1e-8)
+
+    def test_auto_falls_back_without_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        _, source = compute_hessian(
+            QuadraticEngine(harmonic_hessian), harmonic_external_request
+        )
+        assert source == "fd"
+
+    def test_fd_mode_ignores_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        engine = QuadraticEngine(harmonic_hessian, analytic=-harmonic_hessian)
+        _, source = compute_hessian(
+            engine, harmonic_external_request, mode="fd"
+        )
+        assert source == "fd"
+
+    def test_analytic_mode_trusts_engine_without_spot_check(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        asymmetric = harmonic_hessian.copy()
+        asymmetric[0, 3] = 0.0  # symmetrised to -0.05
+        engine = QuadraticEngine(harmonic_hessian, analytic=asymmetric)
+        hessian, source = compute_hessian(
+            engine, harmonic_external_request, mode="analytic"
+        )
+        assert source == "analytic"
+        assert hessian[0, 3] == hessian[3, 0] == pytest.approx(-0.05)
+        assert engine.gradient_calls == 0
+
+    def test_unknown_mode_rejected(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        with pytest.raises(ValueError, match="hessian mode"):
+            compute_hessian(
+                QuadraticEngine(harmonic_hessian),
+                harmonic_external_request,
+                mode="exact",
+            )
+
+    def test_analytic_mode_requires_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        with pytest.raises(RuntimeError, match="analytic"):
+            compute_hessian(
+                QuadraticEngine(harmonic_hessian),
+                harmonic_external_request,
+                "analytic",
+            )
+
+
+# ── Backends ──────────────────────────────────────────────────────────────
+
+
+class TestBuildEngine:
+    def test_ase_backend_imports_dotted_path(self):
+        engine = build_engine(
+            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"}
+        )
+        assert isinstance(engine, ASEEngine)
+
+    def test_xtb_backend_passes_options(self):
+        engine = build_engine(
+            {"backend": "xtb", "options": {"method": "gfn1", "gbsa": "thf"}}
+        )
+        assert isinstance(engine, XTBEngine)
+        assert (engine.method, engine.gbsa) == ("gfn1", "thf")
+
+    def test_mace_off_preset_defaults_to_float64(self):
+        engine = build_engine({"backend": "mace-off", "options": {}})
+        fake_mace = MagicMock()
+        with patch.dict(sys.modules, {"mace": fake_mace}):
+            engine.factory(0, 1)
+        fake_mace.calculators.mace_off.assert_called_once_with(
+            model="medium", device="cpu", default_dtype="float64"
+        )
+
+    def test_aimnet2_preset_passes_charge_and_multiplicity(self):
+        engine = build_engine({"backend": "aimnet2", "options": {}})
+        fake = MagicMock()
+        with patch.dict(
+            sys.modules, {"aimnet": fake, "aimnet.calculators": fake}
+        ):
+            engine.factory(1, 2)
+        fake.AIMNet2ASE.assert_called_once_with("aimnet2", charge=1, mult=2)
+
+    def test_uma_preset_builds_fairchem_calculator(self):
+        engine = build_engine(
+            {"backend": "uma", "options": {"device": "cuda", "seed": 1}}
+        )
+        fake = MagicMock()
+        with patch.dict(
+            sys.modules, {"fairchem": fake, "fairchem.core": fake}
+        ):
+            calc = engine.factory(0, 1)
+        fake.pretrained_mlip.get_predict_unit.assert_called_once_with(
+            "uma-s-1", device="cuda"
+        )
+        fake.FAIRChemCalculator.assert_called_once_with(
+            fake.pretrained_mlip.get_predict_unit.return_value,
+            task_name="omol",
+            seed=1,
+        )
+        assert calc is fake.FAIRChemCalculator.return_value
+
+    @pytest.mark.parametrize(
+        "config, message",
+        [
+            ({"backend": "orca"}, "Unknown External backend"),
+            ({"backend": "ase", "calculator": "EMT"}, "dotted path"),
+        ],
+    )
+    def test_bad_backend_config_rejected(self, config, message):
+        with pytest.raises(ValueError, match=message):
+            build_engine(config)

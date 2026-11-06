@@ -29,7 +29,7 @@ from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.nciplot.nciplot import nciplot
 from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
-from chemsmart.io.gaussian.external import BOHR_TO_ANG, ExternalEngine
+from chemsmart.io.external import BOHR_TO_ANG, ExternalEngine
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
@@ -1898,3 +1898,137 @@ def find_g16():
         return None
     candidate = os.path.join(gauss_exedir, "g16")
     return candidate if os.path.isfile(candidate) else None
+
+
+def write_orca_external_input(
+    directory,
+    symbols,
+    positions_ang,
+    charge=0,
+    multiplicity=1,
+    gradient=True,
+    ncores=1,
+    pointcharges=None,
+    basename="job_EXT",
+):
+    """Write the files ORCA's ``ExtOpt`` hands to ``ProgExt``.
+
+    Creates ``<basename>.xyz`` (Angstrom) and ``<basename>.extinp.tmp``
+    in ``directory``, with ORCA's trailing ``#`` comments and relative
+    file names, and returns the ``.extinp.tmp`` path.
+    """
+    directory = Path(directory)
+    lines = [f"{len(symbols)}", "Coordinates from ORCA-job job E -1.0"]
+    for symbol, (x, y, z) in zip(symbols, positions_ang):
+        lines.append(f"{symbol:<2s} {x:16.10f} {y:16.10f} {z:16.10f}")
+    (directory / f"{basename}.xyz").write_text("\n".join(lines) + "\n")
+    extinp = [
+        f"{basename}.xyz  # xyz filename: string, ending in '.xyz'",
+        f"{charge}  # molecular charge: int",
+        f"{multiplicity}  # multiplicity: int",
+        f"{ncores}  # NCores: int",
+        f"{int(gradient)}  # do gradient: 0 or 1",
+    ]
+    if pointcharges is not None:
+        extinp.append(f"{pointcharges}  # point charge filename: string")
+    path = directory / f"{basename}.extinp.tmp"
+    path.write_text("\n".join(extinp) + "\n")
+    return str(path)
+
+
+def read_engrad(path):
+    """Return (natoms, energy, gradient or None) from an ORCA ``.engrad``."""
+    values = [
+        line.split()[0]
+        for line in Path(path).read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+    natoms, energy = int(values[0]), float(values[1])
+    gradient = [float(v) for v in values[2:]]
+    return (
+        natoms,
+        energy,
+        (np.reshape(gradient, (-1, 3)) if gradient else None),
+    )
+
+
+def run_orca_external_cli(
+    xyz_file, job_class_path, *external_args, orca_args=(), **kwargs
+):
+    """Invoke ``orca -p gas_solv -f <xyz> -c 0 -m 1 [orca_args] external
+    <args>``.
+
+    Returns ``(result, settings)`` like
+    :func:`run_orca_and_capture_settings`, which receives ``kwargs``.
+    """
+    return run_orca_and_capture_settings(
+        job_class_path,
+        ["-p", "gas_solv", "-f", xyz_file, "-c", "0", "-m", "1"]
+        + list(orca_args)
+        + ["external"]
+        + list(external_args),
+        **kwargs,
+    )
+
+
+def find_orca():
+    """Return the real ORCA executable path, or ``None`` if unavailable.
+
+    Looks on ``PATH`` first, then in ``$ORCA_EXEDIR``. An ``orca`` without
+    ORCA's ``orca_scf*`` modules next to it (e.g. the GNOME screen reader
+    or a test stub) is ignored.
+    """
+    from glob import glob
+
+    candidates = [shutil.which("orca")]
+    exedir = os.environ.get("ORCA_EXEDIR")
+    if exedir:
+        candidates.append(os.path.join(exedir, "orca"))
+    for candidate in candidates:
+        if not candidate or not os.path.isfile(candidate):
+            continue
+        folder = os.path.dirname(os.path.realpath(candidate))
+        if glob(os.path.join(folder, "orca_scf*")):
+            return candidate
+    return None
+
+
+def run_h2_orca_external(orca, directory, external, route, r_hh, name):
+    """Run real ORCA on H2 with an external backend; return the output.
+
+    Writes the launcher and ``<name>.inp`` (``! <route> ExtOpt`` with a
+    ``%method ProgExt`` block) into ``directory`` and asserts normal
+    termination.
+    """
+    external.write_script(directory)
+    inp_file = directory / f"{name}.inp"
+    inp_file.write_text(dedent(f"""\
+        ! {route} ExtOpt
+        %method
+          ProgExt "{external.progext(directory)}"
+        end
+        * xyz 0 1
+        H   0.000000   0.000000   0.000000
+        H   0.000000   0.000000   {r_hh:.6f}
+        *
+    """))
+    result = subprocess.run(
+        [orca, inp_file.name],
+        capture_output=True,
+        text=True,
+        cwd=str(directory),
+        timeout=300,
+    )
+    assert "ORCA TERMINATED NORMALLY" in result.stdout, (
+        result.stdout[-3000:] + result.stderr[-2000:]
+    )
+    return result.stdout
+
+
+def write_orca_input_text(writer):
+    """Return the text ``ORCAInputWriter._write_all`` produces."""
+    from io import StringIO
+
+    buffer = StringIO()
+    writer._write_all(buffer)
+    return buffer.getvalue()

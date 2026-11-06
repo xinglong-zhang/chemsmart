@@ -1,13 +1,10 @@
 """Gaussian writer, pKa/UV-Vis job and data-file fixtures."""
 
 import os
-import sys
 from unittest.mock import patch
 
-import numpy as np
 import pytest
 
-from chemsmart.io.gaussian.external import read_external_input
 from chemsmart.jobs.gaussian.external import GaussianExternalCalculator
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
@@ -1080,58 +1077,6 @@ def au2_external_input(tmp_path):
 
 
 @pytest.fixture()
-def xtb_output_directory(tmp_path):
-    """Directory holding xtb ``gradient`` and ``hessian`` files for H2."""
-    (tmp_path / "gradient").write_text(
-        "$grad\n"
-        "  cycle =      1    SCF energy =    -0.9822404321   "
-        "|dE/xyz| =  0.012345\n"
-        "    0.00000000000000      0.00000000000000     -0.69926098000000  h\n"
-        "    0.00000000000000      0.00000000000000      0.69926098000000  h\n"
-        "   0.0000000000000D+00   0.0000000000000D+00  -1.2345678901234D-02\n"
-        "   0.0000000000000D+00   0.0000000000000D+00   1.2345678901234D-02\n"
-        "$end\n"
-    )
-    hessian = [[float(6 * i + j) for j in range(6)] for i in range(6)]
-    body = "\n".join(" ".join(f"{v:.6f}" for v in row) for row in hessian)
-    (tmp_path / "hessian").write_text(f"$hessian\n{body}\n$end\n")
-    return str(tmp_path)
-
-
-@pytest.fixture()
-def fake_xtb_executable(tmp_path, xtb_output_directory, monkeypatch):
-    """Stand-in ``xtb`` binary for :class:`XTBEngine` subprocess tests.
-
-    It copies the canned ``gradient``/``hessian`` files from
-    :func:`xtb_output_directory` into its working directory, records its
-    arguments and ``coord.xyz`` in ``calls.log``, and exits with status 3
-    when given ``--fail``. The test runs from ``tmp_path`` so the engine's
-    temporary ``xtb_*`` folders stay out of the repository.
-    """
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    log = tmp_path / "calls.log"
-    script = bin_dir / "xtb"
-    script.write_text(
-        f"#!{sys.executable}\n"
-        "import shutil, sys\n"
-        f"log = {str(log)!r}\n"
-        f"source = {xtb_output_directory!r}\n"
-        "with open(log, 'a') as fh:\n"
-        "    fh.write(' '.join(sys.argv[1:]) + '\\n')\n"
-        "    fh.write(open('coord.xyz').read())\n"
-        "if '--fail' in sys.argv:\n"
-        "    print('xtb: boom')\n"
-        "    sys.exit(3)\n"
-        "for name in ('gradient', 'hessian'):\n"
-        "    shutil.copy(f'{source}/{name}', name)\n"
-    )
-    script.chmod(0o755)
-    monkeypatch.chdir(tmp_path)
-    return str(script), log
-
-
-@pytest.fixture()
 def lj_external_calculator():
     """ASE LennardJones External backend; sigma=0.5 Angstrom puts H2
     (r=0.74 Angstrom) in the attractive well. No analytic Hessian, so
@@ -1153,23 +1098,3 @@ def external_dft_settings():
         multiplicity=1,
         freq=True,
     )
-
-
-@pytest.fixture()
-def harmonic_hessian():
-    """Stiff, coupled 2-atom Hessian in Hartree/Bohr^2."""
-    hessian = np.diag([0.5, 0.4, 0.3, 0.6, 0.2, 0.7])
-    hessian[0, 3] = hessian[3, 0] = -0.1
-    return hessian
-
-
-@pytest.fixture()
-def harmonic_external_request(tmp_path):
-    """A deriv=2 External request for two atoms 1 Angstrom apart."""
-    path = write_gaussian_external_input(
-        tmp_path / "h2.EIn",
-        [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-        [1, 1],
-        deriv=2,
-    )
-    return read_external_input(path)
