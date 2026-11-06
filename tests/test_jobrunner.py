@@ -1171,6 +1171,9 @@ class TestJobRunnerRunOrchestration:
         concrete_jobrunner._prerun = MagicMock(
             side_effect=lambda j: calls.append("prerun")
         )
+        concrete_jobrunner._set_aside_previous_external_outputs = MagicMock(
+            side_effect=lambda j: calls.append("set_aside_external")
+        )
         concrete_jobrunner._write_input = MagicMock(
             side_effect=lambda j: calls.append("write_input")
         )
@@ -1198,6 +1201,7 @@ class TestJobRunnerRunOrchestration:
 
         assert calls == [
             "prerun",
+            "set_aside_external",
             "write_input",
             "get_command",
             "update_env",

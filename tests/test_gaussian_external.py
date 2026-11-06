@@ -34,6 +34,7 @@ from chemsmart.jobs.gaussian.settings import (
 from tests.helpers import (
     run_gaussian_external_cli,
     run_h2_g16_external,
+    write_external_job_outputs,
 )
 
 # ── File formats ──────────────────────────────────────────────────────────
@@ -358,6 +359,56 @@ class TestExternalSettings:
         com = open(gaussian_jobrunner_no_scratch.job_inputfile).read()
         assert f"External={emt_external_calculator.route_value}" in com
         assert (tmp_path / emt_external_calculator.script_filename).is_file()
+
+    def test_rerun_starts_external_log_afresh(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        emt_external_calculator,
+    ):
+        """Without scratch the log lives in the job folder, so a rerun
+        would otherwise append to the previous run's log."""
+        runner = gaussian_jobrunner_no_scratch
+        job = GaussianOptJob(
+            molecule=Molecule.from_filepath(single_molecule_xyz_file),
+            settings=GaussianJobSettings(
+                charge=0, multiplicity=1, external=emt_external_calculator
+            ),
+            label="mol_opt_ase",
+            jobrunner=runner,
+        )
+        job.folder = str(tmp_path)
+        runner._prerun(job)
+        log, outputs = write_external_job_outputs(tmp_path, job.label)
+
+        runner._set_aside_previous_external_outputs(job)
+
+        assert not log.exists() and not outputs.exists()
+        (backup,) = job._previous_backup_folders()
+        assert os.path.isfile(os.path.join(backup, log.name))
+        assert os.path.isdir(os.path.join(backup, outputs.name))
+
+    def test_host_level_jobs_leave_same_named_files_alone(
+        self, tmp_path, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        runner = gaussian_jobrunner_no_scratch
+        job = GaussianOptJob(
+            molecule=Molecule.from_filepath(single_molecule_xyz_file),
+            settings=GaussianJobSettings(
+                functional="b3lyp", basis="def2svp", charge=0, multiplicity=1
+            ),
+            label="mol_opt",
+            jobrunner=runner,
+        )
+        job.folder = str(tmp_path)
+        runner._prerun(job)
+        log, _ = write_external_job_outputs(tmp_path, job.label)
+
+        runner._set_aside_previous_external_outputs(job)
+
+        assert log.exists()
+        assert job._previous_backup_folders() == []
 
     def test_runner_points_launcher_at_job_log(
         self,

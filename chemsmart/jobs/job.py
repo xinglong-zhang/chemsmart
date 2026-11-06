@@ -196,6 +196,14 @@ class Job(RegistryMixin):
     def _backup_files(self):
         raise NotImplementedError
 
+    def _external_output_names(self, external):
+        """Names of an external job's per-job log and backend-output
+        folder, ``<label>_external.log`` and ``<label>_external``."""
+        return (
+            external.log_filename(self.label),
+            external.output_folder_name(self.label),
+        )
+
     def _backup_external_outputs(self, external, folder, **kwargs):
         """Back up an external job's ``<label>_external.log`` and
         ``<label>_external/`` into ``folder``.
@@ -205,13 +213,60 @@ class Job(RegistryMixin):
         """
         if external is None:
             return
-        for name in (
-            external.log_filename(self.label),
-            external.output_folder_name(self.label),
-        ):
+        for name in self._external_output_names(external):
             self.backup_file(
                 os.path.join(self.folder, name), folder=folder, **kwargs
             )
+
+    def set_aside_external_outputs(self, external, running_directory=None):
+        """Move a previous run's external log and backend outputs aside.
+
+        Each run's ``<label>_external.log`` then starts again at step 1,
+        and its step folders are not mixed with an earlier run's. Files in
+        :attr:`folder` move into a new ``bk.<timestamp>/`` folder; any in a
+        separate ``running_directory`` (a reused scratch folder, which may
+        hold the only copy of a run that stopped before its results were
+        copied back) move into its ``scratch/`` subfolder.
+
+        Args:
+            external: The job's ``settings.external`` (``None`` for jobs
+                at the host program's own level of theory).
+            running_directory (str, optional): Where the job runs, if
+                different from :attr:`folder`.
+
+        Returns:
+            str or None: The backup folder, or ``None`` if nothing was
+            there to set aside.
+        """
+        if external is None:
+            return None
+        locations = [(self.folder, None)]
+        if running_directory is not None and os.path.abspath(
+            running_directory
+        ) != os.path.abspath(self.folder):
+            locations.append((running_directory, "scratch"))
+        previous = [
+            (os.path.join(directory, name), subfolder)
+            for directory, subfolder in locations
+            for name in self._external_output_names(external)
+            if os.path.exists(os.path.join(directory, name))
+        ]
+        if not previous:
+            return None
+        backup = self._create_backup_folder_name()
+        for path, subfolder in previous:
+            target = (
+                backup
+                if subfolder is None
+                else os.path.join(backup, subfolder)
+            )
+            os.makedirs(target, exist_ok=True)
+            self.backup_file(path, folder=target, remove=True)
+        logger.info(
+            f"Set aside the previous external log and outputs of {self} "
+            f"in {backup}"
+        )
+        return backup
 
     def backup_file(self, file, folder=None, remove=False):
         if not os.path.exists(file):

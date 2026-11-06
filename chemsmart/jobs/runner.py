@@ -404,6 +404,28 @@ class JobRunner(RegistryMixin):
             env[k] = str(v)
         return env
 
+    @staticmethod
+    def _external_level_of_theory(job):
+        """The job's :class:`~chemsmart.jobs.external.ExternalCalculator`,
+        or ``None``.
+
+        Runners serve every job type, and only Gaussian and ORCA settings
+        carry ``external``, so this checks rather than assumes it.
+        """
+        from chemsmart.jobs.external import ExternalCalculator
+
+        external = getattr(getattr(job, "settings", None), "external", None)
+        return external if isinstance(external, ExternalCalculator) else None
+
+    def _set_aside_previous_external_outputs(self, job):
+        """Start an external job's log afresh (see
+        :meth:`chemsmart.jobs.job.Job.set_aside_external_outputs`)."""
+        external = self._external_level_of_theory(job)
+        if external is not None:
+            job.set_aside_external_outputs(
+                external, running_directory=self.running_directory
+            )
+
     def _set_external_log_environ(self, job, env):
         """Point external launchers at ``<label>_external.log``.
 
@@ -414,10 +436,9 @@ class JobRunner(RegistryMixin):
         directory, so it is copied back from scratch with ``<label>*``.
         """
         from chemsmart.io.external.runlog import EXTERNAL_LOG_ENV
-        from chemsmart.jobs.external import ExternalCalculator
 
-        external = getattr(getattr(job, "settings", None), "external", None)
-        if not isinstance(external, ExternalCalculator):
+        external = self._external_level_of_theory(job)
+        if external is None:
             env.pop(EXTERNAL_LOG_ENV, None)  # never inherit another job's
             return
         directory = getattr(self, "running_directory", None) or job.folder
@@ -443,6 +464,7 @@ class JobRunner(RegistryMixin):
         logger.debug(f"Running job {job} with runner {self}")
         logger.debug(f"Prerunning job: {job}")
         self._prerun(job)
+        self._set_aside_previous_external_outputs(job)
         logger.debug(f"Writing input for job: {job}")
         self._write_input(job)
         logger.debug(f"Obtaining command for job: {job}")
