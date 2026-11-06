@@ -248,3 +248,114 @@ def test_seam_follow_requires_complete_projected_modes(
         RuntimeError, match="requires projected frequency modes"
     ):
         job._follow_seam_imaginary_mode(result)
+
+
+def test_constrained_seam_relaxation_converges_and_reports_exhaustion(
+    make_driver_job,
+):
+    job = make_driver_job(max_steps=1)
+    job._run_state = lambda *args, **kwargs: (
+        (-1.0, np.array([[1.0, 0.0, 0.0]]))
+        if args[2] == "A"
+        else (-1.0, np.array([[-1.0, 0.0, 0.0]]))
+    )
+    coordinates = np.zeros((1, 3))
+    mode = np.array([0.0, 1.0, 0.0])
+    from io import StringIO
+
+    from ase import units
+
+    relaxed = job._optimize_on_seam_progress_plane(
+        coordinates, coordinates, mode, StringIO(), 1
+    )
+    np.testing.assert_allclose(relaxed, coordinates)
+    np.testing.assert_allclose(
+        job.molecule.positions, coordinates * units.Bohr
+    )
+    job._is_converged = lambda **kwargs: False
+    with pytest.raises(RuntimeError, match="did not converge"):
+        job._optimize_on_seam_progress_plane(
+            coordinates, coordinates, mode, StringIO(), 1
+        )
+
+
+def test_seam_follow_stops_when_negative_mode_persists(
+    make_driver_job, monkeypatch
+):
+    from pathlib import Path
+
+    job = make_driver_job(seam_mode_max_steps=2)
+    result = {
+        "positions_angstrom": np.zeros((1, 3)),
+        "frequencies": np.array([-20.0]),
+        "frequency_eigenvalues": np.array([-0.01]),
+        "modes": np.array([[1.0, 0.0, 0.0]]),
+        "mecp_energy": -1.0,
+        "n_negative": 1,
+    }
+    calls = []
+
+    def branch_factory(*args):
+        branch = SimpleNamespace(
+            molecule=SimpleNamespace(positions=np.zeros((1, 3))),
+            _last_seam_result=None,
+        )
+        branch._optimize_on_seam_progress_plane = lambda **kwargs: kwargs[
+            "positions_bohr"
+        ]
+
+        def verify(**kwargs):
+            calls.append(kwargs["macro_step"])
+            return result
+
+        branch.verify_seam_minimum = verify
+        return branch
+
+    monkeypatch.setattr(job, "_new_seam_follow_branch", branch_factory)
+    with pytest.raises(
+        RuntimeError, match="Neither projected-mode displacement"
+    ):
+        job._follow_seam_imaginary_mode(result)
+    assert calls == [1, 2, 1, 2]
+    records = list(Path(job.mecp_files.follow_folder).glob("*_record.log"))
+    assert len(records) == 2
+    assert all("tracked_mode=1" in path.read_text() for path in records)
+
+
+def test_seam_tracking_orients_an_opposite_signed_mode():
+    from chemsmart.jobs.mecp import MECPSeamMixin
+
+    result = {
+        "modes": np.array([[-1.0, 0.0, 0.0]]),
+        "frequency_eigenvalues": np.array([-0.1]),
+    }
+    index, mode, overlap = MECPSeamMixin._overlap_tracked_negative_mode(
+        result, np.array([1.0, 0.0, 0.0])
+    )
+    assert index == 0
+    np.testing.assert_allclose(mode, [1.0, 0.0, 0.0])
+    assert overlap == pytest.approx(1.0)
+
+
+def test_final_report_without_optional_metadata_is_readable(tmp_path):
+    from chemsmart.io.mecp import read_final_result, write_final_report
+
+    path = tmp_path / "report.log"
+    write_final_report(
+        str(path),
+        label="crossing",
+        backend="gaussian",
+        hessian_method="numerical",
+        symbols=["H"],
+        positions=np.zeros((1, 3)),
+        energy_a=-1.0,
+        energy_b=-1.0,
+        initial_steps=1,
+        metrics={},
+        thresholds={},
+    )
+    text = path.read_text()
+    assert "status=COMPLETED" in text
+    assert "mode=" not in text
+    result = read_final_result(str(path))
+    assert result.energy_a == -1.0

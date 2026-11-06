@@ -2451,3 +2451,197 @@ def test_route_removal_handles_separate_equals_value():
         "guess= read scf=xqc", {"guess"}
     )
     assert route.strip() == "scf=xqc"
+
+
+def test_frequency_sections_stop_at_blank_lines(tmp_path):
+    path = tmp_path / "sections.log"
+    path.write_text(
+        "CHEMSMART MECP projected frequency analysis\nGeometry (Angstrom) and masses (amu):\nH 0 0 0 1\n\nignored\nProjected MECP frequencies (cm^-1):\nmode 1: 100.0\n\nignored\n"
+    )
+    output = MECPProjectedFrequencyOutput(str(path))
+    assert output.symbols == ["H"]
+    np.testing.assert_allclose(output.positions, [[0.0, 0.0, 0.0]])
+    assert output.vibrational_frequencies == [100.0]
+
+
+def test_followseam_report_mode_is_inferred(make_driver_job):
+    from chemsmart.io.mecp import read_report_fields
+
+    job = make_driver_job(follow_seam_imaginary_mode=True)
+    job.log_results(1, -1.0, -1.0)
+    assert read_report_fields(job.final_report_file)["mode"] == "followseam"
+
+
+def test_harvey_rejects_identical_state_gradients(make_driver_job):
+    job = make_driver_job()
+    with pytest.raises(RuntimeError, match="Difference gradient is too small"):
+        job._bfgs_displacement(
+            -1.0,
+            -1.0,
+            np.zeros((1, 3)),
+            np.zeros((1, 3)),
+            None,
+            np.zeros((1, 3)),
+            None,
+            None,
+        )
+
+
+def test_bfgs_nonfinite_update_preserves_previous_matrix():
+    matrix = np.eye(3)
+    with np.errstate(invalid="ignore", over="ignore"):
+        updated, status, _, _ = GaussianMECPJob._update_inverse_hessian(
+            matrix,
+            np.array([np.nan, 1.0, 0.0]),
+            np.ones(3),
+            return_diagnostics=True,
+        )
+    assert status == "SKIP_NONFINITE"
+    np.testing.assert_array_equal(updated, matrix)
+
+
+def test_gaussian_harvey_rejects_nonfinite_step(make_driver_job, monkeypatch):
+    job = make_driver_job(step_size_method="harvey")
+    monkeypatch.setattr(
+        job,
+        "_update_inverse_hessian",
+        lambda *args, **kwargs: (np.eye(3), "UPDATE", 1.0, 1.0),
+    )
+    with np.errstate(over="ignore", invalid="ignore"):
+        with pytest.raises(RuntimeError, match="non-finite step"):
+            job._bfgs_displacement(
+                1e308,
+                -1e308,
+                np.array([[1.0, 0.0, 0.0]]),
+                np.array([[-1.0, 0.0, 0.0]]),
+                np.zeros((1, 3)),
+                np.ones((1, 3)),
+                np.zeros(3),
+                np.eye(3),
+            )
+
+
+def test_gaussian_restart_without_saved_orbitals(make_driver_job, monkeypatch):
+    job = make_driver_job(max_steps=1, restart=True)
+    job._save_optimizer_state(
+        next_step=1,
+        positions_bohr=np.zeros((1, 3)),
+        current_step_size=0.1,
+        prev_merit=None,
+        prev_positions=None,
+        prev_proj_grad=None,
+        inv_hessian=None,
+        prev_eff_grad=None,
+        prev_positions_bfgs=None,
+    )
+    calls = []
+
+    def state(*args):
+        calls.append(dict(job._state_checkpoint_files))
+        return -1.0, np.zeros((1, 3))
+
+    monkeypatch.setattr(job, "_run_state", state)
+    monkeypatch.setattr(
+        job, "_mecp_displacement", lambda **kwargs: (np.zeros((1, 3)),) * 3
+    )
+    job._run()
+    assert calls == [{}, {}]
+
+
+def test_gaussian_already_minimum_needs_no_follow_branch(
+    make_driver_job, monkeypatch
+):
+    job = make_driver_job(mecp_numfreq=True)
+    job._run_state = lambda *args: (-1.0, np.zeros((1, 3)))
+    job._mecp_displacement = lambda **kwargs: (np.zeros((1, 3)),) * 3
+    result = {
+        "is_minimum": True,
+        "n_negative": 0,
+        "mecp_energy": -1.0,
+        "energy_a": -1.0,
+        "energy_b": -1.0,
+        "energy_diff": 0.0,
+        "state_output_files": {},
+        "positions_angstrom": np.zeros((1, 3)),
+        "frequencies": np.array([100.0]),
+    }
+
+    def check(*args):
+        job._initial_seam_result = result
+        return result
+
+    monkeypatch.setattr(job, "_run_seam_minimum_check", check)
+    job._run()
+    text = Path(job.optimization_report_file).read_text()
+    assert "Initial seam status: MINIMUM" in text
+    assert "Final status: VERIFIED MECP MINIMUM" in text
+    assert "Seam following: completed" not in text
+
+
+def test_gaussian_export_requires_both_state_logs(make_driver_job, tmp_path):
+    job = make_driver_job()
+    del job._export_final_gaussian_logs
+    source = tmp_path / "A.log"
+    source.write_text("state A")
+    with pytest.raises(RuntimeError, match="Missing final state B"):
+        job._export_final_gaussian_logs(
+            {"A": str(source), "B": str(tmp_path / "missing.log")}
+        )
+    assert not Path(job.final_gaussian_logs["A"]).exists()
+
+
+def test_gaussian_history_excludes_nested_state_files(make_driver_job):
+    job = make_driver_job()
+    folder = Path(job.optimization_folder)
+    (folder / "nested").mkdir(parents=True)
+    (folder / "nested" / "crossing_step1_A.log").write_text("incomplete")
+    (folder / "unrelated.log").write_text("unrelated")
+    assert job.output is None
+
+
+def test_gaussian_history_includes_seam_branch_directory(make_driver_job):
+    job = make_driver_job()
+    folder = Path(job.mecp_files.follow_folder) / "minus_optimization"
+    folder.mkdir(parents=True)
+    (folder / "crossing_step2_A.log").write_text("interrupted state")
+    output = job.output
+    assert len(output["optimization_steps"]) == 1
+
+
+def test_mecp_frequency_sections_allow_end_of_file(tmp_path):
+    path = tmp_path / "geometry.log"
+    path.write_text(
+        "CHEMSMART MECP projected frequency analysis\nGeometry (Angstrom) and masses (amu):\nH 0 0 0 1\n"
+    )
+    assert MECPProjectedFrequencyOutput(str(path)).symbols == ["H"]
+    path.write_text(
+        "CHEMSMART MECP projected frequency analysis\nProjected MECP frequencies (cm^-1):\nmode 1: 100.0\n"
+    )
+    assert MECPProjectedFrequencyOutput(str(path)).vibrational_frequencies == [
+        100.0
+    ]
+
+
+def test_mecp_thermochemistry_rejects_completed_file_without_frequencies(
+    tmp_path,
+):
+    path = tmp_path / "missing_freq.log"
+    path.write_text(
+        MECPProjectedFrequencyOutput.HEADER
+        + "\n"
+        + MECPProjectedFrequencyOutput.TERMINATION_MARKER
+        + "\n"
+    )
+    analysis = object.__new__(MECPThermochemistry)
+    analysis.filename = str(path)
+    with pytest.raises(ValueError, match="does not contain projected"):
+        _ = analysis.file_object
+
+
+def test_route_removal_preserves_option_without_attached_value():
+    assert (
+        GaussianLinkJobSettings._without_route_options(
+            "stable scf=xqc", {"stable"}
+        ).strip()
+        == "scf=xqc"
+    )

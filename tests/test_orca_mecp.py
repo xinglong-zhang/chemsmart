@@ -1906,3 +1906,102 @@ def test_orca_incomplete_crossing_output_has_no_fabricated_results(tmp_path):
     assert output.mecp_result is None
     with pytest.raises(ValueError, match="No MECP stationary-point geometry"):
         output._get_mecp_stationary_point_structure()
+
+
+@pytest.mark.parametrize("mode", ["opt", "numfreq", "anafreq", "followseam"])
+def test_registered_orca_mecp_command_builds_state_settings(
+    mode, single_molecule_xyz_file, orca_jobrunner_no_scratch, monkeypatch
+):
+    from chemsmart.cli.orca.mecp import mecp as mecp_command
+    from tests.helpers import run_orca_and_capture_settings
+
+    # Exercise this module's actual command rather than any replacement
+    # left in the shared group registry by another CLI test.
+    monkeypatch.setitem(orca.commands, "mecp", mecp_command)
+    args = [
+        "-p",
+        "test",
+        "-f",
+        single_molecule_xyz_file,
+        "-c",
+        "1",
+        "mecp",
+        "-m1",
+        "3",
+        "-m2",
+        "1",
+        "-sm",
+        "cpcm",
+        "-si",
+        "water",
+        "-so",
+        "test-options",
+        "--maxiter",
+        "42",
+        mode,
+    ]
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        args,
+        ctx_obj={"jobrunner": orca_jobrunner_no_scratch},
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.mode == mode
+    assert (settings.multiplicity1, settings.multiplicity2) == (3, 1)
+    assert settings.maxiter == 42
+    assert settings.additional_solvent_options == "test-options"
+    assert settings.solvent_id == "water"
+    assert settings.follow_seam_imaginary_mode == (mode == "followseam")
+
+
+def test_orca_explicit_state_energies_supply_missing_gap(tmp_path):
+    path = tmp_path / "crossing.out"
+    path.write_text(
+        "! SurfCrossOpt\nPES1 ENERGY = -2.0\nPES2 ENERGY = -1.9\nFINAL ENERGY EVALUATION AT THE STATIONARY POINT\nCARTESIAN COORDINATES (ANGSTROEM)\nno coordinates available\n"
+    )
+    output = ORCAOutput(str(path))
+    output.__dict__["is_mecp"] = True
+    result = output.mecp_result
+    assert result.energy_gap == pytest.approx(-0.1)
+    assert result.final_structure is None
+    with pytest.raises(ValueError, match="No MECP stationary-point"):
+        output._get_mecp_stationary_point_structure()
+
+
+def test_orca_native_opt_does_not_export_frequency_files(
+    tmp_path, monkeypatch
+):
+    from chemsmart.jobs.orca.job import ORCAJob
+
+    job = object.__new__(ORCAMECPJob)
+    job.folder = str(tmp_path)
+    job.label = "native"
+    job.settings = SimpleNamespace(uses_seam_workflow=False, mode="opt")
+    run = MagicMock()
+    monkeypatch.setattr(ORCAJob, "_run", run)
+    job._export_native_frequencies = MagicMock()
+    job._run()
+    run.assert_called_once()
+    job._export_native_frequencies.assert_not_called()
+    monkeypatch.setattr(ORCAJob, "_job_is_complete", lambda self: False)
+    assert not job._job_is_complete()
+
+
+def test_orca_checkpoint_reference_cleanup_preserves_orbitals(tmp_path):
+    job = object.__new__(ORCAMECPJob)
+    path = tmp_path / "state.gbw"
+    path.write_bytes(b"wavefunction")
+    job._state_checkpoint_files = {("check", "A"): str(path)}
+    job._remove_checkpoint_set("check")
+    assert job._state_checkpoint_files == {}
+    assert path.read_bytes() == b"wavefunction"
+
+
+def test_native_route_keeps_existing_crossing_keyword():
+    settings = ORCAMECPJobSettings(
+        charge=0,
+        multiplicity1=1,
+        multiplicity2=3,
+        route_to_be_written="! Opt SurfCrossOpt B3LYP def2-SVP",
+    )
+    assert settings.route_string.lower().count("surfcrossopt") == 1
