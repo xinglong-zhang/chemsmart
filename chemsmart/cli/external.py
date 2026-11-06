@@ -102,6 +102,37 @@ def build_external_calculator(calculator_cls, options, **kwargs):
         raise click.UsageError(str(exc)) from exc
 
 
+def reject_external_level_of_theory(parent_settings, command):
+    """Refuse ``command`` when the parent job uses an external level of
+    theory.
+
+    The ``external`` group wraps the hosts' existing job commands, so their
+    nested subcommands (e.g. ``opt qmmm``) are reachable from it too. Those
+    that build fresh settings without the parent's ``external`` would
+    otherwise run at the project's level of theory under a backend-named
+    label.
+
+    WIP: QM/MM with an external layer. Gaussian supports External as an
+    ONIOM layer, e.g. ``ONIOM(External="<launcher>":UFF)``; ORCA's QM/MM
+    would need the external backend for its QM region. Supporting this
+    means carrying ``external`` into the QM/MM settings, rendering it in
+    the layer specification of each host's QM/MM route, and validating it
+    against real Gaussian/ORCA runs. Until then the combination is
+    rejected here.
+
+    Raises:
+        click.UsageError: If ``parent_settings.external`` is set.
+    """
+    from chemsmart.jobs.external import ExternalCalculator
+
+    external = getattr(parent_settings, "external", None)
+    if isinstance(external, ExternalCalculator):
+        raise click.UsageError(
+            f"'{command}' cannot be combined with an external level of "
+            f"theory (backend {external.backend!r}) yet."
+        )
+
+
 def use_external_level_of_theory(ctx, spec):
     """Put ``spec`` on the parent job settings for the chosen subcommand.
 

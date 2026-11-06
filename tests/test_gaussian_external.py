@@ -502,6 +502,37 @@ class TestExternalCLI:
         assert result.exit_code == 0, result.output
         assert settings.external.backend == "harmonic"
 
+    @pytest.mark.parametrize("parent", ["opt", "ts"])
+    def test_qmmm_under_external_is_rejected(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch, parent
+    ):
+        """``qmmm`` is reachable through the wrapped opt/ts groups but would
+        drop the backend (an ONIOM DFT/MM job labelled *_xtb_qmmm)."""
+        job_cls = MagicMock(name="GaussianQMMMJob")
+        result, settings = run_gaussian_external_cli(
+            single_molecule_xyz_file,
+            gaussian_jobrunner_no_scratch,
+            "chemsmart.jobs.gaussian.qmmm.GaussianQMMMJob",
+            "-b",
+            "xtb",
+            parent,
+            "qmmm",
+            "-hx",
+            "b3lyp",
+            "-hb",
+            "6-31g",
+            "-lff",
+            "uff",
+            "-ha",
+            "1-5",
+            job_cls=job_cls,
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert "'qmmm' cannot be combined with an external" in result.output
+        assert settings is None
+        job_cls.assert_not_called()
+
     def test_malformed_option_is_rejected(
         self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
     ):

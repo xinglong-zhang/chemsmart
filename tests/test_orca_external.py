@@ -553,6 +553,26 @@ class TestORCAExternalCLI:
         assert settings.external.log_backend_output is True
         assert settings.external.config["log_backend_output"] is True
 
+    @pytest.mark.parametrize("parent", ["opt", "ts"])
+    def test_qmmm_under_external_is_rejected(
+        self, single_molecule_xyz_file, parent
+    ):
+        job_cls = MagicMock(name="ORCAQMMMJob")
+        result, settings = run_orca_external_cli(
+            single_molecule_xyz_file,
+            "chemsmart.jobs.orca.qmmm.ORCAQMMMJob",
+            "-b",
+            "xtb",
+            parent,
+            "qmmm",
+            job_cls=job_cls,
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert "'qmmm' cannot be combined with an external" in result.output
+        assert settings is None
+        job_cls.assert_not_called()
+
     def test_user_label_is_kept(self, single_molecule_xyz_file):
         job_cls = MagicMock(name="ORCASinglePointJob")
         result, _ = run_orca_external_cli(

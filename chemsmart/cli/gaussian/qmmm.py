@@ -6,6 +6,7 @@ import logging
 
 import click
 
+from chemsmart.cli.external import reject_external_level_of_theory
 from chemsmart.cli.job import click_job_options
 from chemsmart.utils.cli import MyCommand
 from chemsmart.utils.utils import (
@@ -261,6 +262,9 @@ def create_qmmm_subcommand(parent_command):
         parent_kwargs = ctx.obj.get("parent_kwargs", {})
         parent_settings = ctx.obj.get("parent_settings", None)
         parent_jobtype = ctx.obj.get("parent_jobtype", None)
+        # WIP: QM/MM with an external layer is not supported yet; see
+        # reject_external_level_of_theory for what supporting it involves
+        reject_external_level_of_theory(parent_settings, "qmmm")
 
         # Build QMMM settings in proper order:
         # 1. Start with project QMMM settings (from YAML)

@@ -12,12 +12,14 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import click
 import numpy as np
 import pytest
 from ase import Atoms
 from ase.calculators.emt import EMT
 from ase.units import Bohr, Hartree
 
+from chemsmart.cli.external import reject_external_level_of_theory
 from chemsmart.io.external import (
     ENTRY_POINT_GROUP,
     ASEEngine,
@@ -682,3 +684,21 @@ class TestExternalRunLog:
             == 0
         )
         assert len(read_external_log_records(external_run_log)) == 1
+
+
+# ── CLI guards ────────────────────────────────────────────────────────────
+
+
+class TestRejectExternalLevelOfTheory:
+    def test_external_parent_rejected(self, xtb_orca_external_calculator):
+        settings = SimpleNamespace(external=xtb_orca_external_calculator)
+        with pytest.raises(click.UsageError, match="backend 'xtb'"):
+            reject_external_level_of_theory(settings, "qmmm")
+
+    @pytest.mark.parametrize(
+        "parent", [None, SimpleNamespace(external=None), MagicMock()]
+    )
+    def test_other_parents_accepted(self, parent):
+        """No parent, a host level of theory, or a mock (whose ``external``
+        attribute is a truthy MagicMock) is not an external backend."""
+        reject_external_level_of_theory(parent, "qmmm")

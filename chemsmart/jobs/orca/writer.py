@@ -154,6 +154,8 @@ class ORCAInputWriter(InputWriter):
             ValueError: For QM/MM and NEB settings, which are not
                 supported with an external level of theory.
         """
+        # WIP: QM/MM with an external QM region is not supported yet (see
+        # chemsmart.cli.external.reject_external_level_of_theory)
         if isinstance(
             self.settings, (ORCAQMMMJobSettings, ORCANEBJobSettings)
         ):
