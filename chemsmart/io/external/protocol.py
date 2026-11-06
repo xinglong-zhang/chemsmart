@@ -1,6 +1,6 @@
 """
 Host protocol base: how a host program (Gaussian, ORCA, ...) exchanges
-one energy/gradient request with a chemsmart launcher.
+one energy/gradient request with a CHEMSMART launcher.
 
 A host subclasses :class:`ExternalProtocol` and implements three methods:
 
@@ -19,6 +19,7 @@ shared driver (:meth:`~ExternalProtocol.run`,
 gradient, and supplies a Hessian when the request asks for one.
 """
 
+import shutil
 import sys
 import time
 import traceback
@@ -120,19 +121,16 @@ class ExternalProtocol:
         sys.stdout.write(message + "\n")
 
     def report_failure(self, invocation, error):
-        sys.stderr.write("chemsmart external calculation failed:\n")
+        sys.stderr.write("CHEMSMART external calculation failed:\n")
         sys.stderr.write(error)
 
     def answer(self, config, invocation, engine=None):
         """Read, evaluate and write one request.
 
-        Returns ``(request, result, engine)``. When
-        ``config["log_backend_output"]`` is set, the engine keeps its
-        programs' output for the per-job log.
+        Returns ``(request, result)``.
         """
         request = self.read_request(invocation)
         engine = engine or build_engine(config)
-        engine.keep_output = bool(config.get("log_backend_output"))
         result = evaluate(
             engine,
             request,
@@ -140,19 +138,20 @@ class ExternalProtocol:
             fd_step=config.get("fd_step", DEFAULT_FD_STEP),
         )
         self.write_result(invocation, request, result)
-        return request, result, engine
+        return request, result
 
     def run(self, config, invocation, engine=None):
         """Answer one request; return a status message."""
-        _, result, _ = self.answer(config, invocation, engine)
+        _, result = self.answer(config, invocation, engine)
         return result.summary(config["backend"])
 
     def main(self, config, argv=None):
         """Launcher entry point; returns the process exit code.
 
         Each request is recorded in the per-job external log when the
-        host job was started with one (see
-        :mod:`chemsmart.io.external.runlog`).
+        host job was started with one; with ``keep_backend_output`` the
+        engine's working directories are kept in the job's
+        backend-output folder (see :mod:`chemsmart.io.external.runlog`).
         """
         argv = sys.argv[1:] if argv is None else list(argv)
         try:
@@ -162,28 +161,43 @@ class ExternalProtocol:
             return 1
         run_log = ExternalRunLog.from_environment(self.host, config)
         start = time.perf_counter()
+        engine = None
         with capture_warnings() as warnings:
             try:
-                request, result, engine = self.answer(config, invocation)
+                engine = build_engine(config)
+                engine.keep_workdirs = (
+                    run_log is not None and run_log.keep_backend_output
+                )
+                request, result = self.answer(config, invocation, engine)
             except Exception:
                 error = traceback.format_exc()
-                if run_log is not None:
-                    safely(
-                        run_log.record_failure,
-                        error,
-                        time.perf_counter() - start,
-                        warnings,
-                    )
+                self._log(
+                    run_log and run_log.record_failure,
+                    engine,
+                    error,
+                    time.perf_counter() - start,
+                    warnings,
+                )
                 self.report_failure(invocation, error)
                 return 1
-        if run_log is not None:
-            safely(
-                run_log.record,
-                request,
-                result,
-                time.perf_counter() - start,
-                warnings,
-                engine.drain_output(),
-            )
+        self._log(
+            run_log and run_log.record,
+            engine,
+            request,
+            result,
+            time.perf_counter() - start,
+            warnings,
+        )
         self.report_success(invocation, result.summary(config["backend"]))
         return 0
+
+    @staticmethod
+    def _log(record, engine, *args):
+        """Call ``record`` (an :class:`ExternalRunLog` method, or ``None``
+        without a log) with the engine's kept working directories, then
+        remove any directory the log did not take."""
+        workdirs = engine.drain_workdirs() if engine is not None else []
+        if record is not None:
+            safely(record, *args, workdirs=workdirs)
+        for _, directory in workdirs:
+            shutil.rmtree(directory, ignore_errors=True)

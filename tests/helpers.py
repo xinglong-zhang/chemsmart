@@ -133,6 +133,7 @@ class DummyJob:
     updated paths."""
 
     execution_name = Job.execution_name
+    backup_file = Job.backup_file  # runners copy results back with it
 
     def __init__(self, program, input_ext, folder, label, settings, molecule):
         self.PROGRAM = program
@@ -1795,6 +1796,7 @@ class QuadraticEngine(ExternalEngine):
     """
 
     def __init__(self, hessian, analytic=None):
+        super().__init__()
         self.hessian = np.asarray(hessian, dtype=float)
         self.analytic = analytic
         self.gradient_calls = 0

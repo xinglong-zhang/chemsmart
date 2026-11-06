@@ -57,10 +57,11 @@ class ExternalCalculator:
         python_executable (str, optional): Interpreter that runs the
             launcher; defaults to the interpreter running chemsmart when
             the input is written.
-        log_backend_output (bool): Also copy the backend program's own
-            output (e.g. xtb's) into the per-job external log
-            ``<label>_external.log``. One line per request is always
-            logged.
+        keep_backend_output (bool): Keep the backend program's working
+            files for every request in
+            ``<label>_external/step_<NNNN>_<time>/``, next to the per-job
+            log ``<label>_external.log`` (which always records one line
+            per request).
 
     Subclasses set :attr:`host`, :attr:`runtime_module` (the module whose
     ``main(config)`` the launcher calls) and :attr:`script_prefix`, and
@@ -77,7 +78,7 @@ class ExternalCalculator:
         calculator=None,
         options=None,
         python_executable=None,
-        log_backend_output=False,
+        keep_backend_output=False,
     ):
         # raises ValueError for unknown backends and bad options now,
         # not later inside the host program's run
@@ -85,7 +86,7 @@ class ExternalCalculator:
         self.calculator = calculator
         self.options = dict(options or {})
         self.python_executable = python_executable
-        self.log_backend_output = bool(log_backend_output)
+        self.keep_backend_output = bool(keep_backend_output)
 
     def _extra_fields(self):
         """Host-specific fields, included in :meth:`to_dict` and
@@ -103,7 +104,7 @@ class ExternalCalculator:
             "calculator": self.calculator,
             "options": dict(self.options),
             **self._extra_fields(),
-            "log_backend_output": self.log_backend_output,
+            "keep_backend_output": self.keep_backend_output,
             "python_executable": self.python_executable,
         }
 
@@ -123,7 +124,7 @@ class ExternalCalculator:
             "calculator": self.calculator,
             "options": dict(self.options),
             **self._extra_fields(),
-            "log_backend_output": self.log_backend_output,
+            "keep_backend_output": self.keep_backend_output,
         }
 
     @property

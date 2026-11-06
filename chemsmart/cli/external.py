@@ -73,12 +73,13 @@ def click_external_backend_options(f):
         "-o device=cuda, or for xtb -o method=gfn2 -o alpb=water.",
     )
     @click.option(
-        "--log-backend-output/--no-log-backend-output",
+        "--keep-backend-output/--no-keep-backend-output",
         default=False,
         show_default=True,
-        help="Also copy the backend program's own output (e.g. xtb's) "
-        "into <label>_external.log. One line per request is always "
-        "logged there.",
+        help="Keep the backend program's working files (e.g. xtb's "
+        "xtb.out, gradient, hessian) for every request, in "
+        "<label>_external/step_<NNNN>_<time>/. The log "
+        "<label>_external.log always records one line per request.",
     )
     @click.option(
         "--python",

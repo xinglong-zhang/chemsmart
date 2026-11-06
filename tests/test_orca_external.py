@@ -265,7 +265,7 @@ class TestORCAExternalCalculator:
             "backend": "xtb",
             "calculator": None,
             "options": {"method": "gfn2", "alpb": "water"},
-            "log_backend_output": False,
+            "keep_backend_output": False,
         }
         with pytest.raises(TypeError):
             ORCAExternalCalculator(backend="xtb", hessian="fd")
@@ -434,6 +434,57 @@ class TestORCAExternalWriter:
         )
         assert os.path.basename(env[EXTERNAL_LOG_ENV]).startswith(job.label)
 
+    def test_postrun_copies_log_and_backend_folder_from_scratch(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        orca_jobrunner_scratch,
+        emt_orca_external_calculator,
+    ):
+        runner = orca_jobrunner_scratch
+        job = ORCAOptJob(
+            molecule=Molecule.from_filepath(single_molecule_xyz_file),
+            settings=ORCAJobSettings(
+                charge=0, multiplicity=1, external=emt_orca_external_calculator
+            ),
+            label="mol_opt_ase",
+            jobrunner=runner,
+        )
+        job.folder = str(tmp_path / "job")
+        os.makedirs(job.folder)
+        runner._prerun(job)
+        scratch = runner.running_directory
+        step = os.path.join(scratch, f"{job.label}_external", "step_0001_x")
+        os.makedirs(step)
+        with open(os.path.join(step, "xtb.out"), "w") as fh:
+            fh.write("xtb output")
+        with open(
+            os.path.join(scratch, f"{job.label}_external.log"), "w"
+        ) as fh:
+            fh.write("log")
+
+        runner._postrun(job)
+
+        copied = os.path.join(job.folder, f"{job.label}_external")
+        assert open(os.path.join(copied, "step_0001_x", "xtb.out")).read() == (
+            "xtb output"
+        )
+        assert os.path.isfile(
+            os.path.join(job.folder, f"{job.label}_external.log")
+        )
+
+        # a rerun (e.g. -R) keeps the previous run's steps apart: backup_file
+        # moves the earlier folder aside instead of mixing step folders
+        runner._postrun(job)
+        folders = sorted(
+            name
+            for name in os.listdir(job.folder)
+            if name.startswith(f"{job.label}_external")
+            and os.path.isdir(os.path.join(job.folder, name))
+        )
+        assert len(folders) == 2
+        assert folders[0] == f"{job.label}_external"
+
     def test_ts_hessian_is_numerical(
         self, single_molecule_xyz_file, xtb_orca_external_calculator
     ):
@@ -540,18 +591,18 @@ class TestORCAExternalCLI:
         assert "ExtOpt" in settings.route_string
         assert "B3LYP" not in settings.route_string.upper()
 
-    def test_log_backend_output_flag(self, single_molecule_xyz_file):
+    def test_keep_backend_output_flag(self, single_molecule_xyz_file):
         result, settings = run_orca_external_cli(
             single_molecule_xyz_file,
             "chemsmart.jobs.orca.opt.ORCAOptJob",
             "-b",
             "xtb",
-            "--log-backend-output",
+            "--keep-backend-output",
             "opt",
         )
         assert result.exit_code == 0, result.output
-        assert settings.external.log_backend_output is True
-        assert settings.external.config["log_backend_output"] is True
+        assert settings.external.keep_backend_output is True
+        assert settings.external.config["keep_backend_output"] is True
 
     @pytest.mark.parametrize("parent", ["opt", "ts"])
     def test_qmmm_under_external_is_rejected(

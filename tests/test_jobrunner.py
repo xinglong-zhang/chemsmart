@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from chemsmart.cli.sub import sub
+from chemsmart.jobs import job as job_module
 from chemsmart.jobs.crest.runner import CRESTJobRunner, FakeCRESTJobRunner
 from chemsmart.jobs.gaussian import runner as gaussian_runner_module
 from chemsmart.jobs.gaussian.runner import (
@@ -813,7 +814,7 @@ class TestGaussianJobRunnerDirectHelpers:
         def _raise_copy(src, dst):
             raise OSError("disk full")
 
-        monkeypatch.setattr(gaussian_runner_module, "copy", _raise_copy)
+        monkeypatch.setattr(job_module.shutil, "copy", _raise_copy)
 
         runner = GaussianJobRunner(server=pbs_server, scratch=True, fake=True)
         runner.running_directory = str(running_dir)

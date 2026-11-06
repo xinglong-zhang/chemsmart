@@ -525,7 +525,7 @@ class TestExternalProtocol:
         )
         assert code == 1
         err = capsys.readouterr().err
-        assert "chemsmart external calculation failed" in err
+        assert "CHEMSMART external calculation failed" in err
         assert "missing.json" in err
 
     def test_usage_errors(self, capsys):
@@ -566,7 +566,7 @@ class TestExternalRunLog:
 
         text = external_run_log.read_text()
         assert text.startswith(
-            "# chemsmart external log: host JSON, backend harmonic\n"
+            "# CHEMSMART external log: host JSON, backend harmonic\n"
         )
         assert text.count("# config:") == 1  # header written once
         first, second = read_external_log_records(external_run_log)
@@ -616,20 +616,56 @@ class TestExternalRunLog:
             external_run_log.read_text()
         )
 
-    @pytest.mark.parametrize("keep", [True, False])
-    def test_backend_output_only_when_requested(
-        self, tmp_path, external_run_log, fake_xtb_executable, keep
+    def test_backend_files_kept_per_step_not_in_log(
+        self, tmp_path, external_run_log, fake_xtb_executable
     ):
         executable, _ = fake_xtb_executable
         config = {
             "backend": "xtb",
             "options": {"executable": executable},
-            "log_backend_output": keep,
+            "keep_backend_output": True,
         }
         assert run_json_external_request(tmp_path, config) == 0
-        text = external_run_log.read_text()
-        assert ("fake xtb: normal termination" in text) is keep
-        assert ("--- output of: " in text) is keep
+        assert run_json_external_request(tmp_path, config, name="second") == 0
+
+        records = read_external_log_records(external_run_log)
+        folders = [re.search(r"output (\S+)$", r)[1] for r in records]
+        assert re.fullmatch(r"job_external/step_0001_\d{8}-\d{6}", folders[0])
+        assert folders[1].startswith("job_external/step_0002_")
+        grad = tmp_path / folders[0] / "01_grad"
+        assert "fake xtb: normal termination" in (grad / "xtb.out").read_text()
+        assert "--grad" in (grad / "command.txt").read_text()
+        assert {"coord.xyz", "gradient"} <= {p.name for p in grad.iterdir()}
+        # the log holds records only, never backend output
+        assert "fake xtb" not in external_run_log.read_text()
+        assert not list(tmp_path.glob("xtb_*"))
+
+    def test_backend_files_removed_unless_requested(
+        self, tmp_path, external_run_log, fake_xtb_executable
+    ):
+        executable, _ = fake_xtb_executable
+        config = {"backend": "xtb", "options": {"executable": executable}}
+        assert run_json_external_request(tmp_path, config) == 0
+        (record,) = read_external_log_records(external_run_log)
+        assert " output " not in record
+        assert not (tmp_path / "job_external").exists()
+        assert not list(tmp_path.glob("xtb_*"))
+
+    def test_failed_request_keeps_its_backend_files(
+        self, tmp_path, external_run_log, fake_xtb_executable
+    ):
+        executable, _ = fake_xtb_executable
+        config = {
+            "backend": "xtb",
+            "options": {"executable": executable, "args": ["--fail"]},
+            "keep_backend_output": True,
+        }
+        assert run_json_external_request(tmp_path, config) == 1
+        (record,) = read_external_log_records(external_run_log)
+        assert " step    1  FAILED after " in record
+        folder = re.search(r"output (\S+)$", record)[1]
+        xtb_out = tmp_path / folder / "01_grad" / "xtb.out"
+        assert "xtb: boom" in xtb_out.read_text()
 
     def test_log_problems_never_fail_the_request(
         self, tmp_path, harmonic_backend, monkeypatch, capsys
@@ -641,8 +677,24 @@ class TestExternalRunLog:
             run_json_external_request(tmp_path, {"backend": harmonic_backend})
             == 0
         )
-        assert "chemsmart external log not written" in capsys.readouterr().err
+        assert "CHEMSMART external log not written" in capsys.readouterr().err
         assert (tmp_path / "request_result.json").is_file()
+
+    def test_kept_files_removed_when_log_unwritable(
+        self, tmp_path, fake_xtb_executable, monkeypatch, capsys
+    ):
+        blocker = tmp_path / "not_a_directory"
+        blocker.write_text("")
+        monkeypatch.setenv(EXTERNAL_LOG_ENV, str(blocker / "job.log"))
+        executable, _ = fake_xtb_executable
+        config = {
+            "backend": "xtb",
+            "options": {"executable": executable},
+            "keep_backend_output": True,
+        }
+        assert run_json_external_request(tmp_path, config) == 0
+        assert "log not written" in capsys.readouterr().err
+        assert not list(tmp_path.glob("xtb_*"))
 
     def test_concurrent_requests_get_unique_steps(
         self, tmp_path, external_run_log, harmonic_backend

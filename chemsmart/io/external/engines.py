@@ -30,21 +30,30 @@ class ExternalEngine:
     All public methods take positions in Angstrom and return atomic
     units: Hartree, Hartree/Bohr and Hartree/Bohr^2.
 
-    Engines that run programs can keep their output for the per-job
-    external log: when :attr:`keep_output` is set, they call
-    :meth:`_record_output`, and the driver collects the text with
-    :meth:`drain_output`.
+    Engines that run programs in working directories can keep them: when
+    :attr:`keep_workdirs` is set, they hand each directory over with
+    :meth:`_keep_workdir` instead of deleting it, and the driver collects
+    them with :meth:`drain_workdirs` for the job's backend-output folder
+    (see :mod:`chemsmart.io.external.runlog`).
     """
 
-    keep_output = False
+    def __init__(self):
+        self.keep_workdirs = False
+        self._kept_workdirs = []
 
-    def _record_output(self, label, text):
-        if self.keep_output:
-            self.__dict__.setdefault("_outputs", []).append((label, text))
+    def _keep_workdir(self, name, directory):
+        """Hand ``directory`` over to the driver if :attr:`keep_workdirs`
+        is set. Returns ``True`` when kept, so the caller must not delete
+        it."""
+        if not self.keep_workdirs:
+            return False
+        self._kept_workdirs.append((name, directory))
+        return True
 
-    def drain_output(self):
-        """Return and forget the recorded ``(label, text)`` outputs."""
-        return self.__dict__.pop("_outputs", [])
+    def drain_workdirs(self):
+        """Return and forget the kept ``(name, directory)`` pairs."""
+        kept, self._kept_workdirs = self._kept_workdirs, []
+        return kept
 
     def energy_and_gradient(self, numbers, positions, charge, multiplicity):
         raise NotImplementedError
@@ -67,6 +76,7 @@ class ASEEngine(ExternalEngine):
     """
 
     def __init__(self, factory):
+        super().__init__()
         self.factory = factory
         self._calculators = {}
 
@@ -132,6 +142,7 @@ class XTBEngine(ExternalEngine):
             )
         if alpb and gbsa:
             raise ValueError("Specify only one of alpb and gbsa.")
+        super().__init__()
         self.executable = executable
         self.method = method
         self.alpb = alpb
@@ -161,6 +172,7 @@ class XTBEngine(ExternalEngine):
         from ase.data import chemical_symbols
 
         workdir = tempfile.mkdtemp(prefix="xtb_", dir=os.getcwd())
+        kept = False
         try:
             with open(os.path.join(workdir, "coord.xyz"), "w") as fh:
                 fh.write(f"{len(numbers)}\n\n")
@@ -170,6 +182,8 @@ class XTBEngine(ExternalEngine):
                         f"{x:18.10f} {y:18.10f} {zc:18.10f}\n"
                     )
             command = self._command(runtype, charge, multiplicity)
+            with open(os.path.join(workdir, "command.txt"), "w") as fh:
+                fh.write(" ".join(command) + "\n")
             with open(os.path.join(workdir, "xtb.out"), "w") as out:
                 result = subprocess.run(
                     command,
@@ -177,18 +191,18 @@ class XTBEngine(ExternalEngine):
                     stdout=out,
                     stderr=subprocess.STDOUT,
                 )
-            with open(os.path.join(workdir, "xtb.out")) as fh:
-                output = fh.read()
-            self._record_output(" ".join(command), output)
+            kept = self._keep_workdir(runtype.lstrip("-"), workdir)
             if result.returncode != 0:
-                tail = output[-2000:]
+                with open(os.path.join(workdir, "xtb.out")) as fh:
+                    tail = fh.read()[-2000:]
                 raise RuntimeError(
                     f"xtb failed (exit {result.returncode}): "
                     f"{' '.join(command)}\n{tail}"
                 )
             return parse(workdir, len(numbers))
         finally:
-            shutil.rmtree(workdir, ignore_errors=True)
+            if not kept:
+                shutil.rmtree(workdir, ignore_errors=True)
 
     def energy_and_gradient(self, numbers, positions, charge, multiplicity):
         return self._run(

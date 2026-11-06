@@ -19,7 +19,6 @@ from datetime import datetime
 from functools import lru_cache
 from glob import glob
 from random import random
-from shutil import copy
 
 from chemsmart.io.gaussian.input import Gaussian16Input
 from chemsmart.jobs.runner import JobRunner
@@ -357,7 +356,7 @@ class GaussianJobRunner(JobRunner):
                         f"to {job.folder}"
                     )
                     try:
-                        copy(file, job.folder)
+                        job.backup_file(file, folder=job.folder)
                     except Exception as e:
                         logger.error(
                             f"File {file} cannot be copied to job folder "

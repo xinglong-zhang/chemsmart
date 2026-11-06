@@ -457,7 +457,7 @@ class ORCAJobRunner(JobRunner):
                         f"to {job.folder}"
                     )
                     try:
-                        copy(file, job.folder)
+                        job.backup_file(file, folder=job.folder)
                     except Exception as e:
                         logger.error(
                             f"Failed to copy file {file} to {job.folder}: {e}"
