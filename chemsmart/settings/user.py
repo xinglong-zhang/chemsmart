@@ -26,8 +26,10 @@ Configuration Structure:
     │   └── orca_project_settings.yaml
     ├── xtb/
     │   └── xtb_project_settings.yaml
-    └── crest/
-        └── crest_project_settings.yaml
+    ├── crest/
+    │   └── crest_project_settings.yaml
+    └── ccdc/
+        └── ccdc.yaml
 """
 
 import glob
@@ -192,6 +194,28 @@ class CHEMSMARTUserSettings:
             str: Path to the directory containing CREST-specific settings.
         """
         return os.path.join(self.config_dir, "crest")
+
+    @property
+    def user_ccdc_settings_dir(self):
+        """
+        Get the user CCDC/CSD settings directory.
+
+        Returns:
+            str: Path to the directory containing CSD Python API settings.
+        """
+        return os.path.join(self.config_dir, "ccdc")
+
+    @property
+    def user_ccdc_yaml(self):
+        """
+        Get the path to the CSD/CCDC environment variables YAML file.
+
+        Returns:
+            str: Path to the YAML file containing environment variables
+                 required by the licensed CSD Python API (``ccdc``
+                 package), e.g., ``CSDHOME``, ``CCDC_MOGUL_DATA``.
+        """
+        return os.path.join(self.user_ccdc_settings_dir, "ccdc.yaml")
 
     @cached_property
     def server_yaml_files(self):
