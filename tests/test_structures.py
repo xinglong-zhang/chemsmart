@@ -8015,6 +8015,7 @@ class TestPKaAndQMMMEdgeCases:
         with pytest.raises(ValueError, match="cannot be at the same level"):
             qmmm._write_gaussian_coordinates(StringIO())
 
+
 # Minimal valid CIF content shared by the mocked CCDC tests below.
 MINIMAL_TEST_CIF_CONTENT = """data_test
 _chemical_name_common 'test'
@@ -8161,9 +8162,7 @@ class TestCCDCIntegration:
         assert len(mols) == 1
         assert isinstance(mols[0], Molecule)
 
-    def test_configure_csd_environment_from_file(
-        self, tmp_path, monkeypatch
-    ):
+    def test_configure_csd_environment_from_file(self, tmp_path, monkeypatch):
         """Test loading CSD environment variables from a YAML file."""
         from chemsmart.io.molecules.ccdc import configure_csd_environment
 
@@ -8218,9 +8217,7 @@ class TestCCDCIntegration:
         yaml_file = tmp_path / "ccdc.yaml"
         yaml_file.write_text("- just\n- a\n- list\n")
 
-        with pytest.raises(
-            ValueError, match="Invalid CSD environment file"
-        ):
+        with pytest.raises(ValueError, match="Invalid CSD environment file"):
             configure_csd_environment(yaml_file=str(yaml_file))
 
     def test_configure_csd_environment_does_not_overwrite(
