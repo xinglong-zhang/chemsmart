@@ -1603,3 +1603,94 @@ class TestRunPhaseJobs:
             logger_obj=None,
             phase_label="opt",
         )
+
+
+@pytest.mark.parametrize("explicit_source", [False, True])
+def test_orca_mecp_stages_orbital_guess(tmp_path, explicit_source):
+    folder = tmp_path / "job"
+    scratch = tmp_path / "scratch"
+    folder.mkdir()
+    scratch.mkdir()
+    source = folder / "state.gbw"
+    source.write_bytes(b"reference orbitals")
+    inp = scratch / "crossing.inp"
+    inp.write_text('%mecp\n moinp "state.gbw"\nend\n')
+    runner = object.__new__(ORCAJobRunner)
+    runner.scratch = True
+    runner.scratch_dir = str(scratch)
+    runner.running_directory = str(scratch)
+    runner.job_inputfile = str(inp)
+    job = SimpleNamespace(
+        folder=str(folder),
+        inputfile=str(inp),
+        settings=SimpleNamespace(
+            moinp=str(source) if explicit_source else None
+        ),
+    )
+    runner._copy_over_extra_files(job)
+    assert (scratch / "state.gbw").read_bytes() == source.read_bytes()
+    source.unlink()
+    with pytest.raises(FileNotFoundError, match="orbital file does not exist"):
+        runner._copy_over_extra_files(job)
+
+
+def test_gaussian_analytic_hessian_requires_checkpoint(tmp_path):
+    runner = object.__new__(GaussianJobRunner)
+    job = SimpleNamespace(chkfile=str(tmp_path / "missing.chk"))
+    with pytest.raises(RuntimeError, match="Missing analytic checkpoint"):
+        runner.format_hessian_checkpoint(job)
+
+
+@pytest.mark.parametrize(
+    "error", [OSError("disk error"), ValueError("invalid report")]
+)
+def test_orca_postrun_logs_quality_report_failure(error, caplog):
+    runner = object.__new__(ORCAJobRunner)
+    runner.scratch = False
+    job = SimpleNamespace(
+        TYPE="orcamecp", log_results=MagicMock(side_effect=error)
+    )
+    runner._postrun(job)
+    job.log_results.assert_called_once_with()
+    assert "Failed to write ORCA MECP quality report" in caplog.text
+
+
+def test_gaussian_postrun_preserves_custom_checkpoint_name(tmp_path):
+    scratch = tmp_path / "scratch"
+    folder = tmp_path / "job"
+    scratch.mkdir()
+    folder.mkdir()
+    checkpoint = scratch / "shared_A.chk"
+    checkpoint.write_bytes(b"analytic reference")
+    runner = object.__new__(GaussianJobRunner)
+    runner.scratch = True
+    runner.running_directory = str(scratch)
+    runner.job_chkfile = str(checkpoint)
+    runner._postrun(
+        SimpleNamespace(folder=str(folder), label="crossing_step1_A")
+    )
+    assert (folder / checkpoint.name).read_bytes() == checkpoint.read_bytes()
+
+
+def test_gaussian_input_stages_reference_checkpoint(tmp_path, monkeypatch):
+    from chemsmart.jobs.gaussian import writer as writer_module
+
+    source = tmp_path / "reference.chk"
+    source.write_bytes(b"reference wavefunction")
+    target = tmp_path / "scratch"
+    target.mkdir()
+    runner = object.__new__(GaussianJobRunner)
+    runner.scratch = True
+    runner.running_directory = str(target)
+    writer = MagicMock()
+    monkeypatch.setattr(
+        writer_module, "GaussianInputWriter", lambda job: writer
+    )
+    runner._write_input(SimpleNamespace(oldchkfile=str(source)))
+    writer.write.assert_called_once_with(target_directory=str(target))
+    assert (target / source.name).read_bytes() == source.read_bytes()
+    monkeypatch.setattr(
+        GaussianJobRunner, "scratch_dir", property(lambda self: None)
+    )
+    with pytest.raises(ValueError, match="scratch directory is required"):
+        runner._scratch_job_directory(SimpleNamespace())

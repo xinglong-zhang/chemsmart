@@ -3678,3 +3678,89 @@ def test_regular_link_preserves_explicit_label(
         )
     assert result.exit_code == 0, result.output
     assert job.call_args.kwargs["label"] == "custom_link_opt_link"
+
+
+def test_link_mecp_explicit_optimizer_controls(
+    single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+):
+    expected = {
+        "max_steps": 25,
+        "step_size": 0.07,
+        "energy_diff_tol": 2e-5,
+        "force_max_tol": 3e-4,
+        "force_rms_tol": 2e-4,
+        "disp_max_tol": 0.002,
+        "disp_rms_tol": 0.001,
+        "step_size_grow": 1.1,
+        "step_size_shrink": 0.6,
+        "step_size_min": 0.0002,
+        "step_size_max": 0.8,
+        "hess_step_size": 0.002,
+    }
+    args = [
+        "-p",
+        "gas_solv",
+        "-f",
+        single_molecule_xyz_file,
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "link",
+        "-j",
+        "mecp",
+        "--charge1",
+        "1",
+        "--charge2",
+        "-1",
+        "--no-adaptive-step-size",
+        "--step-size-method",
+        "bb",
+    ]
+    for name, value in expected.items():
+        args.extend(["--" + name.replace("_", "-"), str(value)])
+    result, settings = run_gaussian_and_capture_settings(
+        "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+        args,
+        make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+    )
+    assert result.exit_code == 0, result.output
+    for name, value in expected.items():
+        assert getattr(settings, name) == pytest.approx(value)
+    assert (settings.charge_a, settings.charge_b) == (1, -1)
+    assert settings.adaptive_step_size is False
+    assert settings.step_size_method == "bb"
+
+
+def test_link_mecp_solvent_controls(
+    single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+):
+    args = [
+        "-p",
+        "gas_solv",
+        "-f",
+        single_molecule_xyz_file,
+        "-c",
+        "0",
+        "-m",
+        "1",
+        "link",
+        "-j",
+        "mecp",
+        "--remove-solvent",
+        "-sm",
+        "smd",
+        "-si",
+        "water",
+        "-so",
+        "read",
+    ]
+    result, settings = run_gaussian_and_capture_settings(
+        "chemsmart.jobs.gaussian.mecp.GaussianMECPJob",
+        args,
+        make_cli_ctx_obj(gaussian_jobrunner_no_scratch),
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.solvent_model == "smd"
+    assert settings.solvent_id == "water"
+    assert settings.additional_solvent_options == "read"

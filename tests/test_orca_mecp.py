@@ -3,6 +3,7 @@
 import re
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -15,7 +16,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.hessian import ORCAHessianFile
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.jobs.mecp import MECPSeamMixin
-from chemsmart.jobs.orca.job import ORCAGeneralJob
+from chemsmart.jobs.orca.job import ORCAGeneralJob, ORCAJob
 from chemsmart.jobs.orca.mecp import ORCAMECPJob
 from chemsmart.jobs.orca.settings import ORCAMECPJobSettings
 from chemsmart.jobs.orca.writer import ORCAInputWriter
@@ -1540,3 +1541,368 @@ def test_orca_cycle_count_excludes_post_optimization_gap(tmp_path):
         "! SurfCrossOpt\nEnergy difference between both states 0.001\n"
     )
     assert ORCAOutput(str(output)).mecp_optimization_steps is None
+
+
+@pytest.mark.parametrize(
+    "native, message",
+    [
+        (None, "did not converge"),
+        (
+            SimpleNamespace(normal_termination=False, converged=True),
+            "did not converge",
+        ),
+        (
+            SimpleNamespace(normal_termination=True, converged=False),
+            "did not converge",
+        ),
+        (
+            SimpleNamespace(
+                normal_termination=True, converged=True, final_structure=None
+            ),
+            "structure is missing",
+        ),
+    ],
+)
+def test_orca_native_optimization_rejects_incomplete_output(
+    monkeypatch, native, message
+):
+    job = object.__new__(ORCAMECPJob)
+    monkeypatch.setattr(ORCAJob, "_run", lambda self, **kwargs: None)
+    monkeypatch.setattr(
+        ORCAMECPJob, "_native_mecp_result", property(lambda self: native)
+    )
+    with pytest.raises(RuntimeError, match=message):
+        job._run_native_optimization()
+
+
+@pytest.mark.parametrize(
+    "failure", ["energy", "gradient", "symbols", "geometry"]
+)
+def test_orca_state_gradient_rejects_invalid_data(
+    tmp_path, monkeypatch, failure
+):
+    from chemsmart.io.orca import output as orca_output
+
+    molecule = SimpleNamespace(symbols=["H"], positions=np.zeros((1, 3)))
+    parsed = SimpleNamespace(
+        num_atoms=1, energy=-1.0, gradient=np.zeros((1, 3)), molecule=molecule
+    )
+    if failure == "energy":
+        parsed.energy = float("nan")
+    elif failure == "gradient":
+        parsed.gradient = np.full((1, 3), float("nan"))
+    elif failure == "symbols":
+        parsed.molecule = SimpleNamespace(
+            symbols=["He"], positions=np.zeros((1, 3))
+        )
+    else:
+        parsed.molecule = SimpleNamespace(
+            symbols=["H"], positions=np.ones((1, 3))
+        )
+    monkeypatch.setattr(orca_output, "ORCAEngradFile", lambda path: parsed)
+    state_job = SimpleNamespace(
+        folder=str(tmp_path), label="state", molecule=molecule
+    )
+    job = object.__new__(ORCAMECPJob)
+    with pytest.raises(
+        RuntimeError, match="Invalid ORCA energy/gradient or geometry"
+    ):
+        job._read_state_gradient(state_job)
+
+
+@pytest.mark.parametrize(
+    "normal, converged, gap, requested, completed, expected, issue",
+    [
+        (
+            False,
+            False,
+            None,
+            True,
+            False,
+            "FAILED",
+            "did not terminate normally",
+        ),
+        (True, True, None, True, False, "WARNING", "energy gap was not found"),
+    ],
+)
+def test_orca_native_report_explains_incomplete_results(
+    tmp_path,
+    monkeypatch,
+    normal,
+    converged,
+    gap,
+    requested,
+    completed,
+    expected,
+    issue,
+):
+    job = object.__new__(ORCAMECPJob)
+    job.folder = str(tmp_path)
+    job.label = "crossing"
+    job.settings = SimpleNamespace(uses_seam_workflow=True)
+    result = SimpleNamespace(
+        normal_termination=normal,
+        converged=converged,
+        energy_gap=gap,
+        numfreq_requested=requested,
+        numfreq_completed=completed,
+        is_minimum=None,
+        state_1_energy=None,
+        state_2_energy=None,
+        state_1_imaginary_frequencies=(),
+        state_2_imaginary_frequencies=(),
+    )
+    monkeypatch.setattr(
+        job, "_output", lambda: SimpleNamespace(mecp_result=result)
+    )
+    text = open(job._write_native_quality_report(), encoding="utf-8").read()
+    assert f"status={expected}" in text
+    assert issue in text
+    assert "requested SurfCrossNumFreq calculation is incomplete" in text
+
+
+def test_orca_native_frequency_rejects_invalid_zero_modes(monkeypatch):
+    native = SimpleNamespace(
+        converged=True,
+        numfreq_completed=True,
+        final_structure=SimpleNamespace(
+            positions=np.array(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+            )
+        ),
+        state_1_energy=-1.0,
+        state_2_energy=-1.0,
+        state_1_frequencies=np.ones(9),
+        state_2_frequencies=np.zeros(9),
+    )
+    monkeypatch.setattr(
+        ORCAMECPJob, "_native_mecp_result", property(lambda self: native)
+    )
+    job = object.__new__(ORCAMECPJob)
+    with pytest.raises(RuntimeError, match="projected zero modes"):
+        job._export_native_frequencies()
+    native.state_1_energy = float("nan")
+    with pytest.raises(RuntimeError, match="state energies are missing"):
+        job._export_native_frequencies()
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "0 0\n0 1 0\n1 0 1\n2 0 0\n",
+        "0 3\n0 1 0\n1 0 1\n2 0 0\n",
+        "0\n0 1\n1 0\n2 0\n0\n0 1\n1 0\n2 0\n",
+        "0 1 2\n1 1 0 0\n1 0 1 0\n2 0 0 1\n",
+        "0 1 2\n0 1 0\n1 0 1 0\n2 0 0 1\n",
+    ],
+    ids=[
+        "duplicate-columns",
+        "column-out-of-range",
+        "repeated-block",
+        "wrong-row-index",
+        "short-row",
+    ],
+)
+def test_orca_hessian_rejects_malformed_blocks(tmp_path, body):
+    path = tmp_path / "bad.hess"
+    path.write_text("$hessian\n3\n" + body + "$end\n")
+    with pytest.raises(ValueError, match="Malformed ORCA Hessian"):
+        ORCAHessianFile(str(path)).read_hessian(1)
+
+
+@pytest.mark.parametrize(
+    "matrix, message",
+    [
+        ("0 1 2\n0 1 0 0\n1 0 nan 0\n2 0 0 1\n", "nonfinite"),
+        ("0 1 2\n0 1 2 0\n1 0 1 0\n2 0 0 1\n", "not symmetric"),
+    ],
+)
+def test_orca_hessian_rejects_invalid_values(tmp_path, matrix, message):
+    path = tmp_path / "invalid.hess"
+    path.write_text("$hessian\n3\n" + matrix + "$end\n")
+    with pytest.raises(ValueError, match=message):
+        ORCAHessianFile(str(path)).read_hessian(1)
+
+
+def test_orca_hessian_parses_multiple_column_blocks(tmp_path):
+    path = tmp_path / "valid.hess"
+    path.write_text(
+        "$hessian\n3\n0 1\n0 1D+00 0\n1 0 2\n2 0 0\n\n2\n0 0\n1 0\n2 3\n$end\n"
+    )
+    np.testing.assert_allclose(
+        ORCAHessianFile(str(path)).read_hessian(1), np.diag([1, 2, 3])
+    )
+
+
+@pytest.mark.parametrize(
+    "contents, message",
+    [
+        ("$atoms\n1\n", "Missing or invalid"),
+        ("$hessian\nnot-a-number\n", "Missing or invalid"),
+        ("$hessian\n6\n", "dimension"),
+        ("$hessian\n3\n0\n0 1\n1 0\n2 0\n$end\n", "Incomplete"),
+    ],
+)
+def test_orca_hessian_rejects_missing_or_incomplete_data(
+    tmp_path, contents, message
+):
+    path = tmp_path / "missing.hess"
+    path.write_text(contents)
+    with pytest.raises(ValueError, match=message):
+        ORCAHessianFile(str(path)).read_hessian(1)
+
+
+@pytest.mark.parametrize(
+    "changes,message",
+    [
+        ({"mode": "unknown"}, "Unknown ORCA"),
+        ({"hessian_method": "unknown"}, "Hessian method"),
+        (
+            {"mode": "numfreq", "hessian_method": "analytic"},
+            "numfreq requires",
+        ),
+        ({"step_size": 0}, "must be positive"),
+        ({"charge": None}, "requires a charge"),
+        ({"multiplicity1": None}, "two multiplicities"),
+        ({"multiplicity1": 0}, "multiplicities must be positive"),
+        ({"multiplicity2": 1}, "different multiplicities"),
+        ({"maxiter": 0}, "maxiter must be positive"),
+        ({"broken_sym": [0, 1]}, "two positive integers"),
+        ({"casscf_nel": 2}, "both casscf_nel"),
+    ],
+)
+def test_orca_mecp_revalidates_modified_settings(changes, message):
+    settings = ORCAMECPJobSettings(charge=0, multiplicity1=1, multiplicity2=3)
+    for name, value in changes.items():
+        setattr(settings, name, value)
+    with pytest.raises(ValueError, match=message):
+        settings.validate()
+
+
+@pytest.mark.parametrize(
+    "extra,message",
+    [
+        ({"input_string": "literal input"}, "structured settings"),
+        ({"additional_route_parameters": "SP\n%scf"}, "simple route keywords"),
+        ({"modred": [(1, 2)]}, "unconstrained"),
+    ],
+)
+def test_orca_seam_rejects_unsupported_input_forms(extra, message):
+    settings = ORCAMECPJobSettings(
+        charge=0, multiplicity1=1, multiplicity2=3, mode="anafreq", **extra
+    )
+    molecule = Molecule(
+        symbols=["H", "H"],
+        positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.7]]),
+    )
+    with pytest.raises(ValueError, match=message):
+        ORCAMECPJob(molecule=molecule, settings=settings, label="crossing")
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("PES 1 ENERGY = -1.2D+00\nSTATE 2 ENERGY: -1.1\n", (-1.2, -1.1)),
+        (
+            "FINAL SINGLE POINT ENERGY -3.0\nFINAL SINGLE POINT ENERGY -2.9\nENERGY DIFFERENCE BETWEEN STATES\n",
+            (-3.0, -2.9),
+        ),
+        (
+            "FINAL SINGLE POINT ENERGY -3.0\nENERGY DIFFERENCE BETWEEN STATES\n",
+            (None, None),
+        ),
+    ],
+)
+def test_orca_mecp_energy_formats(tmp_path, text, expected):
+    path = tmp_path / "crossing.out"
+    path.write_text(text)
+    assert ORCAOutput(str(path)).mecp_state_energies == expected
+
+
+def test_orca_state_rejects_failed_execution(tmp_path, monkeypatch):
+    job = object.__new__(ORCAMECPJob)
+    monkeypatch.setattr(job, "_state_settings", lambda **kwargs: None)
+    state = SimpleNamespace(
+        label="failed", run=MagicMock(), is_complete=lambda: False
+    )
+    monkeypatch.setattr(job, "_state_job", lambda *args: state)
+    with pytest.raises(RuntimeError, match="did not terminate normally"):
+        job._run_state(np.zeros((1, 3)), 1, "A")
+
+
+def test_orca_gradient_parse_error_is_reported(tmp_path):
+    job = object.__new__(ORCAMECPJob)
+    state = SimpleNamespace(folder=str(tmp_path), label="missing")
+    with pytest.raises(RuntimeError, match="Cannot read ORCA energy/gradient"):
+        job._read_state_gradient(state)
+
+
+def test_orca_missing_native_output_and_invalid_mode(tmp_path):
+    job = object.__new__(ORCAMECPJob)
+    job.folder = str(tmp_path)
+    job.label = "empty"
+    job._output = lambda: None
+    assert job.output is None
+    assert job.settings_class() is ORCAMECPJobSettings
+    with pytest.raises(ValueError, match="mode must be"):
+        ORCAMECPJobSettings(mode="invalid")
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_orca_writer_stages_pes2_orbitals(tmp_path, monkeypatch, present):
+    source = tmp_path / "state.gbw"
+    if present:
+        source.write_bytes(b"state B")
+    target = tmp_path / "input"
+    settings = SimpleNamespace(
+        input_string="! SP\n", solventfilename=None, moinp=str(source)
+    )
+    writer = object.__new__(ORCAInputWriter)
+    writer.job = SimpleNamespace(
+        settings=settings, label="crossing", folder=str(tmp_path)
+    )
+    monkeypatch.setattr(
+        writer,
+        "_write_self",
+        lambda stream: stream.write(settings.input_string),
+    )
+    if present:
+        writer.write(target_directory=str(target))
+        assert (target / source.name).read_bytes() == b"state B"
+    else:
+        with pytest.raises(
+            FileNotFoundError, match="orbital file does not exist"
+        ):
+            writer.write(target_directory=str(target))
+
+
+def test_orca_completion_rejects_failed_frequency_export(monkeypatch):
+    from chemsmart.jobs.orca.job import ORCAJob
+
+    job = object.__new__(ORCAMECPJob)
+    job.settings = SimpleNamespace(uses_seam_workflow=False, mode="numfreq")
+    monkeypatch.setattr(ORCAJob, "_job_is_complete", lambda self: True)
+    job._export_native_frequencies = MagicMock(
+        side_effect=RuntimeError("missing")
+    )
+    assert not job._job_is_complete()
+
+
+def test_orca_quality_report_rejects_invalid_tolerance_and_missing_summary(
+    tmp_path,
+):
+    job = object.__new__(ORCAMECPJob)
+    job._output = lambda: SimpleNamespace(mecp_result=None)
+    with pytest.raises(ValueError, match="must be positive"):
+        job._write_native_quality_report(0)
+    assert job._write_native_quality_report() is None
+
+
+def test_orca_incomplete_crossing_output_has_no_fabricated_results(tmp_path):
+    path = tmp_path / "incomplete.out"
+    path.write_text("ORCA calculation interrupted\n")
+    output = ORCAOutput(str(path))
+    assert output.mecp_state_energies == (None, None)
+    assert output.mecp_result is None
+    with pytest.raises(ValueError, match="No MECP stationary-point geometry"):
+        output._get_mecp_stationary_point_structure()

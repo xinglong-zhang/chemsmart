@@ -123,3 +123,33 @@ def test_missing_analytic_checkpoint_prevents_conversion(tmp_path):
         runner.format_hessian_checkpoint(
             SimpleNamespace(chkfile=str(tmp_path / "missing.chk"))
         )
+
+
+def test_formchk_missing_executable_is_reported(tmp_path, monkeypatch):
+    import chemsmart.jobs.gaussian.runner as module
+
+    chk = tmp_path / "state.chk"
+    chk.write_bytes(b"checkpoint")
+    runner = object.__new__(GaussianJobRunner)
+    runner._update_os_environ = lambda job: {"PATH": ""}
+    runner._get_executable = lambda: "g16"
+    monkeypatch.setattr(module.os, "access", lambda *args: False)
+    monkeypatch.setattr(module, "which", lambda *args, **kwargs: None)
+    with pytest.raises(RuntimeError, match="formchk was not found"):
+        runner.format_hessian_checkpoint(SimpleNamespace(chkfile=str(chk)))
+
+
+def test_formatted_hessian_rejects_extra_values(tmp_path):
+    path = tmp_path / "extra.fchk"
+    path.write_text(FCHK.replace("6.0E+00", "6.0E+00 7.0E+00"))
+    with pytest.raises(RuntimeError, match="Invalid Hessian data"):
+        GaussianHessianFile(str(path)).read_hessian()
+
+
+def test_formatted_checkpoint_without_force_constants_is_rejected(tmp_path):
+    path = tmp_path / "no_hessian.fchk"
+    path.write_text(
+        "Number of atoms                            I                1\n"
+    )
+    with pytest.raises(RuntimeError, match="Missing Hessian"):
+        GaussianHessianFile(str(path)).read_hessian()

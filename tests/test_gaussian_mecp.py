@@ -5,6 +5,7 @@ import re
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import click
 import numpy as np
@@ -2179,3 +2180,274 @@ def test_result_without_minimum_check_has_no_check_method(tmp_path):
     result = read_final_result(str(report))
     assert result.is_minimum is None
     assert result.minimum_check_method is None
+
+
+@pytest.mark.parametrize(
+    "output, message",
+    [
+        (None, "parse energy"),
+        (SimpleNamespace(energies=[], forces=[]), "parse energy"),
+        (SimpleNamespace(energies=[-1.0], forces=[]), "parse forces"),
+        (
+            SimpleNamespace(energies=[-1.0], forces=[np.zeros((2, 3))]),
+            "force shape",
+        ),
+    ],
+)
+def test_gaussian_state_rejects_incomplete_output(
+    make_driver_job, monkeypatch, output, message
+):
+    job = make_driver_job()
+    state = SimpleNamespace(
+        label="state_A", run=MagicMock(), _output=lambda: output
+    )
+    monkeypatch.setattr(job, "_state_settings", lambda **kwargs: None)
+    monkeypatch.setattr(job, "_state_job", lambda *args: state)
+    with pytest.raises(RuntimeError, match=message):
+        job._run_state(np.zeros((1, 3)), 1, "A")
+    state.run.assert_called_once()
+
+
+def test_gaussian_restart_uses_saved_geometry_and_checkpoints(
+    make_driver_job, monkeypatch
+):
+    from pathlib import Path
+
+    from ase import units
+
+    job = make_driver_job(max_steps=4, restart=True)
+    saved_positions = np.array([[0.4, -0.2, 0.1]])
+    job._save_optimizer_state(
+        next_step=3,
+        positions_bohr=saved_positions,
+        current_step_size=0.2,
+        prev_merit=None,
+        prev_positions=None,
+        prev_proj_grad=None,
+        inv_hessian=None,
+        prev_eff_grad=None,
+        prev_positions_bfgs=None,
+    )
+    folder = Path(job.optimization_folder)
+    folder.mkdir(parents=True)
+    for state in ("A", "B"):
+        (folder / f"{job.label}_{state}.chk").write_text("checkpoint")
+    calls = []
+
+    def run_state(positions, step, state):
+        calls.append(
+            (positions.copy(), step, state, dict(job._state_checkpoint_files))
+        )
+        return -1.0, np.zeros((1, 3))
+
+    monkeypatch.setattr(job, "_run_state", run_state)
+    monkeypatch.setattr(
+        job, "_mecp_displacement", lambda **kwargs: (np.zeros((1, 3)),) * 3
+    )
+    job._run()
+    assert [(step, state) for _, step, state, _ in calls] == [
+        (3, "A"),
+        (3, "B"),
+    ]
+    np.testing.assert_allclose(calls[0][0], saved_positions)
+    np.testing.assert_allclose(
+        job.molecule.positions, saved_positions * units.Bohr
+    )
+    assert set(calls[0][3]) == {(None, "A"), (None, "B")}
+    assert (
+        "Restarting from saved state at step 3"
+        in Path(job.optimization_report_file).read_text()
+    )
+    assert not Path(job.state_file).exists()
+
+
+@pytest.mark.parametrize("method", ["bb", "grow_shrink", "harvey"])
+def test_gaussian_optimizer_resumes_after_nonconverged_step(
+    make_driver_job, monkeypatch, method
+):
+    from pathlib import Path
+
+    job = make_driver_job(
+        max_steps=3, adaptive_step_size=True, step_size_method=method
+    )
+    calls = []
+
+    def state(positions, step, state):
+        calls.append((step, state))
+        job._last_spin_squared[state] = 0.75 if state == "A" else None
+        return -1.0, np.zeros((1, 3))
+
+    monkeypatch.setattr(job, "_run_state", state)
+    monkeypatch.setattr(job, "_is_converged", lambda **kwargs: len(calls) >= 6)
+    if method == "harvey":
+
+        def bfgs(**kwargs):
+            return (
+                np.zeros((1, 3)),
+                np.zeros((1, 3)),
+                np.zeros((1, 3)),
+                np.eye(3),
+                "UPDATE",
+                0.1,
+                0.2,
+                np.zeros((1, 3)),
+            )
+
+        monkeypatch.setattr(job, "_bfgs_displacement", bfgs)
+    else:
+        monkeypatch.setattr(
+            job, "_mecp_displacement", lambda **kwargs: (np.zeros((1, 3)),) * 3
+        )
+    job._run()
+    assert calls == [
+        (step, state) for step in (1, 2, 3) for state in ("A", "B")
+    ]
+    report = Path(job.optimization_report_file).read_text()
+    assert "spin_squared_A=0.750000 spin_squared_B=NA" in report
+    assert "Converged at step 3." in report
+    assert not Path(job.state_file).exists()
+
+
+@pytest.mark.parametrize(
+    "updated, expected",
+    [
+        (np.diag([1.0, 1.0, 1.0e-20]), "RESET_ILL_CONDITIONED"),
+        (-np.eye(3), "RESET_NON_DESCENT"),
+    ],
+)
+def test_harvey_resets_unusable_inverse_hessian(
+    make_driver_job, monkeypatch, updated, expected
+):
+    job = make_driver_job(step_size_method="harvey")
+    monkeypatch.setattr(
+        job,
+        "_update_inverse_hessian",
+        lambda *args, **kwargs: (updated, "UPDATE", 1.0, 1.0),
+    )
+    displacement, _, _, matrix, status, _, _, effective = (
+        job._bfgs_displacement(
+            ea=-1.0,
+            eb=-1.0,
+            grad_a=np.array([[1.0, 0.5, 0.0]]),
+            grad_b=np.array([[-1.0, 0.5, 0.0]]),
+            prev_positions=np.zeros((1, 3)),
+            curr_positions=np.array([[0.0, 0.1, 0.0]]),
+            prev_eff_grad=np.zeros(3),
+            inv_hessian=np.eye(3),
+        )
+    )
+    assert status == expected
+    assert np.linalg.eigvalsh(matrix).min() > 0
+    assert np.dot(displacement.ravel(), effective.ravel()) < 0
+
+
+def test_gaussian_analytic_settings_reject_literal_input(make_driver_job):
+    job = make_driver_job()
+    settings = GaussianJobSettings(input_string="literal")
+    with pytest.raises(ValueError, match="literal input_string"):
+        job._analytic_state_settings(settings)
+
+
+def test_gaussian_missing_completion_and_export_directory(
+    make_driver_job, tmp_path
+):
+    job = make_driver_job()
+    assert job.settings_class() is GaussianMECPJobSettings
+    assert not job._job_is_complete()
+    job.settings.mecp_numfreq_only = True
+    assert not job._job_is_complete()
+    del job._export_final_gaussian_logs
+    source = tmp_path / "original.log"
+    source.write_text("original data")
+    job._export_final_gaussian_logs({"A": str(source), "B": str(source)})
+    assert all(
+        Path(path).read_text() == "original data"
+        for path in job.final_gaussian_logs.values()
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"hessian_method": "bad"}, "hessian_method"),
+        (
+            {"mecp_numfreq_only": True, "follow_seam_imaginary_mode": True},
+            "cannot follow",
+        ),
+    ],
+)
+def test_gaussian_invalid_frequency_configuration(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        GaussianMECPJobSettings(**kwargs)
+
+
+def test_gaussian_cartesian_hessian_ignores_nonmatrix_lines(tmp_path):
+    path = tmp_path / "hessian.log"
+    path.write_text(
+        "NAtoms= 1\nForce constants in Cartesian coordinates:\n\nignored text\n 1 2 3\n 9 0.1 0.2 0.3\n 1 invalid\n 1 1D+00\n 2 0 2D+00\n 3 0 0 3D+00\n"
+    )
+    np.testing.assert_allclose(
+        Gaussian16Output(str(path)).read_cartesian_hessian(),
+        np.diag([1.0, 2.0, 3.0]),
+    )
+    path.write_text("Force constants in Cartesian coordinates:\n")
+    with pytest.raises(RuntimeError, match="atom count"):
+        Gaussian16Output(str(path)).read_cartesian_hessian()
+
+
+def test_mecp_frequency_reader_validates_header_and_multiplicities(tmp_path):
+    path = tmp_path / "freq.log"
+    path.write_text("wrong header\n")
+    with pytest.raises(ValueError, match="Not a CHEMSMART"):
+        MECPProjectedFrequencyOutput(str(path))
+    path.write_text(
+        "CHEMSMART MECP projected frequency analysis\nmultiplicity_A=1\nmultiplicity_B=3\n"
+    )
+    output = MECPProjectedFrequencyOutput(str(path))
+    assert (output.multiplicity_a, output.multiplicity_b) == (1, 3)
+
+
+def test_gaussian_settings_factory_and_link_guard():
+    assert isinstance(
+        GaussianMECPJobSettings.from_settings(None), GaussianMECPJobSettings
+    )
+
+
+def test_gaussian_header_reads_previous_checkpoint():
+    job = SimpleNamespace(chkfile="/work/new.chk", oldchkfile="/work/old.chk")
+    writer = object.__new__(GaussianInputWriter)
+    writer.job = job
+    writer.settings = SimpleNamespace(chk=True)
+    writer.jobrunner = SimpleNamespace(num_cores=2, mem_gb=4)
+    stream = StringIO()
+    writer._write_gaussian_header(stream)
+    assert "%oldchk=old.chk\n%chk=new.chk" in stream.getvalue()
+
+
+def test_incomplete_final_result_is_unavailable(tmp_path):
+    from chemsmart.io.mecp import read_final_result
+
+    path = tmp_path / "report.log"
+    path.write_text("status=RUNNING\n")
+    assert read_final_result(str(path)) is None
+
+
+def test_gaussian_state_job_dispatches_link_job(make_driver_job, monkeypatch):
+    import chemsmart.jobs.gaussian.link as link_module
+
+    job = make_driver_job(use_link=True)
+    state = SimpleNamespace(set_folder=MagicMock())
+    constructor = MagicMock(return_value=state)
+    monkeypatch.setattr(link_module, "GaussianLinkJob", constructor)
+    settings = job._state_settings(state="A", step_idx=1, analytic=False)
+    returned = job._state_job(np.zeros((1, 3)), 1, "A", None, settings, False)
+    assert returned is state
+    constructor.assert_called_once()
+    assert state.oldchkfile is None
+
+
+def test_route_removal_handles_separate_equals_value():
+    route = GaussianLinkJobSettings._without_route_options(
+        "guess= read scf=xqc", {"guess"}
+    )
+    assert route.strip() == "scf=xqc"

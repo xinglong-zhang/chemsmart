@@ -436,7 +436,7 @@ def _link_mecp(
     if max_steps is not None:
         mecp_settings.max_steps = max_steps
     if step_size is not None:
-        mecp_settings.step_size = step_size
+        mecp_settings.step_size = float(step_size)
     if energy_diff_tol is not None:
         mecp_settings.energy_diff_tol = energy_diff_tol
     if force_max_tol is not None:

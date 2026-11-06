@@ -192,3 +192,59 @@ def test_mecp_file_thermal_contributions_match_independent_formulas(
         internal, rel=2.0e-6
     )
     assert analysis.vibrational_entropy == pytest.approx(entropy, rel=2.0e-6)
+
+
+@pytest.mark.parametrize(
+    "difference,mode,message",
+    [
+        ([1.0, 0.0, 0.0], [0.0, 0.0, 0.0], "zero norm"),
+        ([1.0, 0.0, 0.0], [1.0, 0.0, 0.0], "linearly dependent"),
+    ],
+)
+def test_seam_progress_rejects_degenerate_constraints(
+    difference, mode, message
+):
+    from chemsmart.jobs.mecp import MECPSeamMixin
+
+    with pytest.raises(RuntimeError, match=message):
+        MECPSeamMixin._constrained_seam_displacement(
+            energy_diff=0.1,
+            grad_a=np.asarray(difference).reshape(1, 3),
+            grad_b=np.zeros((1, 3)),
+            progress_error=0.0,
+            progress_mode=np.asarray(mode),
+            step_size=0.1,
+        )
+
+
+def test_seam_mode_displacement_rejects_incompatible_geometry():
+    from chemsmart.jobs.mecp import MECPSeamMixin
+
+    with pytest.raises(ValueError, match="does not match"):
+        MECPSeamMixin._displace_along_mode(np.zeros((2, 3)), np.ones(3), 0.1)
+
+
+def test_new_execution_invalidates_previous_final_report(make_driver_job):
+    from pathlib import Path
+
+    job = make_driver_job()
+    Path(job.final_report_file).write_text("status=COMPLETED\n")
+    job._last_seam_result = {"energy_a": -1.0}
+    job._begin_execution()
+    assert not Path(job.final_report_file).exists()
+    assert job._last_seam_result is None
+    with pytest.raises(RuntimeError, match="Difference gradient is too small"):
+        job._mecp_displacement(0.0, np.zeros((1, 3)), np.zeros((1, 3)), 0.1)
+    with pytest.raises(ValueError, match="convergence thresholds"):
+        job.log_results(1, -1.0, -1.0, energy_gap_tolerance=0.1)
+
+
+@pytest.mark.parametrize("result", [{}, {"frequencies": [-20.0], "modes": []}])
+def test_seam_follow_requires_complete_projected_modes(
+    make_driver_job, result
+):
+    job = make_driver_job()
+    with pytest.raises(
+        RuntimeError, match="requires projected frequency modes"
+    ):
+        job._follow_seam_imaginary_mode(result)
