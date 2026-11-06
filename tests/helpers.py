@@ -5,11 +5,15 @@ no pytest fixtures. Import them directly, e.g.
 Fixtures live in ``tests/fixtures/`` (loaded by ``tests/conftest.py``).
 """
 
+import ast
 import importlib
 import json
 import logging
 import os
+import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from textwrap import dedent
 from unittest.mock import MagicMock, patch
@@ -27,6 +31,7 @@ from chemsmart.cli.gaussian.gaussian import gaussian
 from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.nciplot.nciplot import nciplot
 from chemsmart.cli.run import run
+from chemsmart.cli.sub import sub
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
@@ -1723,16 +1728,74 @@ def assert_runner_was_configured(job, options):
     assert not set(options) & set(job.kwargs)
 
 
-def invoke_sterimol(*args):
-    """Run ``chemsmart run sterimol`` with ``args``.
-
-    Names a server because ``run`` otherwise needs ``local.yaml`` in the user's
-    ``~/.chemsmart``, which CI does not have.
-    """
-    server_yaml = Path(__file__).parent / "data" / "YAMLTests" / "server.yaml"
+def submit_for_test(server_yaml_file, *args):
+    """Run ``chemsmart sub --test`` with ``args``, writing scripts only."""
     return CliRunner().invoke(
-        run, ["-s", str(server_yaml), "sterimol", *map(str, args)]
+        sub, ["-s", server_yaml_file, "--test", *map(str, args)]
     )
+
+
+def run_generated_script_command(run_script):
+    """Run the command of a generated run script, as a compute node would."""
+    match = re.search(r"run\((\[.*\])\)", Path(run_script).read_text())
+    return CliRunner().invoke(run, ast.literal_eval(match.group(1)))
+
+
+def run_submit_script(submit_script):
+    """Run a generated PBS script as a node would; return its exit status."""
+    folder = Path(submit_script).parent
+    return subprocess.run(
+        ["bash", str(submit_script)],
+        cwd=folder,
+        env={**os.environ, "PBS_O_WORKDIR": str(folder)},
+        capture_output=True,
+    ).returncode
+
+
+def rdkit_mol_without_bonds(symbols):
+    """Return an editable RDKit molecule with these atoms and no bonds."""
+    rdkit_mol = Chem.RWMol()
+    for symbol in symbols:
+        rdkit_mol.AddAtom(Chem.Atom(symbol))
+    return rdkit_mol
+
+
+def rdkit_bond_orders(rdkit_mol):
+    """Return the bond order of each bond, keyed by its pair of atom indices."""
+    return {
+        frozenset((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())): (
+            bond.GetBondTypeAsDouble()
+        )
+        for bond in rdkit_mol.GetBonds()
+    }
+
+
+def assert_uses_submitting_python(submit_script):
+    """The node must find the Python that has chemsmart installed."""
+    text = Path(submit_script).read_text()
+    assert f"export PATH={os.path.dirname(sys.executable)}:" in text
+
+
+def capture_grouper_thermo_parameters(directory, *cutoff_args):
+    """Return the thermochemistry parameters of a directory-mode grouper job."""
+    result, job_kwargs = run_grouper_and_capture_job_kwargs(
+        ["-d", directory, "-p", "gaussian", "-E", "qhG", *cutoff_args, "rmsd"]
+    )
+    assert result.exit_code == 0, result.output
+    return job_kwargs["thermo_parameters"]
+
+
+def read_grouper_structures(folder):
+    """Return the text of each group's xyz file under ``folder``, by name."""
+    return {
+        path.name: path.read_text()
+        for path in Path(folder).rglob("*_group_*.xyz")
+    }
+
+
+def invoke_sterimol(*args):
+    """Run ``chemsmart run sterimol`` with ``args``."""
+    return CliRunner().invoke(run, ["sterimol", *map(str, args)])
 
 
 def run_sterimol_to_json(tmp_path, *args):
