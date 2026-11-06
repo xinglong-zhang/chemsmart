@@ -9,6 +9,7 @@ from chemsmart.jobs.nciplot.settings import NCIPLOTJobSettings
 from tests.helpers import (
     ConcreteGaussianProjectSettings,
     FakePKaSettings,
+    find_g16,
     make_pka_sub_job_factory,
 )
 
@@ -1018,3 +1019,17 @@ def concrete_gaussian_project_settings():
     """A fresh hardcoded (non-YAML) :class:`ConcreteGaussianProjectSettings`
     instance, exercising ``GaussianProjectSettings``' default methods."""
     return ConcreteGaussianProjectSettings()
+
+
+############ Gaussian External Fixtures ##################
+
+
+@pytest.fixture(scope="session")
+def g16_executable():
+    """Path to the real ``g16`` binary; skips the test if Gaussian is absent."""
+    g16 = find_g16()
+    if g16 is None:
+        pytest.skip(
+            "Gaussian g16 not available (add to PATH or set GAUSS_EXEDIR)"
+        )
+    return g16

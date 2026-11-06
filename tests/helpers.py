@@ -1777,3 +1777,47 @@ def rdkit_embed_and_optimize(smiles, seed=1):
     AllChem.EmbedMolecule(mol, params)
     AllChem.UFFOptimizeMolecule(mol)
     return mol
+
+
+class NoDictCalculator:
+    """Pickle-able ASE-calculator stand-in with no ``todict()`` method.
+
+    Forces ``ASEExternalCalculatorScript`` down its pickle fallback path.
+    """
+
+
+# CODATA 2018, matching chemsmart.io.gaussian.external_script.
+BOHR_TO_ANG = 0.529177210903
+
+
+def write_gaussian_external_input(
+    path, positions_ang, atomic_numbers, deriv=1
+):
+    """Write a minimal Gaussian ``External`` input file.
+
+    Positions are given in Angstrom and written in Bohr, in the
+    fixed-width layout Gaussian passes to an External script.
+    """
+    natoms = len(atomic_numbers)
+    with open(path, "w") as fh:
+        fh.write(f"{natoms:10d}{deriv:10d}{0:10d}{1:10d}\n")
+        for z, (x, y, z_coord) in zip(atomic_numbers, positions_ang):
+            xb = x / BOHR_TO_ANG
+            yb = y / BOHR_TO_ANG
+            zb = z_coord / BOHR_TO_ANG
+            fh.write(f"{z:10d}{xb:20.12f}{yb:20.12f}{zb:20.12f}{0.0:20.12f}\n")
+
+
+def find_g16():
+    """Return the ``g16`` executable path, or ``None`` if unavailable.
+
+    Looks on ``PATH`` first, then in ``$GAUSS_EXEDIR``.
+    """
+    on_path = shutil.which("g16")
+    if on_path:
+        return on_path
+    gauss_exedir = os.environ.get("GAUSS_EXEDIR")
+    if not gauss_exedir:
+        return None
+    candidate = os.path.join(gauss_exedir, "g16")
+    return candidate if os.path.isfile(candidate) else None

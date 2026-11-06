@@ -10,50 +10,18 @@ Covers the full round-trip:
 """
 
 import os
-import shutil
 import subprocess
 import sys
 import textwrap
 
 import numpy as np
-import pytest
 
 from chemsmart.io.gaussian.external_script import ASEExternalCalculatorScript
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.external import GaussianExternalJob
 from chemsmart.jobs.gaussian.settings import GaussianExternalJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
-
-
-# ── Stub calculator without todict() (used for the pickle-fallback test) ─
-class _NoDictCalc:
-    """Minimal pickle-able calculator stub that has no todict() method."""
-
-    pass
-
-
-# ── Unit conversions (shared with the generated script) ───────────────────
-_BOHR_TO_ANG = 0.529177210903
-_EV_PER_HA = 27.211386245988
-_GRAD_CONV = _BOHR_TO_ANG / _EV_PER_HA  # (eV/Å) → (Ha/Bohr)
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────
-
-
-def _write_gaussian_external_input(
-    path, positions_ang, atomic_numbers, deriv=1
-):
-    """Write a minimal Gaussian External input file (positions in Bohr)."""
-    natoms = len(atomic_numbers)
-    with open(path, "w") as fh:
-        fh.write(f"{natoms:10d}{deriv:10d}{0:10d}{1:10d}\n")
-        for z, (x, y, z_coord) in zip(atomic_numbers, positions_ang):
-            xb = x / _BOHR_TO_ANG
-            yb = y / _BOHR_TO_ANG
-            zb = z_coord / _BOHR_TO_ANG
-            fh.write(f"{z:10d}{xb:20.12f}{yb:20.12f}{zb:20.12f}{0.0:20.12f}\n")
-
+from tests.helpers import NoDictCalculator, write_gaussian_external_input
 
 # ── Tests ─────────────────────────────────────────────────────────────────
 
@@ -131,7 +99,7 @@ class TestGaussianExternalIntegration:
 
     def test_pickle_fallback_writes_pkl(self, tmp_path):
         """Pickle path: .pkl file is written when calculator has no todict()."""
-        calc = _NoDictCalc()
+        calc = NoDictCalculator()
         script = ASEExternalCalculatorScript(calc, script_name="run_pkl")
         script.write(str(tmp_path))
 
@@ -199,7 +167,7 @@ class TestGaussianExternalIntegration:
         # Au2 molecule: two gold atoms separated by 2.88 Å
         atomic_numbers = [79, 79]
         positions_ang = [[0.0, 0.0, 0.0], [0.0, 0.0, 2.88]]
-        _write_gaussian_external_input(
+        write_gaussian_external_input(
             input_file, positions_ang, atomic_numbers, deriv=1
         )
 
@@ -249,28 +217,12 @@ class TestGaussianExternalIntegration:
 # ── Real Gaussian run ─────────────────────────────────────────────────────
 
 
-def _find_g16():
-    """Return the g16 executable path, or None if Gaussian is not available."""
-    on_path = shutil.which("g16")
-    if on_path:
-        return on_path
-    gauss_exedir = os.environ.get("GAUSS_EXEDIR", "")
-    candidate = os.path.join(gauss_exedir, "g16")
-    return candidate if os.path.isfile(candidate) else None
-
-
-_G16 = _find_g16()
-
-
-@pytest.mark.skipif(
-    _G16 is None,
-    reason="Gaussian g16 not available (add to PATH or set GAUSS_EXEDIR)",
-)
 class TestGaussianExternalRealRun:
     """
     Integration tests that invoke the real g16 binary.
 
-    Each test is skipped automatically when Gaussian is not installed.
+    Each test is skipped automatically when Gaussian is not installed
+    (via the ``g16_executable`` fixture).
 
     Note on calculator choice
     -------------------------
@@ -280,7 +232,7 @@ class TestGaussianExternalRealRun:
     purpose and requires no external model files.
     """
 
-    def test_h2_lj_external_singlepoint(self, tmp_path):
+    def test_h2_lj_external_singlepoint(self, tmp_path, g16_executable):
         """
         Full pipeline: LennardJones single-point on H2 via Gaussian External.
 
@@ -331,7 +283,7 @@ class TestGaussianExternalRealRun:
 
         # ── 3. Run g16 ───────────────────────────────────────────────────
         result = subprocess.run(
-            [_G16, str(com_file)],
+            [g16_executable, str(com_file)],
             capture_output=True,
             text=True,
             cwd=str(tmp_path),
@@ -356,7 +308,7 @@ class TestGaussianExternalRealRun:
             f"log tail:\n{log_text[-1500:]}"
         )
 
-    def test_h2_lj_external_opt(self, tmp_path):
+    def test_h2_lj_external_opt(self, tmp_path, g16_executable):
         """
         Full pipeline: LennardJones geometry optimisation on H2 via Gaussian External.
 
@@ -395,7 +347,7 @@ class TestGaussianExternalRealRun:
 
         # ── 3. Run g16 ───────────────────────────────────────────────────
         result = subprocess.run(
-            [_G16, str(com_file)],
+            [g16_executable, str(com_file)],
             capture_output=True,
             text=True,
             cwd=str(tmp_path),
