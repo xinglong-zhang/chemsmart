@@ -11,9 +11,9 @@ request to :func:`chemsmart.io.gaussian.external.main`.
 """
 
 from chemsmart.io.external import DEFAULT_FD_STEP, HESSIAN_MODES
-from chemsmart.jobs.external import EXTERNAL_BACKENDS, ExternalCalculator
+from chemsmart.jobs.external import ExternalCalculator
 
-__all__ = ["EXTERNAL_BACKENDS", "GaussianExternalCalculator"]
+__all__ = ["GaussianExternalCalculator"]
 
 
 class GaussianExternalCalculator(ExternalCalculator):

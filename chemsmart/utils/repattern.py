@@ -12,6 +12,10 @@ orca_line_integer_followed_by_floats = (
 )
 raw_energy_value_pattern = r"(-\d+\.\d+)"
 
+# One keyword of an ORCA simple-input (route) line such as "! Opt Freq",
+# i.e. any run of characters other than whitespace and "!"
+orca_route_keyword_pattern = r"[^\s!]+"
+
 element_token = r"[A-Z][a-z]?"
 orca_mayer_population_analysis_line_pattern = rf"^\s*(?:\+?\d+)\s+{element_token}(?:\s+{float_pattern_with_exponential}){{6}}\s*$"
 

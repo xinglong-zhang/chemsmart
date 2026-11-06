@@ -5,7 +5,10 @@ and analytic/finite-difference Hessians. Shared by the Gaussian
 (``External=``) and ORCA (``ExtOpt``) interfaces.
 """
 
+import importlib.metadata
+import json
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -15,16 +18,27 @@ from ase.calculators.emt import EMT
 from ase.units import Bohr, Hartree
 
 from chemsmart.io.external import (
+    ENTRY_POINT_GROUP,
     ASEEngine,
     ExternalEngine,
+    ExternalProtocol,
     XTBEngine,
+    available_backends,
     build_engine,
     compute_hessian,
+    evaluate,
     finite_difference_hessian,
-    parse_xtb_gradient_file,
-    parse_xtb_hessian_file,
+    get_backend,
+    read_xtb_gradient,
+    read_xtb_hessian,
+    register_backend,
+    validate_backend,
 )
-from tests.helpers import QuadraticEngine
+from tests.helpers import (
+    JSONExternalProtocol,
+    QuadraticEngine,
+    write_json_external_request,
+)
 
 # ── Engines ───────────────────────────────────────────────────────────────
 
@@ -187,43 +201,38 @@ class TestXTBEngine:
         assert hessian is None
         assert "xtb Hessian unavailable" in caplog.text
 
-    def test_parse_gradient_file(self, xtb_output_directory):
-        energy, gradient = parse_xtb_gradient_file(xtb_output_directory, 2)
+    def test_read_gradient_file(self, xtb_output_directory):
+        energy, gradient = read_xtb_gradient(xtb_output_directory, 2)
         assert energy == pytest.approx(-0.9822404321)
         np.testing.assert_allclose(
             gradient, [[0, 0, -0.012345678901234], [0, 0, 0.012345678901234]]
         )
 
-    def test_parse_hessian_file(self, xtb_output_directory):
-        hessian = parse_xtb_hessian_file(xtb_output_directory, 2)
+    def test_read_hessian_file(self, xtb_output_directory):
+        hessian = read_xtb_hessian(xtb_output_directory, 2)
         assert hessian.shape == (6, 6)
         assert hessian[1, 0] == pytest.approx(6.0)
 
-    def test_parse_hessian_rejects_wrong_size(self, xtb_output_directory):
-        with pytest.raises(ValueError, match="expected 9"):
-            parse_xtb_hessian_file(xtb_output_directory, 1)
+    def test_read_hessian_rejects_wrong_size(self, xtb_output_directory):
+        with pytest.raises(ValueError, match=r"expected \(3, 3\)"):
+            read_xtb_hessian(xtb_output_directory, 1)
 
-    def test_parse_gradient_rejects_truncated_file(self, tmp_path):
+    def test_read_gradient_rejects_truncated_file(self, tmp_path):
         (tmp_path / "gradient").write_text(
             "$grad\n"
             "  cycle = 1    SCF energy =    -1.0   |dE/xyz| =  0.0\n"
             "  0.0  0.0  0.0  h\n"
             "  0.0  0.0  1.4  h\n"
-            "  0.0  0.0  -1.0D-02\n"
+            "  0.0  0.0  -1.0E-02\n"
+            "$end\n"
         )
         with pytest.raises(ValueError, match="gradient shape"):
-            parse_xtb_gradient_file(str(tmp_path), 2)
+            read_xtb_gradient(str(tmp_path), 2)
 
-    def test_parse_hessian_skips_header_and_tolerates_missing_end(
-        self, tmp_path
-    ):
-        (tmp_path / "hessian").write_text(
-            "written by xtb\n$hessian\n"
-            + " ".join(f"{float(v)}D+00" for v in range(9))
-            + "\n"
-        )
-        hessian = parse_xtb_hessian_file(str(tmp_path), 1)
-        np.testing.assert_allclose(hessian, np.arange(9.0).reshape(3, 3))
+    def test_read_gradient_requires_energy_and_gradient(self, tmp_path):
+        (tmp_path / "gradient").write_text("$grad\n$end\n")
+        with pytest.raises(ValueError, match="No energy/gradient"):
+            read_xtb_gradient(str(tmp_path), 2)
 
 
 # ── Hessians ──────────────────────────────────────────────────────────────
@@ -372,3 +381,156 @@ class TestBuildEngine:
     def test_bad_backend_config_rejected(self, config, message):
         with pytest.raises(ValueError, match=message):
             build_engine(config)
+
+
+# ── Backend registry ──────────────────────────────────────────────────────
+
+
+class TestBackendRegistry:
+    def test_builtin_backends_registered(self):
+        assert {"ase", "mace-off", "mace-mp", "aimnet2", "uma", "xtb"} <= set(
+            available_backends()
+        )
+
+    def test_lookup_is_case_insensitive(self):
+        backend = get_backend("XTB")
+        assert backend.name == "xtb"
+        assert backend.description
+
+    def test_unknown_backend_lists_choices(self):
+        with pytest.raises(ValueError, match="choose from .*xtb"):
+            get_backend("orca")
+
+    def test_registered_backend_builds_engines(self, harmonic_backend):
+        engine = build_engine({"backend": harmonic_backend})
+        assert isinstance(engine, QuadraticEngine)
+
+    def test_duplicate_name_rejected_unless_replaced(
+        self, isolated_backend_registry
+    ):
+        with pytest.raises(ValueError, match="already registered"):
+            register_backend("xtb")(lambda options, calculator: None)
+
+        @register_backend("xtb", replace=True, description="replacement")
+        def build(options, calculator):
+            return "replaced"
+
+        assert build_engine({"backend": "xtb"}) == "replaced"
+
+    def test_validate_hook_runs_without_building(self):
+        with pytest.raises(ValueError, match="Unknown xtb method"):
+            validate_backend("xtb", {"method": "pm7"})
+        assert validate_backend("xtb", {"method": "gfn1"}).name == "xtb"
+
+    def test_required_calculator_checked(self):
+        with pytest.raises(ValueError, match="needs a calculator"):
+            validate_backend("ase")
+
+    def test_entry_point_plugins_load_once(
+        self, isolated_backend_registry, monkeypatch, caplog
+    ):
+        loads = []
+
+        def register_plugin():
+            loads.append("good")
+            register_backend("plugin-mlp")(lambda options, calculator: None)
+
+        def broken():
+            raise ImportError("missing dependency")
+
+        entry_points = [
+            SimpleNamespace(
+                name="good", value="pkg.good", load=register_plugin
+            ),
+            SimpleNamespace(name="bad", value="pkg.bad", load=broken),
+        ]
+        groups = []
+
+        def fake_entry_points(group):
+            groups.append(group)
+            return entry_points
+
+        monkeypatch.setattr(
+            importlib.metadata, "entry_points", fake_entry_points
+        )
+        monkeypatch.setattr(
+            isolated_backend_registry, "_plugins_loaded", False
+        )
+
+        assert "plugin-mlp" in available_backends()
+        assert get_backend("plugin-mlp").name == "plugin-mlp"
+        assert loads == ["good"]  # loaded once, on first use
+        assert groups == [ENTRY_POINT_GROUP]
+        assert "missing dependency" in caplog.text
+
+
+# ── Host protocol base ────────────────────────────────────────────────────
+
+
+class TestExternalProtocol:
+    def test_new_host_needs_only_file_exchange(
+        self, tmp_path, harmonic_backend, harmonic_hessian, capsys
+    ):
+        request = write_json_external_request(
+            tmp_path / "request.json", [1, 1], [[0, 0, 0], [0, 0, 1.0]]
+        )
+        result_file = tmp_path / "result.json"
+        code = JSONExternalProtocol().main(
+            {"backend": harmonic_backend}, [request, str(result_file)]
+        )
+        assert code == 0
+        result = json.loads(result_file.read_text())
+        assert np.shape(result["gradient"]) == (2, 3)
+        assert result["hessian"] is None
+        assert capsys.readouterr().out.startswith("harmonic: E = ")
+
+    def test_hessian_requests_get_a_hessian(
+        self, tmp_path, harmonic_backend, harmonic_hessian
+    ):
+        request = write_json_external_request(
+            tmp_path / "request.json",
+            [1, 1],
+            [[0, 0, 0], [0, 0, 1.0]],
+            deriv=2,
+        )
+        message = JSONExternalProtocol().run(
+            {"backend": harmonic_backend, "hessian": "analytic"},
+            (request, str(tmp_path / "result.json")),
+        )
+        assert message.endswith("; Hessian from analytic")
+        result = json.loads((tmp_path / "result.json").read_text())
+        np.testing.assert_allclose(result["hessian"], harmonic_hessian)
+
+    def test_energy_only_request_has_no_gradient(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        harmonic_external_request.deriv = 0
+        result = evaluate(
+            QuadraticEngine(harmonic_hessian), harmonic_external_request
+        )
+        assert result.gradient is None
+        assert result.summary("x") == f"x: E = {result.energy:.10f} Eh"
+
+    def test_failures_reported_with_exit_code(self, tmp_path, capsys):
+        code = JSONExternalProtocol().main(
+            {"backend": "xtb"},
+            [str(tmp_path / "missing.json"), str(tmp_path / "out.json")],
+        )
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "chemsmart external calculation failed" in err
+        assert "missing.json" in err
+
+    def test_usage_errors(self, capsys):
+        assert JSONExternalProtocol().main({"backend": "xtb"}, ["one"]) == 1
+        assert "Usage" in capsys.readouterr().err
+
+    def test_base_methods_are_abstract(self):
+        protocol = ExternalProtocol()
+        for method, args in (
+            (protocol.parse_arguments, ([],)),
+            (protocol.read_request, (None,)),
+            (protocol.write_result, (None, None, None)),
+        ):
+            with pytest.raises(NotImplementedError):
+                method(*args)

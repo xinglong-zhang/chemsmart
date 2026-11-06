@@ -19,8 +19,8 @@ def xtb_output_directory(tmp_path):
         "|dE/xyz| =  0.012345\n"
         "    0.00000000000000      0.00000000000000     -0.69926098000000  h\n"
         "    0.00000000000000      0.00000000000000      0.69926098000000  h\n"
-        "   0.0000000000000D+00   0.0000000000000D+00  -1.2345678901234D-02\n"
-        "   0.0000000000000D+00   0.0000000000000D+00   1.2345678901234D-02\n"
+        "   0.0000000000000E+00   0.0000000000000E+00  -1.2345678901234E-02\n"
+        "   0.0000000000000E+00   0.0000000000000E+00   1.2345678901234E-02\n"
         "$end\n"
     )
     hessian = [[float(6 * i + j) for j in range(6)] for i in range(6)]
@@ -80,3 +80,32 @@ def harmonic_external_request():
         numbers=np.array([1, 1]),
         positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),
     )
+
+
+@pytest.fixture()
+def isolated_backend_registry(monkeypatch):
+    """The external backend registry, restored after the test.
+
+    Backends registered during the test disappear afterwards, and entry
+    point plugins are treated as already loaded.
+    """
+    from chemsmart.io.external import backends
+
+    monkeypatch.setattr(backends, "_REGISTRY", dict(backends._REGISTRY))
+    monkeypatch.setattr(backends, "_plugins_loaded", True)
+    return backends
+
+
+@pytest.fixture()
+def harmonic_backend(isolated_backend_registry, harmonic_hessian):
+    """A registered ``harmonic`` backend returning a QuadraticEngine with
+    an exact analytic Hessian (needs no external software)."""
+    from tests.helpers import QuadraticEngine
+
+    @isolated_backend_registry.register_backend(
+        "harmonic", description="Harmonic test potential"
+    )
+    def build(options, calculator):
+        return QuadraticEngine(harmonic_hessian, analytic=harmonic_hessian)
+
+    return "harmonic"

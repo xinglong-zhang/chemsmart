@@ -15,6 +15,7 @@ import re
 
 from chemsmart.io.orca import ORCA_ALL_SOLVENT_MODELS
 from chemsmart.jobs.settings import MolecularJobSettings
+from chemsmart.utils.repattern import orca_route_keyword_pattern
 from chemsmart.utils.utils import (
     deduplicate_string_keywords,
     get_list_from_string_range,
@@ -646,7 +647,10 @@ class ORCAJobSettings(MolecularJobSettings):
             extras = str(self.additional_route_parameters).strip()
             if extras:
                 existing_lower = {
-                    tok.lower() for tok in re.findall(r"[^\s!]+", route_string)
+                    tok.lower()
+                    for tok in re.findall(
+                        orca_route_keyword_pattern, route_string
+                    )
                 }
                 remaining = []
                 for tok in extras.split():

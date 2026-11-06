@@ -7,6 +7,9 @@ and robust conversions among Hartree, eV, kcal/mol, kJ/mol, and J/mol.
 
 Highlights:
 - `atm_to_pa`, `R`, `bohr_to_meter`, `amu_to_kg`, `hartree_to_joules`.
+- `bohr_to_angstrom`, `hartree_to_ev` and the derivative factors
+  `ev_per_angstrom_to_hartree_per_bohr` (gradients) and
+  `ev_per_angstrom2_to_hartree_per_bohr2` (Hessians).
 - `energy_conversion(from_unit, to_unit, value)` to convert between energy
   units (case-insensitive).
 """
@@ -43,6 +46,14 @@ joule_per_mol_to_hartree = 1 / (
 # joule_per_mol_to_hartree = 3.8087991196914175e-07
 
 au_to_debye = 2.54174623
+
+# Atomic-unit conversions for energies and their Cartesian derivatives,
+# from ase.units like the rest of chemsmart (positions in Angstrom,
+# energies in eV on the ASE side; Hartree and Bohr on the atomic side)
+bohr_to_angstrom = units.Bohr
+hartree_to_ev = units.Hartree
+ev_per_angstrom_to_hartree_per_bohr = units.Bohr / units.Hartree
+ev_per_angstrom2_to_hartree_per_bohr2 = units.Bohr**2 / units.Hartree
 
 
 def energy_conversion(from_unit, to_unit, value=1.0):

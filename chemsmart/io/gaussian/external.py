@@ -36,22 +36,12 @@ Output file (atomic units)::
     force constants (lower triangle, 3N(3N+1)/2)     (3D20.12)
 """
 
-import logging
-import sys
-import traceback
+from dataclasses import dataclass
 
 import numpy as np
 
-from chemsmart.io.external import (
-    BOHR_TO_ANG,
-    DEFAULT_FD_STEP,
-    ExternalRequest,
-    build_engine,
-    compute_hessian,
-)
-
-logger = logging.getLogger(__name__)
-
+from chemsmart.io.external import ExternalProtocol, ExternalRequest
+from chemsmart.utils.constants import bohr_to_angstrom
 
 # ── File formats ──────────────────────────────────────────────────────────
 
@@ -68,7 +58,7 @@ def read_external_input(filename):
     for line in lines[1 : natoms + 1]:
         parts = line.replace("D", "E").split()
         numbers.append(int(float(parts[0])))
-        positions.append([float(v) * BOHR_TO_ANG for v in parts[1:4]])
+        positions.append([float(v) * bohr_to_angstrom for v in parts[1:4]])
     return ExternalRequest(
         deriv=deriv,
         charge=charge,
@@ -119,56 +109,62 @@ def write_external_output(
         _write_values(fh, lower)
 
 
-# ── Driver ────────────────────────────────────────────────────────────────
+# ── Protocol ──────────────────────────────────────────────────────────────
 
 
-def run(config, input_file, output_file, engine=None):
-    """Answer one Gaussian External request. Returns a status message."""
-    request = read_external_input(input_file)
-    engine = engine or build_engine(config)
-    energy, gradient = engine.energy_and_gradient(
-        request.numbers,
-        request.positions,
-        request.charge,
-        request.multiplicity,
+@dataclass(frozen=True)
+class GaussianExternalInvocation:
+    """The six file arguments Gaussian passes to the External program."""
+
+    layer: str
+    input_file: str
+    output_file: str
+    message_file: str
+    fchk_file: str
+    matel_file: str
+
+
+class GaussianExternalProtocol(ExternalProtocol):
+    """Gaussian ``External=`` file exchange.
+
+    Gaussian appends ``layer InFile OutFile MsgFile FChkFile MatElFile``
+    to the command, so the last six arguments are used. Status messages
+    and tracebacks go to ``MsgFile``, which Gaussian copies into its log.
+    """
+
+    host = "Gaussian"
+    usage = (
+        "Usage: <script> [extra_args] layer InputFile OutputFile "
+        "MsgFile FChkFile MatElFile"
     )
-    hessian = None
-    message = f"{config['backend']}: E = {energy:.10f} Ha"
-    if request.deriv >= 2:
-        hessian, source = compute_hessian(
-            engine,
-            request,
-            mode=config.get("hessian", "auto"),
-            step=config.get("fd_step", DEFAULT_FD_STEP),
+
+    def parse_arguments(self, argv):
+        if len(argv) < 6:
+            raise ValueError(self.usage)
+        return GaussianExternalInvocation(*argv[-6:])
+
+    def read_request(self, invocation):
+        return read_external_input(invocation.input_file)
+
+    def write_result(self, invocation, request, result):
+        write_external_output(
+            invocation.output_file,
+            result.energy,
+            result.gradient,
+            result.hessian,
         )
-        message += f"; Hessian from {source}"
-    write_external_output(
-        output_file,
-        energy,
-        gradient if request.deriv >= 1 else None,
-        hessian,
-    )
-    return message
+
+    def report_success(self, invocation, message):
+        with open(invocation.message_file, "w") as fh:
+            fh.write(message + "\n")
+
+    def report_failure(self, invocation, error):
+        with open(invocation.message_file, "w") as fh:
+            fh.write("chemsmart External calculation failed:\n")
+            fh.write(error)
+        super().report_failure(invocation, error)
 
 
 def main(config, argv=None):
     """Entry point for generated launcher scripts. Returns an exit code."""
-    argv = sys.argv[1:] if argv is None else argv
-    if len(argv) < 6:
-        sys.stderr.write(
-            "Usage: <script> [extra_args] layer InputFile OutputFile "
-            "MsgFile FChkFile MatElFile\n"
-        )
-        return 1
-    _layer, input_file, output_file, msg_file, _fchk, _matel = argv[-6:]
-    try:
-        message = run(config, input_file, output_file)
-    except Exception:
-        with open(msg_file, "w") as fh:
-            fh.write("chemsmart External calculation failed:\n")
-            fh.write(traceback.format_exc())
-        traceback.print_exc()
-        return 1
-    with open(msg_file, "w") as fh:
-        fh.write(message + "\n")
-    return 0
+    return GaussianExternalProtocol().main(config, argv)

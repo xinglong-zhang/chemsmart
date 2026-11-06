@@ -17,9 +17,9 @@ Hessian option here.
 
 import os
 
-from chemsmart.jobs.external import EXTERNAL_BACKENDS, ExternalCalculator
+from chemsmart.jobs.external import ExternalCalculator
 
-__all__ = ["EXTERNAL_BACKENDS", "ORCAExternalCalculator"]
+__all__ = ["ORCAExternalCalculator"]
 
 
 class ORCAExternalCalculator(ExternalCalculator):

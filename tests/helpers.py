@@ -29,7 +29,11 @@ from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.nciplot.nciplot import nciplot
 from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
-from chemsmart.io.external import BOHR_TO_ANG, ExternalEngine
+from chemsmart.io.external import (
+    ExternalEngine,
+    ExternalProtocol,
+    ExternalRequest,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
@@ -43,6 +47,7 @@ from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.settings.xtb import XTBProjectSettings
+from chemsmart.utils.constants import bohr_to_angstrom
 from chemsmart.utils.mixins import RegistryMixin
 
 _UNSET = object()
@@ -1796,7 +1801,7 @@ class QuadraticEngine(ExternalEngine):
 
     def energy_and_gradient(self, numbers, positions, charge, multiplicity):
         self.gradient_calls += 1
-        x = np.asarray(positions, dtype=float).reshape(-1) / BOHR_TO_ANG
+        x = np.asarray(positions, dtype=float).reshape(-1) / bohr_to_angstrom
         gradient = self.hessian @ x
         return 0.5 * x @ gradient, gradient.reshape(-1, 3)
 
@@ -1816,9 +1821,9 @@ def write_gaussian_external_input(
     with open(path, "w") as fh:
         fh.write(f"{natoms:10d}{deriv:10d}{charge:10d}{multiplicity:10d}\n")
         for z, (x, y, z_coord) in zip(atomic_numbers, positions_ang):
-            xb = x / BOHR_TO_ANG
-            yb = y / BOHR_TO_ANG
-            zb = z_coord / BOHR_TO_ANG
+            xb = x / bohr_to_angstrom
+            yb = y / bohr_to_angstrom
+            zb = z_coord / bohr_to_angstrom
             fh.write(f"{z:10d}{xb:20.12f}{yb:20.12f}{zb:20.12f}{0.0:20.12f}\n")
     return str(path)
 
@@ -1936,22 +1941,6 @@ def write_orca_external_input(
     return str(path)
 
 
-def read_engrad(path):
-    """Return (natoms, energy, gradient or None) from an ORCA ``.engrad``."""
-    values = [
-        line.split()[0]
-        for line in Path(path).read_text().splitlines()
-        if line.strip() and not line.startswith("#")
-    ]
-    natoms, energy = int(values[0]), float(values[1])
-    gradient = [float(v) for v in values[2:]]
-    return (
-        natoms,
-        energy,
-        (np.reshape(gradient, (-1, 3)) if gradient else None),
-    )
-
-
 def run_orca_external_cli(
     xyz_file, job_class_path, *external_args, orca_args=(), **kwargs
 ):
@@ -2032,3 +2021,65 @@ def write_orca_input_text(writer):
     buffer = StringIO()
     writer._write_all(buffer)
     return buffer.getvalue()
+
+
+class JSONExternalProtocol(ExternalProtocol):
+    """Minimal host protocol for testing :class:`ExternalProtocol`.
+
+    The "host" writes ``request.json`` (symbols, Angstrom positions,
+    charge, multiplicity, deriv) and reads ``result.json`` back, showing
+    that a new host only implements the three file-exchange methods.
+    """
+
+    host = "JSON"
+    usage = "Usage: <script> request.json result.json"
+
+    def parse_arguments(self, argv):
+        if len(argv) != 2:
+            raise ValueError(self.usage)
+        return tuple(argv)
+
+    def read_request(self, invocation):
+        data = json.loads(Path(invocation[0]).read_text())
+        return ExternalRequest(
+            deriv=data["deriv"],
+            charge=data["charge"],
+            multiplicity=data["multiplicity"],
+            numbers=np.array(data["numbers"]),
+            positions=np.array(data["positions"], dtype=float),
+        )
+
+    def write_result(self, invocation, request, result):
+        Path(invocation[1]).write_text(
+            json.dumps(
+                {
+                    "energy": result.energy,
+                    "gradient": (
+                        None
+                        if result.gradient is None
+                        else np.asarray(result.gradient).tolist()
+                    ),
+                    "hessian": (
+                        None
+                        if result.hessian is None
+                        else np.asarray(result.hessian).tolist()
+                    ),
+                }
+            )
+        )
+
+
+def write_json_external_request(path, numbers, positions, deriv=1):
+    """Write a :class:`JSONExternalProtocol` request; return its path."""
+    Path(path).write_text(
+        json.dumps(
+            {
+                "deriv": deriv,
+                "charge": 0,
+                "multiplicity": 1,
+                "numbers": list(numbers),
+                "positions": [list(map(float, p)) for p in positions],
+            }
+        )
+    )
+    return str(path)

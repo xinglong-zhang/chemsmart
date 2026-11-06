@@ -12,7 +12,7 @@ import logging
 import click
 import yaml
 
-from chemsmart.jobs.external import EXTERNAL_BACKENDS
+from chemsmart.io.external import available_backends, get_backend
 from chemsmart.utils.io import clean_label
 
 logger = logging.getLogger(__name__)
@@ -32,13 +32,29 @@ def parse_backend_options(options):
     return parsed
 
 
+class ExternalBackendType(click.ParamType):
+    """Backend name checked against the registry when parsed, so backends
+    registered by plugins are accepted without changing the CLI."""
+
+    name = "backend"
+
+    def convert(self, value, param, ctx):
+        try:
+            return get_backend(value).name
+        except ValueError as exc:
+            self.fail(str(exc), param, ctx)
+
+    def get_metavar(self, param, *args, **kwargs):
+        return f"[{'|'.join(available_backends())}]"
+
+
 def click_external_backend_options(f):
     """Backend options common to every external level of theory."""
 
     @click.option(
         "-b",
         "--backend",
-        type=click.Choice(EXTERNAL_BACKENDS, case_sensitive=False),
+        type=ExternalBackendType(),
         required=True,
         help="Level of theory evaluated outside the host program.",
     )

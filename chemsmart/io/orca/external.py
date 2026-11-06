@@ -43,18 +43,13 @@ The launcher configuration is baked into the generated script (see
 ``Ext_Params`` is not used.
 """
 
-import logging
 import os
-import sys
-import traceback
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 
-from chemsmart.io.external import ExternalRequest, build_engine
-
-logger = logging.getLogger(__name__)
-
+from chemsmart.io.external import ExternalProtocol, ExternalRequest
 
 # ── File formats ──────────────────────────────────────────────────────────
 
@@ -68,7 +63,7 @@ class ORCAExternalInput:
     multiplicity: int
     ncores: int
     gradient: bool
-    pointcharge_file: str = None
+    pointcharge_file: Optional[str] = None
 
     @property
     def basename(self):
@@ -163,59 +158,60 @@ def write_engrad(filename, natoms, energy, gradient=None):
             fh.write(f"{value:22.12f}\n")
 
 
-# ── Driver ────────────────────────────────────────────────────────────────
+# ── Protocol ──────────────────────────────────────────────────────────────
 
 
-def run(config, input_file, engine=None):
-    """Answer one ORCA ExtOpt request. Returns a status message."""
-    request_input = read_orca_external_input(input_file)
-    if request_input.pointcharge_file and os.path.getsize(
-        request_input.pointcharge_file
-    ):
-        raise NotImplementedError(
-            "Point charges (ORCA QM/MM embedding) are not supported by the "
-            "chemsmart external backends."
+@dataclass(frozen=True)
+class ORCAExternalInvocation:
+    """ORCA's ``ProgExt`` arguments: the input file, then ``Ext_Params``."""
+
+    input_file: str
+    ext_params: tuple = ()
+
+
+class ORCAExternalProtocol(ExternalProtocol):
+    """ORCA ``ExtOpt`` file exchange.
+
+    Errors go to stderr, which the ORCA job runner keeps in the ``.err``
+    file; the non-zero exit code makes ORCA stop.
+    """
+
+    host = "ORCA"
+    usage = "Usage: <script> <base>.extinp.tmp [Ext_Params]"
+
+    def parse_arguments(self, argv):
+        if not argv:
+            raise ValueError(self.usage)
+        return ORCAExternalInvocation(argv[0], tuple(argv[1:]))
+
+    def read_request(self, invocation):
+        request_input = read_orca_external_input(invocation.input_file)
+        if request_input.pointcharge_file and os.path.getsize(
+            request_input.pointcharge_file
+        ):
+            raise NotImplementedError(
+                "Point charges (ORCA QM/MM embedding) are not supported by "
+                "the chemsmart external backends."
+            )
+        numbers, positions = read_xyz_geometry(request_input.xyz_file)
+        return ExternalRequest(
+            deriv=int(request_input.gradient),
+            charge=request_input.charge,
+            multiplicity=request_input.multiplicity,
+            numbers=numbers,
+            positions=positions,
         )
-    numbers, positions = read_xyz_geometry(request_input.xyz_file)
-    request = ExternalRequest(
-        deriv=int(request_input.gradient),
-        charge=request_input.charge,
-        multiplicity=request_input.multiplicity,
-        numbers=numbers,
-        positions=positions,
-    )
-    engine = engine or build_engine(config)
-    energy, gradient = engine.energy_and_gradient(
-        request.numbers,
-        request.positions,
-        request.charge,
-        request.multiplicity,
-    )
-    write_engrad(
-        request_input.engrad_file,
-        request.natoms,
-        energy,
-        gradient if request_input.gradient else None,
-    )
-    return f"{config['backend']}: E = {energy:.10f} Eh"
+
+    def write_result(self, invocation, request, result):
+        request_input = read_orca_external_input(invocation.input_file)
+        write_engrad(
+            request_input.engrad_file,
+            request.natoms,
+            result.energy,
+            result.gradient,
+        )
 
 
 def main(config, argv=None):
-    """Entry point for generated launcher scripts. Returns an exit code.
-
-    ORCA passes the ``.extinp.tmp`` file first, followed by any
-    ``Ext_Params``. Errors go to stderr, which ORCA's job runner keeps in
-    the ``.err`` file, and a non-zero exit code makes ORCA stop.
-    """
-    argv = sys.argv[1:] if argv is None else argv
-    if not argv:
-        sys.stderr.write("Usage: <script> <base>.extinp.tmp [Ext_Params]\n")
-        return 1
-    try:
-        message = run(config, argv[0])
-    except Exception:
-        sys.stderr.write("chemsmart external calculation failed:\n")
-        traceback.print_exc()
-        return 1
-    sys.stdout.write(message + "\n")
-    return 0
+    """Entry point for generated launcher scripts. Returns an exit code."""
+    return ORCAExternalProtocol().main(config, argv)

@@ -21,7 +21,6 @@ import pytest
 from chemsmart.io.gaussian.external import (
     main,
     read_external_input,
-    run,
     write_external_output,
 )
 from chemsmart.io.molecules.structure import Molecule
@@ -91,22 +90,24 @@ class TestExternalFileFormats:
 
 
 class TestGaussianExternalDriver:
-    def test_run_energy_only_for_deriv_0(self, tmp_path, au2_external_input):
-        out = tmp_path / "out"
-        message = run(
-            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
-            au2_external_input(deriv=0),
-            out,
-        )
-        assert "Hessian" not in message
-        assert len(out.read_text().splitlines()) == 1
-
-    def test_main_writes_status_to_message_file(
-        self, tmp_path, au2_external_input
+    def test_energy_only_for_deriv_0(
+        self, emt_external_calculator, tmp_path, au2_external_input
     ):
         out, msg = tmp_path / "out", tmp_path / "msg"
         code = main(
-            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
+            emt_external_calculator.config,
+            ["R", au2_external_input(deriv=0), str(out), str(msg), "f", "m"],
+        )
+        assert code == 0
+        assert "Hessian" not in msg.read_text()
+        assert len(out.read_text().splitlines()) == 1
+
+    def test_main_writes_status_to_message_file(
+        self, emt_external_calculator, tmp_path, au2_external_input
+    ):
+        out, msg = tmp_path / "out", tmp_path / "msg"
+        code = main(
+            emt_external_calculator.config,
             [
                 "--extra",
                 "R",
@@ -121,29 +122,32 @@ class TestGaussianExternalDriver:
         assert msg.read_text().startswith("ase: E = ")
         assert len(out.read_text().splitlines()) == 1 + 2
 
-    def test_run_writes_hessian_block_for_deriv_2(
-        self, tmp_path, au2_external_input
+    def test_hessian_block_for_deriv_2(
+        self, emt_external_calculator, tmp_path, au2_external_input
     ):
-        out = tmp_path / "out"
-        message = run(
-            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
-            au2_external_input(deriv=2),
-            out,
+        out, msg = tmp_path / "out", tmp_path / "msg"
+        code = main(
+            emt_external_calculator.config,
+            ["R", au2_external_input(deriv=2), str(out), str(msg), "f", "m"],
         )
-        assert "Hessian from fd" in message
+        assert code == 0
+        assert "Hessian from fd" in msg.read_text()
         assert len(out.read_text().splitlines()) == 1 + 2 + 2 + 6 + 7
 
-    def test_main_reports_failure_in_message_file(self, tmp_path):
+    def test_main_reports_failure_in_message_file(
+        self, emt_external_calculator, tmp_path
+    ):
         msg = tmp_path / "msg"
         code = main(
-            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
+            emt_external_calculator.config,
             ["R", str(tmp_path / "missing"), "out", str(msg), "f", "m"],
         )
         assert code == 1
         assert "failed" in msg.read_text()
 
-    def test_main_requires_six_gaussian_arguments(self):
+    def test_main_requires_six_gaussian_arguments(self, capsys):
         assert main({"backend": "xtb"}, ["only", "three", "args"]) == 1
+        assert "Usage" in capsys.readouterr().err
 
 
 # ── Backend configuration ─────────────────────────────────────────────────
@@ -440,6 +444,23 @@ class TestExternalCLI:
         )
         assert result.exit_code == 0, result.output
         assert job_cls.call_args.kwargs["label"] == "crest_best_sp_xtb"
+
+    def test_registered_backend_accepted_without_cli_changes(
+        self,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        harmonic_backend,
+    ):
+        result, settings = run_gaussian_external_cli(
+            single_molecule_xyz_file,
+            gaussian_jobrunner_no_scratch,
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            "-b",
+            harmonic_backend,
+            "opt",
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.external.backend == "harmonic"
 
     def test_malformed_option_is_rejected(
         self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch

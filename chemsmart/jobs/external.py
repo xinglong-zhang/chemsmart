@@ -18,9 +18,9 @@ import os
 import stat
 import sys
 
-logger = logging.getLogger(__name__)
+from chemsmart.io.external import validate_backend
 
-EXTERNAL_BACKENDS = ("ase", "mace-off", "mace-mp", "aimnet2", "uma", "xtb")
+logger = logging.getLogger(__name__)
 
 _LAUNCHER_TEMPLATE = '''\
 #!{python}
@@ -44,7 +44,8 @@ class ExternalCalculator:
     External level of theory for a host quantum-chemistry program.
 
     Args:
-        backend (str): One of :data:`EXTERNAL_BACKENDS`.
+        backend (str): A registered backend
+            (:func:`chemsmart.io.external.available_backends`). Built in:
             ``ase`` takes any ASE calculator via ``calculator``;
             ``mace-off``, ``mace-mp``, ``aimnet2`` and ``uma`` are
             machine-learning-potential presets; ``xtb`` runs the xtb binary.
@@ -73,18 +74,9 @@ class ExternalCalculator:
         options=None,
         python_executable=None,
     ):
-        backend = str(backend).lower()
-        if backend not in EXTERNAL_BACKENDS:
-            raise ValueError(
-                f"Unknown External backend {backend!r}; choose from "
-                f"{', '.join(EXTERNAL_BACKENDS)}."
-            )
-        if backend == "ase" and not calculator:
-            raise ValueError(
-                "backend 'ase' needs a calculator dotted path, e.g. "
-                "'ase.calculators.emt.EMT'."
-            )
-        self.backend = backend
+        # raises ValueError for unknown backends and bad options now,
+        # not later inside the host program's run
+        self.backend = validate_backend(backend, options, calculator).name
         self.calculator = calculator
         self.options = dict(options or {})
         self.python_executable = python_executable

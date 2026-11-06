@@ -27,9 +27,9 @@ from chemsmart.io.orca.external import (
     main,
     read_orca_external_input,
     read_xyz_geometry,
-    run,
     write_engrad,
 )
+from chemsmart.io.orca.output import ORCAEngradFile
 from chemsmart.jobs.gaussian.external import GaussianExternalCalculator
 from chemsmart.jobs.orca.external import ORCAExternalCalculator
 from chemsmart.jobs.orca.opt import ORCAOptJob
@@ -41,14 +41,11 @@ from chemsmart.jobs.orca.settings import (
 )
 from tests.helpers import (
     make_orca_writer,
-    read_engrad,
     run_h2_orca_external,
     run_orca_external_cli,
     write_orca_external_input,
     write_orca_input_text,
 )
-
-EMT_CONFIG = {"backend": "ase", "calculator": "ase.calculators.emt.EMT"}
 
 # ── File formats ──────────────────────────────────────────────────────────
 
@@ -114,14 +111,17 @@ class TestORCAExternalFileFormats:
         assert [float(v) for v in lines[11:]] == pytest.approx(
             list(gradient.ravel())
         )
-        natoms, energy, parsed = read_engrad(path)
-        assert (natoms, energy) == (2, -1.25)
-        np.testing.assert_allclose(parsed, gradient)
+        # chemsmart's own ORCA .engrad parser reads it back
+        parsed = ORCAEngradFile(str(path))
+        assert (parsed.num_atoms, parsed.energy) == (2, -1.25)
+        np.testing.assert_allclose(parsed.gradient, gradient)
 
     def test_energy_only_engrad_keeps_atom_count(self, tmp_path):
         path = tmp_path / "job_EXT.engrad"
         write_engrad(path, 3, -2.0)
-        assert read_engrad(path) == (3, -2.0, None)
+        parsed = ORCAEngradFile(str(path))
+        assert (parsed.num_atoms, parsed.energy) == (3, -2.0)
+        assert parsed.gradient is None
 
     def test_engrad_gradient_size_checked(self, tmp_path):
         with pytest.raises(ValueError, match="expected 9"):
@@ -132,58 +132,78 @@ class TestORCAExternalFileFormats:
 
 
 class TestORCAExternalDriver:
-    def test_run_writes_energy_and_gradient_in_atomic_units(
-        self, au2_orca_external_input
+    def test_writes_energy_and_gradient_in_atomic_units(
+        self, emt_orca_external_calculator, au2_orca_external_input, capsys
     ):
         path = au2_orca_external_input()
-        message = run(EMT_CONFIG, path)
+        assert main(emt_orca_external_calculator.config, [path]) == 0
 
         reference = Atoms("Au2", positions=[[0, 0, 0], [0, 0, 2.88]])
         reference.calc = EMT()
-        natoms, energy, gradient = read_engrad(
-            path.replace(".extinp.tmp", ".engrad")
-        )
-        assert natoms == 2
-        # chemsmart uses CODATA 2018 constants, ase.units CODATA 2014
-        assert energy == pytest.approx(
-            reference.get_potential_energy() / Hartree, rel=1e-7
+        engrad = ORCAEngradFile(path.replace(".extinp.tmp", ".engrad"))
+        assert engrad.num_atoms == 2
+        assert engrad.energy == pytest.approx(
+            reference.get_potential_energy() / Hartree, abs=1e-11
         )
         np.testing.assert_allclose(
-            gradient, -reference.get_forces() * Bohr / Hartree, rtol=1e-7
+            engrad.gradient,
+            -reference.get_forces() * Bohr / Hartree,
+            atol=1e-11,
         )
-        assert message.startswith("ase: E = ")
+        assert capsys.readouterr().out.startswith("ase: E = ")
 
-    def test_energy_only_request(self, au2_orca_external_input):
+    def test_energy_only_request(
+        self, emt_orca_external_calculator, au2_orca_external_input
+    ):
         path = au2_orca_external_input(gradient=False)
-        run(EMT_CONFIG, path)
-        _, _, gradient = read_engrad(path.replace(".extinp.tmp", ".engrad"))
-        assert gradient is None
+        assert main(emt_orca_external_calculator.config, [path]) == 0
+        engrad = ORCAEngradFile(path.replace(".extinp.tmp", ".engrad"))
+        assert engrad.gradient is None
 
-    def test_point_charges_rejected(self, tmp_path, au2_orca_external_input):
+    def test_point_charges_rejected(
+        self,
+        emt_orca_external_calculator,
+        tmp_path,
+        au2_orca_external_input,
+        capsys,
+    ):
         (tmp_path / "job_EXT.pc").write_text("1\n0.5 0 0 5\n")
         path = au2_orca_external_input(pointcharges="job_EXT.pc")
-        with pytest.raises(NotImplementedError, match="Point charges"):
-            run(EMT_CONFIG, path)
+        assert main(emt_orca_external_calculator.config, [path]) == 1
+        assert "Point charges" in capsys.readouterr().err
 
     def test_empty_point_charge_file_is_ignored(
-        self, tmp_path, au2_orca_external_input
+        self, emt_orca_external_calculator, tmp_path, au2_orca_external_input
     ):
         (tmp_path / "job_EXT.pc").write_text("")
-        run(EMT_CONFIG, au2_orca_external_input(pointcharges="job_EXT.pc"))
+        path = au2_orca_external_input(pointcharges="job_EXT.pc")
+        assert main(emt_orca_external_calculator.config, [path]) == 0
         assert (tmp_path / "job_EXT.engrad").is_file()
 
-    def test_main_ignores_ext_params(self, au2_orca_external_input, capsys):
-        code = main(EMT_CONFIG, [au2_orca_external_input(), "--ignored"])
+    def test_main_ignores_ext_params(
+        self, emt_orca_external_calculator, au2_orca_external_input, capsys
+    ):
+        code = main(
+            emt_orca_external_calculator.config,
+            [au2_orca_external_input(), "--ignored"],
+        )
         assert code == 0
         assert "ase: E = " in capsys.readouterr().out
 
-    def test_main_reports_failure_on_stderr(self, tmp_path, capsys):
-        code = main(EMT_CONFIG, [str(tmp_path / "missing.extinp.tmp")])
+    def test_main_reports_failure_on_stderr(
+        self, emt_orca_external_calculator, tmp_path, capsys
+    ):
+        code = main(
+            emt_orca_external_calculator.config,
+            [str(tmp_path / "missing.extinp.tmp")],
+        )
         assert code == 1
         assert "failed" in capsys.readouterr().err
 
-    def test_main_requires_input_file(self, capsys):
-        assert main(EMT_CONFIG, []) == 1
+    def test_main_requires_input_file(
+        self, emt_orca_external_calculator, capsys
+    ):
+        assert main(emt_orca_external_calculator.config, []) == 1
         assert "Usage" in capsys.readouterr().err
 
 
@@ -236,10 +256,10 @@ class TestORCAExternalCalculator:
             cwd=tmp_path,
         )
         assert result.returncode == 0, result.stderr
-        natoms, energy, gradient = read_engrad(tmp_path / "job_EXT.engrad")
-        assert natoms == 2
-        assert abs(energy) < 10.0  # Hartree, not eV
-        assert gradient.shape == (2, 3)
+        engrad = ORCAEngradFile(str(tmp_path / "job_EXT.engrad"))
+        assert engrad.num_atoms == 2
+        assert abs(engrad.energy) < 10.0  # Hartree, not eV
+        assert engrad.gradient.shape == (2, 3)
 
 
 # ── Settings ──────────────────────────────────────────────────────────────
@@ -495,6 +515,61 @@ class TestORCAExternalCLI:
         assert result.exit_code == 0, result.output
         assert job_cls.call_args.kwargs["label"] == "crest_best_sp_xtb"
         assert settings.route_string == "! ExtOpt"
+
+    def test_registered_backend_accepted_without_cli_changes(
+        self, single_molecule_xyz_file, harmonic_backend
+    ):
+        result, settings = run_orca_external_cli(
+            single_molecule_xyz_file,
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            "-b",
+            harmonic_backend,
+            "opt",
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.external.backend == "harmonic"
+
+    def test_bad_backend_options_fail_before_the_job(
+        self, single_molecule_xyz_file
+    ):
+        result, settings = run_orca_external_cli(
+            single_molecule_xyz_file,
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            "-b",
+            "xtb",
+            "-o",
+            "method=pm7",
+            "opt",
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert "Unknown xtb method" in result.output
+        assert settings is None
+
+    def test_unknown_backend_lists_registered_ones(
+        self, single_molecule_xyz_file
+    ):
+        result, _ = run_orca_external_cli(
+            single_molecule_xyz_file,
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            "-b",
+            "orca",
+            "opt",
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert "choose from" in result.output
+        assert "mace-off" in result.output
+
+    def test_help_shows_registered_backends(self, single_molecule_xyz_file):
+        result, _ = run_orca_external_cli(
+            single_molecule_xyz_file,
+            "chemsmart.jobs.orca.opt.ORCAOptJob",
+            "--help",
+            catch_exceptions=True,
+        )
+        assert result.exit_code == 0, result.output
+        assert "[ase|mace-off|mace-mp|aimnet2|uma|xtb]" in result.output
 
     def test_hessian_option_not_offered(self, single_molecule_xyz_file):
         result, _ = run_orca_external_cli(
