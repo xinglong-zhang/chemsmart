@@ -144,3 +144,160 @@ class OutputFile:
 ```
 
 Also do not report a stale-value bug when no code path changes the input after the value is read. Raise that as an OOP/API recommendation if the class permits such a change.
+
+## Duplicating an existing method
+
+Source: [User feedback: external level of theory, PR #732](review-evidence.md#user-feedback-external-level-of-theory-pr-732).
+
+### Situation
+
+A runner gains a helper to copy results back from scratch, including folders:
+
+```python
+class JobRunner:
+    @staticmethod
+    def _copy_to_job_folder(path, job):
+        if os.path.isdir(path):
+            shutil.copytree(path, os.path.join(job.folder, os.path.basename(path)), dirs_exist_ok=True)
+        else:
+            shutil.copy(path, job.folder)
+```
+
+### Expected behaviour
+
+Report two OOP/API findings. Ownership: the helper only uses `job.folder`, so it belongs to the job, not the runner that calls it. Reuse: `Job.backup_file(path, folder=job.folder)` already copies files and folders, and its rename-aside behaviour for an existing folder keeps two runs apart, where `dirs_exist_ok=True` would merge them. Ask the runners to call `job.backup_file(...)` and not to add `Job.copy_to_job_folder()` or `Job.backup_folder()`. Read the existing method before judging it: it is public, and its semantics are the better fit.
+
+### Counterexample: this should not be flagged
+
+A new method whose behaviour differs from the existing one in a way callers need, with the difference stated:
+
+```python
+def backup_file(self, file, folder=None, remove=False): ...    # copies or moves one path
+def backup(self, **kwargs): ...                                 # backs up this job's known outputs into bk.<timestamp>/
+```
+
+Different responsibilities, not duplicates. Here, extend `backup()`'s host implementations to include new outputs instead of adding another method.
+
+## Nested subcommands of reused Click commands
+
+Source: [User feedback: external level of theory, PR #732](review-evidence.md#user-feedback-external-level-of-theory-pr-732).
+
+### Situation
+
+A new group reuses existing commands to apply a new setting:
+
+```python
+@gaussian.group("external", cls=MyGroup)
+def external(ctx, backend, ...):
+    ctx.obj["job_settings"].external = spec
+
+for command in (opt, ts, modred, scan, irc, sp):
+    external.add_command(command)
+```
+
+`opt` and `ts` already have a `qmmm` subcommand, which builds fresh settings from a fixed list of inherited fields that omits `external`.
+
+### Expected behaviour
+
+Report a correctness finding: `external -b xtb opt qmmm ...` is listed by `--help`, exits 0, and runs ONIOM at the project's level of theory under the label `*_opt_xtb_qmmm`. Ask for the unsupported combination to raise `click.UsageError`, with a `WIP` note if support is planned, and a CLI test for each host program.
+
+### Counterexample: this should not be flagged
+
+The reused commands are leaf commands, or every nested subcommand inherits the new setting through the same merge path, verified by a test.
+
+## Parser patterns from guessed output
+
+Source: [User feedback: external level of theory, PR #732](review-evidence.md#user-feedback-external-level-of-theory-pr-732).
+
+### Situation
+
+A parser gains a pattern for a line no committed output contains, tested against a fixture made by rewriting another program's log:
+
+```python
+external_recovered_energy_pattern = r"Recovered energy=\s*([-+]?\d*\.\d+)"
+```
+
+### Expected behaviour
+
+Ask for a real output (or a short real run) before merging the pattern, and check how many times the line appears per step. In this case the program prints two energy lines per evaluation, and matching both would double the energies and shift their pairing with structures without any error. Keep it as a recommendation unless a concrete mismatch is shown.
+
+### Counterexample: this should not be flagged
+
+The pattern is tested against a committed real output that contains the line, and the test asserts that energy i pairs with structure i.
+
+## Program name in prose
+
+Source: [User feedback: external level of theory, PR #732](review-evidence.md#user-feedback-external-level-of-theory-pr-732) and [PR #612](https://github.com/xinglong-zhang/chemsmart/pull/612#discussion_r3563653821).
+
+### Situation
+
+```python
+"""Job runners set it to ``<label>_external.log``. Chemsmart's launcher ..."""
+sys.stderr.write("chemsmart external calculation failed:\n")
+f"# chemsmart external log: host {host}"
+```
+
+### Expected behaviour
+
+Report a consistency finding listing every occurrence: use `CHEMSMART` in docstrings, comments, messages and file headers. Find them by searching the added lines, not by reading.
+
+### Counterexample: this should not be flagged
+
+Identifiers stay lowercase:
+
+```python
+from chemsmart.io.external import build_engine
+EXTERNAL_LOG_ENV = "CHEMSMART_EXTERNAL_LOG"
+script = "chemsmart_external_xtb_1a2b3c4d.py"   # chemsmart run gaussian ... external ...
+```
+
+## Constants and regex defined locally
+
+Source: [User feedback: external level of theory, PR #732](review-evidence.md#user-feedback-external-level-of-theory-pr-732) and [PR #310](https://github.com/xinglong-zhang/chemsmart/pull/310).
+
+### Situation
+
+```python
+# chemsmart/io/external.py
+BOHR_TO_ANG = 0.529177210903   # CODATA 2018
+EV_PER_HA = 27.211386245988
+
+# chemsmart/jobs/orca/settings.py
+tokens = re.findall(r"[^\s!]+", route_string)
+```
+
+### Expected behaviour
+
+Ask for the conversion factors to move to `chemsmart/utils/constants.py`, derived from `ase.units` like the rest of the repository, so values agree across modules, and for the pattern to move to `chemsmart/utils/repattern.py` with a descriptive name and comment.
+
+### Counterexample: this should not be flagged
+
+Feature configuration is not a physical constant and can stay with its feature:
+
+```python
+HESSIAN_MODES = ("auto", "analytic", "fd")
+DEFAULT_FD_STEP = 0.005  # Angstrom
+```
+
+## Removing a correct test to pass new code
+
+Source: [Extended historical sample](review-evidence.md#extended-historical-sample).
+
+### Situation
+
+A refactor of output parsing changes an existing expected value and deletes a test data file:
+
+```diff
+-    assert len(g16_output.all_structures) == 6
++    assert len(g16_output.all_structures) == 5
+-tests/data/GaussianTests/outputs/CH3CH3.log
+```
+
+### Expected behaviour
+
+Ask why each expected value changed and why the file was removed, and check the original value against the output file. If the original was correct, report a correctness finding: the change hides a regression.
+
+### Counterexample: this should not be flagged
+
+The PR shows the old expected value was wrong, with evidence from the file or independent software, and updates the assertion with that explanation.
+
