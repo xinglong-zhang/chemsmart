@@ -1,220 +1,576 @@
 """
-Integration tests for Gaussian External ML potential calculator support.
+Tests for running Gaussian optimisers on an External level of theory.
 
-Covers the full round-trip:
-  GaussianExternalJobSettings  → correct route string
-  ASEExternalCalculatorScript  → script written, executable, correct content
-  GaussianExternalJob          → script written into job directory
-  Generated script             → reads Gaussian External input, runs ASE
-                                 calculator, writes correctly formatted output
+Covers:
+  chemsmart.io.gaussian.external    file I/O, engines, Hessians, driver
+  GaussianExternalCalculator        validation, route value, launcher
+  GaussianJobSettings.external      route strings for opt/TS/IRC/sp
+  GaussianJobRunner                 writes the launcher next to the .com
+  ``gaussian ... external`` CLI     reuses opt/ts/... with the backend
+  Real g16 runs                     skipped unless Gaussian is installed
 """
 
 import os
 import subprocess
 import sys
-import textwrap
+from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
+from ase import Atoms
+from ase.calculators.emt import EMT
+from ase.units import Bohr, Hartree
 
-from chemsmart.io.gaussian.external_script import ASEExternalCalculatorScript
+from chemsmart.io.gaussian.external import (
+    ASEEngine,
+    XTBEngine,
+    build_engine,
+    compute_hessian,
+    finite_difference_hessian,
+    main,
+    parse_xtb_gradient_file,
+    parse_xtb_hessian_file,
+    read_external_input,
+    run,
+    write_external_output,
+)
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.jobs.gaussian.external import GaussianExternalJob
-from chemsmart.jobs.gaussian.settings import GaussianExternalJobSettings
-from chemsmart.settings.gaussian import GaussianProjectSettings
-from tests.helpers import NoDictCalculator, write_gaussian_external_input
+from chemsmart.jobs.gaussian.external import GaussianExternalCalculator
+from chemsmart.jobs.gaussian.opt import GaussianOptJob
+from chemsmart.jobs.gaussian.settings import (
+    GaussianIRCJobSettings,
+    GaussianJobSettings,
+)
+from tests.helpers import (
+    QuadraticEngine,
+    run_gaussian_external_cli,
+    run_h2_g16_external,
+)
 
-# ── Tests ─────────────────────────────────────────────────────────────────
+# ── File formats ──────────────────────────────────────────────────────────
 
 
-class TestGaussianExternalIntegration:
-    """End-to-end tests for the Gaussian External calculator interface."""
-
-    # ── 1. Settings and route string ──────────────────────────────────────
-
-    def test_route_string_opt(self):
-        """opt job produces '# opt External=<script>' route."""
-        s = GaussianExternalJobSettings(
-            external_script="run_mace.py",
-            jobtype="opt",
-            charge=0,
-            multiplicity=1,
+class TestExternalFileFormats:
+    def test_read_input_converts_bohr_to_angstrom(self, au2_external_input):
+        request = read_external_input(
+            au2_external_input(deriv=2, charge=-1, multiplicity=2)
         )
-        route = s.route_string
-        assert "opt" in route
-        assert "External=run_mace.py" in route
-        assert "functional" not in route.lower()
-        assert "basis" not in route.lower()
+        assert request.natoms == 2
+        assert request.deriv == 2
+        assert request.charge == -1
+        assert request.multiplicity == 2
+        assert list(request.numbers) == [79, 79]
+        np.testing.assert_allclose(request.positions[1], [0, 0, 2.88])
 
-    def test_route_string_sp(self):
-        """sp job produces energy-only External route (no opt keyword)."""
-        s = GaussianExternalJobSettings(
-            external_script="run_mace.py",
-            jobtype="sp",
-            charge=0,
-            multiplicity=1,
+    def test_energy_only_output(self, tmp_path):
+        out = tmp_path / "out"
+        write_external_output(out, -1.5)
+        lines = out.read_text().splitlines()
+        assert len(lines) == 1
+        assert float(lines[0].split()[0]) == pytest.approx(-1.5)
+
+    def test_second_derivative_block_layout(self, tmp_path, harmonic_hessian):
+        out = tmp_path / "out"
+        gradient = np.arange(6.0).reshape(2, 3)
+        write_external_output(out, -1.0, gradient, harmonic_hessian)
+        lines = out.read_text().splitlines()
+
+        n = 6
+        n_lower = n * (n + 1) // 2
+        # energy, 2 gradient rows, 2 polar rows, 3N dipole-derivative
+        # rows, then the lower-triangle force constants 3 per line.
+        assert len(lines) == 1 + 2 + 2 + n + -(-n_lower // 3)
+        fc_lines = lines[1 + 2 + 2 + n :]
+        values = [float(v) for line in fc_lines for v in line.split()]
+        np.testing.assert_allclose(
+            values, harmonic_hessian[np.tril_indices(n)]
         )
-        route = s.route_string
-        assert "opt" not in route
-        assert "External=run_mace.py" in route
+        # off-diagonal coupling lands at lower-triangle position (3, 0)
+        assert values[6] == pytest.approx(-0.1)
 
-    def test_route_string_extra_args_quoted(self):
-        """Extra args produce a quoted External= value in Gaussian format."""
-        s = GaussianExternalJobSettings(
-            external_script="RunTink",
-            extra_args="Amber",
-            jobtype="opt",
-            charge=0,
-            multiplicity=1,
+
+# ── Engines ───────────────────────────────────────────────────────────────
+
+
+class TestASEEngine:
+    def test_energy_and_gradient_units_and_sign(self):
+        positions = [[0.0, 0.0, 0.0], [0.0, 0.0, 2.88]]
+        reference = Atoms("Au2", positions=positions)
+        reference.calc = EMT()
+        engine = ASEEngine(lambda charge, multiplicity: EMT())
+
+        energy, gradient = engine.energy_and_gradient(
+            [79, 79], positions, 0, 1
         )
-        # Gaussian convention: External="<script> <extra_args>"
-        assert 'External="RunTink Amber"' in s.route_string
 
-    def test_project_settings_external(self):
-        """GaussianProjectSettings.external_settings() returns correct type."""
-        ps = GaussianProjectSettings()
-        es = ps.external_settings()
-        assert isinstance(es, GaussianExternalJobSettings)
-        assert es.freq is False
-        assert es.forces is False
-
-    # ── 2. Script generation ──────────────────────────────────────────────
-
-    def test_script_written_and_executable(self, tmp_path):
-        """Code-generation path: script file is written and executable."""
-        from ase.calculators.emt import EMT
-
-        script = ASEExternalCalculatorScript(
-            EMT, calc_kwargs={}, script_name="run_emt"
+        assert energy == pytest.approx(
+            reference.get_potential_energy() / Hartree
         )
-        script_path = script.write(str(tmp_path))
+        np.testing.assert_allclose(
+            gradient, -reference.get_forces() * Bohr / Hartree
+        )
 
-        assert os.path.isfile(script_path)
-        assert os.access(script_path, os.X_OK)
-        content = open(script_path).read()
-        assert "#!/usr/bin/env python" in content
-        assert "from ase.calculators.emt import EMT" in content
-        assert "_read_input" in content
-        assert "_write_output" in content
-        assert "GRAD_CONV" in content
+    def test_charge_and_spin_reach_calculator_and_atoms(self):
+        seen = {}
 
-    def test_pickle_fallback_writes_pkl(self, tmp_path):
-        """Pickle path: .pkl file is written when calculator has no todict()."""
-        calc = NoDictCalculator()
-        script = ASEExternalCalculatorScript(calc, script_name="run_pkl")
-        script.write(str(tmp_path))
+        def factory(charge, multiplicity):
+            seen["args"] = (charge, multiplicity)
+            calc = EMT()
+            original = calc.calculate
 
-        assert os.path.isfile(tmp_path / "run_pkl.py")
-        assert os.path.isfile(tmp_path / "run_pkl.pkl")
+            def calculate(atoms=None, *args, **kwargs):
+                seen["info"] = dict(atoms.info)
+                return original(atoms, *args, **kwargs)
 
-    # ── 3. GaussianExternalJob.write_external_script() ───────────────────
+            calc.calculate = calculate
+            return calc
 
-    def test_job_write_external_script(
-        self, tmp_path, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+        ASEEngine(factory).energy_and_gradient(
+            [79, 79], [[0, 0, 0], [0, 0, 2.88]], -1, 2
+        )
+        assert seen["args"] == (-1, 2)
+        assert seen["info"] == {"charge": -1, "spin": 2}
+
+    def test_no_get_hessian_means_no_analytic_hessian(self):
+        engine = ASEEngine(lambda charge, multiplicity: EMT())
+        assert (
+            engine.analytic_hessian([79, 79], [[0, 0, 0], [0, 0, 2.88]], 0, 1)
+            is None
+        )
+
+
+class TestXTBEngine:
+    def test_command_carries_charge_uhf_method_and_solvent(self):
+        engine = XTBEngine(
+            executable="/opt/xtb/bin/xtb", method="GFN2-xTB", alpb="water"
+        )
+        command = engine._command("--grad", charge=-1, multiplicity=2)
+        assert command == [
+            "/opt/xtb/bin/xtb",
+            "coord.xyz",
+            "--grad",
+            "--chrg",
+            "-1",
+            "--uhf",
+            "1",
+            "--gfn",
+            "2",
+            "--alpb",
+            "water",
+        ]
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [{"method": "pm7"}, {"alpb": "water", "gbsa": "water"}],
+    )
+    def test_invalid_configuration_rejected(self, kwargs):
+        with pytest.raises(ValueError):
+            XTBEngine(**kwargs)
+
+    def test_parse_gradient_file(self, xtb_output_directory):
+        energy, gradient = parse_xtb_gradient_file(xtb_output_directory, 2)
+        assert energy == pytest.approx(-0.9822404321)
+        np.testing.assert_allclose(
+            gradient, [[0, 0, -0.012345678901234], [0, 0, 0.012345678901234]]
+        )
+
+    def test_parse_hessian_file(self, xtb_output_directory):
+        hessian = parse_xtb_hessian_file(xtb_output_directory, 2)
+        assert hessian.shape == (6, 6)
+        assert hessian[1, 0] == pytest.approx(6.0)
+
+    def test_parse_hessian_rejects_wrong_size(self, xtb_output_directory):
+        with pytest.raises(ValueError, match="expected 9"):
+            parse_xtb_hessian_file(xtb_output_directory, 1)
+
+
+# ── Hessians ──────────────────────────────────────────────────────────────
+
+
+class TestHessian:
+    def test_finite_difference_recovers_harmonic_hessian(
+        self, harmonic_hessian, harmonic_external_request
     ):
-        """GaussianExternalJob writes the script into its working directory."""
-        from ase.calculators.emt import EMT
+        engine = QuadraticEngine(harmonic_hessian)
+        hessian = finite_difference_hessian(engine, harmonic_external_request)
+        np.testing.assert_allclose(hessian, harmonic_hessian, atol=1e-8)
+        assert engine.gradient_calls == 2 * 6
 
-        settings = GaussianExternalJobSettings(
-            external_script="run_emt.py",
-            jobtype="opt",
-            charge=0,
-            multiplicity=1,
-            title="EMT opt integration test",
+    def test_auto_uses_consistent_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        engine = QuadraticEngine(
+            harmonic_hessian, analytic=harmonic_hessian.copy()
         )
-        mol = Molecule.from_filepath(single_molecule_xyz_file)
-        script_writer = ASEExternalCalculatorScript(
-            EMT, calc_kwargs={}, script_name="run_emt"
+        hessian, source = compute_hessian(engine, harmonic_external_request)
+        assert source == "analytic"
+        np.testing.assert_allclose(hessian, harmonic_hessian)
+        assert engine.gradient_calls == 2  # one spot-check column
+
+    def test_auto_rejects_wrong_sign_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        engine = QuadraticEngine(harmonic_hessian, analytic=-harmonic_hessian)
+        hessian, source = compute_hessian(engine, harmonic_external_request)
+        assert source == "fd"
+        np.testing.assert_allclose(hessian, harmonic_hessian, atol=1e-8)
+
+    def test_auto_falls_back_without_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        _, source = compute_hessian(
+            QuadraticEngine(harmonic_hessian), harmonic_external_request
         )
-        job = GaussianExternalJob(
-            molecule=mol,
-            settings=settings,
-            label="test_mol",
-            jobrunner=gaussian_jobrunner_no_scratch,
-            external_script=script_writer,
+        assert source == "fd"
+
+    def test_fd_mode_ignores_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        engine = QuadraticEngine(harmonic_hessian, analytic=-harmonic_hessian)
+        _, source = compute_hessian(
+            engine, harmonic_external_request, mode="fd"
         )
-        written = job.write_external_script(directory=str(tmp_path))
+        assert source == "fd"
 
-        assert written is not None
-        assert os.path.isfile(written)
-        assert os.access(written, os.X_OK)
+    def test_analytic_mode_requires_analytic_hessian(
+        self, harmonic_hessian, harmonic_external_request
+    ):
+        with pytest.raises(RuntimeError, match="analytic"):
+            compute_hessian(
+                QuadraticEngine(harmonic_hessian),
+                harmonic_external_request,
+                "analytic",
+            )
 
-    # ── 4. Full round-trip: script execution ─────────────────────────────
 
-    def test_script_execution_energy_and_gradient(self, tmp_path):
-        """
-        End-to-end: generated EMT script reads Gaussian External input
-        and writes correctly formatted energy + gradient output.
+# ── Backends and driver ───────────────────────────────────────────────────
 
-        Uses ASE's EMT (Effective Medium Theory) calculator — a bundled
-        force field that requires no external model files.  Au2 is a
-        valid EMT system.
-        """
-        from ase.calculators.emt import EMT
 
-        # Write the script
-        script = ASEExternalCalculatorScript(
-            EMT, calc_kwargs={}, script_name="run_emt"
+class TestBuildEngineAndDriver:
+    def test_ase_backend_imports_dotted_path(self):
+        engine = build_engine(
+            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"}
         )
-        script_path = script.write(str(tmp_path))
+        assert isinstance(engine, ASEEngine)
 
-        # Prepare file paths Gaussian would supply
-        input_file = str(tmp_path / "ext.dat")
-        output_file = str(tmp_path / "ext.out")
-        msg_file = str(tmp_path / "ext.msg")
-        fchk_file = str(tmp_path / "ext.fchk")
-        matel_file = str(tmp_path / "ext.matel")
+    def test_xtb_backend_passes_options(self):
+        engine = build_engine(
+            {"backend": "xtb", "options": {"method": "gfn1", "gbsa": "thf"}}
+        )
+        assert isinstance(engine, XTBEngine)
+        assert (engine.method, engine.gbsa) == ("gfn1", "thf")
 
-        # Au2 molecule: two gold atoms separated by 2.88 Å
-        atomic_numbers = [79, 79]
-        positions_ang = [[0.0, 0.0, 0.0], [0.0, 0.0, 2.88]]
-        write_gaussian_external_input(
-            input_file, positions_ang, atomic_numbers, deriv=1
+    def test_mace_off_preset_defaults_to_float64(self):
+        engine = build_engine({"backend": "mace-off", "options": {}})
+        fake_mace = MagicMock()
+        with patch.dict(sys.modules, {"mace": fake_mace}):
+            engine.factory(0, 1)
+        fake_mace.calculators.mace_off.assert_called_once_with(
+            model="medium", device="cpu", default_dtype="float64"
         )
 
-        # Run the generated script exactly as Gaussian would
+    def test_aimnet2_preset_passes_charge_and_multiplicity(self):
+        engine = build_engine({"backend": "aimnet2", "options": {}})
+        fake = MagicMock()
+        with patch.dict(
+            sys.modules, {"aimnet": fake, "aimnet.calculators": fake}
+        ):
+            engine.factory(1, 2)
+        fake.AIMNet2ASE.assert_called_once_with("aimnet2", charge=1, mult=2)
+
+    def test_run_writes_hessian_block_for_deriv_2(
+        self, tmp_path, au2_external_input
+    ):
+        out = tmp_path / "out"
+        message = run(
+            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
+            au2_external_input(deriv=2),
+            out,
+        )
+        assert "Hessian from fd" in message
+        assert len(out.read_text().splitlines()) == 1 + 2 + 2 + 6 + 7
+
+    def test_main_reports_failure_in_message_file(self, tmp_path):
+        msg = tmp_path / "msg"
+        code = main(
+            {"backend": "ase", "calculator": "ase.calculators.emt.EMT"},
+            ["R", str(tmp_path / "missing"), "out", str(msg), "f", "m"],
+        )
+        assert code == 1
+        assert "failed" in msg.read_text()
+
+    def test_main_requires_six_gaussian_arguments(self):
+        assert main({"backend": "xtb"}, ["only", "three", "args"]) == 1
+
+
+# ── Backend configuration ─────────────────────────────────────────────────
+
+
+class TestGaussianExternalCalculator:
+    @pytest.mark.parametrize(
+        "kwargs, message",
+        [
+            ({"backend": "orca"}, "Unknown External backend"),
+            ({"backend": "ase"}, "dotted path"),
+            ({"backend": "xtb", "hessian": "exact"}, "hessian"),
+            ({"backend": "xtb", "fd_step": 0}, "fd_step"),
+        ],
+    )
+    def test_validation(self, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            GaussianExternalCalculator(**kwargs)
+
+    def test_script_name_depends_only_on_backend_config(
+        self, xtb_external_calculator
+    ):
+        same = GaussianExternalCalculator.from_dict(
+            {**xtb_external_calculator.to_dict(), "python_executable": None}
+        )
+        other = GaussianExternalCalculator(
+            backend="xtb", options={"method": "gfn1"}
+        )
+        name = xtb_external_calculator.script_filename
+        assert name.startswith("chemsmart_external_xtb_")
+        assert same.script_filename == name
+        assert other.script_filename != name
+
+    def test_route_value_quotes_interpreter_and_script(
+        self, xtb_external_calculator
+    ):
+        assert xtb_external_calculator.route_value == (
+            '"/opt/conda/bin/python '
+            f'{xtb_external_calculator.script_filename}"'
+        )
+
+    def test_write_script_is_executable_launcher(
+        self, tmp_path, emt_external_calculator
+    ):
+        path = emt_external_calculator.write_script(tmp_path)
+        assert os.access(path, os.X_OK)
+        content = open(path).read()
+        assert content.startswith(f"#!{sys.executable}\n")
+        assert "from chemsmart.io.gaussian.external import main" in content
+        assert "'ase.calculators.emt.EMT'" in content
+
+    def test_xtb_executable_comes_from_server_config(self, tmp_path):
+        calc = GaussianExternalCalculator(backend="xtb")
+        executable = MagicMock()
+        executable.get_executable.return_value = "/srv/xtb/bin/xtb"
+        server = MagicMock()
+        server.name = "cluster"
+        with patch(
+            "chemsmart.settings.executable.XTBExecutable.from_servername",
+            return_value=executable,
+        ) as from_servername:
+            path = calc.write_script(tmp_path, server=server)
+        from_servername.assert_called_once_with("cluster")
+        assert "'executable': '/srv/xtb/bin/xtb'" in open(path).read()
+        # the launcher name is unchanged by server-resolved defaults
+        assert os.path.basename(path) == calc.script_filename
+
+    def test_launcher_answers_gaussian_like_gaussian_does(
+        self, tmp_path, emt_external_calculator, au2_external_input
+    ):
+        """Run the launcher exactly as Gaussian would, requesting a Hessian."""
+        script = emt_external_calculator.write_script(tmp_path)
+        out, msg = tmp_path / "ext.out", tmp_path / "ext.msg"
         result = subprocess.run(
             [
                 sys.executable,
-                script_path,
+                script,
                 "R",
-                input_file,
-                output_file,
-                msg_file,
-                fchk_file,
-                matel_file,
+                au2_external_input(deriv=2),
+                str(out),
+                str(msg),
+                str(tmp_path / "ext.fchk"),
+                str(tmp_path / "ext.matel"),
             ],
             capture_output=True,
             text=True,
+            cwd=tmp_path,
         )
-        assert result.returncode == 0, (
-            f"Script exited with code {result.returncode}.\n"
-            f"stderr: {result.stderr}\n"
-            f"msg: {open(msg_file).read() if os.path.exists(msg_file) else 'no msg file'}"
+        assert result.returncode == 0, result.stderr + msg.read_text()
+        lines = out.read_text().splitlines()
+        assert len(lines) == 1 + 2 + 2 + 6 + 7
+        assert abs(float(lines[0].split()[0])) < 10.0  # Hartree, not eV
+
+
+# ── Settings, writer and runner ───────────────────────────────────────────
+
+
+class TestExternalSettings:
+    @pytest.mark.parametrize(
+        "jobtype, expected_prefix",
+        [
+            ("opt", "# opt freq External="),
+            ("ts", "# opt=(ts,calcfc,noeigentest) freq External="),
+            ("sp", "# External="),
+        ],
+    )
+    def test_external_replaces_level_of_theory(
+        self,
+        external_dft_settings,
+        xtb_external_calculator,
+        jobtype,
+        expected_prefix,
+    ):
+        external_dft_settings.jobtype = jobtype
+        settings = external_dft_settings.merge(
+            {"external": xtb_external_calculator}, keywords=("external",)
         )
+        route = settings.route_string
+        assert route == expected_prefix + xtb_external_calculator.route_value
+        assert "b3lyp" not in route
 
-        # Parse output: line 0 = energy+dipole (4×D20.12), lines 1-2 = gradient
-        with open(output_file) as fh:
-            lines = fh.readlines()
+    def test_irc_route_uses_external(self, xtb_external_calculator):
+        settings = GaussianIRCJobSettings(
+            functional="b3lyp",
+            basis="def2svp",
+            jobtype="ircf",
+            external=xtb_external_calculator.to_dict(),
+        )
+        assert settings.external == xtb_external_calculator
+        assert "External=" in settings.route_string
+        assert "irc(calcfc" in settings.route_string
+        assert "b3lyp" not in settings.route_string
 
-        assert len(lines) == 3, "Expected 1 energy line + 2 gradient lines"
+    def test_gaussian_solvation_and_genecp_dropped(
+        self, xtb_external_calculator, caplog
+    ):
+        settings = GaussianJobSettings(
+            functional="b3lyp",
+            basis="genecp",
+            heavy_elements=["Pd"],
+            heavy_elements_basis="def2-tzvp",
+            light_elements_basis="def2svp",
+            solvent_model="smd",
+            solvent_id="water",
+            jobtype="opt",
+            external=xtb_external_calculator,
+        )
+        assert "scrf" not in settings.route_string
+        assert settings.genecp is False
+        assert "solvation is ignored" in caplog.text
 
-        energy_line = lines[0].split()
-        assert len(energy_line) == 4
-        energy_ha = float(energy_line[0])
-        assert np.isfinite(energy_ha), "Energy should be finite"
+    def test_copy_preserves_external(self, xtb_external_calculator):
+        settings = GaussianJobSettings(external=xtb_external_calculator)
+        assert settings.copy().external == xtb_external_calculator
 
-        for i, line in enumerate(lines[1:], start=1):
-            grad = line.split()
-            assert (
-                len(grad) == 3
-            ), f"Gradient line {i} should have 3 components"
-            assert all(np.isfinite(float(g)) for g in grad)
+    def test_runner_writes_launcher_next_to_input(
+        self,
+        tmp_path,
+        single_molecule_xyz_file,
+        gaussian_jobrunner_no_scratch,
+        emt_external_calculator,
+    ):
+        settings = GaussianJobSettings(
+            charge=0,
+            multiplicity=1,
+            jobtype="opt",
+            external=emt_external_calculator,
+        )
+        job = GaussianOptJob(
+            molecule=Molecule.from_filepath(single_molecule_xyz_file),
+            settings=settings,
+            label="mol_opt_ase",
+            jobrunner=gaussian_jobrunner_no_scratch,
+        )
+        job.folder = str(tmp_path)
+        gaussian_jobrunner_no_scratch._prerun(job)
+        gaussian_jobrunner_no_scratch._write_input(job)
 
-        # Sanity-check units: EMT Au2 energy is ~few eV; in Ha that's ~0.1-1 Ha
-        assert abs(energy_ha) < 10.0, "Energy unexpectedly large; check units"
+        com = open(gaussian_jobrunner_no_scratch.job_inputfile).read()
+        assert f"External={emt_external_calculator.route_value}" in com
+        assert (tmp_path / emt_external_calculator.script_filename).is_file()
 
 
-# ── Real Gaussian run ─────────────────────────────────────────────────────
+# ── CLI ───────────────────────────────────────────────────────────────────
+
+
+class TestExternalCLI:
+    def test_ts_with_xtb(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        job_cls = MagicMock(name="GaussianTSJob")
+        result, settings = run_gaussian_external_cli(
+            single_molecule_xyz_file,
+            gaussian_jobrunner_no_scratch,
+            "chemsmart.jobs.gaussian.ts.GaussianTSJob",
+            "-b",
+            "xtb",
+            "-o",
+            "method=gfn2",
+            "-o",
+            "alpb=water",
+            "ts",
+            job_cls=job_cls,
+        )
+        assert result.exit_code == 0, result.output
+        assert settings.external == GaussianExternalCalculator(
+            backend="xtb", options={"method": "gfn2", "alpb": "water"}
+        )
+        assert settings.route_string.startswith(
+            "# opt=(ts,calcfc,noeigentest)"
+        )
+        assert job_cls.call_args.kwargs["label"] == "crest_best_ts_xtb"
+
+    def test_opt_with_ase_calculator_and_typed_options(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        result, settings = run_gaussian_external_cli(
+            single_molecule_xyz_file,
+            gaussian_jobrunner_no_scratch,
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            "-b",
+            "ase",
+            "--calculator",
+            "ase.calculators.lj.LennardJones",
+            "-o",
+            "sigma=0.5",
+            "--hessian",
+            "fd",
+            "opt",
+        )
+        assert result.exit_code == 0, result.output
+        external = settings.external
+        assert external.calculator == "ase.calculators.lj.LennardJones"
+        assert external.options == {"sigma": 0.5}
+        assert external.hessian == "fd"
+
+    def test_malformed_option_is_rejected(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        result, _ = run_gaussian_external_cli(
+            single_molecule_xyz_file,
+            gaussian_jobrunner_no_scratch,
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            "-b",
+            "xtb",
+            "-o",
+            "gfn2",
+            "opt",
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert "key=value" in result.output
+
+    def test_ase_backend_requires_calculator(
+        self, single_molecule_xyz_file, gaussian_jobrunner_no_scratch
+    ):
+        result, _ = run_gaussian_external_cli(
+            single_molecule_xyz_file,
+            gaussian_jobrunner_no_scratch,
+            "chemsmart.jobs.gaussian.opt.GaussianOptJob",
+            "-b",
+            "ase",
+            "opt",
+            catch_exceptions=True,
+        )
+        assert result.exit_code != 0
+        assert "dotted path" in result.output
+
+
+# ── Real Gaussian runs ────────────────────────────────────────────────────
 
 
 class TestGaussianExternalRealRun:
@@ -224,149 +580,44 @@ class TestGaussianExternalRealRun:
     Each test is skipped automatically when Gaussian is not installed
     (via the ``g16_executable`` fixture).
 
-    Note on calculator choice
-    -------------------------
-    ASE's ``EMT`` (Effective Medium Theory) is parametrised only for FCC
-    metals (Al, Cu, Ag, Au, Ni, Pd, Pt) and cannot evaluate H.  For H2
-    we use ASE's built-in ``LennardJones`` calculator, which is general-
-    purpose and requires no external model files.
+    ASE's ``EMT`` cannot evaluate H, so H2 uses ASE's ``LennardJones``
+    with sigma=0.5 Angstrom, which puts r=0.74 Angstrom in the attractive
+    well. LennardJones has no analytic Hessian, so ``calcfc`` exercises
+    the finite-difference second-derivative path.
     """
 
-    def test_h2_lj_external_singlepoint(self, tmp_path, g16_executable):
-        """
-        Full pipeline: LennardJones single-point on H2 via Gaussian External.
-
-        Steps
-        -----
-        1. ``ASEExternalCalculatorScript`` writes ``run_lj.py`` (LJ params
-           chosen so H2 at 0.74 Å sits in the well region).
-        2. A minimal Gaussian ``.com`` file is written whose route line
-           is ``# External="<python_exe> run_lj.py"``.  Using the explicit
-           interpreter path avoids shebang / conda-environment mismatches.
-        3. ``g16`` is invoked; it calls ``run_lj.py`` with the six standard
-           Gaussian External arguments.
-        4. The ``.log`` is checked for ``"Normal termination"`` and a
-           reported energy value.
-        """
-        from ase.calculators.lj import LennardJones
-
-        # ── 1. Write the ASE External script ─────────────────────────────
-        # sigma=0.5 Å places H2 (r=0.74 Å) in the attractive LJ well.
-        script_writer = ASEExternalCalculatorScript(
-            LennardJones,
-            calc_kwargs={"sigma": 0.5, "epsilon": 0.01},
-            script_name="run_lj",
+    def test_h2_lj_external_singlepoint(
+        self, tmp_path, g16_executable, lj_external_calculator
+    ):
+        log_text = run_h2_g16_external(
+            g16_executable, tmp_path, lj_external_calculator, "", 0.74, "h2_sp"
         )
-        script_path = script_writer.write(str(tmp_path))
+        assert "Energy=" in log_text
 
-        # ── 2. Write the Gaussian .com input ─────────────────────────────
-        # Embed the full interpreter path so Gaussian invokes the right Python,
-        # regardless of what "python" resolves to in the shell that runs g16.
-        # Gaussian calls: <python_exe> <script_path> layer In Out Msg Fchk MatEl
-        external_value = f'"{sys.executable} {script_path}"'
-
-        com_content = textwrap.dedent(f"""\
-            %chk=h2_ext.chk
-            %nprocshared=1
-            %mem=1GB
-            # External={external_value}
-
-            H2 LJ external single-point
-
-            0 1
-            H   0.000000   0.000000   0.000000
-            H   0.000000   0.000000   0.740000
-
-        """)
-        com_file = tmp_path / "h2_ext.com"
-        com_file.write_text(com_content)
-
-        # ── 3. Run g16 ───────────────────────────────────────────────────
-        result = subprocess.run(
-            [g16_executable, str(com_file)],
-            capture_output=True,
-            text=True,
-            cwd=str(tmp_path),
-            timeout=120,
+    def test_h2_lj_external_opt(
+        self, tmp_path, g16_executable, lj_external_calculator
+    ):
+        log_text = run_h2_g16_external(
+            g16_executable,
+            tmp_path,
+            lj_external_calculator,
+            "opt",
+            0.90,
+            "h2_opt",
         )
+        assert "Stationary point found" in log_text
 
-        log_file = tmp_path / "h2_ext.log"
-        log_text = log_file.read_text() if log_file.exists() else "(no log)"
-
-        # ── 4. Assert normal termination and reported energy ─────────────
-        assert "Normal termination" in log_text, (
-            "Gaussian did not terminate normally.\n"
-            f"route: {external_value}\n"
-            f"g16 stdout: {result.stdout[-400:]}\n"
-            f"log tail:\n{log_text[-1500:]}"
+    def test_h2_lj_external_opt_calcfc(
+        self, tmp_path, g16_executable, lj_external_calculator
+    ):
+        """``calcfc`` makes Gaussian request a Hessian (deriv=2), the same
+        request a TS search makes."""
+        log_text = run_h2_g16_external(
+            g16_executable,
+            tmp_path,
+            lj_external_calculator,
+            "opt=calcfc",
+            0.90,
+            "h2_calcfc",
         )
-
-        # Gaussian echoes the energy it received from the External script.
-        assert "Energy=" in log_text, (
-            "No 'Energy=' line found in Gaussian log; "
-            "External script may not have written output correctly.\n"
-            f"log tail:\n{log_text[-1500:]}"
-        )
-
-    def test_h2_lj_external_opt(self, tmp_path, g16_executable):
-        """
-        Full pipeline: LennardJones geometry optimisation on H2 via Gaussian External.
-
-        The route line is ``# opt External=...``, which instructs Gaussian to
-        iterate the geometry while calling the LJ script for energy + gradient
-        at each step.
-        """
-        from ase.calculators.lj import LennardJones
-
-        # ── 1. Write the ASE External script ─────────────────────────────
-        script_writer = ASEExternalCalculatorScript(
-            LennardJones,
-            calc_kwargs={"sigma": 0.5, "epsilon": 0.01},
-            script_name="run_lj",
-        )
-        script_path = script_writer.write(str(tmp_path))
-
-        # ── 2. Write the Gaussian .com input ─────────────────────────────
-        external_value = f'"{sys.executable} {script_path}"'
-
-        com_content = textwrap.dedent(f"""\
-            %chk=h2_ext_opt.chk
-            %nprocshared=1
-            %mem=1GB
-            # opt External={external_value}
-
-            H2 LJ external geometry optimisation
-
-            0 1
-            H   0.000000   0.000000   0.000000
-            H   0.000000   0.000000   0.900000
-
-        """)
-        com_file = tmp_path / "h2_ext_opt.com"
-        com_file.write_text(com_content)
-
-        # ── 3. Run g16 ───────────────────────────────────────────────────
-        result = subprocess.run(
-            [g16_executable, str(com_file)],
-            capture_output=True,
-            text=True,
-            cwd=str(tmp_path),
-            timeout=300,
-        )
-
-        log_file = tmp_path / "h2_ext_opt.log"
-        log_text = log_file.read_text() if log_file.exists() else "(no log)"
-
-        # ── 4. Assert normal termination and optimised geometry ──────────
-        assert "Normal termination" in log_text, (
-            "Gaussian did not terminate normally.\n"
-            f"route: {external_value}\n"
-            f"g16 stdout: {result.stdout[-400:]}\n"
-            f"log tail:\n{log_text[-1500:]}"
-        )
-
-        assert "Stationary point found" in log_text, (
-            "Gaussian did not find a stationary point; optimisation may not "
-            "have converged.\n"
-            f"log tail:\n{log_text[-1500:]}"
-        )
+        assert "Stationary point found" in log_text

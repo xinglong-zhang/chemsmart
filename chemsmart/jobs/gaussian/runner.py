@@ -87,7 +87,6 @@ class GaussianJobRunner(JobRunner):
         "g16com",
         "g16link",
         "g16qmmm",
-        "g16external",
         "g16pka",
         "g16pka_analyze",
         "g16pka_thermo",
@@ -269,6 +268,10 @@ class GaussianJobRunner(JobRunner):
 
         input_writer = GaussianInputWriter(job=job)
         input_writer.write(target_directory=self.running_directory)
+
+        external = getattr(job.settings, "external", None)
+        if external is not None:
+            external.write_script(self.running_directory, server=self.server)
 
     def _get_command(self, job):
         """

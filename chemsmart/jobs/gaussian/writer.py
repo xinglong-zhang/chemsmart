@@ -184,7 +184,10 @@ class GaussianInputWriter(InputWriter):
         # Handle basis set replacement for structures without heavy elements
         # if project settings has heavy elements but molecule has no heavy
         # elements, then replace the basis set with light elements basis
-        if self.settings.heavy_elements_basis is not None:
+        if (
+            self.settings.heavy_elements_basis is not None
+            and self.settings.external is None
+        ):
             heavy_elements_in_structure = self.settings.prune_heavy_elements(
                 self.job.molecule
             )

@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from textwrap import dedent
 from unittest.mock import MagicMock, patch
@@ -28,6 +29,7 @@ from chemsmart.cli.job import click_folder_options
 from chemsmart.cli.nciplot.nciplot import nciplot
 from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
+from chemsmart.io.gaussian.external import BOHR_TO_ANG, ExternalEngine
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
@@ -1779,19 +1781,31 @@ def rdkit_embed_and_optimize(smiles, seed=1):
     return mol
 
 
-class NoDictCalculator:
-    """Pickle-able ASE-calculator stand-in with no ``todict()`` method.
+class QuadraticEngine(ExternalEngine):
+    """Harmonic External engine with a known Hessian, for testing.
 
-    Forces ``ASEExternalCalculatorScript`` down its pickle fallback path.
+    ``E = x.H.x / 2`` with ``x`` in Bohr, so the exact Hessian is
+    ``hessian`` (Hartree/Bohr^2). ``analytic`` is what
+    :meth:`analytic_hessian` reports (``None`` for no analytic Hessian).
     """
 
+    def __init__(self, hessian, analytic=None):
+        self.hessian = np.asarray(hessian, dtype=float)
+        self.analytic = analytic
+        self.gradient_calls = 0
 
-# CODATA 2018, matching chemsmart.io.gaussian.external_script.
-BOHR_TO_ANG = 0.529177210903
+    def energy_and_gradient(self, numbers, positions, charge, multiplicity):
+        self.gradient_calls += 1
+        x = np.asarray(positions, dtype=float).reshape(-1) / BOHR_TO_ANG
+        gradient = self.hessian @ x
+        return 0.5 * x @ gradient, gradient.reshape(-1, 3)
+
+    def analytic_hessian(self, numbers, positions, charge, multiplicity):
+        return self.analytic
 
 
 def write_gaussian_external_input(
-    path, positions_ang, atomic_numbers, deriv=1
+    path, positions_ang, atomic_numbers, deriv=1, charge=0, multiplicity=1
 ):
     """Write a minimal Gaussian ``External`` input file.
 
@@ -1800,12 +1814,67 @@ def write_gaussian_external_input(
     """
     natoms = len(atomic_numbers)
     with open(path, "w") as fh:
-        fh.write(f"{natoms:10d}{deriv:10d}{0:10d}{1:10d}\n")
+        fh.write(f"{natoms:10d}{deriv:10d}{charge:10d}{multiplicity:10d}\n")
         for z, (x, y, z_coord) in zip(atomic_numbers, positions_ang):
             xb = x / BOHR_TO_ANG
             yb = y / BOHR_TO_ANG
             zb = z_coord / BOHR_TO_ANG
             fh.write(f"{z:10d}{xb:20.12f}{yb:20.12f}{zb:20.12f}{0.0:20.12f}\n")
+    return str(path)
+
+
+def run_gaussian_external_cli(
+    xyz_file, jobrunner, job_class_path, *external_args, **kwargs
+):
+    """Invoke ``gaussian -p gas_solv -f <xyz> -c 0 -m 1 external <args>``.
+
+    Returns ``(result, settings)`` like
+    :func:`run_gaussian_and_capture_settings`, which receives ``kwargs``.
+    """
+    return run_gaussian_and_capture_settings(
+        job_class_path,
+        ["-p", "gas_solv", "-f", xyz_file, "-c", "0", "-m", "1", "external"]
+        + list(external_args),
+        make_cli_ctx_obj(jobrunner),
+        **kwargs,
+    )
+
+
+def run_h2_g16_external(g16, directory, external, route, r_hh, name):
+    """Run real g16 on H2 with an External backend; return the log text.
+
+    Writes the launcher and ``<name>.com`` (route ``# <route>
+    External=...``) into ``directory`` and asserts normal termination.
+    """
+    external.write_script(directory)
+    com_file = directory / f"{name}.com"
+    com_file.write_text(dedent(f"""\
+        %chk={name}.chk
+        %nprocshared=1
+        %mem=1GB
+        # {route} External={external.route_value}
+
+        H2 LJ External {route}
+
+        0 1
+        H   0.000000   0.000000   0.000000
+        H   0.000000   0.000000   {r_hh:.6f}
+
+    """))
+    result = subprocess.run(
+        [g16, str(com_file)],
+        capture_output=True,
+        text=True,
+        cwd=str(directory),
+        timeout=300,
+    )
+    log_file = directory / f"{name}.log"
+    log_text = log_file.read_text() if log_file.exists() else "(no log)"
+    assert "Normal termination" in log_text, (
+        f"g16 stdout: {result.stdout[-400:]}\n"
+        f"log tail:\n{log_text[-1500:]}"
+    )
+    return log_text
 
 
 def find_g16():

@@ -88,6 +88,7 @@ class GaussianJobSettings(MolecularJobSettings):
         append_additional_info=None,
         forces=False,
         input_string=None,
+        external=None,
         **kwargs,
     ):
         """
@@ -124,6 +125,10 @@ class GaussianJobSettings(MolecularJobSettings):
             append_additional_info (str, optional): Additional input content.
             forces (bool): Calculate forces.
             input_string (str, optional): Custom input string.
+            external (GaussianExternalCalculator or dict, optional):
+                External level of theory (ML potential, xTB, any ASE
+                calculator). When set, it replaces the QM method in the
+                route with ``External=...``.
             **kwargs: Additional keyword arguments.
 
         Raises:
@@ -161,6 +166,14 @@ class GaussianJobSettings(MolecularJobSettings):
         self.append_additional_info = append_additional_info
         self._route_string = None
 
+        if isinstance(external, dict):
+            from chemsmart.jobs.gaussian.external import (
+                GaussianExternalCalculator,
+            )
+
+            external = GaussianExternalCalculator.from_dict(external)
+        self.external = external
+
         if gen_genecp_file is not None and "~" in gen_genecp_file:
             gen_genecp_file = os.path.expanduser(gen_genecp_file)
             logger.debug(f"Expanded GenECP file path: {gen_genecp_file}")
@@ -189,6 +202,8 @@ class GaussianJobSettings(MolecularJobSettings):
         Returns:
             bool: True if GenECP is configured, False otherwise.
         """
+        if self.external is not None:
+            return False
         return (
             self.gen_genecp_file is not None or self.heavy_elements is not None
         )
@@ -651,6 +666,9 @@ class GaussianJobSettings(MolecularJobSettings):
 
     def _get_level_of_theory_string(self):
         """Get level of theory string for route."""
+        if self.external is not None:
+            return self._get_external_level_of_theory_string()
+
         route_string = ""
 
         # Determine computational method and add to route string
@@ -772,6 +790,26 @@ class GaussianJobSettings(MolecularJobSettings):
         elif self.jobtype == "wbi":
             route_string += " pop=nboread"  # write bond order matrix
             logger.debug("Added WBI-specific pop=nboread keyword")
+        return route_string
+
+    def _get_external_level_of_theory_string(self):
+        """
+        Route fragment for an External level of theory.
+
+        The QM method, basis set and Gaussian solvation are not used: the
+        External program supplies energies and derivatives. Implicit
+        solvation, if wanted, belongs to the backend (e.g. xtb ``alpb``).
+        """
+        if self.solvent_model is not None or self.custom_solvent is not None:
+            logger.warning(
+                "Gaussian solvation is ignored for External calculations; "
+                "configure solvation in the External backend instead."
+            )
+        route_string = f" External={self.external.route_value}"
+        if self.forces:
+            route_string += " force"
+        if self.additional_route_parameters is not None:
+            route_string += f" {self.additional_route_parameters}"
         return route_string
 
     @property
@@ -951,103 +989,6 @@ class GaussianJobSettings(MolecularJobSettings):
                 f"The specified solvent model {solvent_model} is not in \n"
                 f"the available solvent models: {GAUSSIAN_SOLVATION_MODELS}"
             )
-
-
-class GaussianExternalJobSettings(GaussianJobSettings):
-    """
-    Settings for Gaussian jobs using the External keyword for ML potentials.
-
-    Replaces the QM level of theory with an external calculator script,
-    enabling ASE-based ML potentials (MACE, NequIP, etc.) to drive
-    Gaussian geometry optimisations and other calculations.
-
-    Attributes:
-        external_script (str): Name or path of the external script passed
-            to the External= keyword.
-        extra_args (str, optional): Additional arguments prepended to the
-            External= value (e.g. "Amber" in External="RunTink Amber").
-    """
-
-    def __init__(
-        self,
-        external_script,
-        extra_args=None,
-        **kwargs,
-    ):
-        """
-        Initialise External calculator settings.
-
-        Args:
-            external_script (str): Script name/path for the External= keyword.
-            extra_args (str, optional): Extra arguments prepended to the
-                External= spec (e.g. "Amber" for "RunTink Amber").
-            **kwargs: Additional arguments forwarded to GaussianJobSettings.
-                functional, basis, and semiempirical default to None.
-                freq and forces default to False.
-        """
-        kwargs.setdefault("freq", False)
-        kwargs.setdefault("forces", False)
-        kwargs.setdefault("functional", None)
-        kwargs.setdefault("basis", None)
-        kwargs.setdefault("semiempirical", None)
-        super().__init__(**kwargs)
-        self.external_script = external_script
-        self.extra_args = extra_args
-
-    @property
-    def _external_spec(self):
-        """
-        Format the External= value with quoting when spaces are present.
-
-        The Gaussian convention is ``External="<script> <extra_args>"``, so
-        the script name comes first followed by any additional arguments
-        (e.g. ``External="RunTink Amber"`` calls
-        ``RunTink Amber layer InputFile ...``).
-
-        Returns:
-            str: The External= argument, quoted if it contains spaces.
-        """
-        if self.extra_args:
-            spec = f"{self.external_script} {self.extra_args}"
-        else:
-            spec = self.external_script
-        return f'"{spec}"' if " " in spec else spec
-
-    def _get_level_of_theory_string(self):
-        """
-        Build External=<spec> route fragment in place of a QM method.
-
-        Returns:
-            str: Route section fragment containing the External= keyword
-                and any additional route parameters.
-        """
-        route_string = f" External={self._external_spec}"
-        if self.additional_route_parameters is not None:
-            route_string += f" {self.additional_route_parameters}"
-        return route_string
-
-    @classmethod
-    def default(cls):
-        """
-        Create default External calculator settings.
-
-        Returns:
-            GaussianExternalJobSettings: Default settings instance.
-        """
-        return cls(
-            external_script="ase_calculator",
-            extra_args=None,
-            charge=None,
-            multiplicity=None,
-            chk=True,
-            jobtype=None,
-            title="Gaussian External ML potential job",
-            freq=False,
-            numfreq=False,
-            dieze_tag=None,
-            forces=False,
-            input_string=None,
-        )
 
 
 class GaussianpKaJobSettings(GaussianJobSettings):

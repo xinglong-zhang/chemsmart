@@ -2,7 +2,6 @@ import logging
 import os
 
 from chemsmart.jobs.gaussian.settings import (
-    GaussianExternalJobSettings,
     GaussianIRCJobSettings,
     GaussianJobSettings,
     GaussianQMMMJobSettings,
@@ -169,28 +168,6 @@ class GaussianProjectSettings(RegistryMixin):
         settings.freq = False
         return settings
 
-    def external_settings(self):
-        """
-        Get default settings for Gaussian External ML potential jobs.
-
-        The external_script name defaults to 'ase_calculator'; override it
-        after calling this method or subclass GaussianProjectSettings to
-        set project-specific defaults.
-
-        Returns:
-            GaussianExternalJobSettings: Settings configured for an
-                External= calculator job with freq and forces disabled.
-        """
-        return GaussianExternalJobSettings(
-            external_script="ase_calculator",
-            extra_args=None,
-            charge=None,
-            multiplicity=None,
-            title="Gaussian External ML potential job",
-            freq=False,
-            chk=True,
-        )
-
     @classmethod
     def from_project(cls, project):
         """
@@ -327,7 +304,6 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         td_settings,
         wbi_settings,
         qmmm_settings,
-        external_settings=None,
     ):
         """
         Initialize YAML-based project settings.
@@ -343,7 +319,6 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
             td_settings: Settings for TD-DFT calculations.
             wbi_settings: Settings for Wiberg bond index calculations.
             qmmm_settings: Settings for QM/MM ONIOM jobs.
-            external_settings: Settings for External= ML potential jobs.
         """
         self._opt_settings = opt_settings
         self._modred_settings = modred_settings
@@ -355,7 +330,6 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
         self._td_settings = td_settings
         self._wbi_settings = wbi_settings
         self._qmmm_settings = qmmm_settings
-        self._external_settings = external_settings
 
     def opt_settings(self):
         return self._opt_settings
@@ -386,11 +360,6 @@ class YamlGaussianProjectSettings(GaussianProjectSettings):
 
     def qmmm_settings(self):
         return self._qmmm_settings
-
-    def external_settings(self):
-        if self._external_settings is not None:
-            return self._external_settings
-        return super().external_settings()
 
     @classmethod
     def from_yaml(cls, filename):
@@ -440,7 +409,6 @@ class YamlGaussianProjectSettingsBuilder:
         td_settings = self._project_settings_for_job(jobtype="td")
         wbi_settings = self._project_settings_for_job(jobtype="wbi")
         qmmm_settings = self._project_settings_for_job(jobtype="qmmm")
-        external_settings = self._project_settings_for_job(jobtype="external")
 
         # Create the project settings instance
         project_settings = YamlGaussianProjectSettings(
@@ -454,7 +422,6 @@ class YamlGaussianProjectSettingsBuilder:
             td_settings=td_settings,
             wbi_settings=wbi_settings,
             qmmm_settings=qmmm_settings,
-            external_settings=external_settings,
         )
 
         # Set project name from filename and return
@@ -495,7 +462,6 @@ class YamlGaussianProjectSettingsBuilder:
             "irc": GaussianIRCJobSettings,
             "td": GaussianTDDFTJobSettings,
             "qmmm": GaussianQMMMJobSettings,
-            "external": GaussianExternalJobSettings,
         }
 
         try:

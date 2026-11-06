@@ -2,6 +2,7 @@ from .com import com
 from .crest import crest
 from .custom import userjob
 from .dias import dias
+from .external import external
 from .gaussian import gaussian
 from .irc import irc
 from .link import link
@@ -23,6 +24,7 @@ __all__ = [
     "crest",
     "userjob",
     "dias",
+    "external",
     "gaussian",
     "irc",
     "link",
