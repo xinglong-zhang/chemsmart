@@ -301,3 +301,63 @@ Ask why each expected value changed and why the file was removed, and check the 
 
 The PR shows the old expected value was wrong, with evidence from the file or independent software, and updates the assertion with that explanation.
 
+## Keyword catch-alls
+
+Source: [Technical review of the guidance](review-evidence.md#technical-review-of-the-guidance).
+
+### Situation
+
+A new runner option is added through a catch-all, and a command reuses a decorator whose options it ignores:
+
+```python
+class NewJobRunner(JobRunner):
+    def __init__(self, server, scratch=None, **kwargs):
+        super().__init__(server, scratch=scratch, **kwargs)
+        self.keep_files = kwargs.get("keep_files", False)
+
+@click_jobrunner_options        # adds --num-cores, --mem-gb, ...
+@click.command()
+def summary(**kwargs): ...      # never uses them
+```
+
+### Expected behaviour
+
+Report an OOP/API finding: `NewJobRunner(server, keep_file=True)` runs with `keep_files=False` and no error, and `summary --num-cores 8` silently does nothing. Ask for `keep_files` to be an explicit parameter and for `summary` to use only the option groups it needs. Do not ask to remove existing catch-alls in `Job` or `JobRunner` in the same PR.
+
+### Counterexample: this should not be flagged
+
+`**kwargs` forwarded unchanged to a callee whose signature validates them:
+
+```python
+def create(cls, molecule, **kwargs):
+    return cls(molecule=molecule, **kwargs)   # cls.__init__ rejects unknown keys
+```
+
+## Net spin versus radical character
+
+Source: [Technical review of the guidance](review-evidence.md#technical-review-of-the-guidance).
+
+### Situation
+
+A PR adds a property for radical analysis on top of the existing definition:
+
+```python
+@property
+def is_radical(self):
+    return self.num_unpaired_electrons > 0   # num_unpaired_electrons = multiplicity - 1
+```
+
+### Expected behaviour
+
+Report a correctness finding: a broken-symmetry open-shell singlet (multiplicity 1, `<S**2>` near 1, e.g. after `stable=opt`) is a diradical, but `is_radical` returns `False`; `tests/data/GaussianTests/outputs/link/oxygen_openshell_singlet_sp_link.log` (`<S**2>` = 1.005) is a real test case. Ask for the property to use the spin-density or orbital information it needs, or to be named and documented as a net-spin check, with an open-shell singlet test using a real output.
+
+### Counterexample: this should not be flagged
+
+A property documented as the net spin, used only for high-spin bookkeeping such as xTB's `--uhf`:
+
+```python
+def uhf(self):
+    """xTB --uhf: N_alpha - N_beta = multiplicity - 1."""
+    return self.multiplicity - 1
+```
+

@@ -11,6 +11,7 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 - [User feedback: cached_property and property](#user-feedback-cached_property-and-property)
 - [User feedback: external level of theory, PR #732](#user-feedback-external-level-of-theory-pr-732)
 - [Extended historical sample](#extended-historical-sample)
+- [Technical review of the guidance](#technical-review-of-the-guidance)
 - [PR #391](#pr-391)
 - [PR #475](#pr-475)
 - [PR #524](#pr-524)
@@ -27,6 +28,7 @@ Sample retrieved on 16 October 2026 from 12 CHEMSMART PR discussions: #391, #475
 - Give later corrections precedence. In #563, Xinglong withdrew a proposal to move CDXML object operations to utilities after recognising their use of `self` (r3529267520).
 - In the same PR he explicitly corrected an earlier objection to class methods returning multiple objects (r3536478367). Python does not constrain classmethod return types. Preserve the valid concern about incomplete output objects constructed from settings, not the withdrawn blanket return-type restriction.
 - Public APIs are a recurring preference, not a requirement to expose every internal hook. Inspect callers and the supported interface.
+- "Class method" in review comments often means "a method of this class", not `@classmethod`; see [Technical review of the guidance](#technical-review-of-the-guidance).
 - General safety checks, prioritisation, and output format in SKILL.md are operational synthesis. They are not verbatim user rules. Historical names/defaults require current verification.
 
 ## User clarification: class layout
@@ -110,6 +112,19 @@ Retrieved on 7 November 2026: all 943 inline review comments by `xinglong-zhang`
 - **Attributes from the constructor.** "instead of using getattr(), we can add an attribute scratch_parent_folder to base class Job" ([#702](https://github.com/xinglong-zhang/chemsmart/pull/702#discussion_r4296425125)); "i do not personally like this setattr() method" ([#454](https://github.com/xinglong-zhang/chemsmart/pull/454#discussion_r2727770801)).
 - **CHEMSMART naming, repeated.** "Please use CHEMSMART throughout and not ChemSmart!" ([#612](https://github.com/xinglong-zhang/chemsmart/pull/612#discussion_r3563653821)); "Use `CHEMSMART` for program name and `chemsmart` for command call, only." ([#733](https://github.com/xinglong-zhang/chemsmart/pull/733#discussion_r4493088570)).
 - **Documentation.** Check documented commands were run ([#476](https://github.com/xinglong-zhang/chemsmart/pull/476#discussion_r2903024744)).
+
+## Technical review of the guidance
+
+- **Date and source:** conversation on 7 November 2026. The user asked: "now, improve code skills by correcting any mistakes that i might have - adopt software engineering principles and check for technical correctedness in my reviewer skills".
+- **Classification:** corrections and refinements of earlier guidance, authorised by that request. Each was checked against current code before the skill changed. Repeated explicit preferences that are design choices rather than errors (regex in `repattern.py`, test layout, single-letter flags) were kept.
+- **Corrections:**
+  - **`**kwargs` catch-alls.** Earlier advice to let unused options or arguments be "captured as **kwargs and ignored silently" ([#411](https://github.com/xinglong-zhang/chemsmart/pull/411#discussion_r2799007929)) or "captured by **kwargs automatically" ([#309](https://github.com/xinglong-zhang/chemsmart/pull/309#discussion_r2361766799)) conflicts with the later, correct concern "Why ignore unknown options? Would be dangerous ..." ([#321](https://github.com/xinglong-zhang/chemsmart/pull/321#discussion_r2454236313)). Verified: `GaussianJobRunner(server=Server.from_yaml("tests/data/YAMLTests/server.yaml"), scratch=False, fake=True, delte_scratch=True)` runs without error and leaves `delete_scratch=False`. The skill now flags new catch-alls without demanding migration of existing ones.
+  - **Net spin versus unpaired electrons.** "should be defined as `self.multiplicity - 1` ... this also applies regardless of spin multiplicity" ([#380](https://github.com/xinglong-zhang/chemsmart/pull/380#discussion_r2576972388)) holds for high-spin states. `multiplicity - 1` is 2S = N_alpha - N_beta; a broken-symmetry open-shell singlet, which CHEMSMART produces with `stable=opt` link jobs ([#248](https://github.com/xinglong-zhang/chemsmart/pull/248#discussion_r2312297847)), has multiplicity 1 and two radical electrons. Verified on `tests/data/GaussianTests/outputs/link/oxygen_openshell_singlet_sp_link.log` (singlet O2 after `stable=opt`): the final `<S**2>` is 1.005, yet `num_unpaired_electrons` (`chemsmart/utils/mixins.py`) returns 0 and `somo_energies` returns `None`. The parsed occupied alpha and beta eigenvalues are identical there, so `<S**2>`, not orbital differences, is the indicator to check. This is a naming and documentation issue in existing code, not a demonstrated bug in a specific result; the skill asks reviewers to make the quantity explicit.
+  - **"Class method" wording.** "this can be a class method of Gaussian16Output object ... using self.natoms" ([#702](https://github.com/xinglong-zhang/chemsmart/pull/702#discussion_r4296363066)) and "can be a class method for molecule object, where the molecule argument here will just be self" ([#488](https://github.com/xinglong-zhang/chemsmart/pull/488#discussion_r2903101386)) describe instance methods. Taken literally, they would produce `@classmethod`s that cannot read `self`.
+  - **Mutually exclusive options.** "separte `--forward` and `--reverse` as two click options ... `--forward/--no-forward` and ... `--reverse/--no-reverse`" ([#310](https://github.com/xinglong-zhang/chemsmart/pull/310#discussion_r2366226984)) allows contradictory combinations. The code settled on one `--direction` choice (`chemsmart/cli/gaussian/gaussian.py`, `chemsmart/cli/orca/irc.py`), which the skill now recommends.
+  - **Structure identity.** The suggestion to "hash something that uniquely defines the molecule (e.g., energy + forces (if any) + 3D coordinates)" ([#454](https://github.com/xinglong-zhang/chemsmart/pull/454#discussion_r2727736692)) would make identity depend on the method and on exact floats. The implemented `Molecule.structure_id` hashes canonical geometry, charge and multiplicity, which is better; its docstring notes that canonicalisation is not strictly guaranteed.
+  - **Attribute checks at generic boundaries.** The assistant's rule from PR #732 to use `isinstance` at boundaries is now secondary to declaring the attribute (default `None`) on a common base class, which removes the introspection; the review evidence from [#702](https://github.com/xinglong-zhang/chemsmart/pull/702#discussion_r4296425125) prefers that approach.
+- **Refinements:** tolerances when comparing unit-converted values from different CODATA sources; reading files lazily for program detection ([#326](https://github.com/xinglong-zhang/chemsmart/pull/326#discussion_r2514384453)); tests for new regex patterns, including lines that must not match ([#310](https://github.com/xinglong-zhang/chemsmart/pull/310)).
 
 ## PR #391
 
