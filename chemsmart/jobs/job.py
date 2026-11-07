@@ -20,6 +20,7 @@ class Job(RegistryMixin):
         label (str): A label for the job.
         jobrunner (JobRunner): The JobRunner instance to execute the job.
         local (bool): If True, run the job locally. Defaults to False.
+        scratch_parent_folder (str, optional): Scratch grouping folder.
         skip_completed (bool): If True, completed
         jobs will not be rerun. Defaults to True.
         **kwargs: Additional keyword arguments.
@@ -34,6 +35,7 @@ class Job(RegistryMixin):
         label,
         jobrunner,
         local=False,
+        scratch_parent_folder=None,
         skip_completed=True,
         **kwargs,
     ):
@@ -42,6 +44,7 @@ class Job(RegistryMixin):
         self.label = label
         self.jobrunner = jobrunner
         self.local = local
+        self.scratch_parent_folder = scratch_parent_folder
         self.skip_completed = skip_completed
         self.kwargs = kwargs
 

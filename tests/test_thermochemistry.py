@@ -13,6 +13,7 @@ from click.testing import CliRunner
 from chemsmart.analysis.thermochemistry import (
     BoltzmannAverageThermochemistry,
     Thermochemistry,
+    thermochemistry_from_file,
 )
 from chemsmart.cli.thermochemistry.thermochemistry import (
     resolve_entropy_cutoff,
@@ -5610,7 +5611,7 @@ class TestThermochemistryJobComputeAndShow:
             -99.92,
         )
         with patch(
-            "chemsmart.jobs.thermochemistry.job.Thermochemistry",
+            "chemsmart.jobs.thermochemistry.job.thermochemistry_from_file",
             return_value=mock_thermo,
         ) as mock_cls:
             job.compute_thermochemistry()
@@ -5638,7 +5639,7 @@ class TestThermochemistryJobComputeAndShow:
             -99.92,
         )
         with patch(
-            "chemsmart.jobs.thermochemistry.job.Thermochemistry",
+            "chemsmart.jobs.thermochemistry.job.thermochemistry_from_file",
             return_value=mock_thermo,
         ):
             job.compute_thermochemistry()
@@ -5652,7 +5653,7 @@ class TestThermochemistryJobComputeAndShow:
         job.settings.outputfile = str(tmp_path / "out.dat")
 
         with patch(
-            "chemsmart.jobs.thermochemistry.job.Thermochemistry",
+            "chemsmart.jobs.thermochemistry.job.thermochemistry_from_file",
             side_effect=RuntimeError("parse failed"),
         ):
             with pytest.raises(RuntimeError, match="parse failed"):
@@ -6232,3 +6233,39 @@ class TestThermochemistryResultCallback:
             )
         assert result.exit_code == 0, result.output
         assert mock_show.call_count == 2
+
+
+class TestMECPMergeCoverage:
+    def test_factory_preserves_gaussian_analysis(
+        self, gaussian_singlet_opt_outfile
+    ):
+        analysis = thermochemistry_from_file(
+            gaussian_singlet_opt_outfile, temperature=298.15
+        )
+        original = Thermochemistry(
+            gaussian_singlet_opt_outfile, temperature=298.15
+        )
+        assert type(analysis) is Thermochemistry
+        assert (
+            analysis.vibrational_frequencies
+            == original.vibrational_frequencies
+        )
+
+    def test_mecp_projected_frequency_file_is_accepted(
+        self,
+        tmp_path,
+        run_thermochemistry_and_capture_settings,
+    ):
+        frequency_file = tmp_path / "crossing_mecp_freq.log"
+        frequency_file.write_text(
+            "CHEMSMART MECP projected frequency analysis\n",
+            encoding="utf-8",
+        )
+
+        result, settings = run_thermochemistry_and_capture_settings(
+            filename=str(frequency_file),
+            detected_program=None,
+        )
+
+        assert result.exit_code == 0, result.output
+        assert settings is not None

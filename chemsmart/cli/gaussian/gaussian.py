@@ -763,6 +763,8 @@ def gaussian(
         ), f"Could not obtain molecule from PubChem {pubchem}!"
         logger.debug(f"Obtained molecule {molecules} from PubChem {pubchem}")
 
+    # Preserve the default base for subcommands that supply a full suffix.
+    default_label_base = None
     # update labels
     if label is not None and append_label is not None:
         raise ValueError(
@@ -791,6 +793,7 @@ def gaussian(
                 label = f"{label}_RID-{record_id}"
             elif record_index is not None:
                 label = f"{label}_RI-{record_index}"
+        default_label_base = clean_label(label)
         label = f"{label}_{ctx.invoked_subcommand}"
     label = clean_label(label)
 
@@ -867,6 +870,7 @@ def gaussian(
         molecule_indices  # Store original 1-based indices
     )
     ctx.obj["label"] = label
+    ctx.obj["default_label_base"] = default_label_base
     ctx.obj["filename"] = filename
 
 

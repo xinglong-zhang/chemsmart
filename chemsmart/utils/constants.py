@@ -44,6 +44,12 @@ joule_per_mol_to_hartree = 1 / (
 
 au_to_debye = 2.54174623
 
+# Markers used by the dedicated MECP projected-frequency output format.
+MECP_FREQUENCY_HEADER = "CHEMSMART MECP projected frequency analysis"
+MECP_FREQUENCY_TERMINATION_MARKER = (
+    "CHEMSMART MECP frequency analysis completed"
+)
+
 
 def energy_conversion(from_unit, to_unit, value=1.0):
     """

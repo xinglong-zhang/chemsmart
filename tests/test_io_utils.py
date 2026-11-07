@@ -20,6 +20,7 @@ from chemsmart.utils.io import (
     clean_duplicate_structure,
     clean_label,
     convert_string_indices_to_pymol_id_indices,
+    file_content_begins_with,
     get_program_type_from_file,
     increment_numbers,
     is_xyzfile,
@@ -36,6 +37,27 @@ from chemsmart.utils.io import (
     update_shell_config,
     update_windows_env,
 )
+
+
+class TestFileContentBeginsWith:
+    def test_matching_prefix(self, tmp_path):
+        output_file = tmp_path / "output.log"
+        output_file.write_text(
+            "expected header\nremaining content", encoding="utf-8"
+        )
+
+        assert file_content_begins_with(output_file, "expected header")
+
+    def test_nonmatching_prefix(self, tmp_path):
+        output_file = tmp_path / "output.log"
+        output_file.write_text("different header", encoding="utf-8")
+
+        assert not file_content_begins_with(output_file, "expected header")
+
+    def test_unreadable_file(self, tmp_path):
+        assert not file_content_begins_with(
+            tmp_path / "missing.log", "expected header"
+        )
 
 
 class TestIncrementNumbers:

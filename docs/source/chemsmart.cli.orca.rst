@@ -24,6 +24,15 @@
    :undoc-members:
    :show-inheritance:
 
+********************************
+ chemsmart.cli.orca.mecp module
+********************************
+
+.. automodule:: chemsmart.cli.orca.mecp
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 **********************************
  chemsmart.cli.orca.modred module
 **********************************
