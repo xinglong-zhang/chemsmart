@@ -1,5 +1,6 @@
 import csv
 import json
+import shutil
 import sqlite3
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -10,6 +11,7 @@ import pytest
 from chemsmart.database.assemble import (
     BaseAssembler,
     GaussianAssembler,
+    ORCAAssembler,
     SingleFileAssembler,
     SingleFolderAssembler,
 )
@@ -41,6 +43,7 @@ from chemsmart.database.utils import (
     to_json,
     truncate_iso,
 )
+from chemsmart.io.molecules.structure import Molecule
 
 # Canonical InChIKeys (molecule_id) for molecules used across the test suite
 INCHIKEY_H2O = "XLYOFNOQVPJJNP-UHFFFAOYSA-N"
@@ -602,6 +605,59 @@ class TestDatabaseSchemaAndInsertion:
         assert required_tables <= tables
         assert "idx_record_id" in indexes
         assert "idx_struct_molecule_id" in indexes
+
+    def test_create_upgrades_existing_schema(
+        self, tmp_path, database_chemsmart_file
+    ):
+        db_path = tmp_path / "existing.db"
+        shutil.copyfile(database_chemsmart_file, db_path)
+        db = Database(str(db_path))
+        db.create()
+
+        conn = db.get_connection()
+        try:
+            record_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(records)")
+            }
+            structure_columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(record_structures)")
+            }
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+        finally:
+            conn.close()
+
+        assert {"meta_json", "results_json"} <= record_columns
+        assert "molecule_data_json" in structure_columns
+        assert version == SCHEMA_VERSION
+
+    def test_round_trips_unmapped_assembled_properties(self, tmp_path):
+        record = AssembledRecord(
+            record_id="property-record",
+            meta={"method": "test", "custom_metadata": {"basis": "x"}},
+            results={"total_energy": -1.0, "custom_result": [1.0, 2.0]},
+            molecules=[
+                {
+                    "index": 1,
+                    "molecule_id": "property-molecule",
+                    "structure_id": "property-structure",
+                    "chemical_symbols": ["H"],
+                    "positions": [[0.0, 0.0, 0.0]],
+                    "custom_structure_property": {"value": 3.0},
+                }
+            ],
+            provenance={"program": "test"},
+        )
+        db = Database(str(tmp_path / "properties.db"))
+        db.create()
+        db.insert_record(record)
+
+        restored = db.get_record(record_id=record.record_id)
+        assert restored["meta"]["custom_metadata"] == {"basis": "x"}
+        assert restored["results"]["custom_result"] == [1.0, 2.0]
+        assert restored["molecules"][0]["custom_structure_property"] == {
+            "value": 3.0
+        }
 
     def test_get_record_without_index_or_id_returns_none(self, tmp_path):
         db = Database(str(tmp_path / "empty2.db"))
@@ -2151,6 +2207,73 @@ class TestGetMoleculeInfoMullikenSpinDensities:
 
         info = assembler.get_molecule_info(mol)
         assert info["mulliken_spin_densities"] == [0.1, -0.1]
+
+
+class TestMoleculeQuantumPropertyAssembly:
+    def test_includes_vibrational_metadata_and_periodic_structure(self):
+        assembler = _make_base_assembler(MagicMock())
+        molecule = Molecule(
+            symbols=["H", "H"],
+            positions=[[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]],
+            pbc_conditions=[1, 0, 0],
+            translation_vectors=[[1.0, 0.0, 0.0]],
+            vibrational_frequencies=[4400.0],
+            vibrational_reduced_masses=[1.0],
+            vibrational_force_constants=[5.0],
+            vibrational_ir_intensities=[0.1],
+            vibrational_mode_symmetries=["Sigma"],
+        )
+
+        info = assembler.get_molecule_info(molecule)
+
+        assert info["pbc_conditions"] == [1, 0, 0]
+        assert info["translation_vectors"] == [[1.0, 0.0, 0.0]]
+        assert info["vibrational_reduced_masses"] == [1.0]
+        assert info["vibrational_force_constants"] == [5.0]
+        assert info["vibrational_ir_intensities"] == [0.1]
+        assert info["vibrational_mode_symmetries"] == ["Sigma"]
+
+
+class TestOutputPropertyAssembly:
+    def test_collects_serializable_output_parser_properties(self):
+        class FakeOutput:
+            @property
+            def excitation_energies(self):
+                return [2.0, 3.0]
+
+            @property
+            def unsupported_value(self):
+                return object()
+
+            @property
+            def unavailable_value(self):
+                raise ValueError("not present in this output")
+
+        assembler = _make_base_assembler(FakeOutput())
+
+        assert assembler.get_output_properties() == {
+            "excitation_energies": [2.0, 3.0]
+        }
+
+    def test_orca_assembler_includes_spectroscopy_properties(self):
+        assembler = ORCAAssembler.__new__(ORCAAssembler)
+        assembler.output = SimpleNamespace(
+            molar_absorption_coefficients=[1.0],
+            integrated_absorption_coefficients=[2.0],
+            transition_dipole_deriv_norm=[3.0],
+            transition_dipoles=[[0.1, 0.2, 0.3]],
+            quadrupole=[[0.0, 0.1], [0.1, 0.0]],
+        )
+        with patch.object(
+            BaseAssembler, "get_calculation_results", return_value={}
+        ):
+            results = assembler.get_calculation_results()
+
+        assert results["molar_absorption_coefficients"] == [1.0]
+        assert results["integrated_absorption_coefficients"] == [2.0]
+        assert results["transition_dipole_deriv_norm"] == [3.0]
+        assert results["transition_dipoles"] == [[0.1, 0.2, 0.3]]
+        assert results["quadrupole"] == [[0.0, 0.1], [0.1, 0.0]]
 
 
 class TestGaussianAssemblerMetaDataBranches:

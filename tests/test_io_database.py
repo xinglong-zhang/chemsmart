@@ -21,9 +21,25 @@ class TestBuildMoleculeFromDatabase:
         minimal_struct_dict["vibrational_modes"] = [
             [[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]]
         ]
+        minimal_struct_dict["vibrational_reduced_masses"] = [1.0]
+        minimal_struct_dict["vibrational_force_constants"] = [2.0]
+        minimal_struct_dict["vibrational_ir_intensities"] = [3.0]
+        minimal_struct_dict["vibrational_mode_symmetries"] = ["Sigma"]
+        minimal_struct_dict["pbc_conditions"] = [1, 0, 0]
+        minimal_struct_dict["translation_vectors"] = [[1.0, 0.0, 0.0]]
+        minimal_struct_dict["velocities"] = [[0.0, 0.1, 0.0], [0.0, -0.1, 0.0]]
+        minimal_struct_dict["info"] = {"source": "test"}
         db_file = DatabaseFile("dummy.db")
         molecule = db_file.build_molecule_from_database(minimal_struct_dict)
         assert isinstance(molecule.vibrational_modes[0], np.ndarray)
+        assert molecule.vibrational_reduced_masses == [1.0]
+        assert molecule.vibrational_force_constants == [2.0]
+        assert molecule.vibrational_ir_intensities == [3.0]
+        assert molecule.vibrational_mode_symmetries == ["Sigma"]
+        assert molecule.pbc_conditions == [1, 0, 0]
+        assert molecule.translation_vectors == [[1.0, 0.0, 0.0]]
+        assert isinstance(molecule.velocities, np.ndarray)
+        assert molecule.info == {"source": "test"}
 
     def test_without_vibrational_modes(self, minimal_struct_dict):
         db_file = DatabaseFile("dummy.db")

@@ -12,6 +12,7 @@ This module consolidates the assembler pipeline:
 - build_provenance: provenance metadata builder
 """
 
+import json
 import logging
 from functools import cached_property
 
@@ -21,6 +22,7 @@ from chemsmart.database.utils import (
     canonical_json_hash,
     canonicalize_route_string,
     compute_trajectory_id,
+    convert_numpy,
     directory_size,
     file_size,
     get_record_id,
@@ -223,9 +225,21 @@ class BaseAssembler:
             "inchi": mol.inchi,
             "chiral_centers": mol.chiral_centers,
             "moments_of_inertia": mol.moments_of_inertia,
+            "moments_of_inertia_tensor": mol.moments_of_inertia_tensor,
+            "moments_of_inertia_principal_axes": (
+                mol.moments_of_inertia_principal_axes
+            ),
+            "rotational_temperatures": mol.rotational_temperatures,
+            "pbc_conditions": mol.pbc_conditions,
+            "translation_vectors": mol.translation_vectors,
+            "velocities": mol.velocities,
             "frozen_atoms": mol.frozen_atoms,
             "energy": mol.energy,
             "forces": mol.forces,
+            "vibrational_reduced_masses": mol.vibrational_reduced_masses,
+            "vibrational_force_constants": mol.vibrational_force_constants,
+            "vibrational_ir_intensities": mol.vibrational_ir_intensities,
+            "vibrational_mode_symmetries": mol.vibrational_mode_symmetries,
         }
         if mol.mulliken_atomic_charges is not None:
             molecule_info["mulliken_atomic_charges"] = (
@@ -257,6 +271,12 @@ class BaseAssembler:
                     "vibrational_modes": mol.vibrational_modes,
                 }
             )
+        try:
+            json.dumps(convert_numpy(mol.info))
+        except (TypeError, ValueError):
+            pass
+        else:
+            molecule_info["info"] = mol.info
         return molecule_info
 
     def get_calculation_results(self):
@@ -280,6 +300,9 @@ class BaseAssembler:
             "total_core_hours": self.output.total_core_hours,
             "total_elapsed_walltime": self.output.total_elapsed_walltime,
         }
+        calculation_results.update(
+            self.get_output_properties(calculation_results)
+        )
         if self.output.freq:
             calculation_results.update(
                 {
@@ -304,6 +327,25 @@ class BaseAssembler:
                 }
             )
         return calculation_results
+
+    def get_output_properties(self, existing_results=None):
+        """Include JSON-serializable properties exposed by the parser."""
+        existing_results = existing_results or {}
+        output_properties = {}
+        for cls in reversed(type(self.output).__mro__):
+            for name, descriptor in cls.__dict__.items():
+                if name.startswith("_") or not isinstance(
+                    descriptor, (property, cached_property)
+                ):
+                    continue
+                try:
+                    value = convert_numpy(getattr(self.output, name))
+                    json.dumps(value)
+                except Exception:
+                    continue
+                if value is not None and name not in existing_results:
+                    output_properties[name] = value
+        return output_properties
 
 
 class GaussianAssembler(BaseAssembler):
@@ -362,6 +404,14 @@ class ORCAAssembler(BaseAssembler):
         calculation_results.update(
             {
                 "molar_absorption_coefficients": self.output.molar_absorption_coefficients,
+                "integrated_absorption_coefficients": (
+                    self.output.integrated_absorption_coefficients
+                ),
+                "transition_dipole_deriv_norm": (
+                    self.output.transition_dipole_deriv_norm
+                ),
+                "transition_dipoles": self.output.transition_dipoles,
+                "quadrupole": self.output.quadrupole,
             }
         )
         return calculation_results

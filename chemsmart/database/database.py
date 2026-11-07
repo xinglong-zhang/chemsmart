@@ -86,6 +86,8 @@ class Database:
                     custom_solvent TEXT,
                     custom_basis_json TEXT,
                     trajectory_id TEXT,
+                    meta_json TEXT,
+                    results_json TEXT,
                     temperature_in_K REAL,
                     pressure_in_atm REAL,
                     -- Results fields
@@ -199,11 +201,30 @@ class Database:
                     num_vibrational_modes INTEGER,
                     vibrational_frequencies_json TEXT,
                     vibrational_modes_json TEXT,
+                    molecule_data_json TEXT,
                     PRIMARY KEY (record_id, index_in_record),
                     FOREIGN KEY (record_id) REFERENCES records(record_id),
                     FOREIGN KEY (structure_id) REFERENCES structures(structure_id)
                 )
             """)
+
+            for table, columns in {
+                "records": {
+                    "meta_json": "TEXT",
+                    "results_json": "TEXT",
+                },
+                "record_structures": {"molecule_data_json": "TEXT"},
+            }.items():
+                existing_columns = {
+                    row[1]
+                    for row in conn.execute(f"PRAGMA table_info({table})")
+                }
+                for column, column_type in columns.items():
+                    if column not in existing_columns:
+                        conn.execute(
+                            f"ALTER TABLE {table} "
+                            f"ADD COLUMN {column} {column_type}"
+                        )
 
             logger.debug("Creating database indices...")
             conn.execute(
@@ -274,6 +295,7 @@ class Database:
                 solvent_on, route_string, solvent_model, solvent_id, custom_solvent,
                 custom_basis_json,
                 trajectory_id,
+                meta_json, results_json,
                 temperature_in_K, pressure_in_atm,
                 total_energy, num_unpaired_electrons,
                 homo_energy, lumo_energy, alpha_homo_energy, beta_homo_energy,
@@ -295,7 +317,8 @@ class Database:
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?
             )
             """,
             (
@@ -314,6 +337,8 @@ class Database:
                 to_json(meta.get("custom_solvent")),
                 to_json(meta.get("custom_basis")),
                 meta.get("trajectory_id"),
+                to_json(meta),
+                to_json(results),
                 meta.get("temperature_in_K"),
                 meta.get("pressure_in_atm"),
                 # Results
@@ -395,7 +420,9 @@ class Database:
                     elements_json, element_counts_json, is_chiral, is_ring,
                     is_aromatic, is_monoatomic, is_diatomic, is_linear,
                     is_multicomponent, num_components
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
                 ON CONFLICT(molecule_id) DO UPDATE SET
                     smiles = COALESCE(molecules.smiles, excluded.smiles),
                     inchi = COALESCE(molecules.inchi, excluded.inchi),
@@ -457,8 +484,10 @@ class Database:
                     rotational_symmetry_number, rotational_constants_json,
                     point_group, dipole_moment_json, dipole_moment_magnitude,
                     num_vibrational_modes, vibrational_frequencies_json,
-                    vibrational_modes_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    vibrational_modes_json, molecule_data_json
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
                 """,
                 (
                     record_id,
@@ -479,6 +508,7 @@ class Database:
                     mol.get("num_vibrational_modes"),
                     to_json(mol.get("vibrational_frequencies")),
                     to_json(mol.get("vibrational_modes")),
+                    to_json(mol),
                 ),
             )
 
@@ -618,6 +648,7 @@ class Database:
         if row.get("temperature_in_K") is not None:
             meta["temperature_in_K"] = row.get("temperature_in_K")
             meta["pressure_in_atm"] = row.get("pressure_in_atm")
+        meta.update(from_json(row.get("meta_json")) or {})
         return meta
 
     @staticmethod
@@ -683,6 +714,7 @@ class Database:
                     "gibbs_free_energy": row.get("gibbs_free_energy"),
                 }
             )
+        results.update(from_json(row.get("results_json")) or {})
         return results
 
     @staticmethod
@@ -779,6 +811,7 @@ class Database:
             mol["vibrational_modes"] = from_json(
                 row.get("vibrational_modes_json")
             )
+        mol.update(from_json(row.get("molecule_data_json")) or {})
         return mol
 
     def get_record_by_partial_id(self, partial_id):
