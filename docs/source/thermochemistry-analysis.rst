@@ -26,6 +26,17 @@ Usage
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
                                  [-o outfile.dat] [-O] [-i] [-S|-R]
 
+To submit the calculation to a compute node instead, use ``chemsmart sub`` with the same options:
+
+.. code:: bash
+
+   chemsmart sub -s SERVER thermochemistry -T 298.15 -f water_opt.out
+
+Nothing is calculated when you submit. All the files in one command run as one job, which is named after the first file,
+and the results are written to the submission folder. This also applies to the ``boltzmann`` subcommand. Your
+``server.yaml`` needs no extra section, but submit from the Python environment where CHEMSMART is installed, because the
+job uses that same environment.
+
 Options
 =======
 
