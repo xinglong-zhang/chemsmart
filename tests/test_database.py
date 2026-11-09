@@ -794,6 +794,68 @@ class TestDatabaseSchemaAndInsertion:
         conn.close()
         assert version == SCHEMA_VERSION
 
+    def test_version_one_upgrades_on_query_check(
+        self, tmp_path, database_chemsmart_file
+    ):
+        db_path = tmp_path / "old.db"
+        shutil.copyfile(database_chemsmart_file, db_path)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("PRAGMA user_version = 1")
+        db = Database(str(db_path))
+        previous = db.get_all_records()
+        check_schema_version(str(db_path))
+        assert db.get_all_records() == previous
+        assert db.count_records() == len(previous)
+        with sqlite3.connect(db_path) as conn:
+            assert (
+                conn.execute("PRAGMA user_version").fetchone()[0]
+                == SCHEMA_VERSION
+            )
+        record = AssembledRecord(
+            record_id="after-upgrade",
+            meta={"method": "test"},
+            results={"custom_result": 2.0},
+            molecules=[],
+            provenance={},
+        )
+        db.insert_record(record)
+        assert (
+            db.get_record(record_id="after-upgrade")["results"][
+                "custom_result"
+            ]
+            == 2.0
+        )
+
+    def test_create_rejects_future_schema(self, tmp_path):
+        db = Database(str(tmp_path / "future.db"))
+        db.create()
+        with sqlite3.connect(db.db_file) as conn:
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+        with pytest.raises(RuntimeError, match="schema version mismatch"):
+            db.create()
+
+    def test_real_outputs_round_trip_new_results(
+        self, tmp_path, gaussian_co2_opt_outfile, orca_co2_output
+    ):
+        db = Database(str(tmp_path / "outputs.db"))
+        db.create()
+        for filename in (gaussian_co2_opt_outfile, orca_co2_output):
+            record = SingleFileAssembler(filename).assemble_data
+            assert record is not None
+            db.insert_record(record)
+            restored = db.get_record(record_id=record.record_id)
+            for key in record.results:
+                if key in (
+                    "excitation_energies_eV",
+                    "absorptions_in_nm",
+                    "oscillatory_strengths",
+                    "transition_dipoles",
+                    "quadrupole",
+                ):
+                    assert restored["results"][key] == convert_numpy(
+                        record.results[key]
+                    )
+
     def test_schema_version_matches_does_not_raise(self, tmp_path):
         db = Database(str(tmp_path / "chemsmart.db"))
         db.create()
@@ -2235,25 +2297,26 @@ class TestMoleculeQuantumPropertyAssembly:
 
 
 class TestOutputPropertyAssembly:
-    def test_collects_serializable_output_parser_properties(self):
+    def test_collects_properties_and_reports_parser_failures(self, caplog):
         class FakeOutput:
             @property
             def excitation_energies(self):
-                return [2.0, 3.0]
+                return np.array([2.0, 3.0])
 
             @property
             def unsupported_value(self):
                 return object()
 
             @property
-            def unavailable_value(self):
-                raise ValueError("not present in this output")
+            def broken_value(self):
+                raise ValueError("bad output")
 
         assembler = _make_base_assembler(FakeOutput())
-
         assert assembler.get_output_properties() == {
             "excitation_energies": [2.0, 3.0]
         }
+        assert "Failed to parse output property broken_value" in caplog.text
+        assert "bad output" in caplog.text
 
     def test_orca_assembler_includes_spectroscopy_properties(self):
         assembler = ORCAAssembler.__new__(ORCAAssembler)

@@ -67,6 +67,12 @@ class Database:
         """
         conn = open_connection(self.db_file)
         try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version not in (0, 1, SCHEMA_VERSION):
+                raise RuntimeError(
+                    f"Database schema version mismatch: expected "
+                    f"{SCHEMA_VERSION}, got {version}."
+                )
             logger.debug("Creating records table...")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS records (

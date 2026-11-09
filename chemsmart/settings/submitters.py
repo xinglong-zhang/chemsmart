@@ -477,6 +477,8 @@ class Submitter(RegistryMixin):
         Args:
             f: File handle for writing program-specific setup.
         """
+        if self.job.PROGRAM == "database":
+            return
         self._write_program_specific_conda_env(f)
         self._write_load_program_specific_modules(f)
         self._write_source_program_specific_script(f)
@@ -978,7 +980,7 @@ class FUGAKUSubmitter(Submitter):
             f: File handle for writing PJM directives.
         """
         if user_settings is not None:
-            f.write(f'#PJM -L rscgrp={user_settings.data["RSCGRP"]}\n')
+            f.write(f"#PJM -L rscgrp={user_settings.data['RSCGRP']}\n")
         f.write("#PJM -L node=1\n")  # using one node here
         f.write(f"#PJM -L elapse={self.server.num_hours}\n")
         f.write(f"#PJM --mpi proc={self.server.num_cores}\n")

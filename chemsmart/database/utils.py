@@ -43,6 +43,12 @@ def check_schema_version(db_file):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     finally:
         conn.close()
+    if version == 1 and is_chemsmart_database(db_file):
+        # Import here to avoid a module-level dependency cycle.
+        from chemsmart.database.database import Database
+
+        Database(db_file).create()
+        return
     if version != SCHEMA_VERSION:
         raise RuntimeError(
             f"Database schema version mismatch: expected {SCHEMA_VERSION}, got {version}. "

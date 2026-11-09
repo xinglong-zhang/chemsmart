@@ -103,3 +103,18 @@ continues assembling other valid calculations.
 .. code:: bash
 
    chemsmart run database assemble -d results/ -i -1 -o final_geoms.db
+
+Submitting large assemblies
+===========================
+
+For large datasets, submit the assembly to the configured scheduler:
+
+.. code::
+
+   chemsmart sub -t 24 database assemble -d . -p xtb -o xtb.db
+
+The input directory and output database must be accessible from the compute node. Activate a Python environment
+containing CHEMSMART before submission and ensure the scheduler makes that environment available to the job. Use
+``--test`` before ``database`` to generate scripts without submitting. Records are written in batches of 100 and
+progress is logged every 100 sources. If a job is interrupted, rerunning scans the inputs again and replaces records
+with matching IDs. The directory discovery step still scans the entire input tree before parsing begins.

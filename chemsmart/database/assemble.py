@@ -273,8 +273,8 @@ class BaseAssembler:
             )
         try:
             json.dumps(convert_numpy(mol.info))
-        except (TypeError, ValueError):
-            pass
+        except (TypeError, ValueError) as exc:
+            logger.warning("Cannot serialize molecule info: %s", exc)
         else:
             molecule_info["info"] = mol.info
         return molecule_info
@@ -329,23 +329,36 @@ class BaseAssembler:
         return calculation_results
 
     def get_output_properties(self, existing_results=None):
-        """Include JSON-serializable properties exposed by the parser."""
+        """Collect serializable public parser properties without replacing results."""
         existing_results = existing_results or {}
-        output_properties = {}
+        properties = {}
         for cls in reversed(type(self.output).__mro__):
             for name, descriptor in cls.__dict__.items():
-                if name.startswith("_") or not isinstance(
-                    descriptor, (property, cached_property)
+                if (
+                    name.startswith("_")
+                    or not isinstance(descriptor, (property, cached_property))
+                    or name in existing_results
                 ):
                     continue
                 try:
                     value = convert_numpy(getattr(self.output, name))
-                    json.dumps(value)
                 except Exception:
+                    logger.warning(
+                        "Failed to parse output property %s",
+                        name,
+                        exc_info=True,
+                    )
                     continue
-                if value is not None and name not in existing_results:
-                    output_properties[name] = value
-        return output_properties
+                try:
+                    json.dumps(value)
+                except (TypeError, ValueError):
+                    logger.debug(
+                        "Output property %s is not JSON serializable", name
+                    )
+                    continue
+                if value is not None:
+                    properties[name] = value
+        return properties
 
 
 class GaussianAssembler(BaseAssembler):
@@ -376,6 +389,9 @@ class GaussianAssembler(BaseAssembler):
         calculation_results = super().get_calculation_results()
         calculation_results.update(
             {
+                "excitation_energies_eV": self.output.excitation_energies_eV,
+                "absorptions_in_nm": self.output.absorptions_in_nm,
+                "oscillatory_strengths": self.output.oscillatory_strengths,
                 "optimized_steps": self.output.optimized_steps,
                 "reduced_masses": self.output.reduced_masses,
                 "force_constants": self.output.force_constants,

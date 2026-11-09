@@ -11,11 +11,29 @@ from chemsmart.database.assemble import (
 from chemsmart.database.database import Database
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.xtb.folder import XTBFolder
+from chemsmart.jobs.job import Job
 from chemsmart.utils.cli import MyCommand
 
 from .database import database
 
 logger = logging.getLogger(__name__)
+
+
+class DatabaseAssemblyJob(Job):
+    """Submission metadata for a database assembly command."""
+
+    PROGRAM = "database"
+
+    def __init__(self, output, jobrunner):
+        super().__init__(
+            molecule=None,
+            label=os.path.splitext(os.path.basename(output))[0],
+            jobrunner=jobrunner,
+            skip_completed=False,
+        )
+
+    def is_complete(self):
+        return False
 
 
 @database.command(cls=MyCommand)
@@ -72,6 +90,15 @@ def assemble(
     directory = os.path.abspath(directory)
     if not os.path.isdir(directory):
         raise FileNotFoundError(f"Directory does not exist: {directory}")
+
+    # A queued invocation must not discover or parse files on the submit host.
+    if ctx.find_root().invoked_subcommand == "sub":
+        output = os.path.abspath(output)
+        for command in ctx.obj["subcommand"]:
+            if command["name"] == "assemble":
+                command["kwargs"]["directory"]["value"] = directory
+                command["kwargs"]["output"]["value"] = output
+        return DatabaseAssemblyJob(output, ctx.obj["jobrunner"])
 
     supported_programs = {"gaussian", "orca", "xtb"}
     if program is None:
@@ -143,44 +170,41 @@ def assemble(
             f"Found {len(files)} {program} output files, assembling..."
         )
 
-    # Parse all collected files or folders
-    rows = []
-    for file in files:
-        try:
-            assembler = SingleFileAssembler(
-                filename=file, index=index, include_failed=include_failed
-            )
-            data = assembler.assemble_data
-            if data:
-                rows.append(data)
-        except Exception as e:
-            logger.error(f"Failed to parse {file}: {e}")
-
-    for folder in folders:
-        try:
-            assembler = SingleFolderAssembler(
-                folder=folder, index=index, include_failed=include_failed
-            )
-            data = assembler.assemble_data
-            if data:
-                rows.append(data)
-        except Exception as e:
-            logger.error(f"Failed to parse {folder}: {e}")
-
-    if not rows:
-        logger.error("No valid data parsed. Aborting.")
-        return None
-
-    # Write to chemsmart database
+    # Commit bounded batches so long jobs make progress and retain completed work.
     db = Database(db_file=output)
     db.create()
-    attempted = db.insert_records(rows)
-    actual = db.count_records()
-    if attempted != actual:
-        logger.warning(
-            f"Processed {attempted} source(s), but only {actual} unique "
-            f"record(s) were stored ({attempted - actual} duplicates were "
-            f"replaced)."
-        )
-    logger.info(f"Assembled {actual} record(s) into database: {output}")
+    batch = []
+    inserted = 0
+    processed = 0
+    total = len(files) + len(folders)
+    for target, assembler_class, keyword in [
+        (file, SingleFileAssembler, "filename") for file in files
+    ] + [(folder, SingleFolderAssembler, "folder") for folder in folders]:
+        try:
+            assembler = assembler_class(
+                **{keyword: target}, index=index, include_failed=include_failed
+            )
+            data = assembler.assemble_data
+            if data:
+                batch.append(data)
+        except Exception:
+            logger.exception("Failed to parse %s", target)
+        processed += 1
+        if len(batch) >= 100:
+            inserted += db.insert_records(batch)
+            batch.clear()
+        if processed % 100 == 0 or processed == total:
+            logger.info(
+                "Processed %d/%d sources; wrote %d records",
+                processed,
+                total,
+                inserted,
+            )
+
+    if batch:
+        inserted += db.insert_records(batch)
+    if not inserted:
+        logger.error("No valid data inserted.")
+        return None
+    logger.info("Inserted %d records into database: %s", inserted, output)
     return None

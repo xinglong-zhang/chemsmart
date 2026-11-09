@@ -5,6 +5,10 @@
 The ``query`` subcommand searches a CHEMSMART database using a compact expression language. The query target can be
 switched between records, molecules, or structures.
 
+Version 1 databases are upgraded to version 2 when opened by the query, inspect, or export commands. This updates the
+database file in place and requires write access. Python callers can upgrade explicitly with ``Database(path).create()``
+before writing new records.
+
 *******
  Usage
 *******
