@@ -3,13 +3,7 @@ import logging
 from abc import abstractmethod
 from typing import Optional
 
-from chemsmart.settings.executable import (
-    CRESTExecutable,
-    GaussianExecutable,
-    NCIPLOTExecutable,
-    ORCAExecutable,
-    XTBExecutable,
-)
+from chemsmart.settings.executable import executable_class_for_program
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
 
@@ -257,22 +251,10 @@ class Submitter(RegistryMixin):
         Raises:
             ValueError: If the job's program is not supported.
         """
-        if self.job.PROGRAM.lower() == "gaussian":
-            executable = GaussianExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "orca":
-            executable = ORCAExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "xtb":
-            executable = XTBExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "crest":
-            executable = CRESTExecutable.from_servername(self.server.name)
-        elif self.job.PROGRAM.lower() == "nciplot":
-            executable = NCIPLOTExecutable.from_servername(self.server.name)
-
-        else:
-            # Need to add programs here to be
-            # supported for other types of programs
+        executable_cls = executable_class_for_program(self.job.PROGRAM)
+        if executable_cls is None:
             raise ValueError(f"Program {self.job.PROGRAM} not supported.")
-        return executable
+        return executable_cls.from_servername(self.server.name)
 
     def write(self, cli_args):
         """

@@ -17,9 +17,12 @@ Each entry point must expose a Click command or group, and its entry-point
 name must match ``command.name``. Job commands are available under both
 ``chemsmart run`` and ``chemsmart sub``.
 
-Duplicate names, including collisions with built-in commands, are errors.
-Broken optional plugins are warned about and skipped, while strict discovery
-used by validation raises the loading error.
+In normal mode, duplicate plugin names are all skipped, and plugins colliding
+with built-in commands are skipped. Broken plugins are also skipped. Each
+failure is logged; strict discovery or registration raises an error instead.
+Job plugins that introduce a new program must load an ``Executable`` subclass
+with a matching ``PROGRAM`` when their command is imported, so the submitter
+can resolve its server configuration. Multiple matches are an error.
 
 A minimal plugin command is:
 
