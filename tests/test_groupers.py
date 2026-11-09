@@ -7,6 +7,7 @@ import click
 import numpy as np
 import pandas as pd
 import pytest
+from click.testing import CliRunner
 
 from chemsmart.cli.grouper.grouper import (
     THERMOCHEMISTRY_DEFAULT_KWARGS,
@@ -19,6 +20,7 @@ from chemsmart.cli.grouper.grouper import (
     build_thermochemistry_kwargs,
     create_grouper_job_from_context,
 )
+from chemsmart.cli.run import run
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.jobs.grouper.base import (
@@ -53,11 +55,13 @@ from chemsmart.utils.utils import (
     to_graph_wrapper,
 )
 from tests.helpers import (
+    capture_grouper_thermo_parameters,
     make_formaldehyde_molecule,
     make_matrix_grouper,
     make_mock_molecules,
     make_molecule_grouper,
     make_thermo_with_output,
+    read_grouper_structures,
     run_grouper_and_capture_job_kwargs,
 )
 
@@ -6000,6 +6004,27 @@ class TestInvalidMoleculeHandling:
         assert groups == []
         assert index_groups == []
 
+    @pytest.mark.parametrize(
+        "fingerprint_type, suggests_alternative",
+        [("rdkit", True), ("usr", False), ("usrcat", False)],
+    )
+    def test_failure_suggests_fingerprints_without_bond_perception(
+        self,
+        methanol_molecules,
+        mocker,
+        fingerprint_type,
+        suggests_alternative,
+    ):
+        """usr and usrcat cannot be suggested when they are what failed."""
+        grouper = TanimotoSimilarityGrouper(
+            methanol_molecules, fingerprint_type=fingerprint_type
+        )
+        mocker.patch.object(grouper, "_get_fingerprint", return_value=None)
+        logger = mocker.patch("chemsmart.jobs.grouper.tanimoto.logger")
+
+        assert grouper.group() == ([], [])
+        assert logger.error.called is suggests_alternative
+
 
 @pytest.mark.usefixtures("temporary_working_dir")
 @pytest.mark.usefixtures("temporary_working_dir")
@@ -6927,9 +6952,8 @@ class TestGrouperJobRunnerSetup:
         assert runner._get_command(grouper_job) is None
         assert runner._get_executable() is None
 
-    def test_run_and_postrun_are_no_ops(self, pbs_server, grouper_job):
+    def test_postrun_is_a_no_op(self, pbs_server, grouper_job):
         runner = GrouperJobRunner(server=pbs_server)
-        runner._run(process=None)
         runner._postrun(grouper_job)
 
 
@@ -7006,8 +7030,10 @@ class TestGrouperJobRunnerCreateProcess:
         os.makedirs(grouper_job.output_dir)
         runner = GrouperJobRunner(server=pbs_server)
 
+        groups = [grouper_job.molecules]
+        indices = [[0, 1, 2]]
         mock_grouper = MagicMock()
-        mock_grouper.group.return_value = ([], [])
+        mock_grouper.group.return_value = (groups, indices)
         with (
             patch.object(runner, "_create_grouper", return_value=mock_grouper),
             patch.object(runner, "_write_outputs") as mock_write,
@@ -7016,7 +7042,88 @@ class TestGrouperJobRunnerCreateProcess:
 
         assert exit_code == 0
         assert grouper_job._grouper is mock_grouper
-        mock_write.assert_called_once_with(grouper_job, [], [])
+        mock_write.assert_called_once_with(grouper_job, groups, indices)
+
+    def test_create_process_with_no_groups_is_a_failure(
+        self, pbs_server, grouper_job
+    ):
+        os.makedirs(grouper_job.output_dir)
+        runner = GrouperJobRunner(server=pbs_server)
+
+        mock_grouper = MagicMock()
+        mock_grouper.group.return_value = ([], [])
+        with (
+            patch.object(runner, "_create_grouper", return_value=mock_grouper),
+            patch.object(runner, "_write_outputs") as mock_write,
+        ):
+            exit_code = runner._create_process(grouper_job, None, None)
+
+        assert exit_code == 1
+        mock_write.assert_not_called()
+        with open(grouper_job.errfile) as f:
+            assert "none of the 3 structures" in f.read()
+
+    def test_failed_grouping_raises_and_success_does_not(self, pbs_server):
+        runner = GrouperJobRunner(server=pbs_server)
+
+        runner._run(0)
+        with pytest.raises(RuntimeError, match="Grouping failed"):
+            runner._run(1)
+
+
+@pytest.mark.usefixtures("chemsmart_templates_config")
+class TestTanimotoWithoutBondPerception:
+    """Metal complexes and transition states defeat RDKit bond perception."""
+
+    def test_failure_reaches_the_exit_code(
+        self, tmp_path, monkeypatch, ts_conformers_log_directory
+    ):
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            run,
+            [
+                "grouper",
+                "-d",
+                ts_conformers_log_directory,
+                "-p",
+                "gaussian",
+                "-l",
+                "pd",
+                "tanimoto",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Grouping failed" in str(result.exception)
+        assert not read_grouper_structures(tmp_path)
+        assert (
+            "none of the 5 structures"
+            in (tmp_path / "pd_tanimoto.err").read_text()
+        )
+
+    @pytest.mark.parametrize("fingerprint_type", ["usr", "usrcat"])
+    def test_3d_fingerprints_group_the_same_structures(
+        self,
+        fingerprint_type,
+        tmp_path,
+        monkeypatch,
+        ts_conformers_log_directory,
+    ):
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(
+            run,
+            [
+                "grouper",
+                "-d",
+                ts_conformers_log_directory,
+                "-p",
+                "gaussian",
+                "tanimoto",
+                "-ft",
+                fingerprint_type,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert read_grouper_structures(tmp_path)
 
     def test_create_process_failure_writes_errfile(
         self, pbs_server, grouper_job
@@ -7659,6 +7766,55 @@ class TestGrouperCliBothCutoffsRejected:
         )
         assert result.exit_code != 0
         assert "Cannot specify both" in result.output
+
+
+class TestGrouperEntropyCutoffOptions:
+    def test_grimme_is_used_when_no_cutoff_is_given(
+        self, ts_conformers_log_directory
+    ):
+        parameters = capture_grouper_thermo_parameters(
+            ts_conformers_log_directory
+        )
+        assert "entropy_method=grimme" in parameters
+        assert "s_freq_cutoff=100.0" in parameters
+
+    def test_truhlar_can_be_given_alone(self, ts_conformers_log_directory):
+        parameters = capture_grouper_thermo_parameters(
+            ts_conformers_log_directory, "-cst", "110"
+        )
+        assert "entropy_method=truhlar" in parameters
+        assert "s_freq_cutoff=110.0" in parameters
+        assert "cutoff_entropy_grimme" not in parameters
+
+    @pytest.mark.usefixtures("chemsmart_templates_config")
+    def test_truhlar_changes_the_energies(
+        self, tmp_path, monkeypatch, ts_conformers_log_directory
+    ):
+        energies = {}
+        for name, cutoff_args in {
+            "grimme": [],
+            "truhlar": ["-cst", "100"],
+        }.items():
+            folder = tmp_path / name
+            folder.mkdir()
+            monkeypatch.chdir(folder)
+            result = CliRunner().invoke(
+                run,
+                [
+                    "grouper",
+                    "-d",
+                    ts_conformers_log_directory,
+                    "-p",
+                    "gaussian",
+                    "-E",
+                    "qhG",
+                    *cutoff_args,
+                    "rmsd",
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            energies[name] = read_grouper_structures(folder)
+        assert energies["grimme"] != energies["truhlar"]
 
 
 class TestFindMatchingSpFileNoSuffix:

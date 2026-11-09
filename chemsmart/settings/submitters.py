@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import shlex
+import sys
 from abc import abstractmethod
 from typing import Optional
 
@@ -21,6 +22,9 @@ user_settings = CHEMSMARTUserSettings()
 
 
 logger = logging.getLogger(__name__)
+
+# These jobs run in Python, so server.yaml has no program section for them
+PYTHON_PROGRAMS = ("grouper", "iterate", "sterimol", "thermochemistry")
 
 
 class RunScript:
@@ -254,10 +258,10 @@ class Submitter(RegistryMixin):
         Get the executable configuration for the job's program.
 
         Returns:
-            Executable: Instance of the appropriate executable handler
+            Executable | None: Instance of the appropriate executable handler
             (GaussianExecutable, ORCAExecutable, XTBExecutable, or
             NCIPLOTExecutable)
-            based on `job.PROGRAM`.
+            based on `job.PROGRAM`, or None for a job that runs in Python.
 
         Raises:
             ValueError: If the job's program is not supported.
@@ -272,7 +276,8 @@ class Submitter(RegistryMixin):
             executable = CRESTExecutable.from_servername(self.server.name)
         elif self.job.PROGRAM.lower() == "nciplot":
             executable = NCIPLOTExecutable.from_servername(self.server.name)
-
+        elif self.job.PROGRAM.lower() in PYTHON_PROGRAMS:
+            executable = None
         else:
             # Need to add programs here to be
             # supported for other types of programs
@@ -488,6 +493,9 @@ class Submitter(RegistryMixin):
         Args:
             f: File handle for writing program-specific setup.
         """
+        if self.executable is None:
+            self._write_python_environment(f)
+            return
         self._write_executable_configuration(f, self.executable)
 
     @staticmethod
@@ -517,6 +525,22 @@ class Submitter(RegistryMixin):
             for key, value in executable.env.items():
                 f.write(f"export {key}={value}\n")
             f.write("\n")
+
+    @staticmethod
+    def _write_python_environment(f):
+        """
+        Make the run script find the Python that submitted the job.
+
+        A job without an executable has no conda environment configured in
+        server.yaml, and not every scheduler passes on the submitting shell's
+        environment. PBS, for example, does not by default.
+
+        Args:
+            f: File handle for writing the environment setup.
+        """
+        python_dir = shlex.quote(os.path.dirname(sys.executable))
+        f.write("# python environment\n")
+        f.write(f"export PATH={python_dir}:$PATH\n\n")
 
     def _write_program_specific_conda_env(self, f):
         """
@@ -647,14 +671,16 @@ class Submitter(RegistryMixin):
         Write the final job execution commands.
 
         Makes the run script executable and executes it in the background,
-        then waits for completion.
+        then waits for it. Waiting for that process gives the script its exit
+        status, so that the scheduler sees a failed job; a bare ``wait`` always
+        succeeds.
 
         Args:
             f: File handle for writing job execution commands.
         """
         f.write(f"chmod +x ./{self.run_script}\n")
         f.write(f"./{self.run_script} &\n")
-        f.write("wait\n")
+        f.write('wait "$!"\n')
 
     @classmethod
     def from_scheduler_type(cls, scheduler_type, **kwargs):

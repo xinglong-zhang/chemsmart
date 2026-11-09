@@ -95,11 +95,11 @@ These options are shared across all grouping strategies and must be placed BEFOR
 
    -  -  ``-csg, --cutoff-entropy-grimme``
       -  float
-      -  Cutoff frequency for entropy (cm⁻¹) using Grimme's qRRHO method (Default: 100)
+      -  Cutoff frequency for entropy (cm⁻¹) using Grimme's qRRHO method (Default: 100, unless ``-cst`` is given)
 
    -  -  ``-cst, --cutoff-entropy-truhlar``
       -  float
-      -  Cutoff frequency for entropy (cm⁻¹) using Truhlar's qRRHO method
+      -  Cutoff frequency for entropy (cm⁻¹) using Truhlar's qRRHO method. Cannot be combined with ``-csg``
 
    -  -  ``-ch, --cutoff-enthalpy``
       -  float
@@ -186,6 +186,12 @@ Fingerprint-based Strategies
    -  -  ``tanimoto``
       -  0.9
       -  Tanimoto similarity with molecular fingerprints
+
+.. note::
+
+   Most ``tanimoto`` fingerprints need RDKit to determine the bonds from the geometry, which often fails for metal
+   complexes and transition states. Structures that fail are left out, and the job fails if none are left. The ``usr``
+   and ``usrcat`` fingerprints do not need this step: ``tanimoto -ft usr``.
 
 Energy-based Strategies
 =======================
@@ -341,6 +347,27 @@ Example comment line:
 .. code:: text
 
    Group 1 Molecule 1 Original_Index: c3 Energy(Hartree): -126.25755080
+
+******************************
+ Submitting to a Compute Node
+******************************
+
+To run the grouping on a compute node, use ``chemsmart sub`` with the same options:
+
+.. code:: bash
+
+   chemsmart sub -s SERVER -n 16 grouper -f conformers.xyz -np 16 rmsd
+   chemsmart sub -s SERVER -n 16 grouper -d . -p gaussian -np 16 -T 0.5 rmsd
+
+No grouping happens when you submit, but the input structures are read so that problems show up straight away. They are
+read again on the compute node. Your ``server.yaml`` needs no extra section, but submit from the Python environment
+where CHEMSMART is installed, because the job uses that same environment.
+
+``-n`` sets the cores requested from the scheduler, and ``-np`` sets how many of them the grouping uses. ``-np``
+defaults to 1 and does not follow ``-n``, so set both.
+
+If the grouping fails, the reason is written to ``<label>.err`` and the command exits with an error, so the scheduler
+reports a submitted job as failed.
 
 ************
  Next Steps

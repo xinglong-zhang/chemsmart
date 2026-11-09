@@ -189,6 +189,7 @@ recorded separately, with a final count of successful, failed, and unfinished ta
 -  ``thermochemistry``: Run thermochemistry analysis jobs
 -  ``grouper``: Run structure grouping jobs
 -  ``convert``: Convert molecular structure files between formats
+-  ``sterimol``: Calculate Sterimol parameters of a substituent
 
 ************
  Next Steps
@@ -204,6 +205,7 @@ For specific job types, see the detailed tutorials:
 -  :doc:`thermochemistry-analysis`
 -  :doc:`grouper-cli-options`
 -  :doc:`convert-cli-options`
+-  :doc:`sterimol-parameters`
 -  :doc:`molecule-input-formats`
 
 .. note::
