@@ -1883,6 +1883,13 @@ def run_pyscf_active_space_sp(
     )[1]
 
 
+def missing_distribution(name):
+    """Stand in for ``importlib.metadata.version`` when nothing is installed."""
+    from importlib import metadata
+
+    raise metadata.PackageNotFoundError(name)
+
+
 def make_pyscf_results_payload():
     """Return a representative B2 payload with exact numeric arrays."""
     spec = {

@@ -33,6 +33,7 @@ from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
 from chemsmart.jobs.pyscf.ts import PySCFTSJob  # noqa: E402
 from tests.helpers import (  # noqa: E402
     interatomic_distances,
+    missing_distribution,
     nevpt2_in_final_orbitals,
     orca_saddle_frequencies,
     orca_structures,
@@ -261,6 +262,51 @@ class TestExecutedEngine:
             driver._check_executed_engine({"engine": "cpu"}, hf.RHF(mol))
             == "pyscf.scf.hf.RHF"
         )
+
+
+class TestOptimizerProvenance:
+    """A geometry search records the optimizer version that produced it."""
+
+    def test_opt_records_the_installed_geometric(
+        self, run_pyscf_driver, pyscf_h2_molecule
+    ):
+        geometric = pytest.importorskip("geometric")
+        _, output = run_pyscf_driver(
+            PySCFOptJob, pyscf_h2_molecule, "opt", freq=False, **HF_MINIMAL
+        )
+        assert output.normal_termination
+        assert output.provenance["optimizer_package"] == "geometric"
+        assert output.provenance["optimizer_version"] == geometric.__version__
+
+    def test_single_point_records_no_optimizer(
+        self, run_pyscf_driver, pyscf_h2_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob, pyscf_h2_molecule, "sp", **HF_MINIMAL
+        )
+        assert output.provenance["optimizer_package"] is None
+        assert output.provenance["optimizer_version"] is None
+
+    @pytest.mark.parametrize(
+        ("solver", "package"),
+        [("geometric", "geometric"), ("berny", "pyberny"), ("ase", "ase")],
+    )
+    def test_each_opt_solver_names_its_package(self, solver, package):
+        record = driver._optimizer_record(solver)
+        assert record["optimizer_package"] == package
+
+    def test_unknown_solver_records_nothing(self):
+        """The search refuses it; provenance must not claim it ran."""
+        assert driver._optimizer_record("lbfgs") == {}
+
+    def test_unreadable_metadata_records_the_package_without_a_version(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(metadata, "version", missing_distribution)
+        assert driver._optimizer_record("geometric") == {
+            "optimizer_package": "geometric",
+            "optimizer_version": None,
+        }
 
 
 class TestFailureHandling:
@@ -1174,6 +1220,7 @@ class TestTransitionState:
     def test_bridging_guess_converges_to_the_saddle_point(
         self, run_pyscf_driver
     ):
+        geometric = pytest.importorskip("geometric")
         output = self._search(run_pyscf_driver, [1.109, 0.0, 0.404], "ts")
         assert output.normal_termination
         assert output.jobtype == "ts"
@@ -1202,6 +1249,8 @@ class TestTransitionState:
         assert output.zero_point_energy == pytest.approx(
             0.5 * sum(real) * hartree_per_wavenumber, rel=1e-4
         )
+        assert output.provenance["optimizer_package"] == "geometric"
+        assert output.provenance["optimizer_version"] == geometric.__version__
 
     def test_minimum_found_instead_is_not_reported_as_a_transition_state(
         self, run_pyscf_driver
@@ -1214,6 +1263,8 @@ class TestTransitionState:
         assert "0 imaginary modes instead of one" in output.failure_reason
         # The structure and its frequencies are kept for inspection.
         assert min(output.vibrational_frequencies) > 0
+        # The search itself ran, so the optimiser is recorded.
+        assert output.provenance["optimizer_package"] == "geometric"
 
     @pytest.mark.parametrize(
         ("frequencies", "order"),
@@ -1274,6 +1325,7 @@ class TestIntrinsicReactionCoordinate:
     def test_branches_end_in_hydrogen_cyanide_and_isocyanide(
         self, run_pyscf_driver
     ):
+        geometric = pytest.importorskip("geometric")
         output = self._irc(run_pyscf_driver, self.SADDLE_POINT, "irc")
         assert output.normal_termination, output.failure_reason
         stage = output.status["stages"]["irc"]
@@ -1307,6 +1359,8 @@ class TestIntrinsicReactionCoordinate:
         for end, (energy, bonds) in zip(ends, (hcn, hnc)):
             assert end.energy == pytest.approx(energy, abs=1e-5)
             assert interatomic_distances(end) == pytest.approx(bonds, abs=2e-3)
+        assert output.provenance["optimizer_package"] == "geometric"
+        assert output.provenance["optimizer_version"] == geometric.__version__
 
     def test_one_branch_is_the_same_branch_of_both(self, run_pyscf_driver):
         both = self._irc(run_pyscf_driver, self.SADDLE_POINT, "both")
@@ -1347,6 +1401,9 @@ class TestIntrinsicReactionCoordinate:
         assert output.irc_path is None
         # The start's Hessian is a check, not a frequency result.
         assert output.vibrational_frequencies is None
+        # Refused before the first step: geomeTRIC never ran.
+        assert output.provenance["optimizer_package"] is None
+        assert output.provenance["optimizer_version"] is None
 
 
 class TestMulticonfigurational:

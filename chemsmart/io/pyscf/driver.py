@@ -26,6 +26,7 @@ import sys
 import tempfile
 import time
 import traceback
+from importlib import metadata
 
 import h5py
 import numpy as np
@@ -416,12 +417,13 @@ def _check_saddle_order(ts_status, frequencies):
         )
 
 
-def _run_irc(config, mf, mol, start_energy):
+def _run_irc(config, mf, mol, start_energy, execution):
     """Follow the reaction path down from a first-order saddle point.
 
     Returns ``(stage_status, path)``. ``path`` is None when no branch was
     followed, else ``(positions, energies)`` in Angstrom and Hartree, ordered
     from the backward end through the start structure to the forward end.
+    geomeTRIC is recorded in ``execution`` only once a branch starts.
 
     Each branch is its own geomeTRIC run. Asked for both at once, geomeTRIC
     1.1.1 starts the backward branch even when the forward one ran out of
@@ -461,6 +463,7 @@ def _run_irc(config, mf, mol, start_energy):
     natm = mol.natm
     branches = {}
     paths = {}
+    execution.update(_optimizer_record("geometric"))
     # geomeTRIC's own files are scratch; the path is stored in the HDF5.
     with tempfile.TemporaryDirectory(dir=lib.param.TMPDIR) as scratch:
         hessian_file = os.path.join(scratch, "hessian.txt")
@@ -588,14 +591,37 @@ def _gpu4pyscf_version():
     Read from package metadata rather than by importing it, which would
     initialise CUDA in a CPU run.
     """
-    from importlib import metadata
-
     for distribution in GPU4PYSCF_DISTRIBUTIONS:
         try:
             return metadata.version(distribution)
         except metadata.PackageNotFoundError:
             continue
     return None
+
+
+# Package that provides each ``opt_solver``; ts and irc always run geomeTRIC.
+OPTIMIZER_DISTRIBUTIONS = {
+    "geometric": "geometric",
+    "berny": "pyberny",
+    "ase": "ase",
+}
+
+
+def _optimizer_record(solver):
+    """Return the provenance entries for an optimiser about to start.
+
+    Called where the optimiser is invoked, so a run that never reaches it
+    (an IRC whose start is not a transition state) records none. The
+    version is None if the package metadata cannot be read.
+    """
+    package = OPTIMIZER_DISTRIBUTIONS.get(solver)
+    if package is None:
+        return {}  # the search itself refuses an unknown solver
+    try:
+        version = metadata.version(package)
+    except metadata.PackageNotFoundError:
+        version = None
+    return {"optimizer_package": package, "optimizer_version": version}
 
 
 def _executed_class(mf):
@@ -647,6 +673,10 @@ def _provenance(config, started_at, ended_at, wall_seconds, execution):
         "pyscf_version": pyscf_version,
         "gpu4pyscf_version": gpu_version,
         "libxc_version": libxc_version,
+        # The optimiser that started, if one did: absent for runs without a
+        # geometry search and for an IRC refused before its first step.
+        "optimizer_package": execution.get("optimizer_package"),
+        "optimizer_version": execution.get("optimizer_version"),
         "chemsmart_version": config.get("chemsmart_version"),
         "numpy_version": np.__version__,
         "h5py_version": h5py.__version__,
@@ -1244,6 +1274,11 @@ def main(config):
                 status["stages"]["scf"] = stage_status
             elif stage in ("opt", "ts"):
                 search = _run_opt if stage == "opt" else _run_ts
+                # ts always runs geomeTRIC's P-RFO, whatever opt_solver says.
+                solver = (
+                    config["opt_solver"] if stage == "opt" else "geometric"
+                )
+                execution.update(_optimizer_record(solver))
                 optimizer_converged, mol_eq = search(config, mf)
                 # Re-converge on the optimised geometry so that every
                 # reported property belongs to the same structure.
@@ -1276,7 +1311,9 @@ def main(config):
                     }
                     continue
                 dm = mf.make_rdm1()
-                stage_status, path = _run_irc(config, mf, mol, energies[-1])
+                stage_status, path = _run_irc(
+                    config, mf, mol, energies[-1], execution
+                )
                 if path is not None:
                     results["irc_positions"], results["irc_energies"] = path
                 if "branches" in stage_status:
