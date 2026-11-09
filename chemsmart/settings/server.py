@@ -752,6 +752,56 @@ class Server(RegistryMixin):
             process = subprocess.Popen(shlex.split(command))
         return process.wait()
 
+    def submit_streaming_npz_batch(
+        self,
+        *,
+        script_path,
+        label,
+        num_nodes,
+        program,
+        command,
+        queue=None,
+        hours=None,
+        test=False,
+    ):
+        """Write and submit one streaming NPZ allocation."""
+        if (self.scheduler or "").upper() != "SLURM":
+            raise ValueError("Streaming NPZ batches require SLURM.")
+
+        from chemsmart.settings.submitters import SLURMSubmitter
+
+        SLURMSubmitter.write_streaming_npz_job(
+            server=self,
+            script_path=script_path,
+            label=label,
+            num_nodes=num_nodes,
+            program=program,
+            command=command,
+            queue=queue,
+            hours=hours,
+        )
+        if test:
+            return 0
+
+        submit_command = shlex.split(self.submit_command or "sbatch")
+        result = subprocess.run(
+            [*submit_command, str(script_path)], check=False
+        )
+        if result.returncode:
+            raise RuntimeError(
+                f"SLURM submission failed with status {result.returncode}."
+            )
+        return result.returncode
+
+    @staticmethod
+    def ensure_batch_name_available(label):
+        """Reject a batch label already present in the scheduler queue."""
+        from chemsmart.utils.cluster import ClusterHelper
+
+        _, running_job_names = ClusterHelper().get_running_jobs()
+        if label in running_job_names:
+            sys.exit(f"Duplicate job NOT submitted: {label}")
+
 
 class YamlServerSettings(Server):
     """

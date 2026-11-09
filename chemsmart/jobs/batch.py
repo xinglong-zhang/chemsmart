@@ -5,10 +5,168 @@ import re
 import subprocess
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    FIRST_COMPLETED,
+    ThreadPoolExecutor,
+    as_completed,
+    wait,
+)
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _replace_task_structure(arguments, filename, label):
+    """Point one replayed CLI invocation at a prepared XYZ structure."""
+    arguments = list(arguments)
+    for option in ("-f", "--filename"):
+        if option in arguments:
+            arguments[arguments.index(option) + 1] = str(filename)
+            break
+        equals_prefix = f"{option}="
+        for position, argument in enumerate(arguments):
+            if option.startswith("--") and argument.startswith(equals_prefix):
+                arguments[position] = f"{option}={filename}"
+                break
+    for option in ("-i", "--index", "--si", "--structure-index"):
+        if option in arguments:
+            position = arguments.index(option)
+            del arguments[position : position + 2]
+            break
+        equals_prefix = f"{option}="
+        for position, argument in enumerate(arguments):
+            if option.startswith("--") and argument.startswith(equals_prefix):
+                del arguments[position]
+                break
+    return ["--batch-label", label, *arguments]
+
+
+def run_streaming_npz_batch(manifest_path):
+    """Prepare NPZ structures lazily and run them in one SLURM allocation."""
+    from chemsmart.io.npz import NPZFile
+
+    manifest_path = Path(manifest_path)
+    manifest = json.loads(manifest_path.read_text())
+    workers = _batch_capacity(manifest)
+    queue_capacity = int(manifest.get("queue_capacity", 100))
+    if queue_capacity <= 0:
+        raise ValueError("queue capacity must be a positive integer.")
+    max_in_flight = workers + queue_capacity
+    prefix = manifest_path.with_suffix("")
+    input_dir = prefix.parent / f"{prefix.name}_inputs"
+    input_dir.mkdir(exist_ok=True)
+    status_file = Path(f"{prefix}.status.jsonl")
+    report_file = Path(f"{prefix}.report.json")
+    status_file.write_text("")
+    status_lock = threading.Lock()
+
+    def record(index, label, status, **details):
+        _append_status(
+            status_file,
+            {"index": index, "label": label, "status": status, **details},
+            status_lock,
+        )
+
+    def run_task(index, molecule, xyz_path):
+        label = f"{manifest['base_label']}_idx{index}"
+        stdout_path = Path(f"{prefix}_{index:06d}.out")
+        stderr_path = Path(f"{prefix}_{index:06d}.err")
+        try:
+            molecule.write_xyz(str(xyz_path), mode="w")
+            record(index, label, "running")
+            args = _replace_task_structure(
+                manifest["task_arguments"], xyz_path, label
+            )
+            python = (
+                "import sys; from chemsmart.cli.run import run; "
+                "run(sys.argv[1:])"
+            )
+            command = [
+                "srun",
+                "--exclusive",
+                "--nodes=1",
+                "--ntasks=1",
+                f"--cpus-per-task={manifest['task_cores']}",
+                f"--mem={manifest['task_memory_gb']}G",
+            ]
+            if manifest.get("task_gpus", 0):
+                command.append(f"--gres=gpu:{manifest['task_gpus']}")
+            command.extend([sys.executable, "-c", python, *args])
+            environment = os.environ.copy()
+            environment["OMP_NUM_THREADS"] = str(manifest["task_cores"])
+            with (
+                stdout_path.open("w") as stdout,
+                stderr_path.open("w") as stderr,
+            ):
+                result = subprocess.run(
+                    command,
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=environment,
+                    check=False,
+                )
+            status = "successful" if result.returncode == 0 else "failed"
+            record(
+                index,
+                label,
+                status,
+                returncode=result.returncode,
+                stdout=str(stdout_path),
+                stderr=str(stderr_path),
+            )
+            return result.returncode
+        except Exception as error:
+            record(index, label, "failed", error=str(error))
+            return 1
+        finally:
+            try:
+                xyz_path.unlink()
+            except FileNotFoundError:
+                pass
+
+    failed = 0
+    total = 0
+    pending = set()
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        npz_file = NPZFile(manifest["filename"])
+        for index, molecule, error in npz_file.iter_molecule_results(
+            manifest["index"]
+        ):
+            total += 1
+            label = f"{manifest['base_label']}_idx{index}"
+            if error is not None:
+                record(index, label, "failed", error=str(error))
+                failed += 1
+                continue
+            while len(pending) >= max_in_flight:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                failed += sum(future.result() != 0 for future in done)
+            xyz_path = input_dir / f"structure_{index:06d}.xyz"
+            record(index, label, "pending")
+            pending.add(executor.submit(run_task, index, molecule, xyz_path))
+        for future in as_completed(pending):
+            failed += future.result() != 0
+
+    try:
+        input_dir.rmdir()
+    except OSError:
+        pass
+    successful = total - failed
+    report = {
+        "successful": successful,
+        "failed": failed,
+        "unfinished": 0,
+        "total": total,
+        "status_file": str(status_file),
+    }
+    temporary_report = Path(f"{report_file}.tmp")
+    temporary_report.write_text(json.dumps(report, indent=2) + "\n")
+    os.replace(temporary_report, report_file)
+    print(
+        "Streaming NPZ batch complete: "
+        f"successful={successful}, failed={failed}, unfinished=0"
+    )
+    return int(failed > 0)
 
 
 def _append_status(status_file, record, lock):

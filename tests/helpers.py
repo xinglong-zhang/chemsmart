@@ -11,6 +11,7 @@ import os
 import shutil
 from pathlib import Path
 from textwrap import dedent
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import click
@@ -48,6 +49,15 @@ mol_cli_module = importlib.import_module("chemsmart.cli.mol.mol")
 # the submodule's own name, so look the submodule up explicitly to patch
 # ``NCIPLOTJob`` on it.
 nciplot_cli_module = importlib.import_module("chemsmart.cli.nciplot.nciplot")
+
+
+def fake_executable_configuration():
+    """Return a program configuration without shell setup commands."""
+    return SimpleNamespace(
+        conda_env=None, modules=None, scripts=None, envars=None
+    )
+
+
 thermochemistry_cli_module = importlib.import_module(
     "chemsmart.cli.thermochemistry.thermochemistry"
 )
