@@ -133,10 +133,6 @@ def test_benzene_record_has_its_energy_and_frequencies(
     assert molecule["num_vibrational_modes"] == 30
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="fixture was computed before the 1e-2 point-group tolerance",
-)
 def test_benzene_record_has_its_true_symmetry(
     pyscf_benzene_outfolder, tmp_path
 ):
