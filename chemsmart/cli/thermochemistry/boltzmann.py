@@ -46,6 +46,9 @@ def boltzmann(
         skip_completed=skip_completed,
     )
 
+    if ctx.obj.get("submitting"):
+        return boltzmann_thermochemistry
+
     boltzmann_thermochemistry.compute_boltzmann_averages()
 
     logger.info(

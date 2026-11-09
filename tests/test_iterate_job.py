@@ -64,6 +64,22 @@ class TestIterateJobConstruction:
         assert IterateJob.settings_class() is IterateJobSettings
 
 
+class TestIterateJobPositionalArguments:
+    def test_arguments_keep_their_positions(self):
+        settings = IterateJobSettings()
+        runner = MagicMock()
+        job = IterateJob(settings, runner, 4, 120, "results", True, "folder")
+
+        assert job.settings is settings
+        assert job.jobrunner is runner
+        assert job.nprocs == 4
+        assert job.timeout == 120
+        assert job.outputfile == "results.xyz"
+        assert job.separate_outputs is True
+        assert job.output_directory == "folder"
+        assert job.label == "iterate_job"
+
+
 class TestIterateJobOutputfile:
     def test_adds_xyz_extension_when_missing(self):
         job = IterateJob(outputfile="my_results")

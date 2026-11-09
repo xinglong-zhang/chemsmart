@@ -2288,7 +2288,7 @@ class Molecule:
         mode="w",
         flavor=0,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
         **kwargs,
     ):
@@ -2686,7 +2686,7 @@ class Molecule:
         self,
         flavor=0,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
     ):
         """
@@ -2864,7 +2864,7 @@ class Molecule:
     def to_rdkit(
         self,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
         bond_method="chemsmart",
     ):
@@ -2872,12 +2872,15 @@ class Molecule:
         with proper stereochemistry handling.
         Args:
             add_bonds (bool): Flag to add bonds to molecule or not.
-            bond_cutoff_buffer (float): Additional
+            bond_cutoff_buffer (float | None): Additional
             buffer for bond cutoff distance.
             From testing, see test_resonance_handling,
             it seems that a value of 0.1Å
             works for ozone, acetone, benzene,
             and probably other molecules, too.
+            By default, bond orders use GRAPH_BOND_ORDER_BUFFER, and pairs of
+            non-hydrogen atoms within GRAPH_CONNECTIVITY_BUFFER that this
+            misses are added as single bonds, as in to_graph().
             adjust_H (bool): Adjust bond distances to H atoms.
             bond_method (str): Method used to perceive bonds. ``"chemsmart"``
                 preserves the existing distance-based bond detection, while
@@ -3004,12 +3007,27 @@ class Molecule:
 
         return graph
 
+    def _is_long_bond(self, i, j, distance):
+        """Return True if a pair with no bond order is still bonded.
+
+        Hydrogen pairs are excluded, so that hydrogen bonds stay unbonded.
+        """
+        if "H" in (self.symbols[i], self.symbols[j]):
+            return False
+        return distance < get_bond_cutoff(
+            self.symbols[i], self.symbols[j], GRAPH_CONNECTIVITY_BUFFER
+        )
+
     def _add_bonds_to_rdkit_mol(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+        self, rdkit_mol, bond_cutoff_buffer=None, adjust_H=True
     ):
         """
         Add bonds to the RDKit molecule.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
         distances = self.distance_matrix
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
@@ -3036,6 +3054,12 @@ class Molecule:
                 bond_order = self.determine_bond_order_one_bond(
                     bond_length=distances[i, j], bond_cutoff=cutoff
                 )
+                if (
+                    bond_order == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bond_order = 1
                 logger.debug(f"bond order: {bond_order}")
                 if bond_order > 0:
                     bond_type = {
@@ -3048,12 +3072,16 @@ class Molecule:
         return rdkit_mol
 
     def _add_bonds_to_rdkit_mol_vectorized(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+        self, rdkit_mol, bond_cutoff_buffer=None, adjust_H=True
     ):
         """
         Add bonds to the RDKit molecule using a
         vectorized approach to compute bond orders.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
         num_atoms = len(self.symbols)
 
         # 1. Build an NxN cutoff matrix
@@ -3080,8 +3108,9 @@ class Molecule:
                 cutoff_matrix[j, i] = cutoff_ij
 
         # 2. Vectorized bond order calculation
+        distances = self.distance_matrix  # a property that recomputes each use
         bond_orders = self.determine_bond_order(
-            bond_length=self.distance_matrix,  # NxN distances
+            bond_length=distances,  # NxN distances
             bond_cutoff=cutoff_matrix,  # NxN cutoffs
         )
 
@@ -3096,6 +3125,12 @@ class Molecule:
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):
                 bo = bond_orders[i, j]
+                if (
+                    bo == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bo = 1.0
                 if bo > 0:
                     bond_type = bond_type_map.get(bo, Chem.BondType.SINGLE)
                     rdkit_mol.AddBond(i, j, bond_type)
@@ -3284,13 +3319,7 @@ class Molecule:
                 if (
                     bond_order == 0
                     and detect_long_bonds
-                    and "H" not in (element_i, element_j)
-                    and distances[i, j]
-                    < get_bond_cutoff(
-                        self.symbols[i],
-                        self.symbols[j],
-                        GRAPH_CONNECTIVITY_BUFFER,
-                    )
+                    and self._is_long_bond(i, j, distances[i, j])
                 ):
                     bond_order = 1.0
                 if bond_order > 0:

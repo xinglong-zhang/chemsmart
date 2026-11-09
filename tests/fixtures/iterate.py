@@ -2,6 +2,7 @@
 
 import importlib
 import os
+import shutil
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -271,3 +272,17 @@ def patch_iterate_cli_job(mocker):
         return mock_job
 
     return _patch
+
+
+@pytest.fixture()
+def iterate_submission_folder(
+    tmp_path, monkeypatch, iterate_input_directory, iterate_configs_directory
+):
+    """Work in a folder holding the inputs of ``cli_happy_path.toml``."""
+    shutil.copytree(iterate_input_directory, tmp_path, dirs_exist_ok=True)
+    shutil.copy(
+        os.path.join(iterate_configs_directory, "cli_happy_path.toml"),
+        tmp_path / "config.toml",
+    )
+    monkeypatch.chdir(tmp_path)
+    return tmp_path

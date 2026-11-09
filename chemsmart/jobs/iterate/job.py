@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Type
 
 from chemsmart.jobs.iterate.settings import IterateJobSettings
@@ -93,6 +94,10 @@ class IterateJob(Job):
         if self._outputfile.endswith(".xyz"):
             return self._outputfile
         return f"{self._outputfile}.xyz"
+
+    def _job_is_complete(self) -> bool:
+        """Return True if the single output file exists."""
+        return not self.separate_outputs and os.path.exists(self.outputfile)
 
     def run(self) -> str:
         """
