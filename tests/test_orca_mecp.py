@@ -2005,3 +2005,19 @@ def test_native_route_keeps_existing_crossing_keyword():
         route_to_be_written="! Opt SurfCrossOpt B3LYP def2-SVP",
     )
     assert settings.route_string.lower().count("surfcrossopt") == 1
+
+
+def test_orca_checkpoint_cleanup_keeps_other_reference_sets(tmp_path):
+    job = object.__new__(ORCAMECPJob)
+    paths = [tmp_path / name for name in ("a.gbw", "b.gbw", "other.gbw")]
+    for path in paths:
+        path.write_bytes(b"orbitals")
+    job._state_checkpoint_files = {
+        ("reference", "A"): str(paths[0]),
+        ("reference", "B"): str(paths[1]),
+        ("other", "A"): str(paths[2]),
+    }
+    job._remove_checkpoint_set("reference")
+    job._remove_checkpoint_set("reference")
+    assert job._state_checkpoint_files == {("other", "A"): str(paths[2])}
+    assert all(path.read_bytes() == b"orbitals" for path in paths)

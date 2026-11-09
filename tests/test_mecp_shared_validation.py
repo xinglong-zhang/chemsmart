@@ -359,3 +359,31 @@ def test_final_report_without_optional_metadata_is_readable(tmp_path):
     assert "mode=" not in text
     result = read_final_result(str(path))
     assert result.energy_a == -1.0
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        (
+            {"initial_steps": 1, "initial_energy_a": -1.0},
+            "Both initial state energies",
+        ),
+        ({"initial_energy_b": -1.0}, "require initial_steps"),
+        ({"frequency_only": True}, "require initial_steps"),
+        (
+            {
+                "initial_steps": 1,
+                "initial_energy_a": -1.0,
+                "initial_energy_b": -1.0,
+                "energy_gap_tolerance": 1e-4,
+            },
+            "settings' convergence thresholds",
+        ),
+    ],
+)
+def test_shared_report_rejects_incomplete_or_conflicting_context(
+    kwargs, message
+):
+    job = object.__new__(GaussianMECPJob)
+    with pytest.raises(ValueError, match=message):
+        job.log_results(**kwargs)

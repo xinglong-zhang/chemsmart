@@ -2645,3 +2645,28 @@ def test_route_removal_preserves_option_without_attached_value():
         ).strip()
         == "scf=xqc"
     )
+
+
+@pytest.mark.parametrize("checkpoint_exists", [False, True])
+def test_analytic_state_requires_existing_reference_checkpoint(
+    tmp_path, checkpoint_exists
+):
+    job = object.__new__(GaussianMECPJob)
+    job.molecule = Molecule(symbols=["H"], positions=[[0, 0, 0]])
+    job.folder = str(tmp_path)
+    job.label = "crossing"
+    missing = tmp_path / "missing.chk"
+    job._state_checkpoint_files = (
+        {("reference", "A"): str(missing)} if checkpoint_exists else {}
+    )
+    with pytest.raises(
+        RuntimeError, match="requires the reference checkpoint"
+    ):
+        job._state_job(
+            np.zeros((1, 3)),
+            0,
+            "A",
+            "reference",
+            GaussianJobSettings(),
+            analytic=True,
+        )
