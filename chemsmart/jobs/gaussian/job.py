@@ -20,7 +20,6 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.gaussian.settings import GaussianJobSettings
 from chemsmart.jobs.job import Job
-from chemsmart.jobs.runner import JobRunner
 
 logger = logging.getLogger(__name__)
 
@@ -254,27 +253,13 @@ class GaussianJob(Job):
 
         molecules = return_objects_from_string_index(molecules, index)
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecules,
+                settings=settings,
+                label=label,
+            ),
             **kwargs,
         )
 
@@ -300,27 +285,13 @@ class GaussianJob(Job):
         """
         molecules = Molecule.from_pubchem(identifier=identifier)
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=molecules,
+                settings=settings,
+                label=label,
+            ),
             **kwargs,
         )
 
@@ -359,80 +330,38 @@ class GaussianJob(Job):
 
             logger.debug(f"Creating GaussianOptJob from jobtype: {jobtype}")
 
-            # Create jobrunner if not provided
-            if jobrunner is None:
-                jobrunner = JobRunner.from_job(
-                    GaussianOptJob(
-                        molecule=molecule,
-                        settings=settings,
-                        label=label,
-                        jobrunner=None,
-                        **kwargs,
-                    ),
-                    server=kwargs.get("server"),
-                    scratch=kwargs.get("scratch"),
-                    fake=kwargs.get("fake", False),
-                    **kwargs,
-                )
-
-            return GaussianOptJob(
-                molecule=molecule,
-                settings=settings,
-                label=label,
-                jobrunner=jobrunner,
+            return GaussianOptJob._create_with_jobrunner(
+                jobrunner,
+                job_args=dict(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                ),
                 **kwargs,
             )
 
         elif jobtype.lower() == "com":
-            # Create jobrunner if not provided
-            if jobrunner is None:
-                jobrunner = JobRunner.from_job(
-                    GaussianComJob(
-                        molecule=molecule,
-                        settings=settings,
-                        label=label,
-                        jobrunner=None,
-                        **kwargs,
-                    ),
-                    server=kwargs.get("server"),
-                    scratch=kwargs.get("scratch"),
-                    fake=kwargs.get("fake", False),
-                    **kwargs,
-                )
-
-            return GaussianComJob(
-                molecule=molecule,
-                settings=settings,
-                label=label,
-                jobrunner=jobrunner,
-                **kwargs,
-            )
-        elif jobtype.lower() == "g16":
-            # Create jobrunner if not provided
-            if jobrunner is None:
-                jobrunner = JobRunner.from_job(
-                    GaussianGeneralJob(
-                        molecule=molecule,
-                        settings=settings,
-                        label=label,
-                        jobrunner=None,
-                        **kwargs,
-                    ),
-                    server=kwargs.get("server"),
-                    scratch=kwargs.get("scratch"),
-                    fake=kwargs.get("fake", False),
-                    **kwargs,
-                )
-
-                return GaussianGeneralJob(
+            return GaussianComJob._create_with_jobrunner(
+                jobrunner,
+                job_args=dict(
                     molecule=molecule,
                     settings=settings,
                     label=label,
-                    jobrunner=jobrunner,
-                    **kwargs,
-                )
-            else:
-                raise ValueError(f"Invalid job type: {jobtype}")
+                ),
+                **kwargs,
+            )
+        elif jobtype.lower() == "g16":
+            return GaussianGeneralJob._create_with_jobrunner(
+                jobrunner,
+                job_args=dict(
+                    molecule=molecule,
+                    settings=settings,
+                    label=label,
+                ),
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Invalid job type: {jobtype}")
 
 
 class GaussianComJob(GaussianJob):
@@ -503,27 +432,13 @@ class GaussianComJob(GaussianJob):
         )
         logger.debug(f"Writing input lines: \n{input_lines}")
 
-        # Create jobrunner if not provided
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=None,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=None,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(
+                molecule=None,
+                settings=settings,
+                label=label,
+            ),
             **kwargs,
         )
 

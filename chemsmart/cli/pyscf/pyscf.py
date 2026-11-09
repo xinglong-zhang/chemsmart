@@ -4,7 +4,7 @@ Group-level options are execution controls and per-invocation overrides only.
 Method, basis, phase and freq are governed by the project YAML, as they are
 for Gaussian and ORCA.
 
-Option names deliberately reuse the existing ChemSmart vocabulary
+Option names deliberately reuse the existing CHEMSMART vocabulary
 (``--functional``, ``--basis``, ``--aux-basis``, ``--defgrid``, ``--scf-tol``)
 rather than inventing PySCF-specific spellings. One normalised vocabulary
 across programs is what lets a downstream tool compare a PySCF invocation
@@ -61,7 +61,7 @@ def click_pyscf_settings_options(f):
         "--multiplicity",
         type=int,
         default=None,
-        help="Spin multiplicity (2S+1). PySCF's own `spin` is 2S; ChemSmart "
+        help="Spin multiplicity (2S+1). PySCF's own `spin` is 2S; CHEMSMART "
         "converts, so always give the multiplicity here.",
     )
     @click.option(
@@ -138,10 +138,23 @@ def click_pyscf_settings_options(f):
         help="Maximum geometry-optimisation steps.",
     )
     @click.option(
+        "--forces/--no-forces",
+        default=None,
+        help="Compute the nuclear gradient for sp or hess jobs, adding a "
+        "large fraction of the SCF cost. opt always stores final forces.",
+    )
+    @click.option(
+        "--point-group-tol",
+        type=click.FloatRange(min=0, min_open=True),
+        default=None,
+        help="Geometry tolerance in Bohr for point-group detection, which "
+        "sets the rotational symmetry number. [default: 1e-2]",
+    )
+    @click.option(
         "--gpu/--no-gpu",
         default=None,
-        help="Run on GPU via gpu4pyscf. Defaults to the server YAML "
-        "SERVER.NUM_GPUS. GPU and CPU results are not bit-identical, so the "
+        help="Run on GPU via gpu4pyscf. Defaults to engine in the project "
+        "YAML, then the server YAML SERVER.NUM_GPUS. GPU and CPU results are not bit-identical, so the "
         "resolved engine is recorded in the results file.",
     )
     @functools.wraps(f)
@@ -214,6 +227,8 @@ def pyscf(
     density_fit,
     opt_solver,
     opt_maxsteps,
+    forces,
+    point_group_tol,
     gpu,
     solvent_model,
     solvent_id,
@@ -303,6 +318,13 @@ def pyscf(
         job_settings.opt_maxsteps = opt_maxsteps
         keywords += ("opt_maxsteps",)
 
+    if forces is not None:
+        job_settings.forces = forces
+        keywords += ("forces",)
+    if point_group_tol is not None:
+        job_settings.point_group_tol = point_group_tol
+        keywords += ("point_group_tol",)
+
     # Engine resolution mirrors the scratch ladder: an explicit flag wins,
     # otherwise the server YAML decides. Resolved late, in the leaf, so the
     # server object is available; here we only record an explicit request.
@@ -352,15 +374,14 @@ def pyscf(
             "Only give PySCF input filename or name to be appended, "
             "but not both!"
         )
-    if append_label is not None:
-        label = os.path.splitext(os.path.basename(filename))[0]
-        label = f"{label}_{append_label}"
-    if label is None and append_label is None:
+    if label is None:
+        # A PubChem structure has no file name to build the label from.
         if filename:
-            label = os.path.splitext(os.path.basename(filename))[0]
+            stem = os.path.splitext(os.path.basename(filename))[0]
         else:
-            label = "output"
-        label = f"{label}_{ctx.invoked_subcommand}"
+            stem = "output"
+        suffix = append_label or ctx.invoked_subcommand
+        label = f"{stem}_{suffix}"
     label = clean_label(label)
 
     molecule_indices = None

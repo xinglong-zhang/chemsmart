@@ -27,6 +27,7 @@ from chemsmart.database.utils import (
     is_custom_basis,
     is_custom_solvent,
     sha256_content,
+    sha256_file,
     standardize_basis_set,
     utcnow_iso,
 )
@@ -380,18 +381,13 @@ class PySCFAssembler(BaseAssembler):
     OUTPUT_CLASS = PySCFOutput
     PROGRAM = "PySCF"
 
-    def get_meta_data(self):
-        meta_data = super().get_meta_data()
-        meta_data.update(
-            {
-                "num_shells": self.output.num_shells,
-                # GPU and CPU results are not bit-identical, so which engine
-                # produced a record has to survive into the database.
-                "engine": self.output.engine,
-                "settings_digest": self.output.settings_digest,
-            }
-        )
-        return meta_data
+    def build_provenance(self):
+        """Identify the record by the results file that holds its numbers."""
+        provenance = super().build_provenance()
+        resultsfile = self.output.resultsfile
+        provenance["source_file_hash"] = sha256_file(resultsfile)
+        provenance["source_size"] = file_size(resultsfile)
+        return provenance
 
 
 class XTBAssembler(BaseAssembler):

@@ -1,13 +1,14 @@
 """Generate the standalone PySCF driver script for a job.
 
-The emitted ``label.py`` is a **fixed skeleton plus one configuration dict**.
-Because v1 covers only sp/opt/hess the driver logic is invariant, so nothing
-is gained by templating source text -- and free-form generation would add a
-quoting, escaping and injection surface for no benefit. Only ``CONFIG``
-varies, and it holds scalars, strings and a geometry array.
+The emitted ``label.py`` is the source of ``chemsmart.io.pyscf.driver`` with
+one JSON configuration substituted in. Because v1 covers only sp/opt/hess the
+driver logic is invariant, so nothing is gained by templating source text --
+and free-form generation would add a quoting, escaping and injection surface
+for no benefit. Only the configuration varies, and it holds scalars, strings
+and a geometry array.
 
-The script imports ``pyscf``, ``numpy``, ``h5py`` and the standard library
-**only**. It must never import ``chemsmart``: that would drag ChemSmart's
+The driver imports ``pyscf``, ``numpy``, ``h5py`` and the standard library
+**only**. It must never import ``chemsmart``: that would drag CHEMSMART's
 ``numpy~=1.26.4`` pin and the rdkit/pymatgen/ase tree into every compute
 process, and would make the per-program ``CONDA_ENV`` -- the mechanism that
 lets a GPU job run in its own environment -- unusable.
@@ -17,8 +18,16 @@ import hashlib
 import json
 import logging
 import os
+from pathlib import Path
 
 from chemsmart import __version__ as chemsmart_version
+from chemsmart.io.pyscf import driver
+from chemsmart.io.pyscf.driver import (  # noqa: F401
+    APPLIED_SPEC_FIELDS,
+    H5_NULL_ATTRIBUTE,
+    RESULTS_SCHEMA_VERSION,
+    write_pyscf_h5,
+)
 from chemsmart.jobs.pyscf.settings import (
     PYSCF_DEFGRIDS,
     PYSCF_SOLVENT_MODELS,
@@ -26,130 +35,10 @@ from chemsmart.jobs.pyscf.settings import (
 
 logger = logging.getLogger(__name__)
 
-#: Bumped when the layout of ``label.h5`` changes in a non-additive way.
-#: Version 1.0 stored ``spec``, ``provenance`` and ``status`` as JSON string
-#: datasets. Version 2.0 makes all four sections real HDF5 groups so an agent
-#: can inspect individual fields without first decoding an opaque blob.
-RESULTS_SCHEMA_VERSION = "2.0"
-LEGACY_RESULTS_SCHEMA_VERSION = "1.0"
-
-#: Marker used for an explicit JSON-style null. HDF5 has no native null scalar,
-#: so a marked empty uint8 dataset distinguishes "known to be unavailable" from
-#: a missing field.
-H5_NULL_ATTRIBUTE = "chemsmart_is_null"
-
-#: Fields copied from the resolved driver configuration into ``spec/``.
-#: Fake and real artifacts use the same applied-settings vocabulary.
-APPLIED_SPEC_FIELDS = (
-    "label",
-    "program",
-    "jobtype",
-    "engine",
-    "stages",
-    "symbols",
-    "positions",
-    "unit",
-    "xc",
-    "ab_initio",
-    "method",
-    "basis",
-    "charge",
-    "spin",
-    "multiplicity",
-    "dispersion",
-    "density_fit",
-    "aux_basis",
-    "defgrid",
-    "atom_grid",
-    "scf_tol",
-    "scf_maxiter",
-    "solvent_model",
-    "solvent_call",
-    "solvent_method",
-    "solvent_id",
-    "solvent_eps",
-    "opt_solver",
-    "opt_maxsteps",
-    "num_threads",
-    "max_memory_mb",
-    "settings_digest",
-)
-
 
 def applied_pyscf_spec(config):
     """Return the resolved fields written under ``spec/``."""
     return {key: config.get(key) for key in APPLIED_SPEC_FIELDS}
-
-
-def write_pyscf_h5(
-    filename,
-    *,
-    spec,
-    provenance,
-    status,
-    results,
-    schema_version=RESULTS_SCHEMA_VERSION,
-):
-    """Write a versioned, machine-operable PySCF results artifact.
-
-    This public helper is also the contract for synthetic/fake runners. Numeric
-    result arrays are passed directly to h5py, preserving their dtype and shape;
-    mappings are represented as nested groups and scalar datasets. Unsupported
-    Python objects raise rather than being silently converted to strings.
-    """
-    import h5py
-
-    with h5py.File(filename, "w") as handle:
-        handle.attrs["schema_version"] = schema_version
-        _write_mapping(handle.create_group("spec"), spec)
-        _write_mapping(handle.create_group("provenance"), provenance)
-        _write_mapping(handle.create_group("status"), status)
-        _write_mapping(handle.create_group("results"), results)
-
-
-def _write_mapping(group, mapping):
-    """Write *mapping* below an open h5py group."""
-    for key in sorted(mapping):
-        _write_value(group, str(key), mapping[key])
-
-
-def _write_value(group, key, value):
-    """Write one supported scalar, array, null or nested mapping."""
-    import h5py
-    import numpy as np
-
-    if isinstance(value, dict):
-        _write_mapping(group.create_group(key), value)
-        return
-
-    if value is None:
-        dataset = group.create_dataset(
-            key, data=np.empty((0,), dtype=np.uint8)
-        )
-        dataset.attrs[H5_NULL_ATTRIBUTE] = True
-        return
-
-    string_dtype = h5py.string_dtype(encoding="utf-8")
-    if isinstance(value, str):
-        group.create_dataset(key, data=value, dtype=string_dtype)
-        return
-
-    array = np.asarray(value)
-    if array.dtype.kind in {"U", "S"}:
-        group.create_dataset(
-            key, data=array.astype(object), dtype=string_dtype
-        )
-        return
-    if array.dtype.kind == "O":
-        flat = array.reshape(-1).tolist()
-        if all(isinstance(item, str) for item in flat):
-            group.create_dataset(key, data=array, dtype=string_dtype)
-            return
-        raise TypeError(
-            f"Cannot store object-valued field {group.name}/{key} in the "
-            "PySCF HDF5 schema"
-        )
-    group.create_dataset(key, data=value)
 
 
 class PySCFScriptWriter:
@@ -205,9 +94,10 @@ class PySCFScriptWriter:
 
         call, method, solvent_id, eps = self._solvent_config(settings)
 
+        # A job can be previewed before a runner is attached.
         jobrunner = job.jobrunner
-        num_threads = getattr(jobrunner, "num_cores", None) or 1
-        mem_gb = getattr(jobrunner, "mem_gb", None)
+        num_threads = (jobrunner.num_cores if jobrunner else None) or 1
+        mem_gb = jobrunner.mem_gb if jobrunner else None
         # PySCF's max_memory is per-process in MB and bounds integral
         # buffering, not total allocation. Leave PySCF's own default in
         # place when the runner has no explicit budget.
@@ -215,7 +105,7 @@ class PySCFScriptWriter:
 
         config = {
             "schema_version": RESULTS_SCHEMA_VERSION,
-            # Captured by the ChemSmart process because the standalone driver
+            # Captured by the CHEMSMART process because the standalone driver
             # deliberately cannot import chemsmart from the compute env.
             "chemsmart_version": chemsmart_version,
             "label": job.label,
@@ -228,8 +118,7 @@ class PySCFScriptWriter:
             "basis": settings.basis,
             "charge": int(charge),
             "multiplicity": int(multiplicity),
-            # PySCF's spin is 2S = Nalpha - Nbeta, NOT the multiplicity.
-            "spin": int(multiplicity) - 1,
+            "spin": settings.multiplicity_to_spin(multiplicity),
             "xc": settings.xc,
             "ab_initio": settings.ab_initio,
             "method": settings.method_name,
@@ -251,15 +140,17 @@ class PySCFScriptWriter:
             "opt_maxsteps": (
                 settings.opt_maxsteps if "opt" in job.stages else None
             ),
-            "engine": settings.engine,
+            # A single point needs no gradient unless asked for; an optimised
+            # geometry's residual forces are part of its result.
+            "forces": bool(settings.forces or "opt" in job.stages),
+            "point_group_tol": float(settings.point_group_tol),
+            "engine": settings.resolved_engine,
             "num_threads": int(num_threads),
             "max_memory_mb": max_memory_mb,
             # The project-settings builder attaches this only when a concrete
             # source YAML exists. A null records that it was unavailable; it
             # is never inferred from a project name or regenerated content.
-            "project_yaml_digest": getattr(
-                settings, "project_yaml_digest", None
-            ),
+            "project_yaml_digest": settings.project_yaml_digest,
         }
         config["settings_digest"] = self.settings_digest(config)
         return config
@@ -316,426 +207,5 @@ class PySCFScriptWriter:
         # a closing quote is always followed by , : } ] or whitespace -- so
         # the triple-quoted literal below is safe. Assert it anyway.
         assert '"""' not in payload, "JSON payload would break the literal"
-        return _SKELETON.replace("__CHEMSMART_CONFIG__", payload)
-
-
-# The skeleton is invariant. Only the CONFIG literal is substituted, and it
-# is emitted as JSON so the file stays readable and diffable.
-_SKELETON = '''#!/usr/bin/env python
-# ChemSmart PySCF driver
-"""PySCF driver generated by ChemSmart.
-
-DO NOT EDIT: this file is regenerated on every run, so edits are lost.
-Rerun it directly with `python <this file>` to reproduce the calculation.
-
-Imports pyscf, numpy, h5py and the standard library only -- never chemsmart.
-"""
-
-import json
-import os
-import platform
-import socket
-import sys
-import time
-import traceback
-
-import h5py
-import numpy as np
-
-CONFIG = json.loads("""__CHEMSMART_CONFIG__""")
-
-
-def _apply_threads(config):
-    """Bound PySCF's thread pool.
-
-    The BLAS/OpenMP pools are bound by environment variables the jobrunner
-    sets before this interpreter starts; this only covers PySCF's own pool.
-    """
-    from pyscf import lib
-
-    lib.num_threads(config["num_threads"])
-
-
-def _build_mole(config, log_path):
-    import pyscf
-
-    atoms = [
-        (sym, tuple(pos))
-        for sym, pos in zip(config["symbols"], config["positions"])
-    ]
-    kwargs = dict(
-        atom=atoms,
-        basis=config["basis"],
-        charge=config["charge"],
-        # PySCF's spin is 2S = Nalpha - Nbeta, not the multiplicity.
-        spin=config["spin"],
-        unit=config["unit"],
-        output=log_path,
-        verbose=4,
-    )
-    if config["max_memory_mb"]:
-        kwargs["max_memory"] = config["max_memory_mb"]
-    return pyscf.M(**kwargs)
-
-
-def _build_method(config, mol):
-    """Construct the mean-field object.
-
-    Order matters and follows gpu4pyscf's own method_from_config: grids and
-    density fitting are applied on the CPU object, `.to_gpu()` comes next,
-    and the solvent is attached last. Attaching a solvent before `.to_gpu()`
-    leaves a CPU-resident solvent object on a GPU method.
-    """
-    from pyscf import dft, scf
-
-    def _solvent_dielectric(solvent_id):
-        """Resolve dielectric data in the target PySCF environment."""
-        from pyscf.solvent.smd import solvent_db
-
-        key = str(solvent_id).strip().lower()
-        if key not in solvent_db:
-            raise ValueError(
-                "Solvent %r is not in target PySCF solvent_db" % solvent_id
-            )
-        # PySCF SMD records unpack as
-        # n, _, alpha, beta, gamma, eps, phi, psi.
-        return float(solvent_db[key][5])
-
-    if config["xc"] is None:
-        mf = scf.HF(mol)
-    else:
-        mf = dft.KS(mol, xc=config["xc"])
-        if config["atom_grid"]:
-            mf.grids.atom_grid = tuple(config["atom_grid"])
-
-    if config["dispersion"]:
-        mf.disp = config["dispersion"]
-
-    if config["scf_tol"] is not None:
-        mf.conv_tol = float(config["scf_tol"])
-    if config["scf_maxiter"] is not None:
-        mf.max_cycle = int(config["scf_maxiter"])
-
-    if config["density_fit"]:
-        mf = mf.density_fit(auxbasis=config["aux_basis"])
-
-    if config["engine"] == "gpu":
-        mf = mf.to_gpu()
-
-    call = config["solvent_call"]
-    if call == "PCM":
-        mf = mf.PCM()
-        mf.with_solvent.method = config["solvent_method"]
-        # PySCF's PCM defaults eps to water regardless of the requested
-        # solvent, so it must be set explicitly or every PCM run is aqueous.
-        eps = config["solvent_eps"]
-        if eps is None:
-            eps = _solvent_dielectric(config["solvent_id"])
-        mf.with_solvent.eps = eps
-        config["solvent_eps"] = eps
-    elif call == "SMD":
-        mf = mf.SMD()
-        mf.with_solvent.solvent = config["solvent_id"]
-        # Resolve now as a target-environment validation and applied-spec
-        # record.  SMD still performs its own descriptor lookup at kernel
-        # time; setting the name, rather than overriding eps, preserves that
-        # implementation path.
-        config["solvent_eps"] = _solvent_dielectric(config["solvent_id"])
-    return mf
-
-
-def _run_opt(config, mf):
-    """Optimise the geometry and return (converged, optimised Mole).
-
-    assert_convergence is disabled so that a failed optimisation still
-    produces a results file recording the failure, rather than raising with
-    no artifact. Downstream, normal_termination stays False.
-    """
-    solver = config["opt_solver"]
-    maxsteps = config["opt_maxsteps"]
-    if solver == "geometric":
-        from pyscf.geomopt import geometric_solver
-
-        return geometric_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
-        )
-    if solver == "berny":
-        from pyscf.geomopt import berny_solver
-
-        return berny_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
-        )
-    if solver == "ase":
-        from pyscf.geomopt import ase_solver
-
-        return ase_solver.kernel(mf, target="atoms", max_steps=maxsteps)
-    raise ValueError("Unknown opt_solver: %s" % solver)
-
-
-def _provenance(config, started_at, ended_at, wall_seconds):
-    from importlib import metadata
-
-    import pyscf
-
-    try:
-        gpu_version = metadata.version("gpu4pyscf")
-    except metadata.PackageNotFoundError:
-        gpu_version = None
-
-    try:
-        from pyscf.dft import libxc
-
-        libxc_version = getattr(libxc, "__version__", None)
-    except Exception:
-        libxc_version = None
-
-    return {
-        "pyscf_version": pyscf.__version__,
-        "gpu4pyscf_version": gpu_version,
-        "libxc_version": libxc_version,
-        "chemsmart_version": config.get("chemsmart_version"),
-        "numpy_version": np.__version__,
-        "h5py_version": h5py.__version__,
-        "python_version": platform.python_version(),
-        "interpreter": sys.executable,
-        "host": socket.gethostname(),
-        "platform": platform.platform(),
-        "engine": config["engine"],
-        "num_threads": config["num_threads"],
-        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
-        "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
-        "mkl_num_threads": os.environ.get("MKL_NUM_THREADS"),
-        "openblas_num_threads": os.environ.get("OPENBLAS_NUM_THREADS"),
-        "settings_digest": config["settings_digest"],
-        "project_yaml_digest": config.get("project_yaml_digest"),
-        "started_at": started_at,
-        "ended_at": ended_at,
-        "wall_seconds": wall_seconds,
-        "core_seconds": wall_seconds * config["num_threads"],
-        "core_seconds_kind": "wall_times_configured_threads",
-    }
-
-
-_H5_NULL_ATTRIBUTE = "chemsmart_is_null"
-
-
-def _write_mapping(group, mapping):
-    """Write a mapping as nested groups and typed datasets."""
-    for key in sorted(mapping):
-        _write_value(group, str(key), mapping[key])
-
-
-def _write_value(group, key, value):
-    """Write one scalar, array, explicit null or nested mapping."""
-    if isinstance(value, dict):
-        _write_mapping(group.create_group(key), value)
-        return
-
-    if value is None:
-        dataset = group.create_dataset(
-            key, data=np.empty((0,), dtype=np.uint8)
-        )
-        dataset.attrs[_H5_NULL_ATTRIBUTE] = True
-        return
-
-    string_dtype = h5py.string_dtype(encoding="utf-8")
-    if isinstance(value, str):
-        group.create_dataset(key, data=value, dtype=string_dtype)
-        return
-
-    array = np.asarray(value)
-    if array.dtype.kind in {"U", "S"}:
-        group.create_dataset(
-            key, data=array.astype(object), dtype=string_dtype
-        )
-        return
-    if array.dtype.kind == "O":
-        flat = array.reshape(-1).tolist()
-        if all(isinstance(item, str) for item in flat):
-            group.create_dataset(key, data=array, dtype=string_dtype)
-            return
-        raise TypeError(
-            "Cannot store object-valued field %s/%s" % (group.name, key)
-        )
-    group.create_dataset(key, data=value)
-
-
-def _write_h5(path, spec, provenance, status, results):
-    """Write the versioned machine contract."""
-    with h5py.File(path, "w") as handle:
-        handle.attrs["schema_version"] = CONFIG["schema_version"]
-        _write_mapping(handle.create_group("spec"), spec)
-        _write_mapping(handle.create_group("provenance"), provenance)
-        _write_mapping(handle.create_group("status"), status)
-        _write_mapping(handle.create_group("results"), results)
-
-
-def main():
-    label = CONFIG["label"]
-    log_path = label + ".out"
-    results_path = label + ".h5"
-
-    started_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    t0 = time.time()
-
-    spec_fields = __CHEMSMART_APPLIED_SPEC_FIELDS__
-    spec = {key: CONFIG.get(key) for key in spec_fields}
-    status = {"stages": {}, "normal_termination": False, "failure": None}
-    results = {}
-    current_stage = "initialization"
-
-    try:
-        _apply_threads(CONFIG)
-        mol = _build_mole(CONFIG, log_path)
-        mf = _build_method(CONFIG, mol)
-        # ``_build_method`` resolves environment-owned values such as the PCM
-        # dielectric.  Echo the value actually applied, not the controller's
-        # unresolved placeholder.
-        spec["solvent_eps"] = CONFIG.get("solvent_eps")
-
-        energies = []
-        for stage in CONFIG["stages"]:
-            current_stage = stage
-            if stage == "scf":
-                energy = mf.kernel()
-                energies.append(float(energy))
-                stage_status = {"converged": bool(mf.converged)}
-                cycles = getattr(mf, "cycles", None)
-                if cycles is not None:
-                    stage_status["iterations"] = int(cycles)
-                    # Historical alias retained for existing consumers.
-                    stage_status["cycles"] = int(cycles)
-                status["stages"]["scf"] = stage_status
-            elif stage == "opt":
-                optimizer_converged, mol_eq = _run_opt(CONFIG, mf)
-                # Re-converge on the optimised geometry so that every
-                # reported property belongs to the same structure.
-                mf.reset(mol_eq)
-                energy = mf.kernel()
-                energies.append(float(energy))
-                mol = mol_eq
-                final_scf_converged = bool(mf.converged)
-                stage_status = {
-                    "converged": bool(
-                        optimizer_converged and final_scf_converged
-                    ),
-                    "optimizer_converged": bool(optimizer_converged),
-                    "final_scf_converged": final_scf_converged,
-                }
-                cycles = getattr(mf, "cycles", None)
-                if cycles is not None:
-                    stage_status["final_scf_iterations"] = int(cycles)
-                status["stages"]["opt"] = stage_status
-            elif stage == "hess":
-                hessian = mf.Hessian().kernel()
-                from pyscf.hessian import thermo
-
-                # Preserve imaginary modes as negative real wavenumbers.
-                # PySCF's default returns complex values, which a float HDF5
-                # dataset would otherwise truncate to zero imaginary parts.
-                analysis = thermo.harmonic_analysis(
-                    mol, hessian, imaginary_freq=False
-                )
-                results["hessian"] = np.asarray(hessian, dtype=float)
-                results["vibrational_frequencies"] = np.asarray(
-                    analysis["freq_wavenumber"], dtype=float
-                )
-                results["normal_modes"] = np.asarray(
-                    analysis["norm_mode"], dtype=float
-                )
-                results["reduced_masses"] = np.asarray(
-                    analysis["reduced_mass"], dtype=float
-                )
-                results["force_constants"] = np.asarray(
-                    analysis["force_const_dyne"], dtype=float
-                )
-                status["stages"]["hess"] = {"converged": True}
-            else:
-                raise ValueError("Unknown stage: %s" % stage)
-
-        # Anything below is engine-agnostic; pull GPU arrays back to host.
-        def _host(array):
-            return np.asarray(getattr(array, "get", lambda: array)())
-
-        results["energies"] = np.asarray(energies, dtype=float)
-        results["positions"] = np.asarray(
-            mol.atom_coords(unit="Angstrom"), dtype=float
-        )
-        results["atomic_numbers"] = np.asarray(
-            mol.atom_charges(), dtype=int
-        )
-        results["mo_energy"] = _host(mf.mo_energy).astype(float)
-        results["mo_occ"] = _host(mf.mo_occ).astype(float)
-
-        # PySCF gradients are dE/dR in Hartree/Bohr. Molecule and database
-        # contracts expose forces, so negate the exact final-geometry gradient.
-        # Some method/solvent combinations do not implement gradients; in that
-        # case the field is absent rather than populated with a placeholder.
-        try:
-            results["forces"] = -_host(
-                mf.nuc_grad_method().kernel()
-            ).astype(float)
-        except Exception:
-            pass
-        try:
-            results["mulliken_charges"] = _host(
-                mf.mulliken_pop(verbose=0)[1]
-            ).astype(float)
-        except Exception:
-            pass
-        try:
-            results["dipole_moment"] = _host(
-                mf.dip_moment(unit="Debye", verbose=0)
-            ).astype(float)
-        except Exception:
-            pass
-        try:
-            from pyscf import symm
-
-            results["point_group"] = symm.detect_symm(mol._atom)[0]
-        except Exception:
-            results["point_group"] = None
-
-        spec["num_basis_functions"] = int(mol.nao)
-        spec["num_shells"] = int(mol.nbas)
-        spec["num_electrons"] = int(mol.nelectron)
-        spec["nelec"] = [int(n) for n in mol.nelec]
-
-        status["normal_termination"] = (
-            len(status["stages"]) == len(CONFIG["stages"])
-            and all(
-                entry.get("converged", False)
-                for entry in status["stages"].values()
-            )
-        )
-    except Exception as exc:  # noqa: BLE001 - recorded, then re-raised
-        status["failure"] = {
-            "type": type(exc).__name__,
-            "message": str(exc),
-            "stage": current_stage,
-            "traceback": traceback.format_exc(),
-        }
-
-    wall_seconds = time.time() - t0
-    ended_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    provenance = _provenance(
-        CONFIG, started_at, ended_at, wall_seconds
-    )
-
-    _write_h5(results_path, spec, provenance, status, results)
-
-    if status["failure"] is not None:
-        sys.stderr.write(status["failure"]["traceback"])
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-'''
-
-# Keep the standalone skeleton invariant while deriving its applied-spec field
-# tuple from the same declaration used by the fake runner.
-_SKELETON = _SKELETON.replace(
-    "__CHEMSMART_APPLIED_SPEC_FIELDS__", repr(APPLIED_SPEC_FIELDS)
-)
+        source = Path(driver.__file__).read_text(encoding="utf-8")
+        return source.replace("__CHEMSMART_CONFIG__", payload, 1)

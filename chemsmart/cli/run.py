@@ -7,7 +7,7 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
-from chemsmart.jobs.job import Job
+from chemsmart.jobs.job import Job, JobFailedError
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.logger import create_logger
 
@@ -130,12 +130,25 @@ def process_pipeline(ctx, *args, **kwargs):
                 "Batch job submission is not supported in this branch."
             )
         logger.info(f"Running {len(job)} jobs locally")
+        # One failed structure must not abandon the rest of the batch.
+        failures = []
         for single_job in job:
-            _run_single_job(single_job, jobrunner)
+            try:
+                _run_single_job(single_job, jobrunner)
+            except JobFailedError as e:
+                failures.append(str(e))
+        if failures:
+            raise click.ClickException(
+                f"{len(failures)} of {len(job)} jobs failed:\n"
+                + "\n".join(failures)
+            )
         return None
 
     if isinstance(job, Job):
-        _run_single_job(job, jobrunner)
+        try:
+            _run_single_job(job, jobrunner)
+        except JobFailedError as e:
+            raise click.ClickException(str(e)) from e
     else:
         raise ValueError(f"Invalid job type: {type(job)}.")
 

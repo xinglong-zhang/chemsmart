@@ -1,16 +1,16 @@
 """PySCF job runners.
 
-PySCF runs as a **subprocess** even when it is importable in ChemSmart's own
+PySCF runs as a **subprocess** even when it is importable in CHEMSMART's own
 environment. Four reasons, none of which is isolation for its own sake:
 
 1. ``OMP_NUM_THREADS`` and friends must be set *before* an interpreter starts
-   to bind libcint and BLAS thread pools. In-process, ChemSmart's numpy has
+   to bind libcint and BLAS thread pools. In-process, CHEMSMART's numpy has
    already initialised OpenMP and ``lib.num_threads()`` cannot fix BLAS.
 2. Peak RSS (measured: 620 MB for an H2O Hessian, GBs for real systems) is
-   returned to the OS on process exit instead of fragmenting ChemSmart's heap
+   returned to the OS on process exit instead of fragmenting CHEMSMART's heap
    for the rest of a batch.
 3. A libcint/libxc segfault or an OOM kill takes down only the child.
-4. GPU4PySCF needs cupy + CUDA and can never share ChemSmart's environment.
+4. GPU4PySCF needs cupy + CUDA and can never share CHEMSMART's environment.
    Selecting a different interpreter per program is the only mechanism that
    permits it, and it must be the same code path as CPU.
 """
@@ -24,6 +24,7 @@ from functools import lru_cache
 from glob import glob
 from shutil import copy
 
+from chemsmart.jobs.job import JobFailedError
 from chemsmart.jobs.pyscf.writer import (
     PySCFScriptWriter,
     applied_pyscf_spec,
@@ -52,7 +53,6 @@ class PySCFJobRunner(JobRunner):
         "pyscf_sp",
         "pyscf_opt",
         "pyscf_hess",
-        "pyscfjob",
     ]
     FAKE = False
     SCRATCH = False
@@ -87,8 +87,44 @@ class PySCFJobRunner(JobRunner):
             )
             raise
 
+    def run(self, job, **kwargs):
+        """Run the job, raising if it did not finish normally.
+
+        The driver records most failures in the results file rather than
+        raising them, so they would otherwise go unnoticed until something
+        tried to read the result.
+
+        Raises:
+            JobFailedError: If the job has no usable result.
+        """
+        super().run(job, **kwargs)
+        if job.is_complete():
+            return
+        output = job._output()
+        reason = (
+            output.failure_reason
+            if output is not None
+            else "no results file was written"
+        )
+        message = f"PySCF job {job.label} failed: {reason}\nSee {job.errfile}."
+        logger.error(message)
+        raise JobFailedError(message)
+
     def _prerun(self, job):
         self._assign_variables(job)
+        self._remove_previous_results(job)
+
+    def _remove_previous_results(self, job):
+        """Delete results from an earlier run under this label.
+
+        Completion is read from the ``.h5``, so a leftover file would make a
+        rerun that dies before writing one look complete, reporting the old
+        settings and numbers.
+        """
+        for path in {self.job_resultsfile, os.path.abspath(job.resultsfile)}:
+            with suppress(FileNotFoundError):
+                os.remove(path)
+                logger.info(f"Removed previous results file: {path}")
 
     def _assign_variables(self, job):
         if self.scratch and self.scratch_dir:
@@ -161,8 +197,7 @@ class PySCFJobRunner(JobRunner):
         ):
             env[var] = threads
 
-        engine = getattr(job.settings, "engine", "cpu")
-        if engine == "gpu":
+        if job.settings.resolved_engine == "gpu":
             num_gpus = self.num_gpus or 1
             env.setdefault(
                 "CUDA_VISIBLE_DEVICES",
@@ -227,6 +262,19 @@ class FakePySCFJobRunner(PySCFJobRunner):
         self._postrun_cleanup(job)
         return 0
 
+    @staticmethod
+    def _fake_stage_status(stage):
+        """Return the status the real driver records for a stage."""
+        if stage == "hess":
+            return {"completed": True}
+        if stage == "opt":
+            return {
+                "converged": True,
+                "optimizer_converged": True,
+                "final_scf_converged": True,
+            }
+        return {"converged": True}
+
     def _write_fake_results(self, job):
         """Write a synthetic ``label.h5`` and a marker log."""
         import numpy as np
@@ -243,10 +291,12 @@ class FakePySCFJobRunner(PySCFJobRunner):
 
         status = {
             "stages": {
-                stage: {"converged": True} for stage in config["stages"]
+                stage: self._fake_stage_status(stage)
+                for stage in config["stages"]
             },
             "normal_termination": True,
             "failure": None,
+            "skipped_properties": {},
         }
         provenance = {
             "pyscf_version": "fake",

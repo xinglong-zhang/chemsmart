@@ -8,7 +8,7 @@ rather than convenience re-exports.
 """
 
 from .hess import PySCFHessJob
-from .job import PySCFGeneralJob, PySCFJob
+from .job import PySCFJob
 from .opt import PySCFOptJob
 from .runner import FakePySCFJobRunner, PySCFJobRunner
 from .settings import PySCFJobSettings
@@ -19,7 +19,6 @@ jobs = PySCFJob.subclasses()
 
 __all__ = [
     "FakePySCFJobRunner",
-    "PySCFGeneralJob",
     "PySCFHessJob",
     "PySCFJob",
     "PySCFJobRunner",

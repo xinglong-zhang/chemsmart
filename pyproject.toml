@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemsmart"
-version = "3.4.0"
+version = "3.4.10"
 description = "CHEMSMART: Chemistry Simulation and Modeling Automation Toolkit"
 readme = "README.md"
 requires-python = "~=3.10"
@@ -49,11 +49,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pyscf = [
+    "pyscf>=2.14.0",
+    "geometric",
+]
 test = [
     "pytest",
     "pytest-mock",
     "coverage",
     "pytest-cov",
+    # Real driver tests. PySCF publishes no Windows wheels; they skip there.
+    "pyscf>=2.14.0; sys_platform != 'win32'",
+    "geometric; sys_platform != 'win32'",
 ]
 dev = [
     "pre-commit>=3.6.0",
@@ -74,7 +81,6 @@ docs = [
     "rstcheck",
     "rstfmt",
 ]
-
 [project.urls]
 ##"Documentation" = "https://documentation_url"
 homepage = "https://github.com/xinglong-zhang/chemsmart/"
@@ -121,3 +127,9 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["chemsmart"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]

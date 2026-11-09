@@ -13,6 +13,9 @@ genecp basis must not silently produce a plain def2-SVP calculation.
 """
 
 import logging
+from functools import lru_cache
+
+from ase.data import atomic_numbers
 
 from chemsmart.jobs.settings import MolecularJobSettings
 
@@ -70,7 +73,7 @@ PYSCF_DOUBLE_HYBRID_MARKERS = (
 )
 
 #: Functionals whose *name* means different things in different programs.
-#: Maps a ChemSmart functional name to (libxc name, note).
+#: Maps a CHEMSMART functional name to (libxc name, note).
 #:
 #: Measured on H2O/def2-SVP at a fixed geometry (pyscf 2.14.0, ORCA 6.1.1):
 #:
@@ -79,7 +82,7 @@ PYSCF_DOUBLE_HYBRID_MARKERS = (
 #:   ORCA  'B3LYP'                                = -76.32111960 Ha
 #:
 #: i.e. the two B3LYP definitions differ by **23.2 kcal/mol**, far larger
-#: than any density-fitting or grid error (0.006 kcal/mol here). ChemSmart
+#: than any density-fitting or grid error (0.006 kcal/mol here). CHEMSMART
 #: resolves ``b3lyp`` to the Gaussian/VWN3 definition, which is both libxc's
 #: default and the dominant convention in the literature. Ask for
 #: ``b3lyp5`` explicitly to reproduce an ORCA B3LYP number.
@@ -95,7 +98,7 @@ FUNCTIONAL_DIVERGENCES = {
 
 
 def resolve_functional(functional):
-    """Return the libxc functional name for a ChemSmart functional name.
+    """Return the libxc functional name for a CHEMSMART functional name.
 
     Warns when the requested name is known to denote different functionals
     in different programs, because such a mismatch is invisible in the
@@ -106,9 +109,15 @@ def resolve_functional(functional):
     key = str(functional).strip().lower()
     if key in FUNCTIONAL_DIVERGENCES:
         resolved, note = FUNCTIONAL_DIVERGENCES[key]
-        logger.warning(f"Functional {functional!r}: {note}")
+        _warn_once(f"Functional {functional!r}: {note}")
         return resolved
     return functional
+
+
+@lru_cache(maxsize=None)
+def _warn_once(message):
+    """Log a message once per process; ``.xc`` is read many times per job."""
+    logger.warning(message)
 
 
 def is_double_hybrid_functional(functional):
@@ -126,14 +135,21 @@ class PySCFJobSettings(MolecularJobSettings):
         density_fit (bool): Apply ``.density_fit()`` to the mean-field object.
         opt_solver (str): One of ``PYSCF_OPT_SOLVERS``.
         opt_maxsteps (int): Geometry-optimisation step ceiling.
-        engine (str): ``cpu`` or ``gpu``; recorded in the results provenance
-            so every number states which engine produced it.
+        engine (str): ``cpu``, ``gpu``, or None when not requested, in which
+            case the CLI resolves it from the server. Recorded in the results
+            provenance so every number states which engine produced it.
         scf_maxiter (int): ``mf.max_cycle``.
+        point_group_tol (float): Geometry tolerance in Bohr for point-group
+            detection, which sets the rotational symmetry number.
+        forces (bool): Compute a gradient for a single point or Hessian job.
+            An optimisation always stores the final forces.
     """
 
     #: Base-class fields PySCF cannot honour. Mapped to the value that means
     #: "unset", so ``validate`` can tell "absent" from "explicitly requested".
     UNSUPPORTED = {
+        "semiempirical": None,
+        "modred": None,
         "gen_genecp_file": None,
         "heavy_elements": None,
         "heavy_elements_basis": None,
@@ -161,16 +177,16 @@ class PySCFJobSettings(MolecularJobSettings):
         density_fit=True,
         opt_solver="geometric",
         opt_maxsteps=100,
-        engine="cpu",
+        engine=None,
+        point_group_tol=1.0e-2,
         jobtype=None,
         title=None,
         solvent_model=None,
         solvent_id=None,
         **kwargs,
     ):
-        # Internal receipt metadata is deliberately private so it does not
-        # become an accepted project-YAML setting. The YAML loader derives it
-        # from the source artifact after validating the public settings keys.
+        # Passed under its private name by ``merge``. Not a project-YAML key:
+        # the YAML loader derives it from the source file.
         project_yaml_digest = kwargs.pop("_project_yaml_digest", None)
         super().__init__(
             ab_initio=ab_initio,
@@ -194,8 +210,8 @@ class PySCFJobSettings(MolecularJobSettings):
         self.opt_solver = opt_solver
         self.opt_maxsteps = opt_maxsteps
         self.engine = engine
-        if project_yaml_digest is not None:
-            self._project_yaml_digest = str(project_yaml_digest)
+        self.point_group_tol = point_group_tol
+        self._project_yaml_digest = project_yaml_digest
 
     @classmethod
     def default(cls):
@@ -210,7 +226,16 @@ class PySCFJobSettings(MolecularJobSettings):
     @property
     def project_yaml_digest(self):
         """SHA-256 of the project YAML that produced these settings."""
-        return getattr(self, "_project_yaml_digest", None)
+        return self._project_yaml_digest
+
+    @project_yaml_digest.setter
+    def project_yaml_digest(self, digest):
+        self._project_yaml_digest = digest
+
+    @property
+    def resolved_engine(self):
+        """Return the engine to run on; CPU unless GPU was requested."""
+        return self.engine or "cpu"
 
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
@@ -241,7 +266,12 @@ class PySCFJobSettings(MolecularJobSettings):
         """
         if self.multiplicity is None:
             return None
-        return int(self.multiplicity) - 1
+        return self.multiplicity_to_spin(self.multiplicity)
+
+    @staticmethod
+    def multiplicity_to_spin(multiplicity):
+        """Convert a multiplicity (2S+1) to PySCF's ``mol.spin`` (2S)."""
+        return int(multiplicity) - 1
 
     @property
     def is_restricted(self):
@@ -293,6 +323,36 @@ class PySCFJobSettings(MolecularJobSettings):
                 requested.append((field, value))
         return requested
 
+    def validate_electrons(self, molecule):
+        """Raise if charge and multiplicity are impossible for a molecule.
+
+        PySCF would otherwise stop at the start of the run, after the job has
+        been launched. Charge and multiplicity must already be resolved.
+
+        Raises:
+            ValueError: If the electrons cannot form the requested spin state.
+        """
+        nuclear_charge = sum(
+            atomic_numbers[symbol] for symbol in molecule.chemical_symbols
+        )
+        num_electrons = nuclear_charge - int(self.charge)
+        unpaired = self.multiplicity_to_spin(self.multiplicity)
+        problem = None
+        if num_electrons < 0:
+            problem = "leaves a negative number of electrons"
+        elif (num_electrons - unpaired) % 2:
+            parity = "even" if num_electrons % 2 else "odd"
+            problem = f"needs an {parity} multiplicity"
+        elif unpaired > num_electrons:
+            problem = f"cannot have {unpaired} unpaired electrons"
+        if problem:
+            raise ValueError(
+                f"Charge {self.charge} and multiplicity {self.multiplicity} "
+                f"are impossible for {num_electrons} electrons (nuclear "
+                f"charge {nuclear_charge}): this electron count {problem}. "
+                f"Check -c/--charge and -m/--multiplicity."
+            )
+
     def validate(self):
         """Raise if the settings request something PySCF cannot deliver.
 
@@ -341,13 +401,19 @@ class PySCFJobSettings(MolecularJobSettings):
                     "so the applied dielectric/environment is explicit."
                 )
 
+        if float(self.point_group_tol) <= 0:
+            raise ValueError(
+                f"point_group_tol must be positive, got "
+                f"{self.point_group_tol!r}."
+            )
+
         if self.opt_solver not in PYSCF_OPT_SOLVERS:
             raise ValueError(
                 f"Unknown opt_solver {self.opt_solver!r}; "
                 f"expected one of {PYSCF_OPT_SOLVERS}."
             )
 
-        if self.engine not in PYSCF_ENGINES:
+        if self.engine is not None and self.engine not in PYSCF_ENGINES:
             raise ValueError(
                 f"Unknown engine {self.engine!r}; "
                 f"expected one of {PYSCF_ENGINES}."

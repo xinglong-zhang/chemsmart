@@ -29,7 +29,7 @@ subcommands and the same project YAML apply; only the engine changes.
 
 ``--gpu`` chooses the engine PySCF runs on. ``-g`` tells the scheduler how many devices to reserve and belongs to
 ``chemsmart run`` and ``chemsmart sub``, so it comes before the program name. With neither ``--gpu`` nor ``--no-gpu``,
-the engine follows ``SERVER.NUM_GPUS`` from the server YAML.
+the engine follows ``engine`` in the project YAML, and then ``SERVER.NUM_GPUS`` from the server YAML.
 
 Basic Usage
 ===========
@@ -60,9 +60,9 @@ also clears ``CUDA_VISIBLE_DEVICES`` for the calculation, which keeps a CPU run 
 ***********************************
 
 PySCF is a Python library, not a binary, so what matters is the interpreter that runs the calculation, not the one
-running chemsmart. For GPU work CuPy and a CUDA toolchain usually live in their own environment.
+running CHEMSMART. For GPU work CuPy and a CUDA toolchain usually live in their own environment.
 
-Point chemsmart at the ``bin`` directory whose ``python`` owns PySCF:
+Point CHEMSMART at the ``bin`` directory whose ``python`` owns PySCF:
 
 .. code:: bash
 
@@ -77,7 +77,7 @@ The same setting can be written by hand as a ``PYSCF`` block in the server YAML:
      LOCAL_RUN: True
      SCRATCH: False
 
-Omit ``EXEFOLDER`` when PySCF shares the environment chemsmart runs in, and the running interpreter is used. Keeping a
+Omit ``EXEFOLDER`` when PySCF shares the environment CHEMSMART runs in, and the running interpreter is used. Keeping a
 separate CUDA environment is the usual arrangement, since it keeps CuPy away from the NumPy that RDKit and PyMOL pin.
 
 **************************

@@ -182,7 +182,7 @@ class YamlPySCFProjectSettingsBuilder:
                 f"{list(config.keys())}"
             )
         settings = PySCFJobSettings.from_dict(jobtype_config)
-        settings._project_yaml_digest = self._project_yaml_digest()
+        settings.project_yaml_digest = self._project_yaml_digest()
         return settings
 
     def _project_yaml_digest(self):

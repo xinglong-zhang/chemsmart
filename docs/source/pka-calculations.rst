@@ -322,8 +322,8 @@ The pKa workflow is unchanged at the chemistry level; only the launch path diffe
 **Batch table or multi-fragment CDXML**
 
 One scheduler submission is created **per table row** or **per ChemDraw fragment**. CHEMSMART expands ``pka batch`` into
-multiple jobs locally, then writes a separate ``chemsmart_sub_<label>.sh`` and ``chemsmart_run_<label>.py`` for each
-job.
+multiple jobs locally, then writes a separate ``chemsmart_sub_<program_name>_<label>.sh`` and
+``chemsmart_run_<program_name>_<label>.py`` for each job.
 
 .. code:: bash
 
@@ -336,7 +336,7 @@ Per-job script reconstruction
 
 Each cluster run wrapper must replay **one** pKa submission, not the entire batch table or full multi-fragment CDXML
 file. When a job is created from ``pka batch``, CHEMSMART stores row- or fragment-level metadata and rewrites the CLI
-inside ``chemsmart_run_<label>.py`` before submission:
+inside ``chemsmart_run_<program_name>_<label>.py`` before submission:
 
 #. **CSV batch rows** — replace the table path in ``-f`` / ``--filename`` with that row's ``filepath``; change ``batch``
    to ``submit``.

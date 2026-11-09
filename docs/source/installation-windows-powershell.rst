@@ -158,7 +158,7 @@ or
 
 .. note::
 
-   Each time ``make configure`` is run, the installer replaces the previous chemsmart block in the PS profile with the
+   Each time ``make configure`` is run, the installer replaces the previous CHEMSMART block in the PS profile with the
    latest settings. Re-running configure is therefore safe and idempotent.
 
 *****************

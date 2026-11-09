@@ -73,7 +73,7 @@ def assemble(
     if not os.path.isdir(directory):
         raise FileNotFoundError(f"Directory does not exist: {directory}")
 
-    supported_programs = {"gaussian", "orca", "xtb"}
+    supported_programs = {"gaussian", "orca", "pyscf", "xtb"}
     if program is None:
         programs = supported_programs
     elif program.lower() in supported_programs:
@@ -81,11 +81,11 @@ def assemble(
     else:
         raise ValueError(
             f"Unsupported program '{program}'. "
-            "Use 'gaussian', 'orca', or 'xtb'."
+            "Use 'gaussian', 'orca', 'pyscf', or 'xtb'."
         )
 
     files = []
-    file_programs = programs & {"gaussian", "orca"}
+    file_programs = programs & {"gaussian", "orca", "pyscf"}
     if file_programs:
         base_folder = BaseFolder(folder=directory)
         for prog in sorted(file_programs):
@@ -125,7 +125,7 @@ def assemble(
         folders = sorted(set(folders))
 
     if not files and not folders:
-        program_label = program or "gaussian, orca, or xtb"
+        program_label = program or "gaussian, orca, pyscf, or xtb"
         logger.error(
             f"No {program_label} output found in directory: {directory}"
         )

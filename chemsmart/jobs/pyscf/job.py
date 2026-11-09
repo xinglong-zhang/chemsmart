@@ -1,7 +1,7 @@
 """PySCF job classes.
 
 Unlike Gaussian and ORCA, PySCF is a Python library rather than an external
-binary. ChemSmart therefore *generates* the calculation script and controls
+binary. CHEMSMART therefore *generates* the calculation script and controls
 both ends of the interface, which changes the file contract:
 
 ``label.py``   the generated, standalone-runnable driver script
@@ -17,7 +17,6 @@ from typing import Type
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.jobs.job import Job
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
-from chemsmart.jobs.runner import JobRunner
 from chemsmart.utils.utils import string2index_1based
 
 logger = logging.getLogger(__name__)
@@ -62,6 +61,13 @@ class PySCFJob(Job):
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
         self.label = label
+
+    @property
+    def stages(self):
+        """Return the ordered stages the generated script executes."""
+        raise NotImplementedError(
+            f"{type(self).__name__} must define its stages."
+        )
 
     @classmethod
     def settings_class(cls) -> Type[PySCFJobSettings]:
@@ -131,7 +137,6 @@ class PySCFJob(Job):
         index="-1",
         label=None,
         jobrunner=None,
-        keywords=("charge", "multiplicity"),
         **kwargs,
     ):
         """Create a PySCF job from a molecular structure file."""
@@ -141,26 +146,9 @@ class PySCFJob(Job):
         logger.info(f"Number of molecules read: {len(molecules)}")
         molecules = molecules[string2index_1based(index)]
 
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecules,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecules,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(molecule=molecules, settings=settings, label=label),
             **kwargs,
         )
 
@@ -171,40 +159,8 @@ class PySCFJob(Job):
         """Create a PySCF job from a PubChem identifier."""
         molecule = Molecule.from_pubchem(identifier=identifier)
 
-        if jobrunner is None:
-            jobrunner = JobRunner.from_job(
-                cls(
-                    molecule=molecule,
-                    settings=settings,
-                    label=label,
-                    jobrunner=None,
-                    **kwargs,
-                ),
-                server=kwargs.get("server"),
-                scratch=kwargs.get("scratch"),
-                fake=kwargs.get("fake", False),
-                **kwargs,
-            )
-
-        return cls(
-            molecule=molecule,
-            settings=settings,
-            label=label,
-            jobrunner=jobrunner,
+        return cls._create_with_jobrunner(
+            jobrunner,
+            job_args=dict(molecule=molecule, settings=settings, label=label),
             **kwargs,
-        )
-
-
-class PySCFGeneralJob(PySCFJob):
-    """General PySCF job.
-
-    Exists so that specialised subclasses can create and run a plain PySCF
-    job internally without recursing into their own type.
-    """
-
-    TYPE = "pyscfjob"
-
-    def __init__(self, molecule, settings=None, label=None, **kwargs):
-        super().__init__(
-            molecule=molecule, settings=settings, label=label, **kwargs
         )

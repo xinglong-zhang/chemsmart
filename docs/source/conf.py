@@ -17,10 +17,10 @@ from datetime import datetime
 # Ensure package import works for autodoc
 sys.path.insert(0, os.path.abspath("../.."))
 
-project = "chemsmart"
+project = "CHEMSMART"
 author = "Zhang Lab, The Chinese University of Hong Kong"
 copyright = f"{datetime.now():%Y}, {author}"
-release = "3.4.0"
+release = "3.4.10"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

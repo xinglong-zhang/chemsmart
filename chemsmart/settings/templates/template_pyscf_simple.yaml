@@ -29,5 +29,5 @@ solv:
   density_fit: True
   defgrid: defgrid2
   scf_tol: 1.0e-9
-  solvent_model: smd     # pcm | iefpcm | cpcm | cosmo | ssvpe | smd
+  solvent_model: cpcm    # pcm | iefpcm | cpcm | cosmo | ssvpe | smd (needs an SMD-enabled PySCF build)
   solvent_id: water      # must exist in pyscf.solvent.smd.solvent_db
