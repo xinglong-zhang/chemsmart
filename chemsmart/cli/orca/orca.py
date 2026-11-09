@@ -757,7 +757,7 @@ def orca(
         if filename:
             label = os.path.splitext(os.path.basename(filename))[0]
         elif pubchem:
-            label = str(pubchem)
+            label = f"pubchem_{pubchem}"
         elif ccdc:
             label = f"ccdc_{ccdc}"
         if is_chemsmart_db:
@@ -773,7 +773,7 @@ def orca(
         if filename:
             label = os.path.splitext(os.path.basename(filename))[0]
         elif pubchem:
-            label = str(pubchem)
+            label = f"pubchem_{pubchem}"
         elif ccdc:
             label = f"ccdc_{ccdc}"
         else:

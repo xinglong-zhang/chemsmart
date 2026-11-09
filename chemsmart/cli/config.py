@@ -1,6 +1,7 @@
 import logging
 import os
 import platform
+import re
 import shutil
 from importlib import resources
 from pathlib import Path
@@ -76,6 +77,11 @@ class Config:
     def chemsmart_orca(self):
         """Path to the ``orca`` sub-directory of the user config."""
         return self.chemsmart_dest / "orca"
+
+    @property
+    def chemsmart_ccdc(self):
+        """Path to the ``ccdc`` sub-directory of the user config."""
+        return self.chemsmart_dest / "ccdc"
 
     @property
     def chemsmart_package_path(self):
@@ -618,11 +624,83 @@ def scratch(ctx, folder):
     update_yaml_files(cfg.chemsmart_server, "~/scratch", folder)
 
 
+@config.command()
+@click.pass_context
+@click.option(
+    "-f",
+    "--folder",
+    type=str,
+    default=None,
+    help="Path to the CCDC software installation folder (CSDHOME).",
+)
+def ccdc(ctx, folder):
+    """
+    Configure the environment for the licensed CSD Python API.
+
+    Copies the bundled ccdc.yaml template to
+    ~/.chemsmart/ccdc/ccdc.yaml if the file does not exist yet.
+    If --folder is given, sets CSDHOME to the specified CCDC software
+    installation folder in that file.
+
+    Note that using CCDC deposition numbers additionally requires the
+    csd-python-api package to be installed in the Python environment
+    running CHEMSMART, and an activated CSD licence.
+
+    Examples:
+        chemsmart config ccdc
+        chemsmart config ccdc --folder <CCDC_SOFTWARE_FOLDER>
+    """
+    cfg = ctx.obj["cfg"]
+    ccdc_dir = cfg.chemsmart_ccdc
+    ccdc_yaml = ccdc_dir / "ccdc.yaml"
+
+    if not ccdc_yaml.exists():
+        ccdc_dir.mkdir(parents=True, exist_ok=True)
+        template = cfg.chemsmart_template / "ccdc" / "ccdc.yaml"
+        with resources.as_file(template) as src:
+            shutil.copy(src, ccdc_yaml)
+        logger.info(f"Copied CSD environment template to {ccdc_yaml}")
+    else:
+        logger.info(f"CSD environment file already exists: {ccdc_yaml}")
+
+    if folder is not None:
+        csdhome = os.path.expanduser(folder)
+        assert os.path.exists(
+            os.path.abspath(csdhome)
+        ), f"CCDC software folder not found: {csdhome}"
+        logger.info(f"Configuring CSDHOME with folder: {folder}")
+        text = ccdc_yaml.read_text()
+        if re.search(r"^#?CSDHOME:.*$", text, flags=re.MULTILINE):
+            # replace the first placeholder or existing CSDHOME line
+            # (lambda replacement: folder may contain backslashes;
+            # count=1 keeps the commented platform examples intact)
+            text = re.sub(
+                r"^#?CSDHOME:.*$",
+                lambda m: f"CSDHOME: '{folder}'",
+                text,
+                count=1,
+                flags=re.MULTILINE,
+            )
+            ccdc_yaml.write_text(text)
+        else:
+            with open(ccdc_yaml, "a") as f:
+                f.write(f"\nCSDHOME: '{folder}'\n")
+
+    logger.info(
+        "Using CCDC deposition numbers additionally requires the "
+        "*licensed* CSD Python API (csd-python-api) to be installed in "
+        "the Python environment running CHEMSMART, and an activated "
+        "CSD licence; see https://downloads.ccdc.cam.ac.uk/"
+        "documentation/API/installation_notes.html"
+    )
+
+
 config.add_command(server)
 config.add_command(gaussian)
 config.add_command(orca)
 config.add_command(nciplot)
 config.add_command(scratch)
+config.add_command(ccdc)
 
 if __name__ == "__main__":
     config()

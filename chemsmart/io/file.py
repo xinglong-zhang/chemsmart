@@ -1,5 +1,6 @@
 import logging
 import re
+import shlex
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
@@ -63,6 +64,287 @@ class SDFFile(FileMixin):
         return Molecule.from_symbols_and_positions_and_pbc_conditions(
             list_of_symbols=list_of_symbols, positions=cart_coords
         )
+
+
+class CIFFile(FileMixin):
+    """
+    CIF (Crystallographic Information File) object.
+
+    Parses elements and atomic coordinates directly from the file,
+    without relying on ASE and without symmetry expansion: the returned
+    structure is the *asymmetric unit* of each data block. Note that for
+    structures where the molecule sits on a symmetry element (e.g., an
+    inversion centre), the asymmetric unit may contain only part of the
+    molecule; full discrete-molecule reconstruction requires the licensed
+    CSD Python API (see ``chemsmart.io.molecules.ccdc``).
+
+    Args:
+        filename (str or pathlib.Path): Path to the CIF file.
+    """
+
+    # reserved CIF keywords that terminate a data row stream
+    _CIF_RESERVED = {"loop_", "data_", "save_", "stop_", "global_"}
+
+    def __init__(self, filename):
+        self.filename = (
+            str(filename) if isinstance(filename, Path) else filename
+        )
+
+    @property
+    def molecule(self):
+        """Molecule from the last data block of the CIF file."""
+        return self.get_molecule()
+
+    def get_molecule(self):
+        return self.get_molecules(index="-1", return_list=False)
+
+    def get_molecules(self, index="-1", return_list=False):
+        """
+        Get molecules from the CIF file, one per data block.
+
+        Args:
+            index (str or int): "-1" for the last data block (default),
+                ":" for all data blocks, or a 1-based integer.
+            return_list (bool): If True, always return a list.
+
+        Returns:
+            Molecule or list[Molecule]: molecule(s) built from the
+                asymmetric unit of the selected data block(s).
+        """
+        blocks = self._parse_data_blocks()
+        if len(blocks) == 0:
+            raise ValueError(
+                f"No data block with atomic coordinates found in "
+                f"CIF file {self.filename}!"
+            )
+
+        if index == ":":
+            molecules = [self._molecule_from_block(b) for b in blocks]
+            return molecules if return_list else molecules[0]
+
+        # supplied index is 1-indexed; "-1" selects the last block
+        index = string2index_1based(index)
+        molecule = self._molecule_from_block(blocks[index])
+        return [molecule] if return_list else molecule
+
+    def _parse_data_blocks(self):
+        """
+        Split the file contents into data blocks, keeping only blocks
+        that contain an ``_atom_site`` coordinate loop.
+
+        Returns:
+            list[list[str]]: list of line lists, one per usable block.
+        """
+        blocks = []
+        current = []
+        for line in self.contents:
+            if line.startswith("data_"):
+                if self._block_has_atom_sites(current):
+                    blocks.append(current)
+                current = []
+            current.append(line)
+        if self._block_has_atom_sites(current):
+            blocks.append(current)
+        return blocks
+
+    @staticmethod
+    def _block_has_atom_sites(lines):
+        return any(line.strip().startswith("_atom_site_") for line in lines)
+
+    def _molecule_from_block(self, lines):
+        """
+        Build a Molecule from the asymmetric unit of one data block.
+
+        Args:
+            lines (list[str]): lines of a single CIF data block.
+
+        Returns:
+            Molecule: molecule with symbols and Cartesian positions.
+
+        Raises:
+            ValueError: If no coordinates are found, or fractional
+                coordinates are given without cell parameters.
+        """
+        cell = self._parse_cell_parameters(lines)
+        rows = self._parse_atom_site_loop(lines)
+
+        symbols = []
+        positions = []
+        for row in rows:
+            symbol = row.get("type_symbol") or row.get("label")
+            symbol = self._clean_element_symbol(symbol)
+            if symbol is None:
+                continue
+
+            if all(k in row for k in ("cartn_x", "cartn_y", "cartn_z")):
+                positions.append(
+                    (row["cartn_x"], row["cartn_y"], row["cartn_z"])
+                )
+            elif all(k in row for k in ("fract_x", "fract_y", "fract_z")):
+                if cell is None:
+                    raise ValueError(
+                        f"CIF file {self.filename} gives fractional "
+                        "coordinates but no unit cell parameters; "
+                        "cannot convert to Cartesian coordinates."
+                    )
+                fract = np.array(
+                    [row["fract_x"], row["fract_y"], row["fract_z"]]
+                )
+                positions.append(tuple(self._cell_matrix(cell) @ fract))
+            else:
+                continue
+            symbols.append(symbol)
+
+        if len(symbols) == 0:
+            raise ValueError(
+                f"No atomic coordinates found in CIF file {self.filename}!"
+            )
+
+        return Molecule.from_symbols_and_positions_and_pbc_conditions(
+            list_of_symbols=symbols, positions=np.array(positions)
+        )
+
+    @classmethod
+    def _parse_atom_site_loop(cls, lines):
+        """
+        Parse the ``_atom_site_*`` loop of a data block into rows of
+        column-name → value mappings. Coordinate columns are converted
+        to floats (ESD parentheses stripped).
+        """
+        i = 0
+        n = len(lines)
+        while i < n:
+            if lines[i].strip() != "loop_":
+                i += 1
+                continue
+            # collect loop column headers
+            headers = []
+            j = i + 1
+            while j < n and lines[j].strip().startswith("_"):
+                headers.append(lines[j].strip())
+                j += 1
+            if not any(h.startswith("_atom_site_") for h in headers):
+                i = j
+                continue
+
+            # read data tokens row by row
+            rows = []
+            tokens = []
+            while j < n:
+                stripped = lines[j].strip()
+                first = stripped.split()[0] if stripped else ""
+                if (
+                    not stripped
+                    or stripped.startswith("#")
+                    or first.startswith("_")
+                    or first in cls._CIF_RESERVED
+                ):
+                    break
+                tokens.extend(shlex.split(stripped, posix=True))
+                j += 1
+            for k in range(0, len(tokens) - len(headers) + 1, len(headers)):
+                values = tokens[k : k + len(headers)]
+                rows.append(cls._row_to_dict(headers, values))
+            return rows
+        return []
+
+    @staticmethod
+    def _row_to_dict(headers, values):
+        """Map loop headers to values, converting coordinates to float."""
+        row = {}
+        for header, value in zip(headers, values):
+            key = header.replace("_atom_site_", "")
+            if key.startswith(("fract_", "cartn_")):
+                row[key] = CIFFile._to_float(value)
+            else:
+                row[key] = value.strip("'\"")
+        return row
+
+    @staticmethod
+    def _to_float(token):
+        """Convert a CIF numeric token to float, stripping ESDs."""
+        match = re.match(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?", token)
+        if match is None:
+            raise ValueError(f"Invalid numeric value in CIF file: {token}")
+        return float(match.group())
+
+    @staticmethod
+    def _clean_element_symbol(raw):
+        """
+        Extract the element symbol from a CIF ``_atom_site_type_symbol``
+        or ``_atom_site_label`` value (e.g., "C12" → "C", "Fe3+" → "Fe").
+        """
+        if raw is None:
+            return None
+        match = re.match(r"^'?\"?([A-Za-z]{1,3})", str(raw))
+        if match is None:
+            return None
+        symbol = match.group(1)
+        # keep at most two-letter symbols, second letter lowercase
+        if len(symbol) > 1 and symbol[1].islower():
+            return symbol[:2]
+        return symbol[0]
+
+    @classmethod
+    def _parse_cell_parameters(cls, lines):
+        """
+        Parse unit cell lengths and angles from a data block.
+
+        Returns:
+            tuple or None: (a, b, c, alpha, beta, gamma) in Å and
+                degrees, or None if any parameter is missing.
+        """
+        params = {}
+        for line in lines:
+            stripped = line.strip()
+            for key in (
+                "_cell_length_a",
+                "_cell_length_b",
+                "_cell_length_c",
+                "_cell_angle_alpha",
+                "_cell_angle_beta",
+                "_cell_angle_gamma",
+            ):
+                if stripped.startswith(key):
+                    value = stripped[len(key) :].strip()
+                    try:
+                        params[key] = cls._to_float(value)
+                    except ValueError:
+                        return None
+        if len(params) < 6:
+            return None
+        return tuple(
+            params[k]
+            for k in (
+                "_cell_length_a",
+                "_cell_length_b",
+                "_cell_length_c",
+                "_cell_angle_alpha",
+                "_cell_angle_beta",
+                "_cell_angle_gamma",
+            )
+        )
+
+    @staticmethod
+    def _cell_matrix(cell):
+        """
+        Convert cell parameters to the fractional→Cartesian matrix.
+
+        Args:
+            cell (tuple): (a, b, c, alpha, beta, gamma) in Å and degrees.
+
+        Returns:
+            numpy.ndarray: 3x3 matrix M such that cart = M @ fract.
+        """
+        a, b, c, alpha, beta, gamma = cell
+        alpha, beta, gamma = np.radians([alpha, beta, gamma])
+        cos_a, cos_b, cos_g = np.cos(alpha), np.cos(beta), np.cos(gamma)
+        sin_g = np.sin(gamma)
+        bx, by = b * cos_g, b * sin_g
+        cx = c * cos_b
+        cy = c * (cos_a - cos_b * cos_g) / sin_g
+        cz = np.sqrt(max(c**2 - cx**2 - cy**2, 0.0))
+        return np.array([[a, bx, cx], [0.0, by, cy], [0.0, 0.0, cz]])
 
 
 class CDXFile(FileMixin):
