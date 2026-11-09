@@ -28,7 +28,14 @@ from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
     PySCFSinglePointJob,
 )
 from chemsmart.jobs.pyscf.ts import PySCFTSJob  # noqa: E402
-from tests.helpers import run_pyscf_ccpvdz_sp  # noqa: E402
+from tests.helpers import (  # noqa: E402
+    interatomic_distances,
+    orca_saddle_frequencies,
+    orca_structures,
+    path_end_deviation,
+    pyscf_rhf_minimum,
+    run_pyscf_ccpvdz_sp,
+)
 
 HF_MINIMAL = {"ab_initio": "hf", "basis": "sto-3g", "density_fit": False}
 DFT_MINIMAL = {"basis": "sto-3g", "density_fit": False}
@@ -1194,35 +1201,6 @@ class TestIntrinsicReactionCoordinate:
             **settings,
         )[1]
 
-    @staticmethod
-    def _bonds(positions):
-        """Return r(CN) and the hydrogen's distances to C and N, in A."""
-        c, n, h = np.asarray(positions, dtype=float)
-        return np.array(
-            [
-                np.linalg.norm(n - c),
-                np.linalg.norm(h - c),
-                np.linalg.norm(h - n),
-            ]
-        )
-
-    @classmethod
-    def _minimum(cls, positions):
-        """Optimise a minimum with PySCF and geomeTRIC, outside CHEMSMART."""
-        from pyscf.geomopt import geometric_solver
-
-        mol = gto.M(
-            atom=list(zip(cls.SYMBOLS, positions)),
-            basis="6-31g*",
-            verbose=0,
-        )
-        mf = hf.RHF(mol)
-        mf.conv_tol = 1e-10
-        converged, optimised = geometric_solver.kernel(mf, maxsteps=100)
-        assert converged
-        energy = hf.RHF(optimised).run(conv_tol=1e-10).e_tot
-        return energy, cls._bonds(optimised.atom_coords(unit="Angstrom"))
-
     def test_branches_end_in_hydrogen_cyanide_and_isocyanide(
         self, run_pyscf_driver
     ):
@@ -1246,15 +1224,19 @@ class TestIntrinsicReactionCoordinate:
         assert np.all(np.diff(energies[start:]) <= 1e-6)
 
         # The ends are the two minima, whichever branch reached which.
-        hcn = self._minimum([[0, 0, 0], [0, 0, 1.15], [0, 0, -1.07]])
-        hnc = self._minimum([[0, 0, 1.17], [0, 0, 0], [0, 0, -1.0]])
+        hcn = pyscf_rhf_minimum(
+            self.SYMBOLS, [[0, 0, 0], [0, 0, 1.15], [0, 0, -1.07]], "6-31g*"
+        )
+        hnc = pyscf_rhf_minimum(
+            self.SYMBOLS, [[0, 0, 1.17], [0, 0, 0], [0, 0, -1.0]], "6-31g*"
+        )
         ends = sorted(
             (path[0], path[-1]),
-            key=lambda frame: self._bonds(frame.positions)[1],
+            key=lambda frame: interatomic_distances(frame)[1],
         )
         for end, (energy, bonds) in zip(ends, (hcn, hnc)):
             assert end.energy == pytest.approx(energy, abs=1e-5)
-            assert self._bonds(end.positions) == pytest.approx(bonds, abs=2e-3)
+            assert interatomic_distances(end) == pytest.approx(bonds, abs=2e-3)
 
     def test_one_branch_is_the_same_branch_of_both(self, run_pyscf_driver):
         both = self._irc(run_pyscf_driver, self.SADDLE_POINT, "both")
@@ -1295,3 +1277,150 @@ class TestIntrinsicReactionCoordinate:
         assert output.irc_path is None
         # The start's Hessian is a check, not a frequency result.
         assert output.vibrational_frequencies is None
+
+
+class TestTransitionStatesAgainstORCA:
+    """ts and irc against ORCA 6.1.1's own results.
+
+    The saddles come from ORCA's OptTS, the paths from its ``%irc``
+    (direction both); nothing in them was computed by PySCF.
+    """
+
+    HF = {"ab_initio": "hf", "basis": "6-31g*"}
+    EXACT = {"density_fit": False, "scf_tol": 1e-10, "charge": 0}
+
+    @classmethod
+    def _run(cls, run_pyscf_driver, job_class, jobtype, molecule, **method):
+        return run_pyscf_driver(
+            job_class,
+            molecule,
+            jobtype,
+            multiplicity=1,
+            **cls.EXACT,
+            **method,
+        )[1]
+
+    #: ORCA OptTS + Freq at B3LYP/G def2-SVP; the HCN fixtures start here.
+    HCN_OPTTS_FREQ = "hcn_hnc_optts_freq_b3lypg_def2svp.out"
+
+    @classmethod
+    def _hcn_optts(cls, orca_outputs_directory):
+        return ORCAOutput(
+            os.path.join(orca_outputs_directory, cls.HCN_OPTTS_FREQ)
+        )
+
+    def test_search_from_a_displaced_seed_reaches_orcas_saddle(
+        self, run_pyscf_driver, pyscf_inputs_directory, orca_outputs_directory
+    ):
+        seed = Molecule.from_filepath(
+            os.path.join(pyscf_inputs_directory, "h2co_hcoh_ts_seed.xyz")
+        )
+        saddle = orca_structures(
+            orca_outputs_directory, "h2co_hcoh_optts_hf_631gs.xyz"
+        )
+        # The seed is 0.2 A from the saddle; the search shares nothing
+        # with ORCA's but the surface.
+        assert (
+            np.abs(
+                interatomic_distances(seed) - interatomic_distances(saddle)
+            ).max()
+            > 0.2
+        )
+        output = self._run(
+            run_pyscf_driver, PySCFTSJob, "ts", seed, freq=True, **self.HF
+        )
+        assert output.normal_termination, output.failure_reason
+        assert output.saddle_order == 1
+        assert interatomic_distances(
+            output.optimized_structure
+        ) == pytest.approx(interatomic_distances(saddle), abs=1e-3)
+
+    def test_formaldehyde_path_ends_where_orcas_does(
+        self, run_pyscf_driver, orca_outputs_directory
+    ):
+        saddle = orca_structures(
+            orca_outputs_directory, "h2co_hcoh_optts_hf_631gs.xyz"
+        )
+        orca_path = orca_structures(
+            orca_outputs_directory, "h2co_hcoh_irc_IRC_Full_trj.xyz", ":"
+        )
+        output = self._run(
+            run_pyscf_driver, PySCFIRCJob, "irc", saddle, **self.HF
+        )
+        assert output.normal_termination, output.failure_reason
+        # The same surface: ORCA's saddle energy, recomputed by PySCF.
+        orca_saddle = max(orca_path, key=lambda frame: frame.energy)
+        assert output.energies[-1] == pytest.approx(
+            orca_saddle.energy, abs=1e-6
+        )
+        assert path_end_deviation(output.irc_path, orca_path) < 1e-2
+        # One end is formaldehyde, the other trans-hydroxymethylene.
+        hydroxyl = sorted(
+            min(interatomic_distances(end)[3:5])
+            for end in (output.irc_path[0], output.irc_path[-1])
+        )
+        assert hydroxyl[0] == pytest.approx(0.951, abs=5e-3)
+        assert hydroxyl[1] > 1.9
+
+    def test_hydrogen_cyanide_path_from_orcas_b3lyp_saddle(
+        self, run_pyscf_driver, orca_outputs_directory
+    ):
+        """ORCA's B3LYP/G is PySCF's b3lyp; their DFT grids differ."""
+        saddle = orca_structures(
+            orca_outputs_directory, "hcn_hnc_optts_b3lypg_def2svp.xyz"
+        )
+        orca_path = orca_structures(
+            orca_outputs_directory, "hcn_hnc_irc_IRC_Full_trj.xyz", ":"
+        )
+        output = self._run(
+            run_pyscf_driver,
+            PySCFIRCJob,
+            "irc",
+            saddle,
+            functional="b3lyp",
+            basis="def2-svp",
+        )
+        assert output.normal_termination, output.failure_reason
+        stage = output.status["stages"]["irc"]
+        orca_modes = orca_saddle_frequencies(
+            self._hcn_optts(orca_outputs_directory)
+        )
+        assert stage["imaginary_frequencies"] == pytest.approx(
+            [orca_modes[0]], abs=2.0
+        )
+        assert path_end_deviation(output.irc_path, orca_path) < 1e-2
+
+    def test_frequencies_at_orcas_hydrogen_cyanide_saddle(
+        self, run_pyscf_driver, orca_outputs_directory
+    ):
+        """All three modes of ORCA's OptTS Freq, recomputed by PySCF.
+
+        ORCA used its default RI approximation for the Coulomb term and its
+        own grid, hence 2 cm-1 rather than an exact match.
+        """
+        orca = self._hcn_optts(orca_outputs_directory)
+        saddle = orca.final_structure
+        committed = orca_structures(
+            orca_outputs_directory, "hcn_hnc_optts_b3lypg_def2svp.xyz"
+        )
+        # The IRC fixtures start from this run's saddle.
+        assert interatomic_distances(saddle) == pytest.approx(
+            interatomic_distances(committed), abs=1e-5
+        )
+        output = self._run(
+            run_pyscf_driver,
+            PySCFHessJob,
+            "hess",
+            Molecule(
+                symbols=saddle.chemical_symbols,
+                positions=saddle.positions,
+                charge=0,
+                multiplicity=1,
+            ),
+            functional="b3lyp",
+            basis="def2-svp",
+        )
+        assert output.normal_termination, output.failure_reason
+        assert output.vibrational_frequencies == pytest.approx(
+            orca_saddle_frequencies(orca), abs=2.0
+        )

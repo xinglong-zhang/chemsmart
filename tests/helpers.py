@@ -1921,3 +1921,76 @@ def rdkit_embed_and_optimize(smiles, seed=1):
     AllChem.EmbedMolecule(mol, params)
     AllChem.UFFOptimizeMolecule(mol)
     return mol
+
+
+def interatomic_distances(molecule):
+    """Return every interatomic distance of a Molecule, in atom-pair order.
+
+    Invariant to rotation and translation, so structures from different
+    programs compare without alignment.
+    """
+    rows, columns = np.triu_indices(molecule.num_atoms, k=1)
+    return molecule.distance_matrix[rows, columns]
+
+
+def path_end_deviation(path, reference_path):
+    """Return the largest distance deviation between two paths' ends.
+
+    The ends are compared as an unordered pair: which branch an IRC calls
+    forward is the sign an eigensolver gave the imaginary mode.
+    """
+    ends = [interatomic_distances(path[i]) for i in (0, -1)]
+    references = [interatomic_distances(reference_path[i]) for i in (0, -1)]
+    straight = max(
+        np.abs(ends[0] - references[0]).max(),
+        np.abs(ends[1] - references[1]).max(),
+    )
+    crossed = max(
+        np.abs(ends[0] - references[1]).max(),
+        np.abs(ends[1] - references[0]).max(),
+    )
+    return min(straight, crossed)
+
+
+def orca_structures(directory, name, index="-1"):
+    """Return the structure ORCA wrote to ``name`` (``index=":"``: all)."""
+    return Molecule.from_filepath(
+        os.path.join(directory, name),
+        index=index,
+        return_list=index == ":",
+    )
+
+
+def orca_saddle_frequencies(orca_output):
+    """Return the modes ORCA's Freq printed at its optimised HCN saddle.
+
+    An OptTS + Freq output holds two frequency blocks, the initial
+    Hessian's at the guess and the final one; ORCAOutput returns both, so
+    the last three (3N - 6 for bent HCN) are the saddle's.
+    """
+    assert orca_output.normal_termination
+    modes = orca_output.vibrational_frequencies[-3:]
+    assert modes[0] < 0 < modes[1]
+    return modes
+
+
+def pyscf_rhf_minimum(symbols, positions, basis):
+    """Return the energy and distances of an RHF minimum found by geomeTRIC.
+
+    Optimised with PySCF's own geomeTRIC interface, outside CHEMSMART.
+    """
+    from pyscf import gto
+    from pyscf.geomopt import geometric_solver
+    from pyscf.scf import hf
+
+    mol = gto.M(atom=list(zip(symbols, positions)), basis=basis, verbose=0)
+    mf = hf.RHF(mol)
+    mf.conv_tol = 1e-10
+    converged, optimised = geometric_solver.kernel(mf, maxsteps=100)
+    assert converged
+    energy = hf.RHF(optimised).run(conv_tol=1e-10).e_tot
+    minimum = Molecule(
+        symbols=list(symbols),
+        positions=optimised.atom_coords(unit="Angstrom"),
+    )
+    return energy, interatomic_distances(minimum)
