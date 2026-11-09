@@ -254,6 +254,17 @@ class PySCFOutput(FileMixin):
         return self.spec.get("xc_applied")
 
     @property
+    def numerics_applied(self):
+        """Return the numerical settings PySCF ran with, defaults resolved.
+
+        SCF ``conv_tol`` and ``max_cycle``; for DFT the integration grid
+        (level, per-atom radial/angular points, pruning, radial and Becke
+        schemes, point count); and the density-fitting basis, or None.
+        None for results written before it was recorded.
+        """
+        return self.spec.get("numerics_applied")
+
+    @property
     def spin_square(self):
         """Return <S^2> of the final determinant, in units of hbar^2."""
         spin_square = self.results.get("spin_square")

@@ -487,6 +487,25 @@ class TestAppliedMethodIsRecorded:
         assert applied["hf_exchange_short_range"] == pytest.approx(0.19)
         assert applied["hf_exchange_long_range"] == pytest.approx(0.65)
 
+    def test_defaults_left_unset_are_recorded_as_applied(
+        self, run_pyscf_driver, pyscf_h2_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_h2_molecule,
+            "sp",
+            functional="b3lyp",
+            basis="def2-svp",
+            defgrid="defgrid2",
+        )
+        numerics = output.numerics_applied
+        assert output.spec["scf_tol"] is None
+        assert numerics["conv_tol"] == pytest.approx(1e-9)
+        assert numerics["grid"]["atom_grid"] == [75, 302]
+        assert numerics["grid"]["num_points"] > 0
+        assert output.spec["aux_basis"] is None
+        assert numerics["auxbasis"] == "def2-svp-jkfit"
+
     def test_hartree_fock_records_no_functional(
         self, run_pyscf_driver, pyscf_h2_molecule
     ):
@@ -497,6 +516,8 @@ class TestAppliedMethodIsRecorded:
         assert output.spin == "restricted"
         assert output.xc_applied is None
         assert output.spin_square == 0.0
+        assert output.numerics_applied["grid"] is None
+        assert output.numerics_applied["auxbasis"] is None
 
     def test_open_shell_reference_records_its_spin_contamination(
         self, run_pyscf_driver, pyscf_oh_molecule

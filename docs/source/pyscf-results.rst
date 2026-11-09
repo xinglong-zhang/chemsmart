@@ -86,6 +86,9 @@ computed:
    the short- and long-range exact-exchange fractions, the range-separation parameter, and whether non-local correlation
    was included. ``b3lyp``, for instance, records LibXC functional 402 with 20% exact exchange.
 
+-  ``numerics_applied``: the SCF convergence threshold and cycle limit, the DFT integration grid, and the
+   density-fitting basis that were actually used, including PySCF's choices for settings left unset.
+
 A results file that declares a different PySCF result contract (``spec/result_contract_version``) stores its quantities
 under other names. CHEMSMART refuses to read it rather than report, for example, the reference energy of a correlated
 calculation as its result.

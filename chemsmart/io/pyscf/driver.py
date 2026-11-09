@@ -193,6 +193,41 @@ def _applied_functional(mf, mol):
     }
 
 
+def _applied_numerics(mf):
+    """Return the numerical settings PySCF ran with, defaults resolved.
+
+    Unset settings take PySCF defaults that a configuration file or a new
+    release can change, so the values used are recorded, not inferred.
+    """
+    numerics = {
+        "conv_tol": float(mf.conv_tol),
+        "max_cycle": int(mf.max_cycle),
+        "grid": None,
+        "auxbasis": None,
+    }
+    grids = getattr(mf, "grids", None)  # absent on Hartree-Fock objects
+    if grids is not None:
+        prune = grids.prune
+        numerics["grid"] = {
+            "level": int(grids.level),
+            "atom_grid": (
+                [int(n) for n in grids.atom_grid] if grids.atom_grid else None
+            ),
+            "prune": getattr(prune, "__name__", None),
+            "radial": grids.radi_method.__name__,
+            "becke_scheme": grids.becke_scheme.__name__,
+            "num_points": int(grids.weights.size),
+        }
+    with_df = getattr(mf, "with_df", None)  # absent without fitting
+    if with_df is not None:
+        auxbasis = with_df.auxbasis
+        # A generated even-tempered set has no name to record.
+        numerics["auxbasis"] = (
+            auxbasis if isinstance(auxbasis, str) else "generated"
+        )
+    return numerics
+
+
 def _build_method(config, mol):
     """Construct the mean-field object.
 
@@ -615,6 +650,10 @@ def main(config):
             lambda: _detect_point_group(mol, config["point_group_tol"]),
         )
 
+        # After the stages, when the grid and fitting basis are built.
+        _record_optional(
+            spec, status, "numerics_applied", lambda: _applied_numerics(mf)
+        )
         spec["num_basis_functions"] = int(mol.nao)
         spec["num_shells"] = int(mol.nbas)
         spec["num_electrons"] = int(mol.nelectron)
