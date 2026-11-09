@@ -441,6 +441,20 @@ class PySCFOutput(FileMixin):
         """Return the perturbative (T) correction in Hartree, or None."""
         return self._scalar_result("triples_correction")
 
+    @property
+    def scf_stability(self):
+        """Return the stability analysis of the converged SCF reference.
+
+        A mapping with the reference and, per question, whether it is stable
+        and its lowest Hessian eigenvalue in Eh: ``internal``,
+        ``real_to_complex`` and ``external`` (its ``question`` names the
+        direction, e.g. RHF/RKS -> UHF/UKS; ROHF has neither of the last two).
+        A ``stable`` of None means PySCF gave no answer. None when stability
+        was not requested, never an implicit "stable".
+        """
+        record = self.results.get("scf_stability")
+        return None if record is None else PySCFH5File.python_value(record)
+
     def _scalar_result(self, name):
         value = self.results.get(name)
         return None if value is None else float(value)
@@ -908,19 +922,21 @@ class PySCFH5File(FileMixin):
             if isinstance(value, bytes):
                 return value.decode("utf-8")
             return np.asarray(value)
-        return cls._python_value(value)
+        return cls.python_value(value)
 
     @classmethod
-    def _python_value(cls, value):
-        """Convert an h5py scalar/array into JSON-compatible Python values."""
+    def python_value(cls, value):
+        """Convert decoded h5py values, mappings included, to plain Python."""
+        if isinstance(value, dict):
+            return {key: cls.python_value(item) for key, item in value.items()}
         if isinstance(value, bytes):
             return value.decode("utf-8")
         if isinstance(value, np.ndarray):
-            return cls._python_value(value.tolist())
+            return cls.python_value(value.tolist())
         if isinstance(value, np.generic):
-            return cls._python_value(value.item())
+            return cls.python_value(value.item())
         if isinstance(value, list):
-            return [cls._python_value(item) for item in value]
+            return [cls.python_value(item) for item in value]
         return value
 
     @staticmethod

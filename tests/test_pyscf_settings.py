@@ -245,6 +245,7 @@ def test_project_yaml_digest_survives_merge():
         ({"solvent_model": "cosmo-rs", "solvent_id": "w"}, "not available"),
         ({"solvent_model": "cpcm"}, "solvent_id is required"),
         ({"point_group_tol": 0.0}, "must be positive"),
+        ({"scf_stability": "yes"}, "scf_stability must be"),
         ({"opt_solver": "bfgs"}, "Unknown opt_solver"),
         ({"engine": "tpu"}, "Unknown engine"),
         ({"defgrid": "defgrid9"}, "Unknown defgrid"),

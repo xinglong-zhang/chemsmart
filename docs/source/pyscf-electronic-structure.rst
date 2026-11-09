@@ -2,7 +2,7 @@
  Electronic Structure Methods (PySCF)
 ######################################
 
-This page covers the correlated methods available for PySCF jobs.
+This page covers the correlated methods available for PySCF jobs, and the stability analysis of the SCF reference.
 
 The method is chosen with ``-A`` or the ``ab_initio`` key of the project YAML, as for Hartree-Fock. For the complete
 option reference, see :doc:`pyscf-cli-options`.
@@ -93,3 +93,34 @@ The same calculation set in the project YAML, correlating every electron:
      correlation:
        frozen_core: false
        conv_tol: 1.0e-8
+
+************************
+ SCF Stability Analysis
+************************
+
+Check whether the converged SCF reference is a minimum in orbital-rotation space.
+
+.. code:: bash
+
+   chemsmart sub [OPTIONS] pyscf [PYSCF_OPTIONS] --scf-stability SUBCMD
+
+A converged SCF need not be a minimum. ``--scf-stability``, or ``scf_stability: true`` in the project YAML, asks PySCF
+three questions about the final reference: whether it is stable within its own family (internal), towards complex
+orbitals (real to complex), and towards the next less constrained family (external: RHF/RKS to UHF/UKS, or UHF/UKS to
+GHF/GKS). Each answer is recorded with its lowest orbital-rotation Hessian eigenvalue, which is comparable only within
+the same question.
+
+The analysis only observes. An instability is reported but not followed, and the job's convergence and termination are
+unchanged. If you want the lower solution, start a new calculation from it, for example with a different multiplicity or
+a broken-symmetry guess.
+
+Basic Usage
+===========
+
+Single point with a stability analysis:
+
+.. code:: bash
+
+   chemsmart sub pyscf -p project -f molecule.xyz --scf-stability sp
+
+The answers are stored under ``results/scf_stability``. See :doc:`pyscf-results`.

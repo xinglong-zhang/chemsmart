@@ -227,6 +227,7 @@ class PySCFJobSettings(MolecularJobSettings):
         solvent_model=None,
         solvent_id=None,
         correlation=None,
+        scf_stability=False,
         **kwargs,
     ):
         # Passed under its private name by ``merge``. Not a project-YAML key:
@@ -264,6 +265,8 @@ class PySCFJobSettings(MolecularJobSettings):
         # A mapping of PYSCF_CORRELATION_DEFAULTS keys; copied so settings
         # built from one project section never share it.
         self.correlation = copy.deepcopy(correlation)
+        # Analyse the converged reference's stability; an observation only.
+        self.scf_stability = scf_stability
         self._project_yaml_digest = project_yaml_digest
 
     @classmethod
@@ -569,6 +572,9 @@ class PySCFJobSettings(MolecularJobSettings):
                     "A solvent_id is required for every PySCF solvent model "
                     "so the applied dielectric/environment is explicit."
                 )
+
+        if not isinstance(self.scf_stability, bool):
+            raise ValueError("scf_stability must be true or false.")
 
         if float(self.point_group_tol) <= 0:
             raise ValueError(

@@ -72,7 +72,11 @@ could not be computed are listed with the reason under ``status/skipped_properti
 Every job writes the SCF energies in Hartree, the geometry in Angstrom, the atomic numbers, the orbital energies and
 occupations, and the detected point group. The last entry of the energy array is the final energy.
 
-A ``hess`` stage adds the Hessian, harmonic frequencies in cm⁻¹, normal modes, reduced masses, and force constants.
+A ``hess`` stage adds the Hessian, harmonic frequencies in cm⁻¹, normal modes, reduced masses, and force constants. With
+``--scf-stability``, ``results/scf_stability`` records each stability question asked about the final reference, whether
+it is stable, and its lowest Hessian eigenvalue in Hartree. A run that did not ask has no record, which is not read as
+stable.
+
 Forces in Hartree/Bohr, Mulliken charges, the dipole moment in Debye, and ⟨S²⟩ of the final determinant are written
 where the method and solvent support them, and are absent otherwise.
 

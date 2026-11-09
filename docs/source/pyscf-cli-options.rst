@@ -323,6 +323,11 @@ Results Options
       -  Compute the nuclear gradient for ``sp`` or ``hess``, which can add a large fraction of the SCF cost. ``opt``
          always stores the final forces.
 
+   -  -  ``--scf-stability/--no-scf-stability``
+      -  bool
+      -  Analyze the stability of the converged SCF reference (project key ``scf_stability``; see
+         :doc:`pyscf-electronic-structure`). Off by default.
+
    -  -  ``--point-group-tol``
       -  float
       -  Geometry tolerance in Bohr for point-group detection, which sets the rotational symmetry number used in free
@@ -406,7 +411,7 @@ ORCA schemas are refused rather than ignored, including ``semiempirical``, ``mod
 ``heavy_elements``, ``numfreq``, ``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and
 ``custom_solvent``.
 
-The ``correlation`` block is described in :doc:`pyscf-electronic-structure`.
+The ``correlation`` block and the ``scf_stability`` key are described in :doc:`pyscf-electronic-structure`.
 
 **********************
  Server Configuration

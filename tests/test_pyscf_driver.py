@@ -26,6 +26,7 @@ from chemsmart.jobs.pyscf.settings import PySCFJobSettings  # noqa: E402
 from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
     PySCFSinglePointJob,
 )
+from tests.helpers import run_pyscf_ccpvdz_sp  # noqa: E402
 
 HF_MINIMAL = {"ab_initio": "hf", "basis": "sto-3g", "density_fit": False}
 DFT_MINIMAL = {"basis": "sto-3g", "density_fit": False}
@@ -978,3 +979,86 @@ class TestCorrelatedMethods:
             output.energies[-1]
         )
         assert record.results["total_energy"] < output.scf_energies[-1]
+
+
+class TestSCFStability:
+    """Stability of the converged reference, recorded and never followed."""
+
+    def test_equilibrium_water_is_stable_in_every_direction(
+        self, run_pyscf_driver, pyscf_water_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_water_molecule,
+            "sp",
+            scf_stability=True,
+            **{**HF_MINIMAL, "basis": "cc-pvdz"},
+        )
+        record = output.scf_stability
+        assert record["external"]["question"] == "RHF/RKS -> UHF/UKS"
+        for question in ("internal", "real_to_complex", "external"):
+            assert record[question]["stable"] is True
+            assert record[question]["lowest_eigenvalue"] > 0
+
+    def test_stretched_h2_is_unstable_towards_unrestricted(
+        self, run_pyscf_driver
+    ):
+        """Past the Coulson-Fischer point RHF is no longer the UHF minimum.
+
+        The instability is reported and the requested RHF solution kept.
+        """
+        geometry = (["H", "H"], [[0, 0, 0], [0, 0, 2.5]], 1)
+        analysed = run_pyscf_ccpvdz_sp(
+            run_pyscf_driver,
+            *geometry,
+            label="analysed",
+            ab_initio="hf",
+            scf_stability=True,
+        )
+        plain = run_pyscf_ccpvdz_sp(
+            run_pyscf_driver, *geometry, label="plain", ab_initio="hf"
+        )
+        record = analysed.scf_stability
+        assert record["internal"]["stable"] is True
+        assert record["external"]["stable"] is False
+        assert record["external"]["lowest_eigenvalue"] < -1e-5
+        assert analysed.energies == plain.energies
+        assert analysed.normal_termination
+
+    def test_real_to_complex_instability_is_reported(self, run_pyscf_driver):
+        """PySCF computes this answer but returns only the RKS -> UKS one."""
+        output = run_pyscf_ccpvdz_sp(
+            run_pyscf_driver,
+            ["O", "O"],
+            [[0, 0, 0], [0, 0, 1.21]],
+            1,
+            functional="b3lyp",
+            scf_stability=True,
+        )
+        assert output.scf_stability["real_to_complex"]["stable"] is False
+
+    def test_unrestricted_reference_asks_about_ghf(
+        self, run_pyscf_driver, pyscf_oh_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_oh_molecule,
+            "sp",
+            multiplicity=2,
+            scf_stability=True,
+            **HF_MINIMAL,
+        )
+        assert output.scf_stability["reference"] == "UHF"
+        assert (
+            output.scf_stability["external"]["question"]
+            == "UHF/UKS -> GHF/GKS"
+        )
+
+    def test_not_requested_is_not_reported_as_stable(
+        self, run_pyscf_driver, pyscf_h2_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob, pyscf_h2_molecule, "sp", **HF_MINIMAL
+        )
+        assert output.spec["scf_stability"] is False
+        assert output.scf_stability is None

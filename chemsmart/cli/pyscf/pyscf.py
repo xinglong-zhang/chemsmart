@@ -145,6 +145,12 @@ def click_pyscf_settings_options(f):
         "large fraction of the SCF cost. opt always stores final forces.",
     )
     @click.option(
+        "--scf-stability/--no-scf-stability",
+        default=None,
+        help="Analyse the stability of the converged SCF reference and record "
+        "it. An instability is reported, never followed.",
+    )
+    @click.option(
         "--point-group-tol",
         type=click.FloatRange(min=0, min_open=True),
         default=None,
@@ -229,6 +235,7 @@ def pyscf(
     opt_solver,
     opt_maxsteps,
     forces,
+    scf_stability,
     point_group_tol,
     gpu,
     solvent_model,
@@ -322,6 +329,9 @@ def pyscf(
     if forces is not None:
         job_settings.forces = forces
         keywords += ("forces",)
+    if scf_stability is not None:
+        job_settings.scf_stability = scf_stability
+        keywords += ("scf_stability",)
     if point_group_tol is not None:
         job_settings.point_group_tol = point_group_tol
         keywords += ("point_group_tol",)

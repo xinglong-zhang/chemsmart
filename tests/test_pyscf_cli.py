@@ -316,6 +316,7 @@ class TestPySCFCliRealRuns:
             "--forces",
             "--point-group-tol",
             "0.01",
+            "--scf-stability",
             "-l",
             "requested",
             "sp",
@@ -323,6 +324,7 @@ class TestPySCFCliRealRuns:
         spec = PySCFH5File(glob.glob("requested*.h5")[0]).spec
         assert spec["forces"] is True
         assert spec["point_group_tol"] == 0.01
+        assert spec["scf_stability"] is True
 
     def test_no_density_fit_clears_an_inherited_auxiliary_basis(
         self, pyscf_water_xyz, temporary_working_dir

@@ -1810,6 +1810,30 @@ def make_pyscf_settings(jobtype, **overrides):
     return PySCFJobSettings(**{**settings, **overrides})
 
 
+def run_pyscf_ccpvdz_sp(
+    run_pyscf_driver, symbols, positions, multiplicity, **method
+):
+    """Run an exact-integral cc-pVDZ single point through the PySCF driver."""
+    from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
+
+    molecule = Molecule(
+        symbols=symbols,
+        positions=np.array(positions, dtype=float),
+        charge=0,
+        multiplicity=multiplicity,
+    )
+    return run_pyscf_driver(
+        PySCFSinglePointJob,
+        molecule,
+        "sp",
+        basis="cc-pvdz",
+        density_fit=False,
+        scf_tol=1e-10,
+        multiplicity=multiplicity,
+        **method,
+    )[1]
+
+
 def make_pyscf_results_payload():
     """Return a representative B2 payload with exact numeric arrays."""
     spec = {

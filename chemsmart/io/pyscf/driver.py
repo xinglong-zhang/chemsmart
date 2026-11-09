@@ -16,9 +16,11 @@ chemistry: pyscf is imported only inside the functions that need it, and the
 configuration is parsed only when run as a script.
 """
 
+import io
 import json
 import os
 import platform
+import re
 import socket
 import sys
 import time
@@ -69,10 +71,15 @@ APPLIED_SPEC_FIELDS = (
     "forces",
     "point_group_tol",
     "correlation",
+    "scf_stability",
     "num_threads",
     "max_memory_mb",
     "settings_digest",
 )
+
+#: PySCF's own criterion: a reference is unstable along a direction when the
+#: lowest eigenvalue of that orbital-rotation Hessian is below this (Eh).
+STABILITY_THRESHOLD = -1e-5
 
 #: Replaced with the job's JSON configuration when the script is generated.
 CONFIG_JSON = """__CHEMSMART_CONFIG__"""
@@ -576,6 +583,84 @@ def _run_correlation(mf, correlation):
     return stage_status, quantities, total, solver
 
 
+def _scf_stability(mf):
+    """Return PySCF's stability analysis of the converged reference.
+
+    Each question is recorded under its own name with its lowest Hessian
+    eigenvalue in Eh, normalised as that question's own matrix is, so values
+    compare within a question only. PySCF answers real -> complex inside the
+    external analysis but returns only the other verdict, so the eigenvalues
+    are read from the analysis' own log, captured in memory; a value it did
+    not print stays None, never "stable". An ROHF reference has no external
+    analysis. Nothing follows an instability: the requested wavefunction
+    remains the result.
+    """
+    from pyscf import lib
+    from pyscf.scf import stability
+
+    reference = _reference_family(mf)
+    if reference in ("ROHF", "ROKS"):
+        prefix, internal, external, question = (
+            "rohf",
+            stability.rohf_internal,
+            None,
+            None,
+        )
+    elif reference in ("UHF", "UKS"):
+        prefix, internal, external, question = (
+            "uhf",
+            stability.uhf_internal,
+            stability.uhf_external,
+            "UHF/UKS -> GHF/GKS",
+        )
+    else:
+        prefix, internal, external, question = (
+            "rhf",
+            stability.rhf_internal,
+            stability.rhf_external,
+            "RHF/RKS -> UHF/UKS",
+        )
+    stream = io.StringIO()
+    log = lib.logger.Logger(stream, lib.logger.INFO)
+    # Two calls, so the internal answer survives if the external one fails.
+    _, internal_stable = internal(mf, verbose=log, return_status=True)
+    external_stable = None
+    if external is not None:
+        _, external_stable = external(mf, verbose=log, return_status=True)
+
+    lowest = {}
+    pattern = re.compile(r"(\w+): lowest eigs of H = (.*)")
+    for line in stream.getvalue().splitlines():
+        match = pattern.match(line.strip())
+        if match:
+            numbers = re.findall(r"-?\d+\.?\d*(?:[eE][-+]?\d+)?", match[2])
+            if numbers:
+                lowest[match[1]] = min(float(n) for n in numbers)
+
+    def answer(name, stable):
+        eigenvalue = lowest.get(f"{prefix}_{name}")
+        if stable is None and eigenvalue is not None:
+            stable = eigenvalue >= STABILITY_THRESHOLD
+        return {
+            "stable": None if stable is None else bool(stable),
+            "lowest_eigenvalue": eigenvalue,
+        }
+
+    record = {
+        "reference": reference,
+        "internal": answer("internal", internal_stable),
+        "real_to_complex": None,
+        "external": None,
+    }
+    if external is not None:
+        record["real_to_complex"] = answer("real2complex", None)
+        record["external"] = {
+            "question": question,
+            **answer("external", external_stable),
+        }
+    return record
+
+
 def _stages_succeeded(status):
     """Return whether every stage recorded so far succeeded."""
     return all(
@@ -786,6 +871,19 @@ def main(config):
             "spin_square",
             lambda: float(mf.spin_square()[0]),
         )
+        # An observation about the final reference; it changes no stage.
+        if config["scf_stability"]:
+            if mf.converged:
+                _record_optional(
+                    results,
+                    status,
+                    "scf_stability",
+                    lambda: _scf_stability(mf),
+                )
+            else:
+                status["skipped_properties"][
+                    "scf_stability"
+                ] = "final SCF did not converge"
         results["point_group"] = None
         _record_optional(
             results,
