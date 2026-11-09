@@ -113,7 +113,9 @@ class PySCFScriptWriter:
             "chemsmart_version": chemsmart_version,
             "label": job.label,
             "program": "pyscf",
-            "jobtype": settings.jobtype or job.TYPE,
+            # job.JOBTYPE ("ts"), not job.TYPE ("pyscf_ts"): thermochemistry
+            # recognises a transition state by the former.
+            "jobtype": settings.jobtype or job.JOBTYPE,
             "stages": list(job.stages),
             "symbols": symbols,
             "positions": positions,

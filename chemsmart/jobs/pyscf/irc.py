@@ -15,6 +15,7 @@ class PySCFIRCJob(PySCFJob):
     """
 
     TYPE = "pyscf_irc"
+    JOBTYPE = "irc"
 
     @property
     def stages(self):

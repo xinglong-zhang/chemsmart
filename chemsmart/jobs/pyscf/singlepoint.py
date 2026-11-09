@@ -15,6 +15,7 @@ class PySCFSinglePointJob(PySCFJob):
     """
 
     TYPE = "pyscf_sp"
+    JOBTYPE = "sp"
 
     @property
     def stages(self):

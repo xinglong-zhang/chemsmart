@@ -15,6 +15,7 @@ class PySCFOptJob(PySCFJob):
     """
 
     TYPE = "pyscf_opt"
+    JOBTYPE = "opt"
 
     @property
     def stages(self):

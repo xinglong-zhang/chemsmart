@@ -15,6 +15,7 @@ class PySCFTSJob(PySCFJob):
     """
 
     TYPE = "pyscf_ts"
+    JOBTYPE = "ts"
 
     @property
     def stages(self):

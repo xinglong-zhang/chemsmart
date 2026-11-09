@@ -554,3 +554,67 @@ def test_charge_and_multiplicity_can_come_from_the_molecule(
     config = PySCFScriptWriter(job=job).build_config()
     assert (config["charge"], config["multiplicity"]) == (0, 1)
     assert config["atom_grid"] == [99, 590]
+
+
+class TestJobOwnsTheCalculationType:
+    """The job's stages and the settings' rules describe one calculation."""
+
+    @pytest.mark.parametrize(
+        ("job_class", "jobtype"),
+        [
+            (PySCFSinglePointJob, "sp"),
+            (PySCFOptJob, "opt"),
+            (PySCFHessJob, "hess"),
+            (PySCFTSJob, "ts"),
+            (PySCFIRCJob, "irc"),
+        ],
+    )
+    def test_settings_without_a_jobtype_take_the_jobs(
+        self, job_class, jobtype, pyscf_water_molecule
+    ):
+        settings = make_pyscf_settings(None)
+        job = job_class(
+            molecule=pyscf_water_molecule, settings=settings, label="x"
+        )
+        assert job.settings.jobtype == jobtype
+        # Thermochemistry reads this to recognise a transition state.
+        assert PySCFScriptWriter(job=job).build_config()["jobtype"] == jobtype
+        assert settings.jobtype is None
+        # Settings cleared after construction still give the job's jobtype,
+        # never its registry TYPE ("pyscf_ts"), which thermochemistry would
+        # not recognise as a transition state.
+        job.settings.jobtype = None
+        assert PySCFScriptWriter(job=job).build_config()["jobtype"] == jobtype
+
+    def test_settings_for_another_calculation_are_refused(
+        self, pyscf_water_molecule
+    ):
+        with pytest.raises(ValueError, match="runs a ts calculation"):
+            PySCFTSJob(
+                molecule=pyscf_water_molecule,
+                settings=make_pyscf_settings("opt"),
+                label="x",
+            )
+
+    @pytest.mark.parametrize(
+        ("job_class", "method", "message"),
+        [
+            # P-RFO would otherwise run on the HF reference, labelled MP2.
+            (PySCFTSJob, {"ab_initio": "mp2"}, "no analytic Hessian"),
+            (PySCFIRCJob, {"ab_initio": "ccsd"}, "no analytic Hessian"),
+            (PySCFTSJob, {"opt_solver": "berny"}, "saddle-point search"),
+        ],
+    )
+    def test_rules_of_the_jobs_calculation_apply(
+        self, job_class, method, message, pyscf_water_molecule
+    ):
+        overrides = {"density_fit": False, **method}
+        if "ab_initio" in method:
+            overrides["functional"] = None
+        job = job_class(
+            molecule=pyscf_water_molecule,
+            settings=make_pyscf_settings(None, **overrides),
+            label="x",
+        )
+        with pytest.raises(ValueError, match=message):
+            PySCFScriptWriter(job=job).build_config()
