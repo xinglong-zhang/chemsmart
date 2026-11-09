@@ -1695,40 +1695,31 @@ class Molecule:
 
         Args:
             filepath (str): Path to CIF file
-            index (str or int): Index for multi-structure files.
-                Use "-1" for last molecule, ":" for all, or 1-based integer.
+            index (str or int): Index for multi-block files (one structure
+                per data block). Use "-1" for last structure, ":" for all,
+                or 1-based integer.
             return_list (bool): If True, return a list of molecules.
 
         Returns:
             Molecule or list[Molecule]: Molecule object(s) from CIF file.
 
         Note:
-            - CIF files contain crystal structure data; ASE expands the
-              symmetry, so the returned structure is the crystallographic
-              unit cell rather than a discrete molecule. Use
-              ``Molecule.from_ccdc()`` with a licensed local CSD Python
-              API installation to obtain the deposited discrete molecule.
-            - ASE is used to read the CIF file format.
-            - For multi-structure CIF files, use index to select specific structures.
+            - The file is parsed directly (elements and coordinates),
+              without relying on ASE and without symmetry expansion, so
+              the returned structure is the *asymmetric unit* of the data
+              block. If the molecule lies on a symmetry element (e.g., an
+              inversion centre), the asymmetric unit may contain only part
+              of the molecule. Use ``Molecule.from_ccdc()`` with a
+              licensed local CSD Python API installation to obtain the
+              deposited discrete molecule.
+            - For multi-block CIF files, use index to select specific
+              structures.
         """
-        from .atoms import AtomsChargeMultiplicity
+        from chemsmart.io.file import CIFFile
 
-        # supplied index is 1-indexed, thus need to convert
-        index = string2index_1based(index)
-
-        ase_atoms = ase_read(filepath, index=index, format="cif")
+        cif_file = CIFFile(filepath)
         logger.debug(f"Read CIF file: {filepath} at index {index}")
-
-        if isinstance(ase_atoms, list):
-            logger.debug(f"Read {len(ase_atoms)} structures from CIF.")
-            molecules = [
-                AtomsChargeMultiplicity.from_atoms(atoms).to_molecule()
-                for atoms in ase_atoms
-            ]
-            return molecules if return_list else molecules[0]
-
-        molecule = AtomsChargeMultiplicity.from_atoms(ase_atoms).to_molecule()
-        return [molecule] if return_list else molecule
+        return cif_file.get_molecules(index=index, return_list=return_list)
 
     @classmethod
     def from_cif_file(cls, filepath, index="-1", return_list=False):

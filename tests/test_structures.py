@@ -8053,9 +8053,11 @@ def minimal_cif_file():
 class TestCIFFileReading:
     """Tests for reading CIF files.
 
-    Note: benzene.cif (CCDC 725244) is a crystal structure CIF; ASE
-    expands the symmetry and returns the conventional unit cell
-    (Z = 4 molecules, i.e., C24H24, 48 atoms), not a discrete molecule.
+    Note: benzene.cif (CCDC 725244) is a crystal structure CIF; CIFFile
+    reads the crystallographic asymmetric unit without applying
+    symmetry. Benzene crystallizes in Pbca (Z = 4) with the molecule on
+    an inversion centre, so the asymmetric unit contains half a benzene
+    molecule (C3H3, 6 atoms), not a discrete molecule.
     """
 
     def test_from_cif_file_exists(self, benzene_cif_file):
@@ -8069,8 +8071,8 @@ class TestCIFFileReading:
 
         assert mol is not None
         assert isinstance(mol, Molecule)
-        assert mol.num_atoms == 48  # unit cell: 4 x C6H6
-        assert mol.chemical_formula == "C24H24"
+        assert mol.num_atoms == 6  # asymmetric unit: half a C6H6
+        assert mol.chemical_formula == "C3H3"
 
     def test_read_cif_file_return_list(self, benzene_cif_file):
         """Test CIF file reading with return_list=True."""
@@ -8078,7 +8080,7 @@ class TestCIFFileReading:
 
         assert isinstance(mols, list)
         assert len(mols) == 1
-        assert mols[0].chemical_formula == "C24H24"
+        assert mols[0].chemical_formula == "C3H3"
 
     def test_from_filepath_recognizes_cif(self, benzene_cif_file):
         """Test that from_filepath recognizes .cif extension."""
@@ -8086,7 +8088,7 @@ class TestCIFFileReading:
 
         assert mol is not None
         assert isinstance(mol, Molecule)
-        assert mol.chemical_formula == "C24H24"
+        assert mol.chemical_formula == "C3H3"
 
     def test_read_nonexistent_cif_file(self):
         """Test reading non-existent CIF file raises FileNotFoundError."""
@@ -8111,17 +8113,17 @@ class TestCIFFileReading:
         mol = Molecule.from_cif_file(benzene_cif_file)
 
         assert mol.positions is not None
-        assert mol.positions.shape == (48, 3)
+        assert mol.positions.shape == (6, 3)
 
     def test_cif_molecule_has_symbols(self, benzene_cif_file):
         """Test that molecule from CIF has correct symbols."""
         mol = Molecule.from_cif_file(benzene_cif_file)
 
         assert mol.symbols is not None
-        assert len(mol.chemical_symbols) == 48
-        # Unit cell contains 4 benzene molecules
-        assert mol.chemical_symbols.count("C") == 24
-        assert mol.chemical_symbols.count("H") == 24
+        assert len(mol.chemical_symbols) == 6
+        # Asymmetric unit contains half a benzene molecule
+        assert mol.chemical_symbols.count("C") == 3
+        assert mol.chemical_symbols.count("H") == 3
 
 
 class TestCCDCIntegration:
@@ -8135,7 +8137,7 @@ class TestCCDCIntegration:
     # Force the HTTP/CIF route so the mocked fetch is exercised even on
     # machines with a licensed local CSD Python API installation.
     @patch("chemsmart.io.molecules.ccdc.csd_api_available", return_value=False)
-    @patch("chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc")
+    @patch("chemsmart.io.molecules.ccdc.CCDCReader.fetch_cif")
     def test_from_ccdc_basic_mock(
         self, mock_fetch, mock_csd_unavailable, minimal_cif_file
     ):
@@ -8146,10 +8148,10 @@ class TestCCDCIntegration:
 
         assert mol is not None
         assert isinstance(mol, Molecule)
-        mock_fetch.assert_called_once_with(1428476)
+        mock_fetch.assert_called_once_with()
 
     @patch("chemsmart.io.molecules.ccdc.csd_api_available", return_value=False)
-    @patch("chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc")
+    @patch("chemsmart.io.molecules.ccdc.CCDCReader.fetch_cif")
     def test_from_ccdc_return_list(
         self, mock_fetch, mock_csd_unavailable, minimal_cif_file
     ):
@@ -8370,16 +8372,16 @@ class TestCIFIntegrationWithExistingCode:
         """Test that CIF molecule has expected properties."""
         mol = Molecule.from_cif_file(benzene_cif_file)
 
-        # Check basic properties (unit cell of 4 benzene molecules)
-        assert mol.num_atoms == 48
+        # Check basic properties (asymmetric unit: half a benzene)
+        assert mol.num_atoms == 6
         assert mol.mass > 0
-        # Empirical formula reduces to simplest ratio, so C24H24 becomes CH
+        # Empirical formula reduces to simplest ratio, so C3H3 becomes CH
         assert mol.empirical_formula == "CH"
-        # Chemical formula of the unit cell is C24H24
-        assert mol.chemical_formula == "C24H24"
+        # Chemical formula of the asymmetric unit is C3H3
+        assert mol.chemical_formula == "C3H3"
 
         # Check positions exist and have correct shape
-        assert mol.positions.shape == (48, 3)
+        assert mol.positions.shape == (6, 3)
 
         # Check distance matrix can be computed
-        assert mol.distance_matrix.shape == (48, 48)
+        assert mol.distance_matrix.shape == (6, 6)
