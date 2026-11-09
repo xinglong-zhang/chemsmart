@@ -11,7 +11,11 @@ from chemsmart.database.assemble import PySCFAssembler, SingleFileAssembler
 from chemsmart.database.database import Database
 from chemsmart.database.utils import sha256_file
 from chemsmart.io.pyscf.driver import APPLIED_SPEC_FIELDS
-from chemsmart.io.pyscf.output import ROUTE_IDENTITY_EXCLUDED, PySCFOutput
+from chemsmart.io.pyscf.output import (
+    ROUTE_IDENTITY_DERIVED,
+    ROUTE_IDENTITY_EXCLUDED,
+    PySCFOutput,
+)
 from tests.helpers import (
     changed_value,
     copy_pyscf_output,
@@ -87,7 +91,7 @@ def test_settings_that_change_the_stored_results_change_the_record_id(
     )
 
 
-@pytest.mark.parametrize("field", APPLIED_SPEC_FIELDS)
+@pytest.mark.parametrize("field", APPLIED_SPEC_FIELDS + ROUTE_IDENTITY_DERIVED)
 def test_only_identity_neutral_settings_keep_the_route(
     pyscf_water_opt_distorted_outfolder, tmp_path, field
 ):

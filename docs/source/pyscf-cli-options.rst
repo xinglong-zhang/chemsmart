@@ -193,8 +193,10 @@ Method and Basis Set Options
       -  Dispersion correction (e.g. ``d3bj``); requires ``pyscf-dispersion``
 
 Give either ``-x`` or ``-A``, never both. Basis names follow PySCF and libcint spelling, which is hyphenated:
-``def2-svp``, not Gaussian's ``def2svp``. Functional names go through libxc, which accepts ``m062x`` as well as
-``M06-2X``.
+``def2-svp``, not Gaussian's ``def2svp``. A basis that defines an effective core potential brings it, as in Gaussian and
+ORCA: the def2 sets replace the core of elements from rubidium on (28 electrons for iodine), and ``lanl2dz`` carries its
+own. The replaced electrons are recorded in the results file. Functional names go through libxc, which accepts ``m062x``
+as well as ``M06-2X``.
 
 .. warning::
 

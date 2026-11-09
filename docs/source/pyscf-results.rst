@@ -86,6 +86,9 @@ computed:
    the short- and long-range exact-exchange fractions, the range-separation parameter, and whether non-local correlation
    was included. ``b3lyp``, for instance, records LibXC functional 402 with 20% exact exchange.
 
+-  ``ecp_core_electrons``: the core electrons an effective core potential replaced, by element, or null for an
+   all-electron calculation.
+
 -  ``numerics_applied``: the SCF convergence threshold and cycle limit, the DFT integration grid, and the
    density-fitting basis that were actually used, including PySCF's choices for settings left unset.
 

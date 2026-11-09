@@ -88,6 +88,28 @@ def _apply_threads(config):
     lib.num_threads(config["num_threads"])
 
 
+def _basis_ecp(config):
+    """Return, by element, the core potential the named basis defines.
+
+    Gaussian and ORCA attach def2's core potential to iodine whenever def2
+    is named. PySCF attaches none unless told and, given def2's valence
+    functions alone, runs the element all-electron without complaint, so
+    the potential is taken from the library entry the functions come from.
+    """
+    from pyscf import gto
+    from pyscf.lib.exceptions import BasisNotFoundError
+
+    ecp = {}
+    for symbol in sorted(set(config["symbols"])):
+        try:
+            defined = gto.basis.load_ecp(config["basis"], symbol)
+        except BasisNotFoundError:  # the orbital basis build reports it
+            defined = None
+        if defined:
+            ecp[symbol] = config["basis"]
+    return ecp
+
+
 def _build_mole(config, log_path):
     import pyscf
 
@@ -107,7 +129,24 @@ def _build_mole(config, log_path):
     )
     if config["max_memory_mb"]:
         kwargs["max_memory"] = config["max_memory_mb"]
+    ecp = _basis_ecp(config)
+    if ecp:
+        kwargs["ecp"] = ecp
     return pyscf.M(**kwargs)
+
+
+def _ecp_core_electrons(mol):
+    """Return the core electrons replaced by a potential, by element.
+
+    None when no element carries one, so an all-electron result keeps the
+    same record identity it had before this was recorded.
+    """
+    cores = {}
+    for index in range(mol.natm):
+        replaced = int(mol.atom_nelec_core(index))
+        if replaced:
+            cores[mol.atom_pure_symbol(index)] = replaced
+    return cores or None
 
 
 def _parsed_functional(name):
@@ -511,6 +550,7 @@ def main(config):
         # unresolved placeholder.
         spec["solvent_eps"] = config.get("solvent_eps")
         # Record what PySCF will compute, not only the names requested.
+        spec["ecp_core_electrons"] = _ecp_core_electrons(mol)
         spec["reference"] = _reference_family(mf)
         spec["xc_applied"] = None
         if config["xc"] is not None:

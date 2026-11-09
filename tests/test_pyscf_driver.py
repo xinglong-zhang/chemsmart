@@ -506,6 +506,36 @@ class TestAppliedMethodIsRecorded:
         assert output.spec["aux_basis"] is None
         assert numerics["auxbasis"] == "def2-svp-jkfit"
 
+    def test_def2_basis_brings_its_core_potential(self, run_pyscf_driver):
+        """Gaussian and ORCA apply def2's 28-electron potential to iodine.
+
+        Without it PySCF would run iodine all-electron in a basis built for
+        the potential, a different and meaningless calculation.
+        """
+        hydrogen_iodide = Molecule(
+            symbols=["I", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.61]]),
+            charge=0,
+            multiplicity=1,
+        )
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            hydrogen_iodide,
+            "sp",
+            **{**HF_MINIMAL, "basis": "def2-svp"},
+        )
+        assert output.ecp_core_electrons == {"I": 28}
+        assert output.spec["num_electrons"] == 54 - 28
+        mol = gto.M(
+            atom="I 0 0 0; H 0 0 1.61",
+            basis="def2-svp",
+            ecp={"I": "def2-svp"},
+            verbose=0,
+        )
+        assert output.energies[-1] == pytest.approx(
+            hf.RHF(mol).kernel(), abs=1e-7
+        )
+
     def test_hartree_fock_records_no_functional(
         self, run_pyscf_driver, pyscf_h2_molecule
     ):
@@ -518,6 +548,7 @@ class TestAppliedMethodIsRecorded:
         assert output.spin_square == 0.0
         assert output.numerics_applied["grid"] is None
         assert output.numerics_applied["auxbasis"] is None
+        assert output.ecp_core_electrons is None
 
     def test_open_shell_reference_records_its_spin_contamination(
         self, run_pyscf_driver, pyscf_oh_molecule

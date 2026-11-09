@@ -57,6 +57,11 @@ ROUTE_IDENTITY_EXCLUDED = frozenset(
     {"label", "num_threads", "max_memory_mb", "settings_digest"}
 )
 
+#: Facts the driver derives that change the physical model, so they join
+#: the record identity although no setting names them: the same basis name
+#: with and without its core potential is a different calculation.
+ROUTE_IDENTITY_DERIVED = ("ecp_core_electrons",)
+
 
 class PySCFOutput(FileMixin):
     """Typed reader for a completed (or failed) PySCF job.
@@ -254,6 +259,15 @@ class PySCFOutput(FileMixin):
         return self.spec.get("xc_applied")
 
     @property
+    def ecp_core_electrons(self):
+        """Return core electrons replaced by a potential, by element.
+
+        None for an all-electron calculation, and for results written before
+        core potentials were attached (those ran every element all-electron).
+        """
+        return self.spec.get("ecp_core_electrons")
+
+    @property
     def numerics_applied(self):
         """Return the numerical settings PySCF ran with, defaults resolved.
 
@@ -376,7 +390,7 @@ class PySCFOutput(FileMixin):
         parts.append(f"engine={spec.get('engine')}")
         identity = {
             name: spec[name]
-            for name in APPLIED_SPEC_FIELDS
+            for name in APPLIED_SPEC_FIELDS + ROUTE_IDENTITY_DERIVED
             if name not in ROUTE_IDENTITY_EXCLUDED
             and spec.get(name) is not None
         }
