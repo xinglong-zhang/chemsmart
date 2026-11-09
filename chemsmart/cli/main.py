@@ -136,7 +136,7 @@ def maybe_submit_deferred_npz(arguments):
     if (
         nodes is None
         or filename is None
-        or not filename.lower().endswith(".npz")
+        or not filename.lower().endswith((".npz", ".xyz"))
     ):
         return False
 
@@ -150,7 +150,7 @@ def maybe_submit_deferred_npz(arguments):
     )
     if (server.scheduler or "").upper() != "SLURM":
         raise click.UsageError(
-            "Deferred NPZ node batches currently require a SLURM server."
+            "Deferred structure batches currently require a SLURM server."
         )
 
     queue = (
@@ -215,6 +215,7 @@ def maybe_submit_deferred_npz(arguments):
         json.dumps(
             {
                 "filename": str(Path(filename).resolve()),
+                "format": Path(filename).suffix.lower(),
                 "index": (
                     program_params.get("index")
                     or program_params.get("structure_index")

@@ -42,8 +42,9 @@ def _replace_task_structure(arguments, filename, label):
 
 
 def run_streaming_npz_batch(manifest_path):
-    """Prepare NPZ structures lazily and run them in one SLURM allocation."""
+    """Prepare NPZ or multi-frame XYZ lazily in one SLURM allocation."""
     from chemsmart.io.npz import NPZFile
+    from chemsmart.io.xyz.xyzfile import XYZFile
 
     manifest_path = Path(manifest_path)
     manifest = json.loads(manifest_path.read_text())
@@ -128,8 +129,12 @@ def run_streaming_npz_batch(manifest_path):
     total = 0
     pending = set()
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        npz_file = NPZFile(manifest["filename"])
-        for index, molecule, error in npz_file.iter_molecule_results(
+        source = (
+            XYZFile(manifest["filename"])
+            if manifest.get("format") == ".xyz"
+            else NPZFile(manifest["filename"])
+        )
+        for index, molecule, error in source.iter_molecule_results(
             manifest["index"]
         ):
             total += 1

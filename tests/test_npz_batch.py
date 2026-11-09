@@ -10,12 +10,46 @@ from click.testing import CliRunner
 from chemsmart.cli.main import maybe_submit_deferred_npz
 from chemsmart.cli.sub import sub
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.jobs.batch import (
     _replace_task_structure,
     run_streaming_npz_batch,
 )
 from chemsmart.settings.server import Server
 from tests.helpers import fake_executable_configuration
+
+
+def test_multiframe_xyz_streams_selected_frames(tmp_path):
+    source = tmp_path / "frames.xyz"
+    source.write_text(
+        "1\nfirst\nH 0 0 0\n1\nsecond\nH 0 0 1\n1\nthird\nH 0 0 2\n"
+    )
+    results = list(XYZFile(str(source)).iter_molecule_results("2:"))
+    assert [index for index, _, error in results if error is None] == [2, 3]
+    assert [molecule.positions[0, 2] for _, molecule, _ in results] == [1, 2]
+    assert [
+        index
+        for index, _, _ in XYZFile(str(source)).iter_molecule_results("-1")
+    ] == [3]
+
+
+def test_multiframe_xyz_uses_deferred_submission(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    server = Server(
+        "test", SCHEDULER="SLURM", NUM_CORES=8, MEM_GB=24, NUM_GPUS=0
+    )
+    with (
+        patch("chemsmart.settings.server.Server.current", return_value=server),
+        patch(
+            "chemsmart.settings.executable.XTBExecutable.from_servername",
+            return_value=fake_executable_configuration(),
+        ),
+    ):
+        assert maybe_submit_deferred_npz(
+            ["sub", "-N", "1", "--test", "xtb", "-f", "frames.xyz", "sp"]
+        )
+    manifest = json.loads(Path("frames_sp_deferred_npz.json").read_text())
+    assert manifest["format"] == ".xyz"
 
 
 def test_npz_node_batch_is_submitted_before_archive_is_read(
