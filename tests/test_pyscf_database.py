@@ -10,7 +10,13 @@ from chemsmart.cli.database.assemble import assemble
 from chemsmart.database.assemble import PySCFAssembler, SingleFileAssembler
 from chemsmart.database.database import Database
 from chemsmart.database.utils import sha256_file
-from tests.helpers import copy_pyscf_output
+from chemsmart.io.pyscf.driver import APPLIED_SPEC_FIELDS
+from chemsmart.io.pyscf.output import ROUTE_IDENTITY_EXCLUDED, PySCFOutput
+from tests.helpers import (
+    changed_value,
+    copy_pyscf_output,
+    replace_pyscf_spec_field,
+)
 
 
 @pytest.mark.parametrize("extra", [[], ["-p", "pyscf"]])
@@ -46,6 +52,57 @@ def test_settings_that_change_results_change_the_record_id(
         PySCFAssembler(filename=original).assemble().record_id
         != PySCFAssembler(filename=changed).assemble().record_id
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        # The tolerance decides the point group, hence the rotational
+        # symmetry number and the free energy.
+        ("point_group_tol", 0.05),
+        # A result storing fewer properties must not overwrite one storing
+        # more: an optimisation without its Hessian has no thermochemistry,
+        ("stages", ["scf", "opt"]),
+        # and a run without forces has no gradient.
+        ("forces", False),
+        # A run that stopped at its step limit must not overwrite one that
+        # had room to converge.
+        ("opt_maxsteps", 5),
+    ],
+)
+def test_settings_that_change_the_stored_results_change_the_record_id(
+    pyscf_water_opt_distorted_outfolder, tmp_path, field, value
+):
+    original = copy_pyscf_output(
+        pyscf_water_opt_distorted_outfolder, tmp_path / "a"
+    )
+    changed = copy_pyscf_output(
+        pyscf_water_opt_distorted_outfolder, tmp_path / "b"
+    )
+    replace_pyscf_spec_field(changed, field, value)
+
+    assert (
+        PySCFAssembler(filename=original).assemble().record_id
+        != PySCFAssembler(filename=changed).assemble().record_id
+    )
+
+
+@pytest.mark.parametrize("field", APPLIED_SPEC_FIELDS)
+def test_only_identity_neutral_settings_keep_the_route(
+    pyscf_water_opt_distorted_outfolder, tmp_path, field
+):
+    """Every applied setting reaches the identity unless it is excluded."""
+    logfile = copy_pyscf_output(
+        pyscf_water_opt_distorted_outfolder, tmp_path / "calc"
+    )
+    before = PySCFOutput(logfile)
+    replace_pyscf_spec_field(
+        logfile, field, changed_value(before.spec.get(field))
+    )
+    after = PySCFOutput(logfile)
+
+    unchanged = after.route_string == before.route_string
+    assert unchanged == (field in ROUTE_IDENTITY_EXCLUDED)
 
 
 def test_record_identifies_the_results_file(pyscf_water_opt_outfolder):

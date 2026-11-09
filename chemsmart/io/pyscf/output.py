@@ -23,7 +23,7 @@ from functools import cached_property
 import numpy as np
 from ase import units
 
-from chemsmart.io.pyscf.driver import H5_NULL_ATTRIBUTE
+from chemsmart.io.pyscf.driver import APPLIED_SPEC_FIELDS, H5_NULL_ATTRIBUTE
 from chemsmart.utils.constants import joule_per_mol_to_hartree
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import parse_index_specification
@@ -38,6 +38,24 @@ SUPPORTED_SCHEMA_VERSIONS = ("2.0",)
 #: only defensible default.
 STANDARD_TEMPERATURE_K = 298.15
 STANDARD_PRESSURE_ATM = 1.0
+
+#: Applied settings that do not change what a calculation computed, so two
+#: results differing only in these are the same database record. Every other
+#: field in ``APPLIED_SPEC_FIELDS`` reaches the record identity through
+#: ``PySCFOutput.route_string``; a setting is therefore part of the identity
+#: unless it is deliberately listed here.
+#:
+#: Only execution bookkeeping qualifies: the label, thread count and memory
+#: change neither the numbers nor which of them were computed. The settings
+#: digest is a hash of the other fields, so including it would count them
+#: twice and re-key every result whenever the driver gains a setting.
+#: Iteration limits, ``forces`` and ``stages`` stay in, as Gaussian's
+#: ``maxcycles``, ``force`` and ``freq`` route keywords do: a run that stopped
+#: at its limit, or stored fewer properties, must not replace a more
+#: complete result.
+ROUTE_IDENTITY_EXCLUDED = frozenset(
+    {"label", "num_threads", "max_memory_mb", "settings_digest"}
+)
 
 
 class PySCFOutput(FileMixin):
@@ -284,9 +302,16 @@ class PySCFOutput(FileMixin):
         """Return a canonical one-line description of the calculation.
 
         There is no native route string for a library backend, so this is
-        synthesised from the applied settings. It is stable for a given
-        settings digest, which is what the database's route hashing needs.
+        synthesised from the applied settings. The readable part names the
+        level of theory; the trailing ``spec=`` hash covers every applied
+        setting outside ``ROUTE_IDENTITY_EXCLUDED``, so a setting that changes
+        the result cannot be left out of the database record identity. Unset
+        (``None``) fields are omitted, so a field added to a later driver does
+        not change the identity of results written before it existed.
         """
+        # Deferred: the database package imports this reader.
+        from chemsmart.database.utils import canonical_json_hash
+
         spec = self.spec
         parts = [str(spec.get("method") or ""), str(spec.get("basis") or "")]
         if spec.get("density_fit"):
@@ -306,6 +331,13 @@ class PySCFOutput(FileMixin):
             )
         parts.append(str(spec.get("jobtype") or ""))
         parts.append(f"engine={spec.get('engine')}")
+        identity = {
+            name: spec[name]
+            for name in APPLIED_SPEC_FIELDS
+            if name not in ROUTE_IDENTITY_EXCLUDED
+            and spec.get(name) is not None
+        }
+        parts.append(f"spec={canonical_json_hash(identity)}")
         return " ".join(p for p in parts if p)
 
     # ------------------------------------------------------------------

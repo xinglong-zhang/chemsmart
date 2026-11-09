@@ -29,7 +29,8 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.pyscf.output import PySCFOutput
+from chemsmart.io.pyscf.driver import write_pyscf_h5
+from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.settings import (
@@ -1756,6 +1757,37 @@ def copy_pyscf_output(source_folder, destination):
             os.path.join(destination, "calc" + suffix),
         )
     return os.path.join(destination, "calc.out")
+
+
+def replace_pyscf_spec_field(logfile, field, value):
+    """Change one applied setting of a copied PySCF result.
+
+    The file is read and rewritten with the driver's own HDF5 functions, so
+    the new value is stored exactly as a real run would store it.
+    """
+    resultsfile = os.path.splitext(logfile)[0] + ".h5"
+    spec, provenance, status, results = read_pyscf_h5(resultsfile)
+    spec[field] = value
+    write_pyscf_h5(
+        resultsfile,
+        spec=spec,
+        provenance=provenance,
+        status=status,
+        results=results,
+    )
+
+
+def changed_value(value):
+    """Return a value of the same kind as ``value`` that differs from it."""
+    if value is None:
+        return 1
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, (int, float)):
+        return value + 1
+    if isinstance(value, str):
+        return value + "_changed"
+    return [changed_value(value[0]), *value[1:]]
 
 
 def read_pyscf_output_folder(folder):
