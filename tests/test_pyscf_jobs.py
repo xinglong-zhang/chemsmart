@@ -603,6 +603,18 @@ class TestJobOwnsTheCalculationType:
             (PySCFTSJob, {"ab_initio": "mp2"}, "no analytic Hessian"),
             (PySCFIRCJob, {"ab_initio": "ccsd"}, "no analytic Hessian"),
             (PySCFTSJob, {"opt_solver": "berny"}, "saddle-point search"),
+            (
+                PySCFIRCJob,
+                {
+                    "ab_initio": "casscf",
+                    "active_space": {
+                        "ncas": 4,
+                        "nelecas": 4,
+                        "orbitals": {"selection": "frontier"},
+                    },
+                },
+                "single-point energies only",
+            ),
         ],
     )
     def test_rules_of_the_jobs_calculation_apply(

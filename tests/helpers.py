@@ -1800,6 +1800,19 @@ def read_pyscf_output_folder(folder):
     return PySCFOutput(logfile)
 
 
+def make_pyscf_casscf_settings(active_space, **overrides):
+    """Return CASSCF/cc-pVDZ single-point settings for an active space."""
+    settings = {
+        "ab_initio": "casscf",
+        "basis": "cc-pvdz",
+        "density_fit": False,
+        "jobtype": "sp",
+        "multiplicity": 1,
+        "active_space": active_space,
+    }
+    return PySCFJobSettings(**{**settings, **overrides})
+
+
 def make_pyscf_settings(jobtype, **overrides):
     """Return valid B3LYP/def2-SVP singlet settings, with any overrides."""
     settings = {
@@ -1833,6 +1846,40 @@ def run_pyscf_ccpvdz_sp(
         scf_tol=1e-10,
         multiplicity=multiplicity,
         **method,
+    )[1]
+
+
+def run_pyscf_active_space_sp(
+    run_pyscf_driver,
+    atom,
+    active_space,
+    method="casscf",
+    multiplicity=1,
+    label=None,
+):
+    """Run a cc-pVDZ CASCI or CASSCF single point for a PySCF atom string."""
+    from pyscf import gto
+
+    from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
+
+    mol = gto.M(atom=atom, unit="Angstrom")
+    molecule = Molecule(
+        symbols=[mol.atom_symbol(i) for i in range(mol.natm)],
+        positions=mol.atom_coords(unit="Angstrom"),
+        charge=0,
+        multiplicity=multiplicity,
+    )
+    return run_pyscf_driver(
+        PySCFSinglePointJob,
+        molecule,
+        "sp",
+        label=label,
+        ab_initio=method,
+        basis="cc-pvdz",
+        density_fit=False,
+        scf_tol=1e-10,
+        multiplicity=multiplicity,
+        active_space=active_space,
     )[1]
 
 
@@ -1974,6 +2021,20 @@ def orca_saddle_frequencies(orca_output):
     return modes
 
 
+def pyscf_hartree_fock(atom, basis, spin=0):
+    """Return a converged RHF (closed shell) or ROHF reference.
+
+    Built with PySCF directly, outside CHEMSMART, as an independent
+    reference for the driver's results.
+    """
+    from pyscf import gto
+    from pyscf.scf import hf, rohf
+
+    mol = gto.M(atom=atom, basis=basis, spin=spin, verbose=0)
+    reference = rohf.ROHF if spin else hf.RHF
+    return reference(mol).run(conv_tol=1e-10)
+
+
 def pyscf_rhf_minimum(symbols, positions, basis):
     """Return the energy and distances of an RHF minimum found by geomeTRIC.
 
@@ -1994,3 +2055,20 @@ def pyscf_rhf_minimum(symbols, positions, basis):
         positions=optimised.atom_coords(unit="Angstrom"),
     )
     return energy, interatomic_distances(minimum)
+
+
+def nevpt2_in_final_orbitals(reference, mc, nroots, ss=None):
+    """Return SC-NEVPT2 per root on a CASCI in a CASSCF's final orbitals.
+
+    The CI vectors are converged to 1e-12: NEVPT2 is not variational in
+    them.
+    """
+    from pyscf import mcscf, mrpt
+
+    casci = mcscf.CASCI(reference, mc.ncas, mc.nelecas)
+    if ss is not None:
+        casci.fix_spin_(ss=ss)
+    casci.fcisolver.nroots = nroots
+    casci.fcisolver.conv_tol = 1e-12
+    casci.kernel(mc.mo_coeff)
+    return [mrpt.NEVPT(casci, root=i).kernel() for i in range(nroots)]

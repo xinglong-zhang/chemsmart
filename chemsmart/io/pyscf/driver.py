@@ -74,6 +74,7 @@ APPLIED_SPEC_FIELDS = (
     "correlation",
     "scf_stability",
     "irc_direction",
+    "active_space",
     "num_threads",
     "max_memory_mb",
     "settings_digest",
@@ -301,7 +302,12 @@ def _build_method(config, mol):
         return float(solvent_db[key][5])
 
     if config["xc"] is None:
-        mf = scf.HF(mol)
+        # CASCI and CASSCF take restricted orbitals: given UHF ones, PySCF
+        # silently converts them, so an open shell starts from ROHF instead.
+        if config.get("active_space") is not None and mol.spin:
+            mf = scf.ROHF(mol)
+        else:
+            mf = scf.HF(mol)
     else:
         _refuse_ambiguous_functional(config["xc"])
         mf = dft.KS(mol, xc=config["xc"])
@@ -756,6 +762,272 @@ def _run_correlation(mf, correlation):
     return stage_status, quantities, total, solver
 
 
+#: Weight below which a determinant's CI coefficient is not recorded.
+LEADING_DETERMINANT_COEFFICIENT = 0.05
+
+#: Largest |<S^2> - S(S+1)| accepted for a root of the requested multiplicity.
+ROOT_SPIN_TOLERANCE = 1e-5
+
+#: CI energy tolerance for the vectors NEVPT2 is computed from. NEVPT2 is not
+#: variational in them: at PySCF's default of 1e-8 the correction varies by
+#: ~2e-7 Eh between equally converged runs, at 1e-12 by under 1e-8.
+NEVPT2_CI_CONV_TOL = 1e-12
+
+
+def _active_space(mf, mol, block):
+    """Return ``(ncas, nelecas, mo_coeff, applied)`` for the selection.
+
+    ``applied`` records what was used, including PySCF's values for
+    settings left unset. MO indices in it are 0-based.
+    """
+    from pyscf.mcscf import avas
+
+    orbitals = block["orbitals"]
+    selection = orbitals["selection"]
+    applied = {"selection": selection}
+    if selection == "avas":
+        threshold = orbitals.get("threshold")
+        if threshold is None:
+            threshold = avas.THRESHOLD
+        ncas, nelecas, mo_coeff = avas.avas(
+            mf, list(orbitals["ao_labels"]), threshold=threshold, verbose=0
+        )
+        applied.update(
+            ao_labels=list(orbitals["ao_labels"]),
+            threshold=float(threshold),
+            minao=avas.MINAO,
+            openshell_option=int(avas.OPENSHELL_OPTION),
+        )
+    else:
+        ncas, nelecas = block["ncas"], block["nelecas"]
+        mo_coeff = mf.mo_coeff
+    # AVAS returns NumPy integers; a count or an (alpha, beta) pair.
+    ncas = int(ncas)
+    if np.ndim(nelecas) == 0:
+        nelecas = int(nelecas)
+    else:
+        nelecas = tuple(int(n) for n in nelecas)
+    nelecas_total = int(np.sum(nelecas))
+    nmo = mf.mo_coeff.shape[1]
+    ncore, remainder = divmod(mol.nelectron - int(nelecas_total), 2)
+    if isinstance(nelecas, tuple):
+        per_spin = nelecas
+    else:
+        beta = (nelecas - mol.spin) // 2
+        per_spin = (nelecas - beta, beta)
+    if max(per_spin) > ncas or min(per_spin) < 0:
+        raise ValueError(
+            "%d alpha and %d beta active electrons do not fit in %d "
+            "orbitals" % (per_spin[0], per_spin[1], ncas)
+        )
+    if remainder or ncore < 0 or ncore + ncas > nmo:
+        raise ValueError(
+            "%d active electrons in %d orbitals do not fit a molecule with "
+            "%d electrons and %d orbitals"
+            % (nelecas_total, ncas, mol.nelectron, nmo)
+        )
+    if selection == "mo_list":
+        base = int(orbitals["index_base"])
+        indices = [int(index) - base for index in orbitals["mo_list"]]
+        if max(indices) >= nmo:
+            raise ValueError(
+                "mo_list %s names an orbital beyond the %d this basis has "
+                "(index_base %d)" % (list(orbitals["mo_list"]), nmo, base)
+            )
+        applied["active_orbitals"] = sorted(indices)
+    elif selection == "frontier":
+        applied["active_orbitals"] = list(range(ncore, ncore + ncas))
+    applied["ncore"] = int(ncore)
+    return ncas, nelecas, mo_coeff, applied
+
+
+def _occupation_string(alpha, beta, ncas):
+    """Return a determinant as one character per active orbital."""
+    symbols = {(1, 1): "2", (1, 0): "a", (0, 1): "b", (0, 0): "0"}
+    alpha, beta = set(int(i) for i in alpha), set(int(i) for i in beta)
+    return "".join(
+        symbols[(int(i in alpha), int(i in beta))] for i in range(ncas)
+    )
+
+
+def _nevpt2_corrections(mc, nroots):
+    """Return the SC-NEVPT2 correction of each root of a CASCI object.
+
+    PySCF canonicalises each root with that root's density and writes the
+    result back into the ``ci`` list it shares with the CASCI object, so each
+    root works on its own copy of that list.
+    """
+    from pyscf import mrpt
+
+    corrections = []
+    for root in range(nroots):
+        nevpt = mrpt.NEVPT(mc, root=root)
+        if nroots > 1:
+            nevpt.ci = list(mc.ci)
+        corrections.append(float(nevpt.kernel()))
+    return corrections
+
+
+def _run_mcscf(mf, mol, block):
+    """Run CASCI or CASSCF, then NEVPT2 if asked, on the converged reference.
+
+    Return ``(stage_status, quantities, applied, total)``. Unconverged
+    iterations, or a root outside the requested spin manifold, give no
+    quantities and no total: such numbers are not results.
+
+    NEVPT2 follows PySCF's own state-averaged route, used here for one root
+    too: a CASCI in the final CASSCF orbitals supplies each root's CI vector.
+    """
+    from pyscf import fci, mcscf
+    from pyscf.fci import direct_spin1
+
+    method, nroots = block["method"], int(block["nroots"])
+    ncas, nelecas, mo_coeff, applied = _active_space(mf, mol, block)
+    spin = mol.spin / 2
+    target_ss = spin * (spin + 1)
+
+    def build(kind):
+        mc = (mcscf.CASSCF if kind == "casscf" else mcscf.CASCI)(
+            mf, ncas, nelecas
+        )
+        # One spin manifold: penalise every other spin rather than let a
+        # lower root of another multiplicity in.
+        mc.fix_spin_(ss=target_ss)
+        return mc
+
+    mc = build(method)
+    if block["orbitals"]["selection"] == "mo_list":
+        base = int(block["orbitals"]["index_base"])
+        mo_coeff = mc.sort_mo(list(block["orbitals"]["mo_list"]), base=base)
+    weights = None
+    if method == "casscf":
+        if block["max_cycle_macro"] is not None:
+            mc.max_cycle_macro = int(block["max_cycle_macro"])
+        if block["conv_tol"] is not None:
+            mc.conv_tol = float(block["conv_tol"])
+        if nroots > 1:
+            weights = block["weights"] or [1.0 / nroots] * nroots
+            mc = mc.state_average_(list(weights))
+        applied.update(
+            max_cycle_macro=int(mc.max_cycle_macro),
+            conv_tol=float(mc.conv_tol),
+        )
+    else:
+        if nroots > 1:
+            mc.fcisolver.nroots = nroots
+        if block["nevpt2"]:
+            mc.fcisolver.conv_tol = NEVPT2_CI_CONV_TOL
+    mc.kernel(mo_coeff)
+    nelecas = tuple(int(n) for n in mc.nelecas)
+    applied.update(
+        ncas=ncas,
+        nelecas=list(nelecas),
+        nroots=nroots,
+        weights=list(weights) if weights is not None else None,
+        solver=type(mc).__name__,
+        fcisolver=type(mc.fcisolver).__name__,
+        spin_penalty={
+            "ss": float(target_ss),
+            "shift": float(mc.fcisolver.ss_penalty),
+        },
+    )
+    stage_status = {"converged": bool(mc.converged), "method": method}
+    if not mc.converged:
+        return stage_status, {}, applied, None
+
+    if method == "casscf" and nroots > 1:
+        root_energies = [float(e) for e in mc.e_states]
+    else:
+        root_energies = [float(e) for e in np.atleast_1d(mc.e_tot)]
+    vectors = mc.ci if nroots > 1 else [mc.ci]
+    spin_squares = [
+        float(fci.spin_op.spin_square0(ci, ncas, nelecas)[0]) for ci in vectors
+    ]
+    wrong = [
+        root
+        for root, ss in enumerate(spin_squares)
+        if abs(ss - target_ss) > ROOT_SPIN_TOLERANCE
+    ]
+    if wrong:
+        stage_status["converged"] = False
+        stage_status["wrong_spin_roots"] = wrong
+        stage_status["root_spin_square"] = spin_squares
+        return stage_status, {}, applied, None
+
+    densities = [direct_spin1.make_rdm1(ci, ncas, nelecas) for ci in vectors]
+    quantities = {
+        "mcscf_root_energies": np.asarray(root_energies, dtype=float),
+        "mcscf_root_spin_square": np.asarray(spin_squares, dtype=float),
+        "natural_occupations": np.asarray(
+            [np.linalg.eigvalsh(dm)[::-1] for dm in densities], dtype=float
+        ),
+        "leading_determinants": {},
+    }
+    for root, ci in enumerate(vectors):
+        leading = fci.addons.large_ci(
+            ci,
+            ncas,
+            nelecas,
+            tol=LEADING_DETERMINANT_COEFFICIENT,
+            return_strs=False,
+        )
+        quantities["leading_determinants"]["root_%d" % root] = {
+            "coefficients": np.asarray([c for c, _, _ in leading]),
+            "occupations": [
+                _occupation_string(a, b, ncas) for _, a, b in leading
+            ],
+        }
+    if weights is not None:
+        averaged = sum(w * dm for w, dm in zip(weights, densities))
+        quantities["mcscf_average_energy"] = float(mc.e_tot)
+        quantities["natural_occupations_state_averaged"] = np.linalg.eigvalsh(
+            averaged
+        )[::-1].astype(float)
+    total = root_energies[0]
+
+    if block["nevpt2"]:
+        # NEVPT2 is not variational in the CI vector, which CASSCF leaves
+        # converged only to its own looser tolerance. A CASCI in the final
+        # orbitals gives each root a fully converged vector, and is the only
+        # route PySCF offers after state averaging.
+        casci = mc
+        if method == "casscf":
+            casci = build("casci")
+            if nroots > 1:
+                casci.fcisolver.nroots = nroots
+            casci.fcisolver.conv_tol = NEVPT2_CI_CONV_TOL
+            casci.kernel(mc.mo_coeff)
+            casci_energies = np.atleast_1d(casci.e_tot)
+            if not casci.converged or (
+                np.abs(casci_energies - root_energies).max() > 1e-6
+            ):
+                raise RuntimeError(
+                    "CASCI in the CASSCF orbitals did not reproduce the "
+                    "CASSCF roots, so NEVPT2 could not be assigned to them"
+                )
+        corrections = _nevpt2_corrections(casci, nroots)
+        quantities["nevpt2_corrections"] = np.asarray(corrections)
+        quantities["nevpt2_root_energies"] = np.asarray(
+            [e + c for e, c in zip(root_energies, corrections)]
+        )
+        total = float(quantities["nevpt2_root_energies"][0])
+        if weights is not None:
+            orbitals = "state-averaged CASSCF"
+        elif method == "casscf":
+            orbitals = "CASSCF"
+        else:
+            orbitals = "reference (CASCI)"
+        applied["nevpt2"] = {
+            "variant": "SC-NEVPT2",
+            "orbitals": orbitals,
+            "ci_vectors": "CASCI in those orbitals",
+            "ci_conv_tol": float(casci.fcisolver.conv_tol),
+            "canonicalisation": "per root, with that root's density",
+            "integrals": "exact (no density fitting)",
+        }
+    return stage_status, quantities, applied, total
+
+
 def _scf_stability(mf):
     """Return PySCF's stability analysis of the converged reference.
 
@@ -999,6 +1271,21 @@ def main(config):
                 if total is not None:
                     correlated_energies.append(total)
                     correlated = solver
+            elif stage == "mcscf":
+                if not _stages_succeeded(status):
+                    status["stages"]["mcscf"] = {
+                        "converged": False,
+                        "skipped_because": "an earlier stage failed",
+                    }
+                    continue
+                stage_status, quantities, applied, total = _run_mcscf(
+                    mf, mol, config["active_space"]
+                )
+                spec["active_space_applied"] = applied
+                status["stages"]["mcscf"] = stage_status
+                results.update(quantities)
+                if total is not None:
+                    correlated_energies.append(total)
             else:
                 raise ValueError("Unknown stage: %s" % stage)
 
@@ -1007,10 +1294,14 @@ def main(config):
             return np.asarray(getattr(array, "get", lambda: array)())
 
         # ``energies`` holds totals at the requested level, as the Gaussian
-        # reader's do: the correlated total for a correlated method (none if
+        # reader's do: the correlated or multiconfigurational total (none if
         # its iterations failed), the SCF energy otherwise.
+        post_scf = (
+            config["correlation"] is not None
+            or config.get("active_space") is not None
+        )
         results["scf_energies"] = np.asarray(energies, dtype=float)
-        if config["correlation"] is None:
+        if not post_scf:
             results["energies"] = results["scf_energies"]
         else:
             results["energies"] = np.asarray(correlated_energies, dtype=float)
@@ -1047,9 +1338,10 @@ def main(config):
                         gradient_source.nuc_grad_method().kernel()
                     ).astype(float),
                 )
-        # Charges and dipole come from the SCF density. For a correlated
-        # method they would belong to the reference, not to the result.
-        if config["correlation"] is None:
+        # Charges and dipole come from the SCF density. For a correlated or
+        # multiconfigurational method they would belong to the reference,
+        # not to the result.
+        if not post_scf:
             _record_optional(
                 results,
                 status,
@@ -1067,8 +1359,8 @@ def main(config):
         else:
             for name in ("mulliken_charges", "dipole_moment"):
                 status["skipped_properties"][name] = (
-                    "no correlated density is computed; the SCF value would "
-                    "describe the reference, not the correlated result"
+                    "no density of the reported method is computed; the SCF "
+                    "value would describe the reference, not the result"
                 )
         # <S^2> of the final (reference) determinant, in units of hbar^2.
         _record_optional(

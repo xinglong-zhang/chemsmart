@@ -77,7 +77,8 @@ def click_pyscf_settings_options(f):
         type=str,
         default=None,
         help="Ab initio method: 'hf', or 'mp2', 'ccsd' or 'ccsd(t)' on the "
-        "HF reference (needs --no-density-fit).",
+        "HF reference (needs --no-density-fit), or 'casci' or 'casscf' "
+        "with an active_space block in the project YAML.",
     )
     @click.option(
         "-b",

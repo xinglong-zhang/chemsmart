@@ -12,7 +12,8 @@ import pytest
 
 pytest.importorskip("pyscf")
 
-from pyscf import __config__, cc, fci, gto, mp, symm  # noqa: E402
+from pyscf import __config__, cc, fci, gto, mcscf, mp, mrpt, symm  # noqa: E402
+from pyscf.mcscf import avas  # noqa: E402
 from pyscf.scf import hf  # noqa: E402
 
 from chemsmart.database.assemble import PySCFAssembler  # noqa: E402
@@ -30,10 +31,13 @@ from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
 from chemsmart.jobs.pyscf.ts import PySCFTSJob  # noqa: E402
 from tests.helpers import (  # noqa: E402
     interatomic_distances,
+    nevpt2_in_final_orbitals,
     orca_saddle_frequencies,
     orca_structures,
     path_end_deviation,
+    pyscf_hartree_fock,
     pyscf_rhf_minimum,
+    run_pyscf_active_space_sp,
     run_pyscf_ccpvdz_sp,
 )
 
@@ -1277,6 +1281,307 @@ class TestIntrinsicReactionCoordinate:
         assert output.irc_path is None
         # The start's Hessian is a check, not a frequency result.
         assert output.vibrational_frequencies is None
+
+
+class TestMulticonfigurational:
+    """CASCI, CASSCF and SC-NEVPT2 against PySCF run directly."""
+
+    N2 = "N 0 0 0; N 0 0 1.098"
+    CAS66 = {
+        "ncas": 6,
+        "nelecas": 6,
+        "orbitals": {
+            "selection": "mo_list",
+            "mo_list": [5, 6, 7, 8, 9, 10],
+            "index_base": 1,
+        },
+    }
+
+    @pytest.mark.parametrize("method", ["casci", "casscf"])
+    def test_full_active_space_is_full_ci(self, run_pyscf_driver, method):
+        atom = "H 0 0 0; H 0 0 0.74"
+        reference = pyscf_hartree_fock(atom, "cc-pvdz")
+        nmo = reference.mo_coeff.shape[1]
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            atom,
+            {"ncas": nmo, "nelecas": 2, "orbitals": {"selection": "frontier"}},
+            method=method,
+        )
+        assert output.normal_termination, output.failure_reason
+        assert output.energies == pytest.approx(
+            [fci.FCI(reference).kernel()[0]], abs=1e-9
+        )
+
+    def test_orbital_numbering_selects_the_same_space(self, run_pyscf_driver):
+        one_based = run_pyscf_active_space_sp(
+            run_pyscf_driver, self.N2, self.CAS66, label="a"
+        )
+        zero_based = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            self.N2,
+            {
+                **self.CAS66,
+                "orbitals": {
+                    "selection": "mo_list",
+                    "mo_list": [4, 5, 6, 7, 8, 9],
+                    "index_base": 0,
+                },
+            },
+            label="b",
+        )
+        frontier = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            self.N2,
+            {**self.CAS66, "orbitals": {"selection": "frontier"}},
+            label="c",
+        )
+        direct = mcscf.CASSCF(
+            pyscf_hartree_fock(self.N2, "cc-pvdz"), 6, 6
+        ).kernel()[0]
+        for output in (one_based, zero_based, frontier):
+            assert output.normal_termination, output.failure_reason
+            assert output.energies == pytest.approx([direct], abs=1e-8)
+            assert output.active_space_applied["active_orbitals"] == [
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+            ]
+        assert one_based.energies[0] == pytest.approx(
+            zero_based.energies[0], abs=1e-9
+        )
+        assert one_based.spec["reference"] == "RHF"
+        assert one_based.active_space_applied["ncore"] == 4
+        assert one_based.results["mcscf_root_spin_square"][0] < 1e-6
+        assert one_based.natural_occupations.sum() == pytest.approx(6.0)
+        leading = one_based.leading_determinants["root_0"]
+        assert leading["occupations"][0] == "222000"
+        assert abs(leading["coefficients"][0]) > 0.9
+        # The reference's charges and dipole do not describe CASSCF.
+        assert one_based.mulliken_atomic_charges is None
+
+    def test_state_averaged_roots_match_pyscf(self, run_pyscf_driver):
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver, self.N2, {**self.CAS66, "nroots": 2}
+        )
+        assert output.normal_termination, output.failure_reason
+        mc = mcscf.CASSCF(pyscf_hartree_fock(self.N2, "cc-pvdz"), 6, 6)
+        mc.fix_spin_(ss=0)
+        mc = mc.state_average_([0.5, 0.5])
+        mc.kernel(mc.sort_mo([5, 6, 7, 8, 9, 10], base=1))
+        assert output.mcscf_root_energies == pytest.approx(
+            list(mc.e_states), abs=1e-8
+        )
+        assert output.results["mcscf_average_energy"] == pytest.approx(
+            mc.e_tot, abs=1e-8
+        )
+        assert output.energies == pytest.approx([mc.e_states[0]], abs=1e-8)
+        assert output.active_space_applied["weights"] == [0.5, 0.5]
+        assert np.allclose(output.results["mcscf_root_spin_square"], 0.0)
+
+    WATER = "O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587"
+    #: Tight enough that NEVPT2 is reproducible to 1e-9 Eh between runs.
+    CAS44 = {
+        "ncas": 4,
+        "nelecas": 4,
+        "orbitals": {"selection": "frontier"},
+        "conv_tol": 1e-12,
+    }
+
+    def test_nevpt2_matches_pyscf_run_directly(self, run_pyscf_driver):
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver, self.WATER, {**self.CAS44, "nevpt2": True}
+        )
+        assert output.normal_termination, output.failure_reason
+        reference = pyscf_hartree_fock(self.WATER, "cc-pvdz")
+        mc = mcscf.CASSCF(reference, 4, 4)
+        mc.conv_tol = 1e-12
+        mc.kernel()
+        [correction] = nevpt2_in_final_orbitals(reference, mc, 1)
+        assert output.nevpt2_corrections == pytest.approx(
+            [correction], abs=1e-8
+        )
+        assert output.energies == pytest.approx(
+            [mc.e_tot + correction], abs=1e-8
+        )
+        # NEVPT2 on the CASSCF object itself inherits its looser CI vector.
+        assert output.nevpt2_corrections == pytest.approx(
+            [mrpt.NEVPT(mc).kernel()], abs=1e-7
+        )
+        assert output.spec["method"] == "casscf/sc-nevpt2"
+        nevpt2 = output.active_space_applied["nevpt2"]
+        assert nevpt2["variant"] == "SC-NEVPT2"
+        assert nevpt2["ci_vectors"] == "CASCI in those orbitals"
+
+    def test_state_averaged_nevpt2_uses_each_root(self, run_pyscf_driver):
+        """PySCF's route: a multi-root CASCI in the averaged orbitals."""
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            self.WATER,
+            {**self.CAS44, "nroots": 2, "nevpt2": True},
+        )
+        assert output.normal_termination, output.failure_reason
+        reference = pyscf_hartree_fock(self.WATER, "cc-pvdz")
+        sa = mcscf.CASSCF(reference, 4, 4)
+        sa.conv_tol = 1e-12
+        sa.fix_spin_(ss=0)
+        sa = sa.state_average_([0.5, 0.5])
+        sa.kernel()
+        corrections = nevpt2_in_final_orbitals(reference, sa, 2, ss=0)
+        assert output.mcscf_root_energies == pytest.approx(
+            list(sa.e_states), abs=1e-8
+        )
+        assert output.nevpt2_corrections == pytest.approx(
+            corrections, abs=1e-8
+        )
+        assert output.active_space_applied["nevpt2"]["orbitals"] == (
+            "state-averaged CASSCF"
+        )
+
+    def test_nevpt2_with_degenerate_orbitals_is_reproducible_to_its_bound(
+        self, run_pyscf_driver
+    ):
+        """Without a point group, N2's pi pairs mix arbitrarily.
+
+        PySCF's SC-NEVPT2 then varies by up to ~4e-6 Eh between equally
+        converged CASSCF solutions, while CASSCF itself agrees.
+        """
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver, self.N2, {**self.CAS66, "nevpt2": True}
+        )
+        mc = mcscf.CASSCF(pyscf_hartree_fock(self.N2, "cc-pvdz"), 6, 6)
+        mc.kernel()
+        assert output.mcscf_root_energies == pytest.approx(
+            [mc.e_tot], abs=1e-8
+        )
+        assert output.nevpt2_corrections == pytest.approx(
+            [mrpt.NEVPT(mc).kernel()], abs=1e-5
+        )
+
+    def test_casci_nevpt2_matches_pyscf_run_directly(self, run_pyscf_driver):
+        """No orbital optimisation: only the CI vector's convergence counts."""
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            self.WATER,
+            {**self.CAS44, "conv_tol": None, "nroots": 2, "nevpt2": True},
+            method="casci",
+        )
+        assert output.normal_termination, output.failure_reason
+        casci = mcscf.CASCI(pyscf_hartree_fock(self.WATER, "cc-pvdz"), 4, 4)
+        casci.fix_spin_(ss=0)
+        casci.fcisolver.nroots = 2
+        casci.fcisolver.conv_tol = 1e-12
+        casci.kernel()
+        assert output.mcscf_root_energies == pytest.approx(
+            list(casci.e_tot), abs=1e-9
+        )
+        corrections = [mrpt.NEVPT(casci, root=i).kernel() for i in (0, 1)]
+        assert output.nevpt2_corrections == pytest.approx(
+            corrections, abs=1e-8
+        )
+        assert output.spec["method"] == "casci/sc-nevpt2"
+        assert output.active_space_applied["nevpt2"]["orbitals"] == (
+            "reference (CASCI)"
+        )
+
+    def test_open_shell_nevpt2_on_restricted_open_shell_orbitals(
+        self, run_pyscf_driver
+    ):
+        """O2's degenerate pi pairs bound the agreement, as for N2."""
+        atom = "O 0 0 0; O 0 0 1.21"
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            atom,
+            {
+                "ncas": 6,
+                "nelecas": 8,
+                "orbitals": {"selection": "frontier"},
+                "nevpt2": True,
+            },
+            multiplicity=3,
+        )
+        assert output.normal_termination, output.failure_reason
+        reference = pyscf_hartree_fock(atom, "cc-pvdz", spin=2)
+        mc = mcscf.CASSCF(reference, 6, 8)
+        mc.kernel()
+        [correction] = nevpt2_in_final_orbitals(reference, mc, 1)
+        assert output.nevpt2_corrections == pytest.approx(
+            [correction], abs=1e-5
+        )
+        assert output.nevpt2_corrections[0] < 0
+
+    def test_triplet_oxygen_starts_from_restricted_open_shell_orbitals(
+        self, run_pyscf_driver
+    ):
+        atom = "O 0 0 0; O 0 0 1.21"
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            atom,
+            {"ncas": 6, "nelecas": 8, "orbitals": {"selection": "frontier"}},
+            multiplicity=3,
+        )
+        assert output.normal_termination, output.failure_reason
+        assert output.spec["reference"] == "ROHF"
+        assert output.active_space_applied["nelecas"] == [5, 3]
+        assert output.results["mcscf_root_spin_square"][0] == pytest.approx(
+            2.0, abs=1e-6
+        )
+        mc = mcscf.CASSCF(pyscf_hartree_fock(atom, "cc-pvdz", spin=2), 6, 8)
+        mc.fix_spin_(ss=2)
+        assert output.energies == pytest.approx([mc.kernel()[0]], abs=1e-8)
+
+    def test_avas_sizes_the_active_space(self, run_pyscf_driver):
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            self.N2,
+            {"orbitals": {"selection": "avas", "ao_labels": ["N 2p"]}},
+        )
+        assert output.normal_termination, output.failure_reason
+        ncas, nelecas, orbitals = avas.avas(
+            pyscf_hartree_fock(self.N2, "cc-pvdz"),
+            ["N 2p"],
+            threshold=0.2,
+            verbose=0,
+        )
+        applied = output.active_space_applied
+        assert (applied["ncas"], sum(applied["nelecas"])) == (ncas, nelecas)
+        assert applied["threshold"] == 0.2
+        mc = mcscf.CASSCF(
+            pyscf_hartree_fock(self.N2, "cc-pvdz"), ncas, nelecas
+        )
+        assert output.energies == pytest.approx(
+            [mc.kernel(orbitals)[0]], abs=1e-8
+        )
+
+    def test_unconverged_casscf_reports_no_energy(self, run_pyscf_driver):
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver,
+            self.N2,
+            {**self.CAS66, "max_cycle_macro": 1, "nevpt2": True},
+        )
+        assert not output.normal_termination
+        assert output.status["stages"]["mcscf"]["converged"] is False
+        assert output.energies == []
+        assert output.mcscf_root_energies is None
+        assert output.nevpt2_corrections is None
+
+    def test_root_of_another_spin_fails_the_job(
+        self, run_pyscf_driver, monkeypatch
+    ):
+        # Every root counts as off-spin when no deviation is tolerated.
+        monkeypatch.setattr(driver, "ROOT_SPIN_TOLERANCE", -1.0)
+        output = run_pyscf_active_space_sp(
+            run_pyscf_driver, self.N2, self.CAS66
+        )
+        assert not output.normal_termination
+        assert output.status["stages"]["mcscf"]["wrong_spin_roots"] == [0]
+        assert output.energies == []
+        assert "roots 0 left the requested spin manifold" in (
+            output.failure_reason
+        )
 
 
 class TestTransitionStatesAgainstORCA:

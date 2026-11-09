@@ -178,7 +178,8 @@ Method and Basis Set Options
 
    -  -  ``-A, --ab-initio``
       -  string
-      -  Ab initio method: ``hf``, ``mp2``, ``ccsd`` or ``ccsd(t)``; see :doc:`pyscf-electronic-structure`
+      -  Ab initio method: ``hf``, ``mp2``, ``ccsd``, ``ccsd(t)``, ``casci`` or ``casscf``; see
+         :doc:`pyscf-electronic-structure`
 
    -  -  ``-b, --basis``
       -  string
@@ -220,8 +221,8 @@ starts:
 
 Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied.
 
-The correlated methods ``mp2``, ``ccsd`` and ``ccsd(t)`` take their own project keys; see
-:doc:`pyscf-electronic-structure`.
+The correlated methods ``mp2``, ``ccsd`` and ``ccsd(t)`` and the multiconfigurational methods ``casci`` and ``casscf``
+take their own project keys; see :doc:`pyscf-electronic-structure`.
 
 Examples:
 
@@ -412,8 +413,8 @@ ORCA schemas are refused rather than ignored, including ``semiempirical``, ``mod
 ``heavy_elements``, ``numfreq``, ``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and
 ``custom_solvent``.
 
-The ``correlation`` block and the ``scf_stability`` key are described in :doc:`pyscf-electronic-structure`, and the
-``irc_direction`` key in :doc:`pyscf-transition-state`.
+The ``correlation`` and ``active_space`` blocks and the ``scf_stability`` key are described in
+:doc:`pyscf-electronic-structure`, and the ``irc_direction`` key in :doc:`pyscf-transition-state`.
 
 **********************
  Server Configuration

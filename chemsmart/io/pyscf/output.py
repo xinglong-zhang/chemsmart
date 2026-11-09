@@ -409,7 +409,9 @@ class PySCFOutput(FileMixin):
 
         As in the Gaussian reader: the correlated total for MP2, CCSD or
         CCSD(T), which is empty when its iterations did not converge, and
-        the SCF energies, in stage order, otherwise.
+        the SCF energies, in stage order, otherwise. For CASCI and CASSCF it
+        is the first (lowest) root's energy, with the NEVPT2 correction when
+        requested; every root is in :attr:`mcscf_root_energies`.
         """
         values = self.results.get("energies")
         return [float(v) for v in values] if values is not None else []
@@ -440,6 +442,60 @@ class PySCFOutput(FileMixin):
     def triples_correction(self):
         """Return the perturbative (T) correction in Hartree, or None."""
         return self._scalar_result("triples_correction")
+
+    @property
+    def active_space_applied(self):
+        """Return the active space a CASCI or CASSCF job used, or None.
+
+        Includes the orbital selection with 0-based MO indices, the core
+        count, (alpha, beta) active electrons, the solver, the spin penalty
+        keeping roots in one spin manifold and, with NEVPT2, its variant.
+        """
+        return self.spec.get("active_space_applied")
+
+    @property
+    def mcscf_root_energies(self):
+        """Return each root's CASCI or CASSCF energy in Hartree, or None."""
+        return self._list_result("mcscf_root_energies")
+
+    @property
+    def nevpt2_corrections(self):
+        """Return each root's SC-NEVPT2 correction in Hartree, or None."""
+        return self._list_result("nevpt2_corrections")
+
+    @property
+    def natural_occupations(self):
+        """Return each root's active natural-orbital occupations, or None.
+
+        One row per root, largest occupation first.
+        """
+        values = self.results.get("natural_occupations")
+        return None if values is None else np.asarray(values, dtype=float)
+
+    @property
+    def leading_determinants(self):
+        """Return each root's largest CI coefficients, or None.
+
+        Keyed ``root_0``, ``root_1``, ...; each holds the coefficients and
+        the determinants, one character per active orbital: ``2`` doubly
+        occupied, ``a`` alpha, ``b`` beta, ``0`` empty.
+        """
+        stored = self.results.get("leading_determinants")
+        if stored is None:
+            return None
+        return {
+            root: {
+                "coefficients": [float(c) for c in entry["coefficients"]],
+                "occupations": [
+                    PySCFH5File.python_value(o) for o in entry["occupations"]
+                ],
+            }
+            for root, entry in stored.items()
+        }
+
+    def _list_result(self, name):
+        values = self.results.get(name)
+        return None if values is None else [float(v) for v in values]
 
     @property
     def saddle_order(self):
@@ -1004,6 +1060,9 @@ def _describe_unfinished(stage, entry):
     ]
     if failed:
         return f"{stage} ({'; '.join(failed)})"
+    if "wrong_spin_roots" in entry:
+        roots = ", ".join(str(r) for r in entry["wrong_spin_roots"])
+        return f"{stage} (roots {roots} left the requested spin manifold)"
     return stage
 
 

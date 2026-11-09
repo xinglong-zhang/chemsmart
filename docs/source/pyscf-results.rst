@@ -87,6 +87,12 @@ convergence and number of points under ``branches`` and the starting structure's
 ``results/irc_positions`` holds the path in Angstrom and ``results/irc_energies`` its energies in Hartree. The starting
 structure's frequencies are a check, not a result, and are not stored as ``vibrational_frequencies``.
 
+A CASCI or CASSCF job stores, per root, ``mcscf_root_energies``, ``mcscf_root_spin_square``, ``natural_occupations``
+(largest first) and ``leading_determinants``: the CI coefficients above 0.05 with their determinants, one character per
+active orbital (``2`` doubly occupied, ``a`` alpha, ``b`` beta, ``0`` empty). A state-averaged job adds the weighted
+average energy and the natural occupations of the averaged density, and NEVPT2 adds ``nevpt2_corrections`` and
+``nevpt2_root_energies``. ``scf_energies`` holds the Hartree-Fock reference energy.
+
 Forces in Hartree/Bohr, Mulliken charges, the dipole moment in Debye, and ⟨S²⟩ of the final determinant are written
 where the method and solvent support them, and are absent otherwise.
 
@@ -102,6 +108,10 @@ computed:
 
 -  ``ecp_core_electrons``: the core electrons an effective core potential replaced, by element, or null for an
    all-electron calculation.
+
+-  ``active_space_applied``: for CASCI and CASSCF, the active space used: the orbital selection with 0-based MO indices
+   (or the AVAS labels and threshold), the number of core orbitals, the active (alpha, beta) electrons, the solver, the
+   spin penalty and the convergence settings, and with NEVPT2 its variant and the CI tolerance of the vectors it used.
 
 -  ``numerics_applied``: the SCF convergence threshold and cycle limit, the DFT integration grid, and the
    density-fitting basis that were actually used, including PySCF's choices for settings left unset.

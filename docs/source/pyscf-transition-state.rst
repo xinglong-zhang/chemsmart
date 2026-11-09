@@ -6,8 +6,8 @@ This page covers transition state searches and intrinsic reaction coordinate (IR
 geomeTRIC optimizer.
 
 Both jobs read the ``gas`` section of the project YAML, like ``opt``, and both need ``opt_solver: geometric``. They run
-with Hartree-Fock and DFT. MP2 and coupled cluster have no analytic Hessian in PySCF and are refused. For the complete
-option reference, see :doc:`pyscf-cli-options`.
+with Hartree-Fock and DFT. MP2, coupled cluster, CASCI and CASSCF have no analytic Hessian in PySCF and are refused. For
+the complete option reference, see :doc:`pyscf-cli-options`.
 
 *************************
  Transition State Search

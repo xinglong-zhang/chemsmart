@@ -146,6 +146,7 @@ class PySCFScriptWriter:
             "forces": bool(settings.forces or optimises),
             "point_group_tol": float(settings.point_group_tol),
             "correlation": settings.resolved_correlation,
+            "active_space": settings.resolved_active_space,
             "scf_stability": settings.scf_stability,
             "irc_direction": (
                 settings.irc_direction if "irc" in job.stages else None
