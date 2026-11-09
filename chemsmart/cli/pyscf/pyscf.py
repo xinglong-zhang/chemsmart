@@ -76,7 +76,8 @@ def click_pyscf_settings_options(f):
         "--ab-initio",
         type=str,
         default=None,
-        help="Ab initio method. Use 'hf' for a Hartree-Fock reference.",
+        help="Ab initio method: 'hf', or 'mp2', 'ccsd' or 'ccsd(t)' on the "
+        "HF reference (needs --no-density-fit).",
     )
     @click.option(
         "-b",

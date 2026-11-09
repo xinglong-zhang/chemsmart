@@ -68,6 +68,7 @@ APPLIED_SPEC_FIELDS = (
     "opt_maxsteps",
     "forces",
     "point_group_tol",
+    "correlation",
     "num_threads",
     "max_memory_mb",
     "settings_digest",
@@ -339,27 +340,31 @@ def _run_opt(config, mf):
 
     assert_convergence is disabled so that a failed optimisation still
     produces a results file recording the failure, rather than raising with
-    no artifact. Downstream, normal_termination stays False.
+    no artifact. Downstream, normal_termination stays False. A correlated
+    method is optimised on its own gradient, not on the reference's.
     """
-    solver = config["opt_solver"]
+    optimizer = config["opt_solver"]
     maxsteps = config["opt_maxsteps"]
-    if solver == "geometric":
+    target = mf
+    if config["correlation"] is not None:
+        target = _correlated_solver(mf, config["correlation"])
+    if optimizer == "geometric":
         from pyscf.geomopt import geometric_solver
 
         return geometric_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
+            target, assert_convergence=False, maxsteps=maxsteps
         )
-    if solver == "berny":
+    if optimizer == "berny":
         from pyscf.geomopt import berny_solver
 
         return berny_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
+            target, assert_convergence=False, maxsteps=maxsteps
         )
-    if solver == "ase":
+    if optimizer == "ase":
         from pyscf.geomopt import ase_solver
 
-        return ase_solver.kernel(mf, target="atoms", max_steps=maxsteps)
-    raise ValueError("Unknown opt_solver: %s" % solver)
+        return ase_solver.kernel(target, target="atoms", max_steps=maxsteps)
+    raise ValueError("Unknown opt_solver: %s" % optimizer)
 
 
 def _provenance(config, started_at, ended_at, wall_seconds):
@@ -515,6 +520,62 @@ def _record_optional(results, status, name, compute):
         sys.stderr.write("Skipped %s: %s\n" % (name, reason))
 
 
+def _correlated_solver(mf, correlation):
+    """Return the MP2 or CCSD object for the reference, configured.
+
+    Frozen orbitals are PySCF's chemical core, counted after any core
+    potential. CCSD(T) is CCSD plus its perturbative triples correction.
+    """
+    if correlation["method"] == "mp2":
+        from pyscf import mp
+
+        solver = mp.MP2(mf)
+    else:
+        from pyscf import cc
+
+        solver = cc.CCSD(mf)
+        if correlation["max_cycle"] is not None:
+            solver.max_cycle = int(correlation["max_cycle"])
+        if correlation["conv_tol"] is not None:
+            solver.conv_tol = float(correlation["conv_tol"])
+    if correlation["frozen_core"]:
+        solver.set_frozen()
+    return solver
+
+
+def _run_correlation(mf, correlation):
+    """Run the correlated method on the converged reference.
+
+    Return the stage status, the correlated quantities, the total energy and
+    the solver. Unconverged iterations give no quantities and no total: such
+    numbers are not results. The solver class is recorded because it shows
+    which algorithm ran (RMP2, UCCSD, ...; a density-fitted one has its own
+    name).
+    """
+    method = correlation["method"]
+    solver = _correlated_solver(mf, correlation)
+    solver.kernel()
+    # MP2 is a closed formula: there are no iterations to converge.
+    converged = True if method == "mp2" else bool(solver.converged)
+    stage_status = {
+        "converged": converged,
+        "solver": type(solver).__name__,
+        "frozen_orbitals": int(solver.frozen or 0),
+    }
+    if not converged:
+        return stage_status, {}, None, solver
+
+    quantities = {"correlation_energy": float(solver.e_corr)}
+    total = float(solver.e_tot)
+    if method == "ccsd(t)":
+        triples = float(solver.ccsd_t())
+        quantities["ccsd_correlation_energy"] = float(solver.e_corr)
+        quantities["triples_correction"] = triples
+        quantities["correlation_energy"] = float(solver.e_corr) + triples
+        total += triples
+    return stage_status, quantities, total, solver
+
+
 def _stages_succeeded(status):
     """Return whether every stage recorded so far succeeded."""
     return all(
@@ -562,6 +623,8 @@ def main(config):
             )
 
         energies = []
+        correlated_energies = []
+        correlated = None  # the converged MP2 or CCSD object, if any
         for stage in config["stages"]:
             current_stage = stage
             if stage == "scf":
@@ -628,6 +691,23 @@ def main(config):
                 # PySCF exposes no CPHF convergence flag, so this records that
                 # the stage ran to the end, not that it converged.
                 status["stages"]["hess"] = {"completed": True}
+            elif stage == "correlation":
+                # A correlation energy on an unconverged reference is not a
+                # result, and the iterations would only cost time.
+                if not _stages_succeeded(status):
+                    status["stages"]["correlation"] = {
+                        "converged": False,
+                        "skipped_because": "an earlier stage failed",
+                    }
+                    continue
+                stage_status, quantities, total, solver = _run_correlation(
+                    mf, config["correlation"]
+                )
+                status["stages"]["correlation"] = stage_status
+                results.update(quantities)
+                if total is not None:
+                    correlated_energies.append(total)
+                    correlated = solver
             else:
                 raise ValueError("Unknown stage: %s" % stage)
 
@@ -635,7 +715,14 @@ def main(config):
         def _host(array):
             return np.asarray(getattr(array, "get", lambda: array)())
 
-        results["energies"] = np.asarray(energies, dtype=float)
+        # ``energies`` holds totals at the requested level, as the Gaussian
+        # reader's do: the correlated total for a correlated method (none if
+        # its iterations failed), the SCF energy otherwise.
+        results["scf_energies"] = np.asarray(energies, dtype=float)
+        if config["correlation"] is None:
+            results["energies"] = results["scf_energies"]
+        else:
+            results["energies"] = np.asarray(correlated_energies, dtype=float)
         results["positions"] = np.asarray(
             mol.atom_coords(unit="Angstrom"), dtype=float
         )
@@ -647,40 +734,57 @@ def main(config):
         # contracts expose forces, so negate. Requested explicitly because a
         # gradient costs a large fraction of the SCF itself, and only when the
         # SCF converged: forces from an unconverged density are meaningless.
+        # A correlated method's forces are its own gradient, never the SCF's.
         if config["forces"]:
-            if mf.converged:
+            gradient_source = mf
+            if config["correlation"] is not None:
+                gradient_source = correlated
+            if not mf.converged:
+                status["skipped_properties"][
+                    "forces"
+                ] = "final SCF did not converge"
+            elif gradient_source is None:
+                status["skipped_properties"][
+                    "forces"
+                ] = "the correlated energy did not converge"
+            else:
                 _record_optional(
                     results,
                     status,
                     "forces",
-                    lambda: -_host(mf.nuc_grad_method().kernel()).astype(
-                        float
-                    ),
+                    lambda: -_host(
+                        gradient_source.nuc_grad_method().kernel()
+                    ).astype(float),
                 )
-            else:
-                status["skipped_properties"][
-                    "forces"
-                ] = "final SCF did not converge"
-        _record_optional(
-            results,
-            status,
-            "mulliken_charges",
-            lambda: _host(mf.mulliken_pop(verbose=0)[1]).astype(float),
-        )
-        # <S^2> of the final determinant, in units of hbar^2.
+        # Charges and dipole come from the SCF density. For a correlated
+        # method they would belong to the reference, not to the result.
+        if config["correlation"] is None:
+            _record_optional(
+                results,
+                status,
+                "mulliken_charges",
+                lambda: _host(mf.mulliken_pop(verbose=0)[1]).astype(float),
+            )
+            _record_optional(
+                results,
+                status,
+                "dipole_moment",
+                lambda: _host(mf.dip_moment(unit="Debye", verbose=0)).astype(
+                    float
+                ),
+            )
+        else:
+            for name in ("mulliken_charges", "dipole_moment"):
+                status["skipped_properties"][name] = (
+                    "no correlated density is computed; the SCF value would "
+                    "describe the reference, not the correlated result"
+                )
+        # <S^2> of the final (reference) determinant, in units of hbar^2.
         _record_optional(
             results,
             status,
             "spin_square",
             lambda: float(mf.spin_square()[0]),
-        )
-        _record_optional(
-            results,
-            status,
-            "dipole_moment",
-            lambda: _host(mf.dip_moment(unit="Debye", verbose=0)).astype(
-                float
-            ),
         )
         results["point_group"] = None
         _record_optional(

@@ -12,10 +12,13 @@ import pytest
 
 pytest.importorskip("pyscf")
 
-from pyscf import __config__, gto, symm  # noqa: E402
+from pyscf import __config__, cc, fci, gto, mp, symm  # noqa: E402
 from pyscf.scf import hf  # noqa: E402
 
+from chemsmart.database.assemble import PySCFAssembler  # noqa: E402
+from chemsmart.io.gaussian.output import Gaussian16Output  # noqa: E402
 from chemsmart.io.molecules.structure import Molecule  # noqa: E402
+from chemsmart.io.orca.output import ORCAOutput  # noqa: E402
 from chemsmart.io.pyscf import driver  # noqa: E402
 from chemsmart.jobs.pyscf.hess import PySCFHessJob  # noqa: E402
 from chemsmart.jobs.pyscf.opt import PySCFOptJob  # noqa: E402
@@ -26,6 +29,7 @@ from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
 
 HF_MINIMAL = {"ab_initio": "hf", "basis": "sto-3g", "density_fit": False}
 DFT_MINIMAL = {"basis": "sto-3g", "density_fit": False}
+CORRELATED = {"density_fit": False, "scf_tol": 1e-11}
 
 
 class TestSinglePoint:
@@ -686,3 +690,291 @@ class TestAppliedMethodIsRecorded:
         )
         assert returncode == 0
         assert output.normal_termination
+
+
+class TestCorrelatedMethods:
+    """MP2, CCSD and CCSD(T) single points on the Hartree-Fock reference."""
+
+    def test_ccsd_of_two_electrons_is_full_ci(
+        self, run_pyscf_driver, pyscf_h2_molecule
+    ):
+        """With two electrons CCSD is exact and the (T) correction vanishes."""
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_h2_molecule,
+            "sp",
+            ab_initio="ccsd(t)",
+            basis="cc-pvdz",
+            correlation={"conv_tol": 1e-10},
+            **CORRELATED,
+        )
+        mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="cc-pvdz", verbose=0)
+        exact = fci.FCI(hf.RHF(mol).run(conv_tol=1e-11)).kernel()[0]
+        assert output.normal_termination
+        assert output.energies[-1] == pytest.approx(exact, abs=1e-8)
+        assert output.triples_correction == pytest.approx(0.0, abs=1e-10)
+        assert output.status["stages"]["correlation"]["frozen_orbitals"] == 0
+
+    @pytest.mark.parametrize(
+        ("orca_output", "frozen_core", "frozen_orbitals"),
+        [
+            ("water_mp2_frozen_core.out", True, 1),
+            ("water_mp2_all_electron.out", False, 0),
+        ],
+    )
+    def test_mp2_reproduces_orca(
+        self,
+        run_pyscf_driver,
+        orca_outputs_directory,
+        orca_output,
+        frozen_core,
+        frozen_orbitals,
+    ):
+        """ORCA 6.1.1 MP2/def2-SVP with exact integrals (NoRI)."""
+        path = os.path.join(orca_outputs_directory, orca_output)
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            Molecule.from_filepath(path, index="-1"),
+            "sp",
+            ab_initio="mp2",
+            basis="def2-svp",
+            correlation={"frozen_core": frozen_core},
+            **CORRELATED,
+        )
+        stage = output.status["stages"]["correlation"]
+        assert output.energies[-1] == pytest.approx(
+            ORCAOutput(path).energies[-1], abs=1e-6
+        )
+        assert stage["frozen_orbitals"] == frozen_orbitals
+        assert stage["solver"] == "RMP2"
+
+    @pytest.mark.parametrize(
+        ("atom", "frozen"),
+        [
+            # ORCA 6.1's default frozen core (manual Table 2.69), in
+            # orbitals, beyond any effective core potential.
+            ("C 0 0 0; O 0 0 1.13", 2),
+            ("H 0 0 0; Cl 0 0 1.27", 5),
+            ("K 0 0 0; Cl 0 0 2.67", 10),
+            ("Zn 0 0 0; Cl 0 0 2.05; Cl 0 0 -2.05", 15),
+            ("H 0 0 0; Br 0 0 1.41", 9),
+            # def2-SVP replaces iodine's 28 innermost electrons.
+            ("H 0 0 0; I 0 0 1.61", 4),
+        ],
+    )
+    def test_default_frozen_core_is_orcas(self, atom, frozen):
+        """Fails loudly if a newer PySCF redefines its chemical core.
+
+        Gaussian's FC differs for Li and Be, Sc-Zn, and Ga-Kr with Pople
+        basis sets, so ORCA's table is the reference.
+        """
+        mol = gto.M(atom=atom, basis="def2-svp", ecp="def2-svp", verbose=0)
+        assert mp.MP2(hf.RHF(mol)).set_frozen().frozen == frozen
+
+    def test_recorded_frozen_core_is_the_one_applied(self, run_pyscf_driver):
+        hydrogen_bromide = Molecule(
+            symbols=["H", "Br"],
+            positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.41]]),
+            charge=0,
+            multiplicity=1,
+        )
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            hydrogen_bromide,
+            "sp",
+            ab_initio="mp2",
+            basis="def2-svp",
+            **CORRELATED,
+        )
+        assert output.status["stages"]["correlation"]["frozen_orbitals"] == 9
+
+    def test_mp2_reproduces_gaussian(
+        self, run_pyscf_driver, gaussian_outputs_test_directory
+    ):
+        """Gaussian 16 B.01 MP2/aug-cc-pVTZ with its default frozen core."""
+        path = os.path.join(gaussian_outputs_test_directory, "water_mp2.log")
+        reference = Gaussian16Output(path)
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            Molecule.from_filepath(path, index="-1"),
+            "sp",
+            ab_initio="mp2",
+            basis="aug-cc-pvtz",
+            **CORRELATED,
+        )
+        assert output.scf_energies[-1] == pytest.approx(
+            reference.scf_energies[-1], abs=1e-6
+        )
+        assert output.energies[-1] == pytest.approx(
+            reference.energies[-1], abs=1e-6
+        )
+
+    @pytest.mark.parametrize("method", ["ccsd", "ccsd(t)"])
+    def test_coupled_cluster_matches_pyscf_run_directly(
+        self, run_pyscf_driver, pyscf_water_molecule, method
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_water_molecule,
+            "sp",
+            ab_initio=method,
+            basis="cc-pvdz",
+            correlation={"conv_tol": 1e-10},
+            **CORRELATED,
+        )
+        mol = gto.M(
+            atom=list(
+                zip(
+                    pyscf_water_molecule.chemical_symbols,
+                    pyscf_water_molecule.positions,
+                )
+            ),
+            basis="cc-pvdz",
+            verbose=0,
+        )
+        solver = cc.CCSD(hf.RHF(mol).run(conv_tol=1e-11))
+        solver.conv_tol = 1e-10
+        solver.set_frozen()
+        solver.kernel()
+        expected = solver.e_tot
+        if method == "ccsd(t)":
+            expected += solver.ccsd_t()
+        assert output.energies[-1] == pytest.approx(expected, abs=1e-8)
+        assert output.correlation_energy == pytest.approx(
+            expected - output.scf_energies[-1], abs=1e-8
+        )
+        # The SCF density would describe the reference, not this result.
+        assert "dipole_moment" in output.status["skipped_properties"]
+
+    def test_open_shell_uses_the_unrestricted_reference(
+        self, run_pyscf_driver, pyscf_oh_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_oh_molecule,
+            "sp",
+            ab_initio="ccsd(t)",
+            basis="cc-pvdz",
+            multiplicity=2,
+            **CORRELATED,
+        )
+        assert output.normal_termination
+        assert output.reference == "UHF"
+        assert output.status["stages"]["correlation"]["solver"] == "UCCSD"
+        assert output.triples_correction < 0
+
+    def test_unconverged_coupled_cluster_reports_no_energy(
+        self, run_pyscf_driver, pyscf_water_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_water_molecule,
+            "sp",
+            ab_initio="ccsd(t)",
+            basis="cc-pvdz",
+            correlation={"max_cycle": 1, "conv_tol": 1e-12},
+            **CORRELATED,
+        )
+        assert output.normal_termination is False
+        assert output.energies == []
+        assert output.correlation_energy is None
+        assert output.triples_correction is None
+        assert len(output.scf_energies) == 1
+        assert "correlation" in output.failure_reason
+
+    @pytest.mark.parametrize("method", ["mp2", "ccsd"])
+    def test_forces_are_the_correlated_gradient(
+        self, run_pyscf_driver, pyscf_distorted_water_molecule, method
+    ):
+        """Analytic forces against a central difference of the energy."""
+        molecule = pyscf_distorted_water_molecule
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            molecule,
+            "sp",
+            ab_initio=method,
+            basis="6-31g",
+            forces=True,
+            correlation={"conv_tol": 1e-10} if method == "ccsd" else None,
+            **CORRELATED,
+        )
+        bohr = 0.52917721092
+        step = 1e-3  # Bohr
+
+        def energy(positions):
+            mol = gto.M(
+                atom=list(zip(molecule.chemical_symbols, positions)),
+                basis="6-31g",
+                verbose=0,
+            )
+            reference = hf.RHF(mol).run(conv_tol=1e-12)
+            solver = (
+                mp.MP2(reference) if method == "mp2" else cc.CCSD(reference)
+            )
+            if method == "ccsd":
+                solver.conv_tol = 1e-11
+            solver.set_frozen()
+            return solver.kernel()[0] + reference.e_tot
+
+        numerical = np.zeros_like(molecule.positions)
+        for atom in range(len(molecule.positions)):
+            for axis in range(3):
+                shifted = [molecule.positions.copy() for _ in range(2)]
+                shifted[0][atom, axis] += step * bohr
+                shifted[1][atom, axis] -= step * bohr
+                gradient = (energy(shifted[0]) - energy(shifted[1])) / (
+                    2 * step
+                )
+                numerical[atom, axis] = -gradient
+        assert np.abs(output.forces - numerical).max() < 1e-5
+
+    @pytest.mark.slow
+    def test_mp2_optimum_reproduces_gaussian(
+        self, run_pyscf_driver, gaussian_outputs_test_directory
+    ):
+        """Gaussian 16 B.01 MP2(FC)/aug-cc-pVTZ optimum from a displaced start."""
+        path = os.path.join(gaussian_outputs_test_directory, "water_mp2.log")
+        optimum = Molecule.from_filepath(path, index="-1")
+        start = optimum.copy()
+        start.positions = optimum.positions + np.array(
+            [[0.0, 0.0, 0.0], [0.03, 0.0, 0.0], [0.0, -0.02, 0.0]]
+        )
+        _, output = run_pyscf_driver(
+            PySCFOptJob,
+            start,
+            "opt",
+            ab_initio="mp2",
+            basis="aug-cc-pvtz",
+            freq=False,
+            **CORRELATED,
+        )
+
+        assert output.normal_termination
+        assert output.status["stages"]["opt"]["optimizer_converged"]
+        final = output.optimized_structure
+        bond, angle = final.get_distance(1, 2), final.get_angle(2, 1, 3)
+        reference_bond = optimum.get_distance(1, 2)
+        reference_angle = optimum.get_angle(2, 1, 3)
+        assert abs(bond - reference_bond) < 5e-4
+        assert abs(angle - reference_angle) < 0.1
+        assert output.energies[-1] == pytest.approx(
+            Gaussian16Output(path).energies[-1], abs=1e-6
+        )
+
+    def test_record_carries_the_correlated_total(
+        self, run_pyscf_driver, pyscf_water_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_water_molecule,
+            "sp",
+            ab_initio="mp2",
+            basis="cc-pvdz",
+            **CORRELATED,
+        )
+        record = PySCFAssembler(filename=output.filename).assemble()
+        assert record.meta["method"] == "mp2"
+        assert record.results["total_energy"] == pytest.approx(
+            output.energies[-1]
+        )
+        assert record.results["total_energy"] < output.scf_energies[-1]

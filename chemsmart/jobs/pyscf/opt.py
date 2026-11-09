@@ -25,9 +25,12 @@ class PySCFOptJob(PySCFJob):
         Splitting it into a second CHEMSMART job would re-converge the SCF
         from scratch and re-pay density-fitting factorisation and grid
         construction -- the one place PySCF's in-process nature is a genuine
-        advantage over the file-based engines.
+        advantage over the file-based engines. A correlated method follows
+        its own gradient and is evaluated again at the optimised geometry.
         """
         stages = ["scf", "opt"]
+        if self.settings.correlated_method is not None:
+            stages.append("correlation")
         if self.settings.freq:
             stages.append("hess")
         return stages

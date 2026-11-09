@@ -70,10 +70,12 @@ class TestPySCFJobSettings:
         with pytest.raises(ValueError, match="gen_genecp_file"):
             settings.validate()
 
-    def test_only_hf_is_supported_as_an_ab_initio_method(self):
-        settings = PySCFJobSettings(ab_initio="mp2", basis="def2-svp")
+    def test_unsupported_ab_initio_method_names_the_supported_ones(self):
+        settings = PySCFJobSettings(ab_initio="cisd", basis="def2-svp")
 
-        with pytest.raises(ValueError, match="supports only 'hf'"):
+        with pytest.raises(
+            ValueError, match=r"supports 'hf' and mp2, ccsd, ccsd\(t\)"
+        ):
             settings.validate()
 
     def test_ab_initio_and_dft_functional_are_mutually_exclusive(self):
@@ -236,7 +238,7 @@ def test_project_yaml_digest_survives_merge():
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"ab_initio": "mp2"}, "Unknown ab_initio"),
+        ({"ab_initio": "cisd"}, "Unknown ab_initio"),
         ({"ab_initio": "hf"}, "either 'ab_initio: hf' or 'functional'"),
         ({"functional": "b2plyp"}, "Double-hybrid"),
         ({"solvent_id": "water"}, "without a solvent_model"),
@@ -288,6 +290,95 @@ def test_strings_that_are_not_one_named_functional_are_refused(
 )
 def test_named_functionals_pass_validation(functional):
     PySCFJobSettings(functional=functional, basis="def2-svp").validate()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        # PySCF would run DF-MP2/DF-CCSD on a density-fitted reference.
+        ({"density_fit": True}, "density_fit"),
+        ({"dispersion": "d3bj"}, "dispersion"),
+        ({"solvent_model": "cpcm", "solvent_id": "water"}, "solvent_model"),
+        # PySCF 2.14 has no open-shell CCSD(T) gradient.
+        ({"forces": True}, "forces"),
+        ({"jobtype": "opt"}, "single-point energies only"),
+        ({"jobtype": "hess"}, "no analytic Hessian"),
+        ({"correlation": {"frozen_cores": False}}, "Unknown correlation"),
+        ({"correlation": {"frozen_core": "yes"}}, "true or false"),
+    ],
+)
+def test_correlated_requests_pyscf_would_change_are_refused(kwargs, message):
+    settings = {
+        "ab_initio": "ccsd(t)",
+        "basis": "cc-pvdz",
+        "density_fit": False,
+        **kwargs,
+    }
+    with pytest.raises(ValueError, match=message):
+        PySCFJobSettings(**settings).validate()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"freq": True}, "no analytic Hessian"),
+        ({"opt_solver": "berny"}, "geometric solver only"),
+    ],
+)
+def test_correlated_optimisation_limits(kwargs, message):
+    settings = PySCFJobSettings(
+        ab_initio="mp2",
+        basis="cc-pvdz",
+        density_fit=False,
+        jobtype="opt",
+        **kwargs,
+    )
+    with pytest.raises(ValueError, match=message):
+        settings.validate()
+
+
+def test_mp2_and_ccsd_can_be_optimised():
+    for method in ("mp2", "ccsd"):
+        PySCFJobSettings(
+            ab_initio=method,
+            basis="cc-pvdz",
+            density_fit=False,
+            jobtype="opt",
+            freq=False,
+        ).validate()
+
+
+def test_mp2_has_no_iterations_to_control():
+    settings = PySCFJobSettings(
+        ab_initio="mp2",
+        basis="cc-pvdz",
+        density_fit=False,
+        correlation={"max_cycle": 10},
+    )
+    with pytest.raises(ValueError, match="not iterative"):
+        settings.validate()
+
+
+def test_correlation_block_needs_a_correlated_method():
+    settings = PySCFJobSettings(
+        functional="b3lyp",
+        basis="def2-svp",
+        correlation={"frozen_core": False},
+    )
+    with pytest.raises(ValueError, match="applies only"):
+        settings.validate()
+
+
+def test_correlation_defaults_to_the_chemical_frozen_core():
+    settings = PySCFJobSettings(
+        ab_initio="CCSD(T)", basis="cc-pvdz", density_fit=False
+    )
+    assert settings.validate().resolved_correlation == {
+        "method": "ccsd(t)",
+        "frozen_core": True,
+        "max_cycle": None,
+        "conv_tol": None,
+    }
 
 
 def test_hf_cannot_use_a_dft_grid():

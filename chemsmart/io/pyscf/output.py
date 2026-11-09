@@ -280,9 +280,11 @@ class PySCFOutput(FileMixin):
 
     @property
     def spin_square(self):
-        """Return <S^2> of the final determinant, in units of hbar^2."""
-        spin_square = self.results.get("spin_square")
-        return None if spin_square is None else float(spin_square)
+        """Return <S^2> of the final determinant, in units of hbar^2.
+
+        For a correlated method this is the HF reference determinant.
+        """
+        return self._scalar_result("spin_square")
 
     @property
     def spin_contamination(self):
@@ -403,9 +405,45 @@ class PySCFOutput(FileMixin):
 
     @cached_property
     def energies(self):
-        """Return every SCF energy in Hartree, in stage order."""
+        """Return the total energies in Hartree at the requested level.
+
+        As in the Gaussian reader: the correlated total for MP2, CCSD or
+        CCSD(T), which is empty when its iterations did not converge, and
+        the SCF energies, in stage order, otherwise.
+        """
         values = self.results.get("energies")
         return [float(v) for v in values] if values is not None else []
+
+    @property
+    def scf_energies(self):
+        """Return the SCF (reference) energies in Hartree, in stage order."""
+        values = self.results.get("scf_energies")
+        if values is None:
+            # Written before correlated methods, when they were the same.
+            return self.energies
+        return [float(v) for v in values]
+
+    @property
+    def correlation_energy(self):
+        """Return the correlation energy in Hartree, or None.
+
+        For CCSD(T) it includes the perturbative triples correction.
+        """
+        return self._scalar_result("correlation_energy")
+
+    @property
+    def ccsd_correlation_energy(self):
+        """Return the CCSD part of a CCSD(T) correlation energy, or None."""
+        return self._scalar_result("ccsd_correlation_energy")
+
+    @property
+    def triples_correction(self):
+        """Return the perturbative (T) correction in Hartree, or None."""
+        return self._scalar_result("triples_correction")
+
+    def _scalar_result(self, name):
+        value = self.results.get(name)
+        return None if value is None else float(value)
 
     @cached_property
     def _eigenvalues(self):

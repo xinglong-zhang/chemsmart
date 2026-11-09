@@ -178,7 +178,7 @@ Method and Basis Set Options
 
    -  -  ``-A, --ab-initio``
       -  string
-      -  Ab initio method; use ``hf`` for a Hartree-Fock reference
+      -  Ab initio method: ``hf``, ``mp2``, ``ccsd`` or ``ccsd(t)``; see :doc:`pyscf-electronic-structure`
 
    -  -  ``-b, --basis``
       -  string
@@ -218,8 +218,10 @@ starts:
 -  ``b3lyp3``, which is a different functional from Gaussian's B3LYP. Ask for ``hyb_gga_xc_b3lyp3`` if that functional
    is really intended.
 
-Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied. ``-A`` accepts
-only ``hf``; post-Hartree-Fock correlation methods are not part of this integration.
+Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied.
+
+The correlated methods ``mp2``, ``ccsd`` and ``ccsd(t)`` take their own project keys; see
+:doc:`pyscf-electronic-structure`.
 
 Examples:
 
@@ -404,6 +406,8 @@ ORCA schemas are refused rather than ignored, including ``semiempirical``, ``mod
 ``heavy_elements``, ``numfreq``, ``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and
 ``custom_solvent``.
 
+The ``correlation`` block is described in :doc:`pyscf-electronic-structure`.
+
 **********************
  Server Configuration
 **********************
@@ -449,6 +453,7 @@ already completed.
 For detailed information on each job type:
 
 -  :doc:`pyscf-structure-optimization`
+-  :doc:`pyscf-electronic-structure`
 -  :doc:`pyscf-frequency-calculations`
 -  :doc:`pyscf-gpu-acceleration`
 -  :doc:`pyscf-results`
