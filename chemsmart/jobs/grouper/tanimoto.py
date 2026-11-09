@@ -340,6 +340,13 @@ class TanimotoSimilarityGrouper(MatrixGrouper):
         num_valid = len(valid_indices)
 
         if num_valid == 0:
+            if self.fingerprint_type not in {"usr", "usrcat"}:
+                logger.error(
+                    f"[{self.__class__.__name__}] RDKit could not determine "
+                    "bonds for any structure, which is common for metal "
+                    "complexes and transition states. The usr and usrcat "
+                    "fingerprints do not need this step."
+                )
             groups = []
             index_groups = []
             self._cached_groups = groups

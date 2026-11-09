@@ -38,6 +38,7 @@ THERMOCHEMISTRY_DEFAULT_KWARGS = {
     "energy_units": "hartree",
     "check_imaginary_frequencies": True,
 }
+DEFAULT_CUTOFF_ENTROPY_GRIMME = 100.0
 
 
 def build_thermochemistry_kwargs(
@@ -171,11 +172,10 @@ def click_grouper_thermochemistry_options(f):
     @click.option(
         "-csg",
         "--cutoff-entropy-grimme",
-        default=100,
+        default=None,
         type=float,
-        show_default=True,
         help="For-Thermo-Correction: Cutoff frequency for entropy in wavenumbers, using Grimme's "
-        "quasi-RRHO method (Default to 100).",
+        "quasi-RRHO method (Default to 100, unless -cst is given).",
     )
     @click.option(
         "-cst",
@@ -331,6 +331,10 @@ def grouper(
     ctx.obj["representative"] = representative
     ctx.obj["conformer_ids"] = None  # Will be set only in directory mode
     ctx.obj["energy_type"] = energy_type
+
+    # Not an option default, which could not be told apart from a user's -csg
+    if cutoff_entropy_grimme is None and cutoff_entropy_truhlar is None:
+        cutoff_entropy_grimme = DEFAULT_CUTOFF_ENTROPY_GRIMME
 
     try:
         thermo_kwargs = build_thermochemistry_kwargs(

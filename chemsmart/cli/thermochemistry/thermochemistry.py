@@ -13,7 +13,7 @@ from chemsmart.io.folder import BaseFolder
 from chemsmart.io.xtb.folder import XTBFolder
 from chemsmart.jobs.thermochemistry.job import ThermochemistryJob
 from chemsmart.jobs.thermochemistry.settings import ThermochemistryJobSettings
-from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.cli import MyGroup, get_selected_server
 from chemsmart.utils.io import (
     check_program_availability_in_chemsmart,
     file_content_begins_with,
@@ -361,6 +361,7 @@ def thermochemistry(
                     filename=file,
                     settings=job_settings,
                     skip_completed=skip_completed,
+                    server=get_selected_server(ctx),
                 )
             except Exception as e:
                 logger.error(
@@ -394,6 +395,7 @@ def thermochemistry(
                 filename=file,
                 settings=job_settings,
                 skip_completed=skip_completed,
+                server=get_selected_server(ctx),
             )
             if outputfile is not None:
                 job_settings.overwrite = False
@@ -427,6 +429,16 @@ def thermochemistry_process_pipeline(ctx, *args, **kwargs):
     jobs = ctx.obj.get("jobs", [])
     outputfile = ctx.obj.get("outputfile", None)
     logger.debug(f"Jobs to process:{jobs}")
+    if ctx.obj.get("submitting"):
+        # One job is enough: its script repeats this whole command on the
+        # compute node, for all files.
+        if ctx.invoked_subcommand is not None:
+            return args[0]
+        if not jobs:
+            raise click.ClickException(
+                "No thermochemistry output files to submit."
+            )
+        return jobs[0]
     if ctx.invoked_subcommand is None:
         # If no subcommand is invoked, run the thermochemistry jobs
         logger.info("Running thermochemistry calculations on specified jobs.")

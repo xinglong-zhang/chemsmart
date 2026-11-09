@@ -38,6 +38,13 @@ p = pt()
 
 logger = logging.getLogger(__name__)
 
+# Default buffers (Angstrom) added to covalent radii in Molecule.to_graph().
+# Bond orders scale with the cutoff, so raising the order buffer would change
+# existing orders. Long bonds to non-hydrogen atoms, such as C-F at 1.38-1.40,
+# are therefore detected with a separate, larger buffer.
+GRAPH_BOND_ORDER_BUFFER = 0.05
+GRAPH_CONNECTIVITY_BUFFER = 0.2
+
 # Extensions that must use ASE (Open Babel either cannot read them or
 # silently drops cell / PBC information). Kept as a module-level set so
 # callers and tests can inspect the skip-list.
@@ -968,35 +975,45 @@ class Molecule:
         correction.
 
         Args:
-            atom1 (int): 0-based index of the atom the substituent is bonded
+            atom1 (int): 1-based index of the atom the substituent is bonded
                 to (often a dummy H). It is left out of the measurement and
                 defines the origin of the axis.
-            atom2 (int): 0-based index of the first substituent atom. The
+            atom2 (int): 1-based index of the first substituent atom. The
                 atom1->atom2 vector defines the +z axis.
-            excluded_atoms (Iterable[int] | None): 0-based indices of further
+            excluded_atoms (Iterable[int] | None): 1-based indices of further
                 atoms to leave out. All atoms other than atom1 count as the
                 substituent, so when atom1 has other neighbours, list the
                 rest of the molecule here.
 
         Returns:
             dict: "L", "B1" and "B5" in Angstrom, and "pos", the (N, 3)
-            aligned coordinates of all atoms.
+            aligned coordinates of all atoms. "pos" is a NumPy array, so atom
+            n is at pos[n - 1].
 
         Raises:
+            TypeError: If an atom index is not an integer.
+            IndexError: If an atom index is outside 1..num_atoms.
             ValueError: If atom1 and atom2 overlap, or atom2 is excluded.
         """
+        excluded = [] if excluded_atoms is None else list(excluded_atoms)
+        self._validate_geometry_indices(atom1, atom2, *excluded)
+        atom1_idx = atom1 - 1
+        atom2_idx = atom2 - 1
+
         # Work on a copy so that the molecule's own coordinates are untouched
         positions = np.array(self.positions, dtype=float)
-        positions -= positions[atom1].copy()
+        positions -= positions[atom1_idx].copy()
 
         # Rodrigues rotation to place atom2 on the +z axis
         # v: rotation axis, z_axis: target direction, theta: rotation angle
         z_axis = np.array([0.0, 0.0, 1.0])
-        if np.isclose(np.linalg.norm(positions[atom2]), 0.0):
+        if np.isclose(np.linalg.norm(positions[atom2_idx]), 0.0):
             raise ValueError(
                 "atom2 vector norm too close to zero, atom1 and atom2 overlap?"
             )
-        norm_atom2 = positions[atom2] / np.linalg.norm(positions[atom2])
+        norm_atom2 = positions[atom2_idx] / np.linalg.norm(
+            positions[atom2_idx]
+        )
         v = np.cross(norm_atom2, z_axis)
         if not np.isclose(np.linalg.norm(v), 0):
             v /= np.linalg.norm(v)
@@ -1011,7 +1028,7 @@ class Molecule:
             r = identity + np.sin(theta) * k + (1.0 - np.cos(theta)) * (k @ k)
             positions = positions @ r.T
 
-        elif positions[atom2][2] < 0:
+        elif positions[atom2_idx][2] < 0:
             # Atom2 on -z: rotate 180 degrees about x. Negating all coordinates
             # would be an inversion, which turns the molecule into its mirror
             # image.
@@ -1019,10 +1036,9 @@ class Molecule:
 
         # Select the atoms that make up the substituent
         included = np.ones(len(positions), dtype=bool)
-        included[atom1] = False
-        if excluded_atoms is not None:
-            included[list(excluded_atoms)] = False
-        if not included[atom2] and atom1 != atom2:
+        included[atom1_idx] = False
+        included[[idx - 1 for idx in excluded]] = False
+        if not included[atom2_idx] and atom1 != atom2:
             raise ValueError(f"atom2 ({atom2}) cannot be in excluded_atoms.")
 
         pt = rdchem.GetPeriodicTable()
@@ -1051,6 +1067,55 @@ class Molecule:
         }
 
         return self._sterimol
+
+    def get_substituent_atoms(self, atom1, atom2):
+        """
+        Return the atoms on the atom2 side of the atom1-atom2 bond.
+
+        Connectivity comes from to_graph(), which infers bonds from distances,
+        so check the result for metal complexes and transition states. Atoms
+        connected to neither side, such as a counterion, are left out with a
+        warning.
+
+        Args:
+            atom1 (int): 1-based index of the atom on the parent side.
+            atom2 (int): 1-based index of the first substituent atom.
+
+        Returns:
+            list[int]: Sorted 1-based indices of the substituent, including
+            atom2.
+
+        Raises:
+            ValueError: If the atoms are not bonded, or the bond is in a ring,
+                so that cutting it does not separate them.
+        """
+        self._validate_geometry_indices(atom1, atom2)
+        atom1_idx = atom1 - 1
+        atom2_idx = atom2 - 1
+
+        graph = self.to_graph()
+        if not graph.has_edge(atom1_idx, atom2_idx):
+            raise ValueError(
+                f"Atoms {atom1} and {atom2} are not bonded in the connectivity "
+                "inferred from the geometry."
+            )
+        graph.remove_edge(atom1_idx, atom2_idx)
+        if nx.has_path(graph, atom1_idx, atom2_idx):
+            raise ValueError(
+                f"The bond between atoms {atom1} and {atom2} is in a ring, so "
+                "cutting it does not separate a substituent."
+            )
+        substituent = nx.node_connected_component(graph, atom2_idx)
+        parent = nx.node_connected_component(graph, atom1_idx)
+        unassigned = sorted(
+            int(idx) + 1 for idx in set(graph) - substituent - parent
+        )
+        if unassigned:
+            logger.warning(
+                f"Atoms {unassigned} are connected to neither side of the "
+                f"{atom1}-{atom2} bond and were left out of the substituent."
+            )
+        return sorted(int(idx) + 1 for idx in substituent)
 
     @property
     def twod_descriptors(self):
@@ -2096,7 +2161,7 @@ class Molecule:
         mode="w",
         flavor=0,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
         **kwargs,
     ):
@@ -2494,7 +2559,7 @@ class Molecule:
         self,
         flavor=0,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
     ):
         """
@@ -2672,7 +2737,7 @@ class Molecule:
     def to_rdkit(
         self,
         add_bonds=True,
-        bond_cutoff_buffer=0.05,
+        bond_cutoff_buffer=None,
         adjust_H=True,
         bond_method="chemsmart",
     ):
@@ -2680,12 +2745,15 @@ class Molecule:
         with proper stereochemistry handling.
         Args:
             add_bonds (bool): Flag to add bonds to molecule or not.
-            bond_cutoff_buffer (float): Additional
+            bond_cutoff_buffer (float | None): Additional
             buffer for bond cutoff distance.
             From testing, see test_resonance_handling,
             it seems that a value of 0.1Å
             works for ozone, acetone, benzene,
             and probably other molecules, too.
+            By default, bond orders use GRAPH_BOND_ORDER_BUFFER, and pairs of
+            non-hydrogen atoms within GRAPH_CONNECTIVITY_BUFFER that this
+            misses are added as single bonds, as in to_graph().
             adjust_H (bool): Adjust bond distances to H atoms.
             bond_method (str): Method used to perceive bonds. ``"chemsmart"``
                 preserves the existing distance-based bond detection, while
@@ -2812,12 +2880,27 @@ class Molecule:
 
         return graph
 
+    def _is_long_bond(self, i, j, distance):
+        """Return True if a pair with no bond order is still bonded.
+
+        Hydrogen pairs are excluded, so that hydrogen bonds stay unbonded.
+        """
+        if "H" in (self.symbols[i], self.symbols[j]):
+            return False
+        return distance < get_bond_cutoff(
+            self.symbols[i], self.symbols[j], GRAPH_CONNECTIVITY_BUFFER
+        )
+
     def _add_bonds_to_rdkit_mol(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+        self, rdkit_mol, bond_cutoff_buffer=None, adjust_H=True
     ):
         """
         Add bonds to the RDKit molecule.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
         distances = self.distance_matrix
         for i in range(len(self.symbols)):
             for j in range(i + 1, len(self.symbols)):
@@ -2844,6 +2927,12 @@ class Molecule:
                 bond_order = self.determine_bond_order_one_bond(
                     bond_length=distances[i, j], bond_cutoff=cutoff
                 )
+                if (
+                    bond_order == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bond_order = 1
                 logger.debug(f"bond order: {bond_order}")
                 if bond_order > 0:
                     bond_type = {
@@ -2856,12 +2945,16 @@ class Molecule:
         return rdkit_mol
 
     def _add_bonds_to_rdkit_mol_vectorized(
-        self, rdkit_mol, bond_cutoff_buffer=0.05, adjust_H=True
+        self, rdkit_mol, bond_cutoff_buffer=None, adjust_H=True
     ):
         """
         Add bonds to the RDKit molecule using a
         vectorized approach to compute bond orders.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
         num_atoms = len(self.symbols)
 
         # 1. Build an NxN cutoff matrix
@@ -2888,8 +2981,9 @@ class Molecule:
                 cutoff_matrix[j, i] = cutoff_ij
 
         # 2. Vectorized bond order calculation
+        distances = self.distance_matrix  # a property that recomputes each use
         bond_orders = self.determine_bond_order(
-            bond_length=self.distance_matrix,  # NxN distances
+            bond_length=distances,  # NxN distances
             bond_cutoff=cutoff_matrix,  # NxN cutoffs
         )
 
@@ -2904,6 +2998,12 @@ class Molecule:
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):
                 bo = bond_orders[i, j]
+                if (
+                    bo == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bo = 1.0
                 if bo > 0:
                     bond_type = bond_type_map.get(bo, Chem.BondType.SINGLE)
                     rdkit_mol.AddBond(i, j, bond_type)
@@ -2951,7 +3051,7 @@ class Molecule:
             bond_orders.append(bond["bond_order"])
         return bond_orders
 
-    def to_graph(self, bond_cutoff_buffer=0.05, adjust_H=True) -> nx.Graph:
+    def to_graph(self, bond_cutoff_buffer=None, adjust_H=True) -> nx.Graph:
         """
         Convert a Molecule object to a connectivity
         graph with vectorized calculations.
@@ -2960,13 +3060,20 @@ class Molecule:
         Bond cutoff is obtained using Covalent
         Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
         Args:
-            bond_cutoff_buffer (float): Additional
-            buffer for bond cutoff distance.
+            bond_cutoff_buffer (float | None): Additional buffer for bond
+            cutoff distance, used for both connectivity and bond orders. By
+            default, bond orders use GRAPH_BOND_ORDER_BUFFER, and pairs of
+            non-hydrogen atoms within GRAPH_CONNECTIVITY_BUFFER that this
+            misses are added as single bonds.
             adjust_H (bool): Whether to adjust hydrogen bond cutoffs.
 
         Returns:
             nx.Graph: A networkx graph object representing the molecule.
         """
+
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
 
         G = nx.Graph()
         positions = np.array(self.positions)
@@ -2984,6 +3091,7 @@ class Molecule:
 
         # Compute bond cutoff matrix
         cutoff_matrix = np.zeros((num_atoms, num_atoms))
+        long_bond_cutoff_matrix = np.zeros((num_atoms, num_atoms))
 
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):
@@ -2999,11 +3107,21 @@ class Molecule:
                 cutoff_matrix[i, j] = cutoff_matrix[j, i] = get_bond_cutoff(
                     element_i, element_j, cutoff_buffer
                 )
+                if detect_long_bonds and "H" not in (element_i, element_j):
+                    long_bond_cutoff_matrix[i, j] = long_bond_cutoff_matrix[
+                        j, i
+                    ] = get_bond_cutoff(
+                        element_i, element_j, GRAPH_CONNECTIVITY_BUFFER
+                    )
 
         # Determine bond orders
         bond_orders = self.determine_bond_order(
             bond_length=distance_matrix, bond_cutoff=cutoff_matrix
         )
+        is_long_bond = (bond_orders == 0) & (
+            distance_matrix < long_bond_cutoff_matrix
+        )
+        bond_orders = np.where(is_long_bond, 1.0, bond_orders)
 
         # Add edges where bond order > 0
         i_indices, j_indices = np.where(bond_orders > 0)
@@ -3015,7 +3133,7 @@ class Molecule:
         return G
 
     def to_graph_non_vectorized(
-        self, bond_cutoff_buffer=0.05, adjust_H=True
+        self, bond_cutoff_buffer=None, adjust_H=True
     ) -> nx.Graph:
         """Convert a Molecule object to a connectivity graph, non-vectorized.
         Bond cutoff value determines the maximum distance between two atoms
@@ -3023,11 +3141,15 @@ class Molecule:
         Bond cutoff is obtained using Covalent
         Radii between the atoms via 𝑅_cutoff = 𝑅_𝐴 + 𝑅_𝐵 + tolerance_buffer.
         Args:
-            bond_cutoff_buffer (float): Additional
-            buffer for bond cutoff distance.
+            bond_cutoff_buffer (float | None): Additional buffer for bond
+            cutoff distance. See to_graph() for the default behaviour.
         Returns:
             nx.Graph: A networkx graph object representing the molecule.
         """
+        detect_long_bonds = bond_cutoff_buffer is None
+        if detect_long_bonds:
+            bond_cutoff_buffer = GRAPH_BOND_ORDER_BUFFER
+
         G = nx.Graph()
         positions = self.positions
 
@@ -3067,6 +3189,12 @@ class Molecule:
                 bond_order = self.determine_bond_order_one_bond(
                     bond_length=distances[i, j], bond_cutoff=cutoff
                 )
+                if (
+                    bond_order == 0
+                    and detect_long_bonds
+                    and self._is_long_bond(i, j, distances[i, j])
+                ):
+                    bond_order = 1.0
                 if bond_order > 0:
                     G.add_edge(i, j, bond_order=bond_order)
         return G

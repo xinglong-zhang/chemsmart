@@ -13,7 +13,7 @@ from chemsmart.cli.job import click_filename_options
 from chemsmart.jobs.iterate.job import IterateJob
 from chemsmart.jobs.iterate.runner import IterateJobRunner
 from chemsmart.jobs.iterate.settings import IterateJobSettings
-from chemsmart.utils.cli import MyGroup
+from chemsmart.utils.cli import MyGroup, get_selected_server
 from chemsmart.utils.iterate import generate_template, validate_config
 
 logger = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ def click_iterate_options(f):
     @click.option(
         "-s",
         "--sphere-direction-samples-number",
-        "sphere_direction_samples_num",
+        "sphere_direction_samples_number",
         default=96,
         type=int,
         show_default=True,
@@ -82,7 +82,7 @@ def click_iterate_options(f):
     @click.option(
         "-a",
         "--axial-rotations-sample-number",
-        "axial_rotations_sample_num",
+        "axial_rotations_sample_number",
         default=6,
         type=int,
         show_default=True,
@@ -98,9 +98,9 @@ def click_iterate_options(f):
     @click.option(
         "-o",
         "--outputfile",
-        default="iterate_out",
+        default=None,
         type=str,
-        show_default=True,
+        show_default="iterate_out",
         help="Output filename (without .xyz extension) for generated structures. Use only with --no-separate-outputs.",
     )
     @functools.wraps(f)
@@ -123,8 +123,8 @@ def iterate(
     timeout,
     outputfile,
     generate_template_path,
-    sphere_direction_samples_num,
-    axial_rotations_sample_num,
+    sphere_direction_samples_number,
+    axial_rotations_sample_number,
     directory,
     separate_outputs,
     **kwargs,
@@ -221,14 +221,14 @@ def iterate(
     job_settings = IterateJobSettings(
         config_file=filename,
         method=method,
-        sphere_direction_samples_num=sphere_direction_samples_num,
-        axial_rotations_sample_num=axial_rotations_sample_num,
+        sphere_direction_samples_num=sphere_direction_samples_number,
+        axial_rotations_sample_num=axial_rotations_sample_number,
     )
     job_settings.skeleton_list = config["skeletons"]
     job_settings.substituent_list = config["substituents"]
 
     # Create job runner
-    jobrunner = IterateJobRunner()
+    jobrunner = IterateJobRunner(server=get_selected_server(ctx))
 
     # Create job
     job = IterateJob(
@@ -236,10 +236,14 @@ def iterate(
         jobrunner=jobrunner,
         nprocs=nprocs,
         timeout=timeout,
-        outputfile=outputfile,
+        outputfile=outputfile or "iterate_out",
         separate_outputs=separate_outputs,
         output_directory=directory,
     )
+
+    # Names the submission scripts and scheduler job, so that jobs from
+    # different configuration files do not share them
+    job.label = os.path.splitext(os.path.basename(filename))[0]
 
     logger.debug(f"Created IterateJob with {nprocs} process(es)")
 
@@ -259,6 +263,9 @@ def iterate_process_pipeline(ctx, *args, **kwargs):
     logger.debug(f"Context object: {ctx.obj}")
 
     job = ctx.obj.get("job")
+
+    if ctx.obj.get("submitting"):
+        return job
 
     if ctx.invoked_subcommand is None and job is not None:
         # If no subcommand is invoked, run the iterate job
