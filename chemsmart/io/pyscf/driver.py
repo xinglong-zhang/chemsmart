@@ -553,9 +553,78 @@ def _follow_irc_branch(mf, direction, hessian, prefix, options, start):
     return branch, (positions, energies)
 
 
-def _provenance(config, started_at, ended_at, wall_seconds):
+def _visible_gpus():
+    """Return the names of the CUDA devices this process can use.
+
+    Raises when none is visible, so a GPU request never continues on the
+    CPU: ``CUDA_VISIBLE_DEVICES=""`` or a node without a GPU ends the run.
+    """
+    import cupy
+
+    count = cupy.cuda.runtime.getDeviceCount()
+    if count < 1:
+        raise RuntimeError(
+            "engine gpu was requested but no CUDA device is visible"
+        )
+    names = []
+    for index in range(count):
+        name = cupy.cuda.runtime.getDeviceProperties(index)["name"]
+        names.append(name.decode() if isinstance(name, bytes) else str(name))
+    return names
+
+
+#: Distributions GPU4PySCF is published under: the CUDA-specific wheels
+#: are what pip installs, and none of them is named plainly "gpu4pyscf".
+GPU4PYSCF_DISTRIBUTIONS = (
+    "gpu4pyscf",
+    "gpu4pyscf-cuda12x",
+    "gpu4pyscf-cuda11x",
+)
+
+
+def _gpu4pyscf_version():
+    """Return the installed GPU4PySCF version, or None if none is installed.
+
+    Read from package metadata rather than by importing it, which would
+    initialise CUDA in a CPU run.
+    """
     from importlib import metadata
 
+    for distribution in GPU4PYSCF_DISTRIBUTIONS:
+        try:
+            return metadata.version(distribution)
+        except metadata.PackageNotFoundError:
+            continue
+    return None
+
+
+def _executed_class(mf):
+    """Return the module-qualified class of the mean-field object that runs."""
+    return "%s.%s" % (type(mf).__module__, type(mf).__qualname__)
+
+
+def _check_executed_engine(config, mf):
+    """Refuse a mean-field object that does not run on the requested engine.
+
+    ``to_gpu()`` returns a gpu4pyscf object; anything else under a GPU
+    request would compute on the CPU while recording engine gpu.
+    """
+    executed = _executed_class(mf)
+    on_gpu = executed.startswith("gpu4pyscf.")
+    if config["engine"] == "gpu" and not on_gpu:
+        raise RuntimeError(
+            "engine gpu was requested but the mean-field object is %s, a CPU "
+            "implementation" % executed
+        )
+    if config["engine"] != "gpu" and on_gpu:
+        raise RuntimeError(
+            "engine cpu was requested but the mean-field object is %s"
+            % executed
+        )
+    return executed
+
+
+def _provenance(config, started_at, ended_at, wall_seconds, execution):
     # Must not raise: this runs while recording a failure, and a missing or
     # broken pyscf is itself one of the failures worth recording.
     try:
@@ -565,10 +634,7 @@ def _provenance(config, started_at, ended_at, wall_seconds):
     except Exception:  # noqa: BLE001 - version is informational only
         pyscf_version = None
 
-    try:
-        gpu_version = metadata.version("gpu4pyscf")
-    except metadata.PackageNotFoundError:
-        gpu_version = None
+    gpu_version = _gpu4pyscf_version()
 
     try:
         from pyscf.dft import libxc
@@ -589,6 +655,11 @@ def _provenance(config, started_at, ended_at, wall_seconds):
         "host": socket.gethostname(),
         "platform": platform.platform(),
         "engine": config["engine"],
+        # What actually ran: the mean-field class and, for the GPU
+        # engine, the devices it could use. Absent if the run failed
+        # before the method was built.
+        "mean_field_class": execution.get("mean_field_class"),
+        "gpu_devices": execution.get("gpu_devices"),
         "num_threads": config["num_threads"],
         "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
@@ -1130,12 +1201,16 @@ def main(config):
         "skipped_properties": {},
     }
     results = {}
+    execution = {}
     current_stage = "initialization"
 
     try:
         _apply_threads(config)
         mol = _build_mole(config, log_path)
+        if config["engine"] == "gpu":
+            execution["gpu_devices"] = _visible_gpus()
         mf = _build_method(config, mol)
+        execution["mean_field_class"] = _check_executed_engine(config, mf)
         # ``_build_method`` resolves environment-owned values such as the PCM
         # dielectric.  Echo the value actually applied, not the controller's
         # unresolved placeholder.
@@ -1412,7 +1487,9 @@ def main(config):
 
     wall_seconds = time.time() - t0
     ended_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    provenance = _provenance(config, started_at, ended_at, wall_seconds)
+    provenance = _provenance(
+        config, started_at, ended_at, wall_seconds, execution
+    )
 
     write_pyscf_h5(
         results_path,

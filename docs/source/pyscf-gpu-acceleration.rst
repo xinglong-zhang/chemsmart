@@ -9,8 +9,8 @@ subcommands and the same project YAML apply; only the engine changes.
 
 .. note::
 
-   The GPU engine can be configured, previewed, and run, but CHEMSMART has not validated GPU4PySCF results against CPU
-   reference calculations. Compare a representative case with a ``--no-gpu`` run before relying on GPU numbers.
+   GPU and CPU runs of the same job agree closely but not bit for bit, and not every method and basis set has been
+   compared on both. Compare a representative case with a ``--no-gpu`` run before relying on GPU numbers.
 
 **********************
  Selecting the Engine
@@ -95,9 +95,14 @@ separate CUDA environment is the usual arrangement, since it keeps CuPy away fro
    error is recorded in the results file with its stage and traceback, ``normal_termination`` is false, and the process
    exits non-zero.
 
-Not every method runs on the GPU engine even with a device present. Double-hybrid functionals, Laplacian-dependent
-meta-GGAs, and basis sets with high angular momentum fall outside what GPU4PySCF covers, and a solvent model it does not
-implement will fail there while working on CPU.
+The results file records what ran: ``provenance/mean_field_class`` names the executed mean-field class, a ``gpu4pyscf``
+class on the GPU engine, and ``provenance/gpu_devices`` lists the devices the calculation could see. A mean-field object
+that is not GPU4PySCF's also stops the job before the SCF.
+
+Hartree-Fock and DFT ``sp``, ``opt`` and ``hess`` jobs run on the GPU engine. Correlated methods, CASCI, CASSCF, ``ts``
+and ``irc`` are not supported on it; run them with ``--no-gpu``. Not every method runs on the GPU engine even with a
+device present. Double-hybrid functionals, Laplacian-dependent meta-GGAs, and basis sets with high angular momentum fall
+outside what GPU4PySCF covers, and a solvent model it does not implement will fail there while working on CPU.
 
 Use ``--fake`` to render a GPU job on a machine with no device:
 

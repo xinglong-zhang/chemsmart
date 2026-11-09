@@ -4,7 +4,9 @@ Skipped where PySCF is not installed, such as Windows, which it does not support
 Every number here comes from an actual calculation.
 """
 
+import importlib.util
 import os
+from importlib import metadata
 from unittest.mock import patch
 
 import numpy as np
@@ -195,6 +197,70 @@ def test_dispersion_runs_or_reports_the_missing_package(
         assert output.normal_termination
     else:
         assert output.failure["type"] in ("RuntimeError", "TypeError")
+
+
+class TestExecutedEngine:
+    """What ran is recorded, and a GPU request never completes on the CPU."""
+
+    def test_cpu_run_records_the_pyscf_class_it_executed(
+        self, run_pyscf_driver, pyscf_h2_molecule
+    ):
+        _, output = run_pyscf_driver(
+            PySCFSinglePointJob, pyscf_h2_molecule, "sp", **HF_MINIMAL
+        )
+        assert output.provenance["engine"] == "cpu"
+        assert output.provenance["mean_field_class"] == "pyscf.scf.hf.RHF"
+        assert output.provenance["gpu_devices"] is None
+
+    @pytest.mark.skipif(
+        importlib.util.find_spec("cupy") is not None,
+        reason="needs a machine without the GPU stack",
+    )
+    def test_gpu_request_without_a_gpu_stack_computes_nothing(
+        self, run_pyscf_driver, pyscf_h2_molecule
+    ):
+        returncode, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_h2_molecule,
+            "sp",
+            engine="gpu",
+            **HF_MINIMAL,
+        )
+        assert returncode == 1
+        assert not output.normal_termination
+        assert output.status["failure"]["stage"] == "initialization"
+        assert output.energies == []
+        assert output.provenance["engine"] == "gpu"
+        assert output.provenance["mean_field_class"] is None
+
+    @pytest.mark.parametrize(
+        "distribution", ["gpu4pyscf-cuda12x", "gpu4pyscf-cuda11x"]
+    )
+    def test_gpu4pyscf_version_is_read_from_its_cuda_wheel(
+        self, monkeypatch, distribution
+    ):
+        """pip installs GPU4PySCF as a CUDA-specific distribution.
+
+        Looking up only the plain name "gpu4pyscf" recorded its version as
+        None.
+        """
+
+        def version(name):
+            if name == distribution:
+                return "1.8.1"
+            raise metadata.PackageNotFoundError(name)
+
+        monkeypatch.setattr(metadata, "version", version)
+        assert driver._gpu4pyscf_version() == "1.8.1"
+
+    def test_cpu_object_under_a_gpu_request_is_refused(self):
+        mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=0)
+        with pytest.raises(RuntimeError, match="CPU implementation"):
+            driver._check_executed_engine({"engine": "gpu"}, hf.RHF(mol))
+        assert (
+            driver._check_executed_engine({"engine": "cpu"}, hf.RHF(mol))
+            == "pyscf.scf.hf.RHF"
+        )
 
 
 class TestFailureHandling:

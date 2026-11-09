@@ -514,8 +514,8 @@ class PySCFJobSettings(MolecularJobSettings):
         """Refuse what a wavefunction method would silently change or skip.
 
         PySCF runs the density-fitted variant on a density-fitted reference,
-        and applies no dispersion or solvation to the correlated or CAS
-        energy.
+        applies no dispersion or solvation to the correlated or CAS energy,
+        and is not supported on the GPU engine.
         """
         refused = {
             "density_fit": self.density_fit,
@@ -529,6 +529,12 @@ class PySCFJobSettings(MolecularJobSettings):
                 "this backend; set density_fit: false and remove the others. "
                 "Density fitting would silently turn the method into its "
                 "density-fitted variant."
+            )
+        if self.engine == "gpu":
+            raise ValueError(
+                f"{method} is not supported on the GPU engine, and "
+                "PySCF's CPU implementation would receive a GPU reference; "
+                "set engine: cpu or pass --no-gpu."
             )
 
     def _check_active_space(self):
@@ -890,6 +896,11 @@ class PySCFJobSettings(MolecularJobSettings):
             raise ValueError(
                 "Transition-state searches use the geometric optimizer's "
                 f"P-RFO saddle-point search, not {self.opt_solver!r}."
+            )
+        if self.jobtype in ("ts", "irc") and self.engine == "gpu":
+            raise ValueError(
+                f"{self.jobtype} is not supported on the GPU engine; "
+                "set engine: cpu or pass --no-gpu."
             )
         if self.jobtype == "irc" and self.opt_solver != "geometric":
             raise ValueError(

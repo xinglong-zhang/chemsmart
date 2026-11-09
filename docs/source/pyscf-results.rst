@@ -64,7 +64,7 @@ computed are listed with the reason under ``status/skipped_properties``.
    -  -  ``spec``
       -  Settings as applied: method, basis, charge, spin, grid, solvent, engine, stages
    -  -  ``provenance``
-      -  PySCF and GPU4PySCF versions, thread count, timings, settings digests
+      -  PySCF and GPU4PySCF versions, the mean-field class that ran, GPUs used, threads, timings, digests
    -  -  ``status``
       -  Per-stage convergence, normal termination, and any failure with its traceback
    -  -  ``results``

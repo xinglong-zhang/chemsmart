@@ -52,10 +52,10 @@ Gaussian's default ``FC`` freezes more orbitals for Li, Be, Sc–Zn and, with Po
 frozen orbitals in Gaussian before comparing correlation energies for those elements.
 
 Density fitting must be off, because PySCF would otherwise run the density-fitted variant of the method: pass
-``--no-density-fit`` or set ``density_fit: false``. Dispersion corrections and solvent models cannot be combined with
-these methods. PySCF has no analytic Hessian for them, so ``hess``, ``freq: True`` and every other job that needs a
-Hessian are refused; set ``freq: false`` in the ``gas`` section to optimize. Optimizations use the ``geometric``
-optimizer.
+``--no-density-fit`` or set ``density_fit: false``. Dispersion corrections, solvent models and the GPU engine cannot be
+combined with these methods. PySCF has no analytic Hessian for them, so ``hess``, ``freq: True`` and every other job
+that needs a Hessian are refused; set ``freq: false`` in the ``gas`` section to optimize. Optimizations use the
+``geometric`` optimizer.
 
 The reported energy is the correlated total, as in Gaussian's output. The Hartree-Fock energy, the correlation energy
 and, for CCSD(T), the CCSD part and the triples correction are stored beside it. If the CCSD iterations do not converge,
@@ -183,9 +183,10 @@ The reported energy is that of the lowest root: the CASSCF or CASCI energy, plus
 is true. Every root's energy, NEVPT2 correction, ⟨S²⟩, natural-orbital occupations and largest CI coefficients are
 stored beside it. If CASSCF does not converge, no energy is reported and the job fails.
 
-Density fitting, dispersion corrections and solvent models cannot be combined with these methods, and gradients,
-optimizations and frequencies are not available. No point group is imposed, so NEVPT2 corrections for molecules with
-degenerate orbitals, such as N₂, can differ slightly between runs; a tighter ``conv_tol`` reduces the spread.
+Density fitting, dispersion corrections, solvent models and the GPU engine cannot be combined with these methods, and
+gradients, optimizations and frequencies are not available. No point group is imposed, so NEVPT2 corrections for
+molecules with degenerate orbitals, such as N₂, can differ slightly between runs; a tighter ``conv_tol`` reduces the
+spread.
 
 Basic Usage
 ===========

@@ -253,6 +253,8 @@ def test_project_yaml_digest_survives_merge():
         ({"jobtype": "ts", "opt_solver": "berny"}, "saddle-point search"),
         ({"jobtype": "ts", "opt_solver": "ase"}, "saddle-point search"),
         ({"jobtype": "irc", "opt_solver": "berny"}, "IRC method"),
+        ({"jobtype": "ts", "engine": "gpu"}, "not supported on the GPU"),
+        ({"jobtype": "irc", "engine": "gpu"}, "not supported on the GPU"),
         ({"irc_direction": "reverse"}, "Unknown irc_direction"),
         ({"engine": "tpu"}, "Unknown engine"),
         ({"defgrid": "defgrid9"}, "Unknown defgrid"),
@@ -311,6 +313,7 @@ def test_named_functionals_pass_validation(functional):
         ({"forces": True}, "forces"),
         ({"jobtype": "opt"}, "single-point energies only"),
         ({"jobtype": "hess"}, "no analytic Hessian"),
+        ({"engine": "gpu"}, "not supported on the GPU"),
         # The saddle-point search starts from an analytic Hessian.
         ({"jobtype": "ts"}, "no analytic Hessian"),
         ({"jobtype": "irc"}, "no analytic Hessian"),
@@ -641,6 +644,7 @@ CAS66 = {
         (CAS66, {"density_fit": True}, "density_fit"),
         (CAS66, {"solvent_model": "cpcm", "solvent_id": "water"}, "solvent"),
         (CAS66, {"jobtype": "opt"}, "single-point energies only"),
+        (CAS66, {"engine": "gpu"}, "not supported on the GPU"),
         (CAS66, {"forces": True}, "single-point energies only"),
         (
             {**CAS66, "max_cycle_macro": 10},
