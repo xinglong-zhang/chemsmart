@@ -4,9 +4,10 @@
 
 This page covers geometry optimization and single point calculations using PySCF.
 
-A PySCF project splits its settings into two sections. ``gas`` supplies the ``opt`` and ``hess`` jobs, and ``solv``
-supplies ``sp``. The examples below use the packaged ``test`` project; substitute your own project name. For the
-complete option reference, see :doc:`pyscf-cli-options`.
+A PySCF project splits its settings into two sections. ``gas`` supplies the ``opt``, ``ts`` and ``hess`` jobs, and
+``solv`` supplies ``sp``. The examples below use the packaged ``test`` project; substitute your own project name. For
+the complete option reference, see :doc:`pyscf-cli-options`. Transition state searches are covered in
+:doc:`pyscf-transition-state`.
 
 ***********************
  Geometry Optimization

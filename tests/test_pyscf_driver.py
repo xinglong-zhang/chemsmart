@@ -26,6 +26,7 @@ from chemsmart.jobs.pyscf.settings import PySCFJobSettings  # noqa: E402
 from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
     PySCFSinglePointJob,
 )
+from chemsmart.jobs.pyscf.ts import PySCFTSJob  # noqa: E402
 from tests.helpers import run_pyscf_ccpvdz_sp  # noqa: E402
 
 HF_MINIMAL = {"ab_initio": "hf", "basis": "sto-3g", "density_fit": False}
@@ -1062,3 +1063,104 @@ class TestSCFStability:
         )
         assert output.spec["scf_stability"] is False
         assert output.scf_stability is None
+
+
+class TestTransitionState:
+    """HCN <=> HNC isomerisation at RHF/6-31G*.
+
+    Three atoms, so the saddle point and its Hessian take seconds, and the
+    reaction coordinate -- the hydrogen swinging from carbon to nitrogen --
+    is unambiguous.
+    """
+
+    BASIS = {"ab_initio": "hf", "basis": "6-31g*", "density_fit": False}
+
+    @classmethod
+    def _search(cls, run_pyscf_driver, hydrogen, label, freq=True):
+        molecule = Molecule(
+            symbols=["C", "N", "H"],
+            positions=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.18], hydrogen]),
+            charge=0,
+            multiplicity=1,
+        )
+        return run_pyscf_driver(
+            PySCFTSJob,
+            molecule,
+            "ts",
+            label=label,
+            freq=freq,
+            scf_tol=1e-10,
+            **cls.BASIS,
+        )[1]
+
+    def test_bridging_guess_converges_to_the_saddle_point(
+        self, run_pyscf_driver
+    ):
+        output = self._search(run_pyscf_driver, [1.109, 0.0, 0.404], "ts")
+        assert output.normal_termination
+        assert output.jobtype == "ts"
+        assert output.saddle_order == 1
+        imaginary = output.status["stages"]["ts"]["imaginary_frequencies"]
+        assert imaginary == pytest.approx([-1226.7], abs=1.0)
+        assert output.vibrational_frequencies[1:] == pytest.approx(
+            [2238.4, 2857.9], abs=1.0
+        )
+        # Checked independently of the optimiser: PySCF's own gradient
+        # vanishes at the reported structure, whose energy it reproduces.
+        coordinates = output.optimized_structure.positions
+        mol = gto.M(
+            atom=list(zip(["C", "N", "H"], coordinates.tolist())),
+            basis="6-31g*",
+            verbose=0,
+        )
+        mf = hf.RHF(mol).run(conv_tol=1e-10)
+        assert mf.e_tot == pytest.approx(output.energies[-1], abs=1e-8)
+        assert np.abs(mf.nuc_grad_method().kernel()).max() < 5e-4
+        assert output.energies[-1] == pytest.approx(-92.791419, abs=1e-5)
+        # The reaction coordinate is not a vibration of the transition
+        # state: the zero-point energy counts only the two real modes.
+        real = output.vibrational_frequencies[1:]
+        hartree_per_wavenumber = 1 / 219474.6313632
+        assert output.zero_point_energy == pytest.approx(
+            0.5 * sum(real) * hartree_per_wavenumber, rel=1e-4
+        )
+
+    def test_minimum_found_instead_is_not_reported_as_a_transition_state(
+        self, run_pyscf_driver
+    ):
+        """From a guess near HCN the search falls into the HCN minimum."""
+        output = self._search(run_pyscf_driver, [1.05, 0.0, 0.75], "minimum")
+        assert not output.normal_termination
+        assert output.saddle_order == 0
+        assert output.status["stages"]["ts"]["imaginary_frequencies"] == []
+        assert "0 imaginary modes instead of one" in output.failure_reason
+        # The structure and its frequencies are kept for inspection.
+        assert min(output.vibrational_frequencies) > 0
+
+    @pytest.mark.parametrize(
+        ("frequencies", "order"),
+        [
+            ([-1226.7, 2238.4, 2857.9], 1),
+            # No threshold: a small negative mode counts, as it does in
+            # CHEMSMART's thermochemistry, so a second-order saddle is never
+            # reported as a transition state.
+            ([-1226.7, -3.0, 2857.9], 2),
+            ([531.5, 2308.4, 4092.2], 0),
+        ],
+    )
+    def test_every_negative_frequency_is_an_imaginary_mode(
+        self, frequencies, order
+    ):
+        status = {"converged": True}
+        driver._check_saddle_order(status, frequencies)
+        assert status["saddle_order"] == order
+        assert status["converged"] is (order == 1)
+
+    def test_saddle_order_is_unknown_without_a_hessian(self, run_pyscf_driver):
+        output = self._search(
+            run_pyscf_driver, [1.109, 0.0, 0.404], "no_freq", freq=False
+        )
+        assert output.normal_termination
+        assert output.spec["stages"] == ["scf", "ts"]
+        assert output.saddle_order is None
+        assert output.vibrational_frequencies is None

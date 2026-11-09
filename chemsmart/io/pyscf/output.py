@@ -147,7 +147,11 @@ class PySCFOutput(FileMixin):
                 f"{failure.get('message')}"
             )
         unfinished = [
-            stage
+            (
+                f"{stage} ({entry['not_a_transition_state']})"
+                if "not_a_transition_state" in entry
+                else stage
+            )
             for stage, entry in status.get("stages", {}).items()
             if not entry.get("converged", entry.get("completed", False))
         ]
@@ -442,6 +446,15 @@ class PySCFOutput(FileMixin):
         return self._scalar_result("triples_correction")
 
     @property
+    def saddle_order(self):
+        """Return the number of imaginary modes found by a TS search.
+
+        One for a transition state. None for other jobs, and for a search
+        whose result had no Hessian, so it is not known to be a saddle point.
+        """
+        return self.status.get("stages", {}).get("ts", {}).get("saddle_order")
+
+    @property
     def scf_stability(self):
         """Return the stability analysis of the converged SCF reference.
 
@@ -556,8 +569,14 @@ class PySCFOutput(FileMixin):
 
     @property
     def optimizer_converged(self):
-        """Return whether a geometry optimisation met its criteria."""
-        stage = self.status.get("stages", {}).get("opt", {})
+        """Return whether a geometry optimisation met its criteria.
+
+        For a transition-state search this is the saddle-point search's own
+        convergence; whether the result is a transition state is
+        :attr:`saddle_order`.
+        """
+        stages = self.status.get("stages", {})
+        stage = stages.get("opt", stages.get("ts", {}))
         return bool(stage.get("optimizer_converged", False))
 
     @cached_property

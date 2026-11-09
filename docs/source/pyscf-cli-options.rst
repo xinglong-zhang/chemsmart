@@ -321,7 +321,7 @@ Results Options
    -  -  ``--forces/--no-forces``
       -  bool
       -  Compute the nuclear gradient for ``sp`` or ``hess``, which can add a large fraction of the SCF cost. ``opt``
-         always stores the final forces.
+         and ``ts`` always store the final forces.
 
    -  -  ``--scf-stability/--no-scf-stability``
       -  bool
@@ -378,8 +378,8 @@ Examples:
  Project YAML Contract
 ***********************
 
-A PySCF project uses two sections. ``gas`` feeds the ``opt`` and ``hess`` jobs; ``solv`` feeds ``sp``. That split
-matches the usual workflow: optimize and take frequencies at one level, then refine the single point in solvent.
+A PySCF project uses two sections. ``gas`` feeds the ``opt``, ``ts`` and ``hess`` jobs; ``solv`` feeds ``sp``. That
+split matches the usual workflow: optimize and take frequencies at one level, then refine the single point in solvent.
 
 .. code:: yaml
 
@@ -441,10 +441,17 @@ adds nothing.
 
    -  -  Subcommand
       -  Description
+
    -  -  ``sp``
       -  Single point energy, using the ``solv`` project section
+
    -  -  ``opt``
       -  Geometry optimization, using the ``gas`` project section
+
+   -  -  ``ts``
+      -  Transition state search with geomeTRIC, using the ``gas`` section; with ``freq: True`` the result must have
+         exactly one imaginary mode
+
    -  -  ``hess``
       -  Analytic Hessian and harmonic frequencies, using the ``gas`` section
 
@@ -458,6 +465,7 @@ already completed.
 For detailed information on each job type:
 
 -  :doc:`pyscf-structure-optimization`
+-  :doc:`pyscf-transition-state`
 -  :doc:`pyscf-electronic-structure`
 -  :doc:`pyscf-frequency-calculations`
 -  :doc:`pyscf-gpu-acceleration`

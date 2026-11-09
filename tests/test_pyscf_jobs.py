@@ -22,6 +22,7 @@ from chemsmart.jobs.pyscf.opt import PySCFOptJob
 from chemsmart.jobs.pyscf.runner import PySCFJobRunner
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
+from chemsmart.jobs.pyscf.ts import PySCFTSJob
 from chemsmart.jobs.pyscf.writer import PySCFScriptWriter
 from chemsmart.settings.executable import PySCFExecutable
 from tests.helpers import make_pyscf_settings
@@ -127,6 +128,7 @@ class TestFakePySCFJobRunner:
         [
             (PySCFOptJob, "opt", {}),
             (PySCFHessJob, "hess", {"freq": True}),
+            (PySCFTSJob, "ts", {"freq": True}),
         ],
     )
     def test_preview_generates_a_driver_script_per_jobtype(
@@ -235,6 +237,7 @@ class TestPySCFForcesRequest:
             (PySCFSinglePointJob, "sp", {"forces": True}, True),
             (PySCFHessJob, "hess", {}, False),
             (PySCFOptJob, "opt", {}, True),
+            (PySCFTSJob, "ts", {}, True),
         ],
     )
     def test_forces_follow_the_request(

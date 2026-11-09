@@ -93,6 +93,8 @@ class PySCFScriptWriter:
             atom_grid = list(PYSCF_DEFGRIDS[str(settings.defgrid).lower()])
 
         call, method, solvent_id, eps = self._solvent_config(settings)
+        # A transition-state search is an optimisation towards a saddle point.
+        optimises = "opt" in job.stages or "ts" in job.stages
 
         # A job can be previewed before a runner is attached.
         jobrunner = job.jobrunner
@@ -134,15 +136,11 @@ class PySCFScriptWriter:
             "solvent_method": method,
             "solvent_id": solvent_id,
             "solvent_eps": eps,
-            "opt_solver": (
-                settings.opt_solver if "opt" in job.stages else None
-            ),
-            "opt_maxsteps": (
-                settings.opt_maxsteps if "opt" in job.stages else None
-            ),
+            "opt_solver": settings.opt_solver if optimises else None,
+            "opt_maxsteps": settings.opt_maxsteps if optimises else None,
             # A single point needs no gradient unless asked for; an optimised
             # geometry's residual forces are part of its result.
-            "forces": bool(settings.forces or "opt" in job.stages),
+            "forces": bool(settings.forces or optimises),
             "point_group_tol": float(settings.point_group_tol),
             "correlation": settings.resolved_correlation,
             "scf_stability": settings.scf_stability,

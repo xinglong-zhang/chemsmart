@@ -420,10 +420,12 @@ class PySCFJobSettings(MolecularJobSettings):
                 "Density fitting would silently turn the method into its "
                 "density-fitted variant."
             )
-        if self.jobtype == "hess" or (self.jobtype == "opt" and self.freq):
+        if self.jobtype in ("hess", "ts") or (
+            self.jobtype == "opt" and self.freq
+        ):
             raise ValueError(
-                f"{method} has no analytic Hessian in PySCF, so neither hess "
-                "nor freq: true is available; set freq: false to optimise."
+                f"{method} has no analytic Hessian in PySCF, so hess, ts and "
+                "freq: true are not available; set freq: false to optimise."
             )
         # PySCF 2.14 has no open-shell CCSD(T) gradient.
         if method == "ccsd(t)" and (self.jobtype == "opt" or self.forces):
@@ -586,6 +588,11 @@ class PySCFJobSettings(MolecularJobSettings):
             raise ValueError(
                 f"Unknown opt_solver {self.opt_solver!r}; "
                 f"expected one of {PYSCF_OPT_SOLVERS}."
+            )
+        if self.jobtype == "ts" and self.opt_solver != "geometric":
+            raise ValueError(
+                "Transition-state searches use the geometric optimizer's "
+                f"P-RFO saddle-point search, not {self.opt_solver!r}."
             )
 
         if self.engine is not None and self.engine not in PYSCF_ENGINES:

@@ -13,6 +13,7 @@ from .opt import PySCFOptJob
 from .runner import FakePySCFJobRunner, PySCFJobRunner
 from .settings import PySCFJobSettings
 from .singlepoint import PySCFSinglePointJob
+from .ts import PySCFTSJob
 
 # Get all available PySCF job subclasses
 jobs = PySCFJob.subclasses()
@@ -25,5 +26,6 @@ __all__ = [
     "PySCFJobSettings",
     "PySCFOptJob",
     "PySCFSinglePointJob",
+    "PySCFTSJob",
     "jobs",
 ]

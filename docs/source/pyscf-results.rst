@@ -77,6 +77,10 @@ A ``hess`` stage adds the Hessian, harmonic frequencies in cm⁻¹, normal modes
 it is stable, and its lowest Hessian eigenvalue in Hartree. A run that did not ask has no record, which is not read as
 stable.
 
+A ``ts`` job records under ``status/stages/ts`` whether the saddle-point search converged and, when a Hessian followed,
+``saddle_order``, the number of imaginary modes, with the imaginary frequencies themselves. A ``saddle_order`` other
+than one fails the job. Without a Hessian it is null: the structure is not known to be a transition state.
+
 Forces in Hartree/Bohr, Mulliken charges, the dipole moment in Debye, and ⟨S²⟩ of the final determinant are written
 where the method and solvent support them, and are absent otherwise.
 

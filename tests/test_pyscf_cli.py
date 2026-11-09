@@ -21,7 +21,7 @@ from chemsmart.settings.user import CHEMSMARTUserSettings
 from tests.helpers import run_pyscf_and_capture_settings
 
 
-@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess"])
+@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "ts"])
 def test_group_and_all_leaves_expose_help(pyscf_water_xyz, jobtype):
     runner = CliRunner()
 
@@ -165,7 +165,7 @@ def test_remove_solvent_clears_project_single_point_solvent(
     assert (settings.solvent_model, settings.solvent_id) == (None, None)
 
 
-@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess"])
+@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "ts"])
 def test_leaf_selects_matching_project_settings(pyscf_water_xyz, jobtype):
     result, settings = run_pyscf_and_capture_settings(
         [

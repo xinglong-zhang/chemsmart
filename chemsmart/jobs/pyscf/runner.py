@@ -53,6 +53,7 @@ class PySCFJobRunner(JobRunner):
         "pyscf_sp",
         "pyscf_opt",
         "pyscf_hess",
+        "pyscf_ts",
     ]
     FAKE = False
     SCRATCH = False
@@ -267,12 +268,16 @@ class FakePySCFJobRunner(PySCFJobRunner):
         """Return the status the real driver records for a stage."""
         if stage == "hess":
             return {"completed": True}
-        if stage == "opt":
-            return {
+        if stage in ("opt", "ts"):
+            status = {
                 "converged": True,
                 "optimizer_converged": True,
                 "final_scf_converged": True,
             }
+            if stage == "ts":
+                # A fake run has no Hessian to count imaginary modes from.
+                status["saddle_order"] = None
+            return status
         return {"converged": True}
 
     def _write_fake_results(self, job):

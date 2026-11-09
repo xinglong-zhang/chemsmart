@@ -374,6 +374,40 @@ def _run_opt(config, mf):
     raise ValueError("Unknown opt_solver: %s" % optimizer)
 
 
+def _run_ts(config, mf):
+    """Search for a first-order saddle point; return (converged, Mole).
+
+    geomeTRIC's P-RFO search starts from PySCF's analytic Hessian of the
+    guess, which PySCF's geomeTRIC interface computes and hands over.
+    """
+    from pyscf.geomopt import geometric_solver
+
+    return geometric_solver.kernel(
+        mf,
+        assert_convergence=False,
+        maxsteps=config["opt_maxsteps"],
+        transition=True,
+        hessian=True,
+    )
+
+
+def _check_saddle_order(ts_status, frequencies):
+    """Count the imaginary modes of a transition-state search's result.
+
+    The optimiser converging only means it found a stationary point; it is a
+    transition state only with exactly one imaginary (negative) frequency,
+    the convention CHEMSMART's thermochemistry applies to TS jobs.
+    """
+    imaginary = [float(f) for f in frequencies if f < 0.0]
+    ts_status["saddle_order"] = len(imaginary)
+    ts_status["imaginary_frequencies"] = imaginary
+    if len(imaginary) != 1:
+        ts_status["converged"] = False
+        ts_status["not_a_transition_state"] = (
+            "%d imaginary modes instead of one" % len(imaginary)
+        )
+
+
 def _provenance(config, started_at, ended_at, wall_seconds):
     from importlib import metadata
 
@@ -722,8 +756,9 @@ def main(config):
                     # Historical alias retained for existing consumers.
                     stage_status["cycles"] = int(cycles)
                 status["stages"]["scf"] = stage_status
-            elif stage == "opt":
-                optimizer_converged, mol_eq = _run_opt(config, mf)
+            elif stage in ("opt", "ts"):
+                search = _run_opt if stage == "opt" else _run_ts
+                optimizer_converged, mol_eq = search(config, mf)
                 # Re-converge on the optimised geometry so that every
                 # reported property belongs to the same structure.
                 mf.reset(mol_eq)
@@ -741,7 +776,11 @@ def main(config):
                 cycles = getattr(mf, "cycles", None)
                 if cycles is not None:
                     stage_status["final_scf_iterations"] = int(cycles)
-                status["stages"]["opt"] = stage_status
+                if stage == "ts":
+                    # Set from the Hessian when one is computed; until then
+                    # the structure is not known to be a saddle point.
+                    stage_status["saddle_order"] = None
+                status["stages"][stage] = stage_status
             elif stage == "hess":
                 # Frequencies are only meaningful at a converged stationary
                 # point, and a Hessian is too costly to compute regardless.
@@ -776,6 +815,11 @@ def main(config):
                 # PySCF exposes no CPHF convergence flag, so this records that
                 # the stage ran to the end, not that it converged.
                 status["stages"]["hess"] = {"completed": True}
+                if "ts" in status["stages"]:
+                    _check_saddle_order(
+                        status["stages"]["ts"],
+                        results["vibrational_frequencies"],
+                    )
             elif stage == "correlation":
                 # A correlation energy on an unconverged reference is not a
                 # result, and the iterations would only cost time.

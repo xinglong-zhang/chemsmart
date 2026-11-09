@@ -247,6 +247,9 @@ def test_project_yaml_digest_survives_merge():
         ({"point_group_tol": 0.0}, "must be positive"),
         ({"scf_stability": "yes"}, "scf_stability must be"),
         ({"opt_solver": "bfgs"}, "Unknown opt_solver"),
+        # Only geomeTRIC searches for a saddle point; berny would minimise.
+        ({"jobtype": "ts", "opt_solver": "berny"}, "saddle-point search"),
+        ({"jobtype": "ts", "opt_solver": "ase"}, "saddle-point search"),
         ({"engine": "tpu"}, "Unknown engine"),
         ({"defgrid": "defgrid9"}, "Unknown defgrid"),
         ({"density_fit": False, "aux_basis": "x"}, "aux_basis cannot"),
@@ -304,6 +307,8 @@ def test_named_functionals_pass_validation(functional):
         ({"forces": True}, "forces"),
         ({"jobtype": "opt"}, "single-point energies only"),
         ({"jobtype": "hess"}, "no analytic Hessian"),
+        # The saddle-point search starts from an analytic Hessian.
+        ({"jobtype": "ts"}, "no analytic Hessian"),
         ({"correlation": {"frozen_cores": False}}, "Unknown correlation"),
         ({"correlation": {"frozen_core": "yes"}}, "true or false"),
     ],
@@ -336,6 +341,14 @@ def test_correlated_optimisation_limits(kwargs, message):
     )
     with pytest.raises(ValueError, match=message):
         settings.validate()
+
+
+def test_transition_state_search_uses_geometric_by_default():
+    settings = PySCFJobSettings(
+        functional="b3lyp", basis="def2-svp", jobtype="ts"
+    )
+    settings.validate()
+    assert settings.opt_solver == "geometric"
 
 
 def test_mp2_and_ccsd_can_be_optimised():

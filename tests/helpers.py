@@ -633,6 +633,7 @@ def run_pyscf_and_capture_settings(cli_args, jobtype="sp", num_gpus=0):
         "sp": "chemsmart.jobs.pyscf.singlepoint.PySCFSinglePointJob",
         "opt": "chemsmart.jobs.pyscf.opt.PySCFOptJob",
         "hess": "chemsmart.jobs.pyscf.hess.PySCFHessJob",
+        "ts": "chemsmart.jobs.pyscf.ts.PySCFTSJob",
     }
     with patch(job_class_paths[jobtype]) as job_cls:
         job_cls.return_value = MagicMock()
