@@ -206,6 +206,16 @@ Give either ``-x`` or ``-A``, never both. Basis names follow PySCF and libcint s
    A PySCF configuration file that sets ``B3LYP_WITH_VWN5`` would change what ``b3lyp`` means, so a DFT job stops before
    the SCF when that setting is present.
 
+A functional is given by name, and strings PySCF would read as something else are rejected before the calculation
+starts:
+
+-  expressions such as ``pbe,pbe`` or ``0.5*b3lyp``;
+-  a dispersion suffix such as ``b3lyp-d3bj``, which belongs in ``-d``;
+-  a ``-`` that PySCF reads as subtraction, such as ``b3lyp-vwn3`` (B3LYP minus VWN); genuine names like ``cam-b3lyp``
+   are unaffected;
+-  ``b3lyp3``, which is a different functional from Gaussian's B3LYP. Ask for ``hyb_gga_xc_b3lyp3`` if that functional
+   is really intended.
+
 Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied. ``-A`` accepts
 only ``hf``; post-Hartree-Fock correlation methods are not part of this integration.
 
@@ -386,9 +396,11 @@ matches the usual workflow: optimize and take frequencies at one level, then ref
      solvent_id: water
 
 A key that does not exist on the PySCF settings raises an error at load time and lists every valid key, so a typo stops
-the run instead of quietly applying a default. Settings inherited from the Gaussian and ORCA schemas are refused rather
-than ignored, including ``semiempirical``, ``modred``, ``gen_genecp_file``, ``heavy_elements``, ``numfreq``,
-``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and ``custom_solvent``.
+the run instead of quietly applying a default. A section other than ``gas`` and ``solv``, such as ``td`` or a misspelt
+``gass``, is rejected for the same reason, since no PySCF job would read it. Settings inherited from the Gaussian and
+ORCA schemas are refused rather than ignored, including ``semiempirical``, ``modred``, ``gen_genecp_file``,
+``heavy_elements``, ``numfreq``, ``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and
+``custom_solvent``.
 
 **********************
  Server Configuration

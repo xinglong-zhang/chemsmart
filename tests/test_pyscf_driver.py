@@ -531,6 +531,32 @@ class TestAppliedMethodIsRecorded:
         assert "energies" not in output.results
 
     @pytest.mark.parametrize(
+        ("functional", "hint"),
+        [
+            # B3LYP minus VWN_RPA: a functional nobody meant.
+            ("b3lyp-vwn3", None),
+            # PySCF knows only the underscore spelling.
+            ("lc-wpbe", "lc_wpbe"),
+        ],
+    )
+    def test_dash_read_as_subtraction_is_refused(
+        self, run_pyscf_driver, pyscf_h2_molecule, functional, hint
+    ):
+        returncode, output = run_pyscf_driver(
+            PySCFSinglePointJob,
+            pyscf_h2_molecule,
+            "sp",
+            functional=functional,
+            **DFT_MINIMAL,
+        )
+        assert returncode == 1
+        assert output.failure["stage"] == "initialization"
+        assert "subtraction" in output.failure["message"]
+        if hint is not None:
+            assert repr(hint) in output.failure["message"]
+        assert "energies" not in output.results
+
+    @pytest.mark.parametrize(
         ("log", "basis", "reference", "tolerance"),
         [
             # Gaussian 16 B.01 B3LYP/def2-QZVP; one atom, so GD3BJ adds 0.

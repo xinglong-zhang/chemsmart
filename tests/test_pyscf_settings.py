@@ -171,6 +171,17 @@ class TestPySCFProjectSettings:
             hess.project_yaml_digest,
         } == {expected_digest}
 
+    @pytest.mark.parametrize("section", ["td", "gass"])
+    def test_section_no_pyscf_job_reads_is_refused(
+        self, pyscf_test_project_yaml, tmp_path, section
+    ):
+        project = yaml.safe_load(pyscf_test_project_yaml.read_text())
+        project[section] = {"functional": "cam-b3lyp"}
+        path = tmp_path / "extra.yaml"
+        path.write_text(yaml.safe_dump(project))
+        with pytest.raises(ValueError, match=f"no PySCF job reads: {section}"):
+            YamlPySCFProjectSettings.from_yaml(str(path))
+
     def test_settings_copies_do_not_mutate_project(self):
         project = PySCFProjectSettings.from_project("test")
         first = project.opt_settings()
@@ -210,6 +221,11 @@ def test_settings_the_driver_cannot_apply_are_refused(request_field):
         settings.validate()
 
 
+def test_unknown_settings_are_refused_rather_than_ignored():
+    with pytest.raises(TypeError, match="Unknown PySCF settings: nstate"):
+        PySCFJobSettings(functional="b3lyp", basis="def2-svp", nstate=5)
+
+
 def test_project_yaml_digest_survives_merge():
     settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
     assert settings.project_yaml_digest is None
@@ -238,6 +254,40 @@ def test_impossible_requests_fail_validation(kwargs, message):
     settings = {"functional": "b3lyp", "basis": "def2-svp", **kwargs}
     with pytest.raises(ValueError, match=message):
         PySCFJobSettings(**settings).validate()
+
+
+@pytest.mark.parametrize(
+    ("functional", "message"),
+    [
+        ("pbe,pbe", "PySCF expression"),
+        ("0.5*b3lyp", "PySCF expression"),
+        ("b3lyp-d3bj", "dispersion setting"),
+        # LibXC 394, 23 kcal/mol from Gaussian's B3LYP for H2O/def2-SVP.
+        ("b3lyp3", "not Gaussian's B3LYP"),
+    ],
+)
+def test_strings_that_are_not_one_named_functional_are_refused(
+    functional, message
+):
+    settings = PySCFJobSettings(functional=functional, basis="def2-svp")
+    with pytest.raises(ValueError, match=message):
+        settings.validate()
+
+
+@pytest.mark.parametrize(
+    "functional",
+    [
+        "b3lyp",
+        "b3lyp5",
+        "cam-b3lyp",
+        "m06-2x",
+        "wb97m-v",
+        "b97-d",
+        "hyb_gga_xc_b3lyp3",
+    ],
+)
+def test_named_functionals_pass_validation(functional):
+    PySCFJobSettings(functional=functional, basis="def2-svp").validate()
 
 
 def test_hf_cannot_use_a_dft_grid():

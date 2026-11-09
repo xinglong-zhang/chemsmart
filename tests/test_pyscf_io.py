@@ -16,6 +16,7 @@ from chemsmart.jobs.pyscf.writer import (
     RESULTS_SCHEMA_VERSION,
     write_pyscf_h5,
 )
+from tests.helpers import copy_pyscf_output, replace_pyscf_spec_field
 
 
 def test_v2_artifact_uses_navigable_top_level_groups(pyscf_output):
@@ -131,6 +132,27 @@ def test_missing_schema_version_is_rejected(tmp_path):
         pass
     with pytest.raises(ValueError, match="Unsupported PySCF results schema"):
         PySCFH5File(path).spec
+
+
+def test_result_declaring_another_contract_is_refused(
+    pyscf_water_sp_outfolder, tmp_path
+):
+    """Same schema version, other layout: refuse rather than misread.
+
+    Such a driver stores an MP2 energy beside the HF reference, which this
+    reader would otherwise report as the result of an MP2 record.
+    """
+    logfile = copy_pyscf_output(pyscf_water_sp_outfolder, tmp_path / "calc")
+    replace_pyscf_spec_field(
+        logfile,
+        "result_contract_version",
+        "chemsmart.pyscf-result-contract.v5",
+    )
+    with pytest.raises(ValueError, match="does not read"):
+        PySCFH5File(tmp_path / "calc" / "calc.h5").spec
+    output = PySCFOutput(logfile)
+    assert output.normal_termination is False
+    assert "pyscf-result-contract.v5" in output.failure_reason
 
 
 def test_missing_section_is_named(tmp_path):

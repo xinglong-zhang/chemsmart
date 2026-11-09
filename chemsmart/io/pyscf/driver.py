@@ -110,13 +110,25 @@ def _build_mole(config, log_path):
     return pyscf.M(**kwargs)
 
 
-def _refuse_redefined_functionals():
-    """Stop if the PySCF configuration changes what a functional name means.
+def _parsed_functional(name):
+    """Return PySCF's reading of a functional string, or None if it fails."""
+    from pyscf.dft import libxc
+
+    try:
+        return libxc.parse_xc(name)
+    except Exception:  # noqa: BLE001 - any parse failure means "not a name"
+        return None
+
+
+def _refuse_ambiguous_functional(xc):
+    """Stop if PySCF would evaluate a different functional from the one named.
 
     ``B3LYP_WITH_VWN5`` in a PySCF configuration file remaps B3LYP, B3P86 and
-    X3LYP to their VWN5 variants when PySCF is imported. CHEMSMART resolves
-    functional names itself, so a run under that setting would compute a
-    different functional from the one requested and recorded.
+    X3LYP to their VWN5 variants when PySCF is imported, so a run under that
+    setting would compute a different functional from the one requested and
+    recorded. Separately, PySCF reads a '-' as subtraction unless the name is
+    in its own tables: ``cam-b3lyp`` is one functional, ``b3lyp-vwn3`` is
+    B3LYP minus VWN. A genuine name parses the same with '_' for '-'.
     """
     from pyscf import __config__
 
@@ -128,6 +140,17 @@ def _refuse_redefined_functionals():
             "configuration file and request 'b3lyp5' where the VWN5 variant "
             "is intended."
         )
+
+    if "-" in xc:
+        named = xc.replace("-", "_")
+        if _parsed_functional(xc) != _parsed_functional(named):
+            hint = ""
+            if _parsed_functional(named) is not None:
+                hint = " Did you mean %r?" % named
+            raise ValueError(
+                "PySCF does not read %r as one functional: it treats the "
+                "'-' as subtraction or as a dispersion suffix.%s" % (xc, hint)
+            )
 
 
 def _reference_family(mf):
@@ -196,7 +219,7 @@ def _build_method(config, mol):
     if config["xc"] is None:
         mf = scf.HF(mol)
     else:
-        _refuse_redefined_functionals()
+        _refuse_ambiguous_functional(config["xc"])
         mf = dft.KS(mol, xc=config["xc"])
         if config["atom_grid"]:
             mf.grids.atom_grid = tuple(config["atom_grid"])

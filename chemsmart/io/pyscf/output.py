@@ -795,6 +795,20 @@ class PySCFH5File(FileMixin):
                         f"PySCF schema {version} requires /{name} to be a "
                         f"group in {self.filename}"
                     )
+            # Another driver writes the same schema version with its own
+            # result contract; its energies sit under other names and would
+            # be misread, e.g. an MP2 record reporting its HF reference
+            # energy.
+            if "result_contract_version" in handle["spec"]:
+                contract = self._text(
+                    handle["spec/result_contract_version"][()]
+                )
+                raise ValueError(
+                    f"{self.filename} declares the PySCF result contract "
+                    f"{contract!r}, a layout this CHEMSMART does not read. "
+                    "Its quantities are stored under other names and would "
+                    "be misread; rerun the calculation with this CHEMSMART."
+                )
             return {
                 name: self._read_group(
                     handle[name], preserve_arrays=name == "results"
