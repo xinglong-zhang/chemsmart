@@ -110,6 +110,66 @@ def _build_mole(config, log_path):
     return pyscf.M(**kwargs)
 
 
+def _refuse_redefined_functionals():
+    """Stop if the PySCF configuration changes what a functional name means.
+
+    ``B3LYP_WITH_VWN5`` in a PySCF configuration file remaps B3LYP, B3P86 and
+    X3LYP to their VWN5 variants when PySCF is imported. CHEMSMART resolves
+    functional names itself, so a run under that setting would compute a
+    different functional from the one requested and recorded.
+    """
+    from pyscf import __config__
+
+    # A configuration file defines only the attributes it sets.
+    if getattr(__config__, "B3LYP_WITH_VWN5", False):
+        raise ValueError(
+            "The PySCF configuration sets B3LYP_WITH_VWN5, which changes the "
+            "meaning of B3LYP, B3P86 and X3LYP. Remove it from the PySCF "
+            "configuration file and request 'b3lyp5' where the VWN5 variant "
+            "is intended."
+        )
+
+
+def _reference_family(mf):
+    """Return the SCF reference the mean-field object actually is.
+
+    Read from the class hierarchy, so it holds whatever PySCF chose, and
+    after density fitting or a solvent model wraps the object.
+    """
+    names = {cls.__name__ for cls in type(mf).__mro__}
+    # Most specific first: RKS derives from RHF, ROKS from ROHF and RHF.
+    for family in ("ROKS", "UKS", "RKS", "ROHF", "UHF", "RHF"):
+        if family in names:
+            return family
+    raise ValueError(
+        "Cannot identify the SCF reference of %s" % type(mf).__name__
+    )
+
+
+def _applied_functional(mf, mol):
+    """Return the exchange-correlation functional PySCF will evaluate.
+
+    Component ids are those of the backend named in ``backend``. The exact
+    (HF) exchange fractions follow PySCF's convention: equal for a global
+    hybrid, short- and long-range parts for a range-separated hybrid.
+    """
+    numint = mf._numint
+    components = numint.libxc.parse_xc(mf.xc)[1]
+    omega, long_range, short_range = numint.rsh_and_hybrid_coeff(
+        mf.xc, spin=mol.spin
+    )
+    return {
+        "name": str(mf.xc),
+        "backend": numint.libxc.__name__.rsplit(".", 1)[-1],
+        "component_ids": [int(xc_id) for xc_id, _ in components],
+        "component_coefficients": [float(coef) for _, coef in components],
+        "hf_exchange_short_range": float(short_range),
+        "hf_exchange_long_range": float(long_range),
+        "range_separation_omega": float(omega),
+        "nonlocal_correlation": bool(mf.do_nlc()),
+    }
+
+
 def _build_method(config, mol):
     """Construct the mean-field object.
 
@@ -136,6 +196,7 @@ def _build_method(config, mol):
     if config["xc"] is None:
         mf = scf.HF(mol)
     else:
+        _refuse_redefined_functionals()
         mf = dft.KS(mol, xc=config["xc"])
         if config["atom_grid"]:
             mf.grids.atom_grid = tuple(config["atom_grid"])
@@ -391,6 +452,16 @@ def main(config):
         # dielectric.  Echo the value actually applied, not the controller's
         # unresolved placeholder.
         spec["solvent_eps"] = config.get("solvent_eps")
+        # Record what PySCF will compute, not only the names requested.
+        spec["reference"] = _reference_family(mf)
+        spec["xc_applied"] = None
+        if config["xc"] is not None:
+            _record_optional(
+                spec,
+                status,
+                "xc_applied",
+                lambda: _applied_functional(mf, mol),
+            )
 
         energies = []
         for stage in config["stages"]:
@@ -497,6 +568,13 @@ def main(config):
             status,
             "mulliken_charges",
             lambda: _host(mf.mulliken_pop(verbose=0)[1]).astype(float),
+        )
+        # <S^2> of the final determinant, in units of hbar^2.
+        _record_optional(
+            results,
+            status,
+            "spin_square",
+            lambda: float(mf.spin_square()[0]),
         )
         _record_optional(
             results,

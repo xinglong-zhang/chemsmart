@@ -218,9 +218,55 @@ class PySCFOutput(FileMixin):
         return self.spec.get("multiplicity")
 
     @property
+    def reference(self):
+        """Return the SCF reference PySCF used, e.g. ``RKS`` or ``UHF``.
+
+        None for results written before the reference was recorded; it is
+        not reconstructed for them.
+        """
+        return self.spec.get("reference")
+
+    @property
     def spin(self):
-        """Return PySCF's ``mol.spin`` (2S), not the multiplicity."""
-        return self.spec.get("spin")
+        """Return ``restricted`` or ``unrestricted``, as the Gaussian and ORCA
+        readers do. PySCF's ``mol.spin`` (2S) is ``spec["spin"]``.
+
+        Results written before the reference was recorded used
+        ``scf.HF``/``dft.KS``, which choose a restricted reference exactly
+        when 2S is zero.
+        """
+        reference = self.reference
+        if reference is None:
+            return (
+                "restricted" if self.spec.get("spin") == 0 else "unrestricted"
+            )
+        return "unrestricted" if reference.startswith("U") else "restricted"
+
+    @property
+    def xc_applied(self):
+        """Return the exchange-correlation functional PySCF evaluated.
+
+        A mapping of backend component ids and coefficients, the short- and
+        long-range exact-exchange fractions, the range-separation parameter
+        and whether non-local correlation was included; None for Hartree-Fock
+        and for results written before it was recorded.
+        """
+        return self.spec.get("xc_applied")
+
+    @property
+    def spin_square(self):
+        """Return <S^2> of the final determinant, in units of hbar^2."""
+        spin_square = self.results.get("spin_square")
+        return None if spin_square is None else float(spin_square)
+
+    @property
+    def spin_contamination(self):
+        """Return <S^2> - S(S+1) for the requested multiplicity, or None."""
+        spin_square = self.spin_square
+        if spin_square is None:
+            return None
+        total_spin = (self.multiplicity - 1) / 2
+        return spin_square - total_spin * (total_spin + 1)
 
     @property
     def num_basis_functions(self):

@@ -73,11 +73,18 @@ Every job writes the SCF energies in Hartree, the geometry in Angstrom, the atom
 occupations, and the detected point group. The last entry of the energy array is the final energy.
 
 A ``hess`` stage adds the Hessian, harmonic frequencies in cm⁻¹, normal modes, reduced masses, and force constants.
-Forces in Hartree/Bohr, Mulliken charges, and the dipole moment in Debye are written where the method and solvent
-support them, and are absent otherwise.
+Forces in Hartree/Bohr, Mulliken charges, the dipole moment in Debye, and ⟨S²⟩ of the final determinant are written
+where the method and solvent support them, and are absent otherwise.
 
 ``spec`` holds the applied settings, not the requested ones, including values PySCF resolves at run time such as the
-number of basis functions and the dielectric constant of the chosen solvent.
+number of basis functions and the dielectric constant of the chosen solvent. It also records what PySCF actually
+computed:
+
+-  ``reference``: the SCF reference, for example ``RKS`` for a closed shell or ``UHF`` for a radical.
+
+-  ``xc_applied``: the exchange-correlation functional PySCF evaluated, as LibXC component ids and coefficients, with
+   the short- and long-range exact-exchange fractions, the range-separation parameter, and whether non-local correlation
+   was included. ``b3lyp``, for instance, records LibXC functional 402 with 20% exact exchange.
 
 ******************
  Reusing a Result

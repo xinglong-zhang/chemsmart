@@ -162,7 +162,8 @@ def test_open_shell_record_keeps_both_spin_channels(
     record = SingleFileAssembler(logfile).assemble_data
     assert record.results["alpha_homo_energy"] is not None
     assert record.results["beta_homo_energy"] is not None
-    assert record.meta["spin"] == 1
+    # The same "restricted"/"unrestricted" meaning as Gaussian and ORCA.
+    assert record.meta["spin"] == "unrestricted"
 
 
 def _assemble_benzene(folder, tmp_path):

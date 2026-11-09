@@ -67,7 +67,7 @@ class TestPySCFSinglePointOutput:
         assert output.num_shells == 12
         assert output.charge == 0
         assert output.multiplicity == 1
-        assert output.spin == 0
+        assert output.spin == "restricted"
         assert output.chemical_symbols == ["O", "H", "H"]
         assert output.energies[-1] == -76.35923673423423
 
@@ -259,11 +259,20 @@ class TestPySCFUnrestrictedOutput:
     def test_spin_channels_are_separated(self, pyscf_oh_radical_outfolder):
         output = read_pyscf_output_folder(pyscf_oh_radical_outfolder)
         assert output.multiplicity == 2
-        assert output.spin == 1
+        assert output.spin == "unrestricted"
         assert output.results["mo_energy"].ndim == 2
         assert len(output.alpha_occ_eigenvalues) == 5
         assert len(output.beta_occ_eigenvalues) == 4
         assert output.num_unpaired_electrons == 1
+
+    def test_reference_written_before_it_was_recorded(
+        self, pyscf_oh_radical_outfolder
+    ):
+        """The reference is not reconstructed; the spin type follows 2S."""
+        output = read_pyscf_output_folder(pyscf_oh_radical_outfolder)
+        assert output.reference is None
+        assert output.spin_square is None
+        assert output.spin == "unrestricted"
 
     def test_orbital_energies_are_in_ev(self, pyscf_oh_radical_outfolder):
         output = read_pyscf_output_folder(pyscf_oh_radical_outfolder)

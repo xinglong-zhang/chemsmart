@@ -155,6 +155,12 @@ Molecular Properties Options
    PySCF's own ``spin`` keyword is ``2S``, not ``2S+1``. Always give the multiplicity here and let CHEMSMART convert it,
    so that the value in the command matches the value in the project YAML and in every other program group.
 
+.. note::
+
+   The energy of an open shell whose singly occupied orbital belongs to a degenerate pair, such as the π hole of OH,
+   depends slightly on how the SCF orients that orbital, because the integration grids are not cylindrically symmetric.
+   Such energies can differ between machines by a few 1e-7 Eh.
+
 Method and Basis Set Options
 ============================
 
@@ -196,6 +202,9 @@ Give either ``-x`` or ``-A``, never both. Basis names follow PySCF and libcint s
    ``b3lyp5``. For water in def2-SVP the two differ by roughly 23 kcal/mol, so a PySCF ``b3lyp`` energy must not be
    compared with an ORCA ``B3LYP`` energy. CHEMSMART logs a warning when it resolves ``b3lyp``, but it cannot know which
    convention you meant.
+
+   A PySCF configuration file that sets ``B3LYP_WITH_VWN5`` would change what ``b3lyp`` means, so a DFT job stops before
+   the SCF when that setting is present.
 
 Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied. ``-A`` accepts
 only ``hf``; post-Hartree-Fock correlation methods are not part of this integration.
