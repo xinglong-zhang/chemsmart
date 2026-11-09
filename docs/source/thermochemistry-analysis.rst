@@ -2,8 +2,8 @@
  Thermochemistry Analysis
 ##########################
 
-CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian, ORCA, and
-xTB output files.
+CHEMSMART provides thermochemistry analysis capabilities for computing thermodynamic properties from Gaussian, ORCA,
+PySCF, and xTB output files.
 
 *******************************
  Thermochemistry Analysis Jobs
@@ -20,7 +20,7 @@ Usage
 
 .. code:: text
 
-   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca|xtb] [-t filetype] [-f filename(s)]
+   chemsmart run thermochemistry [-d path/to/directory] [-p gaussian|orca|pyscf|xtb] [-t filetype] [-f filename(s)]
                                  [-csg s_freq_cutoff] [-cst s_freq_cutoff]
                                  [-ch h_freq_cutoff] [-c concentration] [-P pressure] [--weighted | --no-weighted]
                                  [-T temperature] [-a alpha] [-u hartree|eV|kcal/mol|kJ/mol]
@@ -48,9 +48,12 @@ Options
          inspected.
 
    -  -  ``-p, --program``
+
       -  string
-      -  Program that produced the output files: ``gaussian``, ``orca``, and ``xtb``. Use this when parsing depends on
-         program identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
+
+      -  Program that produced the output files: ``gaussian``, ``orca``, ``pyscf``, and ``xtb``. Use this when parsing
+         depends on program identity, for example to distinguish Gaussian and ORCA outputs that may share extensions.
+         With ``-p pyscf``, results are located through the ``.out`` log and read from the ``.h5`` file beside it.
 
    -  -  ``-t, --filetype``
       -  string
@@ -59,7 +62,7 @@ Options
 
    -  -  ``-f, --filenames``
       -  string
-      -  Specific Gaussian, ORCA, or xTB output file(s) to analyze (repeatable, mutually exclusive with ``-d``)
+      -  Specific Gaussian, ORCA, PySCF, or xTB output file(s) to analyze (repeatable, mutually exclusive with ``-d``)
 
 **Quasi-RRHO Corrections:**
 
@@ -153,7 +156,7 @@ Examples
 
 **Single file analysis:**
 
-Analyze a single Gaussian, ORCA, or xTB output file.
+Analyze a single Gaussian, ORCA, PySCF, or xTB output file.
 
 .. code:: bash
 
@@ -169,7 +172,7 @@ Output:
 
 **Multiple files:**
 
-Analyze multiple Gaussian, ORCA, or xTB output files in a single run.
+Analyze multiple Gaussian, ORCA, PySCF, or xTB output files in a single run.
 
 .. code:: bash
 
