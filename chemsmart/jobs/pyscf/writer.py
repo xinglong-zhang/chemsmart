@@ -93,8 +93,9 @@ class PySCFScriptWriter:
             atom_grid = list(PYSCF_DEFGRIDS[str(settings.defgrid).lower()])
 
         call, method, solvent_id, eps = self._solvent_config(settings)
-        # A transition-state search is an optimisation towards a saddle point.
-        optimises = "opt" in job.stages or "ts" in job.stages
+        # A transition-state search is an optimisation towards a saddle
+        # point, and an IRC a sequence of constrained optimisations.
+        optimises = bool({"opt", "ts", "irc"} & set(job.stages))
 
         # A job can be previewed before a runner is attached.
         jobrunner = job.jobrunner
@@ -144,6 +145,9 @@ class PySCFScriptWriter:
             "point_group_tol": float(settings.point_group_tol),
             "correlation": settings.resolved_correlation,
             "scf_stability": settings.scf_stability,
+            "irc_direction": (
+                settings.irc_direction if "irc" in job.stages else None
+            ),
             "engine": settings.resolved_engine,
             "num_threads": int(num_threads),
             "max_memory_mb": max_memory_mb,

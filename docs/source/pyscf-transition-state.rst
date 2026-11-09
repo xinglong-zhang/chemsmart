@@ -2,9 +2,10 @@
  Transition State Search (PySCF)
 #################################
 
-This page covers transition state searches using PySCF and the geomeTRIC optimizer.
+This page covers transition state searches and intrinsic reaction coordinate (IRC) calculations using PySCF and the
+geomeTRIC optimizer.
 
-The search reads the ``gas`` section of the project YAML, like ``opt``, and needs ``opt_solver: geometric``. It runs
+Both jobs read the ``gas`` section of the project YAML, like ``opt``, and both need ``opt_solver: geometric``. They run
 with Hartree-Fock and DFT. MP2 and coupled cluster have no analytic Hessian in PySCF and are refused. For the complete
 option reference, see :doc:`pyscf-cli-options`.
 
@@ -50,3 +51,61 @@ Transition state search with a finer DFT grid:
 .. code:: bash
 
    chemsmart sub pyscf -p test -f guess.xyz --defgrid defgrid3 ts
+
+*******************************
+ Intrinsic Reaction Coordinate
+*******************************
+
+Follow the reaction path down from a transition state to the minima on either side.
+
+.. code:: bash
+
+   chemsmart sub [OPTIONS] pyscf [PYSCF_OPTIONS] irc [SUBCMD_OPTIONS]
+
+IRC Options
+===========
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 15 55
+
+   -  -  Option
+      -  Type
+      -  Description
+
+   -  -  ``-d, --direction``
+      -  choice
+      -  Branches to follow: ``both`` (default), ``forward`` or ``backward``. The project key ``irc_direction`` sets the
+         same choice.
+
+The job first computes the analytic Hessian of the starting structure and stops unless it has exactly one imaginary
+mode, so a minimum or a higher-order saddle point is never followed as a transition state. Start from the result of a
+``ts`` job. ``freq`` does not apply.
+
+``forward`` and ``backward`` are the two signs of the imaginary mode, which the eigensolver chooses, so they do not say
+which side is the reactant. Each branch is followed until it reaches a minimum or ``opt_maxsteps`` steps, and each
+records whether it converged. A branch that fails does not discard the other.
+
+The path is stored in the results file, from the end of the backward branch, through the starting structure, to the end
+of the forward branch. The job's own energy, forces and geometry are those of the starting structure. See
+:doc:`pyscf-results`.
+
+Basic Usage
+===========
+
+Follow both branches from a transition state:
+
+.. code:: bash
+
+   chemsmart sub pyscf -p test -f guess_ts_gas_phase.out irc
+
+Results are written to ``guess_ts_gas_phase_irc_gas_phase.h5``; pass ``-l`` to choose a shorter label.
+
+Follow one branch:
+
+.. code:: bash
+
+   chemsmart sub pyscf -p test -f guess_ts_gas_phase.out irc -d forward
+
+The label gains ``f`` for ``forward`` or ``r`` for ``backward``, as Gaussian IRC labels do, so the results go to
+``guess_ts_gas_phase_ircf_gas_phase.h5`` and the two branches never share a results file.

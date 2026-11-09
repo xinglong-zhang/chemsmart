@@ -59,6 +59,11 @@ PYSCF_DEFGRIDS = {
 #: ``[geomopt]`` extra installs first.
 PYSCF_OPT_SOLVERS = ("geometric", "berny", "ase")
 
+#: Branches an IRC follows from the saddle point: ``forward`` and
+#: ``backward`` are the two signs of the imaginary mode, a convention of the
+#: eigensolver rather than a reactant or product side.
+PYSCF_IRC_DIRECTIONS = ("both", "forward", "backward")
+
 #: Execution engines. ``gpu`` routes through gpu4pyscf via ``.to_gpu()``.
 PYSCF_ENGINES = ("cpu", "gpu")
 
@@ -186,6 +191,8 @@ class PySCFJobSettings(MolecularJobSettings):
             detection, which sets the rotational symmetry number.
         forces (bool): Compute a gradient for a single point or Hessian job.
             An optimisation always stores the final forces.
+        irc_direction (str): One of ``PYSCF_IRC_DIRECTIONS``; the branches
+            an ``irc`` job follows from its saddle point.
     """
 
     #: Base-class fields PySCF cannot honour. Mapped to the value that means
@@ -228,6 +235,7 @@ class PySCFJobSettings(MolecularJobSettings):
         solvent_id=None,
         correlation=None,
         scf_stability=False,
+        irc_direction="both",
         **kwargs,
     ):
         # Passed under its private name by ``merge``. Not a project-YAML key:
@@ -267,6 +275,7 @@ class PySCFJobSettings(MolecularJobSettings):
         self.correlation = copy.deepcopy(correlation)
         # Analyse the converged reference's stability; an observation only.
         self.scf_stability = scf_stability
+        self.irc_direction = irc_direction
         self._project_yaml_digest = project_yaml_digest
 
     @classmethod
@@ -420,12 +429,13 @@ class PySCFJobSettings(MolecularJobSettings):
                 "Density fitting would silently turn the method into its "
                 "density-fitted variant."
             )
-        if self.jobtype in ("hess", "ts") or (
+        if self.jobtype in ("hess", "ts", "irc") or (
             self.jobtype == "opt" and self.freq
         ):
             raise ValueError(
-                f"{method} has no analytic Hessian in PySCF, so hess, ts and "
-                "freq: true are not available; set freq: false to optimise."
+                f"{method} has no analytic Hessian in PySCF, so hess, ts, irc "
+                "and freq: true are not available; set freq: false to "
+                "optimise."
             )
         # PySCF 2.14 has no open-shell CCSD(T) gradient.
         if method == "ccsd(t)" and (self.jobtype == "opt" or self.forces):
@@ -593,6 +603,16 @@ class PySCFJobSettings(MolecularJobSettings):
             raise ValueError(
                 "Transition-state searches use the geometric optimizer's "
                 f"P-RFO saddle-point search, not {self.opt_solver!r}."
+            )
+        if self.jobtype == "irc" and self.opt_solver != "geometric":
+            raise ValueError(
+                "Reaction paths are followed by the geometric optimizer's "
+                f"IRC method, not {self.opt_solver!r}."
+            )
+        if self.irc_direction not in PYSCF_IRC_DIRECTIONS:
+            raise ValueError(
+                f"Unknown irc_direction {self.irc_direction!r}; "
+                f"expected one of {PYSCF_IRC_DIRECTIONS}."
             )
 
         if self.engine is not None and self.engine not in PYSCF_ENGINES:

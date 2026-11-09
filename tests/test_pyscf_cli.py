@@ -21,7 +21,7 @@ from chemsmart.settings.user import CHEMSMARTUserSettings
 from tests.helpers import run_pyscf_and_capture_settings
 
 
-@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "ts"])
+@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "ts", "irc"])
 def test_group_and_all_leaves_expose_help(pyscf_water_xyz, jobtype):
     runner = CliRunner()
 
@@ -165,7 +165,7 @@ def test_remove_solvent_clears_project_single_point_solvent(
     assert (settings.solvent_model, settings.solvent_id) == (None, None)
 
 
-@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "ts"])
+@pytest.mark.parametrize("jobtype", ["sp", "opt", "hess", "ts", "irc"])
 def test_leaf_selects_matching_project_settings(pyscf_water_xyz, jobtype):
     result, settings = run_pyscf_and_capture_settings(
         [
@@ -325,6 +325,80 @@ class TestPySCFCliRealRuns:
         assert spec["forces"] is True
         assert spec["point_group_tol"] == 0.01
         assert spec["scf_stability"] is True
+
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [([], "both"), (["-d", "forward"], "forward")],
+    )
+    def test_irc_direction_reaches_the_results(
+        self, pyscf_water_xyz, temporary_working_dir, args, expected
+    ):
+        self._preview(
+            "-f",
+            pyscf_water_xyz,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "-l",
+            "path",
+            "irc",
+            *args,
+        )
+        spec = PySCFH5File(glob.glob("path*.h5")[0]).spec
+        assert spec["irc_direction"] == expected
+        assert spec["stages"] == ["scf", "irc"]
+
+    def test_each_irc_branch_gets_its_own_label(
+        self, pyscf_water_xyz, temporary_working_dir
+    ):
+        """Otherwise the second branch is skipped as already complete."""
+        for direction in ("forward", "backward"):
+            self._preview(
+                "-f",
+                pyscf_water_xyz,
+                "-c",
+                "0",
+                "-m",
+                "1",
+                "irc",
+                "-d",
+                direction,
+            )
+        assert sorted(glob.glob("water_irc*.h5")) == [
+            "water_ircf_gas_phase.h5",
+            "water_ircr_gas_phase.h5",
+        ]
+
+    def test_project_irc_direction_is_checked_before_the_label(
+        self, pyscf_water_xyz, temporary_working_dir, tmp_path
+    ):
+        """Only the project YAML can carry a direction ``-d`` would refuse.
+
+        It must be refused with PySCF's directions, not the label helper's
+        Gaussian ones ('reverse'), which PySCF itself does not accept.
+        """
+        (tmp_path / "sideways.yaml").write_text(
+            "gas:\n  ab_initio: hf\n  basis: sto-3g\n"
+            "  irc_direction: sideways\n"
+            "solv:\n  ab_initio: hf\n  basis: sto-3g\n"
+        )
+        with patch.object(
+            CHEMSMARTUserSettings,
+            "user_pyscf_settings_dir",
+            new_callable=PropertyMock,
+            return_value=str(tmp_path),
+        ):
+            result = CliRunner().invoke(
+                run,
+                ["--fake", "pyscf", "-p", "sideways", "-f", pyscf_water_xyz]
+                + ["-c", "0", "-m", "1", "irc"],
+                obj={},
+            )
+        assert result.exit_code != 0
+        message = str(result.exception)
+        assert "Unknown irc_direction 'sideways'" in message
+        assert "reverse" not in message
 
     def test_no_density_fit_clears_an_inherited_auxiliary_basis(
         self, pyscf_water_xyz, temporary_working_dir

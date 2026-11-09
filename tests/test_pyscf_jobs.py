@@ -17,6 +17,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.jobs.job import JobFailedError
 from chemsmart.jobs.pyscf.hess import PySCFHessJob
+from chemsmart.jobs.pyscf.irc import PySCFIRCJob
 from chemsmart.jobs.pyscf.job import PySCFJob
 from chemsmart.jobs.pyscf.opt import PySCFOptJob
 from chemsmart.jobs.pyscf.runner import PySCFJobRunner
@@ -129,6 +130,7 @@ class TestFakePySCFJobRunner:
             (PySCFOptJob, "opt", {}),
             (PySCFHessJob, "hess", {"freq": True}),
             (PySCFTSJob, "ts", {"freq": True}),
+            (PySCFIRCJob, "irc", {}),
         ],
     )
     def test_preview_generates_a_driver_script_per_jobtype(
@@ -238,6 +240,7 @@ class TestPySCFForcesRequest:
             (PySCFHessJob, "hess", {}, False),
             (PySCFOptJob, "opt", {}, True),
             (PySCFTSJob, "ts", {}, True),
+            (PySCFIRCJob, "irc", {}, True),
         ],
     )
     def test_forces_follow_the_request(

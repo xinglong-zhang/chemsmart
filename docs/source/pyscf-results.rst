@@ -42,8 +42,9 @@ the ``.h5`` and ``.err`` files record why.
 geometry optimization that did not converge. In a multi-structure run, the remaining structures still run first. A rerun
 under the same label deletes the old ``.h5`` first, so a run that dies early cannot be mistaken for the earlier result.
 
-A PySCF job stores only its final structure, so ``-i`` can select only that structure from a PySCF output. Results that
-could not be computed are listed with the reason under ``status/skipped_properties``.
+A PySCF job stores only its final structure, so ``-i`` can select only that structure from a PySCF output. An ``irc``
+job's path is stored separately, as described below, and is not selectable with ``-i``. Results that could not be
+computed are listed with the reason under ``status/skipped_properties``.
 
 .. warning::
 
@@ -80,6 +81,11 @@ stable.
 A ``ts`` job records under ``status/stages/ts`` whether the saddle-point search converged and, when a Hessian followed,
 ``saddle_order``, the number of imaginary modes, with the imaginary frequencies themselves. A ``saddle_order`` other
 than one fails the job. Without a Hessian it is null: the structure is not known to be a transition state.
+
+An ``irc`` job records the same two fields for its starting structure under ``status/stages/irc``, with each branch's
+convergence and number of points under ``branches`` and the starting structure's position in the path as ``ts_index``.
+``results/irc_positions`` holds the path in Angstrom and ``results/irc_energies`` its energies in Hartree. The starting
+structure's frequencies are a check, not a result, and are not stored as ``vibrational_frequencies``.
 
 Forces in Hartree/Bohr, Mulliken charges, the dipole moment in Debye, and ⟨S²⟩ of the final determinant are written
 where the method and solvent support them, and are absent otherwise.

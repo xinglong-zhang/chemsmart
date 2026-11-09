@@ -21,6 +21,7 @@ from chemsmart.io.molecules.structure import Molecule  # noqa: E402
 from chemsmart.io.orca.output import ORCAOutput  # noqa: E402
 from chemsmart.io.pyscf import driver  # noqa: E402
 from chemsmart.jobs.pyscf.hess import PySCFHessJob  # noqa: E402
+from chemsmart.jobs.pyscf.irc import PySCFIRCJob  # noqa: E402
 from chemsmart.jobs.pyscf.opt import PySCFOptJob  # noqa: E402
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings  # noqa: E402
 from chemsmart.jobs.pyscf.singlepoint import (  # noqa: E402
@@ -1163,4 +1164,134 @@ class TestTransitionState:
         assert output.normal_termination
         assert output.spec["stages"] == ["scf", "ts"]
         assert output.saddle_order is None
+        assert output.vibrational_frequencies is None
+
+
+class TestIntrinsicReactionCoordinate:
+    """Both branches from the HCN <=> HNC saddle point at RHF/6-31G*."""
+
+    BASIS = {"ab_initio": "hf", "basis": "6-31g*", "density_fit": False}
+    SYMBOLS = ["C", "N", "H"]
+    #: The saddle point found by TestTransitionState, in Angstrom.
+    SADDLE_POINT = [[0.0065, 0.0, 0.0446], [-0.0248, 0.0, 1.2132]]
+    SADDLE_POINT += [[1.1267, 0.0, 0.3259]]
+
+    @classmethod
+    def _irc(cls, run_pyscf_driver, positions, label, **settings):
+        molecule = Molecule(
+            symbols=cls.SYMBOLS,
+            positions=np.array(positions, dtype=float),
+            charge=0,
+            multiplicity=1,
+        )
+        return run_pyscf_driver(
+            PySCFIRCJob,
+            molecule,
+            "irc",
+            label=label,
+            scf_tol=1e-10,
+            **cls.BASIS,
+            **settings,
+        )[1]
+
+    @staticmethod
+    def _bonds(positions):
+        """Return r(CN) and the hydrogen's distances to C and N, in A."""
+        c, n, h = np.asarray(positions, dtype=float)
+        return np.array(
+            [
+                np.linalg.norm(n - c),
+                np.linalg.norm(h - c),
+                np.linalg.norm(h - n),
+            ]
+        )
+
+    @classmethod
+    def _minimum(cls, positions):
+        """Optimise a minimum with PySCF and geomeTRIC, outside CHEMSMART."""
+        from pyscf.geomopt import geometric_solver
+
+        mol = gto.M(
+            atom=list(zip(cls.SYMBOLS, positions)),
+            basis="6-31g*",
+            verbose=0,
+        )
+        mf = hf.RHF(mol)
+        mf.conv_tol = 1e-10
+        converged, optimised = geometric_solver.kernel(mf, maxsteps=100)
+        assert converged
+        energy = hf.RHF(optimised).run(conv_tol=1e-10).e_tot
+        return energy, cls._bonds(optimised.atom_coords(unit="Angstrom"))
+
+    def test_branches_end_in_hydrogen_cyanide_and_isocyanide(
+        self, run_pyscf_driver
+    ):
+        output = self._irc(run_pyscf_driver, self.SADDLE_POINT, "irc")
+        assert output.normal_termination, output.failure_reason
+        stage = output.status["stages"]["irc"]
+        assert stage["saddle_order"] == 1
+        assert stage["imaginary_frequencies"] == pytest.approx(
+            [-1226.7], abs=1.0
+        )
+        assert all(b["converged"] for b in stage["branches"].values())
+
+        path = output.irc_path
+        start = output.irc_ts_index
+        assert 0 < start < len(path) - 1
+        assert np.array_equal(path[start].positions, output.positions)
+        assert path[start].energy == output.energies[-1]
+        energies = np.array([frame.energy for frame in path])
+        # Downhill from the saddle point in both directions.
+        assert np.all(np.diff(energies[: start + 1]) >= -1e-6)
+        assert np.all(np.diff(energies[start:]) <= 1e-6)
+
+        # The ends are the two minima, whichever branch reached which.
+        hcn = self._minimum([[0, 0, 0], [0, 0, 1.15], [0, 0, -1.07]])
+        hnc = self._minimum([[0, 0, 1.17], [0, 0, 0], [0, 0, -1.0]])
+        ends = sorted(
+            (path[0], path[-1]),
+            key=lambda frame: self._bonds(frame.positions)[1],
+        )
+        for end, (energy, bonds) in zip(ends, (hcn, hnc)):
+            assert end.energy == pytest.approx(energy, abs=1e-5)
+            assert self._bonds(end.positions) == pytest.approx(bonds, abs=2e-3)
+
+    def test_one_branch_is_the_same_branch_of_both(self, run_pyscf_driver):
+        both = self._irc(run_pyscf_driver, self.SADDLE_POINT, "both")
+        forward = self._irc(
+            run_pyscf_driver,
+            self.SADDLE_POINT,
+            "forward",
+            irc_direction="forward",
+        )
+        assert forward.normal_termination, forward.failure_reason
+        assert forward.spec["irc_direction"] == "forward"
+        assert list(forward.status["stages"]["irc"]["branches"]) == ["forward"]
+        assert forward.irc_ts_index == 0
+        assert np.abs(
+            forward.irc_path[-1].positions - both.irc_path[-1].positions
+        ).max() == pytest.approx(0.0, abs=1e-6)
+
+    def test_branch_out_of_steps_is_not_reported_as_a_path(
+        self, run_pyscf_driver
+    ):
+        output = self._irc(
+            run_pyscf_driver, self.SADDLE_POINT, "short", opt_maxsteps=3
+        )
+        assert not output.normal_termination
+        branches = output.status["stages"]["irc"]["branches"]
+        assert [b["converged"] for b in branches.values()] == [False, False]
+        assert "forward: no minimum within 3 steps" in output.failure_reason
+        assert output.irc_path is None
+
+    def test_minimum_is_not_followed_as_a_transition_state(
+        self, run_pyscf_driver
+    ):
+        hydrogen_cyanide = [[0, 0, 0], [0, 0, 1.133], [0, 0, -1.059]]
+        output = self._irc(run_pyscf_driver, hydrogen_cyanide, "minimum")
+        assert not output.normal_termination
+        assert output.status["stages"]["irc"]["saddle_order"] == 0
+        assert "0 imaginary modes instead of one" in output.failure_reason
+        assert output.irc_path is None
+        # The start's Hessian is a check, not a frequency result.
         assert output.vibrational_frequencies is None

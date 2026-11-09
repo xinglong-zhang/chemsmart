@@ -54,6 +54,7 @@ class PySCFJobRunner(JobRunner):
         "pyscf_opt",
         "pyscf_hess",
         "pyscf_ts",
+        "pyscf_irc",
     ]
     FAKE = False
     SCRATCH = False
@@ -278,6 +279,8 @@ class FakePySCFJobRunner(PySCFJobRunner):
                 # A fake run has no Hessian to count imaginary modes from.
                 status["saddle_order"] = None
             return status
+        if stage == "irc":
+            return {"converged": True, "saddle_order": None, "ts_index": 0}
         return {"converged": True}
 
     def _write_fake_results(self, job):

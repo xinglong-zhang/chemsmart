@@ -2,12 +2,13 @@
 
 A PySCF project YAML uses the same ``gas:`` / ``solv:`` shape as Gaussian and
 ORCA, because PySCF's functional, basis and phase genuinely vary per job --
-which is the reason that split exists. ``gas:`` feeds ``opt``, ``hess`` and
-``ts``; ``solv:`` feeds ``sp``. That is the standard workflow: optimise and
-take frequencies at one level, refine the single point in solvent.
+which is the reason that split exists. ``gas:`` feeds ``opt``, ``hess``,
+``ts`` and ``irc``; ``solv:`` feeds ``sp``. That is the standard workflow:
+optimise and take frequencies at one level, refine the single point in
+solvent.
 
 Unlike Gaussian and ORCA, PySCF passes its own jobtype lists to
-``read_molecular_job_yaml`` so that exactly four configs are produced rather
+``read_molecular_job_yaml`` so that exactly five configs are produced rather
 than the fifteen the shared default emits.
 """
 
@@ -26,7 +27,7 @@ user_settings = CHEMSMARTUserSettings()
 logger = logging.getLogger(__name__)
 
 #: Jobtypes fed by the ``gas:`` section of a PySCF project YAML.
-PYSCF_GAS_PHASE_JOBS = ["opt", "hess", "ts"]
+PYSCF_GAS_PHASE_JOBS = ["opt", "hess", "ts", "irc"]
 
 #: Jobtypes fed by the ``solv:`` section.
 PYSCF_SP_JOBS = ["sp"]
@@ -78,6 +79,11 @@ class PySCFProjectSettings(RegistryMixin):
     def ts_settings(self):
         settings = self.main_settings().copy()
         settings.jobtype = "ts"
+        return settings
+
+    def irc_settings(self):
+        settings = self.main_settings().copy()
+        settings.jobtype = "irc"
         return settings
 
     @classmethod
@@ -140,11 +146,19 @@ class YamlPySCFProjectSettings(PySCFProjectSettings):
 
     PROJECT_NAME = "yaml"
 
-    def __init__(self, sp_settings, opt_settings, hess_settings, ts_settings):
+    def __init__(
+        self,
+        sp_settings,
+        opt_settings,
+        hess_settings,
+        ts_settings,
+        irc_settings,
+    ):
         self._sp_settings = sp_settings
         self._opt_settings = opt_settings
         self._hess_settings = hess_settings
         self._ts_settings = ts_settings
+        self._irc_settings = irc_settings
 
     def sp_settings(self):
         return self._sp_settings.copy()
@@ -157,6 +171,9 @@ class YamlPySCFProjectSettings(PySCFProjectSettings):
 
     def ts_settings(self):
         return self._ts_settings.copy()
+
+    def irc_settings(self):
+        return self._irc_settings.copy()
 
     @classmethod
     def from_yaml(cls, filename):
@@ -176,6 +193,7 @@ class YamlPySCFProjectSettingsBuilder:
             opt_settings=self._project_settings_for_job("opt"),
             hess_settings=self._project_settings_for_job("hess"),
             ts_settings=self._project_settings_for_job("ts"),
+            irc_settings=self._project_settings_for_job("irc"),
         )
         project_settings.PROJECT_NAME = self._parse_project_name()
         return project_settings
@@ -190,7 +208,7 @@ class YamlPySCFProjectSettingsBuilder:
                 f"PySCF project {self.filename} has sections that no PySCF "
                 f"job reads: {', '.join(unknown)}. A PySCF project has only "
                 f"{' and '.join(PYSCF_PROJECT_SECTIONS)}: 'gas' configures "
-                "opt, hess and ts, 'solv' configures sp."
+                "opt, hess, ts and irc, 'solv' configures sp."
             )
 
     def _read_config(self):

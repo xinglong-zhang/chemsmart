@@ -147,11 +147,7 @@ class PySCFOutput(FileMixin):
                 f"{failure.get('message')}"
             )
         unfinished = [
-            (
-                f"{stage} ({entry['not_a_transition_state']})"
-                if "not_a_transition_state" in entry
-                else stage
-            )
+            _describe_unfinished(stage, entry)
             for stage, entry in status.get("stages", {}).items()
             if not entry.get("converged", entry.get("completed", False))
         ]
@@ -453,6 +449,37 @@ class PySCFOutput(FileMixin):
         whose result had no Hessian, so it is not known to be a saddle point.
         """
         return self.status.get("stages", {}).get("ts", {}).get("saddle_order")
+
+    @property
+    def irc_ts_index(self):
+        """Return the 0-based position of the start structure in the path."""
+        return self.status.get("stages", {}).get("irc", {}).get("ts_index")
+
+    @cached_property
+    def irc_path(self):
+        """Return the IRC path as structures with their energies, or None.
+
+        Ordered from the end of the backward branch, through the start
+        structure at :attr:`irc_ts_index`, to the end of the forward branch.
+        The branch names are the two signs of the imaginary mode, not a
+        reactant or product side.
+        """
+        from chemsmart.io.molecules.structure import Molecule
+
+        positions = self.results.get("irc_positions")
+        if positions is None:
+            return None
+        energies = self.results["irc_energies"]
+        return [
+            Molecule(
+                symbols=self.chemical_symbols,
+                positions=np.asarray(frame, dtype=float),
+                charge=self.charge,
+                multiplicity=self.multiplicity,
+                energy=float(energy),
+            )
+            for frame, energy in zip(positions, energies)
+        ]
 
     @property
     def scf_stability(self):
@@ -964,6 +991,20 @@ class PySCFH5File(FileMixin):
         if isinstance(value, bytes):
             return value.decode("utf-8")
         return str(value)
+
+
+def _describe_unfinished(stage, entry):
+    """Return a stage name with the reason it did not finish, when known."""
+    if "not_a_transition_state" in entry:
+        return f"{stage} ({entry['not_a_transition_state']})"
+    failed = [
+        f"{name}: {branch.get('reason')}"
+        for name, branch in entry.get("branches", {}).items()
+        if not branch.get("converged")
+    ]
+    if failed:
+        return f"{stage} ({'; '.join(failed)})"
+    return stage
 
 
 #: Point groups whose rotational symmetry number is not derived from an

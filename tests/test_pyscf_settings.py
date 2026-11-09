@@ -250,6 +250,8 @@ def test_project_yaml_digest_survives_merge():
         # Only geomeTRIC searches for a saddle point; berny would minimise.
         ({"jobtype": "ts", "opt_solver": "berny"}, "saddle-point search"),
         ({"jobtype": "ts", "opt_solver": "ase"}, "saddle-point search"),
+        ({"jobtype": "irc", "opt_solver": "berny"}, "IRC method"),
+        ({"irc_direction": "reverse"}, "Unknown irc_direction"),
         ({"engine": "tpu"}, "Unknown engine"),
         ({"defgrid": "defgrid9"}, "Unknown defgrid"),
         ({"density_fit": False, "aux_basis": "x"}, "aux_basis cannot"),
@@ -309,6 +311,7 @@ def test_named_functionals_pass_validation(functional):
         ({"jobtype": "hess"}, "no analytic Hessian"),
         # The saddle-point search starts from an analytic Hessian.
         ({"jobtype": "ts"}, "no analytic Hessian"),
+        ({"jobtype": "irc"}, "no analytic Hessian"),
         ({"correlation": {"frozen_cores": False}}, "Unknown correlation"),
         ({"correlation": {"frozen_core": "yes"}}, "true or false"),
     ],

@@ -320,8 +320,8 @@ Results Options
 
    -  -  ``--forces/--no-forces``
       -  bool
-      -  Compute the nuclear gradient for ``sp`` or ``hess``, which can add a large fraction of the SCF cost. ``opt``
-         and ``ts`` always store the final forces.
+      -  Compute the nuclear gradient for ``sp`` or ``hess``, which can add a large fraction of the SCF cost. ``opt``,
+         ``ts`` and ``irc`` always store the final forces.
 
    -  -  ``--scf-stability/--no-scf-stability``
       -  bool
@@ -378,8 +378,9 @@ Examples:
  Project YAML Contract
 ***********************
 
-A PySCF project uses two sections. ``gas`` feeds the ``opt``, ``ts`` and ``hess`` jobs; ``solv`` feeds ``sp``. That
-split matches the usual workflow: optimize and take frequencies at one level, then refine the single point in solvent.
+A PySCF project uses two sections. ``gas`` feeds the ``opt``, ``ts``, ``irc`` and ``hess`` jobs; ``solv`` feeds ``sp``.
+That split matches the usual workflow: optimize and take frequencies at one level, then refine the single point in
+solvent.
 
 .. code:: yaml
 
@@ -411,7 +412,8 @@ ORCA schemas are refused rather than ignored, including ``semiempirical``, ``mod
 ``heavy_elements``, ``numfreq``, ``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and
 ``custom_solvent``.
 
-The ``correlation`` block and the ``scf_stability`` key are described in :doc:`pyscf-electronic-structure`.
+The ``correlation`` block and the ``scf_stability`` key are described in :doc:`pyscf-electronic-structure`, and the
+``irc_direction`` key in :doc:`pyscf-transition-state`.
 
 **********************
  Server Configuration
@@ -451,6 +453,10 @@ adds nothing.
    -  -  ``ts``
       -  Transition state search with geomeTRIC, using the ``gas`` section; with ``freq: True`` the result must have
          exactly one imaginary mode
+
+   -  -  ``irc``
+      -  Intrinsic reaction coordinate from a transition state, using the ``gas`` section; ``-d`` chooses ``both``
+         (default), ``forward`` or ``backward``
 
    -  -  ``hess``
       -  Analytic Hessian and harmonic frequencies, using the ``gas`` section

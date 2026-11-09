@@ -23,6 +23,7 @@ import platform
 import re
 import socket
 import sys
+import tempfile
 import time
 import traceback
 
@@ -72,6 +73,7 @@ APPLIED_SPEC_FIELDS = (
     "point_group_tol",
     "correlation",
     "scf_stability",
+    "irc_direction",
     "num_threads",
     "max_memory_mb",
     "settings_digest",
@@ -406,6 +408,143 @@ def _check_saddle_order(ts_status, frequencies):
         ts_status["not_a_transition_state"] = (
             "%d imaginary modes instead of one" % len(imaginary)
         )
+
+
+def _run_irc(config, mf, mol, start_energy):
+    """Follow the reaction path down from a first-order saddle point.
+
+    Returns ``(stage_status, path)``. ``path`` is None when no branch was
+    followed, else ``(positions, energies)`` in Angstrom and Hartree, ordered
+    from the backward end through the start structure to the forward end.
+
+    Each branch is its own geomeTRIC run. Asked for both at once, geomeTRIC
+    1.1.1 starts the backward branch even when the forward one ran out of
+    steps, so a single success would not show that both branches finished.
+    """
+    import geometric
+    from pyscf import lib
+    from pyscf.geomopt import geometric_solver
+    from pyscf.hessian import thermo
+
+    # The analytic Hessian both proves the start is a transition state and
+    # gives geomeTRIC the imaginary mode to leave it along.
+    hessian = mf.Hessian().kernel()
+    frequencies = thermo.harmonic_analysis(mol, hessian, imaginary_freq=False)[
+        "freq_wavenumber"
+    ]
+    stage_status = {}
+    _check_saddle_order(stage_status, frequencies)
+    if "not_a_transition_state" in stage_status:
+        return stage_status, None
+
+    requested = config["irc_direction"]
+    if requested == "both":
+        directions = ("forward", "backward")
+    else:
+        directions = (requested,)
+    options = {"irc": True, "maxiter": config["opt_maxsteps"]}
+    # As PySCF's own geomeTRIC wrapper does: geomeTRIC installed from PyPI
+    # ships without the logging configuration it reads.
+    package = os.path.dirname(geometric.optimize.__file__)
+    if not os.path.exists(os.path.join(package, "log.ini")):
+        options["logIni"] = os.path.join(
+            os.path.dirname(geometric_solver.__file__), "log.ini"
+        )
+
+    start = mol.atom_coords(unit="Angstrom")
+    natm = mol.natm
+    branches = {}
+    paths = {}
+    # geomeTRIC's own files are scratch; the path is stored in the HDF5.
+    with tempfile.TemporaryDirectory(dir=lib.param.TMPDIR) as scratch:
+        hessian_file = os.path.join(scratch, "hessian.txt")
+        np.savetxt(
+            hessian_file,
+            hessian.transpose(0, 2, 1, 3).reshape(3 * natm, 3 * natm),
+        )
+        for direction in directions:
+            branches[direction], paths[direction] = _follow_irc_branch(
+                mf,
+                direction,
+                "file:" + hessian_file,
+                os.path.join(scratch, direction),
+                options,
+                start,
+            )
+
+    stage_status["branches"] = branches
+    stage_status["converged"] = all(
+        branch["converged"] for branch in branches.values()
+    )
+    if not any(path is not None for path in paths.values()):
+        return stage_status, None
+
+    positions = [start]
+    energies = [start_energy]
+    if paths.get("backward") is not None:
+        backward_positions, backward_energies = paths["backward"]
+        positions = list(backward_positions[:0:-1]) + positions
+        energies = list(backward_energies[:0:-1]) + energies
+    stage_status["ts_index"] = len(positions) - 1
+    if paths.get("forward") is not None:
+        forward_positions, forward_energies = paths["forward"]
+        positions += list(forward_positions[1:])
+        energies += list(forward_energies[1:])
+    path = (
+        np.asarray(positions, dtype=float),
+        np.asarray(energies, dtype=float),
+    )
+    return stage_status, path
+
+
+def _follow_irc_branch(mf, direction, hessian, prefix, options, start):
+    """Run one IRC branch; return ``(branch_status, path or None)``.
+
+    Uses the public ``PySCFEngine`` rather than PySCF's ``kernel`` wrapper,
+    whose IRC call fails in geomeTRIC 1.1.1: the IRC reads the fragment
+    topology (``geometric/optimize.py``, ``len(M.molecules)``), which the
+    wrapper never builds. Nothing in either library is patched.
+    """
+    import geometric
+    from pyscf.geomopt import geometric_solver
+
+    scanner = mf.nuc_grad_method().as_scanner()
+    engine = geometric_solver.PySCFEngine(scanner)
+    # The driver builds its Mole without symmetry, so no reorientation
+    # needs muting here, unlike in PySCF's wrapper.
+    engine.mol = scanner.mol.copy()
+    engine.M.build_topology()
+    # An SCF that did not converge at a step would put a wrong energy on
+    # the path, so it ends the branch instead.
+    engine.assert_convergence = True
+    try:
+        progress = geometric.optimize.run_optimizer(
+            customengine=engine,
+            input=prefix,
+            irc_direction=direction,
+            hessian=hessian,
+            **options,
+        )
+    except geometric.errors.GeomOptNotConvergedError:
+        reason = "no minimum within %d steps" % options["maxiter"]
+        return {"converged": False, "reason": reason}, None
+    except (RuntimeError, geometric.errors.IRCError) as error:
+        reason = "%s: %s" % (type(error).__name__, error)
+        return {"converged": False, "reason": reason}, None
+
+    positions = np.asarray(progress.xyzs, dtype=float)
+    energies = np.asarray(progress.qm_energies, dtype=float)
+    if np.abs(positions[0] - start).max() > 1e-6:
+        raise RuntimeError(
+            "geomeTRIC's %s IRC path does not begin at the start structure"
+            % direction
+        )
+    branch = {
+        "converged": True,
+        "points": len(positions) - 1,
+        "endpoint_energy": float(energies[-1]),
+    }
+    return branch, (positions, energies)
 
 
 def _provenance(config, started_at, ended_at, wall_seconds):
@@ -781,6 +920,29 @@ def main(config):
                     # the structure is not known to be a saddle point.
                     stage_status["saddle_order"] = None
                 status["stages"][stage] = stage_status
+            elif stage == "irc":
+                # A path from an unconverged reference starts nowhere.
+                if not _stages_succeeded(status):
+                    status["stages"]["irc"] = {
+                        "converged": False,
+                        "skipped_because": "an earlier stage failed",
+                    }
+                    continue
+                dm = mf.make_rdm1()
+                stage_status, path = _run_irc(config, mf, mol, energies[-1])
+                if path is not None:
+                    results["irc_positions"], results["irc_energies"] = path
+                if "branches" in stage_status:
+                    # The path's gradient scanners share objects such as the
+                    # density-fitting tensors with mf. Restore them to the
+                    # start structure, whose properties are reported below.
+                    mf.reset(mol)
+                    mf.kernel(dm0=dm)
+                    stage_status["final_scf_converged"] = bool(mf.converged)
+                    stage_status["converged"] = bool(
+                        stage_status["converged"] and mf.converged
+                    )
+                status["stages"]["irc"] = stage_status
             elif stage == "hess":
                 # Frequencies are only meaningful at a converged stationary
                 # point, and a Hessian is too costly to compute regardless.
