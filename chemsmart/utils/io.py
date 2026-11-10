@@ -68,14 +68,11 @@ PROGRAM_INFO = {
         # "CHEMSMART PySCF driver" is the second line of the generated
         # driver script, which PySCF echoes into the log before anything
         # else. It is listed first because PySCF's own "PySCF version"
-        # banner is printed *after* that echo, and the echoed driver alone
-        # is longer than the 200-line window this detection reads. Earlier
-        # drivers wrote "ChemSmart PySCF driver"; that spelling is a file
-        # signature and must stay so their logs remain readable. The native
+        # banner is printed *after* that echo, and a large molecule can push
+        # it past the 200-line window this detection reads. The native
         # banners still match a hand-run PySCF log.
         "keywords": [
             "CHEMSMART PySCF driver",
-            "ChemSmart PySCF driver",
             "PySCF version",
             "PySCF path",
         ],

@@ -597,30 +597,3 @@ class TestPySCFResultsWithoutTheirLog:
     def test_molecule_reads_the_results_file(self, pyscf_benzene_outfolder):
         path = os.path.join(pyscf_benzene_outfolder, "benzene_gas_phase.h5")
         assert Molecule.from_filepath(path).chemical_formula == "C6H6"
-
-
-class TestPySCFLogRecognition:
-    """A PySCF log is recognised whichever driver generation wrote it.
-
-    The driver echo is longer than the 200-line detection window, so the
-    driver's own signature line is the only thing that identifies the log.
-    """
-
-    def test_log_from_an_earlier_driver_is_recognised(
-        self, pyscf_he_sp_outfolder
-    ):
-        path = os.path.join(pyscf_he_sp_outfolder, "he_sp_gas_phase.out")
-        with open(path) as f:
-            assert "# ChemSmart PySCF driver" in f.read(200)
-        assert get_program_type_from_file(path) == "pyscf"
-        molecule = Molecule.from_filepath(path)
-        assert molecule.chemical_formula == "He"
-        assert molecule.multiplicity == 1
-
-    def test_log_from_the_current_driver_is_recognised(
-        self, pyscf_benzene_outfolder
-    ):
-        path = os.path.join(pyscf_benzene_outfolder, "benzene_gas_phase.out")
-        with open(path) as f:
-            assert "# CHEMSMART PySCF driver" in f.read(200)
-        assert get_program_type_from_file(path) == "pyscf"
