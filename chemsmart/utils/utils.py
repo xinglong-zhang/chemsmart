@@ -1132,40 +1132,27 @@ def return_objects_and_indices_from_string_index(list_of_objects, index):
     """
     # convert index from 1-based (user input) to 0-based (python code-needed)
     index_0based = convert_string_index_from_1_based_to_0_based(index)
+    total = len(list_of_objects)
+
+    def _to_1based(i):
+        # Resolve a negative 0-based index against the list length, as
+        # Python indexing does, so the reported position is the real one.
+        return (i + total if i < 0 else i) + 1
 
     if isinstance(index_0based, list):
         # if index is a list, use it to select objects
         objects = [list_of_objects[i] for i in index_0based]
-        # Convert back to 1-based for tracking
-        indices_1based = [i + 1 for i in index_0based]
+        indices_1based = [_to_1based(i) for i in index_0based]
     elif isinstance(index_0based, int):
         # if index is a single integer, use it to select a single object
         objects = list_of_objects[index_0based]
-        # Handle negative indices: convert to
-        # positive 0-based first, then to 1-based
-        if index_0based < 0:
-            indices_1based = len(list_of_objects) + index_0based + 1
-        else:
-            indices_1based = index_0based + 1
+        indices_1based = _to_1based(index_0based)
     else:
-        # index is a Slice
+        # index is a slice: slice.indices() resolves negative, missing and
+        # out-of-range bounds exactly as slicing does, so the indices
+        # always correspond one-to-one with the selected objects.
         objects = list_of_objects[index_0based]
-        # Convert slice to list of indices
-        if isinstance(objects, list):
-            # Figure out which indices were actually selected
-            start = index_0based.start if index_0based.start is not None else 0
-            stop = (
-                index_0based.stop
-                if index_0based.stop is not None
-                else len(list_of_objects)
-            )
-            step = index_0based.step if index_0based.step is not None else 1
-            indices_0based = list(range(start, stop, step))
-            indices_1based = [i + 1 for i in indices_0based]
-        else:
-            # Single object from slice
-            start = index_0based.start if index_0based.start is not None else 0
-            indices_1based = start + 1
+        indices_1based = [i + 1 for i in range(*index_0based.indices(total))]
 
     return objects, indices_1based
 
