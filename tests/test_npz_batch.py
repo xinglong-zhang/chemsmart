@@ -13,6 +13,7 @@ from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xyz.xyzfile import XYZFile
 from chemsmart.jobs.batch import (
     _replace_task_structure,
+    run_streaming_chunk,
     run_streaming_npz_batch,
 )
 from chemsmart.settings.server import Server
@@ -333,11 +334,18 @@ def test_streaming_batch_removes_each_prepared_structure(
     manifest_path = tmp_path / "sample_deferred_npz.json"
     manifest_path.write_text(json.dumps(manifest))
 
-    with patch("chemsmart.jobs.batch.subprocess.run") as run:
-        run.return_value.returncode = 0
+    commands = []
+
+    def run_task(command, **kwargs):
+        commands.append((command, kwargs))
+        if command[0] == "srun":
+            run_streaming_chunk(*command[-3:])
+        return type("Result", (), {"returncode": 0})()
+
+    with patch("chemsmart.jobs.batch.subprocess.run", side_effect=run_task):
         assert run_streaming_npz_batch(manifest_path) == 0
 
-    assert run.call_count == 2
+    assert len(commands) == 4
     assert not (tmp_path / "sample_deferred_npz_inputs").exists()
     report = json.loads(
         (tmp_path / "sample_deferred_npz.report.json").read_text()
@@ -349,13 +357,49 @@ def test_streaming_batch_removes_each_prepared_structure(
         "total": 2,
         "status_file": str(tmp_path / "sample_deferred_npz.status.jsonl"),
     }
-    commands = [call.args[0] for call in run.call_args_list]
-    assert all(command[0] == "srun" for command in commands)
-    assert all("--batch-label" in command for command in commands)
+    assert sum(command[0][0] == "srun" for command in commands) == 2
     assert all(
-        call.kwargs["env"]["OMP_NUM_THREADS"] == "1"
-        for call in run.call_args_list
+        "--batch-label" in command
+        for command, _ in commands
+        if command[0] != "srun"
     )
+    assert all(
+        kwargs["env"]["OMP_NUM_THREADS"] == "1"
+        for command, kwargs in commands
+        if command[0] != "srun"
+    )
+
+
+def test_streaming_batch_shares_one_step_across_molecules(tmp_path):
+    source = Path(__file__).parent / "data/IOTests/revQM9_subset.npz"
+    manifest = {
+        "filename": str(source),
+        "index": "1,2",
+        "base_label": "sample",
+        "queue_capacity": 100,
+        "num_nodes": 1,
+        "cores_per_node": 2,
+        "memory_per_node_gb": 4,
+        "gpus_per_node": 0,
+        "task_cores": 1,
+        "task_memory_gb": 1,
+        "task_gpus": 0,
+        "task_arguments": ["-n", "1", "xtb", "-f", str(source), "sp"],
+    }
+    manifest_path = tmp_path / "sample_deferred_npz.json"
+    manifest_path.write_text(json.dumps(manifest))
+    commands = []
+
+    def run_task(command, **kwargs):
+        commands.append(command)
+        if command[0] == "srun":
+            run_streaming_chunk(*command[-3:])
+        return type("Result", (), {"returncode": 0})()
+
+    with patch("chemsmart.jobs.batch.subprocess.run", side_effect=run_task):
+        assert run_streaming_npz_batch(manifest_path) == 0
+    assert sum(command[0] == "srun" for command in commands) == 1
+    assert sum(command[0] != "srun" for command in commands) == 2
 
 
 def test_npz_batch_prepares_selected_structures(tmp_path, monkeypatch):
