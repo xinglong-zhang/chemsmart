@@ -30,7 +30,7 @@ from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.pyscf.driver import write_pyscf_h5
-from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
+from chemsmart.io.pyscf.output import PySCFH5File, PySCFOutput
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.settings import (
@@ -1766,14 +1766,13 @@ def replace_pyscf_spec_field(logfile, field, value):
     the new value is stored exactly as a real run would store it.
     """
     resultsfile = os.path.splitext(logfile)[0] + ".h5"
-    spec, provenance, status, results = read_pyscf_h5(resultsfile)
-    spec[field] = value
+    stored = PySCFH5File(resultsfile)
     write_pyscf_h5(
         resultsfile,
-        spec=spec,
-        provenance=provenance,
-        status=status,
-        results=results,
+        spec={**stored.spec, field: value},
+        provenance=stored.provenance,
+        status=stored.status,
+        results=stored.results,
     )
 
 

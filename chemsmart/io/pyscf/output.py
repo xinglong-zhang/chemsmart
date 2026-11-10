@@ -69,6 +69,7 @@ class PySCFOutput(FileMixin):
     Attributes:
         filename (str): Path to the PySCF log file.
         resultsfile (str): Path to the structured results file.
+        h5file (PySCFH5File): Reader for that file.
     """
 
     def __init__(self, filename):
@@ -77,46 +78,31 @@ class PySCFOutput(FileMixin):
         self.filename = os.path.abspath(filename)
         stem, _ = os.path.splitext(self.filename)
         self.resultsfile = stem + ".h5"
+        self.h5file = PySCFH5File(self.resultsfile)
 
     # ------------------------------------------------------------------
     # raw payload
     # ------------------------------------------------------------------
 
-    @cached_property
-    def _payload(self):
-        """Return ``(spec, provenance, status, results)`` from the h5 file."""
-        if not os.path.exists(self.resultsfile):
-            raise FileNotFoundError(
-                f"PySCF results file not found: {self.resultsfile}. "
-                f"The calculation did not reach the point of writing results."
-            )
-        try:
-            return read_pyscf_h5(self.resultsfile)
-        except OSError as e:
-            raise ValueError(
-                f"{self.resultsfile} is not a readable PySCF results file: "
-                f"{e}"
-            ) from e
-
     @property
     def spec(self):
         """Settings as they were actually applied."""
-        return self._payload[0]
+        return self.h5file.spec
 
     @property
     def provenance(self):
         """Versions, host, engine, timings and the settings digest."""
-        return self._payload[1]
+        return self.h5file.provenance
 
     @property
     def status(self):
         """Per-stage convergence, termination flag and any typed failure."""
-        return self._payload[2]
+        return self.h5file.status
 
     @property
     def results(self):
         """Numeric result arrays."""
-        return self._payload[3]
+        return self.h5file.results
 
     # ------------------------------------------------------------------
     # provenance / identity
@@ -683,93 +669,143 @@ class PySCFOutput(FileMixin):
         )
 
 
-def read_pyscf_h5(filename):
-    """Read a PySCF HDF5 artifact.
+class PySCFH5File(FileMixin):
+    """Structured results file written by CHEMSMART's PySCF driver.
 
-    Mapping arrays are converted to ordinary Python lists; values below
-    ``results/`` remain exact numpy arrays.
+    The file is read on first access and its layout is checked before any
+    value is returned. Mapping groups decode to ordinary Python values;
+    values below ``results/`` remain exact numpy arrays.
+
+    Attributes:
+        filename (str): Path to the ``label.h5`` file.
     """
-    import h5py
 
-    with h5py.File(filename, "r") as handle:
-        raw_version = handle.attrs.get("schema_version")
-        version = _text(raw_version) if raw_version is not None else None
-        if version not in SUPPORTED_SCHEMA_VERSIONS:
-            raise ValueError(
-                f"Unsupported PySCF results schema {version!r} in "
-                f"{filename}; this CHEMSMART understands "
-                f"{SUPPORTED_SCHEMA_VERSIONS}."
+    #: Top-level groups every supported layout carries.
+    SECTIONS = ("spec", "provenance", "status", "results")
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def spec(self):
+        """Settings as they were actually applied."""
+        return self._sections["spec"]
+
+    @property
+    def provenance(self):
+        """Versions, host, engine, timings and the settings digest."""
+        return self._sections["provenance"]
+
+    @property
+    def status(self):
+        """Per-stage convergence, termination flag and any typed failure."""
+        return self._sections["status"]
+
+    @property
+    def results(self):
+        """Numeric result arrays."""
+        return self._sections["results"]
+
+    @cached_property
+    def _sections(self):
+        """Return every top-level group, decoded, keyed by name."""
+        if not os.path.exists(self.filename):
+            raise FileNotFoundError(
+                f"PySCF results file not found: {self.filename}. "
+                f"The calculation did not reach the point of writing results."
             )
+        try:
+            return self._read()
+        except OSError as e:
+            raise ValueError(
+                f"{self.filename} is not a readable PySCF results file: {e}"
+            ) from e
 
-        _require_nodes(handle, ("spec", "provenance", "status", "results"))
-        for name in ("spec", "provenance", "status", "results"):
-            if not isinstance(handle[name], h5py.Group):
+    def _read(self):
+        """Check the layout and decode every section in one pass."""
+        import h5py
+
+        with h5py.File(self.filename, "r") as handle:
+            raw_version = handle.attrs.get("schema_version")
+            version = (
+                self._text(raw_version) if raw_version is not None else None
+            )
+            if version not in SUPPORTED_SCHEMA_VERSIONS:
                 raise ValueError(
-                    f"PySCF schema {version} requires /{name} to be a group "
-                    f"in {filename}"
+                    f"Unsupported PySCF results schema {version!r} in "
+                    f"{self.filename}; this CHEMSMART understands "
+                    f"{SUPPORTED_SCHEMA_VERSIONS}."
                 )
-        spec = _read_group(handle["spec"])
-        provenance = _read_group(handle["provenance"])
-        status = _read_group(handle["status"])
-        results = _read_group(handle["results"], preserve_arrays=True)
-        return spec, provenance, status, results
 
+            missing = [name for name in self.SECTIONS if name not in handle]
+            if missing:
+                raise ValueError(
+                    f"PySCF results artifact {self.filename} is missing "
+                    f"required nodes: {missing}"
+                )
+            for name in self.SECTIONS:
+                if not isinstance(handle[name], h5py.Group):
+                    raise ValueError(
+                        f"PySCF schema {version} requires /{name} to be a "
+                        f"group in {self.filename}"
+                    )
+            return {
+                name: self._read_group(
+                    handle[name], preserve_arrays=name == "results"
+                )
+                for name in self.SECTIONS
+            }
 
-def _require_nodes(handle, names):
-    """Raise a useful schema error for a missing top-level node."""
-    missing = [name for name in names if name not in handle]
-    if missing:
-        raise ValueError(
-            f"PySCF results artifact {handle.filename} is missing required "
-            f"nodes: {missing}"
-        )
+    @classmethod
+    def _read_group(cls, group, preserve_arrays=False):
+        """Decode a mapping group recursively."""
+        import h5py
 
+        decoded = {}
+        for key in group:
+            node = group[key]
+            if isinstance(node, h5py.Group):
+                decoded[key] = cls._read_group(
+                    node, preserve_arrays=preserve_arrays
+                )
+            else:
+                decoded[key] = cls._read_dataset(
+                    node, preserve_arrays=preserve_arrays
+                )
+        return decoded
 
-def _read_group(group, preserve_arrays=False):
-    """Decode a mapping group recursively."""
-    import h5py
+    @classmethod
+    def _read_dataset(cls, dataset, preserve_arrays=False):
+        """Decode one typed dataset, including the explicit null marker."""
+        if bool(dataset.attrs.get(H5_NULL_ATTRIBUTE, False)):
+            return None
 
-    decoded = {}
-    for key in group:
-        node = group[key]
-        if isinstance(node, h5py.Group):
-            decoded[key] = _read_group(node, preserve_arrays=preserve_arrays)
-        else:
-            decoded[key] = _read_dataset(node, preserve_arrays=preserve_arrays)
-    return decoded
+        value = dataset[()]
+        if preserve_arrays:
+            if isinstance(value, bytes):
+                return value.decode("utf-8")
+            return np.asarray(value)
+        return cls._python_value(value)
 
-
-def _read_dataset(dataset, preserve_arrays=False):
-    """Decode one typed dataset, including the explicit null marker."""
-    if bool(dataset.attrs.get(H5_NULL_ATTRIBUTE, False)):
-        return None
-
-    value = dataset[()]
-    if preserve_arrays:
+    @classmethod
+    def _python_value(cls, value):
+        """Convert an h5py scalar/array into JSON-compatible Python values."""
         if isinstance(value, bytes):
             return value.decode("utf-8")
-        return np.asarray(value)
-    return _python_value(value)
+        if isinstance(value, np.ndarray):
+            return cls._python_value(value.tolist())
+        if isinstance(value, np.generic):
+            return cls._python_value(value.item())
+        if isinstance(value, list):
+            return [cls._python_value(item) for item in value]
+        return value
 
-
-def _python_value(value):
-    """Convert an h5py scalar/array into JSON-compatible Python values."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    if isinstance(value, np.ndarray):
-        return _python_value(value.tolist())
-    if isinstance(value, np.generic):
-        return _python_value(value.item())
-    if isinstance(value, list):
-        return [_python_value(item) for item in value]
-    return value
-
-
-def _text(value):
-    """Decode an h5py string dataset to ``str``."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    return str(value)
+    @staticmethod
+    def _text(value):
+        """Decode an h5py string dataset to ``str``."""
+        if isinstance(value, bytes):
+            return value.decode("utf-8")
+        return str(value)
 
 
 #: Point groups whose rotational symmetry number is not derived from an
