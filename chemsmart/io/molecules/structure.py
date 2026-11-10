@@ -102,15 +102,20 @@ class Molecule:
         where the key is the bonded atom pair indices and the value is
         a list of scale factors for (low, medium, high).
     structure_index_in_file: int | None
-        1-based index of this structure within the source file, if applicable.
+        1-based index of this structure within the source file,
+        if applicable.
     rotational_symmetry_number: int | None
-        Rotational symmetry number of the molecule (from thermochemistry or parser), if available.
+        Rotational symmetry number of the molecule
+        (from thermochemistry or parser), if available.
     mulliken_atomic_charges: dict[str, float] | None
-        Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed), if available.
+        Per-atom Mulliken charges keyed like "O1", "C2" (1-indexed),
+        if available.
     mulliken_spin_densities: dict[str, float] | None
-        Per-atom Mulliken spin densities (same keys as mulliken_atomic_charges), if available.
+        Per-atom Mulliken spin densities (same keys as mulliken_atomic_charges),
+        if available.
     is_optimized_structure: bool | None
-        Whether this structure corresponds to an optimized step/final optimized geometry.
+        Whether this structure corresponds to an optimized step/
+        final optimized geometry.
     dipole_moment: numpy array | None
         Dipole moment [X, Y, Z] components in Debye, if available.
     dipole_moment_magnitude: float | None
@@ -387,10 +392,11 @@ class Molecule:
     @property
     def canonical_positions(self):
         """Canonical atomic positions.
-        The positions are translated to the centre of mass and rotated into
-        the principal-axes frame of the moment-of-inertia tensor, with a
-        deterministic sign convention applied to each axis. The result is
-        invariant under translation and rotation of the original coordinates.
+        The positions are translated to the centre of mass and rotated
+        into the principal-axes frame of the moment-of-inertia tensor,
+        with a deterministic sign convention applied to each axis.
+        The result is invariant under translation and rotation of the
+        original coordinates.
         """
         return canonicalize_positions(self.masses, self.positions)
 
@@ -398,13 +404,13 @@ class Molecule:
     def canonical_geometry(self):
         """Canonical string representation of the molecular geometry.
         Atoms are sorted lexicographically by (symbol, x, y, z) after
-        canonicalization, yielding a representation that is invariant under
-        translation, rotation and atom-index permutation.
+        canonicalization, yielding a representation that is invariant
+        under translation, rotation and atom-index permutation.
 
-        Note on precision: coordinates are rounded to 4 decimal places
-        (~1e-4 Å) to absorb sub-threshold numerical noise in the canonical
-        positions (e.g. floating-point differences across platforms or
-        minor coordinate perturbations). This is an engineering compromise:
+        Note on precision: coordinates are rounded to 3 decimal places
+        (~1e-3 Å) to absorb sub-threshold numerical noise in the canonical
+        positions (e.g. floating-point differences across platforms or minor
+        coordinate perturbations). This is an engineering compromise:
         in rare cases (e.g. perfectly symmetric spherical-top molecules),
         the canonical frame is not uniquely defined due to degeneracy of the
         inertia tensor. As a result, canonical_positions may differ across
@@ -412,8 +418,10 @@ class Molecule:
         canonical_geometry (and thus structure_id) is not strictly guaranteed
         to be invariant in such cases.
         """
-        decimals = 4
-        rounded = np.round(self.canonical_positions, decimals=decimals)
+        decimals = 3
+        rounded = (
+            np.round(self.canonical_positions, decimals=decimals) + 0.0
+        )  # drop negative zero
         atoms = sorted(zip(self.chemical_symbols, rounded.tolist()))
         parts = [
             f"{sym}:{x:.{decimals}f},{y:.{decimals}f},{z:.{decimals}f}"
