@@ -898,6 +898,17 @@ class TestNPZSelection:
         assert len(molecules) == 1
         assert indices == [2]
 
+    def test_negative_slice_reports_positions_in_the_file(
+        self, multiple_molecules_xyz_file
+    ):
+        # crest_conformers.xyz holds 18 structures; these indices label the
+        # submitted jobs (<label>_idx<N>), so they must be the real positions.
+        molecules, indices = Molecule.from_filepath_with_indices(
+            multiple_molecules_xyz_file, "-2:"
+        )
+        assert indices == [17, 18]
+        assert [m.structure_index_in_file for m in molecules] == indices
+
 
 class TestNPZEnergiesWithoutADeclaredDataset:
     """Energies are recorded either way, in each column's fixed unit."""

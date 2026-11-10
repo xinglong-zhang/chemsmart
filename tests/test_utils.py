@@ -1728,17 +1728,15 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         assert result_objects == ["a", "c", "e", "g"]
         assert result_indices == [1, 3, 5, 7]
 
-    def test_slice_on_non_list_sequence_uses_single_object_branch(self):
-        """Slicing a non-list sequence (e.g. a tuple) doesn't produce a
-        `list`, so the function falls back to its "single object from
-        slice" branch and reports just the slice's start index rather
-        than one index per selected item."""
+    def test_slice_on_non_list_sequence_reports_each_position(self):
+        """Slicing a non-list sequence (e.g. a tuple) reports one index per
+        selected item, as for a list."""
         objects = ("a", "b", "c", "d")
         result_objects, result_indices = (
             return_objects_and_indices_from_string_index(objects, "2:4")
         )
         assert result_objects == ("b", "c")
-        assert result_indices == 2
+        assert result_indices == [2, 3]
 
     def test_user_defined_range(self):
         """Test user-defined range format (comma-separated)."""
@@ -1803,6 +1801,44 @@ class TestReturnObjectsAndIndicesFromStringIndex:
         )
         assert result_objects == ["e", "f", "g"]
         assert result_indices == [5, 6, 7]
+
+    @pytest.mark.parametrize(
+        "index, expected_objects, expected_indices",
+        [
+            ("-2:", ["e", "f"], [5, 6]),
+            ("-3:-1", ["d", "e"], [4, 5]),
+            (":-2", ["a", "b", "c", "d"], [1, 2, 3, 4]),
+            ("-4::2", ["c", "e"], [3, 5]),
+        ],
+    )
+    def test_negative_slice_indices_match_selected_objects(
+        self, index, expected_objects, expected_indices
+    ):
+        """Negative slice bounds resolve to the real 1-based positions."""
+        objects = ["a", "b", "c", "d", "e", "f"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, index)
+        )
+        assert result_objects == expected_objects
+        assert result_indices == expected_indices
+
+    def test_slice_past_the_end_reports_only_existing_positions(self):
+        """A slice beyond the list reports one index per selected object."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "5:8")
+        )
+        assert result_objects == ["e"]
+        assert result_indices == [5]
+
+    def test_negative_entry_in_index_list_resolves_to_position(self):
+        """A negative entry in a comma list reports its real position."""
+        objects = ["a", "b", "c", "d", "e"]
+        result_objects, result_indices = (
+            return_objects_and_indices_from_string_index(objects, "1,-1")
+        )
+        assert result_objects == ["a", "e"]
+        assert result_indices == [1, 5]
 
     def test_empty_list_raises_index_error(self):
         """Test that accessing empty list raises IndexError."""
