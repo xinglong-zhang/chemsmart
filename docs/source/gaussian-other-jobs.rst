@@ -5,6 +5,8 @@
 This page covers additional Gaussian job types including multi-step link jobs, custom user-defined calculations, and
 direct input file execution.
 
+For minimum energy crossing-point optimization and analysis, see :doc:`gaussian-mecp`.
+
 ***********
  Link Jobs
 ***********

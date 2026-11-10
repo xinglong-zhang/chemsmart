@@ -126,7 +126,7 @@ Method and Basis Set Options
 
    -  -  ``-B, --aux-basis``
       -  string
-      -  Auxiliary basis set
+      -  Auxiliary basis set (``-a`` is reserved for ``--append-label``)
 
    -  -  ``-e, --extrapolation-basis``
       -  string
@@ -700,6 +700,11 @@ inside the same single ``%tddft`` block.
    UHF/UKS, double-hybrids, or ECPs may need a manual ORCA input via ``orca inp``; CHEMSMART does not auto-inject
    ``ForceECP`` or reshape the reference multiplicity.
 
+MECP analysis and seam following
+================================
+
+See :doc:`orca-mecp` for optimization, frequency analysis, seam following and supported states.
+
 QM/MM
 =====
 
@@ -714,5 +719,6 @@ For detailed information on each job type:
 
 -  :doc:`orca-structure-optimization`
 -  :doc:`orca-transition-state`
+-  :doc:`orca-mecp`
 -  :doc:`orca-direct-input`
 -  :doc:`orca-multiscale-calculations`

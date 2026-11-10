@@ -17,6 +17,7 @@ from .dias import GaussianDIASJob
 from .irc import GaussianIRCJob
 from .job import GaussianComJob, GaussianGeneralJob, GaussianJob
 from .link import GaussianLinkJob
+from .mecp import GaussianMECPJob
 from .modred import GaussianModredJob
 from .nci import GaussianNCIJob
 from .opt import GaussianOptJob
@@ -44,6 +45,7 @@ __all__ = [
     "GaussianGeneralJob",
     "GaussianJob",
     "GaussianLinkJob",
+    "GaussianMECPJob",
     "GaussianModredJob",
     "GaussianNCIJob",
     "GaussianOptJob",

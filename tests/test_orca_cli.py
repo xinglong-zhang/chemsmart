@@ -15,6 +15,8 @@ the merged settings can be inspected without running an actual calculation.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from tests.helpers import invoke_orca_cli, run_orca_and_capture_settings
 
 
@@ -2924,3 +2926,263 @@ class TestOrcaQmmmSubcommand:
         )
         assert result.exit_code == 0, result.output
         assert settings is not None
+
+
+def test_orca_mecp_cli_forwards_state_and_optimization_options(
+    single_molecule_xyz_file,
+):
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "mecp",
+            "--multiplicity1",
+            "1",
+            "--multiplicity2",
+            "3",
+            "--mode",
+            "anafreq",
+            "--maxiter",
+            "80",
+            "--energy-diff-tol",
+            "0.0002",
+            "--max-steps",
+            "42",
+        ],
+        ctx_obj={"jobrunner": MagicMock()},
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.multiplicity1 == 1
+    assert settings.multiplicity2 == 3
+    assert settings.mode == "anafreq"
+    assert settings.hessian_method == "analytic"
+    assert settings.mecp_numfreq
+    assert settings.maxiter == 80
+    assert settings.max_steps == 42
+    assert settings.energy_diff_tol == 0.0002
+
+
+def test_orca_mecp_cli_rejects_conflicting_modes(single_molecule_xyz_file):
+    result = invoke_orca_cli(
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "mecp",
+            "--multiplicity1",
+            "1",
+            "--multiplicity2",
+            "3",
+            "--mode",
+            "anafreq",
+            "opt",
+        ],
+        catch_exceptions=True,
+    )
+    assert result.exit_code != 0
+    assert "Positional mode and --mode must agree" in result.output
+
+
+def test_orca_mecp_cli_native_options_and_frozen_atoms(
+    single_molecule_xyz_file, tmp_path
+):
+    guess = tmp_path / "guess.gbw"
+    guess.write_text("orbital guess")
+    solvent = tmp_path / "solvent.cosmorsxyz"
+    solvent.write_text("solvent")
+    job_cls = MagicMock()
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "mecp",
+            "-m1",
+            "1",
+            "-m2",
+            "3",
+            "numfreq",
+            "--broken-sym",
+            "1,2",
+            "--moinp",
+            str(guess),
+            "--casscf-nel",
+            "2",
+            "--casscf-norb",
+            "2",
+            "--casscf-mult",
+            "1,3",
+            "--casscf-nroots",
+            "2,1",
+            "--casscf-bweight",
+            "1,2",
+            "--freeze-atoms",
+            "1,3-4",
+            "--invert-constraints",
+            "--solvent-options",
+            "Epsilon 78.36",
+            "--solventfilename",
+            str(solvent),
+        ],
+        ctx_obj={"jobrunner": MagicMock()},
+        job_cls=job_cls,
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.mode == "numfreq"
+    assert settings.hessian_method == "numerical"
+    assert not settings.mecp_numfreq_only
+    assert settings.broken_sym == [1, 2]
+    assert settings.moinp == str(guess)
+    assert (settings.casscf_nel, settings.casscf_norb) == (2, 2)
+    assert settings.casscf_mult == [1, 3]
+    assert settings.casscf_nroots == [2, 1]
+    assert settings.casscf_bweight == [1, 2]
+    assert settings.invert_constraints
+    assert settings.additional_solvent_options == "Epsilon 78.36"
+    assert settings.solventfilename == str(solvent)
+    assert job_cls.call_args.kwargs["molecule"].frozen_atoms[:5] == [
+        -1,
+        0,
+        -1,
+        -1,
+        0,
+    ]
+
+
+def test_orca_mecp_cli_followseam_controls(single_molecule_xyz_file):
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "mecp",
+            "-m1",
+            "1",
+            "-m2",
+            "3",
+            "followseam",
+            "--hessian-method",
+            "analytic",
+            "--hess-step-size",
+            "0.002",
+            "--displacement",
+            "0.1",
+            "--max-follow-steps",
+            "12",
+        ],
+        ctx_obj={"jobrunner": MagicMock()},
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.follow_seam_imaginary_mode
+    assert settings.mecp_numfreq
+    assert settings.hessian_method == "analytic"
+    assert settings.hess_step_size == 0.002
+    assert settings.seam_mode_displacement == 0.1
+    assert settings.seam_mode_max_steps == 12
+
+
+@pytest.mark.parametrize(
+    "options, mode, only",
+    [
+        ([], "opt", False),
+        (["numfreq", "--only"], "numfreq", True),
+        (["anafreq", "--mode", "anafreq", "--only"], "anafreq", True),
+    ],
+)
+def test_orca_mecp_cli_default_and_analysis_modes(
+    single_molecule_xyz_file, options, mode, only
+):
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "mecp",
+            "-m1",
+            "1",
+            "-m2",
+            "3",
+            *options,
+        ],
+        ctx_obj={"jobrunner": MagicMock()},
+    )
+    assert result.exit_code == 0, result.output
+    assert settings.mode == mode
+    assert settings.mecp_numfreq_only is only
+    assert settings.hessian_method == (
+        "analytic" if mode == "anafreq" else "numerical"
+    )
+    assert settings.broken_sym is None
+    assert settings.casscf_mult is None
+    assert settings.maxiter == 200
+
+
+@pytest.mark.parametrize(
+    "options, message",
+    [
+        (["--only"], "--only requires anafreq or numfreq"),
+        (["--maxiter", "0"], "maxiter must be positive"),
+        (["--casscf-nel", "2"], "requires both casscf_nel and casscf_norb"),
+        (["--broken-sym", "1"], "requires two positive integers"),
+    ],
+)
+def test_orca_mecp_cli_invalid_settings_do_not_create_job(
+    single_molecule_xyz_file, options, message
+):
+    job_cls = MagicMock()
+    result, settings = run_orca_and_capture_settings(
+        "chemsmart.jobs.orca.mecp.ORCAMECPJob",
+        [
+            "-p",
+            "gas_solv",
+            "-f",
+            single_molecule_xyz_file,
+            "-c",
+            "0",
+            "-m",
+            "1",
+            "mecp",
+            "-m1",
+            "1",
+            "-m2",
+            "3",
+            *options,
+        ],
+        ctx_obj={"jobrunner": MagicMock()},
+        job_cls=job_cls,
+        catch_exceptions=True,
+    )
+    assert result.exit_code != 0
+    assert message in str(result.exception)
+    job_cls.assert_not_called()
+    assert settings is None
