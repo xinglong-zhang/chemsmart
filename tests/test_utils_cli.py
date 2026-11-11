@@ -439,6 +439,10 @@ class TestUpdateIrcLabel:
     def test_reverse_direction(self):
         assert update_irc_label("mol", "reverse", False) == "molr"
 
+    def test_backward_is_reverse(self):
+        """ORCA and PySCF call the reverse branch backward."""
+        assert update_irc_label("mol", "backward", False) == "molr"
+
     def test_forward_with_flat_irc(self):
         assert update_irc_label("mol", "forward", True) == "molf_flat"
 

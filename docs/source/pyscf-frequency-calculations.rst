@@ -96,5 +96,11 @@ geometry is then not a stationary point at the new level, or if the result is no
 The ``.h5`` file can be given instead of the ``.out``. CHEMSMART reads the geometry from the ``.h5`` either way, so
 giving the ``.out`` requires the two files to stay in the same directory. See :doc:`pyscf-results`.
 
-The ``thermochemistry`` command does not yet accept PySCF output; enthalpies, entropies, and Gibbs free energies
-currently come from Gaussian, ORCA, or xTB results. See :doc:`thermochemistry-analysis`.
+Pass the result of a ``hess`` job, or of an ``opt`` with ``freq: True``, to the ``thermochemistry`` command for
+enthalpies, entropies, and Gibbs free energies:
+
+.. code:: bash
+
+   chemsmart run thermochemistry -T 298.15 -f molecule_opt_gas_phase.out
+
+See :doc:`thermochemistry-analysis`.

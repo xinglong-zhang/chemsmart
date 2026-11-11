@@ -15,6 +15,7 @@ class PySCFHessJob(PySCFJob):
     """
 
     TYPE = "pyscf_hess"
+    JOBTYPE = "hess"
 
     @property
     def stages(self):

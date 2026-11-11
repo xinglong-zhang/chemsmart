@@ -2,18 +2,21 @@
 
 A PySCF project YAML uses the same ``gas:`` / ``solv:`` shape as Gaussian and
 ORCA, because PySCF's functional, basis and phase genuinely vary per job --
-which is the reason that split exists. ``gas:`` feeds ``opt`` and ``hess``;
-``solv:`` feeds ``sp``. That is the standard workflow: optimise and take
-frequencies at one level, refine the single point in solvent.
+which is the reason that split exists. ``gas:`` feeds ``opt``, ``hess``,
+``ts`` and ``irc``; ``solv:`` feeds ``sp``. That is the standard workflow:
+optimise and take frequencies at one level, refine the single point in
+solvent.
 
 Unlike Gaussian and ORCA, PySCF passes its own jobtype lists to
-``read_molecular_job_yaml`` so that exactly three configs are produced rather
+``read_molecular_job_yaml`` so that exactly five configs are produced rather
 than the fifteen the shared default emits.
 """
 
 import hashlib
 import logging
 import os
+
+import yaml
 
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.settings.user import CHEMSMARTUserSettings
@@ -24,13 +27,18 @@ user_settings = CHEMSMARTUserSettings()
 logger = logging.getLogger(__name__)
 
 #: Jobtypes fed by the ``gas:`` section of a PySCF project YAML.
-PYSCF_GAS_PHASE_JOBS = ["opt", "hess"]
+PYSCF_GAS_PHASE_JOBS = ["opt", "hess", "ts", "irc"]
 
 #: Jobtypes fed by the ``solv:`` section.
 PYSCF_SP_JOBS = ["sp"]
 
 #: Every jobtype a PySCF project YAML produces.
 PYSCF_JOBTYPES = PYSCF_GAS_PHASE_JOBS + PYSCF_SP_JOBS
+
+#: Top-level sections a PySCF project YAML may contain. The shared reader
+#: ignores any other section, so a ``td:`` block or a misspelt ``gass:``
+#: would silently configure nothing.
+PYSCF_PROJECT_SECTIONS = ("gas", "solv")
 
 
 class PySCFProjectSettings(RegistryMixin):
@@ -66,6 +74,16 @@ class PySCFProjectSettings(RegistryMixin):
     def hess_settings(self):
         settings = self.main_settings().copy()
         settings.jobtype = "hess"
+        return settings
+
+    def ts_settings(self):
+        settings = self.main_settings().copy()
+        settings.jobtype = "ts"
+        return settings
+
+    def irc_settings(self):
+        settings = self.main_settings().copy()
+        settings.jobtype = "irc"
         return settings
 
     @classmethod
@@ -128,10 +146,19 @@ class YamlPySCFProjectSettings(PySCFProjectSettings):
 
     PROJECT_NAME = "yaml"
 
-    def __init__(self, sp_settings, opt_settings, hess_settings):
+    def __init__(
+        self,
+        sp_settings,
+        opt_settings,
+        hess_settings,
+        ts_settings,
+        irc_settings,
+    ):
         self._sp_settings = sp_settings
         self._opt_settings = opt_settings
         self._hess_settings = hess_settings
+        self._ts_settings = ts_settings
+        self._irc_settings = irc_settings
 
     def sp_settings(self):
         return self._sp_settings.copy()
@@ -141,6 +168,12 @@ class YamlPySCFProjectSettings(PySCFProjectSettings):
 
     def hess_settings(self):
         return self._hess_settings.copy()
+
+    def ts_settings(self):
+        return self._ts_settings.copy()
+
+    def irc_settings(self):
+        return self._irc_settings.copy()
 
     @classmethod
     def from_yaml(cls, filename):
@@ -154,13 +187,29 @@ class YamlPySCFProjectSettingsBuilder:
         self.filename = filename
 
     def build(self):
+        self._check_sections()
         project_settings = YamlPySCFProjectSettings(
             sp_settings=self._project_settings_for_job("sp"),
             opt_settings=self._project_settings_for_job("opt"),
             hess_settings=self._project_settings_for_job("hess"),
+            ts_settings=self._project_settings_for_job("ts"),
+            irc_settings=self._project_settings_for_job("irc"),
         )
         project_settings.PROJECT_NAME = self._parse_project_name()
         return project_settings
+
+    def _check_sections(self):
+        """Raise if the project YAML has a section PySCF would not read."""
+        with open(self.filename) as handle:
+            project = yaml.safe_load(handle) or {}
+        unknown = sorted(set(project) - set(PYSCF_PROJECT_SECTIONS))
+        if unknown:
+            raise ValueError(
+                f"PySCF project {self.filename} has sections that no PySCF "
+                f"job reads: {', '.join(unknown)}. A PySCF project has only "
+                f"{' and '.join(PYSCF_PROJECT_SECTIONS)}: 'gas' configures "
+                "opt, hess, ts and irc, 'solv' configures sp."
+            )
 
     def _read_config(self):
         from chemsmart.jobs.settings import read_molecular_job_yaml

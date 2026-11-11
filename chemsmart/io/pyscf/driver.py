@@ -16,11 +16,14 @@ chemistry: pyscf is imported only inside the functions that need it, and the
 configuration is parsed only when run as a script.
 """
 
+import io
 import json
 import os
 import platform
+import re
 import socket
 import sys
+import tempfile
 import time
 import traceback
 
@@ -68,10 +71,17 @@ APPLIED_SPEC_FIELDS = (
     "opt_maxsteps",
     "forces",
     "point_group_tol",
+    "correlation",
+    "scf_stability",
+    "irc_direction",
     "num_threads",
     "max_memory_mb",
     "settings_digest",
 )
+
+#: PySCF's own criterion: a reference is unstable along a direction when the
+#: lowest eigenvalue of that orbital-rotation Hessian is below this (Eh).
+STABILITY_THRESHOLD = -1e-5
 
 #: Replaced with the job's JSON configuration when the script is generated.
 CONFIG_JSON = """__CHEMSMART_CONFIG__"""
@@ -86,6 +96,28 @@ def _apply_threads(config):
     from pyscf import lib
 
     lib.num_threads(config["num_threads"])
+
+
+def _basis_ecp(config):
+    """Return, by element, the core potential the named basis defines.
+
+    Gaussian and ORCA attach def2's core potential to iodine whenever def2
+    is named. PySCF attaches none unless told and, given def2's valence
+    functions alone, runs the element all-electron without complaint, so
+    the potential is taken from the library entry the functions come from.
+    """
+    from pyscf import gto
+    from pyscf.lib.exceptions import BasisNotFoundError
+
+    ecp = {}
+    for symbol in sorted(set(config["symbols"])):
+        try:
+            defined = gto.basis.load_ecp(config["basis"], symbol)
+        except BasisNotFoundError:  # the orbital basis build reports it
+            defined = None
+        if defined:
+            ecp[symbol] = config["basis"]
+    return ecp
 
 
 def _build_mole(config, log_path):
@@ -107,7 +139,142 @@ def _build_mole(config, log_path):
     )
     if config["max_memory_mb"]:
         kwargs["max_memory"] = config["max_memory_mb"]
+    ecp = _basis_ecp(config)
+    if ecp:
+        kwargs["ecp"] = ecp
     return pyscf.M(**kwargs)
+
+
+def _ecp_core_electrons(mol):
+    """Return the core electrons replaced by a potential, by element.
+
+    None when no element carries one, so an all-electron result keeps the
+    same record identity it had before this was recorded.
+    """
+    cores = {}
+    for index in range(mol.natm):
+        replaced = int(mol.atom_nelec_core(index))
+        if replaced:
+            cores[mol.atom_pure_symbol(index)] = replaced
+    return cores or None
+
+
+def _parsed_functional(name):
+    """Return PySCF's reading of a functional string, or None if it fails."""
+    from pyscf.dft import libxc
+
+    try:
+        return libxc.parse_xc(name)
+    except Exception:  # noqa: BLE001 - any parse failure means "not a name"
+        return None
+
+
+def _refuse_ambiguous_functional(xc):
+    """Stop if PySCF would evaluate a different functional from the one named.
+
+    ``B3LYP_WITH_VWN5`` in a PySCF configuration file remaps B3LYP, B3P86 and
+    X3LYP to their VWN5 variants when PySCF is imported, so a run under that
+    setting would compute a different functional from the one requested and
+    recorded. Separately, PySCF reads a '-' as subtraction unless the name is
+    in its own tables: ``cam-b3lyp`` is one functional, ``b3lyp-vwn3`` is
+    B3LYP minus VWN. A genuine name parses the same with '_' for '-'.
+    """
+    from pyscf import __config__
+
+    # A configuration file defines only the attributes it sets.
+    if getattr(__config__, "B3LYP_WITH_VWN5", False):
+        raise ValueError(
+            "The PySCF configuration sets B3LYP_WITH_VWN5, which changes the "
+            "meaning of B3LYP, B3P86 and X3LYP. Remove it from the PySCF "
+            "configuration file and request 'b3lyp5' where the VWN5 variant "
+            "is intended."
+        )
+
+    if "-" in xc:
+        named = xc.replace("-", "_")
+        if _parsed_functional(xc) != _parsed_functional(named):
+            hint = ""
+            if _parsed_functional(named) is not None:
+                hint = " Did you mean %r?" % named
+            raise ValueError(
+                "PySCF does not read %r as one functional: it treats the "
+                "'-' as subtraction or as a dispersion suffix.%s" % (xc, hint)
+            )
+
+
+def _reference_family(mf):
+    """Return the SCF reference the mean-field object actually is.
+
+    Read from the class hierarchy, so it holds whatever PySCF chose, and
+    after density fitting or a solvent model wraps the object.
+    """
+    names = {cls.__name__ for cls in type(mf).__mro__}
+    # Most specific first: RKS derives from RHF, ROKS from ROHF and RHF.
+    for family in ("ROKS", "UKS", "RKS", "ROHF", "UHF", "RHF"):
+        if family in names:
+            return family
+    raise ValueError(
+        "Cannot identify the SCF reference of %s" % type(mf).__name__
+    )
+
+
+def _applied_functional(mf, mol):
+    """Return the exchange-correlation functional PySCF will evaluate.
+
+    Component ids are those of the backend named in ``backend``. The exact
+    (HF) exchange fractions follow PySCF's convention: equal for a global
+    hybrid, short- and long-range parts for a range-separated hybrid.
+    """
+    numint = mf._numint
+    components = numint.libxc.parse_xc(mf.xc)[1]
+    omega, long_range, short_range = numint.rsh_and_hybrid_coeff(
+        mf.xc, spin=mol.spin
+    )
+    return {
+        "name": str(mf.xc),
+        "backend": numint.libxc.__name__.rsplit(".", 1)[-1],
+        "component_ids": [int(xc_id) for xc_id, _ in components],
+        "component_coefficients": [float(coef) for _, coef in components],
+        "hf_exchange_short_range": float(short_range),
+        "hf_exchange_long_range": float(long_range),
+        "range_separation_omega": float(omega),
+        "nonlocal_correlation": bool(mf.do_nlc()),
+    }
+
+
+def _applied_numerics(mf):
+    """Return the numerical settings PySCF ran with, defaults resolved.
+
+    Unset settings take PySCF defaults that a configuration file or a new
+    release can change, so the values used are recorded, not inferred.
+    """
+    numerics = {
+        "conv_tol": float(mf.conv_tol),
+        "max_cycle": int(mf.max_cycle),
+        "grid": None,
+        "auxbasis": None,
+    }
+    grids = getattr(mf, "grids", None)  # absent on Hartree-Fock objects
+    if grids is not None:
+        prune = grids.prune
+        numerics["grid"] = {
+            "level": int(grids.level),
+            "atom_grid": (
+                [int(n) for n in grids.atom_grid] if grids.atom_grid else None
+            ),
+            "prune": getattr(prune, "__name__", None),
+            "radial": grids.radi_method.__name__,
+            "becke_scheme": grids.becke_scheme.__name__,
+            "num_points": int(grids.weights.size),
+        }
+    with_df = getattr(mf, "with_df", None)  # absent without fitting
+    if with_df is not None:
+        auxbasis = with_df.auxbasis
+        # A generated even-tempered set has no name to record.
+        numerics["auxbasis"] = (
+            auxbasis if isinstance(auxbasis, str) else "generated"
+        )
+    return numerics
 
 
 def _build_method(config, mol):
@@ -136,6 +303,7 @@ def _build_method(config, mol):
     if config["xc"] is None:
         mf = scf.HF(mol)
     else:
+        _refuse_ambiguous_functional(config["xc"])
         mf = dft.KS(mol, xc=config["xc"])
         if config["atom_grid"]:
             mf.grids.atom_grid = tuple(config["atom_grid"])
@@ -181,27 +349,202 @@ def _run_opt(config, mf):
 
     assert_convergence is disabled so that a failed optimisation still
     produces a results file recording the failure, rather than raising with
-    no artifact. Downstream, normal_termination stays False.
+    no artifact. Downstream, normal_termination stays False. A correlated
+    method is optimised on its own gradient, not on the reference's.
     """
-    solver = config["opt_solver"]
+    optimizer = config["opt_solver"]
     maxsteps = config["opt_maxsteps"]
-    if solver == "geometric":
+    target = mf
+    if config["correlation"] is not None:
+        target = _correlated_solver(mf, config["correlation"])
+    if optimizer == "geometric":
         from pyscf.geomopt import geometric_solver
 
         return geometric_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
+            target, assert_convergence=False, maxsteps=maxsteps
         )
-    if solver == "berny":
+    if optimizer == "berny":
         from pyscf.geomopt import berny_solver
 
         return berny_solver.kernel(
-            mf, assert_convergence=False, maxsteps=maxsteps
+            target, assert_convergence=False, maxsteps=maxsteps
         )
-    if solver == "ase":
+    if optimizer == "ase":
         from pyscf.geomopt import ase_solver
 
-        return ase_solver.kernel(mf, target="atoms", max_steps=maxsteps)
-    raise ValueError("Unknown opt_solver: %s" % solver)
+        return ase_solver.kernel(target, target="atoms", max_steps=maxsteps)
+    raise ValueError("Unknown opt_solver: %s" % optimizer)
+
+
+def _run_ts(config, mf):
+    """Search for a first-order saddle point; return (converged, Mole).
+
+    geomeTRIC's P-RFO search starts from PySCF's analytic Hessian of the
+    guess, which PySCF's geomeTRIC interface computes and hands over.
+    """
+    from pyscf.geomopt import geometric_solver
+
+    return geometric_solver.kernel(
+        mf,
+        assert_convergence=False,
+        maxsteps=config["opt_maxsteps"],
+        transition=True,
+        hessian=True,
+    )
+
+
+def _check_saddle_order(ts_status, frequencies):
+    """Count the imaginary modes of a transition-state search's result.
+
+    The optimiser converging only means it found a stationary point; it is a
+    transition state only with exactly one imaginary (negative) frequency,
+    the convention CHEMSMART's thermochemistry applies to TS jobs.
+    """
+    imaginary = [float(f) for f in frequencies if f < 0.0]
+    ts_status["saddle_order"] = len(imaginary)
+    ts_status["imaginary_frequencies"] = imaginary
+    if len(imaginary) != 1:
+        ts_status["converged"] = False
+        ts_status["not_a_transition_state"] = (
+            "%d imaginary modes instead of one" % len(imaginary)
+        )
+
+
+def _run_irc(config, mf, mol, start_energy):
+    """Follow the reaction path down from a first-order saddle point.
+
+    Returns ``(stage_status, path)``. ``path`` is None when no branch was
+    followed, else ``(positions, energies)`` in Angstrom and Hartree, ordered
+    from the backward end through the start structure to the forward end.
+
+    Each branch is its own geomeTRIC run. Asked for both at once, geomeTRIC
+    1.1.1 starts the backward branch even when the forward one ran out of
+    steps, so a single success would not show that both branches finished.
+    """
+    import geometric
+    from pyscf import lib
+    from pyscf.geomopt import geometric_solver
+    from pyscf.hessian import thermo
+
+    # The analytic Hessian both proves the start is a transition state and
+    # gives geomeTRIC the imaginary mode to leave it along.
+    hessian = mf.Hessian().kernel()
+    frequencies = thermo.harmonic_analysis(mol, hessian, imaginary_freq=False)[
+        "freq_wavenumber"
+    ]
+    stage_status = {}
+    _check_saddle_order(stage_status, frequencies)
+    if "not_a_transition_state" in stage_status:
+        return stage_status, None
+
+    requested = config["irc_direction"]
+    if requested == "both":
+        directions = ("forward", "backward")
+    else:
+        directions = (requested,)
+    options = {"irc": True, "maxiter": config["opt_maxsteps"]}
+    # As PySCF's own geomeTRIC wrapper does: geomeTRIC installed from PyPI
+    # ships without the logging configuration it reads.
+    package = os.path.dirname(geometric.optimize.__file__)
+    if not os.path.exists(os.path.join(package, "log.ini")):
+        options["logIni"] = os.path.join(
+            os.path.dirname(geometric_solver.__file__), "log.ini"
+        )
+
+    start = mol.atom_coords(unit="Angstrom")
+    natm = mol.natm
+    branches = {}
+    paths = {}
+    # geomeTRIC's own files are scratch; the path is stored in the HDF5.
+    with tempfile.TemporaryDirectory(dir=lib.param.TMPDIR) as scratch:
+        hessian_file = os.path.join(scratch, "hessian.txt")
+        np.savetxt(
+            hessian_file,
+            hessian.transpose(0, 2, 1, 3).reshape(3 * natm, 3 * natm),
+        )
+        for direction in directions:
+            branches[direction], paths[direction] = _follow_irc_branch(
+                mf,
+                direction,
+                "file:" + hessian_file,
+                os.path.join(scratch, direction),
+                options,
+                start,
+            )
+
+    stage_status["branches"] = branches
+    stage_status["converged"] = all(
+        branch["converged"] for branch in branches.values()
+    )
+    if not any(path is not None for path in paths.values()):
+        return stage_status, None
+
+    positions = [start]
+    energies = [start_energy]
+    if paths.get("backward") is not None:
+        backward_positions, backward_energies = paths["backward"]
+        positions = list(backward_positions[:0:-1]) + positions
+        energies = list(backward_energies[:0:-1]) + energies
+    stage_status["ts_index"] = len(positions) - 1
+    if paths.get("forward") is not None:
+        forward_positions, forward_energies = paths["forward"]
+        positions += list(forward_positions[1:])
+        energies += list(forward_energies[1:])
+    path = (
+        np.asarray(positions, dtype=float),
+        np.asarray(energies, dtype=float),
+    )
+    return stage_status, path
+
+
+def _follow_irc_branch(mf, direction, hessian, prefix, options, start):
+    """Run one IRC branch; return ``(branch_status, path or None)``.
+
+    Uses the public ``PySCFEngine`` rather than PySCF's ``kernel`` wrapper,
+    whose IRC call fails in geomeTRIC 1.1.1: the IRC reads the fragment
+    topology (``geometric/optimize.py``, ``len(M.molecules)``), which the
+    wrapper never builds. Nothing in either library is patched.
+    """
+    import geometric
+    from pyscf.geomopt import geometric_solver
+
+    scanner = mf.nuc_grad_method().as_scanner()
+    engine = geometric_solver.PySCFEngine(scanner)
+    # The driver builds its Mole without symmetry, so no reorientation
+    # needs muting here, unlike in PySCF's wrapper.
+    engine.mol = scanner.mol.copy()
+    engine.M.build_topology()
+    # An SCF that did not converge at a step would put a wrong energy on
+    # the path, so it ends the branch instead.
+    engine.assert_convergence = True
+    try:
+        progress = geometric.optimize.run_optimizer(
+            customengine=engine,
+            input=prefix,
+            irc_direction=direction,
+            hessian=hessian,
+            **options,
+        )
+    except geometric.errors.GeomOptNotConvergedError:
+        reason = "no minimum within %d steps" % options["maxiter"]
+        return {"converged": False, "reason": reason}, None
+    except (RuntimeError, geometric.errors.IRCError) as error:
+        reason = "%s: %s" % (type(error).__name__, error)
+        return {"converged": False, "reason": reason}, None
+
+    positions = np.asarray(progress.xyzs, dtype=float)
+    energies = np.asarray(progress.qm_energies, dtype=float)
+    if np.abs(positions[0] - start).max() > 1e-6:
+        raise RuntimeError(
+            "geomeTRIC's %s IRC path does not begin at the start structure"
+            % direction
+        )
+    branch = {
+        "converged": True,
+        "points": len(positions) - 1,
+        "endpoint_energy": float(energies[-1]),
+    }
+    return branch, (positions, energies)
 
 
 def _provenance(config, started_at, ended_at, wall_seconds):
@@ -357,6 +700,140 @@ def _record_optional(results, status, name, compute):
         sys.stderr.write("Skipped %s: %s\n" % (name, reason))
 
 
+def _correlated_solver(mf, correlation):
+    """Return the MP2 or CCSD object for the reference, configured.
+
+    Frozen orbitals are PySCF's chemical core, counted after any core
+    potential. CCSD(T) is CCSD plus its perturbative triples correction.
+    """
+    if correlation["method"] == "mp2":
+        from pyscf import mp
+
+        solver = mp.MP2(mf)
+    else:
+        from pyscf import cc
+
+        solver = cc.CCSD(mf)
+        if correlation["max_cycle"] is not None:
+            solver.max_cycle = int(correlation["max_cycle"])
+        if correlation["conv_tol"] is not None:
+            solver.conv_tol = float(correlation["conv_tol"])
+    if correlation["frozen_core"]:
+        solver.set_frozen()
+    return solver
+
+
+def _run_correlation(mf, correlation):
+    """Run the correlated method on the converged reference.
+
+    Return the stage status, the correlated quantities, the total energy and
+    the solver. Unconverged iterations give no quantities and no total: such
+    numbers are not results. The solver class is recorded because it shows
+    which algorithm ran (RMP2, UCCSD, ...; a density-fitted one has its own
+    name).
+    """
+    method = correlation["method"]
+    solver = _correlated_solver(mf, correlation)
+    solver.kernel()
+    # MP2 is a closed formula: there are no iterations to converge.
+    converged = True if method == "mp2" else bool(solver.converged)
+    stage_status = {
+        "converged": converged,
+        "solver": type(solver).__name__,
+        "frozen_orbitals": int(solver.frozen or 0),
+    }
+    if not converged:
+        return stage_status, {}, None, solver
+
+    quantities = {"correlation_energy": float(solver.e_corr)}
+    total = float(solver.e_tot)
+    if method == "ccsd(t)":
+        triples = float(solver.ccsd_t())
+        quantities["ccsd_correlation_energy"] = float(solver.e_corr)
+        quantities["triples_correction"] = triples
+        quantities["correlation_energy"] = float(solver.e_corr) + triples
+        total += triples
+    return stage_status, quantities, total, solver
+
+
+def _scf_stability(mf):
+    """Return PySCF's stability analysis of the converged reference.
+
+    Each question is recorded under its own name with its lowest Hessian
+    eigenvalue in Eh, normalised as that question's own matrix is, so values
+    compare within a question only. PySCF answers real -> complex inside the
+    external analysis but returns only the other verdict, so the eigenvalues
+    are read from the analysis' own log, captured in memory; a value it did
+    not print stays None, never "stable". An ROHF reference has no external
+    analysis. Nothing follows an instability: the requested wavefunction
+    remains the result.
+    """
+    from pyscf import lib
+    from pyscf.scf import stability
+
+    reference = _reference_family(mf)
+    if reference in ("ROHF", "ROKS"):
+        prefix, internal, external, question = (
+            "rohf",
+            stability.rohf_internal,
+            None,
+            None,
+        )
+    elif reference in ("UHF", "UKS"):
+        prefix, internal, external, question = (
+            "uhf",
+            stability.uhf_internal,
+            stability.uhf_external,
+            "UHF/UKS -> GHF/GKS",
+        )
+    else:
+        prefix, internal, external, question = (
+            "rhf",
+            stability.rhf_internal,
+            stability.rhf_external,
+            "RHF/RKS -> UHF/UKS",
+        )
+    stream = io.StringIO()
+    log = lib.logger.Logger(stream, lib.logger.INFO)
+    # Two calls, so the internal answer survives if the external one fails.
+    _, internal_stable = internal(mf, verbose=log, return_status=True)
+    external_stable = None
+    if external is not None:
+        _, external_stable = external(mf, verbose=log, return_status=True)
+
+    lowest = {}
+    pattern = re.compile(r"(\w+): lowest eigs of H = (.*)")
+    for line in stream.getvalue().splitlines():
+        match = pattern.match(line.strip())
+        if match:
+            numbers = re.findall(r"-?\d+\.?\d*(?:[eE][-+]?\d+)?", match[2])
+            if numbers:
+                lowest[match[1]] = min(float(n) for n in numbers)
+
+    def answer(name, stable):
+        eigenvalue = lowest.get(f"{prefix}_{name}")
+        if stable is None and eigenvalue is not None:
+            stable = eigenvalue >= STABILITY_THRESHOLD
+        return {
+            "stable": None if stable is None else bool(stable),
+            "lowest_eigenvalue": eigenvalue,
+        }
+
+    record = {
+        "reference": reference,
+        "internal": answer("internal", internal_stable),
+        "real_to_complex": None,
+        "external": None,
+    }
+    if external is not None:
+        record["real_to_complex"] = answer("real2complex", None)
+        record["external"] = {
+            "question": question,
+            **answer("external", external_stable),
+        }
+    return record
+
+
 def _stages_succeeded(status):
     """Return whether every stage recorded so far succeeded."""
     return all(
@@ -391,8 +868,21 @@ def main(config):
         # dielectric.  Echo the value actually applied, not the controller's
         # unresolved placeholder.
         spec["solvent_eps"] = config.get("solvent_eps")
+        # Record what PySCF will compute, not only the names requested.
+        spec["ecp_core_electrons"] = _ecp_core_electrons(mol)
+        spec["reference"] = _reference_family(mf)
+        spec["xc_applied"] = None
+        if config["xc"] is not None:
+            _record_optional(
+                spec,
+                status,
+                "xc_applied",
+                lambda: _applied_functional(mf, mol),
+            )
 
         energies = []
+        correlated_energies = []
+        correlated = None  # the converged MP2 or CCSD object, if any
         for stage in config["stages"]:
             current_stage = stage
             if stage == "scf":
@@ -405,8 +895,9 @@ def main(config):
                     # Historical alias retained for existing consumers.
                     stage_status["cycles"] = int(cycles)
                 status["stages"]["scf"] = stage_status
-            elif stage == "opt":
-                optimizer_converged, mol_eq = _run_opt(config, mf)
+            elif stage in ("opt", "ts"):
+                search = _run_opt if stage == "opt" else _run_ts
+                optimizer_converged, mol_eq = search(config, mf)
                 # Re-converge on the optimised geometry so that every
                 # reported property belongs to the same structure.
                 mf.reset(mol_eq)
@@ -424,7 +915,34 @@ def main(config):
                 cycles = getattr(mf, "cycles", None)
                 if cycles is not None:
                     stage_status["final_scf_iterations"] = int(cycles)
-                status["stages"]["opt"] = stage_status
+                if stage == "ts":
+                    # Set from the Hessian when one is computed; until then
+                    # the structure is not known to be a saddle point.
+                    stage_status["saddle_order"] = None
+                status["stages"][stage] = stage_status
+            elif stage == "irc":
+                # A path from an unconverged reference starts nowhere.
+                if not _stages_succeeded(status):
+                    status["stages"]["irc"] = {
+                        "converged": False,
+                        "skipped_because": "an earlier stage failed",
+                    }
+                    continue
+                dm = mf.make_rdm1()
+                stage_status, path = _run_irc(config, mf, mol, energies[-1])
+                if path is not None:
+                    results["irc_positions"], results["irc_energies"] = path
+                if "branches" in stage_status:
+                    # The path's gradient scanners share objects such as the
+                    # density-fitting tensors with mf. Restore them to the
+                    # start structure, whose properties are reported below.
+                    mf.reset(mol)
+                    mf.kernel(dm0=dm)
+                    stage_status["final_scf_converged"] = bool(mf.converged)
+                    stage_status["converged"] = bool(
+                        stage_status["converged"] and mf.converged
+                    )
+                status["stages"]["irc"] = stage_status
             elif stage == "hess":
                 # Frequencies are only meaningful at a converged stationary
                 # point, and a Hessian is too costly to compute regardless.
@@ -459,6 +977,28 @@ def main(config):
                 # PySCF exposes no CPHF convergence flag, so this records that
                 # the stage ran to the end, not that it converged.
                 status["stages"]["hess"] = {"completed": True}
+                if "ts" in status["stages"]:
+                    _check_saddle_order(
+                        status["stages"]["ts"],
+                        results["vibrational_frequencies"],
+                    )
+            elif stage == "correlation":
+                # A correlation energy on an unconverged reference is not a
+                # result, and the iterations would only cost time.
+                if not _stages_succeeded(status):
+                    status["stages"]["correlation"] = {
+                        "converged": False,
+                        "skipped_because": "an earlier stage failed",
+                    }
+                    continue
+                stage_status, quantities, total, solver = _run_correlation(
+                    mf, config["correlation"]
+                )
+                status["stages"]["correlation"] = stage_status
+                results.update(quantities)
+                if total is not None:
+                    correlated_energies.append(total)
+                    correlated = solver
             else:
                 raise ValueError("Unknown stage: %s" % stage)
 
@@ -466,7 +1006,14 @@ def main(config):
         def _host(array):
             return np.asarray(getattr(array, "get", lambda: array)())
 
-        results["energies"] = np.asarray(energies, dtype=float)
+        # ``energies`` holds totals at the requested level, as the Gaussian
+        # reader's do: the correlated total for a correlated method (none if
+        # its iterations failed), the SCF energy otherwise.
+        results["scf_energies"] = np.asarray(energies, dtype=float)
+        if config["correlation"] is None:
+            results["energies"] = results["scf_energies"]
+        else:
+            results["energies"] = np.asarray(correlated_energies, dtype=float)
         results["positions"] = np.asarray(
             mol.atom_coords(unit="Angstrom"), dtype=float
         )
@@ -478,34 +1025,71 @@ def main(config):
         # contracts expose forces, so negate. Requested explicitly because a
         # gradient costs a large fraction of the SCF itself, and only when the
         # SCF converged: forces from an unconverged density are meaningless.
+        # A correlated method's forces are its own gradient, never the SCF's.
         if config["forces"]:
-            if mf.converged:
+            gradient_source = mf
+            if config["correlation"] is not None:
+                gradient_source = correlated
+            if not mf.converged:
+                status["skipped_properties"][
+                    "forces"
+                ] = "final SCF did not converge"
+            elif gradient_source is None:
+                status["skipped_properties"][
+                    "forces"
+                ] = "the correlated energy did not converge"
+            else:
                 _record_optional(
                     results,
                     status,
                     "forces",
-                    lambda: -_host(mf.nuc_grad_method().kernel()).astype(
-                        float
-                    ),
+                    lambda: -_host(
+                        gradient_source.nuc_grad_method().kernel()
+                    ).astype(float),
+                )
+        # Charges and dipole come from the SCF density. For a correlated
+        # method they would belong to the reference, not to the result.
+        if config["correlation"] is None:
+            _record_optional(
+                results,
+                status,
+                "mulliken_charges",
+                lambda: _host(mf.mulliken_pop(verbose=0)[1]).astype(float),
+            )
+            _record_optional(
+                results,
+                status,
+                "dipole_moment",
+                lambda: _host(mf.dip_moment(unit="Debye", verbose=0)).astype(
+                    float
+                ),
+            )
+        else:
+            for name in ("mulliken_charges", "dipole_moment"):
+                status["skipped_properties"][name] = (
+                    "no correlated density is computed; the SCF value would "
+                    "describe the reference, not the correlated result"
+                )
+        # <S^2> of the final (reference) determinant, in units of hbar^2.
+        _record_optional(
+            results,
+            status,
+            "spin_square",
+            lambda: float(mf.spin_square()[0]),
+        )
+        # An observation about the final reference; it changes no stage.
+        if config["scf_stability"]:
+            if mf.converged:
+                _record_optional(
+                    results,
+                    status,
+                    "scf_stability",
+                    lambda: _scf_stability(mf),
                 )
             else:
                 status["skipped_properties"][
-                    "forces"
+                    "scf_stability"
                 ] = "final SCF did not converge"
-        _record_optional(
-            results,
-            status,
-            "mulliken_charges",
-            lambda: _host(mf.mulliken_pop(verbose=0)[1]).astype(float),
-        )
-        _record_optional(
-            results,
-            status,
-            "dipole_moment",
-            lambda: _host(mf.dip_moment(unit="Debye", verbose=0)).astype(
-                float
-            ),
-        )
         results["point_group"] = None
         _record_optional(
             results,
@@ -514,6 +1098,10 @@ def main(config):
             lambda: _detect_point_group(mol, config["point_group_tol"]),
         )
 
+        # After the stages, when the grid and fitting basis are built.
+        _record_optional(
+            spec, status, "numerics_applied", lambda: _applied_numerics(mf)
+        )
         spec["num_basis_functions"] = int(mol.nao)
         spec["num_shells"] = int(mol.nbas)
         spec["num_electrons"] = int(mol.nelectron)

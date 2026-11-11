@@ -23,7 +23,7 @@ from functools import cached_property
 import numpy as np
 from ase import units
 
-from chemsmart.io.pyscf.driver import H5_NULL_ATTRIBUTE
+from chemsmart.io.pyscf.driver import APPLIED_SPEC_FIELDS, H5_NULL_ATTRIBUTE
 from chemsmart.utils.constants import joule_per_mol_to_hartree
 from chemsmart.utils.mixins import FileMixin
 from chemsmart.utils.utils import parse_index_specification
@@ -39,6 +39,29 @@ SUPPORTED_SCHEMA_VERSIONS = ("2.0",)
 STANDARD_TEMPERATURE_K = 298.15
 STANDARD_PRESSURE_ATM = 1.0
 
+#: Applied settings that do not change what a calculation computed, so two
+#: results differing only in these are the same database record. Every other
+#: field in ``APPLIED_SPEC_FIELDS`` reaches the record identity through
+#: ``PySCFOutput.route_string``; a setting is therefore part of the identity
+#: unless it is deliberately listed here.
+#:
+#: Only execution bookkeeping qualifies: the label, thread count and memory
+#: change neither the numbers nor which of them were computed. The settings
+#: digest is a hash of the other fields, so including it would count them
+#: twice and re-key every result whenever the driver gains a setting.
+#: Iteration limits, ``forces`` and ``stages`` stay in, as Gaussian's
+#: ``maxcycles``, ``force`` and ``freq`` route keywords do: a run that stopped
+#: at its limit, or stored fewer properties, must not replace a more
+#: complete result.
+ROUTE_IDENTITY_EXCLUDED = frozenset(
+    {"label", "num_threads", "max_memory_mb", "settings_digest"}
+)
+
+#: Facts the driver derives that change the physical model, so they join
+#: the record identity although no setting names them: the same basis name
+#: with and without its core potential is a different calculation.
+ROUTE_IDENTITY_DERIVED = ("ecp_core_electrons",)
+
 
 class PySCFOutput(FileMixin):
     """Typed reader for a completed (or failed) PySCF job.
@@ -51,6 +74,7 @@ class PySCFOutput(FileMixin):
     Attributes:
         filename (str): Path to the PySCF log file.
         resultsfile (str): Path to the structured results file.
+        h5file (PySCFH5File): Reader for that file.
     """
 
     def __init__(self, filename):
@@ -59,46 +83,31 @@ class PySCFOutput(FileMixin):
         self.filename = os.path.abspath(filename)
         stem, _ = os.path.splitext(self.filename)
         self.resultsfile = stem + ".h5"
+        self.h5file = PySCFH5File(self.resultsfile)
 
     # ------------------------------------------------------------------
     # raw payload
     # ------------------------------------------------------------------
 
-    @cached_property
-    def _payload(self):
-        """Return ``(spec, provenance, status, results)`` from the h5 file."""
-        if not os.path.exists(self.resultsfile):
-            raise FileNotFoundError(
-                f"PySCF results file not found: {self.resultsfile}. "
-                f"The calculation did not reach the point of writing results."
-            )
-        try:
-            return read_pyscf_h5(self.resultsfile)
-        except OSError as e:
-            raise ValueError(
-                f"{self.resultsfile} is not a readable PySCF results file: "
-                f"{e}"
-            ) from e
-
     @property
     def spec(self):
         """Settings as they were actually applied."""
-        return self._payload[0]
+        return self.h5file.spec
 
     @property
     def provenance(self):
         """Versions, host, engine, timings and the settings digest."""
-        return self._payload[1]
+        return self.h5file.provenance
 
     @property
     def status(self):
         """Per-stage convergence, termination flag and any typed failure."""
-        return self._payload[2]
+        return self.h5file.status
 
     @property
     def results(self):
         """Numeric result arrays."""
-        return self._payload[3]
+        return self.h5file.results
 
     # ------------------------------------------------------------------
     # provenance / identity
@@ -138,7 +147,7 @@ class PySCFOutput(FileMixin):
                 f"{failure.get('message')}"
             )
         unfinished = [
-            stage
+            _describe_unfinished(stage, entry)
             for stage, entry in status.get("stages", {}).items()
             if not entry.get("converged", entry.get("completed", False))
         ]
@@ -214,9 +223,77 @@ class PySCFOutput(FileMixin):
         return self.spec.get("multiplicity")
 
     @property
+    def reference(self):
+        """Return the SCF reference PySCF used, e.g. ``RKS`` or ``UHF``.
+
+        None for results written before the reference was recorded; it is
+        not reconstructed for them.
+        """
+        return self.spec.get("reference")
+
+    @property
     def spin(self):
-        """Return PySCF's ``mol.spin`` (2S), not the multiplicity."""
-        return self.spec.get("spin")
+        """Return ``restricted`` or ``unrestricted``, as the Gaussian and ORCA
+        readers do. PySCF's ``mol.spin`` (2S) is ``spec["spin"]``.
+
+        Results written before the reference was recorded used
+        ``scf.HF``/``dft.KS``, which choose a restricted reference exactly
+        when 2S is zero.
+        """
+        reference = self.reference
+        if reference is None:
+            return (
+                "restricted" if self.spec.get("spin") == 0 else "unrestricted"
+            )
+        return "unrestricted" if reference.startswith("U") else "restricted"
+
+    @property
+    def xc_applied(self):
+        """Return the exchange-correlation functional PySCF evaluated.
+
+        A mapping of backend component ids and coefficients, the short- and
+        long-range exact-exchange fractions, the range-separation parameter
+        and whether non-local correlation was included; None for Hartree-Fock
+        and for results written before it was recorded.
+        """
+        return self.spec.get("xc_applied")
+
+    @property
+    def ecp_core_electrons(self):
+        """Return core electrons replaced by a potential, by element.
+
+        None for an all-electron calculation, and for results written before
+        core potentials were attached (those ran every element all-electron).
+        """
+        return self.spec.get("ecp_core_electrons")
+
+    @property
+    def numerics_applied(self):
+        """Return the numerical settings PySCF ran with, defaults resolved.
+
+        SCF ``conv_tol`` and ``max_cycle``; for DFT the integration grid
+        (level, per-atom radial/angular points, pruning, radial and Becke
+        schemes, point count); and the density-fitting basis, or None.
+        None for results written before it was recorded.
+        """
+        return self.spec.get("numerics_applied")
+
+    @property
+    def spin_square(self):
+        """Return <S^2> of the final determinant, in units of hbar^2.
+
+        For a correlated method this is the HF reference determinant.
+        """
+        return self._scalar_result("spin_square")
+
+    @property
+    def spin_contamination(self):
+        """Return <S^2> - S(S+1) for the requested multiplicity, or None."""
+        spin_square = self.spin_square
+        if spin_square is None:
+            return None
+        total_spin = (self.multiplicity - 1) / 2
+        return spin_square - total_spin * (total_spin + 1)
 
     @property
     def num_basis_functions(self):
@@ -284,9 +361,16 @@ class PySCFOutput(FileMixin):
         """Return a canonical one-line description of the calculation.
 
         There is no native route string for a library backend, so this is
-        synthesised from the applied settings. It is stable for a given
-        settings digest, which is what the database's route hashing needs.
+        synthesised from the applied settings. The readable part names the
+        level of theory; the trailing ``spec=`` hash covers every applied
+        setting outside ``ROUTE_IDENTITY_EXCLUDED``, so a setting that changes
+        the result cannot be left out of the database record identity. Unset
+        (``None``) fields are omitted, so a field added to a later driver does
+        not change the identity of results written before it existed.
         """
+        # Deferred: the database package imports this reader.
+        from chemsmart.database.utils import canonical_json_hash
+
         spec = self.spec
         parts = [str(spec.get("method") or ""), str(spec.get("basis") or "")]
         if spec.get("density_fit"):
@@ -306,6 +390,13 @@ class PySCFOutput(FileMixin):
             )
         parts.append(str(spec.get("jobtype") or ""))
         parts.append(f"engine={spec.get('engine')}")
+        identity = {
+            name: spec[name]
+            for name in APPLIED_SPEC_FIELDS + ROUTE_IDENTITY_DERIVED
+            if name not in ROUTE_IDENTITY_EXCLUDED
+            and spec.get(name) is not None
+        }
+        parts.append(f"spec={canonical_json_hash(identity)}")
         return " ".join(p for p in parts if p)
 
     # ------------------------------------------------------------------
@@ -314,9 +405,99 @@ class PySCFOutput(FileMixin):
 
     @cached_property
     def energies(self):
-        """Return every SCF energy in Hartree, in stage order."""
+        """Return the total energies in Hartree at the requested level.
+
+        As in the Gaussian reader: the correlated total for MP2, CCSD or
+        CCSD(T), which is empty when its iterations did not converge, and
+        the SCF energies, in stage order, otherwise.
+        """
         values = self.results.get("energies")
         return [float(v) for v in values] if values is not None else []
+
+    @property
+    def scf_energies(self):
+        """Return the SCF (reference) energies in Hartree, in stage order."""
+        values = self.results.get("scf_energies")
+        if values is None:
+            # Written before correlated methods, when they were the same.
+            return self.energies
+        return [float(v) for v in values]
+
+    @property
+    def correlation_energy(self):
+        """Return the correlation energy in Hartree, or None.
+
+        For CCSD(T) it includes the perturbative triples correction.
+        """
+        return self._scalar_result("correlation_energy")
+
+    @property
+    def ccsd_correlation_energy(self):
+        """Return the CCSD part of a CCSD(T) correlation energy, or None."""
+        return self._scalar_result("ccsd_correlation_energy")
+
+    @property
+    def triples_correction(self):
+        """Return the perturbative (T) correction in Hartree, or None."""
+        return self._scalar_result("triples_correction")
+
+    @property
+    def saddle_order(self):
+        """Return the number of imaginary modes found by a TS search.
+
+        One for a transition state. None for other jobs, and for a search
+        whose result had no Hessian, so it is not known to be a saddle point.
+        """
+        return self.status.get("stages", {}).get("ts", {}).get("saddle_order")
+
+    @property
+    def irc_ts_index(self):
+        """Return the 0-based position of the start structure in the path."""
+        return self.status.get("stages", {}).get("irc", {}).get("ts_index")
+
+    @cached_property
+    def irc_path(self):
+        """Return the IRC path as structures with their energies, or None.
+
+        Ordered from the end of the backward branch, through the start
+        structure at :attr:`irc_ts_index`, to the end of the forward branch.
+        The branch names are the two signs of the imaginary mode, not a
+        reactant or product side.
+        """
+        from chemsmart.io.molecules.structure import Molecule
+
+        positions = self.results.get("irc_positions")
+        if positions is None:
+            return None
+        energies = self.results["irc_energies"]
+        return [
+            Molecule(
+                symbols=self.chemical_symbols,
+                positions=np.asarray(frame, dtype=float),
+                charge=self.charge,
+                multiplicity=self.multiplicity,
+                energy=float(energy),
+            )
+            for frame, energy in zip(positions, energies)
+        ]
+
+    @property
+    def scf_stability(self):
+        """Return the stability analysis of the converged SCF reference.
+
+        A mapping with the reference and, per question, whether it is stable
+        and its lowest Hessian eigenvalue in Eh: ``internal``,
+        ``real_to_complex`` and ``external`` (its ``question`` names the
+        direction, e.g. RHF/RKS -> UHF/UKS; ROHF has neither of the last two).
+        A ``stable`` of None means PySCF gave no answer. None when stability
+        was not requested, never an implicit "stable".
+        """
+        record = self.results.get("scf_stability")
+        return None if record is None else PySCFH5File.python_value(record)
+
+    def _scalar_result(self, name):
+        value = self.results.get(name)
+        return None if value is None else float(value)
 
     @cached_property
     def _eigenvalues(self):
@@ -415,8 +596,14 @@ class PySCFOutput(FileMixin):
 
     @property
     def optimizer_converged(self):
-        """Return whether a geometry optimisation met its criteria."""
-        stage = self.status.get("stages", {}).get("opt", {})
+        """Return whether a geometry optimisation met its criteria.
+
+        For a transition-state search this is the saddle-point search's own
+        convergence; whether the result is a transition state is
+        :attr:`saddle_order`.
+        """
+        stages = self.status.get("stages", {})
+        stage = stages.get("opt", stages.get("ts", {}))
         return bool(stage.get("optimizer_converged", False))
 
     @cached_property
@@ -651,93 +838,173 @@ class PySCFOutput(FileMixin):
         )
 
 
-def read_pyscf_h5(filename):
-    """Read a PySCF HDF5 artifact.
+class PySCFH5File(FileMixin):
+    """Structured results file written by CHEMSMART's PySCF driver.
 
-    Mapping arrays are converted to ordinary Python lists; values below
-    ``results/`` remain exact numpy arrays.
+    The file is read on first access and its layout is checked before any
+    value is returned. Mapping groups decode to ordinary Python values;
+    values below ``results/`` remain exact numpy arrays.
+
+    Attributes:
+        filename (str): Path to the ``label.h5`` file.
     """
-    import h5py
 
-    with h5py.File(filename, "r") as handle:
-        raw_version = handle.attrs.get("schema_version")
-        version = _text(raw_version) if raw_version is not None else None
-        if version not in SUPPORTED_SCHEMA_VERSIONS:
-            raise ValueError(
-                f"Unsupported PySCF results schema {version!r} in "
-                f"{filename}; this CHEMSMART understands "
-                f"{SUPPORTED_SCHEMA_VERSIONS}."
+    #: Top-level groups every supported layout carries.
+    SECTIONS = ("spec", "provenance", "status", "results")
+
+    def __init__(self, filename):
+        self.filename = filename
+
+    @property
+    def spec(self):
+        """Settings as they were actually applied."""
+        return self._sections["spec"]
+
+    @property
+    def provenance(self):
+        """Versions, host, engine, timings and the settings digest."""
+        return self._sections["provenance"]
+
+    @property
+    def status(self):
+        """Per-stage convergence, termination flag and any typed failure."""
+        return self._sections["status"]
+
+    @property
+    def results(self):
+        """Numeric result arrays."""
+        return self._sections["results"]
+
+    @cached_property
+    def _sections(self):
+        """Return every top-level group, decoded, keyed by name."""
+        if not os.path.exists(self.filename):
+            raise FileNotFoundError(
+                f"PySCF results file not found: {self.filename}. "
+                f"The calculation did not reach the point of writing results."
             )
+        try:
+            return self._read()
+        except OSError as e:
+            raise ValueError(
+                f"{self.filename} is not a readable PySCF results file: {e}"
+            ) from e
 
-        _require_nodes(handle, ("spec", "provenance", "status", "results"))
-        for name in ("spec", "provenance", "status", "results"):
-            if not isinstance(handle[name], h5py.Group):
+    def _read(self):
+        """Check the layout and decode every section in one pass."""
+        import h5py
+
+        with h5py.File(self.filename, "r") as handle:
+            raw_version = handle.attrs.get("schema_version")
+            version = (
+                self._text(raw_version) if raw_version is not None else None
+            )
+            if version not in SUPPORTED_SCHEMA_VERSIONS:
                 raise ValueError(
-                    f"PySCF schema {version} requires /{name} to be a group "
-                    f"in {filename}"
+                    f"Unsupported PySCF results schema {version!r} in "
+                    f"{self.filename}; this CHEMSMART understands "
+                    f"{SUPPORTED_SCHEMA_VERSIONS}."
                 )
-        spec = _read_group(handle["spec"])
-        provenance = _read_group(handle["provenance"])
-        status = _read_group(handle["status"])
-        results = _read_group(handle["results"], preserve_arrays=True)
-        return spec, provenance, status, results
 
+            missing = [name for name in self.SECTIONS if name not in handle]
+            if missing:
+                raise ValueError(
+                    f"PySCF results artifact {self.filename} is missing "
+                    f"required nodes: {missing}"
+                )
+            for name in self.SECTIONS:
+                if not isinstance(handle[name], h5py.Group):
+                    raise ValueError(
+                        f"PySCF schema {version} requires /{name} to be a "
+                        f"group in {self.filename}"
+                    )
+            # Another driver writes the same schema version with its own
+            # result contract; its energies sit under other names and would
+            # be misread, e.g. an MP2 record reporting its HF reference
+            # energy.
+            if "result_contract_version" in handle["spec"]:
+                contract = self._text(
+                    handle["spec/result_contract_version"][()]
+                )
+                raise ValueError(
+                    f"{self.filename} declares the PySCF result contract "
+                    f"{contract!r}, a layout this CHEMSMART does not read. "
+                    "Its quantities are stored under other names and would "
+                    "be misread; rerun the calculation with this CHEMSMART."
+                )
+            return {
+                name: self._read_group(
+                    handle[name], preserve_arrays=name == "results"
+                )
+                for name in self.SECTIONS
+            }
 
-def _require_nodes(handle, names):
-    """Raise a useful schema error for a missing top-level node."""
-    missing = [name for name in names if name not in handle]
-    if missing:
-        raise ValueError(
-            f"PySCF results artifact {handle.filename} is missing required "
-            f"nodes: {missing}"
-        )
+    @classmethod
+    def _read_group(cls, group, preserve_arrays=False):
+        """Decode a mapping group recursively."""
+        import h5py
 
+        decoded = {}
+        for key in group:
+            node = group[key]
+            if isinstance(node, h5py.Group):
+                decoded[key] = cls._read_group(
+                    node, preserve_arrays=preserve_arrays
+                )
+            else:
+                decoded[key] = cls._read_dataset(
+                    node, preserve_arrays=preserve_arrays
+                )
+        return decoded
 
-def _read_group(group, preserve_arrays=False):
-    """Decode a mapping group recursively."""
-    import h5py
+    @classmethod
+    def _read_dataset(cls, dataset, preserve_arrays=False):
+        """Decode one typed dataset, including the explicit null marker."""
+        if bool(dataset.attrs.get(H5_NULL_ATTRIBUTE, False)):
+            return None
 
-    decoded = {}
-    for key in group:
-        node = group[key]
-        if isinstance(node, h5py.Group):
-            decoded[key] = _read_group(node, preserve_arrays=preserve_arrays)
-        else:
-            decoded[key] = _read_dataset(node, preserve_arrays=preserve_arrays)
-    return decoded
+        value = dataset[()]
+        if preserve_arrays:
+            if isinstance(value, bytes):
+                return value.decode("utf-8")
+            return np.asarray(value)
+        return cls.python_value(value)
 
-
-def _read_dataset(dataset, preserve_arrays=False):
-    """Decode one typed dataset, including the explicit null marker."""
-    if bool(dataset.attrs.get(H5_NULL_ATTRIBUTE, False)):
-        return None
-
-    value = dataset[()]
-    if preserve_arrays:
+    @classmethod
+    def python_value(cls, value):
+        """Convert decoded h5py values, mappings included, to plain Python."""
+        if isinstance(value, dict):
+            return {key: cls.python_value(item) for key, item in value.items()}
         if isinstance(value, bytes):
             return value.decode("utf-8")
-        return np.asarray(value)
-    return _python_value(value)
+        if isinstance(value, np.ndarray):
+            return cls.python_value(value.tolist())
+        if isinstance(value, np.generic):
+            return cls.python_value(value.item())
+        if isinstance(value, list):
+            return [cls.python_value(item) for item in value]
+        return value
+
+    @staticmethod
+    def _text(value):
+        """Decode an h5py string dataset to ``str``."""
+        if isinstance(value, bytes):
+            return value.decode("utf-8")
+        return str(value)
 
 
-def _python_value(value):
-    """Convert an h5py scalar/array into JSON-compatible Python values."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    if isinstance(value, np.ndarray):
-        return _python_value(value.tolist())
-    if isinstance(value, np.generic):
-        return _python_value(value.item())
-    if isinstance(value, list):
-        return [_python_value(item) for item in value]
-    return value
-
-
-def _text(value):
-    """Decode an h5py string dataset to ``str``."""
-    if isinstance(value, bytes):
-        return value.decode("utf-8")
-    return str(value)
+def _describe_unfinished(stage, entry):
+    """Return a stage name with the reason it did not finish, when known."""
+    if "not_a_transition_state" in entry:
+        return f"{stage} ({entry['not_a_transition_state']})"
+    failed = [
+        f"{name}: {branch.get('reason')}"
+        for name, branch in entry.get("branches", {}).items()
+        if not branch.get("converged")
+    ]
+    if failed:
+        return f"{stage} ({'; '.join(failed)})"
+    return stage
 
 
 #: Point groups whose rotational symmetry number is not derived from an

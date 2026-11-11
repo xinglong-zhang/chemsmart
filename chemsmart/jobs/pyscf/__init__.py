@@ -8,11 +8,13 @@ rather than convenience re-exports.
 """
 
 from .hess import PySCFHessJob
+from .irc import PySCFIRCJob
 from .job import PySCFJob
 from .opt import PySCFOptJob
 from .runner import FakePySCFJobRunner, PySCFJobRunner
 from .settings import PySCFJobSettings
 from .singlepoint import PySCFSinglePointJob
+from .ts import PySCFTSJob
 
 # Get all available PySCF job subclasses
 jobs = PySCFJob.subclasses()
@@ -20,10 +22,12 @@ jobs = PySCFJob.subclasses()
 __all__ = [
     "FakePySCFJobRunner",
     "PySCFHessJob",
+    "PySCFIRCJob",
     "PySCFJob",
     "PySCFJobRunner",
     "PySCFJobSettings",
     "PySCFOptJob",
     "PySCFSinglePointJob",
+    "PySCFTSJob",
     "jobs",
 ]
