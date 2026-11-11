@@ -1728,6 +1728,57 @@ def assert_runner_was_configured(job, options):
     assert not set(options) & set(job.kwargs)
 
 
+def write_revqm9_npz(path):
+    """Write a small ragged archive in the revQM9 layout."""
+    coords = np.empty(2, dtype=object)
+    numbers = np.empty(2, dtype=object)
+    elements = np.empty(2, dtype=object)
+    coords[:] = [np.zeros((1, 3)), np.array([[0, 0, 0], [0, 0, 0.74]])]
+    numbers[:] = [np.array([2]), np.array([1, 1])]
+    elements[:] = [np.array(["He"]), np.array(["H", "H"])]
+    np.savez_compressed(
+        path, coords=coords, charges=numbers, elements=elements
+    )
+    return coords
+
+
+def npz_test_flaky(fails_on, error=RuntimeError("perception failed")):
+    from chemsmart.database.assemble import NPZAssembler
+
+    original = NPZAssembler.get_molecule_info
+    calls = {"count": 0}
+
+    def get_molecule_info(assembler, molecule):
+        calls["count"] += 1
+        if calls["count"] == fails_on:
+            raise error
+        return original(assembler, molecule)
+
+    return patch.object(NPZAssembler, "get_molecule_info", get_molecule_info)
+
+
+def npz_test_record(io_test_directory, filename, dataset=None):
+    from chemsmart.database.assemble import NPZAssembler
+
+    source = os.path.join(io_test_directory, filename)
+    return next(NPZAssembler(source, index="1", dataset=dataset).assemble())
+
+
+def npz_test_stored(tmp_path, io_test_directory, filename, *options):
+    from chemsmart.cli.database.assemble import assemble
+    from chemsmart.database.database import Database
+
+    source = os.path.join(io_test_directory, filename)
+    output = tmp_path / "records.db"
+    result = CliRunner().invoke(
+        assemble,
+        ["-f", source, "-i", "1", "-o", str(output), *options],
+        obj={},
+    )
+    assert result.exit_code == 0, (result.output, result.exception)
+    return Database(str(output)).get_record(record_index=1)
+
+
 def submit_for_test(server_yaml_file, *args):
     """Run ``chemsmart sub --test`` with ``args``, writing scripts only."""
     return CliRunner().invoke(

@@ -1460,6 +1460,63 @@ class TestDatabaseExport:
 
 
 class TestDatabaseInspect:
+    @pytest.mark.parametrize(
+        "results,expected,absent",
+        [
+            (
+                {"homo_energy": -1.0, "alpha_homo_energy": -2.0},
+                {
+                    "HOMO Energy (eV)": "-1.00000000",
+                    "α-HOMO Energy (eV)": "-2.00000000",
+                },
+                [],
+            ),
+            (
+                {"homo_energy": -1.0},
+                {
+                    "HOMO Energy (eV)": "-1.00000000",
+                    "LUMO Energy (eV)": "NULL",
+                },
+                ["α-HOMO Energy (eV)"],
+            ),
+            (
+                {"lumo_energy": 1.0},
+                {"HOMO Energy (eV)": "NULL", "LUMO Energy (eV)": "1.00000000"},
+                ["α-HOMO Energy (eV)"],
+            ),
+            (
+                {"num_unpaired_electrons": 0, "homo_energy": -1.0},
+                {"HOMO Energy (eV)": "-1.00000000"},
+                ["α-HOMO Energy (eV)"],
+            ),
+            (
+                {"num_unpaired_electrons": 1, "alpha_homo_energy": -2.0},
+                {"α-HOMO Energy (eV)": "-2.00000000"},
+                ["HOMO Energy (eV)"],
+            ),
+        ],
+    )
+    def test_orbital_detail_display(
+        self, monkeypatch, results, expected, absent
+    ):
+        inspector = DatabaseInspector(":memory:")
+        monkeypatch.setattr(
+            inspector,
+            "record_detail",
+            lambda: {"results": results, "provenance": {"source": "test"}},
+        )
+        detail = inspector.format_record_detail()
+        fields = dict(
+            (key.strip(), value.strip())
+            for line in detail.splitlines()
+            if ":" in line
+            for key, value in [line.split(":", 1)]
+        )
+        for label, value in expected.items():
+            assert fields[label].strip() == value
+        for label in absent:
+            assert label not in fields
+
     def test_inspect_overview_and_record(
         self,
         tmp_path,

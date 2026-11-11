@@ -32,10 +32,12 @@ else:
 
 @click.group(name="run")
 @click.pass_context
+@click.option("--batch-label", hidden=True, default=None)
 @click_jobrunner_options
 @logger_options
 def run(
     ctx,
+    batch_label,
     server,
     num_cores,
     num_gpus,
@@ -73,6 +75,7 @@ def run(
     # Store the jobrunner and other options in the context object
     ctx.ensure_object(dict)  # Ensure ctx.obj is initialized as a dict
     ctx.obj["jobrunner"] = jobrunner
+    ctx.obj["batch_label"] = batch_label
 
 
 def _run_single_job(job, jobrunner):
@@ -111,6 +114,16 @@ def process_pipeline(ctx, *args, **kwargs):
         logger.debug("No pipeline output returned. Skipping job execution.")
         return None
     job = args[0]
+    batch_label = ctx.obj.get("batch_label")
+    if batch_label is not None:
+        if isinstance(job, list):
+            if len(job) != 1:
+                raise ValueError(
+                    "A prepared input must produce exactly one job."
+                )
+            job = job[0]
+        if isinstance(job, Job):
+            job.label = batch_label
     logger.debug(f"Job to be run: {job}")
 
     # Handle None return (e.g., from post-processing subcommands like
