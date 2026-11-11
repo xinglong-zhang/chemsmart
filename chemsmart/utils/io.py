@@ -466,11 +466,11 @@ def discover_pka_target_companion_outputs(ha_gas_path, program=None):
 
 def check_program_availability_in_chemsmart(program_name):
     """Utility function to check if user-supplied program type is
-    supported in CHEMMART."""
-    if program_name.lower() not in {"gaussian", "orca", "xtb"}:
+    supported in CHEMSMART."""
+    if program_name.lower() not in {"gaussian", "orca", "pyscf", "xtb"}:
         raise ValueError(
             f"Unsupported program '{program_name}' for thermochemistry.\n"
-            f"Please choose one of ['gaussian', 'orca', 'xtb']."
+            f"Please choose one of ['gaussian', 'orca', 'pyscf', 'xtb']."
         )
 
 

@@ -35,6 +35,10 @@ class PySCFJob(Job):
     """
 
     PROGRAM = "PySCF"
+    #: The calculation a subclass runs, as ``settings.jobtype`` names
+    #: it. The stages a job executes and the rules settings are
+    #: validated against must describe the same calculation.
+    JOBTYPE = None
 
     def __init__(
         self, molecule, settings=None, label=None, jobrunner=None, **kwargs
@@ -57,10 +61,29 @@ class PySCFJob(Job):
 
         self.molecule = molecule.copy() if molecule is not None else None
         self.settings = settings.copy()
+        self._adopt_jobtype()
 
         if label is None:
             label = molecule.get_chemical_formula(empirical=True)
         self.label = label
+
+    def _adopt_jobtype(self):
+        """Make the settings describe the calculation this job runs.
+
+        Settings that name no jobtype take this job's; settings made for
+        another calculation are refused, since they were validated
+        against rules -- correlated methods, solvers, thermochemistry --
+        that do not hold for this one.
+        """
+        if self.JOBTYPE is None:
+            return
+        if self.settings.jobtype is None:
+            self.settings.jobtype = self.JOBTYPE
+        elif self.settings.jobtype != self.JOBTYPE:
+            raise ValueError(
+                f"{type(self).__name__} runs a {self.JOBTYPE} calculation, "
+                f"but its settings are for {self.settings.jobtype!r}."
+            )
 
     @property
     def stages(self):

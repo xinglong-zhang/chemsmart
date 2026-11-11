@@ -4,9 +4,10 @@
 
 This page covers geometry optimization and single point calculations using PySCF.
 
-A PySCF project splits its settings into two sections. ``gas`` supplies the ``opt`` and ``hess`` jobs, and ``solv``
-supplies ``sp``. The examples below use the packaged ``test`` project; substitute your own project name. For the
-complete option reference, see :doc:`pyscf-cli-options`.
+A PySCF project splits its settings into two sections. ``gas`` supplies the ``opt``, ``ts``, ``irc`` and ``hess`` jobs,
+and ``solv`` supplies ``sp``. The examples below use the packaged ``test`` project; substitute your own project name.
+For the complete option reference, see :doc:`pyscf-cli-options`. Transition state searches and IRC calculations are
+covered in :doc:`pyscf-transition-state`.
 
 ***********************
  Geometry Optimization
@@ -140,8 +141,9 @@ subcommand.
 Method and Basis Set
 ====================
 
-Use ``-x`` for a DFT functional or ``-A`` for a Hartree-Fock reference, never both. Basis sets take the hyphenated PySCF
-spelling, for example ``def2-svp``, not Gaussian's ``def2svp``.
+Use ``-x`` for a DFT functional or ``-A`` for an ab initio method, never both; the methods beyond Hartree-Fock are
+described in :doc:`pyscf-electronic-structure`. Basis sets take the hyphenated PySCF spelling, for example ``def2-svp``,
+not Gaussian's ``def2svp``.
 
 Optimize with a different functional and basis set:
 

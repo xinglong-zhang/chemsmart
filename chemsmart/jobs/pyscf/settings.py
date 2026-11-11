@@ -12,6 +12,8 @@ Fields the base class carries but PySCF cannot honour are listed in
 genecp basis must not silently produce a plain def2-SVP calculation.
 """
 
+import copy
+import inspect
 import logging
 from functools import lru_cache
 
@@ -20,6 +22,16 @@ from ase.data import atomic_numbers
 from chemsmart.jobs.settings import MolecularJobSettings
 
 logger = logging.getLogger(__name__)
+
+#: Settings ``MolecularJobSettings`` accepts. Its ``**kwargs`` discards any
+#: other name, so a misspelt PySCF setting would vanish without a trace.
+MOLECULAR_SETTINGS_FIELDS = frozenset(
+    name
+    for name, parameter in inspect.signature(
+        MolecularJobSettings.__init__
+    ).parameters.items()
+    if parameter.kind is parameter.POSITIONAL_OR_KEYWORD and name != "self"
+)
 
 #: Solvent models accepted by ``solvent_model``, mapped to the PySCF call and
 #: the ``with_solvent.method`` string. Verified against pyscf 2.14.0: the PCM
@@ -47,8 +59,57 @@ PYSCF_DEFGRIDS = {
 #: ``[geomopt]`` extra installs first.
 PYSCF_OPT_SOLVERS = ("geometric", "berny", "ase")
 
+#: Branches an IRC follows from the saddle point: ``forward`` and
+#: ``backward`` are the two signs of the imaginary mode, a convention of the
+#: eigensolver rather than a reactant or product side.
+PYSCF_IRC_DIRECTIONS = ("both", "forward", "backward")
+
 #: Execution engines. ``gpu`` routes through gpu4pyscf via ``.to_gpu()``.
 PYSCF_ENGINES = ("cpu", "gpu")
+
+#: Correlated wavefunction methods, run on the Hartree-Fock reference PySCF
+#: chooses from the multiplicity (RHF for a closed shell, UHF otherwise).
+PYSCF_CORRELATED_METHODS = ("mp2", "ccsd", "ccsd(t)")
+
+#: Keys of the ``correlation`` block and their defaults. PySCF's chemical
+#: frozen core is ORCA 6's default for H-Zn and main-group Ga-Xe; Gaussian's
+#: FC differs for Li-Be, Sc-Zn and, with Pople basis sets, Ga-Kr. ``None``
+#: leaves PySCF's own CCSD iteration limit and convergence threshold.
+PYSCF_CORRELATION_DEFAULTS = {
+    "frozen_core": True,
+    "max_cycle": None,
+    "conv_tol": None,
+}
+
+#: Multiconfigurational methods. The reference is Hartree-Fock: RHF for a
+#: closed shell, ROHF otherwise, because PySCF would silently convert a UHF
+#: reference to restricted orbitals.
+PYSCF_MCSCF_METHODS = ("casci", "casscf")
+
+#: Keys of the ``active_space`` block and their defaults. ``orbitals`` has no
+#: default: which orbitals are active is always stated. ``None`` leaves
+#: PySCF's own CASSCF iteration limit and convergence threshold.
+PYSCF_ACTIVE_SPACE_DEFAULTS = {
+    "ncas": None,
+    "nelecas": None,
+    "orbitals": None,
+    "nroots": 1,
+    "weights": None,
+    "nevpt2": False,
+    "max_cycle_macro": None,
+    "conv_tol": None,
+}
+
+#: How the active orbitals are chosen, and the keys each choice takes.
+#: ``mo_list`` names reference orbitals, numbered from ``index_base``;
+#: ``avas`` projects onto atomic orbitals and sizes the space itself;
+#: ``frontier`` takes the ``ncas`` orbitals around the Fermi level.
+PYSCF_ORBITAL_SELECTIONS = {
+    "mo_list": ("selection", "mo_list", "index_base"),
+    "avas": ("selection", "ao_labels", "threshold"),
+    "frontier": ("selection",),
+}
+
 
 #: Functionals for which the perturbative correlation term is not implemented
 #: by this v1 mean-field-only backend.  Passing one of these names to
@@ -71,6 +132,23 @@ PYSCF_DOUBLE_HYBRID_MARKERS = (
     "xygjos",
     "double-hybrid",
 )
+
+#: Characters that make PySCF read a functional string as an expression
+#: (``pbe,pbe``, ``0.5*b3lyp``) instead of one named functional. CHEMSMART
+#: requests functionals by name, so a functional is written one way only.
+PYSCF_FUNCTIONAL_EXPRESSION_CHARACTERS = frozenset(",*+;() ")
+
+#: Names PySCF accepts that do not denote what their spelling suggests,
+#: mapped to the reason they are refused.
+PYSCF_MISLEADING_FUNCTIONALS = {
+    "b3lyp3": (
+        "LibXC's B3LYP3 (functional 394) is not Gaussian's B3LYP, although "
+        "ORCA calls Gaussian's variant 'VWN3'; for H2O/def2-SVP the two "
+        "differ by 23 kcal/mol. Use 'b3lyp' for Gaussian's B3LYP (ORCA's "
+        "B3LYP/G), 'b3lyp5' for ORCA's B3LYP, or 'hyb_gga_xc_b3lyp3' for "
+        "LibXC functional 394 itself."
+    ),
+}
 
 #: Functionals whose *name* means different things in different programs.
 #: Maps a CHEMSMART functional name to (libxc name, note).
@@ -128,6 +206,16 @@ def is_double_hybrid_functional(functional):
     return any(marker in normal for marker in PYSCF_DOUBLE_HYBRID_MARKERS)
 
 
+def _is_int(value):
+    """Return whether *value* is an integer and not a boolean."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value):
+    """Return whether *value* is a real number and not a boolean."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 class PySCFJobSettings(MolecularJobSettings):
     """Configuration for a PySCF calculation.
 
@@ -143,6 +231,10 @@ class PySCFJobSettings(MolecularJobSettings):
             detection, which sets the rotational symmetry number.
         forces (bool): Compute a gradient for a single point or Hessian job.
             An optimisation always stores the final forces.
+        irc_direction (str): One of ``PYSCF_IRC_DIRECTIONS``; the branches
+            an ``irc`` job follows from its saddle point.
+        active_space (dict): ``PYSCF_ACTIVE_SPACE_DEFAULTS`` keys for CASCI
+            and CASSCF.
     """
 
     #: Base-class fields PySCF cannot honour. Mapped to the value that means
@@ -183,11 +275,21 @@ class PySCFJobSettings(MolecularJobSettings):
         title=None,
         solvent_model=None,
         solvent_id=None,
+        correlation=None,
+        scf_stability=False,
+        irc_direction="both",
+        active_space=None,
         **kwargs,
     ):
         # Passed under its private name by ``merge``. Not a project-YAML key:
         # the YAML loader derives it from the source file.
         project_yaml_digest = kwargs.pop("_project_yaml_digest", None)
+        unknown = sorted(set(kwargs) - MOLECULAR_SETTINGS_FIELDS)
+        if unknown:
+            raise TypeError(
+                f"Unknown PySCF settings: {', '.join(unknown)}. A setting "
+                "that is not recognised would otherwise be ignored."
+            )
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
@@ -211,6 +313,14 @@ class PySCFJobSettings(MolecularJobSettings):
         self.opt_maxsteps = opt_maxsteps
         self.engine = engine
         self.point_group_tol = point_group_tol
+        # A mapping of PYSCF_CORRELATION_DEFAULTS keys; copied so settings
+        # built from one project section never share it.
+        self.correlation = copy.deepcopy(correlation)
+        # Analyse the converged reference's stability; an observation only.
+        self.scf_stability = scf_stability
+        self.irc_direction = irc_direction
+        # Copied for the same reason as ``correlation``.
+        self.active_space = copy.deepcopy(active_space)
         self._project_yaml_digest = project_yaml_digest
 
     @classmethod
@@ -219,9 +329,7 @@ class PySCFJobSettings(MolecularJobSettings):
         return cls()
 
     def copy(self):
-        import copy as _copy
-
-        return _copy.deepcopy(self)
+        return copy.deepcopy(self)
 
     @property
     def project_yaml_digest(self):
@@ -236,6 +344,46 @@ class PySCFJobSettings(MolecularJobSettings):
     def resolved_engine(self):
         """Return the engine to run on; CPU unless GPU was requested."""
         return self.engine or "cpu"
+
+    @property
+    def correlated_method(self):
+        """Return the correlated method requested, or None for HF and DFT."""
+        method = str(self.ab_initio).lower() if self.ab_initio else None
+        return method if method in PYSCF_CORRELATED_METHODS else None
+
+    @property
+    def resolved_correlation(self):
+        """Return the correlation settings with defaults filled in.
+
+        None unless a correlated method is requested.
+        """
+        if self.correlated_method is None:
+            return None
+        return {
+            "method": self.correlated_method,
+            **PYSCF_CORRELATION_DEFAULTS,
+            **(self.correlation or {}),
+        }
+
+    @property
+    def mcscf_method(self):
+        """Return the multiconfigurational method requested, or None."""
+        method = str(self.ab_initio).lower() if self.ab_initio else None
+        return method if method in PYSCF_MCSCF_METHODS else None
+
+    @property
+    def resolved_active_space(self):
+        """Return the active-space settings with defaults filled in.
+
+        None unless CASCI or CASSCF is requested.
+        """
+        if self.mcscf_method is None:
+            return None
+        return {
+            "method": self.mcscf_method,
+            **PYSCF_ACTIVE_SPACE_DEFAULTS,
+            **copy.deepcopy(self.active_space or {}),
+        }
 
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
@@ -284,7 +432,15 @@ class PySCFJobSettings(MolecularJobSettings):
 
     @property
     def method_name(self):
-        """Return the method label used for provenance and the database."""
+        """Return the method label used for provenance and the database.
+
+        Names the level the reported energy belongs to, so CASSCF corrected
+        by NEVPT2 is not labelled plain CASSCF.
+        """
+        if self.mcscf_method is not None:
+            if (self.active_space or {}).get("nevpt2"):
+                return f"{self.mcscf_method}/sc-nevpt2"
+            return self.mcscf_method
         if self.ab_initio:
             return str(self.ab_initio).lower()
         if self.functional:
@@ -301,6 +457,316 @@ class PySCFJobSettings(MolecularJobSettings):
         if self.ab_initio and str(self.ab_initio).lower() == "hf":
             return None
         return resolve_functional(self.functional)
+
+    def _check_correlation(self):
+        """Reject a correlated request PySCF would not compute as written.
+
+        Density fitting is refused rather than applied: PySCF switches to
+        DF-MP2 or DF-CCSD whenever the reference uses density fitting, an
+        approximation the request did not name.
+        """
+        method = self.correlated_method
+        if method is None:
+            if self.correlation is not None:
+                raise ValueError(
+                    "The correlation block applies only to ab_initio "
+                    f"{', '.join(PYSCF_CORRELATED_METHODS)}."
+                )
+            return
+        block = self.correlation or {}
+        unknown = sorted(set(block) - set(PYSCF_CORRELATION_DEFAULTS))
+        if unknown:
+            raise ValueError(
+                f"Unknown correlation settings: {', '.join(unknown)}; "
+                f"expected {', '.join(PYSCF_CORRELATION_DEFAULTS)}."
+            )
+        if not isinstance(block.get("frozen_core", True), bool):
+            raise ValueError("correlation frozen_core must be true or false.")
+        if method == "mp2" and any(
+            block.get(key) is not None for key in ("max_cycle", "conv_tol")
+        ):
+            raise ValueError(
+                "max_cycle and conv_tol control the CCSD iterations; MP2 is "
+                "not iterative."
+            )
+        self._refuse_unsupported_combinations(method)
+        if self.jobtype in ("hess", "ts", "irc") or (
+            self.jobtype == "opt" and self.freq
+        ):
+            raise ValueError(
+                f"{method} has no analytic Hessian in PySCF, so hess, ts, irc "
+                "and freq: true are not available; set freq: false to "
+                "optimise."
+            )
+        # PySCF 2.14 has no open-shell CCSD(T) gradient.
+        if method == "ccsd(t)" and (self.jobtype == "opt" or self.forces):
+            raise ValueError(
+                "ccsd(t) is available for single-point energies only; "
+                "optimise or compute forces with mp2 or ccsd."
+            )
+        if self.jobtype == "opt" and self.opt_solver != "geometric":
+            raise ValueError(
+                f"Optimisation with {method} uses the geometric solver "
+                f"only, not {self.opt_solver!r}."
+            )
+
+    def _refuse_unsupported_combinations(self, method):
+        """Refuse what a wavefunction method would silently change or skip.
+
+        PySCF runs the density-fitted variant on a density-fitted reference,
+        applies no dispersion or solvation to the correlated or CAS energy,
+        and is not supported on the GPU engine.
+        """
+        refused = {
+            "density_fit": self.density_fit,
+            "dispersion": self.dispersion,
+            "solvent_model": self.solvent_model,
+        }
+        applied = [name for name, value in refused.items() if value]
+        if applied:
+            raise ValueError(
+                f"{method} cannot be combined with {', '.join(applied)} in "
+                "this backend; set density_fit: false and remove the others. "
+                "Density fitting would silently turn the method into its "
+                "density-fitted variant."
+            )
+        if self.engine == "gpu":
+            raise ValueError(
+                f"{method} is not supported on the GPU engine, and "
+                "PySCF's CPU implementation would receive a GPU reference; "
+                "set engine: cpu or pass --no-gpu."
+            )
+
+    def _check_active_space(self):
+        """Reject an active space PySCF would not compute as written."""
+        method = self.mcscf_method
+        if method is None:
+            if self.active_space is not None:
+                raise ValueError(
+                    "The active_space block applies only to ab_initio "
+                    f"{' and '.join(PYSCF_MCSCF_METHODS)}."
+                )
+            return
+        block = self.active_space
+        if not isinstance(block, dict):
+            raise ValueError(
+                f"{method} needs an active_space block stating ncas, nelecas "
+                "and how the active orbitals are chosen."
+            )
+        unknown = sorted(set(block) - set(PYSCF_ACTIVE_SPACE_DEFAULTS))
+        if unknown:
+            raise ValueError(
+                f"Unknown active_space settings: {', '.join(unknown)}; "
+                f"expected {', '.join(PYSCF_ACTIVE_SPACE_DEFAULTS)}."
+            )
+        selection = self._check_orbital_selection(block.get("orbitals"))
+        ncas, nelecas = block.get("ncas"), block.get("nelecas")
+        if selection == "avas":
+            if ncas is not None or nelecas is not None:
+                raise ValueError(
+                    "With avas the active space is sized by AVAS itself; "
+                    "remove ncas and nelecas, which would be ignored."
+                )
+        else:
+            self._check_active_size(ncas, nelecas)
+            if selection == "mo_list":
+                self._check_mo_list(block["orbitals"], ncas)
+
+        nroots = block.get("nroots", 1)
+        if not _is_int(nroots) or nroots < 1:
+            raise ValueError(
+                f"active_space nroots must be a positive integer, not "
+                f"{nroots!r}."
+            )
+        weights = block.get("weights")
+        if weights is not None:
+            if method == "casci":
+                raise ValueError(
+                    "weights average the orbitals over roots, which needs "
+                    "casscf; casci reports every root without averaging."
+                )
+            if (
+                not isinstance(weights, (list, tuple))
+                or len(weights) != nroots
+                or any(not _is_number(w) or w < 0 for w in weights)
+                or abs(sum(weights) - 1.0) > 1e-10
+            ):
+                raise ValueError(
+                    f"active_space weights must be {nroots} non-negative "
+                    f"numbers summing to 1, not {weights!r}."
+                )
+        if not isinstance(block.get("nevpt2", False), bool):
+            raise ValueError("active_space nevpt2 must be true or false.")
+        for key, valid in (
+            ("max_cycle_macro", lambda v: _is_int(v) and v >= 1),
+            ("conv_tol", lambda v: _is_number(v) and v > 0),
+        ):
+            value = block.get(key)
+            if value is None:
+                continue
+            if method == "casci":
+                raise ValueError(
+                    f"active_space {key} controls the CASSCF orbital "
+                    "optimisation; casci optimises no orbitals."
+                )
+            if not valid(value):
+                raise ValueError(f"Invalid active_space {key}: {value!r}.")
+
+        self._refuse_unsupported_combinations(method)
+        if self.jobtype not in (None, "sp") or self.forces:
+            raise ValueError(
+                f"{method} is available for single-point energies only; "
+                "gradients, optimisation and frequencies are not offered."
+            )
+
+    @staticmethod
+    def _check_orbital_selection(orbitals):
+        """Return the orbital selection after checking its keys."""
+        if not isinstance(orbitals, dict) or "selection" not in orbitals:
+            raise ValueError(
+                "active_space orbitals.selection is required: one of "
+                f"{', '.join(PYSCF_ORBITAL_SELECTIONS)}. No active orbitals "
+                "are chosen implicitly."
+            )
+        selection = orbitals["selection"]
+        if selection not in PYSCF_ORBITAL_SELECTIONS:
+            raise ValueError(
+                f"Unknown orbital selection {selection!r}; expected one of "
+                f"{', '.join(PYSCF_ORBITAL_SELECTIONS)}."
+            )
+        allowed = PYSCF_ORBITAL_SELECTIONS[selection]
+        unknown = sorted(set(orbitals) - set(allowed))
+        if unknown:
+            raise ValueError(
+                f"Orbital selection {selection} takes only "
+                f"{', '.join(allowed)}, not {', '.join(unknown)}."
+            )
+        if selection == "avas":
+            labels = orbitals.get("ao_labels")
+            if (
+                not isinstance(labels, (list, tuple))
+                or not labels
+                or not all(isinstance(label, str) for label in labels)
+            ):
+                raise ValueError(
+                    "avas needs ao_labels, a list of atomic-orbital labels "
+                    "such as ['Fe 3d', 'C 2pz']."
+                )
+            threshold = orbitals.get("threshold")
+            if threshold is not None and not (
+                _is_number(threshold) and 0 < threshold < 1
+            ):
+                raise ValueError(
+                    f"avas threshold must lie between 0 and 1, not "
+                    f"{threshold!r}."
+                )
+        return selection
+
+    def _check_active_size(self, ncas, nelecas):
+        """Check ncas and nelecas against each other and the multiplicity."""
+        if not _is_int(ncas) or ncas < 1:
+            raise ValueError(
+                f"active_space ncas must be a positive integer, not {ncas!r}."
+            )
+        if _is_int(nelecas):
+            total = nelecas
+            if self.spin is not None and (
+                (nelecas - self.spin) % 2 or nelecas < self.spin
+            ):
+                raise ValueError(
+                    f"{nelecas} active electrons cannot have multiplicity "
+                    f"{self.multiplicity}."
+                )
+        elif (
+            isinstance(nelecas, (list, tuple))
+            and len(nelecas) == 2
+            and all(_is_int(n) and n >= 0 for n in nelecas)
+        ):
+            total = sum(nelecas)
+            if self.spin is not None and nelecas[0] - nelecas[1] != self.spin:
+                raise ValueError(
+                    f"active_space nelecas {list(nelecas)} has "
+                    f"{nelecas[0] - nelecas[1]} unpaired electrons; "
+                    f"multiplicity {self.multiplicity} has {self.spin}."
+                )
+        else:
+            raise ValueError(
+                "active_space nelecas must be an electron count or "
+                f"[n_alpha, n_beta], not {nelecas!r}."
+            )
+        if total > 2 * ncas or total < 0:
+            raise ValueError(
+                f"{total} active electrons do not fit in {ncas} orbitals."
+            )
+        if isinstance(nelecas, (list, tuple)):
+            per_spin = tuple(nelecas)
+        elif self.spin is not None:
+            # PySCF's split of an electron count by 2S.
+            beta = (nelecas - self.spin) // 2
+            per_spin = (nelecas - beta, beta)
+        else:
+            per_spin = ()
+        if any(n > ncas for n in per_spin):
+            raise ValueError(
+                f"{per_spin[0]} alpha and {per_spin[1]} beta active electrons "
+                f"do not fit in {ncas} orbitals."
+            )
+
+    @staticmethod
+    def _check_mo_list(orbitals, ncas):
+        """Check an explicit list of active orbitals."""
+        if orbitals.get("index_base") not in (0, 1):
+            raise ValueError(
+                "mo_list needs index_base: 1 or 0, stating whether the first "
+                "orbital is numbered 1 (Gaussian, PySCF sort_mo) or 0 (ORCA, "
+                "Python)."
+            )
+        mo_list = orbitals.get("mo_list")
+        if not isinstance(mo_list, (list, tuple)) or not all(
+            _is_int(index) for index in mo_list
+        ):
+            raise ValueError(
+                f"mo_list must be a list of orbital numbers, not {mo_list!r}."
+            )
+        if len(set(mo_list)) != len(mo_list):
+            raise ValueError(f"mo_list {list(mo_list)} repeats an orbital.")
+        if len(mo_list) != ncas:
+            raise ValueError(
+                f"mo_list names {len(mo_list)} orbitals but ncas is {ncas}."
+            )
+        if min(mo_list) < orbitals["index_base"]:
+            raise ValueError(
+                f"mo_list {list(mo_list)} has an orbital below "
+                f"index_base {orbitals['index_base']}."
+            )
+
+    def _check_functional_name(self):
+        """Reject a functional string PySCF would not read as that name.
+
+        Hyphenated names such as ``cam-b3lyp`` and ``b3lyp-vwn3`` (B3LYP
+        minus VWN) can only be told apart with PySCF's own tables, so the
+        driver checks those in the environment that runs the calculation.
+        """
+        functional = self.functional
+        name = str(functional).strip().lower()
+        if PYSCF_FUNCTIONAL_EXPRESSION_CHARACTERS.intersection(name):
+            raise ValueError(
+                f"Functional {functional!r} is a PySCF expression, not a "
+                "named functional. Request the functional by name, for "
+                "example 'pbe0' or 'b3lyp'."
+            )
+        if "-d3" in name or "-d4" in name:
+            raise ValueError(
+                f"Functional {functional!r} carries a dispersion suffix, "
+                "which PySCF would apply on its own. Give the dispersion "
+                "through the dispersion setting instead, for example "
+                "functional 'b3lyp' with dispersion 'd3bj'."
+            )
+        if name in PYSCF_MISLEADING_FUNCTIONALS:
+            raise ValueError(
+                f"Functional {functional!r} is refused: "
+                f"{PYSCF_MISLEADING_FUNCTIONALS[name]}"
+            )
 
     def _check_solvent(self, solvent_model):
         """Reject a solvent model PySCF has no implementation for."""
@@ -370,16 +836,27 @@ class PySCFJobSettings(MolecularJobSettings):
                 f"calculation than the one requested."
             )
 
-        if self.ab_initio is not None and str(self.ab_initio).lower() != "hf":
+        if (
+            self.ab_initio is not None
+            and str(self.ab_initio).lower() != "hf"
+            and self.correlated_method is None
+            and self.mcscf_method is None
+        ):
             raise ValueError(
                 f"Unknown ab_initio method {self.ab_initio!r}; the PySCF "
-                "v1 backend supports only 'hf' or a DFT functional."
+                f"backend supports 'hf', {', '.join(PYSCF_CORRELATED_METHODS)}, "
+                f"{', '.join(PYSCF_MCSCF_METHODS)}, or a DFT functional."
             )
+        self._check_correlation()
+        self._check_active_space()
 
         if self.ab_initio is not None and self.functional is not None:
             raise ValueError(
                 "Specify either 'ab_initio: hf' or 'functional', not both."
             )
+
+        if self.functional is not None:
+            self._check_functional_name()
 
         if is_double_hybrid_functional(self.functional):
             raise ValueError(
@@ -401,6 +878,9 @@ class PySCFJobSettings(MolecularJobSettings):
                     "so the applied dielectric/environment is explicit."
                 )
 
+        if not isinstance(self.scf_stability, bool):
+            raise ValueError("scf_stability must be true or false.")
+
         if float(self.point_group_tol) <= 0:
             raise ValueError(
                 f"point_group_tol must be positive, got "
@@ -411,6 +891,26 @@ class PySCFJobSettings(MolecularJobSettings):
             raise ValueError(
                 f"Unknown opt_solver {self.opt_solver!r}; "
                 f"expected one of {PYSCF_OPT_SOLVERS}."
+            )
+        if self.jobtype == "ts" and self.opt_solver != "geometric":
+            raise ValueError(
+                "Transition-state searches use the geometric optimizer's "
+                f"P-RFO saddle-point search, not {self.opt_solver!r}."
+            )
+        if self.jobtype in ("ts", "irc") and self.engine == "gpu":
+            raise ValueError(
+                f"{self.jobtype} is not supported on the GPU engine; "
+                "set engine: cpu or pass --no-gpu."
+            )
+        if self.jobtype == "irc" and self.opt_solver != "geometric":
+            raise ValueError(
+                "Reaction paths are followed by the geometric optimizer's "
+                f"IRC method, not {self.opt_solver!r}."
+            )
+        if self.irc_direction not in PYSCF_IRC_DIRECTIONS:
+            raise ValueError(
+                f"Unknown irc_direction {self.irc_direction!r}; "
+                f"expected one of {PYSCF_IRC_DIRECTIONS}."
             )
 
         if self.engine is not None and self.engine not in PYSCF_ENGINES:
