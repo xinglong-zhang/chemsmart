@@ -8,8 +8,8 @@ import pytest
 from ase import units
 
 from chemsmart.io.pyscf.output import (
+    PySCFH5File,
     PySCFOutput,
-    read_pyscf_h5,
     rotational_symmetry_number_from_point_group,
 )
 from chemsmart.jobs.pyscf.writer import (
@@ -122,7 +122,7 @@ def test_unsupported_schema_version_is_rejected(tmp_path):
     with h5py.File(path, "w") as handle:
         handle.attrs["schema_version"] = "99.0"
     with pytest.raises(ValueError, match="Unsupported PySCF results schema"):
-        read_pyscf_h5(path)
+        PySCFH5File(path).spec
 
 
 def test_missing_schema_version_is_rejected(tmp_path):
@@ -130,7 +130,7 @@ def test_missing_schema_version_is_rejected(tmp_path):
     with h5py.File(path, "w"):
         pass
     with pytest.raises(ValueError, match="Unsupported PySCF results schema"):
-        read_pyscf_h5(path)
+        PySCFH5File(path).spec
 
 
 def test_missing_section_is_named(tmp_path):
@@ -139,7 +139,7 @@ def test_missing_section_is_named(tmp_path):
         handle.attrs["schema_version"] = RESULTS_SCHEMA_VERSION
         handle.create_group("spec")
     with pytest.raises(ValueError, match="provenance"):
-        read_pyscf_h5(path)
+        PySCFH5File(path).spec
 
 
 @pytest.mark.parametrize(
