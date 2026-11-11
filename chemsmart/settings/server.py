@@ -691,6 +691,117 @@ class Server(RegistryMixin):
             p = subprocess.Popen(shlex.split(command))
         return p.wait()
 
+    def submit_batch_job(
+        self,
+        jobs,
+        num_nodes,
+        test=False,
+        cli_args=None,
+        batch_label=None,
+        **kwargs,
+    ):
+        """Submit independent jobs within one node-limited SLURM allocation."""
+        if not jobs:
+            logger.warning("No jobs to submit")
+            return
+        if (self.scheduler or "").upper() != "SLURM":
+            raise ValueError(
+                "Node-limited batch submission currently requires SLURM."
+            )
+
+        first_job = jobs[0]
+        submitter = self.get_submitter(
+            first_job, batch_label=batch_label, **kwargs
+        )
+        labeled_jobs = {
+            job.execution_name for job in jobs if job.label is not None
+        }
+        batch_name = getattr(submitter, "batch_prefix", None)
+        if labeled_jobs or batch_name is not None:
+            from chemsmart.utils.cluster import ClusterHelper
+
+            _, running_job_names = ClusterHelper().get_running_jobs()
+            duplicate = labeled_jobs.intersection(running_job_names)
+            if batch_name in running_job_names:
+                duplicate.add(batch_name)
+            if duplicate:
+                name = sorted(duplicate)[0]
+                sys.exit(f"Duplicate job NOT submitted: {name}")
+
+        submitter.write_batch_job(
+            jobs=jobs,
+            num_nodes=num_nodes,
+            cli_args=cli_args,
+        )
+        if not test:
+            self._submit_batch_job(first_job, submitter)
+
+    def _submit_batch_job(self, job, submitter):
+        """Submit the single SLURM allocation for a batch."""
+        command = self.submit_command
+        if command is None:
+            raise ValueError(
+                f"Cannot submit job on {self} "
+                "since no submission command is defined."
+            )
+        command += f" {submitter.batch_submit_script}"
+        logger.info(f"Submitting batch job with command: {command}")
+        if "<" in command or ">" in command or "|" in command:
+            process = subprocess.Popen(command, shell=True)
+        else:
+            process = subprocess.Popen(shlex.split(command))
+        return process.wait()
+
+    def submit_streaming_npz_batch(
+        self,
+        *,
+        script_path,
+        label,
+        num_nodes,
+        program,
+        command,
+        queue=None,
+        hours=None,
+        test=False,
+    ):
+        """Write and submit one streaming NPZ allocation."""
+        if (self.scheduler or "").upper() != "SLURM":
+            raise ValueError("Streaming NPZ batches require SLURM.")
+
+        from chemsmart.settings.submitters import SLURMSubmitter
+
+        SLURMSubmitter.write_streaming_npz_job(
+            server=self,
+            script_path=script_path,
+            label=label,
+            num_nodes=num_nodes,
+            program=program,
+            command=command,
+            queue=queue,
+            hours=hours,
+        )
+        if test:
+            return 0
+
+        submit_command = shlex.split(self.submit_command or "sbatch")
+        result = subprocess.run(
+            [*submit_command, str(script_path)], check=False
+        )
+        if result.returncode:
+            raise RuntimeError(
+                f"SLURM submission failed with status {result.returncode}."
+            )
+        return result.returncode
+
+    @staticmethod
+    def ensure_batch_name_available(label):
+        """Reject a batch label already present in the scheduler queue."""
+        from chemsmart.utils.cluster import ClusterHelper
+
+        _, running_job_names = ClusterHelper().get_running_jobs()
+        if label in running_job_names:
+            sys.exit(f"Duplicate job NOT submitted: {label}")
+
 
 class YamlServerSettings(Server):
     """

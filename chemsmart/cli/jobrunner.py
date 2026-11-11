@@ -20,7 +20,7 @@ def click_jobrunner_options(f):
     @click.option(
         "-n",
         "--num-cores",
-        type=int,
+        type=click.IntRange(min=1),
         help="Number of cores for each job.",
     )
     @click.option(

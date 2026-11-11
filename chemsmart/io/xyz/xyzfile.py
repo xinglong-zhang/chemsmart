@@ -61,6 +61,97 @@ class XYZFile(FileMixin):
         """
         return self.get_comments(index="-1")
 
+    def iter_molecule_results(self, index=":"):
+        """Read frames sequentially, yielding original one-based positions.
+
+        The selection syntax matches ``get_molecules``. Negative positions
+        require a counting pass, but neither pass stores all frames.
+        """
+        from chemsmart.io.molecules.structure import Molecule
+        from chemsmart.utils.utils import parse_index_specification
+
+        selector = parse_index_specification(str(index))
+        needs_count = (
+            isinstance(selector, int)
+            and selector < 0
+            or isinstance(selector, list)
+            and any(i < 0 for i in selector)
+            or isinstance(selector, slice)
+            and (
+                selector.step is not None
+                and selector.step < 0
+                or selector.start is not None
+                and selector.start < 0
+                or selector.stop is not None
+                and selector.stop < 0
+            )
+        )
+        count = (
+            sum(1 for _ in self._iter_frame_blocks()) if needs_count else None
+        )
+        if count is not None:
+            selected = parse_index_specification(str(index), total_count=count)
+        else:
+            selected = selector
+        if isinstance(selected, int):
+            wanted = {selected}
+        elif isinstance(selected, list):
+            wanted = set(selected)
+        else:
+            wanted = None
+
+        matched = False
+        for offset, comment, block in self._iter_frame_blocks():
+            if wanted is not None:
+                include = offset in wanted
+            elif selected.step is not None and selected.step < 0:
+                include = offset in range(*selected.indices(count))
+            else:
+                start = selected.start or 0
+                stop = selected.stop
+                step = selected.step or 1
+                include = (
+                    offset >= start
+                    and (stop is None or offset < stop)
+                    and (offset - start) % step == 0
+                )
+            if not include:
+                continue
+            matched = True
+            try:
+                molecule = Molecule.from_coordinate_block_text(
+                    block, structure_index_in_file=offset + 1
+                )
+                match = re.findall(raw_energy_value_pattern, comment)
+                if match:
+                    molecule.energy = float(match[0])
+                yield offset + 1, molecule, None
+            except (ValueError, TypeError, IndexError) as error:
+                yield offset + 1, None, error
+        if not matched:
+            raise IndexError(
+                f"Index {index} selects no structures in {self.filename}."
+            )
+
+    def _iter_frame_blocks(self):
+        """Yield one XYZ frame at a time without loading the full file."""
+        with open(self.filename) as stream:
+            offset = 0
+            while header := stream.readline():
+                atoms = int(header.strip())
+                if atoms <= 0:
+                    raise ValueError(
+                        "Number of atoms in the xyz file is zero!"
+                    )
+                comment = stream.readline()
+                if not comment:
+                    raise ValueError(f"Incomplete XYZ frame {offset + 1}.")
+                block = [stream.readline() for _ in range(atoms)]
+                if any(not line for line in block):
+                    raise ValueError(f"Incomplete XYZ frame {offset + 1}.")
+                yield offset, comment.strip(), block
+                offset += 1
+
     def _get_molecules_and_comments(self, index=":", return_list=False):
         """
         Extract molecules and comments from XYZ file.

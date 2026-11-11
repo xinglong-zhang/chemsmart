@@ -12,6 +12,7 @@ This module consolidates the assembler pipeline:
 - build_provenance: provenance metadata builder
 """
 
+import hashlib
 import logging
 from functools import cached_property
 
@@ -27,12 +28,14 @@ from chemsmart.database.utils import (
     is_custom_basis,
     is_custom_solvent,
     sha256_content,
+    sha256_file,
     standardize_basis_set,
     utcnow_iso,
 )
 from chemsmart.io.folder import BaseFolder
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
+from chemsmart.io.npz import NPZFile
 from chemsmart.io.orca.output import ORCAOutput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.utils.io import get_program_type_from_file
@@ -40,7 +43,78 @@ from chemsmart.utils.io import get_program_type_from_file
 logger = logging.getLogger(__name__)
 
 
-class BaseAssembler:
+class MoleculeInfoAssemblerMixin:
+    """Shared conversion from a molecule to database fields."""
+
+    def get_molecule_info(self, mol):
+        molecule_info = {
+            "molecule_label": mol.molecule_label,
+            "molecule_id": mol.molecule_id,
+            "structure_index_in_file": mol.structure_index_in_file,
+            "is_optimized_structure": mol.is_optimized_structure,
+            "charge": mol.charge,
+            "multiplicity": mol.multiplicity,
+            "structure_id": mol.structure_id,
+            "structure_label": mol.structure_label,
+            "chemical_symbols": mol.chemical_symbols,
+            "positions": mol.positions,
+            "empirical_formula": mol.empirical_formula,
+            "chemical_formula": mol.chemical_formula,
+            "number_of_atoms": mol.num_atoms,
+            "mass": mol.mass,
+            "elements": mol.elements,
+            "element_counts": mol.element_counts,
+            "center_of_mass": mol.center_of_mass,
+            "is_chiral": mol.is_chiral,
+            "is_ring": mol.is_ring,
+            "is_aromatic": mol.is_aromatic,
+            "is_monoatomic": mol.is_monoatomic,
+            "is_diatomic": mol.is_diatomic,
+            "is_linear": mol.is_linear,
+            "is_multicomponent": mol.is_multicomponent,
+            "num_components": mol.num_components,
+            "smiles": mol.smiles,
+            "inchi": mol.inchi,
+            "chiral_centers": mol.chiral_centers,
+            "moments_of_inertia": mol.moments_of_inertia,
+            "frozen_atoms": mol.frozen_atoms,
+            "energy": mol.energy,
+            "forces": mol.forces,
+        }
+        if mol.mulliken_atomic_charges is not None:
+            molecule_info["mulliken_atomic_charges"] = (
+                mol.mulliken_atomic_charges
+            )
+        if mol.mulliken_spin_densities is not None:
+            molecule_info["mulliken_spin_densities"] = (
+                mol.mulliken_spin_densities
+            )
+        if mol.rotational_symmetry_number is not None:
+            molecule_info["rotational_symmetry_number"] = (
+                mol.rotational_symmetry_number
+            )
+        if mol.rotational_constants is not None:
+            molecule_info["rotational_constants"] = mol.rotational_constants
+        if mol.point_group is not None:
+            molecule_info["point_group"] = mol.point_group
+        if mol.dipole_moment is not None:
+            molecule_info["dipole_moment"] = mol.dipole_moment
+        if mol.dipole_moment_magnitude is not None:
+            molecule_info["dipole_moment_magnitude"] = (
+                mol.dipole_moment_magnitude
+            )
+        if mol.has_vibrations:
+            molecule_info.update(
+                {
+                    "num_vibrational_modes": mol.num_vib_modes,
+                    "vibrational_frequencies": mol.vibrational_frequencies,
+                    "vibrational_modes": mol.vibrational_modes,
+                }
+            )
+        return molecule_info
+
+
+class BaseAssembler(MoleculeInfoAssemblerMixin):
     OUTPUT_CLASS = None  # To be defined in subclasses
     PROGRAM = "unknown"  # To be defined in subclasses
     FOLDER_BASED = False
@@ -65,7 +139,9 @@ class BaseAssembler:
             )
             return molecules if isinstance(molecules, list) else [molecules]
         return Molecule.from_filepath(
-            self.filename, index=self.index, return_list=True
+            self.filename,
+            index=self.index,
+            return_list=True,
         )
 
     def build_provenance(self):
@@ -191,73 +267,6 @@ class BaseAssembler:
                 }
             )
         return meta_data
-
-    def get_molecule_info(self, mol):
-        molecule_info = {
-            "molecule_label": mol.molecule_label,
-            "molecule_id": mol.molecule_id,
-            "structure_index_in_file": mol.structure_index_in_file,
-            "is_optimized_structure": mol.is_optimized_structure,
-            "charge": mol.charge,
-            "multiplicity": mol.multiplicity,
-            "structure_id": mol.structure_id,
-            "structure_label": mol.structure_label,
-            "chemical_symbols": mol.chemical_symbols,
-            "positions": mol.positions,
-            "empirical_formula": mol.empirical_formula,
-            "chemical_formula": mol.chemical_formula,
-            "number_of_atoms": mol.num_atoms,
-            "mass": mol.mass,
-            "elements": mol.elements,
-            "element_counts": mol.element_counts,
-            "center_of_mass": mol.center_of_mass,
-            "is_chiral": mol.is_chiral,
-            "is_ring": mol.is_ring,
-            "is_aromatic": mol.is_aromatic,
-            "is_monoatomic": mol.is_monoatomic,
-            "is_diatomic": mol.is_diatomic,
-            "is_linear": mol.is_linear,
-            "is_multicomponent": mol.is_multicomponent,
-            "num_components": mol.num_components,
-            "smiles": mol.smiles,
-            "inchi": mol.inchi,
-            "chiral_centers": mol.chiral_centers,
-            "moments_of_inertia": mol.moments_of_inertia,
-            "frozen_atoms": mol.frozen_atoms,
-            "energy": mol.energy,
-            "forces": mol.forces,
-        }
-        if mol.mulliken_atomic_charges is not None:
-            molecule_info["mulliken_atomic_charges"] = (
-                mol.mulliken_atomic_charges
-            )
-        if mol.mulliken_spin_densities is not None:
-            molecule_info["mulliken_spin_densities"] = (
-                mol.mulliken_spin_densities
-            )
-        if mol.rotational_symmetry_number is not None:
-            molecule_info["rotational_symmetry_number"] = (
-                mol.rotational_symmetry_number
-            )
-        if mol.rotational_constants is not None:
-            molecule_info["rotational_constants"] = mol.rotational_constants
-        if mol.point_group is not None:
-            molecule_info["point_group"] = mol.point_group
-        if mol.dipole_moment is not None:
-            molecule_info["dipole_moment"] = mol.dipole_moment
-        if mol.dipole_moment_magnitude is not None:
-            molecule_info["dipole_moment_magnitude"] = (
-                mol.dipole_moment_magnitude
-            )
-        if mol.has_vibrations:
-            molecule_info.update(
-                {
-                    "num_vibrational_modes": mol.num_vib_modes,
-                    "vibrational_frequencies": mol.vibrational_frequencies,
-                    "vibrational_modes": mol.vibrational_modes,
-                }
-            )
-        return molecule_info
 
     def get_calculation_results(self):
         calculation_results = {
@@ -396,6 +405,152 @@ class XTBAssembler(BaseAssembler):
             }
         )
         return calculation_results
+
+
+class NPZAssembler(MoleculeInfoAssemblerMixin):
+    """Build one database record per NPZ structure.
+
+    Attributes:
+        failed_structures (dict): 1-based structure index to the reason it
+            could not be assembled, filled while ``assemble`` is consumed.
+    """
+
+    def __init__(
+        self, filename, index=":", dataset=None, method=None, basis=None
+    ):
+        self.filename = filename
+        self.index = index
+        self.dataset = dataset
+        self.method = method
+        self.basis = basis
+        self.npz_file = NPZFile(filename, dataset=dataset)
+        self.failed_structures = {}
+
+    def assemble(self):
+        self.failed_structures = {}
+        schema = self.npz_file.schema
+        source_hash = sha256_file(self.filename)
+        source_size = file_size(self.filename)
+        if self.dataset is None:
+            logger.warning(
+                f"No dataset declared for {self.filename}: energies are "
+                f"recorded assuming the units of the detected {schema.name} "
+                f"layout. Use --dataset {schema.dataset} to confirm this and "
+                f"record its units, method and basis."
+            )
+        for index, molecule, error in self.npz_file.iter_molecule_results(
+            index=self.index
+        ):
+            try:
+                if error is not None:
+                    raise error
+                yield self._build_record(
+                    molecule, schema, source_hash, source_size
+                )
+            except ImportError:
+                # A missing dependency would fail every structure.
+                raise
+            except Exception as e:
+                logger.error(f"Skipping NPZ structure {index}: {e}")
+                self.failed_structures[index] = str(e)
+
+    def _build_record(self, molecule, schema, source_hash, source_size):
+        """Build the database record for one structure."""
+        index = molecule.structure_index_in_file
+        molecule_info = self.get_molecule_info(molecule)
+        dipole = getattr(molecule, schema.dipole_key)
+        if dipole is not None:
+            molecule_info["dipole_moment_magnitude"] = dipole
+        constants = self._rotational_constants_in_Hz(molecule, schema)
+        if constants is not None:
+            molecule_info["rotational_constants"] = constants
+        return AssembledRecord(
+            record_id=hashlib.sha256(
+                f"npz|{source_hash}|{index}".encode()
+            ).hexdigest(),
+            meta=self._get_meta(schema),
+            results=self._get_results(molecule, schema),
+            molecules=[
+                {
+                    "index": 1,
+                    **molecule_info,
+                    "dataset_source": molecule.dataset_source,
+                    "dataset_properties": self._get_dataset_properties(
+                        molecule, schema
+                    ),
+                }
+            ],
+            provenance={
+                "source": self.filename,
+                "source_file_hash": source_hash,
+                "source_size": source_size,
+                "program": schema.name if self.dataset else None,
+                "parser": "NPZFile",
+                "chemsmart_version": chemsmart_version,
+                "assembled_at": utcnow_iso(),
+                "normal_termination": None,
+            },
+        )
+
+    def _get_meta(self, schema):
+        """Return the method and basis, defaulting from a declared dataset."""
+        defaults = schema.meta if self.dataset else {}
+        return {
+            "method": self.method or defaults.get("method"),
+            "basis": self.basis or defaults.get("basis"),
+        }
+
+    def _get_results(self, molecule, schema):
+        """Convert dataset values to the record's energy conventions.
+
+        Each database column has a fixed unit, so the values are converted
+        using the units of the layout whether or not it was declared.
+        """
+        to_eV = schema.orbital_energy_to_eV
+        homo, lumo, gap = molecule.homo, molecule.lumo, molecule.gap
+        if gap is None and homo is not None and lumo is not None:
+            gap = lumo - homo
+        results = {"total_energy": molecule.energy}
+        if homo is not None:
+            results["homo_energy"] = homo * to_eV
+        if lumo is not None:
+            results["lumo_energy"] = lumo * to_eV
+        if gap is not None:
+            results["fmo_gap"] = gap * to_eV
+        # QM9's U0, U, H and G are atom-reference-adjusted, so they must not
+        # fill the columns holding absolute energies from other programs.
+        if molecule.zpve is not None:
+            results["zero_point_energy"] = (
+                molecule.zpve * schema.zpve_to_hartree
+            )
+        constants = self._rotational_constants_in_Hz(molecule, schema)
+        if constants is not None:
+            results["rotational_constants_in_Hz"] = constants
+        return results
+
+    @staticmethod
+    def _rotational_constants_in_Hz(molecule, schema):
+        """Return [A, B, C] in Hz, or None if the dataset does not have them."""
+        constants = [
+            getattr(molecule, key) for key in schema.rotational_constant_keys
+        ]
+        if not constants or None in constants:
+            return None
+        return [
+            constant * schema.rotational_constant_to_Hz
+            for constant in constants
+        ]
+
+    def _get_dataset_properties(self, molecule, schema):
+        """Describe the original values, with units once they are declared."""
+        return {
+            key: {
+                "value": getattr(molecule, key),
+                "unit": unit if self.dataset else None,
+            }
+            for key, unit in schema.property_units.items()
+            if getattr(molecule, key) is not None
+        }
 
 
 class SingleFileAssembler:

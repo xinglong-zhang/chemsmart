@@ -1,6 +1,8 @@
 import inspect
+import json
 import logging
 import os
+import re
 import shlex
 import sys
 from abc import abstractmethod
@@ -39,7 +41,7 @@ class RunScript:
         cli_args: Command line arguments to pass to the job.
     """
 
-    def __init__(self, filename, cli_args, batch=False):
+    def __init__(self, filename, cli_args, batch=False, num_cores=1):
         """
         Initialize the run script generator.
 
@@ -51,6 +53,7 @@ class RunScript:
         self.filename = filename
         self.batch = batch
         self.cli_args = cli_args
+        self.num_cores = num_cores
 
     def write(self):
         """
@@ -75,7 +78,7 @@ class RunScript:
         contents = f"""\
         #!/usr/bin/env python
         import os
-        os.environ['OMP_NUM_THREADS'] = '1'
+        os.environ['OMP_NUM_THREADS'] = {str(self.num_cores)!r}
         
         from chemsmart.cli.run import run
 
@@ -322,6 +325,12 @@ class Submitter(RegistryMixin):
         # Write array submit script
         self._write_array_submitscript(num_nodes)
 
+    def write_batch_job(self, jobs, num_nodes, cli_args=None):
+        """Write scripts for independent subtasks in one scheduler allocation."""
+        raise NotImplementedError(
+            f"{self.NAME} does not support node-limited batch jobs."
+        )
+
     def _write_array_runscripts(self, jobs, cli_args):
         """
         Write individual run scripts for each job in the array.
@@ -487,10 +496,35 @@ class Submitter(RegistryMixin):
         if self.executable is None:
             self._write_python_environment(f)
             return
-        self._write_program_specific_conda_env(f)
-        self._write_load_program_specific_modules(f)
-        self._write_source_program_specific_script(f)
-        self._write_program_specific_environment_variables(f)
+        self._write_executable_configuration(f, self.executable)
+
+    @staticmethod
+    def _write_executable_configuration(f, executable):
+        """Write one executable's shell setup commands."""
+        sections = (
+            ("# conda environment", executable.conda_env),
+            ("# modules", executable.modules),
+            ("# program specific scripts", executable.scripts),
+        )
+        for heading, setup in sections:
+            if setup is None:
+                continue
+            f.write(f"{heading}\n")
+            if isinstance(setup, str):
+                f.write(setup)
+                if setup and not setup.endswith("\n"):
+                    f.write("\n")
+            else:
+                for line in setup:
+                    f.write(line)
+                    if line and not line.endswith("\n"):
+                        f.write("\n")
+            f.write("\n")
+        if executable.envars is not None:
+            f.write("# Writing program specific environment variables\n")
+            for key, value in executable.env.items():
+                f.write(f"export {key}={value}\n")
+            f.write("\n")
 
     @staticmethod
     def _write_python_environment(f):
@@ -790,6 +824,66 @@ class SLURMSubmitter(Submitter):
         """
         super().__init__(name=name, job=job, server=server, **kwargs)
 
+    @staticmethod
+    def write_streaming_npz_job(
+        *,
+        server,
+        script_path,
+        label,
+        num_nodes,
+        program,
+        command,
+        queue=None,
+        hours=None,
+    ):
+        """Write the outer SLURM script for a streaming NPZ batch."""
+        writer = SLURMSubmitter(server=server, job=None)
+        executable_class = {
+            "gaussian": GaussianExecutable,
+            "orca": ORCAExecutable,
+            "xtb": XTBExecutable,
+        }[program]
+        executable = executable_class.from_servername(server.name)
+        with open(script_path, "w") as stream:
+            writer._write_bash_header(stream)
+            writer._write_batch_scheduler_configuration(
+                stream,
+                label=label,
+                num_nodes=num_nodes,
+                queue=queue,
+                hours=hours,
+            )
+            writer._write_executable_configuration(stream, executable)
+            writer._write_extra_commands(stream)
+            writer._write_change_to_job_directory(stream)
+            stream.write(f"{shlex.join(command)}\n")
+
+    def _write_batch_scheduler_configuration(
+        self, f, *, label, num_nodes, queue=None, hours=None
+    ):
+        """Write scheduler options shared by batch allocation types."""
+        f.write(f"#SBATCH --job-name={label}\n")
+        f.write(f"#SBATCH --output={label}.slurmout\n")
+        f.write(f"#SBATCH --error={label}.slurmerr\n")
+        if queue:
+            f.write(f"#SBATCH --partition={queue}\n")
+        if hours:
+            f.write(f"#SBATCH --time={hours}:00:00\n")
+        if user_settings is not None:
+            if user_settings.data.get("PROJECT"):
+                f.write(f"#SBATCH --account={user_settings.data['PROJECT']}\n")
+            if user_settings.data.get("EMAIL"):
+                f.write(f"#SBATCH --mail-user={user_settings.data['EMAIL']}\n")
+                f.write("#SBATCH --mail-type=END,FAIL\n")
+        self._write_extra_scheduler_directives(f)
+        if self.server.num_gpus:
+            f.write(f"#SBATCH --gres=gpu:{self.server.num_gpus}\n")
+        f.write(f"#SBATCH --nodes={num_nodes}\n")
+        f.write(
+            f"#SBATCH --ntasks-per-node={self.server.num_cores}\n"
+            f"#SBATCH --mem={self.server.mem_gb}G\n\n"
+        )
+
     def _write_scheduler_options(self, f):
         """
         Write SLURM-specific scheduler directives.
@@ -875,6 +969,112 @@ class SLURMSubmitter(Submitter):
                 f.write("#SBATCH --mail-type=END,FAIL\n")
         f.write("\n")
         f.write("\n")
+
+    @property
+    def batch_prefix(self):
+        label = self.kwargs.get("batch_label")
+        if label:
+            program = self.job.PROGRAM
+            if program:
+                label = f"{program.lower()}_{label}"
+        else:
+            label = self.job.execution_name or "batch"
+        label = re.sub(r"[^A-Za-z0-9_.-]+", "_", os.path.basename(label))
+        return label[:100]
+
+    @property
+    def batch_submit_script(self):
+        return f"{self.batch_prefix}.sh"
+
+    @property
+    def batch_driver_script(self):
+        return f"{self.batch_prefix}.py"
+
+    @property
+    def batch_manifest(self):
+        return f"{self.batch_prefix}.json"
+
+    def write_batch_job(self, jobs, num_nodes, cli_args=None):
+        if not jobs:
+            logger.warning("No jobs provided for batch job")
+            return
+        self.jobs = jobs
+        self.num_nodes = num_nodes
+        task_runner = jobs[0].jobrunner
+        task_cores = task_runner.num_cores
+        task_memory = task_runner.mem_gb
+        task_gpus = task_runner.num_gpus
+        if num_nodes <= 0 or task_cores <= 0 or task_memory <= 0:
+            raise ValueError(
+                "Batch node, core, and memory allocations must be positive."
+            )
+        if task_gpus < 0:
+            raise ValueError("A subtask GPU count cannot be negative.")
+        if task_cores > self.server.num_cores:
+            raise ValueError(
+                "A subtask cannot request more cores than one node."
+            )
+        if task_memory > self.server.mem_gb:
+            raise ValueError(
+                "A subtask cannot request more memory than one node."
+            )
+        if task_gpus > self.server.num_gpus:
+            raise ValueError(
+                "A subtask cannot request more GPUs than one node."
+            )
+
+        tasks = []
+        for index, job in enumerate(jobs, start=1):
+            task_args = cli_args
+            if isinstance(cli_args, (list, tuple)) and len(cli_args) == len(
+                jobs
+            ):
+                task_args = cli_args[index - 1]
+            runscript = f"{self.batch_prefix}_run_{index:05d}.py"
+            RunScript(runscript, task_args, num_cores=task_cores).write()
+            tasks.append({"label": job.label, "runscript": runscript})
+
+        with open(self.batch_manifest, "w") as manifest_file:
+            json.dump(
+                {
+                    "num_nodes": num_nodes,
+                    "cores_per_node": self.server.num_cores,
+                    "memory_per_node_gb": self.server.mem_gb,
+                    "gpus_per_node": self.server.num_gpus,
+                    "task_cores": task_cores,
+                    "task_memory_gb": task_memory,
+                    "task_gpus": task_gpus,
+                    "tasks": tasks,
+                },
+                manifest_file,
+            )
+
+        with open(self.batch_driver_script, "w") as driver_file:
+            driver_file.write(
+                "from chemsmart.jobs.batch import run_slurm_batch\n\n"
+                "if __name__ == '__main__':\n"
+                f"    raise SystemExit(run_slurm_batch("
+                f"{self.batch_manifest!r}))\n"
+            )
+
+        with open(self.batch_submit_script, "w") as submit_file:
+            self._write_bash_header(submit_file)
+            self._write_batch_scheduler_options(submit_file)
+            self._write_program_specifics(submit_file)
+            self._write_extra_commands(submit_file)
+            self._write_change_to_job_directory(submit_file)
+            submit_file.write(
+                f"python {shlex.quote(self.batch_driver_script)}\n"
+            )
+
+    def _write_batch_scheduler_options(self, f):
+        self._write_batch_scheduler_configuration(
+            f,
+            label=self.batch_prefix,
+            num_nodes=self.num_nodes,
+            queue=self.server.queue_name,
+            hours=self.server.num_hours,
+        )
 
     def _write_change_to_job_directory(self, f):
         """

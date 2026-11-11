@@ -12,6 +12,10 @@ import click
 from chemsmart.cli.jobrunner import click_jobrunner_options
 from chemsmart.cli.logger import logger_options
 from chemsmart.cli.subcommands import subcommands
+from chemsmart.cli.utils import (
+    prepare_structure_inputs,
+    prepared_structure_arguments,
+)
 from chemsmart.jobs.runner import JobRunner
 from chemsmart.settings.server import Server
 from chemsmart.utils.cli import CtxObjArguments, MyGroup
@@ -32,6 +36,13 @@ logger = logging.getLogger(__name__)
     help="Time limit in hours for the job (e.g., 48.0).",
 )
 @click.option("-q", "--queue", type=str, help="Queue name for job submission.")
+@click.option(
+    "-N",
+    "--num-nodes",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Enable node-limited batch submission using this maximum node count.",
+)
 @click.option(
     "-v/",
     "--verbose/--no-verbose",
@@ -62,6 +73,7 @@ def sub(
     stream,
     time_hours,
     queue,
+    num_nodes,
     verbose,
     test,
     print_command,
@@ -88,11 +100,11 @@ def sub(
         server.num_hours = time_hours
     if queue is not None:
         server.queue_name = queue
-    if num_cores is not None:
+    if num_cores is not None and num_nodes is None:
         server.kwargs["NUM_CORES"] = num_cores
-    if num_gpus is not None:
+    if num_gpus is not None and num_nodes is None:
         server.kwargs["NUM_GPUS"] = num_gpus
-    if mem_gb is not None:
+    if mem_gb is not None and num_nodes is None:
         server.kwargs["MEM_GB"] = mem_gb
 
     jobrunner = JobRunner(
@@ -149,6 +161,7 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
             keywords_not_in_run = [
                 "time_hours",
                 "queue",
+                "num_nodes",
                 "verbose",
                 "test",
                 "print_command",
@@ -300,7 +313,22 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
 
         return args
 
-    def _reconstruct_cli_args(ctx, job):
+    def _replace_batch_structure_index(cli_args, structure_index):
+        args = list(cli_args)
+        for option in (
+            "-i",
+            "--index",
+            "--structure-index",
+            "--si",
+        ):
+            if option in args:
+                args[args.index(option) + 1] = str(structure_index)
+                break
+        return args
+
+    def _reconstruct_cli_args(
+        ctx, job, structure_index=None, batch_mode=False
+    ):
         """
         Get cli args that reconstruct the command line.
 
@@ -315,16 +343,26 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
         cli_args = _replace_batch_table_tokens(
             cli_args, getattr(job, "_batch_entry", None)
         )
+        if structure_index is not None:
+            cli_args = _replace_batch_structure_index(
+                cli_args, structure_index
+            )
+        if batch_mode:
+            cli_args = ["--batch-label", str(job.label), *cli_args]
 
         if kwargs.get("print_command"):
             print(cli_args)
         return cli_args
 
-    def _process_single_job(job):
+    def _process_single_job(job, prepared_file=None):
         if kwargs.get("test"):
             logger.warning('Not submitting as "test" flag specified.')
 
         cli_args = _reconstruct_cli_args(ctx, job)
+        if prepared_file is not None:
+            cli_args = prepared_structure_arguments(
+                cli_args, prepared_file, job.label
+            )
 
         jobrunner.server.submit(
             job=job,
@@ -336,12 +374,67 @@ def process_pipeline(ctx, *args, **kwargs):  # noqa: PLR0915
     jobrunner = ctx.obj["jobrunner"]
     job = args[0]
 
+    num_nodes = kwargs.get("num_nodes")
+    if num_nodes is not None:
+        jobs = job if isinstance(job, list) else [job]
+        if not jobs:
+            logger.warning("No jobs to submit")
+            return
+
+        molecule_indices = ctx.obj.get("molecule_indices")
+        source = ctx.obj.get("filename")
+        prepared_jobs = prepare_structure_inputs(
+            jobs,
+            source,
+            ctx.obj["subcommand"],
+            prepare_single=bool(
+                source and str(source).lower().endswith(".npz")
+            ),
+        )
+        batch_cli_args = []
+        for index, (single_job, input_file) in enumerate(prepared_jobs):
+            structure_index = None
+            if isinstance(molecule_indices, list) and len(
+                molecule_indices
+            ) == len(jobs):
+                structure_index = molecule_indices[index]
+            task_args = _reconstruct_cli_args(
+                ctx,
+                single_job,
+                structure_index=structure_index,
+                batch_mode=False,
+            )
+            if input_file is not None:
+                task_args = prepared_structure_arguments(
+                    task_args, input_file, single_job.label
+                )
+            else:
+                task_args = [
+                    "--batch-label",
+                    str(single_job.label),
+                    *task_args,
+                ]
+            batch_cli_args.append(task_args)
+            single_job.jobrunner = jobrunner
+
+        jobrunner.server.submit_batch_job(
+            jobs=jobs,
+            num_nodes=num_nodes,
+            test=kwargs.get("test"),
+            cli_args=batch_cli_args,
+            batch_label=ctx.obj.get("label"),
+        )
+        return
+
     # Handle list of jobs (when multiple molecules are specified with --index)
     if isinstance(job, list):
         logger.info(f"Processing {len(job)} jobs")
-        for single_job in job:
+        prepared_jobs = prepare_structure_inputs(
+            job, ctx.obj.get("filename"), ctx.obj["subcommand"]
+        )
+        for single_job, prepared_file in prepared_jobs:
             single_job.jobrunner = jobrunner
-            _process_single_job(job=single_job)
+            _process_single_job(job=single_job, prepared_file=prepared_file)
     else:
         job.jobrunner = jobrunner
         _process_single_job(job=job)

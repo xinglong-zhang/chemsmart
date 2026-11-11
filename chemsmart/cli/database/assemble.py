@@ -5,6 +5,7 @@ import click
 
 from chemsmart.cli.job import click_folder_options
 from chemsmart.database.assemble import (
+    NPZAssembler,
     SingleFileAssembler,
     SingleFolderAssembler,
 )
@@ -21,12 +22,28 @@ logger = logging.getLogger(__name__)
 @database.command(cls=MyCommand)
 @click_folder_options
 @click.option(
+    "-f",
+    "--file",
+    "input_file",
+    type=click.Path(exists=True, dir_okay=False),
+    help="Import molecular structures from an NPZ dataset.",
+)
+@click.option(
     "-i",
     "--index",
     default=":",
     show_default=True,
     help="Index (1-based) of the structures to extract from multi-structure files.",
 )
+@click.option(
+    "--dataset",
+    type=click.Choice(["revqm9", "qm9"], case_sensitive=False),
+    help="Identify the NPZ dataset and its units.",
+)
+@click.option(
+    "--method", help="Calculation method to record for the NPZ dataset."
+)
+@click.option("--basis", help="Basis set to record for the NPZ dataset.")
 @click.option(
     "-o",
     "--output",
@@ -51,6 +68,10 @@ def assemble(
     index,
     output,
     include_failed,
+    input_file,
+    dataset,
+    method,
+    basis,
 ):
     """Assemble calculation output files into a chemsmart database.
 
@@ -61,12 +82,46 @@ def assemble(
     Examples:
         chemsmart run database assemble -d results/ -o my.db
         chemsmart run database assemble -d ./ -p gaussian -o database.db
+        chemsmart run database assemble -f revQM9.npz --dataset revqm9
     """
 
     # Ensure the output filename ends with .db
     if not output.lower().endswith(".db"):
         output = output + ".db"
 
+    if input_file is not None:
+        if not input_file.lower().endswith(".npz"):
+            raise click.BadParameter(
+                "Expected an NPZ file.", param_hint="--file"
+            )
+        if directory or filetype or program or include_failed:
+            raise click.UsageError(
+                "--file cannot be combined with --directory, --filetype, "
+                "--program, or --include-failed."
+            )
+        db = Database(db_file=output)
+        db.create()
+        assembler = NPZAssembler(
+            os.path.abspath(input_file),
+            index=index,
+            dataset=dataset,
+            method=method,
+            basis=basis,
+        )
+        count = db.insert_records(assembler.assemble())
+        logger.info(f"Imported {count} NPZ record(s) into database: {output}")
+        if assembler.failed_structures:
+            logger.warning(
+                f"Skipped {len(assembler.failed_structures)} structure(s) "
+                f"that could not be assembled: "
+                f"{sorted(assembler.failed_structures)}"
+            )
+        return None
+
+    if dataset or method or basis:
+        raise click.UsageError(
+            "--dataset, --method and --basis require --file."
+        )
     if directory is None:
         directory = "./"
     directory = os.path.abspath(directory)
