@@ -42,8 +42,9 @@ the ``.h5`` and ``.err`` files record why.
 geometry optimization that did not converge. In a multi-structure run, the remaining structures still run first. A rerun
 under the same label deletes the old ``.h5`` first, so a run that dies early cannot be mistaken for the earlier result.
 
-A PySCF job stores only its final structure, so ``-i`` can select only that structure from a PySCF output. Results that
-could not be computed are listed with the reason under ``status/skipped_properties``.
+A PySCF job stores only its final structure, so ``-i`` can select only that structure from a PySCF output. An ``irc``
+job's path is stored separately, as described below, and is not selectable with ``-i``. Results that could not be
+computed are listed with the reason under ``status/skipped_properties``.
 
 .. warning::
 
@@ -72,12 +73,52 @@ could not be computed are listed with the reason under ``status/skipped_properti
 Every job writes the SCF energies in Hartree, the geometry in Angstrom, the atomic numbers, the orbital energies and
 occupations, and the detected point group. The last entry of the energy array is the final energy.
 
-A ``hess`` stage adds the Hessian, harmonic frequencies in cm⁻¹, normal modes, reduced masses, and force constants.
-Forces in Hartree/Bohr, Mulliken charges, and the dipole moment in Debye are written where the method and solvent
-support them, and are absent otherwise.
+A ``hess`` stage adds the Hessian, harmonic frequencies in cm⁻¹, normal modes, reduced masses, and force constants. With
+``--scf-stability``, ``results/scf_stability`` records each stability question asked about the final reference, whether
+it is stable, and its lowest Hessian eigenvalue in Hartree. A run that did not ask has no record, which is not read as
+stable.
+
+A ``ts`` job records under ``status/stages/ts`` whether the saddle-point search converged and, when a Hessian followed,
+``saddle_order``, the number of imaginary modes, with the imaginary frequencies themselves. A ``saddle_order`` other
+than one fails the job. Without a Hessian it is null: the structure is not known to be a transition state.
+
+An ``irc`` job records the same two fields for its starting structure under ``status/stages/irc``, with each branch's
+convergence and number of points under ``branches`` and the starting structure's position in the path as ``ts_index``.
+``results/irc_positions`` holds the path in Angstrom and ``results/irc_energies`` its energies in Hartree. The starting
+structure's frequencies are a check, not a result, and are not stored as ``vibrational_frequencies``.
+
+A CASCI or CASSCF job stores, per root, ``mcscf_root_energies``, ``mcscf_root_spin_square``, ``natural_occupations``
+(largest first) and ``leading_determinants``: the CI coefficients above 0.05 with their determinants, one character per
+active orbital (``2`` doubly occupied, ``a`` alpha, ``b`` beta, ``0`` empty). A state-averaged job adds the weighted
+average energy and the natural occupations of the averaged density, and NEVPT2 adds ``nevpt2_corrections`` and
+``nevpt2_root_energies``. ``scf_energies`` holds the Hartree-Fock reference energy.
+
+Forces in Hartree/Bohr, Mulliken charges, the dipole moment in Debye, and ⟨S²⟩ of the final determinant are written
+where the method and solvent support them, and are absent otherwise.
 
 ``spec`` holds the applied settings, not the requested ones, including values PySCF resolves at run time such as the
-number of basis functions and the dielectric constant of the chosen solvent.
+number of basis functions and the dielectric constant of the chosen solvent. It also records what PySCF actually
+computed:
+
+-  ``reference``: the SCF reference, for example ``RKS`` for a closed shell or ``UHF`` for a radical.
+
+-  ``xc_applied``: the exchange-correlation functional PySCF evaluated, as LibXC component ids and coefficients, with
+   the short- and long-range exact-exchange fractions, the range-separation parameter, and whether non-local correlation
+   was included. ``b3lyp``, for instance, records LibXC functional 402 with 20% exact exchange.
+
+-  ``ecp_core_electrons``: the core electrons an effective core potential replaced, by element, or null for an
+   all-electron calculation.
+
+-  ``active_space_applied``: for CASCI and CASSCF, the active space used: the orbital selection with 0-based MO indices
+   (or the AVAS labels and threshold), the number of core orbitals, the active (alpha, beta) electrons, the solver, the
+   spin penalty and the convergence settings, and with NEVPT2 its variant and the CI tolerance of the vectors it used.
+
+-  ``numerics_applied``: the SCF convergence threshold and cycle limit, the DFT integration grid, and the
+   density-fitting basis that were actually used, including PySCF's choices for settings left unset.
+
+A results file that declares a different PySCF result contract (``spec/result_contract_version``) stores its quantities
+under other names. CHEMSMART refuses to read it rather than report, for example, the reference energy of a correlated
+calculation as its result.
 
 ******************
  Reusing a Result

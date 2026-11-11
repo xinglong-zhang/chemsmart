@@ -18,6 +18,7 @@ from chemsmart.settings.pyscf import (
     YamlPySCFProjectSettings,
 )
 from chemsmart.settings.user import CHEMSMARTUserSettings
+from tests.helpers import make_pyscf_casscf_settings
 
 
 class TestPySCFJobSettings:
@@ -70,10 +71,13 @@ class TestPySCFJobSettings:
         with pytest.raises(ValueError, match="gen_genecp_file"):
             settings.validate()
 
-    def test_only_hf_is_supported_as_an_ab_initio_method(self):
-        settings = PySCFJobSettings(ab_initio="mp2", basis="def2-svp")
+    def test_unsupported_ab_initio_method_names_the_supported_ones(self):
+        settings = PySCFJobSettings(ab_initio="cisd", basis="def2-svp")
 
-        with pytest.raises(ValueError, match="supports only 'hf'"):
+        with pytest.raises(
+            ValueError,
+            match=r"supports 'hf', mp2, ccsd, ccsd\(t\), casci, casscf",
+        ):
             settings.validate()
 
     def test_ab_initio_and_dft_functional_are_mutually_exclusive(self):
@@ -171,6 +175,17 @@ class TestPySCFProjectSettings:
             hess.project_yaml_digest,
         } == {expected_digest}
 
+    @pytest.mark.parametrize("section", ["td", "gass"])
+    def test_section_no_pyscf_job_reads_is_refused(
+        self, pyscf_test_project_yaml, tmp_path, section
+    ):
+        project = yaml.safe_load(pyscf_test_project_yaml.read_text())
+        project[section] = {"functional": "cam-b3lyp"}
+        path = tmp_path / "extra.yaml"
+        path.write_text(yaml.safe_dump(project))
+        with pytest.raises(ValueError, match=f"no PySCF job reads: {section}"):
+            YamlPySCFProjectSettings.from_yaml(str(path))
+
     def test_settings_copies_do_not_mutate_project(self):
         project = PySCFProjectSettings.from_project("test")
         first = project.opt_settings()
@@ -210,6 +225,11 @@ def test_settings_the_driver_cannot_apply_are_refused(request_field):
         settings.validate()
 
 
+def test_unknown_settings_are_refused_rather_than_ignored():
+    with pytest.raises(TypeError, match="Unknown PySCF settings: nstate"):
+        PySCFJobSettings(functional="b3lyp", basis="def2-svp", nstate=5)
+
+
 def test_project_yaml_digest_survives_merge():
     settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
     assert settings.project_yaml_digest is None
@@ -220,14 +240,20 @@ def test_project_yaml_digest_survives_merge():
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"ab_initio": "mp2"}, "Unknown ab_initio"),
+        ({"ab_initio": "cisd"}, "Unknown ab_initio"),
         ({"ab_initio": "hf"}, "either 'ab_initio: hf' or 'functional'"),
         ({"functional": "b2plyp"}, "Double-hybrid"),
         ({"solvent_id": "water"}, "without a solvent_model"),
         ({"solvent_model": "cosmo-rs", "solvent_id": "w"}, "not available"),
         ({"solvent_model": "cpcm"}, "solvent_id is required"),
         ({"point_group_tol": 0.0}, "must be positive"),
+        ({"scf_stability": "yes"}, "scf_stability must be"),
         ({"opt_solver": "bfgs"}, "Unknown opt_solver"),
+        # Only geomeTRIC searches for a saddle point; berny would minimise.
+        ({"jobtype": "ts", "opt_solver": "berny"}, "saddle-point search"),
+        ({"jobtype": "ts", "opt_solver": "ase"}, "saddle-point search"),
+        ({"jobtype": "irc", "opt_solver": "berny"}, "IRC method"),
+        ({"irc_direction": "reverse"}, "Unknown irc_direction"),
         ({"engine": "tpu"}, "Unknown engine"),
         ({"defgrid": "defgrid9"}, "Unknown defgrid"),
         ({"density_fit": False, "aux_basis": "x"}, "aux_basis cannot"),
@@ -238,6 +264,140 @@ def test_impossible_requests_fail_validation(kwargs, message):
     settings = {"functional": "b3lyp", "basis": "def2-svp", **kwargs}
     with pytest.raises(ValueError, match=message):
         PySCFJobSettings(**settings).validate()
+
+
+@pytest.mark.parametrize(
+    ("functional", "message"),
+    [
+        ("pbe,pbe", "PySCF expression"),
+        ("0.5*b3lyp", "PySCF expression"),
+        ("b3lyp-d3bj", "dispersion setting"),
+        # LibXC 394, 23 kcal/mol from Gaussian's B3LYP for H2O/def2-SVP.
+        ("b3lyp3", "not Gaussian's B3LYP"),
+    ],
+)
+def test_strings_that_are_not_one_named_functional_are_refused(
+    functional, message
+):
+    settings = PySCFJobSettings(functional=functional, basis="def2-svp")
+    with pytest.raises(ValueError, match=message):
+        settings.validate()
+
+
+@pytest.mark.parametrize(
+    "functional",
+    [
+        "b3lyp",
+        "b3lyp5",
+        "cam-b3lyp",
+        "m06-2x",
+        "wb97m-v",
+        "b97-d",
+        "hyb_gga_xc_b3lyp3",
+    ],
+)
+def test_named_functionals_pass_validation(functional):
+    PySCFJobSettings(functional=functional, basis="def2-svp").validate()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        # PySCF would run DF-MP2/DF-CCSD on a density-fitted reference.
+        ({"density_fit": True}, "density_fit"),
+        ({"dispersion": "d3bj"}, "dispersion"),
+        ({"solvent_model": "cpcm", "solvent_id": "water"}, "solvent_model"),
+        # PySCF 2.14 has no open-shell CCSD(T) gradient.
+        ({"forces": True}, "forces"),
+        ({"jobtype": "opt"}, "single-point energies only"),
+        ({"jobtype": "hess"}, "no analytic Hessian"),
+        # The saddle-point search starts from an analytic Hessian.
+        ({"jobtype": "ts"}, "no analytic Hessian"),
+        ({"jobtype": "irc"}, "no analytic Hessian"),
+        ({"correlation": {"frozen_cores": False}}, "Unknown correlation"),
+        ({"correlation": {"frozen_core": "yes"}}, "true or false"),
+    ],
+)
+def test_correlated_requests_pyscf_would_change_are_refused(kwargs, message):
+    settings = {
+        "ab_initio": "ccsd(t)",
+        "basis": "cc-pvdz",
+        "density_fit": False,
+        **kwargs,
+    }
+    with pytest.raises(ValueError, match=message):
+        PySCFJobSettings(**settings).validate()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"freq": True}, "no analytic Hessian"),
+        ({"opt_solver": "berny"}, "geometric solver only"),
+    ],
+)
+def test_correlated_optimisation_limits(kwargs, message):
+    settings = PySCFJobSettings(
+        ab_initio="mp2",
+        basis="cc-pvdz",
+        density_fit=False,
+        jobtype="opt",
+        **kwargs,
+    )
+    with pytest.raises(ValueError, match=message):
+        settings.validate()
+
+
+def test_transition_state_search_uses_geometric_by_default():
+    settings = PySCFJobSettings(
+        functional="b3lyp", basis="def2-svp", jobtype="ts"
+    )
+    settings.validate()
+    assert settings.opt_solver == "geometric"
+
+
+def test_mp2_and_ccsd_can_be_optimised():
+    for method in ("mp2", "ccsd"):
+        PySCFJobSettings(
+            ab_initio=method,
+            basis="cc-pvdz",
+            density_fit=False,
+            jobtype="opt",
+            freq=False,
+        ).validate()
+
+
+def test_mp2_has_no_iterations_to_control():
+    settings = PySCFJobSettings(
+        ab_initio="mp2",
+        basis="cc-pvdz",
+        density_fit=False,
+        correlation={"max_cycle": 10},
+    )
+    with pytest.raises(ValueError, match="not iterative"):
+        settings.validate()
+
+
+def test_correlation_block_needs_a_correlated_method():
+    settings = PySCFJobSettings(
+        functional="b3lyp",
+        basis="def2-svp",
+        correlation={"frozen_core": False},
+    )
+    with pytest.raises(ValueError, match="applies only"):
+        settings.validate()
+
+
+def test_correlation_defaults_to_the_chemical_frozen_core():
+    settings = PySCFJobSettings(
+        ab_initio="CCSD(T)", basis="cc-pvdz", density_fit=False
+    )
+    assert settings.validate().resolved_correlation == {
+        "method": "ccsd(t)",
+        "frozen_core": True,
+        "max_cycle": None,
+        "conv_tol": None,
+    }
 
 
 def test_hf_cannot_use_a_dft_grid():
@@ -360,3 +520,210 @@ class TestPySCFExecutable:
     def test_no_folder_uses_the_running_interpreter(self):
         executable = PySCFExecutable(executable_folder=None)
         assert executable.get_executable() == sys.executable
+
+
+CAS66 = {
+    "ncas": 6,
+    "nelecas": 6,
+    "orbitals": {
+        "selection": "mo_list",
+        "mo_list": [5, 6, 7, 8, 9, 10],
+        "index_base": 1,
+    },
+}
+
+
+@pytest.mark.parametrize(
+    ("active_space", "kwargs", "message"),
+    [
+        (None, {}, "needs an active_space block"),
+        ({**CAS66, "orbitals": None}, {}, "selection is required"),
+        (
+            {**CAS66, "orbitals": {"selection": "homo_lumo"}},
+            {},
+            "Unknown orbital selection",
+        ),
+        (
+            {**CAS66, "orbitals": {"selection": "frontier", "mo_list": [1]}},
+            {},
+            "takes only selection",
+        ),
+        (
+            {**CAS66, "orbitals": {**CAS66["orbitals"], "index_base": None}},
+            {},
+            "needs index_base",
+        ),
+        (
+            {
+                **CAS66,
+                "orbitals": {
+                    **CAS66["orbitals"],
+                    "mo_list": [5, 5, 6, 7, 8, 9],
+                },
+            },
+            {},
+            "repeats an orbital",
+        ),
+        (
+            {**CAS66, "orbitals": {**CAS66["orbitals"], "mo_list": [5, 6]}},
+            {},
+            "names 2 orbitals but ncas is 6",
+        ),
+        (
+            {
+                **CAS66,
+                "orbitals": {
+                    **CAS66["orbitals"],
+                    "mo_list": [0, 1, 2, 3, 4, 5],
+                },
+            },
+            {},
+            "below index_base 1",
+        ),
+        ({**CAS66, "nelecas": [4, 2]}, {}, "2 unpaired electrons"),
+        ({**CAS66, "nelecas": 5}, {}, "cannot have multiplicity 1"),
+        ({**CAS66, "nelecas": 14}, {}, "do not fit in 6 orbitals"),
+        # Four electrons fit in two orbitals, but not as a triplet.
+        (
+            {
+                **CAS66,
+                "ncas": 2,
+                "nelecas": 4,
+                "orbitals": {"selection": "frontier"},
+            },
+            {"multiplicity": 3},
+            "3 alpha and 1 beta active electrons do not fit in 2",
+        ),
+        (
+            {
+                **CAS66,
+                "ncas": 2,
+                "nelecas": [3, 1],
+                "orbitals": {"selection": "frontier"},
+            },
+            {"multiplicity": 3},
+            "3 alpha and 1 beta active electrons do not fit in 2",
+        ),
+        ({**CAS66, "nroots": 0}, {}, "nroots must be a positive integer"),
+        (
+            {**CAS66, "nroots": 2, "weights": [0.7, 0.7]},
+            {},
+            "summing to 1",
+        ),
+        ({**CAS66, "nroots": 2, "weights": [1.0]}, {}, "summing to 1"),
+        ({**CAS66, "nevpt2": "yes"}, {}, "nevpt2 must be true or false"),
+        ({**CAS66, "frozen": 2}, {}, "Unknown active_space settings"),
+        (
+            {
+                "ncas": 6,
+                "orbitals": {"selection": "avas", "ao_labels": ["N 2p"]},
+            },
+            {},
+            "sized by AVAS itself",
+        ),
+        (
+            {"orbitals": {"selection": "avas", "ao_labels": "N 2p"}},
+            {},
+            "needs ao_labels",
+        ),
+        (
+            {
+                "orbitals": {
+                    "selection": "avas",
+                    "ao_labels": ["N 2p"],
+                    "threshold": 1.5,
+                }
+            },
+            {},
+            "threshold must lie between 0 and 1",
+        ),
+        # PySCF would silently run density-fitted CASSCF.
+        (CAS66, {"density_fit": True}, "density_fit"),
+        (CAS66, {"solvent_model": "cpcm", "solvent_id": "water"}, "solvent"),
+        (CAS66, {"jobtype": "opt"}, "single-point energies only"),
+        (CAS66, {"forces": True}, "single-point energies only"),
+        (
+            {**CAS66, "max_cycle_macro": 10},
+            {"ab_initio": "casci"},
+            "casci optimises no orbitals",
+        ),
+        (
+            {**CAS66, "nroots": 2, "weights": [0.5, 0.5]},
+            {"ab_initio": "casci"},
+            "needs casscf",
+        ),
+        (CAS66, {"ab_initio": "hf"}, "applies only to ab_initio casci"),
+    ],
+)
+def test_active_spaces_pyscf_would_not_compute_as_written_are_refused(
+    active_space, kwargs, message
+):
+    with pytest.raises(ValueError, match=message):
+        make_pyscf_casscf_settings(active_space, **kwargs).validate()
+
+
+@pytest.mark.parametrize(
+    "active_space",
+    [
+        CAS66,
+        {**CAS66, "nelecas": [3, 3], "nroots": 3, "nevpt2": True},
+        {**CAS66, "nroots": 2, "weights": [0.25, 0.75]},
+        {"ncas": 6, "nelecas": 6, "orbitals": {"selection": "frontier"}},
+        {
+            "orbitals": {
+                "selection": "avas",
+                "ao_labels": ["Fe 3d", "C 2pz"],
+                "threshold": 0.1,
+            }
+        },
+    ],
+)
+def test_explicit_active_spaces_pass_validation(active_space):
+    make_pyscf_casscf_settings(active_space).validate()
+
+
+def test_open_shell_active_space_must_match_the_multiplicity():
+    make_pyscf_casscf_settings(
+        {**CAS66, "nelecas": [4, 2]}, multiplicity=3
+    ).validate()
+    with pytest.raises(ValueError, match="cannot have multiplicity 3"):
+        make_pyscf_casscf_settings(
+            {**CAS66, "nelecas": 5}, multiplicity=3
+        ).validate()
+
+
+def test_active_space_defaults_are_filled_and_nevpt2_names_the_method():
+    settings = make_pyscf_casscf_settings({**CAS66, "nevpt2": True}).validate()
+    assert settings.resolved_active_space == {
+        "method": "casscf",
+        **CAS66,
+        "nroots": 1,
+        "weights": None,
+        "nevpt2": True,
+        "max_cycle_macro": None,
+        "conv_tol": None,
+    }
+    assert settings.method_name == "casscf/sc-nevpt2"
+    assert make_pyscf_casscf_settings(CAS66).method_name == "casscf"
+
+
+def test_active_space_survives_the_project_yaml(
+    pyscf_test_project_yaml, tmp_path
+):
+    project = yaml.safe_load(pyscf_test_project_yaml.read_text())
+    project["solv"] = {
+        "ab_initio": "casscf",
+        "basis": "cc-pvdz",
+        "density_fit": False,
+        "active_space": {**CAS66, "nroots": 2, "nevpt2": True},
+    }
+    path = tmp_path / "cas.yaml"
+    path.write_text(yaml.safe_dump(project))
+    sp = YamlPySCFProjectSettings.from_yaml(str(path)).sp_settings()
+    assert sp.active_space == {**CAS66, "nroots": 2, "nevpt2": True}
+    sp.multiplicity = 1
+    sp.validate()
+    # Settings built from one section never share the block.
+    sp.active_space["ncas"] = 99
+    again = YamlPySCFProjectSettings.from_yaml(str(path)).sp_settings()
+    assert again.active_space["ncas"] == 6

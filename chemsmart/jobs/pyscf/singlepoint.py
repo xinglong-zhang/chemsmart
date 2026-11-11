@@ -15,6 +15,7 @@ class PySCFSinglePointJob(PySCFJob):
     """
 
     TYPE = "pyscf_sp"
+    JOBTYPE = "sp"
 
     @property
     def stages(self):
@@ -23,6 +24,12 @@ class PySCFSinglePointJob(PySCFJob):
         A single point converges the SCF and stops. ``freq`` is ignored here
         even if the project YAML sets it, because a Hessian at a non-optimised
         geometry is not a meaningful frequency calculation -- use ``hess``
-        explicitly if that is really wanted.
+        explicitly if that is really wanted. A correlated or
+        multiconfigurational method adds its stage on the converged
+        reference.
         """
+        if self.settings.correlated_method is not None:
+            return ["scf", "correlation"]
+        if self.settings.mcscf_method is not None:
+            return ["scf", "mcscf"]
         return ["scf"]

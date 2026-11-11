@@ -208,7 +208,7 @@ def thermochemistry(
     jobs using the chemsmart framework.
 
     This command allows you to compute thermochemistry for Gaussian, ORCA,
-    or xTB output files.
+    PySCF or xTB output files.
 
     Examples:
     `chemsmart run thermochemistry -f udc3_mCF3_monomer_c9.log
@@ -364,11 +364,12 @@ def thermochemistry(
             if get_program_type_from_file(file) not in {
                 "gaussian",
                 "orca",
+                "pyscf",
                 "xtb",
             }:
                 raise ValueError(
                     f"Unsupported output file type for '{file}'. Use Gaussian, "
-                    f"ORCA, or xTB output files."
+                    f"ORCA, PySCF, or xTB output files."
                 )
             job = ThermochemistryJob.from_filename(
                 filename=file,

@@ -21,6 +21,7 @@ from chemsmart.cli.thermochemistry.thermochemistry import (
 from chemsmart.io.gaussian.output import Gaussian16Output
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.orca.output import ORCAOutput
+from chemsmart.io.pyscf.output import PySCFOutput
 from chemsmart.io.xtb.output import XTBOutput
 from chemsmart.jobs.gaussian import GaussianOptJob
 from chemsmart.jobs.thermochemistry.boltzmann import (
@@ -4694,6 +4695,34 @@ class TestThermochemistryCLI:
 
         assert result.exit_code == 0, result.output
         assert settings is not None
+
+    def test_pyscf_result_gives_the_free_energy_its_reader_reports(
+        self, pyscf_benzene_outfolder, tmp_path, monkeypatch
+    ):
+        """End to end on a real PySCF opt+freq result.
+
+        The reader evaluates thermochemistry with most-abundant isotope
+        masses, so the CLI must agree with it under ``--no-weighted``.
+        """
+        monkeypatch.chdir(tmp_path)
+        logfile = os.path.join(
+            pyscf_benzene_outfolder, "benzene_gas_phase.out"
+        )
+        outputfile = tmp_path / "thermo.dat"
+        result = CliRunner().invoke(
+            thermochemistry,
+            ["-f", logfile, "-T", "298.15", "--no-weighted"]
+            + ["-o", str(outputfile)],
+            obj={},
+            catch_exceptions=False,
+        )
+
+        assert result.exit_code == 0, result.output
+        row = outputfile.read_text().splitlines()[-1].split()
+        assert row[0] == "benzene_gas_phase"
+        assert float(row[-1]) == pytest.approx(
+            PySCFOutput(logfile).gibbs_free_energy, abs=1e-6
+        )
 
 
 class TestThermochemistryCLIFolderOptions:

@@ -736,7 +736,8 @@ def update_irc_label(label, direction, flat_irc):
 
     Args:
         label (str): Original job label.
-        direction (str | None): IRC direction ('forward' or 'reverse').
+        direction (str | None): IRC direction ('forward', or 'reverse' /
+            its PySCF name 'backward').
         flat_irc (bool): Whether the IRC is flat.
 
     Returns:
@@ -745,11 +746,12 @@ def update_irc_label(label, direction, flat_irc):
     if direction is not None:
         if direction.lower() == "forward":
             label += "f"
-        elif direction.lower() == "reverse":
+        elif direction.lower() in ("reverse", "backward"):
             label += "r"
         else:
             raise ValueError(
-                "Invalid direction for IRC job. Must be 'forward' or 'reverse'."
+                "Invalid direction for IRC job. Must be 'forward' or "
+                "'reverse' ('backward')."
             )
     if flat_irc and not label.endswith("_flat"):
         label += "_flat"

@@ -29,7 +29,8 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.run import run
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.pyscf.output import PySCFOutput
+from chemsmart.io.pyscf.driver import write_pyscf_h5
+from chemsmart.io.pyscf.output import PySCFH5File, PySCFOutput
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
 from chemsmart.jobs.gaussian.settings import (
@@ -632,6 +633,8 @@ def run_pyscf_and_capture_settings(cli_args, jobtype="sp", num_gpus=0):
         "sp": "chemsmart.jobs.pyscf.singlepoint.PySCFSinglePointJob",
         "opt": "chemsmart.jobs.pyscf.opt.PySCFOptJob",
         "hess": "chemsmart.jobs.pyscf.hess.PySCFHessJob",
+        "ts": "chemsmart.jobs.pyscf.ts.PySCFTSJob",
+        "irc": "chemsmart.jobs.pyscf.irc.PySCFIRCJob",
     }
     with patch(job_class_paths[jobtype]) as job_cls:
         job_cls.return_value = MagicMock()
@@ -1758,6 +1761,36 @@ def copy_pyscf_output(source_folder, destination):
     return os.path.join(destination, "calc.out")
 
 
+def replace_pyscf_spec_field(logfile, field, value):
+    """Change one applied setting of a copied PySCF result.
+
+    The file is read and rewritten with the driver's own HDF5 functions, so
+    the new value is stored exactly as a real run would store it.
+    """
+    resultsfile = os.path.splitext(logfile)[0] + ".h5"
+    stored = PySCFH5File(resultsfile)
+    write_pyscf_h5(
+        resultsfile,
+        spec={**stored.spec, field: value},
+        provenance=stored.provenance,
+        status=stored.status,
+        results=stored.results,
+    )
+
+
+def changed_value(value):
+    """Return a value of the same kind as ``value`` that differs from it."""
+    if value is None:
+        return 1
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, (int, float)):
+        return value + 1
+    if isinstance(value, str):
+        return value + "_changed"
+    return [changed_value(value[0]), *value[1:]]
+
+
 def read_pyscf_output_folder(folder):
     """Return a PySCFOutput for the run stored in ``folder``."""
     label = os.path.basename(folder)
@@ -1765,6 +1798,19 @@ def read_pyscf_output_folder(folder):
     assert os.path.exists(logfile)
     assert os.path.exists(os.path.join(folder, f"{label}.h5"))
     return PySCFOutput(logfile)
+
+
+def make_pyscf_casscf_settings(active_space, **overrides):
+    """Return CASSCF/cc-pVDZ single-point settings for an active space."""
+    settings = {
+        "ab_initio": "casscf",
+        "basis": "cc-pvdz",
+        "density_fit": False,
+        "jobtype": "sp",
+        "multiplicity": 1,
+        "active_space": active_space,
+    }
+    return PySCFJobSettings(**{**settings, **overrides})
 
 
 def make_pyscf_settings(jobtype, **overrides):
@@ -1777,6 +1823,64 @@ def make_pyscf_settings(jobtype, **overrides):
         "jobtype": jobtype,
     }
     return PySCFJobSettings(**{**settings, **overrides})
+
+
+def run_pyscf_ccpvdz_sp(
+    run_pyscf_driver, symbols, positions, multiplicity, **method
+):
+    """Run an exact-integral cc-pVDZ single point through the PySCF driver."""
+    from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
+
+    molecule = Molecule(
+        symbols=symbols,
+        positions=np.array(positions, dtype=float),
+        charge=0,
+        multiplicity=multiplicity,
+    )
+    return run_pyscf_driver(
+        PySCFSinglePointJob,
+        molecule,
+        "sp",
+        basis="cc-pvdz",
+        density_fit=False,
+        scf_tol=1e-10,
+        multiplicity=multiplicity,
+        **method,
+    )[1]
+
+
+def run_pyscf_active_space_sp(
+    run_pyscf_driver,
+    atom,
+    active_space,
+    method="casscf",
+    multiplicity=1,
+    label=None,
+):
+    """Run a cc-pVDZ CASCI or CASSCF single point for a PySCF atom string."""
+    from pyscf import gto
+
+    from chemsmart.jobs.pyscf.singlepoint import PySCFSinglePointJob
+
+    mol = gto.M(atom=atom, unit="Angstrom")
+    molecule = Molecule(
+        symbols=[mol.atom_symbol(i) for i in range(mol.natm)],
+        positions=mol.atom_coords(unit="Angstrom"),
+        charge=0,
+        multiplicity=multiplicity,
+    )
+    return run_pyscf_driver(
+        PySCFSinglePointJob,
+        molecule,
+        "sp",
+        label=label,
+        ab_initio=method,
+        basis="cc-pvdz",
+        density_fit=False,
+        scf_tol=1e-10,
+        multiplicity=multiplicity,
+        active_space=active_space,
+    )[1]
 
 
 def make_pyscf_results_payload():
@@ -1864,3 +1968,107 @@ def rdkit_embed_and_optimize(smiles, seed=1):
     AllChem.EmbedMolecule(mol, params)
     AllChem.UFFOptimizeMolecule(mol)
     return mol
+
+
+def interatomic_distances(molecule):
+    """Return every interatomic distance of a Molecule, in atom-pair order.
+
+    Invariant to rotation and translation, so structures from different
+    programs compare without alignment.
+    """
+    rows, columns = np.triu_indices(molecule.num_atoms, k=1)
+    return molecule.distance_matrix[rows, columns]
+
+
+def path_end_deviation(path, reference_path):
+    """Return the largest distance deviation between two paths' ends.
+
+    The ends are compared as an unordered pair: which branch an IRC calls
+    forward is the sign an eigensolver gave the imaginary mode.
+    """
+    ends = [interatomic_distances(path[i]) for i in (0, -1)]
+    references = [interatomic_distances(reference_path[i]) for i in (0, -1)]
+    straight = max(
+        np.abs(ends[0] - references[0]).max(),
+        np.abs(ends[1] - references[1]).max(),
+    )
+    crossed = max(
+        np.abs(ends[0] - references[1]).max(),
+        np.abs(ends[1] - references[0]).max(),
+    )
+    return min(straight, crossed)
+
+
+def orca_structures(directory, name, index="-1"):
+    """Return the structure ORCA wrote to ``name`` (``index=":"``: all)."""
+    return Molecule.from_filepath(
+        os.path.join(directory, name),
+        index=index,
+        return_list=index == ":",
+    )
+
+
+def orca_saddle_frequencies(orca_output):
+    """Return the modes ORCA's Freq printed at its optimised HCN saddle.
+
+    An OptTS + Freq output holds two frequency blocks, the initial
+    Hessian's at the guess and the final one; ORCAOutput returns both, so
+    the last three (3N - 6 for bent HCN) are the saddle's.
+    """
+    assert orca_output.normal_termination
+    modes = orca_output.vibrational_frequencies[-3:]
+    assert modes[0] < 0 < modes[1]
+    return modes
+
+
+def pyscf_hartree_fock(atom, basis, spin=0):
+    """Return a converged RHF (closed shell) or ROHF reference.
+
+    Built with PySCF directly, outside CHEMSMART, as an independent
+    reference for the driver's results.
+    """
+    from pyscf import gto
+    from pyscf.scf import hf, rohf
+
+    mol = gto.M(atom=atom, basis=basis, spin=spin, verbose=0)
+    reference = rohf.ROHF if spin else hf.RHF
+    return reference(mol).run(conv_tol=1e-10)
+
+
+def pyscf_rhf_minimum(symbols, positions, basis):
+    """Return the energy and distances of an RHF minimum found by geomeTRIC.
+
+    Optimised with PySCF's own geomeTRIC interface, outside CHEMSMART.
+    """
+    from pyscf import gto
+    from pyscf.geomopt import geometric_solver
+    from pyscf.scf import hf
+
+    mol = gto.M(atom=list(zip(symbols, positions)), basis=basis, verbose=0)
+    mf = hf.RHF(mol)
+    mf.conv_tol = 1e-10
+    converged, optimised = geometric_solver.kernel(mf, maxsteps=100)
+    assert converged
+    energy = hf.RHF(optimised).run(conv_tol=1e-10).e_tot
+    minimum = Molecule(
+        symbols=list(symbols),
+        positions=optimised.atom_coords(unit="Angstrom"),
+    )
+    return energy, interatomic_distances(minimum)
+
+
+def nevpt2_in_final_orbitals(reference, mc, nroots, ss=None):
+    """Return SC-NEVPT2 per root on a CASCI in a CASSCF's final orbitals.
+
+    The CI vectors are converged to 1e-12: NEVPT2 is not variational in
+    them.
+    """
+    from pyscf import mcscf, mrpt
+
+    casci = mcscf.CASCI(reference, mc.ncas, mc.nelecas)
+    if ss is not None:
+        casci.fix_spin_(ss=ss)
+    casci.fcisolver.nroots = nroots
+    casci.fcisolver.conv_tol = 1e-12
+    casci.kernel(mc.mo_coeff)
+    return [mrpt.NEVPT(casci, root=i).kernel() for i in range(nroots)]
