@@ -12,6 +12,8 @@ Fields the base class carries but PySCF cannot honour are listed in
 genecp basis must not silently produce a plain def2-SVP calculation.
 """
 
+import copy
+import inspect
 import logging
 from functools import lru_cache
 
@@ -20,6 +22,16 @@ from ase.data import atomic_numbers
 from chemsmart.jobs.settings import MolecularJobSettings
 
 logger = logging.getLogger(__name__)
+
+#: Settings ``MolecularJobSettings`` accepts. Its ``**kwargs`` discards any
+#: other name, so a misspelt PySCF setting would vanish without a trace.
+MOLECULAR_SETTINGS_FIELDS = frozenset(
+    name
+    for name, parameter in inspect.signature(
+        MolecularJobSettings.__init__
+    ).parameters.items()
+    if parameter.kind is parameter.POSITIONAL_OR_KEYWORD and name != "self"
+)
 
 #: Solvent models accepted by ``solvent_model``, mapped to the PySCF call and
 #: the ``with_solvent.method`` string. Verified against pyscf 2.14.0: the PCM
@@ -50,6 +62,20 @@ PYSCF_OPT_SOLVERS = ("geometric", "berny", "ase")
 #: Execution engines. ``gpu`` routes through gpu4pyscf via ``.to_gpu()``.
 PYSCF_ENGINES = ("cpu", "gpu")
 
+#: Correlated wavefunction methods, run on the Hartree-Fock reference PySCF
+#: chooses from the multiplicity (RHF for a closed shell, UHF otherwise).
+PYSCF_CORRELATED_METHODS = ("mp2", "ccsd", "ccsd(t)")
+
+#: Keys of the ``correlation`` block and their defaults. PySCF's chemical
+#: frozen core is ORCA 6's default for H-Zn and main-group Ga-Xe; Gaussian's
+#: FC differs for Li-Be, Sc-Zn and, with Pople basis sets, Ga-Kr. ``None``
+#: leaves PySCF's own CCSD iteration limit and convergence threshold.
+PYSCF_CORRELATION_DEFAULTS = {
+    "frozen_core": True,
+    "max_cycle": None,
+    "conv_tol": None,
+}
+
 #: Functionals for which the perturbative correlation term is not implemented
 #: by this v1 mean-field-only backend.  Passing one of these names to
 #: ``dft.KS`` can produce a converged energy that contains only the DFT part of
@@ -71,6 +97,23 @@ PYSCF_DOUBLE_HYBRID_MARKERS = (
     "xygjos",
     "double-hybrid",
 )
+
+#: Characters that make PySCF read a functional string as an expression
+#: (``pbe,pbe``, ``0.5*b3lyp``) instead of one named functional. CHEMSMART
+#: requests functionals by name, so a functional is written one way only.
+PYSCF_FUNCTIONAL_EXPRESSION_CHARACTERS = frozenset(",*+;() ")
+
+#: Names PySCF accepts that do not denote what their spelling suggests,
+#: mapped to the reason they are refused.
+PYSCF_MISLEADING_FUNCTIONALS = {
+    "b3lyp3": (
+        "LibXC's B3LYP3 (functional 394) is not Gaussian's B3LYP, although "
+        "ORCA calls Gaussian's variant 'VWN3'; for H2O/def2-SVP the two "
+        "differ by 23 kcal/mol. Use 'b3lyp' for Gaussian's B3LYP (ORCA's "
+        "B3LYP/G), 'b3lyp5' for ORCA's B3LYP, or 'hyb_gga_xc_b3lyp3' for "
+        "LibXC functional 394 itself."
+    ),
+}
 
 #: Functionals whose *name* means different things in different programs.
 #: Maps a CHEMSMART functional name to (libxc name, note).
@@ -183,11 +226,19 @@ class PySCFJobSettings(MolecularJobSettings):
         title=None,
         solvent_model=None,
         solvent_id=None,
+        correlation=None,
+        scf_stability=False,
         **kwargs,
     ):
         # Passed under its private name by ``merge``. Not a project-YAML key:
         # the YAML loader derives it from the source file.
         project_yaml_digest = kwargs.pop("_project_yaml_digest", None)
+        unknown = sorted(set(kwargs) - MOLECULAR_SETTINGS_FIELDS)
+        if unknown:
+            raise TypeError(
+                f"Unknown PySCF settings: {', '.join(unknown)}. A setting "
+                "that is not recognised would otherwise be ignored."
+            )
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
@@ -211,6 +262,11 @@ class PySCFJobSettings(MolecularJobSettings):
         self.opt_maxsteps = opt_maxsteps
         self.engine = engine
         self.point_group_tol = point_group_tol
+        # A mapping of PYSCF_CORRELATION_DEFAULTS keys; copied so settings
+        # built from one project section never share it.
+        self.correlation = copy.deepcopy(correlation)
+        # Analyse the converged reference's stability; an observation only.
+        self.scf_stability = scf_stability
         self._project_yaml_digest = project_yaml_digest
 
     @classmethod
@@ -219,9 +275,7 @@ class PySCFJobSettings(MolecularJobSettings):
         return cls()
 
     def copy(self):
-        import copy as _copy
-
-        return _copy.deepcopy(self)
+        return copy.deepcopy(self)
 
     @property
     def project_yaml_digest(self):
@@ -236,6 +290,26 @@ class PySCFJobSettings(MolecularJobSettings):
     def resolved_engine(self):
         """Return the engine to run on; CPU unless GPU was requested."""
         return self.engine or "cpu"
+
+    @property
+    def correlated_method(self):
+        """Return the correlated method requested, or None for HF and DFT."""
+        method = str(self.ab_initio).lower() if self.ab_initio else None
+        return method if method in PYSCF_CORRELATED_METHODS else None
+
+    @property
+    def resolved_correlation(self):
+        """Return the correlation settings with defaults filled in.
+
+        None unless a correlated method is requested.
+        """
+        if self.correlated_method is None:
+            return None
+        return {
+            "method": self.correlated_method,
+            **PYSCF_CORRELATION_DEFAULTS,
+            **(self.correlation or {}),
+        }
 
     def merge(
         self, other, keywords=("charge", "multiplicity"), merge_all=False
@@ -301,6 +375,95 @@ class PySCFJobSettings(MolecularJobSettings):
         if self.ab_initio and str(self.ab_initio).lower() == "hf":
             return None
         return resolve_functional(self.functional)
+
+    def _check_correlation(self):
+        """Reject a correlated request PySCF would not compute as written.
+
+        Density fitting is refused rather than applied: PySCF switches to
+        DF-MP2 or DF-CCSD whenever the reference uses density fitting, an
+        approximation the request did not name.
+        """
+        method = self.correlated_method
+        if method is None:
+            if self.correlation is not None:
+                raise ValueError(
+                    "The correlation block applies only to ab_initio "
+                    f"{', '.join(PYSCF_CORRELATED_METHODS)}."
+                )
+            return
+        block = self.correlation or {}
+        unknown = sorted(set(block) - set(PYSCF_CORRELATION_DEFAULTS))
+        if unknown:
+            raise ValueError(
+                f"Unknown correlation settings: {', '.join(unknown)}; "
+                f"expected {', '.join(PYSCF_CORRELATION_DEFAULTS)}."
+            )
+        if not isinstance(block.get("frozen_core", True), bool):
+            raise ValueError("correlation frozen_core must be true or false.")
+        if method == "mp2" and any(
+            block.get(key) is not None for key in ("max_cycle", "conv_tol")
+        ):
+            raise ValueError(
+                "max_cycle and conv_tol control the CCSD iterations; MP2 is "
+                "not iterative."
+            )
+        refused = {
+            "density_fit": self.density_fit,
+            "dispersion": self.dispersion,
+            "solvent_model": self.solvent_model,
+        }
+        applied = [name for name, value in refused.items() if value]
+        if applied:
+            raise ValueError(
+                f"{method} cannot be combined with {', '.join(applied)} in "
+                "this backend; set density_fit: false and remove the others. "
+                "Density fitting would silently turn the method into its "
+                "density-fitted variant."
+            )
+        if self.jobtype == "hess" or (self.jobtype == "opt" and self.freq):
+            raise ValueError(
+                f"{method} has no analytic Hessian in PySCF, so neither hess "
+                "nor freq: true is available; set freq: false to optimise."
+            )
+        # PySCF 2.14 has no open-shell CCSD(T) gradient.
+        if method == "ccsd(t)" and (self.jobtype == "opt" or self.forces):
+            raise ValueError(
+                "ccsd(t) is available for single-point energies only; "
+                "optimise or compute forces with mp2 or ccsd."
+            )
+        if self.jobtype == "opt" and self.opt_solver != "geometric":
+            raise ValueError(
+                f"Optimisation with {method} uses the geometric solver "
+                f"only, not {self.opt_solver!r}."
+            )
+
+    def _check_functional_name(self):
+        """Reject a functional string PySCF would not read as that name.
+
+        Hyphenated names such as ``cam-b3lyp`` and ``b3lyp-vwn3`` (B3LYP
+        minus VWN) can only be told apart with PySCF's own tables, so the
+        driver checks those in the environment that runs the calculation.
+        """
+        functional = self.functional
+        name = str(functional).strip().lower()
+        if PYSCF_FUNCTIONAL_EXPRESSION_CHARACTERS.intersection(name):
+            raise ValueError(
+                f"Functional {functional!r} is a PySCF expression, not a "
+                "named functional. Request the functional by name, for "
+                "example 'pbe0' or 'b3lyp'."
+            )
+        if "-d3" in name or "-d4" in name:
+            raise ValueError(
+                f"Functional {functional!r} carries a dispersion suffix, "
+                "which PySCF would apply on its own. Give the dispersion "
+                "through the dispersion setting instead, for example "
+                "functional 'b3lyp' with dispersion 'd3bj'."
+            )
+        if name in PYSCF_MISLEADING_FUNCTIONALS:
+            raise ValueError(
+                f"Functional {functional!r} is refused: "
+                f"{PYSCF_MISLEADING_FUNCTIONALS[name]}"
+            )
 
     def _check_solvent(self, solvent_model):
         """Reject a solvent model PySCF has no implementation for."""
@@ -370,16 +533,25 @@ class PySCFJobSettings(MolecularJobSettings):
                 f"calculation than the one requested."
             )
 
-        if self.ab_initio is not None and str(self.ab_initio).lower() != "hf":
+        if (
+            self.ab_initio is not None
+            and str(self.ab_initio).lower() != "hf"
+            and self.correlated_method is None
+        ):
             raise ValueError(
                 f"Unknown ab_initio method {self.ab_initio!r}; the PySCF "
-                "v1 backend supports only 'hf' or a DFT functional."
+                f"backend supports 'hf' and {', '.join(PYSCF_CORRELATED_METHODS)}"
+                ", or a DFT functional."
             )
+        self._check_correlation()
 
         if self.ab_initio is not None and self.functional is not None:
             raise ValueError(
                 "Specify either 'ab_initio: hf' or 'functional', not both."
             )
+
+        if self.functional is not None:
+            self._check_functional_name()
 
         if is_double_hybrid_functional(self.functional):
             raise ValueError(
@@ -400,6 +572,9 @@ class PySCFJobSettings(MolecularJobSettings):
                     "A solvent_id is required for every PySCF solvent model "
                     "so the applied dielectric/environment is explicit."
                 )
+
+        if not isinstance(self.scf_stability, bool):
+            raise ValueError("scf_stability must be true or false.")
 
         if float(self.point_group_tol) <= 0:
             raise ValueError(

@@ -144,6 +144,8 @@ class PySCFScriptWriter:
             # geometry's residual forces are part of its result.
             "forces": bool(settings.forces or "opt" in job.stages),
             "point_group_tol": float(settings.point_group_tol),
+            "correlation": settings.resolved_correlation,
+            "scf_stability": settings.scf_stability,
             "engine": settings.resolved_engine,
             "num_threads": int(num_threads),
             "max_memory_mb": max_memory_mb,

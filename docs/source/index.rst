@@ -71,6 +71,7 @@ computational chemistry software.
 
    pyscf-cli-options
    pyscf-structure-optimization
+   pyscf-electronic-structure
    pyscf-frequency-calculations
    pyscf-gpu-acceleration
    pyscf-results
