@@ -140,8 +140,9 @@ subcommand.
 Method and Basis Set
 ====================
 
-Use ``-x`` for a DFT functional or ``-A`` for a Hartree-Fock reference, never both. Basis sets take the hyphenated PySCF
-spelling, for example ``def2-svp``, not Gaussian's ``def2svp``.
+Use ``-x`` for a DFT functional or ``-A`` for an ab initio method, never both; the methods beyond Hartree-Fock are
+described in :doc:`pyscf-electronic-structure`. Basis sets take the hyphenated PySCF spelling, for example ``def2-svp``,
+not Gaussian's ``def2svp``.
 
 Optimize with a different functional and basis set:
 

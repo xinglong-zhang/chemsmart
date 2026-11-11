@@ -722,6 +722,10 @@ class TestCheckProgramAvailability:
     def test_orca_case_insensitive_is_accepted(self, name):
         check_program_availability_in_chemsmart(name)
 
+    @pytest.mark.parametrize("name", ["pyscf", "PySCF"])
+    def test_pyscf_is_accepted(self, name):
+        check_program_availability_in_chemsmart(name)
+
     def test_unsupported_program_raises(self):
         with pytest.raises(ValueError, match="Unsupported program"):
             check_program_availability_in_chemsmart("nwchem")

@@ -155,6 +155,12 @@ Molecular Properties Options
    PySCF's own ``spin`` keyword is ``2S``, not ``2S+1``. Always give the multiplicity here and let CHEMSMART convert it,
    so that the value in the command matches the value in the project YAML and in every other program group.
 
+.. note::
+
+   The energy of an open shell whose singly occupied orbital belongs to a degenerate pair, such as the π hole of OH,
+   depends slightly on how the SCF orients that orbital, because the integration grids are not cylindrically symmetric.
+   Such energies can differ between machines by a few 1e-7 Eh.
+
 Method and Basis Set Options
 ============================
 
@@ -172,7 +178,7 @@ Method and Basis Set Options
 
    -  -  ``-A, --ab-initio``
       -  string
-      -  Ab initio method; use ``hf`` for a Hartree-Fock reference
+      -  Ab initio method: ``hf``, ``mp2``, ``ccsd`` or ``ccsd(t)``; see :doc:`pyscf-electronic-structure`
 
    -  -  ``-b, --basis``
       -  string
@@ -187,8 +193,10 @@ Method and Basis Set Options
       -  Dispersion correction (e.g. ``d3bj``); requires ``pyscf-dispersion``
 
 Give either ``-x`` or ``-A``, never both. Basis names follow PySCF and libcint spelling, which is hyphenated:
-``def2-svp``, not Gaussian's ``def2svp``. Functional names go through libxc, which accepts ``m062x`` as well as
-``M06-2X``.
+``def2-svp``, not Gaussian's ``def2svp``. A basis that defines an effective core potential brings it, as in Gaussian and
+ORCA: the def2 sets replace the core of elements from rubidium on (28 electrons for iodine), and ``lanl2dz`` carries its
+own. The replaced electrons are recorded in the results file. Functional names go through libxc, which accepts ``m062x``
+as well as ``M06-2X``.
 
 .. warning::
 
@@ -197,8 +205,23 @@ Give either ``-x`` or ``-A``, never both. Basis names follow PySCF and libcint s
    compared with an ORCA ``B3LYP`` energy. CHEMSMART logs a warning when it resolves ``b3lyp``, but it cannot know which
    convention you meant.
 
-Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied. ``-A`` accepts
-only ``hf``; post-Hartree-Fock correlation methods are not part of this integration.
+   A PySCF configuration file that sets ``B3LYP_WITH_VWN5`` would change what ``b3lyp`` means, so a DFT job stops before
+   the SCF when that setting is present.
+
+A functional is given by name, and strings PySCF would read as something else are rejected before the calculation
+starts:
+
+-  expressions such as ``pbe,pbe`` or ``0.5*b3lyp``;
+-  a dispersion suffix such as ``b3lyp-d3bj``, which belongs in ``-d``;
+-  a ``-`` that PySCF reads as subtraction, such as ``b3lyp-vwn3`` (B3LYP minus VWN); genuine names like ``cam-b3lyp``
+   are unaffected;
+-  ``b3lyp3``, which is a different functional from Gaussian's B3LYP. Ask for ``hyb_gga_xc_b3lyp3`` if that functional
+   is really intended.
+
+Double-hybrid functionals are rejected, since their perturbative correlation term would not be applied.
+
+The correlated methods ``mp2``, ``ccsd`` and ``ccsd(t)`` take their own project keys; see
+:doc:`pyscf-electronic-structure`.
 
 Examples:
 
@@ -377,9 +400,13 @@ matches the usual workflow: optimize and take frequencies at one level, then ref
      solvent_id: water
 
 A key that does not exist on the PySCF settings raises an error at load time and lists every valid key, so a typo stops
-the run instead of quietly applying a default. Settings inherited from the Gaussian and ORCA schemas are refused rather
-than ignored, including ``semiempirical``, ``modred``, ``gen_genecp_file``, ``heavy_elements``, ``numfreq``,
-``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and ``custom_solvent``.
+the run instead of quietly applying a default. A section other than ``gas`` and ``solv``, such as ``td`` or a misspelt
+``gass``, is rejected for the same reason, since no PySCF job would read it. Settings inherited from the Gaussian and
+ORCA schemas are refused rather than ignored, including ``semiempirical``, ``modred``, ``gen_genecp_file``,
+``heavy_elements``, ``numfreq``, ``additional_route_parameters``, ``route_to_be_written``, ``input_string``, and
+``custom_solvent``.
+
+The ``correlation`` block is described in :doc:`pyscf-electronic-structure`.
 
 **********************
  Server Configuration
@@ -426,6 +453,7 @@ already completed.
 For detailed information on each job type:
 
 -  :doc:`pyscf-structure-optimization`
+-  :doc:`pyscf-electronic-structure`
 -  :doc:`pyscf-frequency-calculations`
 -  :doc:`pyscf-gpu-acceleration`
 -  :doc:`pyscf-results`

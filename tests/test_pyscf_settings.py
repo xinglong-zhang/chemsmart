@@ -70,10 +70,12 @@ class TestPySCFJobSettings:
         with pytest.raises(ValueError, match="gen_genecp_file"):
             settings.validate()
 
-    def test_only_hf_is_supported_as_an_ab_initio_method(self):
-        settings = PySCFJobSettings(ab_initio="mp2", basis="def2-svp")
+    def test_unsupported_ab_initio_method_names_the_supported_ones(self):
+        settings = PySCFJobSettings(ab_initio="cisd", basis="def2-svp")
 
-        with pytest.raises(ValueError, match="supports only 'hf'"):
+        with pytest.raises(
+            ValueError, match=r"supports 'hf' and mp2, ccsd, ccsd\(t\)"
+        ):
             settings.validate()
 
     def test_ab_initio_and_dft_functional_are_mutually_exclusive(self):
@@ -171,6 +173,17 @@ class TestPySCFProjectSettings:
             hess.project_yaml_digest,
         } == {expected_digest}
 
+    @pytest.mark.parametrize("section", ["td", "gass"])
+    def test_section_no_pyscf_job_reads_is_refused(
+        self, pyscf_test_project_yaml, tmp_path, section
+    ):
+        project = yaml.safe_load(pyscf_test_project_yaml.read_text())
+        project[section] = {"functional": "cam-b3lyp"}
+        path = tmp_path / "extra.yaml"
+        path.write_text(yaml.safe_dump(project))
+        with pytest.raises(ValueError, match=f"no PySCF job reads: {section}"):
+            YamlPySCFProjectSettings.from_yaml(str(path))
+
     def test_settings_copies_do_not_mutate_project(self):
         project = PySCFProjectSettings.from_project("test")
         first = project.opt_settings()
@@ -210,6 +223,11 @@ def test_settings_the_driver_cannot_apply_are_refused(request_field):
         settings.validate()
 
 
+def test_unknown_settings_are_refused_rather_than_ignored():
+    with pytest.raises(TypeError, match="Unknown PySCF settings: nstate"):
+        PySCFJobSettings(functional="b3lyp", basis="def2-svp", nstate=5)
+
+
 def test_project_yaml_digest_survives_merge():
     settings = PySCFJobSettings(functional="b3lyp", basis="def2-svp")
     assert settings.project_yaml_digest is None
@@ -220,7 +238,7 @@ def test_project_yaml_digest_survives_merge():
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"ab_initio": "mp2"}, "Unknown ab_initio"),
+        ({"ab_initio": "cisd"}, "Unknown ab_initio"),
         ({"ab_initio": "hf"}, "either 'ab_initio: hf' or 'functional'"),
         ({"functional": "b2plyp"}, "Double-hybrid"),
         ({"solvent_id": "water"}, "without a solvent_model"),
@@ -238,6 +256,129 @@ def test_impossible_requests_fail_validation(kwargs, message):
     settings = {"functional": "b3lyp", "basis": "def2-svp", **kwargs}
     with pytest.raises(ValueError, match=message):
         PySCFJobSettings(**settings).validate()
+
+
+@pytest.mark.parametrize(
+    ("functional", "message"),
+    [
+        ("pbe,pbe", "PySCF expression"),
+        ("0.5*b3lyp", "PySCF expression"),
+        ("b3lyp-d3bj", "dispersion setting"),
+        # LibXC 394, 23 kcal/mol from Gaussian's B3LYP for H2O/def2-SVP.
+        ("b3lyp3", "not Gaussian's B3LYP"),
+    ],
+)
+def test_strings_that_are_not_one_named_functional_are_refused(
+    functional, message
+):
+    settings = PySCFJobSettings(functional=functional, basis="def2-svp")
+    with pytest.raises(ValueError, match=message):
+        settings.validate()
+
+
+@pytest.mark.parametrize(
+    "functional",
+    [
+        "b3lyp",
+        "b3lyp5",
+        "cam-b3lyp",
+        "m06-2x",
+        "wb97m-v",
+        "b97-d",
+        "hyb_gga_xc_b3lyp3",
+    ],
+)
+def test_named_functionals_pass_validation(functional):
+    PySCFJobSettings(functional=functional, basis="def2-svp").validate()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        # PySCF would run DF-MP2/DF-CCSD on a density-fitted reference.
+        ({"density_fit": True}, "density_fit"),
+        ({"dispersion": "d3bj"}, "dispersion"),
+        ({"solvent_model": "cpcm", "solvent_id": "water"}, "solvent_model"),
+        # PySCF 2.14 has no open-shell CCSD(T) gradient.
+        ({"forces": True}, "forces"),
+        ({"jobtype": "opt"}, "single-point energies only"),
+        ({"jobtype": "hess"}, "no analytic Hessian"),
+        ({"correlation": {"frozen_cores": False}}, "Unknown correlation"),
+        ({"correlation": {"frozen_core": "yes"}}, "true or false"),
+    ],
+)
+def test_correlated_requests_pyscf_would_change_are_refused(kwargs, message):
+    settings = {
+        "ab_initio": "ccsd(t)",
+        "basis": "cc-pvdz",
+        "density_fit": False,
+        **kwargs,
+    }
+    with pytest.raises(ValueError, match=message):
+        PySCFJobSettings(**settings).validate()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"freq": True}, "no analytic Hessian"),
+        ({"opt_solver": "berny"}, "geometric solver only"),
+    ],
+)
+def test_correlated_optimisation_limits(kwargs, message):
+    settings = PySCFJobSettings(
+        ab_initio="mp2",
+        basis="cc-pvdz",
+        density_fit=False,
+        jobtype="opt",
+        **kwargs,
+    )
+    with pytest.raises(ValueError, match=message):
+        settings.validate()
+
+
+def test_mp2_and_ccsd_can_be_optimised():
+    for method in ("mp2", "ccsd"):
+        PySCFJobSettings(
+            ab_initio=method,
+            basis="cc-pvdz",
+            density_fit=False,
+            jobtype="opt",
+            freq=False,
+        ).validate()
+
+
+def test_mp2_has_no_iterations_to_control():
+    settings = PySCFJobSettings(
+        ab_initio="mp2",
+        basis="cc-pvdz",
+        density_fit=False,
+        correlation={"max_cycle": 10},
+    )
+    with pytest.raises(ValueError, match="not iterative"):
+        settings.validate()
+
+
+def test_correlation_block_needs_a_correlated_method():
+    settings = PySCFJobSettings(
+        functional="b3lyp",
+        basis="def2-svp",
+        correlation={"frozen_core": False},
+    )
+    with pytest.raises(ValueError, match="applies only"):
+        settings.validate()
+
+
+def test_correlation_defaults_to_the_chemical_frozen_core():
+    settings = PySCFJobSettings(
+        ab_initio="CCSD(T)", basis="cc-pvdz", density_fit=False
+    )
+    assert settings.validate().resolved_correlation == {
+        "method": "ccsd(t)",
+        "frozen_core": True,
+        "max_cycle": None,
+        "conv_tol": None,
+    }
 
 
 def test_hf_cannot_use_a_dft_grid():
