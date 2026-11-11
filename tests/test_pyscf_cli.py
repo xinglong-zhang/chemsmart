@@ -14,7 +14,7 @@ from chemsmart.cli.pyscf import pyscf
 from chemsmart.cli.pyscf.common import resolve_engine, settings_for_molecule
 from chemsmart.cli.run import run
 from chemsmart.io.molecules.structure import Molecule
-from chemsmart.io.pyscf.output import PySCFOutput, read_pyscf_h5
+from chemsmart.io.pyscf.output import PySCFH5File, PySCFOutput
 from chemsmart.jobs.pyscf.runner import PySCFJobRunner
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.settings.user import CHEMSMARTUserSettings
@@ -320,7 +320,7 @@ class TestPySCFCliRealRuns:
             "requested",
             "sp",
         )
-        spec = read_pyscf_h5(glob.glob("requested*.h5")[0])[0]
+        spec = PySCFH5File(glob.glob("requested*.h5")[0]).spec
         assert spec["forces"] is True
         assert spec["point_group_tol"] == 0.01
 
@@ -339,7 +339,7 @@ class TestPySCFCliRealRuns:
             "nodf",
             "sp",
         )
-        spec = read_pyscf_h5(glob.glob("nodf*.h5")[0])[0]
+        spec = PySCFH5File(glob.glob("nodf*.h5")[0]).spec
         assert spec["density_fit"] is False
         assert spec["aux_basis"] is None
 

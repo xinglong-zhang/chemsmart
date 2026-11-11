@@ -15,6 +15,8 @@ import hashlib
 import logging
 import os
 
+import yaml
+
 from chemsmart.jobs.pyscf.settings import PySCFJobSettings
 from chemsmart.settings.user import CHEMSMARTUserSettings
 from chemsmart.utils.mixins import RegistryMixin
@@ -31,6 +33,11 @@ PYSCF_SP_JOBS = ["sp"]
 
 #: Every jobtype a PySCF project YAML produces.
 PYSCF_JOBTYPES = PYSCF_GAS_PHASE_JOBS + PYSCF_SP_JOBS
+
+#: Top-level sections a PySCF project YAML may contain. The shared reader
+#: ignores any other section, so a ``td:`` block or a misspelt ``gass:``
+#: would silently configure nothing.
+PYSCF_PROJECT_SECTIONS = ("gas", "solv")
 
 
 class PySCFProjectSettings(RegistryMixin):
@@ -154,6 +161,7 @@ class YamlPySCFProjectSettingsBuilder:
         self.filename = filename
 
     def build(self):
+        self._check_sections()
         project_settings = YamlPySCFProjectSettings(
             sp_settings=self._project_settings_for_job("sp"),
             opt_settings=self._project_settings_for_job("opt"),
@@ -161,6 +169,19 @@ class YamlPySCFProjectSettingsBuilder:
         )
         project_settings.PROJECT_NAME = self._parse_project_name()
         return project_settings
+
+    def _check_sections(self):
+        """Raise if the project YAML has a section PySCF would not read."""
+        with open(self.filename) as handle:
+            project = yaml.safe_load(handle) or {}
+        unknown = sorted(set(project) - set(PYSCF_PROJECT_SECTIONS))
+        if unknown:
+            raise ValueError(
+                f"PySCF project {self.filename} has sections that no PySCF "
+                f"job reads: {', '.join(unknown)}. A PySCF project has only "
+                f"{' and '.join(PYSCF_PROJECT_SECTIONS)}: 'gas' configures "
+                "opt and hess, 'solv' configures sp."
+            )
 
     def _read_config(self):
         from chemsmart.jobs.settings import read_molecular_job_yaml

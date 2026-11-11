@@ -12,6 +12,7 @@ Fields the base class carries but PySCF cannot honour are listed in
 genecp basis must not silently produce a plain def2-SVP calculation.
 """
 
+import inspect
 import logging
 from functools import lru_cache
 
@@ -20,6 +21,16 @@ from ase.data import atomic_numbers
 from chemsmart.jobs.settings import MolecularJobSettings
 
 logger = logging.getLogger(__name__)
+
+#: Settings ``MolecularJobSettings`` accepts. Its ``**kwargs`` discards any
+#: other name, so a misspelt PySCF setting would vanish without a trace.
+MOLECULAR_SETTINGS_FIELDS = frozenset(
+    name
+    for name, parameter in inspect.signature(
+        MolecularJobSettings.__init__
+    ).parameters.items()
+    if parameter.kind is parameter.POSITIONAL_OR_KEYWORD and name != "self"
+)
 
 #: Solvent models accepted by ``solvent_model``, mapped to the PySCF call and
 #: the ``with_solvent.method`` string. Verified against pyscf 2.14.0: the PCM
@@ -71,6 +82,23 @@ PYSCF_DOUBLE_HYBRID_MARKERS = (
     "xygjos",
     "double-hybrid",
 )
+
+#: Characters that make PySCF read a functional string as an expression
+#: (``pbe,pbe``, ``0.5*b3lyp``) instead of one named functional. CHEMSMART
+#: requests functionals by name, so a functional is written one way only.
+PYSCF_FUNCTIONAL_EXPRESSION_CHARACTERS = frozenset(",*+;() ")
+
+#: Names PySCF accepts that do not denote what their spelling suggests,
+#: mapped to the reason they are refused.
+PYSCF_MISLEADING_FUNCTIONALS = {
+    "b3lyp3": (
+        "LibXC's B3LYP3 (functional 394) is not Gaussian's B3LYP, although "
+        "ORCA calls Gaussian's variant 'VWN3'; for H2O/def2-SVP the two "
+        "differ by 23 kcal/mol. Use 'b3lyp' for Gaussian's B3LYP (ORCA's "
+        "B3LYP/G), 'b3lyp5' for ORCA's B3LYP, or 'hyb_gga_xc_b3lyp3' for "
+        "LibXC functional 394 itself."
+    ),
+}
 
 #: Functionals whose *name* means different things in different programs.
 #: Maps a CHEMSMART functional name to (libxc name, note).
@@ -188,6 +216,12 @@ class PySCFJobSettings(MolecularJobSettings):
         # Passed under its private name by ``merge``. Not a project-YAML key:
         # the YAML loader derives it from the source file.
         project_yaml_digest = kwargs.pop("_project_yaml_digest", None)
+        unknown = sorted(set(kwargs) - MOLECULAR_SETTINGS_FIELDS)
+        if unknown:
+            raise TypeError(
+                f"Unknown PySCF settings: {', '.join(unknown)}. A setting "
+                "that is not recognised would otherwise be ignored."
+            )
         super().__init__(
             ab_initio=ab_initio,
             functional=functional,
@@ -302,6 +336,34 @@ class PySCFJobSettings(MolecularJobSettings):
             return None
         return resolve_functional(self.functional)
 
+    def _check_functional_name(self):
+        """Reject a functional string PySCF would not read as that name.
+
+        Hyphenated names such as ``cam-b3lyp`` and ``b3lyp-vwn3`` (B3LYP
+        minus VWN) can only be told apart with PySCF's own tables, so the
+        driver checks those in the environment that runs the calculation.
+        """
+        functional = self.functional
+        name = str(functional).strip().lower()
+        if PYSCF_FUNCTIONAL_EXPRESSION_CHARACTERS.intersection(name):
+            raise ValueError(
+                f"Functional {functional!r} is a PySCF expression, not a "
+                "named functional. Request the functional by name, for "
+                "example 'pbe0' or 'b3lyp'."
+            )
+        if "-d3" in name or "-d4" in name:
+            raise ValueError(
+                f"Functional {functional!r} carries a dispersion suffix, "
+                "which PySCF would apply on its own. Give the dispersion "
+                "through the dispersion setting instead, for example "
+                "functional 'b3lyp' with dispersion 'd3bj'."
+            )
+        if name in PYSCF_MISLEADING_FUNCTIONALS:
+            raise ValueError(
+                f"Functional {functional!r} is refused: "
+                f"{PYSCF_MISLEADING_FUNCTIONALS[name]}"
+            )
+
     def _check_solvent(self, solvent_model):
         """Reject a solvent model PySCF has no implementation for."""
         if str(solvent_model).lower() not in PYSCF_SOLVENT_MODELS:
@@ -380,6 +442,9 @@ class PySCFJobSettings(MolecularJobSettings):
             raise ValueError(
                 "Specify either 'ab_initio: hf' or 'functional', not both."
             )
+
+        if self.functional is not None:
+            self._check_functional_name()
 
         if is_double_hybrid_functional(self.functional):
             raise ValueError(

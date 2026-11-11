@@ -88,6 +88,28 @@ def _apply_threads(config):
     lib.num_threads(config["num_threads"])
 
 
+def _basis_ecp(config):
+    """Return, by element, the core potential the named basis defines.
+
+    Gaussian and ORCA attach def2's core potential to iodine whenever def2
+    is named. PySCF attaches none unless told and, given def2's valence
+    functions alone, runs the element all-electron without complaint, so
+    the potential is taken from the library entry the functions come from.
+    """
+    from pyscf import gto
+    from pyscf.lib.exceptions import BasisNotFoundError
+
+    ecp = {}
+    for symbol in sorted(set(config["symbols"])):
+        try:
+            defined = gto.basis.load_ecp(config["basis"], symbol)
+        except BasisNotFoundError:  # the orbital basis build reports it
+            defined = None
+        if defined:
+            ecp[symbol] = config["basis"]
+    return ecp
+
+
 def _build_mole(config, log_path):
     import pyscf
 
@@ -107,7 +129,142 @@ def _build_mole(config, log_path):
     )
     if config["max_memory_mb"]:
         kwargs["max_memory"] = config["max_memory_mb"]
+    ecp = _basis_ecp(config)
+    if ecp:
+        kwargs["ecp"] = ecp
     return pyscf.M(**kwargs)
+
+
+def _ecp_core_electrons(mol):
+    """Return the core electrons replaced by a potential, by element.
+
+    None when no element carries one, so an all-electron result keeps the
+    same record identity it had before this was recorded.
+    """
+    cores = {}
+    for index in range(mol.natm):
+        replaced = int(mol.atom_nelec_core(index))
+        if replaced:
+            cores[mol.atom_pure_symbol(index)] = replaced
+    return cores or None
+
+
+def _parsed_functional(name):
+    """Return PySCF's reading of a functional string, or None if it fails."""
+    from pyscf.dft import libxc
+
+    try:
+        return libxc.parse_xc(name)
+    except Exception:  # noqa: BLE001 - any parse failure means "not a name"
+        return None
+
+
+def _refuse_ambiguous_functional(xc):
+    """Stop if PySCF would evaluate a different functional from the one named.
+
+    ``B3LYP_WITH_VWN5`` in a PySCF configuration file remaps B3LYP, B3P86 and
+    X3LYP to their VWN5 variants when PySCF is imported, so a run under that
+    setting would compute a different functional from the one requested and
+    recorded. Separately, PySCF reads a '-' as subtraction unless the name is
+    in its own tables: ``cam-b3lyp`` is one functional, ``b3lyp-vwn3`` is
+    B3LYP minus VWN. A genuine name parses the same with '_' for '-'.
+    """
+    from pyscf import __config__
+
+    # A configuration file defines only the attributes it sets.
+    if getattr(__config__, "B3LYP_WITH_VWN5", False):
+        raise ValueError(
+            "The PySCF configuration sets B3LYP_WITH_VWN5, which changes the "
+            "meaning of B3LYP, B3P86 and X3LYP. Remove it from the PySCF "
+            "configuration file and request 'b3lyp5' where the VWN5 variant "
+            "is intended."
+        )
+
+    if "-" in xc:
+        named = xc.replace("-", "_")
+        if _parsed_functional(xc) != _parsed_functional(named):
+            hint = ""
+            if _parsed_functional(named) is not None:
+                hint = " Did you mean %r?" % named
+            raise ValueError(
+                "PySCF does not read %r as one functional: it treats the "
+                "'-' as subtraction or as a dispersion suffix.%s" % (xc, hint)
+            )
+
+
+def _reference_family(mf):
+    """Return the SCF reference the mean-field object actually is.
+
+    Read from the class hierarchy, so it holds whatever PySCF chose, and
+    after density fitting or a solvent model wraps the object.
+    """
+    names = {cls.__name__ for cls in type(mf).__mro__}
+    # Most specific first: RKS derives from RHF, ROKS from ROHF and RHF.
+    for family in ("ROKS", "UKS", "RKS", "ROHF", "UHF", "RHF"):
+        if family in names:
+            return family
+    raise ValueError(
+        "Cannot identify the SCF reference of %s" % type(mf).__name__
+    )
+
+
+def _applied_functional(mf, mol):
+    """Return the exchange-correlation functional PySCF will evaluate.
+
+    Component ids are those of the backend named in ``backend``. The exact
+    (HF) exchange fractions follow PySCF's convention: equal for a global
+    hybrid, short- and long-range parts for a range-separated hybrid.
+    """
+    numint = mf._numint
+    components = numint.libxc.parse_xc(mf.xc)[1]
+    omega, long_range, short_range = numint.rsh_and_hybrid_coeff(
+        mf.xc, spin=mol.spin
+    )
+    return {
+        "name": str(mf.xc),
+        "backend": numint.libxc.__name__.rsplit(".", 1)[-1],
+        "component_ids": [int(xc_id) for xc_id, _ in components],
+        "component_coefficients": [float(coef) for _, coef in components],
+        "hf_exchange_short_range": float(short_range),
+        "hf_exchange_long_range": float(long_range),
+        "range_separation_omega": float(omega),
+        "nonlocal_correlation": bool(mf.do_nlc()),
+    }
+
+
+def _applied_numerics(mf):
+    """Return the numerical settings PySCF ran with, defaults resolved.
+
+    Unset settings take PySCF defaults that a configuration file or a new
+    release can change, so the values used are recorded, not inferred.
+    """
+    numerics = {
+        "conv_tol": float(mf.conv_tol),
+        "max_cycle": int(mf.max_cycle),
+        "grid": None,
+        "auxbasis": None,
+    }
+    grids = getattr(mf, "grids", None)  # absent on Hartree-Fock objects
+    if grids is not None:
+        prune = grids.prune
+        numerics["grid"] = {
+            "level": int(grids.level),
+            "atom_grid": (
+                [int(n) for n in grids.atom_grid] if grids.atom_grid else None
+            ),
+            "prune": getattr(prune, "__name__", None),
+            "radial": grids.radi_method.__name__,
+            "becke_scheme": grids.becke_scheme.__name__,
+            "num_points": int(grids.weights.size),
+        }
+    with_df = getattr(mf, "with_df", None)  # absent without fitting
+    if with_df is not None:
+        auxbasis = with_df.auxbasis
+        # A generated even-tempered set has no name to record.
+        numerics["auxbasis"] = (
+            auxbasis if isinstance(auxbasis, str) else "generated"
+        )
+    return numerics
 
 
 def _build_method(config, mol):
@@ -136,6 +293,7 @@ def _build_method(config, mol):
     if config["xc"] is None:
         mf = scf.HF(mol)
     else:
+        _refuse_ambiguous_functional(config["xc"])
         mf = dft.KS(mol, xc=config["xc"])
         if config["atom_grid"]:
             mf.grids.atom_grid = tuple(config["atom_grid"])
@@ -391,6 +549,17 @@ def main(config):
         # dielectric.  Echo the value actually applied, not the controller's
         # unresolved placeholder.
         spec["solvent_eps"] = config.get("solvent_eps")
+        # Record what PySCF will compute, not only the names requested.
+        spec["ecp_core_electrons"] = _ecp_core_electrons(mol)
+        spec["reference"] = _reference_family(mf)
+        spec["xc_applied"] = None
+        if config["xc"] is not None:
+            _record_optional(
+                spec,
+                status,
+                "xc_applied",
+                lambda: _applied_functional(mf, mol),
+            )
 
         energies = []
         for stage in config["stages"]:
@@ -498,6 +667,13 @@ def main(config):
             "mulliken_charges",
             lambda: _host(mf.mulliken_pop(verbose=0)[1]).astype(float),
         )
+        # <S^2> of the final determinant, in units of hbar^2.
+        _record_optional(
+            results,
+            status,
+            "spin_square",
+            lambda: float(mf.spin_square()[0]),
+        )
         _record_optional(
             results,
             status,
@@ -514,6 +690,10 @@ def main(config):
             lambda: _detect_point_group(mol, config["point_group_tol"]),
         )
 
+        # After the stages, when the grid and fitting basis are built.
+        _record_optional(
+            spec, status, "numerics_applied", lambda: _applied_numerics(mf)
+        )
         spec["num_basis_functions"] = int(mol.nao)
         spec["num_shells"] = int(mol.nbas)
         spec["num_electrons"] = int(mol.nelectron)
