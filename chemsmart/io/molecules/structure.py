@@ -1488,6 +1488,13 @@ class Molecule:
                 )
             return result
 
+        if basename.endswith(".cif"):
+            return cls._read_cif_file(
+                filepath=filepath,
+                index=index,
+                return_list=return_list,
+            )
+
         return cls._read_other(filepath, index, **kwargs)
 
     @classmethod
@@ -1688,6 +1695,74 @@ class Molecule:
                 return_list=return_list,
             )
         return database_file.get_all_molecules(return_list=return_list)
+
+    @classmethod
+    def _read_cif_file(cls, filepath, index="-1", return_list=False):
+        """
+        Read CIF (Crystallographic Information File) format.
+
+        Args:
+            filepath (str): Path to CIF file
+            index (str or int): Index for multi-block files (one structure
+                per data block). Use "-1" for last structure, ":" for all,
+                or 1-based integer.
+            return_list (bool): If True, return a list of molecules.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from CIF file.
+
+        Note:
+            - The file is parsed directly (elements and coordinates),
+              without relying on ASE and without symmetry expansion, so
+              the returned structure is the *asymmetric unit* of the data
+              block. If the molecule lies on a symmetry element (e.g., an
+              inversion centre), the asymmetric unit may contain only part
+              of the molecule. Use ``Molecule.from_ccdc()`` with a
+              licensed local CSD Python API installation to obtain the
+              deposited discrete molecule.
+            - For multi-block CIF files, use index to select specific
+              structures.
+        """
+        from chemsmart.io.file import CIFFile
+
+        cif_file = CIFFile(filepath)
+        logger.debug(f"Read CIF file: {filepath} at index {index}")
+        return cif_file.get_molecules(index=index, return_list=return_list)
+
+    @classmethod
+    def from_cif_file(cls, filepath, index="-1", return_list=False):
+        """
+        Create molecule from CIF (Crystallographic Information File).
+
+        Args:
+            filepath (str): Path to CIF file
+            index (str or int): Index for multi-structure files.
+                Use "-1" for last molecule, ":" for all, or 1-based integer.
+                Default is "-1" (last structure).
+            return_list (bool): If True, return a list of molecules.
+                Default is False.
+
+        Returns:
+            Molecule or list[Molecule]: Molecule object(s) from CIF file.
+
+        Raises:
+            FileNotFoundError: If the file does not exist
+            ValueError: If the file cannot be parsed
+
+        Example:
+            >>> mol = Molecule.from_cif_file('structure.cif')
+            >>> mols = Molecule.from_cif_file('structure.cif', index=':', return_list=True)
+        """
+        filepath = os.path.abspath(filepath)
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"{filepath} could not be found!")
+
+        if os.path.getsize(filepath) == 0:
+            raise ValueError(f"{filepath} is empty!")
+
+        return cls._read_cif_file(
+            filepath, index=index, return_list=return_list
+        )
 
     # @staticmethod
     # @file_cache()
@@ -1916,6 +1991,52 @@ class Molecule:
                 return molecule
 
         logger.debug("Could not create structure from pubchem.")
+        return None
+
+    @classmethod
+    def from_ccdc(cls, deposition_number, return_list=False):
+        """
+        Create molecule object from CCDC database.
+
+        Uses the local, licensed CSD Python API when available (returns the
+        deposited discrete molecule); otherwise falls back to downloading
+        the CIF file from the CCDC web service (returns the
+        crystallographic structure read from the CIF).
+
+        Note: no in-memory caching is applied here, since caching the
+        Molecule object would also cache the ``return_list``
+        transformation; retrieved CIF files are instead cached on disk by
+        :func:`chemsmart.io.molecules.ccdc.fetch_cif_from_ccdc`.
+
+        Args:
+            deposition_number (str or int): CCDC deposition number (e.g., 1428476)
+            return_list (bool): Whether to return list format. Default False
+
+        Returns:
+            Molecule or list or None: Molecule object from CCDC, None if not found
+
+        Raises:
+            ValueError: If deposition number is invalid or structure cannot be retrieved
+            requests.exceptions.RequestException: For network or HTTP-related issues
+
+        Example:
+            >>> mol = Molecule.from_ccdc(1428476)
+            >>> mols = Molecule.from_ccdc(1428476, return_list=True)
+        """
+        from chemsmart.io.molecules.ccdc import ccdc_search
+
+        molecule = ccdc_search(deposition_number, fail_silently=False)
+        if molecule is not None:
+            logger.info(
+                f"Structure successfully created from CCDC deposition {deposition_number}"
+            )
+            if return_list:
+                return [molecule]
+            return molecule
+
+        logger.debug(
+            f"Could not create structure from CCDC deposition {deposition_number}."
+        )
         return None
 
     @classmethod
