@@ -291,6 +291,7 @@ class DatabaseInspector:
                     "heavy_elements_basis_functions",
                     "heavy_elements_basis_by_element",
                     "heavy_elements_ecp",
+                    "custom_basis_input",
                 )
             )
             if not has_detail:
@@ -333,6 +334,22 @@ class DatabaseInspector:
             if heavy_ecp:
                 ecp_elems = ", ".join(heavy_ecp.keys())
                 lines.append(format_kv("  Heavy Elements ECP", ecp_elems))
+                for elem, ecp in heavy_ecp.items():
+                    if ecp.get("parameters_available") is False:
+                        lines.append(
+                            format_kv(
+                                f"    {elem} ECP",
+                                f"{ecp['name']} "
+                                f"({ecp['core_electrons']} core electrons; "
+                                "potential parameters unavailable)",
+                            )
+                        )
+            if custom_basis.get("custom_basis_input"):
+                lines.append(
+                    format_kv(
+                        "  Custom Basis Input", "stored from output echo"
+                    )
+                )
         lines.append(format_kv("Spin Type", meta.get("spin")))
         lines.append(format_kv("Job Type", meta.get("jobtype")))
         lines.append(format_kv("Solvent", bool_to_str(meta.get("solvent_on"))))

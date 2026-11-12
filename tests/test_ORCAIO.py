@@ -462,6 +462,15 @@ END
 
 
 class TestORCAOutput:
+    @pytest.mark.parametrize("ending", ["", "end\n", "S 1\n1 2.0 1.0\nend\n"])
+    def test_incomplete_printed_basis_is_not_reported(self, tmp_path, ending):
+        output = tmp_path / "truncated.out"
+        output.write_text(
+            "ATOM BASIS FOR ELEMENT He\nNewGTO He\nS 2\n1 1.0 1.0\n" + ending
+        )
+        out = ORCAOutput(str(output))
+        assert out.heavy_elements_basis_functions is None
+
     def test_printed_ecp_summary(self, orca_outputs_directory):
         out = ORCAOutput(
             os.path.join(orca_outputs_directory, "L2_ts1_opt_pka_HA_sp.out")
@@ -524,8 +533,12 @@ class TestORCAOutput:
             "| 10> ****END OF INPUT****\n"
         )
         out = ORCAOutput(str(out_file))
-        assert out.heavy_elements == ["I"]
-        assert out.heavy_elements_basis == "def2-QZVP"
+        assert out.heavy_elements == ["Pd", "I"]
+        assert out.heavy_elements_basis is None
+        assert out.heavy_elements_basis_by_element == {
+            "Pd": None,
+            "I": "def2-QZVP",
+        }
 
     def test_heavy_elements_basis_names_are_case_insensitive(self, tmp_path):
         out_file = tmp_path / "case_variants.out"

@@ -1306,6 +1306,45 @@ class TestDatabaseInspect:
 
 
 class TestDatabaseAssembler:
+    def test_orca_unexpanded_custom_bases_have_distinct_ids(
+        self, orca_he_output_freq, tmp_path
+    ):
+        with open(orca_he_output_freq) as source:
+            text = source.read()
+        start = text.index("ATOM BASIS FOR ELEMENT He")
+        end = text.index("\n end", start) + len("\n end")
+        text = text[:start] + text[end:]
+        records = []
+        for index, (exponent, comment) in enumerate(
+            [("1.0", ""), ("2.0", ""), ("1.0", "# ignored comment #")]
+        ):
+            definition = (
+                f"| 90> %basis {comment} NewGTO He S 1\n"
+                f"| 91> 1 {exponent} 1.0\n| 92> end end\n"
+            )
+            output = tmp_path / f"basis{index}.out"
+            output.write_text(text.replace("|  1>", definition + "|  1>", 1))
+            record = SingleFileAssembler(str(output)).assemble_data
+            basis = record.meta["custom_basis"]
+            assert basis["heavy_elements_basis_functions"] is None
+            assert basis["custom_basis_input"]["basis_blocks"]
+            records.append(record)
+        assert records[0].record_id != records[1].record_id
+        assert records[0].record_id == records[2].record_id
+        db = Database(str(tmp_path / "custom_orca.db"))
+        db.create()
+        for record in records:
+            db.insert_record(record)
+        for record in records[:2]:
+            stored = db.get_record(record_id=record.record_id)
+            assert (
+                stored["meta"]["custom_basis"] == record.meta["custom_basis"]
+            )
+            detail = DatabaseInspector(
+                db.db_file, record_id=record.record_id
+            ).format_record_detail()
+            assert "stored from output echo" in detail
+
     def test_orca_mixed_basis_names_are_stored(
         self, orca_he_output_freq, tmp_path
     ):

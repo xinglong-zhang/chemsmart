@@ -361,25 +361,7 @@ class ORCAOutput(ORCAFileMixin):
         echoed input file via ``NewGTO <element> "<basis name>" end``.
         Returns a dict keyed by element symbol, e.g. {'Pd': 'def2-TZVP'}.
         """
-        input_lines = []
-        for line in self.contents:
-            if "****END OF INPUT****" in line:
-                break
-            match = re.match(r"^\|\s*\d+>(.*)$", line)
-            if match:
-                input_lines.append(match.group(1))
-        # Keep line boundaries until comments have been removed. A comment
-        # may end at a second '#', and quoted strings may themselves contain
-        # '#', so the generic end-of-line comment stripper is insufficient.
-        input_text = re.sub(
-            orca_input_comment_pattern,
-            lambda match: (
-                "" if match.group().startswith("#") else match.group()
-            ),
-            "\n".join(input_lines),
-            flags=re.MULTILINE,
-        )
-        tokens = re.findall(orca_input_token_pattern, input_text)
+        tokens = self._input_tokens
         basis_names = {}
         depth = 0
         for index, token in enumerate(tokens):
@@ -408,15 +390,14 @@ class ORCAOutput(ORCAFileMixin):
                 else:
                     # An explicit replacement has no library name. Do not
                     # retain a name from an earlier NewGTO for this element.
-                    basis_names.pop(element, None)
+                    basis_names[element] = None
         return basis_names
 
     @property
     def heavy_elements(self):
         """
-        List of element symbols assigned a named element-specific basis
-        with ``NewGTO`` in the %basis block, or None if there are none.
-        Explicit shell definitions without a library name are not included.
+        Elements assigned a NewGTO basis in %basis, or None if absent.
+        Explicit definitions are included even when their name is unknown.
         """
         if not self._element_basis_names:
             return None
@@ -424,9 +405,9 @@ class ORCAOutput(ORCAFileMixin):
             list(self._element_basis_names.keys())
         )
 
-    @property
-    def has_custom_basis(self):
-        """Whether echoed input defines element/atom basis overrides."""
+    @cached_property
+    def _input_tokens(self):
+        """Tokenize echoed input once, excluding comments and line numbers."""
         lines = []
         for line in self.contents:
             if "****END OF INPUT****" in line:
@@ -442,25 +423,89 @@ class ORCAOutput(ORCAFileMixin):
             "\n".join(lines),
             flags=re.MULTILINE,
         )
+        return re.findall(orca_input_token_pattern, text)
+
+    @property
+    def has_custom_basis(self):
+        """Whether echoed input defines element/atom basis overrides."""
         return any(
             token.casefold() in {"newgto", "newecp", "addgto"}
-            for token in re.findall(orca_input_token_pattern, text)
+            for token in self._input_tokens
         )
+
+    @cached_property
+    def custom_basis_input(self):
+        """Preserve custom definitions even when expanded functions are absent.
+
+        Store complete %basis blocks. For atom-level or other definitions
+        outside those blocks, retain the tokenized input as a lossless
+        fallback so the atom assignment and its definition stay together.
+        """
+        if not self.has_custom_basis:
+            return None
+        tokens = self._input_tokens
+        blocks = []
+        covered = set()
+        index = 0
+        while index < len(tokens):
+            if tokens[index].casefold() != "%basis":
+                index += 1
+                continue
+            start = index
+            depth = 1
+            index += 1
+            while index < len(tokens) and depth:
+                keyword = tokens[index].casefold()
+                if keyword.startswith(("new", "add")) and (
+                    keyword.endswith("gto") or keyword == "newecp"
+                ):
+                    depth += 1
+                elif keyword == "end":
+                    depth -= 1
+                index += 1
+            blocks.append(tokens[start:index])
+            covered.update(range(start, index))
+        if any(
+            index not in covered
+            and token.casefold() in {"newgto", "newecp", "addgto"}
+            for index, token in enumerate(tokens)
+        ):
+            return {"input_tokens": list(tokens)}
+        return {"basis_blocks": blocks}
 
     @cached_property
     def heavy_elements_basis_functions(self):
         """Expanded NewGTO functions printed in the results, when available."""
         result = {}
         shells = None
+        expected = None
+        element = None
+        printed_element = None
         for line in self.contents:
+            header = re.fullmatch(
+                r"ATOM BASIS FOR ELEMENT (\w+)", line.strip()
+            )
+            if header:
+                printed_element = header.group(1).capitalize()
+                shells = None
+                continue
             tokens = line.split()
-            if len(tokens) == 2 and tokens[0].casefold() == "newgto":
+            if (
+                len(tokens) == 2
+                and tokens[0].casefold() == "newgto"
+                and tokens[1].capitalize() == printed_element
+            ):
                 element = tokens[1].capitalize()
                 shells = [] if element in p.PERIODIC_TABLE else None
-                if shells is not None:
-                    result[element] = shells
+                expected = None
             elif shells is not None:
                 if tokens and tokens[0].casefold() == "end":
+                    if shells and expected == len(shells[-1]["primitives"]):
+                        result[element] = shells
+                    else:
+                        logger.warning(
+                            "Incomplete printed basis for %s", element
+                        )
                     shells = None
                 elif (
                     len(tokens) == 2
@@ -468,14 +513,34 @@ class ORCAOutput(ORCAFileMixin):
                     in ("S", "P", "D", "F", "G", "H", "I", "SP")
                     and tokens[1].isdigit()
                 ):
+                    if shells and expected != len(shells[-1]["primitives"]):
+                        logger.warning(
+                            "Incomplete printed basis for %s", element
+                        )
+                        shells = None
+                        continue
+                    expected = int(tokens[1])
                     shells.append(
                         {"shell": tokens[0].upper(), "primitives": []}
                     )
                 elif tokens and tokens[0].isdigit() and shells:
-                    values = tuple(
-                        float(v.replace("D", "E")) for v in tokens[1:]
-                    )
+                    try:
+                        values = tuple(
+                            float(v.upper().replace("D", "E"))
+                            for v in tokens[1:]
+                        )
+                    except ValueError:
+                        shells = None
+                        continue
+                    width = 3 if shells[-1]["shell"] == "SP" else 2
+                    if len(values) != width or not all(
+                        math.isfinite(v) for v in values
+                    ):
+                        shells = None
+                        continue
                     shells[-1]["primitives"].append(values)
+        if shells is not None:
+            logger.warning("Unterminated printed basis for %s", element)
         return result or None
 
     @cached_property
@@ -500,7 +565,7 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def heavy_elements_basis_by_element(self):
-        """Named NewGTO assignments by element, or None if absent."""
+        """NewGTO names by element; explicit unnamed definitions map to None."""
         return dict(self._element_basis_names) or None
 
     @property
@@ -511,7 +576,7 @@ class ORCAOutput(ORCAFileMixin):
         ``heavy_elements_basis_by_element``.
         """
         names = self.heavy_elements_basis_by_element
-        if not names:
+        if not names or any(name is None for name in names.values()):
             return None
         first = names[self.heavy_elements[0]]
         if all(name.casefold() == first.casefold() for name in names.values()):

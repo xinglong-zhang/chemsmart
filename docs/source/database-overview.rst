@@ -181,3 +181,10 @@ ORCA assembly stores named element-specific NewGTO assignments and expanded NewG
 Unprinted functions remain unavailable. Printed ECP summaries retain the name, replaced core-electron count and lmax;
 ``parameters_available: false`` indicates that potential coefficients were not parsed and the summary is not a complete
 reconstructable ECP.
+
+Custom definitions echoed in the output are retained as ``custom_basis_input`` even when expanded functions are absent.
+This includes complete tokenized ``%basis`` blocks, with comments and echo line numbers removed. For atom-specific or
+other overrides outside those blocks, the tokenized input is retained to preserve assignment context. These definitions
+participate in record identity so different unexpanded custom bases cannot overwrite each other. Incomplete printed
+function blocks are not presented as complete functions. Standard route-basis expansions remain metadata and do not
+change record identity across ORCA versions.

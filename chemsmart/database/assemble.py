@@ -96,6 +96,10 @@ class BaseAssembler:
             "normal_termination": output.normal_termination,
         }
 
+    def get_custom_basis_hash(self, meta):
+        """Compute the basis identity from this backend's metadata."""
+        return canonical_custom_basis_hash(meta.get("custom_basis"))
+
     def assemble(self):
         if not self.output.normal_termination:
             if not self.include_failed:
@@ -124,14 +128,7 @@ class BaseAssembler:
             [m.structure_id for m in self.molecules_list]
         )
         meta = {**meta, "trajectory_id": trajectory_id}
-        custom_basis_hash = canonical_custom_basis_hash(
-            meta.get("custom_basis"),
-            include_basis_names=self.PROGRAM == "ORCA",
-        )
-        if self.PROGRAM == "ORCA" and not self.output.has_custom_basis:
-            # Printed functions for a standard route basis are metadata;
-            # normalization can vary between ORCA versions.
-            custom_basis_hash = None
+        custom_basis_hash = self.get_custom_basis_hash(meta)
         custom_solvent_hash = canonical_json_hash(meta.get("custom_solvent"))
         route_tokens = canonicalize_route_string(
             self.output.route_string,
@@ -358,6 +355,15 @@ class ORCAAssembler(BaseAssembler):
     OUTPUT_CLASS = ORCAOutput
     PROGRAM = "ORCA"
 
+    def get_custom_basis_hash(self, meta):
+        # Standard basis normalization differs between ORCA releases.
+        # Its printed functions are metadata, not a custom basis identity.
+        if not self.output.has_custom_basis:
+            return None
+        return canonical_custom_basis_hash(
+            meta.get("custom_basis"), include_basis_names=True
+        )
+
     def get_meta_data(self):
         meta_data = super().get_meta_data()
         meta_data.update(
@@ -368,7 +374,8 @@ class ORCAAssembler(BaseAssembler):
         names = self.output.heavy_elements_basis_by_element
         functions = self.output.heavy_elements_basis_functions
         ecps = self.output.heavy_elements_ecp
-        if names or functions or ecps:
+        definitions = self.output.custom_basis_input
+        if names or functions or ecps or definitions:
             meta_data["custom_basis"] = {
                 "heavy_elements": sorted(
                     set(names or {}) | set(functions or {}) | set(ecps or {})
@@ -377,6 +384,7 @@ class ORCAAssembler(BaseAssembler):
                 "heavy_elements_basis_by_element": names,
                 "heavy_elements_basis_functions": functions,
                 "heavy_elements_ecp": ecps,
+                "custom_basis_input": definitions,
             }
         return meta_data
 

@@ -186,14 +186,15 @@ def canonical_custom_basis_hash(custom_basis, include_basis_names=False):
     the functions belong in the legacy hash slot: a derived name or alias
     must not change a calculation's ID. This projection is for hashing
     only and does not change the public metadata or stored JSON.
+    ORCA callers set include_basis_names because input assignments, unlike
+    inferred Gaussian names, are part of the supplied basis specification.
     """
     if not custom_basis:
         return None
     identity = dict(custom_basis)
     names = identity.pop("heavy_elements_basis_by_element", None)
     if include_basis_names and names:
-        # Without expanded functions, element assignments are the only
-        # available basis identity and must distinguish mixed assignments.
+        # Preserve input assignments even when expansion is unavailable.
         identity["heavy_elements_basis_by_element"] = names
     if "heavy_elements_basis_functions" in identity:
         identity["heavy_elements_basis"] = identity.pop(
