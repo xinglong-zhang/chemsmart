@@ -105,56 +105,51 @@ class Gaussian16Output(GaussianFileMixin):
 
     @property
     def heavy_elements_basis(self):
+        """Common inferred basis name, ``mixed``, or None if unidentified.
+
+        Names require matching orbital functions and ECPs. See
+        ``heavy_elements_basis_by_element`` for the element assignments.
         """
-        Name of the basis set for heavy elements (lowercase, consistent with
-        Gaussian16Input.heavy_elements_basis).
-        Gaussian does not print the name of an explicitly defined gen/genecp
-        basis, so the name is identified by matching
-        `heavy_elements_basis_functions` against the Basis Set Exchange
-        library (see `heavy_elements_basis_candidates`).  When several BSE
-        basis sets are identical for all heavy elements (e.g. def2-TZVP and
-        def2-TZVPD for Ag), the shortest name is returned. The ECP must also
-        match, including its absence, so the inferred name is safe to use
-        when reconstructing the basis section from BSE.
-        Returns None when the basis functions are unavailable (no #p) or no
-        single BSE basis set and ECP match all heavy elements.
+        names = self.heavy_elements_basis_by_element
+        if not names or any(name is None for name in names.values()):
+            return None
+        unique_names = set(names.values())
+        return next(iter(unique_names)) if len(unique_names) == 1 else "mixed"
+
+    @cached_property
+    def heavy_elements_basis_by_element(self):
+        """Inferred names by element; unknown names are None.
+
+        Prefer a common BSE name where possible; otherwise select the
+        shortest matching name per element. Every match preserves the ECP.
         """
         candidates = self.heavy_elements_basis_candidates
         if not candidates:
             return None
-        common_names = set.intersection(
-            *(set(names) for names in candidates.values())
-        )
-        if not common_names:
-            logger.debug(
-                f"No Basis Set Exchange basis set matches all heavy "
-                f"elements: {candidates}"
-            )
-            return None
         from chemsmart.io.gaussian import BSEMetadata
 
-        bse_metadata = BSEMetadata()
+        metadata = BSEMetadata()
         ecps = self.heavy_elements_ecp or {}
-        common_names = {
-            name
-            for name in common_names
-            if all(
-                bse_metadata.basis_ecp_matches(
-                    element, name, ecps.get(element)
-                )
-                for element in candidates
-            )
+        matches = {
+            element: {
+                name
+                for name in names
+                if metadata.basis_ecp_matches(element, name, ecps.get(element))
+            }
+            for element, names in candidates.items()
         }
-        if not common_names:
-            logger.debug("No matching BSE basis preserves the printed ECP.")
-            return None
-        names = sorted(common_names, key=lambda name: (len(name), name))
-        if len(names) > 1:
-            logger.debug(
-                f"Heavy elements basis functions are identical in "
-                f"{names}; using {names[0]}."
+        common = set.intersection(*matches.values())
+        if common:
+            name = min(common, key=lambda value: (len(value), value))
+            return dict.fromkeys(matches, name)
+        return {
+            element: (
+                min(names, key=lambda value: (len(value), value))
+                if names
+                else None
             )
-        return names[0]
+            for element, names in matches.items()
+        }
 
     @cached_property
     def heavy_elements_basis_candidates(self):

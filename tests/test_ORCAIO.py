@@ -579,7 +579,11 @@ class TestORCAOutput:
         )
         orca_out = ORCAOutput(filename=str(out_file))
         assert orca_out.heavy_elements == ["Pd", "I"]
-        assert orca_out.heavy_elements_basis == "def2-TZVP, def2-QZVP"
+        assert orca_out.heavy_elements_basis == "mixed"
+        assert orca_out.heavy_elements_basis_by_element == {
+            "Pd": "def2-TZVP",
+            "I": "def2-QZVP",
+        }
 
         out_file.write_text(
             "|  1> ! PBE0 def2-SVP\n"

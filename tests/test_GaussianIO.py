@@ -2013,6 +2013,25 @@ class TestGaussian16Output:
         assert np.isclose(br_last_exp, 1.5350000000e00)
         assert np.isclose(br_last_coeff, 1.0000000000e00)
 
+    @pytest.mark.parametrize(
+        "br_names, expected", [(["6-31g"], "mixed"), ([], None)]
+    )
+    def test_basis_names_by_element_without_a_common_name(
+        self, gaussian_full_gen_outfile, br_names, expected
+    ):
+        out = Gaussian16Output(gaussian_full_gen_outfile)
+        # Exercise selection after orbital matching, including an unknown
+        # element. These all-electron candidates require no ECP.
+        out.__dict__["heavy_elements_basis_candidates"] = {
+            "Cl": ["6-311g"],
+            "Br": br_names,
+        }
+        assert out.heavy_elements_basis == expected
+        assert out.heavy_elements_basis_by_element == {
+            "Cl": "6-311g",
+            "Br": "6-31g" if br_names else None,
+        }
+
     def test_heavy_elements_basis_name_round_trip_with_sp_shells(self):
         # Write a BSE basis with SP shells the way Gaussian prints it under
         # #p, parse it back and identify its name from the functions.

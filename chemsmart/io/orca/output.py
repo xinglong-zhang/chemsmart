@@ -425,26 +425,24 @@ class ORCAOutput(ORCAFileMixin):
         )
 
     @property
+    def heavy_elements_basis_by_element(self):
+        """Named NewGTO assignments by element, or None if absent."""
+        return dict(self._element_basis_names) or None
+
+    @property
     def heavy_elements_basis(self):
+        """Common NewGTO name, ``mixed`` for different names, or None.
+
+        Comparison ignores case. Element assignments are available through
+        ``heavy_elements_basis_by_element``.
         """
-        Name of the basis set assigned to the heavy elements with
-        ``NewGTO`` in the %basis block (consistent with
-        Gaussian16Input.heavy_elements_basis).  When the heavy elements use
-        different basis sets, their names are joined in the order of
-        `heavy_elements`, e.g. 'def2-TZVP, def2-QZVP'.  Returns None if no
-        element-specific basis is given. Duplicate names are compared
-        without case, preserving the first spelling in element order.
-        """
-        if not self._element_basis_names:
+        names = self.heavy_elements_basis_by_element
+        if not names:
             return None
-        basis_names = []
-        seen = set()
-        for element in self.heavy_elements:
-            basis_name = self._element_basis_names[element]
-            if basis_name.casefold() not in seen:
-                basis_names.append(basis_name)
-                seen.add(basis_name.casefold())
-        return ", ".join(basis_names)
+        first = names[self.heavy_elements[0]]
+        if all(name.casefold() == first.casefold() for name in names.values()):
+            return first
+        return "mixed"
 
     @property
     def num_atoms(self):
