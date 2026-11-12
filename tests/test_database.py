@@ -93,6 +93,7 @@ class TestDatabaseUtilities:
             **legacy,
             "heavy_elements_basis": "def2-tzvp",
             "heavy_elements_basis_functions": functions,
+            "heavy_elements_basis_by_element": {"Ag": "def2-tzvp"},
         }
         snapshot = copy.deepcopy(modern)
         expected = canonical_json_hash(legacy)
@@ -101,6 +102,16 @@ class TestDatabaseUtilities:
         assert (
             canonical_custom_basis_hash(
                 {**modern, "heavy_elements_basis": "def2-tzvpd"}
+            )
+            == expected
+        )
+        assert (
+            canonical_custom_basis_hash(
+                {
+                    **modern,
+                    "heavy_elements_basis": "mixed",
+                    "heavy_elements_basis_by_element": {"Ag": None},
+                }
             )
             == expected
         )
@@ -1115,6 +1126,22 @@ class TestDatabaseExport:
 
 
 class TestDatabaseInspect:
+    def test_record_detail_ecp_only_is_available(self, tmp_path, monkeypatch):
+        db = Database(str(tmp_path / "ecp.db"))
+        db.create()
+        inspector = DatabaseInspector(db.db_file)
+        record = {
+            "meta": {
+                "basis": "customized_basis",
+                "custom_basis": {"heavy_elements_ecp": {"Ag": {}}},
+            },
+            "provenance": {"source": "ag.log"},
+        }
+        monkeypatch.setattr(inspector, "record_detail", lambda: record)
+        detail = inspector.format_record_detail()
+        assert "Heavy Elements ECP" in detail
+        assert "unavailable" not in detail
+
     def test_record_detail_heavy_elements_basis_functions(
         self, tmp_path, monkeypatch
     ):
@@ -1279,6 +1306,31 @@ class TestDatabaseInspect:
 
 
 class TestDatabaseAssembler:
+    def test_unidentified_genecp_preserves_functions_and_ecp(
+        self, gaussian_custom_ecp_outfile, tmp_path
+    ):
+        record = SingleFileAssembler(gaussian_custom_ecp_outfile).assemble_data
+        basis = record.meta["custom_basis"]
+        assert basis["heavy_elements_basis"] is None
+        assert basis["heavy_elements_basis_by_element"] == {"Ag": None}
+        assert basis["heavy_elements_basis_functions"]["Ag"]
+        assert basis["heavy_elements_ecp"]["Ag"]["channels"][0]["terms"][0][
+            2
+        ] == (-34.68992012)
+        db = Database(str(tmp_path / "custom.db"))
+        db.create()
+        db.insert_record(record)
+        stored = db.get_record(record_id=record.record_id)["meta"][
+            "custom_basis"
+        ]
+        assert stored == json.loads(json.dumps(basis))
+        detail = DatabaseInspector(
+            db.db_file, record_id=record.record_id
+        ).format_record_detail()
+        assert "Ag Basis" in detail
+        assert "unidentified" in detail
+        assert "Ag Shells" in detail
+
     @pytest.mark.parametrize(
         "fixture_name, legacy_id",
         [
@@ -1301,8 +1353,13 @@ class TestDatabaseAssembler:
         assert record.record_id == legacy_id
         custom_basis = record.meta["custom_basis"]
         assert isinstance(custom_basis["heavy_elements_basis"], str)
+        assert custom_basis["heavy_elements_basis_by_element"] == {
+            element: custom_basis["heavy_elements_basis"]
+            for element in custom_basis["heavy_elements"]
+        }
         legacy = copy.deepcopy(Database.record_to_dict(record))
         legacy_basis = legacy["meta"]["custom_basis"]
+        legacy_basis.pop("heavy_elements_basis_by_element")
         legacy_basis["heavy_elements_basis"] = legacy_basis.pop(
             "heavy_elements_basis_functions"
         )
@@ -1330,6 +1387,11 @@ class TestDatabaseAssembler:
             "custom_basis"
         ]
         assert stored_basis == json.loads(json.dumps(custom_basis))
+        for element, name in custom_basis[
+            "heavy_elements_basis_by_element"
+        ].items():
+            assert f"{element} Basis" in detail
+            assert name in detail
 
     def test_assembler_builds_records(
         self,

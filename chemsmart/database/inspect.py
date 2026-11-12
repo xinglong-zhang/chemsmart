@@ -289,6 +289,8 @@ class DatabaseInspector:
                     "heavy_elements",
                     "heavy_elements_basis",
                     "heavy_elements_basis_functions",
+                    "heavy_elements_basis_by_element",
+                    "heavy_elements_ecp",
                 )
             )
             if not has_detail:
@@ -318,6 +320,12 @@ class DatabaseInspector:
                 if heavy_basis_name:
                     heavy_str += f"  [{heavy_basis_name}]"
                 lines.append(format_kv("  Heavy Elements", heavy_str))
+            basis_names = custom_basis.get("heavy_elements_basis_by_element")
+            if basis_names:
+                for elem, name in basis_names.items():
+                    lines.append(
+                        format_kv(f"    {elem} Basis", name or "unidentified")
+                    )
             if heavy_basis:
                 for elem, shells in heavy_basis.items():
                     shell_types = ", ".join(s["shell"] for s in shells)

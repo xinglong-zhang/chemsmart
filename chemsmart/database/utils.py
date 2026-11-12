@@ -190,6 +190,7 @@ def canonical_custom_basis_hash(custom_basis):
     if not custom_basis:
         return None
     identity = dict(custom_basis)
+    identity.pop("heavy_elements_basis_by_element", None)
     if "heavy_elements_basis_functions" in identity:
         identity["heavy_elements_basis"] = identity.pop(
             "heavy_elements_basis_functions"
