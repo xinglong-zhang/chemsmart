@@ -485,6 +485,24 @@ class TestORCAOutput:
         if '# NewGTO Pd "def2-QZVP" end #' in comment:
             assert out.heavy_elements == ["Pd", "I"]
 
+    def test_explicit_newgto_replaces_previous_basis_name(self, tmp_path):
+        out_file = tmp_path / "replaced_newgto.out"
+        out_file.write_text(
+            "|  1> ! PBE0 def2-SVP\n"
+            "|  2> %basis\n"
+            '|  3> NewGTO Pd "def2-TZVP" end\n'
+            "|  4> NewGTO Pd\n"
+            "|  5> S 1\n"
+            "|  6> 1 1.0 1.0\n"
+            "|  7> end\n"
+            '|  8> NewGTO I "def2-QZVP" end\n'
+            "|  9> end\n"
+            "| 10> ****END OF INPUT****\n"
+        )
+        out = ORCAOutput(str(out_file))
+        assert out.heavy_elements == ["I"]
+        assert out.heavy_elements_basis == "def2-QZVP"
+
     def test_heavy_elements_basis_names_are_case_insensitive(self, tmp_path):
         out_file = tmp_path / "case_variants.out"
         out_file.write_text(

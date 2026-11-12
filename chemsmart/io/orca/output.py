@@ -402,15 +402,21 @@ class ORCAOutput(ORCAFileMixin):
                 continue
             element = tokens[index + 1].capitalize()
             basis_name = tokens[index + 2]
-            if element in p.PERIODIC_TABLE and basis_name.startswith('"'):
-                basis_names[element] = basis_name[1:-1]
+            if element in p.PERIODIC_TABLE:
+                if basis_name.startswith('"'):
+                    basis_names[element] = basis_name[1:-1]
+                else:
+                    # An explicit replacement has no library name. Do not
+                    # retain a name from an earlier NewGTO for this element.
+                    basis_names.pop(element, None)
         return basis_names
 
     @property
     def heavy_elements(self):
         """
-        List of element symbols assigned an element-specific basis set
+        List of element symbols assigned a named element-specific basis
         with ``NewGTO`` in the %basis block, or None if there are none.
+        Explicit shell definitions without a library name are not included.
         """
         if not self._element_basis_names:
             return None
