@@ -1309,6 +1309,12 @@ class TestDatabaseAssembler:
         db = Database(str(tmp_path / "upgrade.db"))
         db.create()
         db.insert_record(legacy)
+        legacy_detail = DatabaseInspector(
+            db.db_file, record_id=legacy_id
+        ).format_record_detail()
+        for element in legacy_basis["heavy_elements_basis"]:
+            assert f"{element} Shells" in legacy_detail
+        assert "'primitives':" not in legacy_detail
         db.insert_record(record)
         with db.get_connection() as conn:
             assert (
