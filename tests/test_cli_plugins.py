@@ -4,6 +4,7 @@ import click
 import pytest
 
 from chemsmart.cli import plugins
+from chemsmart.utils.cli import MyCommand
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +38,7 @@ def test_discovery_is_sorted_and_skips_broken(monkeypatch, caplog):
         def load(self):
             if self.broken:
                 raise ImportError("missing dependency")
-            return click.Command(self.name)
+            return MyCommand(self.name)
 
     class Entries:
         def select(self, **kwargs):
@@ -59,6 +60,20 @@ def test_duplicate_plugins_are_all_skipped(monkeypatch):
     )
     assert plugins.discover(plugins.JOB_COMMANDS) == ()
     with pytest.raises(plugins.PluginLoadError, match="multiple entry points"):
+        plugins.discover(plugins.JOB_COMMANDS, strict=True)
+
+
+def test_job_plugin_requires_recording_command(monkeypatch):
+    entry = SimpleNamespace(
+        name="example", value="example:command", dist=None,
+        load=lambda: click.Command("example"),
+    )
+    monkeypatch.setattr(
+        plugins.importlib.metadata, "entry_points",
+        lambda: SimpleNamespace(select=lambda **kwargs: [entry]),
+    )
+    assert plugins.discover(plugins.JOB_COMMANDS) == ()
+    with pytest.raises(plugins.PluginLoadError, match="MyCommand"):
         plugins.discover(plugins.JOB_COMMANDS, strict=True)
 
 

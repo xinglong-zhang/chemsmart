@@ -12,6 +12,7 @@ from typing import Iterable
 import click
 
 from chemsmart.utils.mixins import RegistryMixin
+from chemsmart.utils.cli import MyCommand, MyGroup
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,17 @@ COMMANDS = "chemsmart.commands"
 
 class PluginLoadError(RuntimeError):
     """Raised when a plugin cannot be loaded or validated."""
+
+
+def _validate_job_command(command):
+    """Ensure every job command records arguments for submission scripts."""
+    if isinstance(command, click.Group):
+        if not isinstance(command, MyGroup):
+            raise PluginLoadError("Job command groups must use MyGroup.")
+        for child in command.commands.values():
+            _validate_job_command(child)
+    elif not isinstance(command, MyCommand):
+        raise PluginLoadError("Job commands must use MyCommand.")
 
 
 def _provider(entry_point: importlib.metadata.EntryPoint) -> str:
@@ -66,6 +78,8 @@ def discover(
                     f"{group} entry point {_provider(entry)} has name "
                     f"{entry.name!r}, but command.name is {command.name!r}."
                 )
+            if group == JOB_COMMANDS:
+                _validate_job_command(command)
             commands.append(command)
         except Exception as error:
             # Imports may register classes before failing validation. Restore

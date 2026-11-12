@@ -16,6 +16,9 @@ reporting commands in ``chemsmart.commands``:
 Each entry point must expose a Click command or group, and its entry-point
 name must match ``command.name``. Job commands are available under both
 ``chemsmart run`` and ``chemsmart sub``.
+Job command groups must use ``chemsmart.utils.cli.MyGroup`` and leaf
+commands must use ``chemsmart.utils.cli.MyCommand``, including nested
+commands. These classes record arguments for submission scripts.
 
 In normal mode, duplicate plugin names are all skipped, and plugins colliding
 with built-in commands are skipped. Broken plugins are also skipped. Each
