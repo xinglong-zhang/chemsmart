@@ -188,3 +188,9 @@ other overrides outside those blocks, the tokenized input is retained to preserv
 participate in record identity so different unexpanded custom bases cannot overwrite each other. Incomplete printed
 function blocks are not presented as complete functions. Standard route-basis expansions remain metadata and do not
 change record identity across ORCA versions.
+
+A named ORCA basis augmented with extra shells (inside NewGTO or via AddGTO) has an unidentified final name rather than
+retaining the original library nickname. Both element symbols and atomic numbers are accepted for element assignments.
+All echoed ``%basis`` definitions, including global Basis/ECP settings and GTOName file references, participate in
+custom basis identity. A file reference preserves its filename, not the contents of an external file absent from the
+output.

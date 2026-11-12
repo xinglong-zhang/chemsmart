@@ -380,23 +380,33 @@ class ORCAOutput(ORCAFileMixin):
                 keyword.endswith("gto") or keyword == "newecp"
             ):
                 depth += 1
-            if keyword != "newgto" or index + 2 >= len(tokens):
+            if keyword not in {"newgto", "addgto"} or index + 2 >= len(tokens):
                 continue
-            element = tokens[index + 1].capitalize()
+            selector = tokens[index + 1]
+            if selector.isdigit():
+                number = int(selector)
+                if not 0 < number < len(p.PERIODIC_TABLE):
+                    continue
+                element = p.to_symbol(number)
+            else:
+                element = selector.capitalize()
             basis_name = tokens[index + 2]
             if element in p.PERIODIC_TABLE:
-                if basis_name.startswith('"'):
-                    basis_names[element] = basis_name[1:-1]
-                else:
-                    # An explicit replacement has no library name. Do not
-                    # retain a name from an earlier NewGTO for this element.
-                    basis_names[element] = None
+                # A library nickname followed by extra shells no longer
+                # describes the complete basis. AddGTO also changes it.
+                named_only = (
+                    keyword == "newgto"
+                    and basis_name.startswith('"')
+                    and index + 3 < len(tokens)
+                    and tokens[index + 3].casefold() == "end"
+                )
+                basis_names[element] = basis_name[1:-1] if named_only else None
         return basis_names
 
     @property
     def heavy_elements(self):
         """
-        Elements assigned a NewGTO basis in %basis, or None if absent.
+        Elements assigned a NewGTO/AddGTO basis in %basis, or None if absent.
         Explicit definitions are included even when their name is unknown.
         """
         if not self._element_basis_names:
@@ -427,9 +437,10 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def has_custom_basis(self):
-        """Whether echoed input defines element/atom basis overrides."""
+        """Whether echoed input contains a basis block or atom overrides."""
         return any(
-            token.casefold() in {"newgto", "newecp", "addgto"}
+            token.casefold()
+            in {"%basis", "newgto", "newecp", "addgto", "delecp"}
             for token in self._input_tokens
         )
 
@@ -467,7 +478,7 @@ class ORCAOutput(ORCAFileMixin):
             covered.update(range(start, index))
         if any(
             index not in covered
-            and token.casefold() in {"newgto", "newecp", "addgto"}
+            and token.casefold() in {"newgto", "newecp", "addgto", "delecp"}
             for index, token in enumerate(tokens)
         ):
             return {"input_tokens": list(tokens)}
@@ -565,7 +576,7 @@ class ORCAOutput(ORCAFileMixin):
 
     @property
     def heavy_elements_basis_by_element(self):
-        """NewGTO names by element; explicit unnamed definitions map to None."""
+        """Element basis names; explicit or augmented bases map to None."""
         return dict(self._element_basis_names) or None
 
     @property

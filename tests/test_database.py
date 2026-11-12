@@ -1306,6 +1306,31 @@ class TestDatabaseInspect:
 
 
 class TestDatabaseAssembler:
+    @pytest.mark.parametrize(
+        "keyword, names",
+        [
+            ("Basis", ["def2-SVP", "def2-TZVP"]),
+            ("GTOName", ["first.bas", "second.bas"]),
+            ("ECP", ["def2-ECP", "SDD"]),
+        ],
+    )
+    def test_orca_global_basis_definitions_distinguish_records(
+        self, keyword, names, orca_he_output_freq, tmp_path
+    ):
+        with open(orca_he_output_freq) as source:
+            text = source.read()
+        records = []
+        for index, name in enumerate(names):
+            output = tmp_path / f"global{index}.out"
+            definition = f'| 90> %basis {keyword} "{name}" end\n'
+            output.write_text(text.replace("|  1>", definition + "|  1>", 1))
+            record = SingleFileAssembler(str(output)).assemble_data
+            assert record.meta["custom_basis"]["custom_basis_input"][
+                "basis_blocks"
+            ]
+            records.append(record)
+        assert records[0].record_id != records[1].record_id
+
     def test_orca_unexpanded_custom_bases_have_distinct_ids(
         self, orca_he_output_freq, tmp_path
     ):

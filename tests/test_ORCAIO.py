@@ -462,6 +462,26 @@ END
 
 
 class TestORCAOutput:
+    @pytest.mark.parametrize(
+        "definitions, expected",
+        [
+            ('NewGTO 8 "def2-SVP" end', "def2-SVP"),
+            ('NewGTO O "def2-SVP" S 1 1 0.4 1.0 end', None),
+            ('NewGTO O "def2-SVP" end AddGTO O S 1 1 0.4 1.0 end', None),
+            ('AddGTO 8 S 1 1 0.4 1.0 end NewGTO O "def2-SVP" end', "def2-SVP"),
+        ],
+    )
+    def test_element_basis_names_include_augmentation_and_numeric_selectors(
+        self, tmp_path, definitions, expected
+    ):
+        output = tmp_path / "augmented.out"
+        output.write_text(
+            f"| 1> %basis {definitions} end\n| 2> ****END OF INPUT****\n"
+        )
+        out = ORCAOutput(str(output))
+        assert out.heavy_elements_basis_by_element == {"O": expected}
+        assert out.heavy_elements_basis == expected
+
     @pytest.mark.parametrize("ending", ["", "end\n", "S 1\n1 2.0 1.0\nend\n"])
     def test_incomplete_printed_basis_is_not_reported(self, tmp_path, ending):
         output = tmp_path / "truncated.out"
