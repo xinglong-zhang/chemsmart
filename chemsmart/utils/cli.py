@@ -768,6 +768,12 @@ def create_sp_label(label, sp_settings):
     # and id, if both given;
     # will not be activated when both are not given, e.g., in the gaussian
     # calculator calling the sp job
+    from chemsmart.jobs.external import ExternalCalculator
+
+    if isinstance(getattr(sp_settings, "external", None), ExternalCalculator):
+        # external levels of theory ignore the host program's solvation,
+        # so a solvent (or gas-phase) tag would mislabel the job
+        return label
     if (
         sp_settings.solvent_model is not None
         and sp_settings.solvent_id is not None

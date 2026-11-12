@@ -482,6 +482,17 @@ class TestCreateSpLabel:
         label = create_sp_label("mol", sp_settings)
         assert label == "mol_custom_solvent"
 
+    def test_external_level_of_theory_leaves_label_unchanged(self):
+        from chemsmart.jobs.orca.external import ORCAExternalCalculator
+
+        sp_settings = MagicMock(
+            solvent_model="smd",
+            solvent_id="water",
+            custom_solvent=None,
+            external=ORCAExternalCalculator(backend="xtb"),
+        )
+        assert create_sp_label("mol", sp_settings) == "mol"
+
     def test_partial_solvent_info_leaves_label_unchanged(self):
         sp_settings = MagicMock(
             solvent_model="smd", solvent_id=None, custom_solvent=None

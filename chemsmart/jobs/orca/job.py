@@ -133,7 +133,8 @@ class ORCAJob(Job):
 
     def _backup_files(self, backup_gbw=False, **kwargs):
         """
-        Create backup of important files.
+        Create backup of important files, including an external job's
+        per-job external log and backend-output folder.
 
         Args:
             backup_gbw: Whether to backup the GBW file
@@ -145,6 +146,7 @@ class ORCAJob(Job):
 
         if backup_gbw:
             self.backup_file(self.gbwfile, folder=folder, **kwargs)
+        self._backup_external_outputs(self.settings.external, folder, **kwargs)
 
     def _output(self):
         """

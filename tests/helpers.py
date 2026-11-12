@@ -33,6 +33,11 @@ from chemsmart.cli.nciplot.nciplot import nciplot
 from chemsmart.cli.run import run
 from chemsmart.cli.sub import sub
 from chemsmart.cli.thermochemistry.thermochemistry import thermochemistry
+from chemsmart.io.external import (
+    ExternalEngine,
+    ExternalProtocol,
+    ExternalRequest,
+)
 from chemsmart.io.molecules.structure import Molecule
 from chemsmart.io.xtb.input import XTBInput
 from chemsmart.jobs.crest.settings import CRESTJobSettings
@@ -46,6 +51,7 @@ from chemsmart.jobs.runner import JobRunner
 from chemsmart.jobs.xtb.settings import XTBJobSettings
 from chemsmart.settings.gaussian import GaussianProjectSettings
 from chemsmart.settings.xtb import XTBProjectSettings
+from chemsmart.utils.constants import bohr_to_angstrom
 from chemsmart.utils.mixins import RegistryMixin
 
 _UNSET = object()
@@ -131,6 +137,7 @@ class DummyJob:
     updated paths."""
 
     execution_name = Job.execution_name
+    backup_file = Job.backup_file  # runners copy results back with it
 
     def __init__(self, program, input_ext, folder, label, settings, molecule):
         self.PROGRAM = program
@@ -1840,3 +1847,341 @@ def rdkit_embed_and_optimize(smiles, seed=1):
     AllChem.EmbedMolecule(mol, params)
     AllChem.UFFOptimizeMolecule(mol)
     return mol
+
+
+class QuadraticEngine(ExternalEngine):
+    """Harmonic External engine with a known Hessian, for testing.
+
+    ``E = x.H.x / 2`` with ``x`` in Bohr, so the exact Hessian is
+    ``hessian`` (Hartree/Bohr^2). ``analytic`` is what
+    :meth:`analytic_hessian` reports (``None`` for no analytic Hessian).
+    """
+
+    def __init__(self, hessian, analytic=None):
+        super().__init__()
+        self.hessian = np.asarray(hessian, dtype=float)
+        self.analytic = analytic
+        self.gradient_calls = 0
+
+    def energy_and_gradient(self, numbers, positions, charge, multiplicity):
+        self.gradient_calls += 1
+        x = np.asarray(positions, dtype=float).reshape(-1) / bohr_to_angstrom
+        gradient = self.hessian @ x
+        return 0.5 * x @ gradient, gradient.reshape(-1, 3)
+
+    def analytic_hessian(self, numbers, positions, charge, multiplicity):
+        return self.analytic
+
+
+def write_gaussian_external_input(
+    path, positions_ang, atomic_numbers, deriv=1, charge=0, multiplicity=1
+):
+    """Write a minimal Gaussian ``External`` input file.
+
+    Positions are given in Angstrom and written in Bohr, in the
+    fixed-width layout Gaussian passes to an External script.
+    """
+    natoms = len(atomic_numbers)
+    with open(path, "w") as fh:
+        fh.write(f"{natoms:10d}{deriv:10d}{charge:10d}{multiplicity:10d}\n")
+        for z, (x, y, z_coord) in zip(atomic_numbers, positions_ang):
+            xb = x / bohr_to_angstrom
+            yb = y / bohr_to_angstrom
+            zb = z_coord / bohr_to_angstrom
+            fh.write(f"{z:10d}{xb:20.12f}{yb:20.12f}{zb:20.12f}{0.0:20.12f}\n")
+    return str(path)
+
+
+def run_gaussian_external_cli(
+    xyz_file,
+    jobrunner,
+    job_class_path,
+    *external_args,
+    gaussian_args=(),
+    **kwargs,
+):
+    """Invoke ``gaussian -p gas_solv -f <xyz> -c 0 -m 1 [gaussian_args]
+    external <args>``.
+
+    Returns ``(result, settings)`` like
+    :func:`run_gaussian_and_capture_settings`, which receives ``kwargs``.
+    """
+    return run_gaussian_and_capture_settings(
+        job_class_path,
+        ["-p", "gas_solv", "-f", xyz_file, "-c", "0", "-m", "1"]
+        + list(gaussian_args)
+        + ["external"]
+        + list(external_args),
+        make_cli_ctx_obj(jobrunner),
+        **kwargs,
+    )
+
+
+def run_h2_g16_external(g16, directory, external, route, r_hh, name):
+    """Run real g16 on H2 with an External backend; return the log text.
+
+    Writes the launcher and ``<name>.com`` (route ``# <route>
+    External=...``) into ``directory`` and asserts normal termination.
+    """
+    external.write_script(directory)
+    com_file = directory / f"{name}.com"
+    com_file.write_text(dedent(f"""\
+        %chk={name}.chk
+        %nprocshared=1
+        %mem=1GB
+        # {route} External={external.route_value}
+
+        H2 LJ External {route}
+
+        0 1
+        H   0.000000   0.000000   0.000000
+        H   0.000000   0.000000   {r_hh:.6f}
+
+    """))
+    result = subprocess.run(
+        [g16, str(com_file)],
+        capture_output=True,
+        text=True,
+        cwd=str(directory),
+        timeout=300,
+    )
+    log_file = directory / f"{name}.log"
+    log_text = log_file.read_text() if log_file.exists() else "(no log)"
+    assert "Normal termination" in log_text, (
+        f"g16 stdout: {result.stdout[-400:]}\n"
+        f"log tail:\n{log_text[-1500:]}"
+    )
+    return log_text
+
+
+def find_g16():
+    """Return the ``g16`` executable path, or ``None`` if unavailable.
+
+    Looks on ``PATH`` first, then in ``$GAUSS_EXEDIR``.
+    """
+    on_path = shutil.which("g16")
+    if on_path:
+        return on_path
+    gauss_exedir = os.environ.get("GAUSS_EXEDIR")
+    if not gauss_exedir:
+        return None
+    candidate = os.path.join(gauss_exedir, "g16")
+    return candidate if os.path.isfile(candidate) else None
+
+
+def write_orca_external_input(
+    directory,
+    symbols,
+    positions_ang,
+    charge=0,
+    multiplicity=1,
+    gradient=True,
+    ncores=1,
+    pointcharges=None,
+    basename="job_EXT",
+):
+    """Write the files ORCA's ``ExtOpt`` hands to ``ProgExt``.
+
+    Creates ``<basename>.xyz`` (Angstrom) and ``<basename>.extinp.tmp``
+    in ``directory``, with ORCA's trailing ``#`` comments and relative
+    file names, and returns the ``.extinp.tmp`` path.
+    """
+    directory = Path(directory)
+    lines = [f"{len(symbols)}", "Coordinates from ORCA-job job E -1.0"]
+    for symbol, (x, y, z) in zip(symbols, positions_ang):
+        lines.append(f"{symbol:<2s} {x:16.10f} {y:16.10f} {z:16.10f}")
+    (directory / f"{basename}.xyz").write_text("\n".join(lines) + "\n")
+    extinp = [
+        f"{basename}.xyz  # xyz filename: string, ending in '.xyz'",
+        f"{charge}  # molecular charge: int",
+        f"{multiplicity}  # multiplicity: int",
+        f"{ncores}  # NCores: int",
+        f"{int(gradient)}  # do gradient: 0 or 1",
+    ]
+    if pointcharges is not None:
+        extinp.append(f"{pointcharges}  # point charge filename: string")
+    path = directory / f"{basename}.extinp.tmp"
+    path.write_text("\n".join(extinp) + "\n")
+    return str(path)
+
+
+def run_orca_external_cli(
+    xyz_file, job_class_path, *external_args, orca_args=(), **kwargs
+):
+    """Invoke ``orca -p gas_solv -f <xyz> -c 0 -m 1 [orca_args] external
+    <args>``.
+
+    Returns ``(result, settings)`` like
+    :func:`run_orca_and_capture_settings`, which receives ``kwargs``.
+    """
+    return run_orca_and_capture_settings(
+        job_class_path,
+        ["-p", "gas_solv", "-f", xyz_file, "-c", "0", "-m", "1"]
+        + list(orca_args)
+        + ["external"]
+        + list(external_args),
+        **kwargs,
+    )
+
+
+def find_orca():
+    """Return the real ORCA executable path, or ``None`` if unavailable.
+
+    Looks on ``PATH`` first, then in ``$ORCA_EXEDIR``. An ``orca`` without
+    ORCA's ``orca_scf*`` modules next to it (e.g. the GNOME screen reader
+    or a test stub) is ignored.
+    """
+    from glob import glob
+
+    candidates = [shutil.which("orca")]
+    exedir = os.environ.get("ORCA_EXEDIR")
+    if exedir:
+        candidates.append(os.path.join(exedir, "orca"))
+    for candidate in candidates:
+        if not candidate or not os.path.isfile(candidate):
+            continue
+        folder = os.path.dirname(os.path.realpath(candidate))
+        if glob(os.path.join(folder, "orca_scf*")):
+            return candidate
+    return None
+
+
+def run_h2_orca_external(orca, directory, external, route, r_hh, name):
+    """Run real ORCA on H2 with an external backend; return the output.
+
+    Writes the launcher and ``<name>.inp`` (``! <route> ExtOpt`` with a
+    ``%method ProgExt`` block) into ``directory`` and asserts normal
+    termination.
+    """
+    external.write_script(directory)
+    inp_file = directory / f"{name}.inp"
+    inp_file.write_text(dedent(f"""\
+        ! {route} ExtOpt
+        %method
+          ProgExt "{external.progext(directory)}"
+        end
+        * xyz 0 1
+        H   0.000000   0.000000   0.000000
+        H   0.000000   0.000000   {r_hh:.6f}
+        *
+    """))
+    result = subprocess.run(
+        [orca, inp_file.name],
+        capture_output=True,
+        text=True,
+        cwd=str(directory),
+        timeout=300,
+    )
+    assert "ORCA TERMINATED NORMALLY" in result.stdout, (
+        result.stdout[-3000:] + result.stderr[-2000:]
+    )
+    return result.stdout
+
+
+def write_orca_input_text(writer):
+    """Return the text ``ORCAInputWriter._write_all`` produces."""
+    from io import StringIO
+
+    buffer = StringIO()
+    writer._write_all(buffer)
+    return buffer.getvalue()
+
+
+class JSONExternalProtocol(ExternalProtocol):
+    """Minimal host protocol for testing :class:`ExternalProtocol`.
+
+    The "host" writes ``request.json`` (symbols, Angstrom positions,
+    charge, multiplicity, deriv) and reads ``result.json`` back, showing
+    that a new host only implements the three file-exchange methods.
+    """
+
+    host = "JSON"
+    usage = "Usage: <script> request.json result.json"
+
+    def parse_arguments(self, argv):
+        if len(argv) != 2:
+            raise ValueError(self.usage)
+        return tuple(argv)
+
+    def read_request(self, invocation):
+        data = json.loads(Path(invocation[0]).read_text())
+        return ExternalRequest(
+            deriv=data["deriv"],
+            charge=data["charge"],
+            multiplicity=data["multiplicity"],
+            numbers=np.array(data["numbers"]),
+            positions=np.array(data["positions"], dtype=float),
+        )
+
+    def write_result(self, invocation, request, result):
+        Path(invocation[1]).write_text(
+            json.dumps(
+                {
+                    "energy": result.energy,
+                    "gradient": (
+                        None
+                        if result.gradient is None
+                        else np.asarray(result.gradient).tolist()
+                    ),
+                    "hessian": (
+                        None
+                        if result.hessian is None
+                        else np.asarray(result.hessian).tolist()
+                    ),
+                }
+            )
+        )
+
+
+def write_json_external_request(path, numbers, positions, deriv=1):
+    """Write a :class:`JSONExternalProtocol` request; return its path."""
+    Path(path).write_text(
+        json.dumps(
+            {
+                "deriv": deriv,
+                "charge": 0,
+                "multiplicity": 1,
+                "numbers": list(numbers),
+                "positions": [list(map(float, p)) for p in positions],
+            }
+        )
+    )
+    return str(path)
+
+
+def read_external_log_records(path):
+    """Return the request lines of a chemsmart per-job external log."""
+    import re
+
+    from chemsmart.utils.repattern import external_log_step_pattern
+
+    return [
+        line
+        for line in Path(path).read_text().splitlines()
+        if re.match(external_log_step_pattern, line)
+    ]
+
+
+def run_json_external_request(directory, config, deriv=1, name="request"):
+    """Answer one H2 :class:`JSONExternalProtocol` request through
+    ``main``; return the exit code."""
+    request = write_json_external_request(
+        Path(directory) / f"{name}.json",
+        [1, 1],
+        [[0, 0, 0], [0, 0, 1.0]],
+        deriv=deriv,
+    )
+    return JSONExternalProtocol().main(
+        config, [request, str(Path(directory) / f"{name}_result.json")]
+    )
+
+
+def write_external_job_outputs(folder, label):
+    """Create an external job's ``<label>_external.log`` and one kept step
+    in ``<label>_external/`` inside ``folder``; return their paths."""
+    log = Path(folder) / f"{label}_external.log"
+    log.write_text("# CHEMSMART external log\n")
+    step = Path(folder) / f"{label}_external" / "step_0001_20261107-090000"
+    step.mkdir(parents=True)
+    (step / "xtb.out").write_text("xtb output")
+    return log, step.parent

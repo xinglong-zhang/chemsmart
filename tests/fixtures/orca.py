@@ -540,3 +540,85 @@ def orca_td_inherited_project_name(orca_yaml_settings_directory):
     ``ORCAJobSettings`` defaults this yields ``freq=True`` inherited into the
     TD settings, without any ``additional_route_parameters``."""
     return os.path.join(orca_yaml_settings_directory, "orca_td_inherited")
+
+
+############ ORCA External Fixtures ##################
+
+
+@pytest.fixture(scope="session")
+def orca_executable():
+    """Path to the real ORCA binary; skips if ORCA is absent."""
+    from tests.helpers import find_orca
+
+    orca = find_orca()
+    if orca is None:
+        pytest.skip("ORCA not available (add to PATH or set ORCA_EXEDIR)")
+    return orca
+
+
+@pytest.fixture()
+def emt_orca_external_calculator():
+    """ORCA external backend running ASE's EMT (no model files needed)."""
+    from chemsmart.jobs.orca.external import ORCAExternalCalculator
+
+    return ORCAExternalCalculator(
+        backend="ase", calculator="ase.calculators.emt.EMT"
+    )
+
+
+@pytest.fixture()
+def xtb_orca_external_calculator():
+    """xtb ORCA external backend with a fixed interpreter."""
+    from chemsmart.jobs.orca.external import ORCAExternalCalculator
+
+    return ORCAExternalCalculator(
+        backend="xtb",
+        options={"method": "gfn2", "alpb": "water"},
+        python_executable="/opt/conda/bin/python",
+    )
+
+
+@pytest.fixture()
+def lj_orca_external_calculator():
+    """ASE LennardJones ORCA external backend for H2 (see
+    :func:`lj_external_calculator`)."""
+    from chemsmart.jobs.orca.external import ORCAExternalCalculator
+
+    return ORCAExternalCalculator(
+        backend="ase",
+        calculator="ase.calculators.lj.LennardJones",
+        options={"sigma": 0.5, "epsilon": 0.01},
+    )
+
+
+@pytest.fixture()
+def au2_orca_external_input(tmp_path):
+    """Factory writing ORCA ExtOpt request files for Au2 (2.88 Angstrom);
+    returns the ``.extinp.tmp`` path. EMT is parametrised for Au."""
+    from tests.helpers import write_orca_external_input
+
+    def make(**kwargs):
+        return write_orca_external_input(
+            tmp_path,
+            ["Au", "Au"],
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 2.88]],
+            **kwargs,
+        )
+
+    return make
+
+
+@pytest.fixture()
+def orca_external_dft_settings():
+    """Project-like ORCA DFT settings an external backend must override."""
+    from chemsmart.jobs.orca.settings import ORCAJobSettings
+
+    return ORCAJobSettings(
+        functional="B3LYP",
+        basis="def2-SVP",
+        defgrid="defgrid3",
+        scf_tol="tight",
+        charge=0,
+        multiplicity=1,
+        freq=True,
+    )

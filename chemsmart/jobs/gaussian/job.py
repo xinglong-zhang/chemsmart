@@ -158,8 +158,9 @@ class GaussianJob(Job):
         """
         Create backup copies of important job files.
 
-        Backs up input and output files, and optionally the checkpoint
-        file, to a timestamped backup directory for data preservation.
+        Backs up input and output files, optionally the checkpoint file,
+        and for external jobs the per-job external log and backend-output
+        folder, to a timestamped backup directory for data preservation.
 
         Args:
             backup_chk (bool): Whether to backup checkpoint files.
@@ -170,6 +171,7 @@ class GaussianJob(Job):
         self.backup_file(self.outputfile, folder=folder, **kwargs)
         if backup_chk:
             self.backup_file(self.chkfile, folder=folder, **kwargs)
+        self._backup_external_outputs(self.settings.external, folder, **kwargs)
 
     def _output(self):
         """

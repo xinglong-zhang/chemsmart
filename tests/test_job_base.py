@@ -15,6 +15,7 @@ from tests.helpers import (
     ConcreteJob,
     make_concrete_job,
     make_default_behavior_job,
+    write_external_job_outputs,
 )
 
 
@@ -383,3 +384,66 @@ class TestJobFromMolecule:
         )
         assert isinstance(job, ConcreteJob)
         assert job.label == "from_mol"
+
+
+class TestSetAsideExternalOutputs:
+    def test_nothing_to_set_aside(
+        self, concrete_job, emt_orca_external_calculator
+    ):
+        assert (
+            concrete_job.set_aside_external_outputs(
+                emt_orca_external_calculator
+            )
+            is None
+        )
+        assert concrete_job._previous_backup_folders() == []
+
+    def test_job_at_host_level_of_theory_untouched(
+        self, concrete_job, tmp_path
+    ):
+        log, outputs = write_external_job_outputs(tmp_path, "myjob")
+        assert concrete_job.set_aside_external_outputs(None) is None
+        assert log.exists() and outputs.exists()
+
+    def test_previous_run_moved_into_backup_folder(
+        self, concrete_job, tmp_path, emt_orca_external_calculator
+    ):
+        log, outputs = write_external_job_outputs(tmp_path, "myjob")
+
+        backup = concrete_job.set_aside_external_outputs(
+            emt_orca_external_calculator, running_directory=str(tmp_path)
+        )
+
+        assert backup in concrete_job._previous_backup_folders()
+        assert not log.exists() and not outputs.exists()
+        assert open(os.path.join(backup, log.name)).read() == (
+            "# CHEMSMART external log\n"
+        )
+        assert os.path.isdir(os.path.join(backup, outputs.name))
+        # the running directory is the job folder: no scratch subfolder
+        assert not os.path.exists(os.path.join(backup, "scratch"))
+
+    def test_reused_scratch_copies_kept_separately(
+        self, concrete_job, tmp_path, emt_orca_external_calculator
+    ):
+        """A reused scratch folder may hold the only copy of a run that
+        stopped before copy-back, so it is kept, not merged or deleted."""
+        scratch = tmp_path / "scratch_run"
+        scratch.mkdir()
+        write_external_job_outputs(tmp_path, "myjob")
+        scratch_log, scratch_outputs = write_external_job_outputs(
+            scratch, "myjob"
+        )
+        scratch_log.write_text("crashed run")
+
+        backup = concrete_job.set_aside_external_outputs(
+            emt_orca_external_calculator, running_directory=str(scratch)
+        )
+
+        kept = os.path.join(backup, "scratch", scratch_log.name)
+        assert open(kept).read() == "crashed run"
+        assert os.path.isdir(
+            os.path.join(backup, "scratch", scratch_outputs.name)
+        )
+        assert os.path.isfile(os.path.join(backup, scratch_log.name))
+        assert not scratch_log.exists() and not scratch_outputs.exists()
