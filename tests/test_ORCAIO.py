@@ -463,6 +463,19 @@ END
 
 class TestORCAOutput:
     @pytest.mark.parametrize(
+        "fixture_name", ["orca_he_output_freq", "orca_he_output_freq_new"]
+    )
+    def test_printed_basis_functions_are_not_input_basis_names(
+        self, request, fixture_name
+    ):
+        out = ORCAOutput(request.getfixturevalue(fixture_name))
+        # Real ORCA outputs print explicit NewGTO blocks after the echoed
+        # input. They must not be interpreted as named input overrides.
+        assert any("NewGTO He" in line for line in out.contents)
+        assert out.heavy_elements is None
+        assert out.heavy_elements_basis is None
+
+    @pytest.mark.parametrize(
         "comment",
         [
             '# NewGTO Pd "def2-QZVP" end',
