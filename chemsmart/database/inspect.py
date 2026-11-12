@@ -304,11 +304,8 @@ class DatabaseInspector:
             heavy_elems = custom_basis.get("heavy_elements")
             heavy_basis_name = custom_basis.get("heavy_elements_basis")
             heavy_basis = custom_basis.get("heavy_elements_basis_functions")
-            # Records written before the name/functions split store shells
-            # in heavy_elements_basis rather than a basis name.
-            if isinstance(heavy_basis_name, dict):
-                if heavy_basis is None:
-                    heavy_basis = heavy_basis_name
+            # This field represents a name only, never shell definitions.
+            if not isinstance(heavy_basis_name, str):
                 heavy_basis_name = None
             heavy_ecp = custom_basis.get("heavy_elements_ecp")
             if light_elems:

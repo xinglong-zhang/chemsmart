@@ -1313,9 +1313,15 @@ class TestDatabaseAssembler:
             db.db_file, record_id=legacy_id
         ).format_record_detail()
         for element in legacy_basis["heavy_elements_basis"]:
-            assert f"{element} Shells" in legacy_detail
+            assert f"{element} Shells" not in legacy_detail
         assert "'primitives':" not in legacy_detail
         db.insert_record(record)
+        detail = DatabaseInspector(
+            db.db_file, record_id=legacy_id
+        ).format_record_detail()
+        assert f"[{custom_basis['heavy_elements_basis']}]" in detail
+        for element in custom_basis["heavy_elements_basis_functions"]:
+            assert f"{element} Shells" in detail
         with db.get_connection() as conn:
             assert (
                 conn.execute("SELECT COUNT(*) FROM records").fetchone()[0] == 1
