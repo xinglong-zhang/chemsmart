@@ -779,8 +779,8 @@ class GaussianJobSettings(MolecularJobSettings):
         """
         Check if GenECP elements are properly specified.
 
-        Verifies that both heavy elements and their basis set are
-        defined for GenECP pseudopotential calculations.
+        Verifies that both heavy elements and a concrete basis name are
+        defined. The output/database display label ``mixed`` is excluded.
 
         Returns:
             bool: True if GenECP elements are properly specified.
@@ -788,6 +788,7 @@ class GaussianJobSettings(MolecularJobSettings):
         return (
             self.heavy_elements is not None
             and self.heavy_elements_basis is not None
+            and self.heavy_elements_basis.strip().casefold() != "mixed"
         )
 
     @property
@@ -820,7 +821,8 @@ class GaussianJobSettings(MolecularJobSettings):
             GenGenECPSection: GenECP section for Gaussian input.
 
         Raises:
-            ValueError: If neither GenECP elements nor file are specified.
+            ValueError: If neither a concrete basis name nor a basis file
+                is specified. The display label ``mixed`` requires a file.
         """
         if self._genecp_elements_specified:
             logger.info(
@@ -847,6 +849,15 @@ class GaussianJobSettings(MolecularJobSettings):
             # Supplied path to genecp file
             genecp_section = GenGenECPSection.from_genecp_path(
                 genecp_path=self.gen_genecp_file
+            )
+        elif (
+            self.heavy_elements_basis is not None
+            and self.heavy_elements_basis.strip().casefold() == "mixed"
+        ):
+            raise ValueError(
+                "'mixed' is a display label, not a basis-set name. "
+                "Supply a complete gen_genecp_file with the per-element "
+                "basis functions and any ECPs before generating input."
             )
         else:
             raise ValueError(

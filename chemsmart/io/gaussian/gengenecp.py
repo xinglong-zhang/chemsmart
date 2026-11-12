@@ -217,6 +217,12 @@ class GenGenECPSection:
             heavy_elements (list): Heavy element symbols (with ECPs)
             heavy_elements_basis (str): Basis set name for heavy elements
         """
+        if heavy_elements_basis.strip().casefold() == "mixed":
+            raise ValueError(
+                "'mixed' is a display label, not a basis-set name. "
+                "Use an explicit basis name or load a complete per-element "
+                "basis section with from_genecp_path()."
+            )
         try:
             import basis_set_exchange as bse
 

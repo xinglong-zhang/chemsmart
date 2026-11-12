@@ -1,3 +1,4 @@
+import pytest
 from ase import Atoms
 
 from chemsmart.io.gaussian.gengenecp import GenGenECPSection
@@ -8,6 +9,16 @@ from chemsmart.utils.utils import two_files_have_similar_contents
 
 
 class TestGaussianGenGenECP:
+    @pytest.mark.parametrize("basis_name", ["mixed", "MIXED", " mixed "])
+    def test_display_label_cannot_be_rendered_as_basis(self, basis_name):
+        with pytest.raises(ValueError, match="display label"):
+            GenGenECPSection.from_bse_api(
+                light_elements=["H"],
+                light_elements_basis="6-31g",
+                heavy_elements=["Cl", "Br"],
+                heavy_elements_basis=basis_name,
+            )
+
     def test_genecp_fallback_when_basis_missing_from_bse(self, caplog):
         genecp_section = GenGenECPSection.from_bse_api(
             light_elements=["H", "C", "N", "O", "P", "Cl"],

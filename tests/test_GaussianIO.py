@@ -2032,6 +2032,45 @@ class TestGaussian16Output:
             "Br": "6-31g" if br_names else None,
         }
 
+    def test_mixed_output_settings_require_an_explicit_basis_file(
+        self, gaussian_full_gen_outfile, tmp_path
+    ):
+        out = Gaussian16Output(gaussian_full_gen_outfile)
+        # Exercise the output-to-settings boundary independently of BSE's
+        # name matching, using different per-element identified names.
+        out.__dict__["heavy_elements_basis_by_element"] = {
+            "Cl": "6-311g",
+            "Br": "6-31g",
+        }
+        settings = out.read_settings()
+        assert (
+            out.heavy_elements_basis
+            == settings.heavy_elements_basis
+            == "mixed"
+        )
+        with pytest.raises(ValueError, match="display label.*gen_genecp_file"):
+            settings.get_genecp_section(out.molecule)
+
+        basis_file = tmp_path / "mixed_basis.txt"
+        contents = (
+            " ".join(out.light_elements)
+            + " 0\n"
+            + out.light_elements_basis
+            + "\n****\n"
+            + "Cl 0\n6-311g\n****\nBr 0\n6-31g\n****\n"
+        )
+        basis_file.write_text(contents)
+        settings.gen_genecp_file = str(basis_file)
+        section = settings.get_genecp_section(out.molecule)
+        assert section.string == contents
+        assert "mixed" not in section.string
+        # Reading settings must not remove the label or mapping used by DB assembly.
+        assert out.heavy_elements_basis == "mixed"
+        assert out.heavy_elements_basis_by_element == {
+            "Cl": "6-311g",
+            "Br": "6-31g",
+        }
+
     def test_heavy_elements_basis_name_round_trip_with_sp_shells(self):
         # Write a BSE basis with SP shells the way Gaussian prints it under
         # #p, parse it back and identify its name from the functions.

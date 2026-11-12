@@ -150,7 +150,9 @@ A typical CHEMSMART database workflow is:
 -  **Gaussian basis reuse.** For verbose ``#p`` Gen/GenECP output, basis names are inferred from Basis Set Exchange only
    when both the orbital functions and the ECP match, including the absence of an ECP. Orbital-only matches remain
    available in ``heavy_elements_basis_candidates``. If no complete match exists, supply an explicit basis name or a
-   ``gen_genecp_file`` containing the intended basis and ECP before preparing another calculation.
+   ``gen_genecp_file`` containing the intended basis and ECP before preparing another calculation. The ``mixed`` value
+   is a display label only. Preparing Gaussian input from such an output requires a complete ``gen_genecp_file`` with
+   the per-element basis definitions and ECPs; the label is never written as a basis name.
 
 -  **Database validation.** Every database operation first verifies that the input is a valid CHEMSMART database with
    the expected schema. Foreign ``.db`` files are rejected with a clear error.
