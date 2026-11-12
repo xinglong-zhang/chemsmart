@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
-import sys
 from collections import Counter
 from functools import lru_cache
 from typing import Iterable
 
 import click
 
-from chemsmart.utils.mixins import RegistryMixin
 from chemsmart.utils.cli import MyCommand, MyGroup
+from chemsmart.utils.mixins import RegistryMixin
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +42,25 @@ def _provider(entry_point: importlib.metadata.EntryPoint) -> str:
     )
 
 
+def _declared_classes(command):
+    """Validate the whole declaration before activating any plugin class."""
+    classes = getattr(command, "chemsmart_classes", ())
+    if not isinstance(classes, tuple):
+        raise PluginLoadError("command.chemsmart_classes must be a tuple.")
+    for cls in classes:
+        if (
+            not isinstance(cls, type)
+            or cls is RegistryMixin
+            or not issubclass(cls, RegistryMixin)
+            or not cls.REGISTERABLE
+        ):
+            raise PluginLoadError(
+                "command.chemsmart_classes must contain registerable "
+                "RegistryMixin subclasses."
+            )
+    return classes
+
+
 @lru_cache(maxsize=None)
 def discover(
     group: str, strict: bool = False, reserved: frozenset[str] = frozenset()
@@ -55,8 +73,6 @@ def discover(
     commands: list[click.Command] = []
     counts = Counter(entry.name for entry in entries)
     for entry in entries:
-        registry_before = list(RegistryMixin._REGISTRY)
-        modules_before = set(sys.modules)
         try:
             if entry.name in reserved:
                 raise PluginLoadError(
@@ -67,7 +83,8 @@ def discover(
                 raise PluginLoadError(
                     f"{group} has multiple entry points named {entry.name!r}."
                 )
-            command = entry.load()
+            with RegistryMixin.defer_plugin_registration():
+                command = entry.load()
             if not isinstance(command, click.Command):
                 raise PluginLoadError(
                     f"{group} entry point {_provider(entry)} is not a "
@@ -80,20 +97,12 @@ def discover(
                 )
             if group == JOB_COMMANDS:
                 _validate_job_command(command)
+            classes = _declared_classes(command)
+            for cls in classes:
+                if cls not in RegistryMixin._REGISTRY:
+                    RegistryMixin._REGISTRY.append(cls)
             commands.append(command)
         except Exception as error:
-            # Imports may register classes before failing validation. Restore
-            # the registry and discard newly imported modules that defined
-            # those classes so a later import can register them again.
-            added = [
-                cls for cls in RegistryMixin._REGISTRY
-                if cls not in registry_before
-            ]
-            RegistryMixin._REGISTRY[:] = registry_before
-            module_names = {cls.__module__ for cls in added}
-            module_names.add(entry.value.split(":", 1)[0])
-            for name in module_names - modules_before:
-                sys.modules.pop(name, None)
             if strict:
                 if isinstance(error, PluginLoadError):
                     raise

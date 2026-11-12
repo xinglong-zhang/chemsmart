@@ -18,6 +18,8 @@ Key mixin classes:
 import inspect
 import os
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from functools import cached_property
 
@@ -1814,6 +1816,11 @@ class YAMLFileMixin(FileMixin):
         return self.yaml_contents_dict[key]
 
 
+_defer_plugin_registration = ContextVar(
+    "defer_plugin_registration", default=False
+)
+
+
 class RegistryMeta(type):
     """
     Metaclass that seeds a shared subclass registry on the root class.
@@ -1850,6 +1857,21 @@ class RegistryMixin(metaclass=RegistryMeta):
 
     # Flag to control whether this class should be registered in the registry
     REGISTERABLE = True
+
+    @classmethod
+    @contextmanager
+    def defer_plugin_registration(cls):
+        """Keep imported plugin classes inactive until explicitly accepted.
+
+        Host classes still register normally, including lazy core imports.
+        Cached plugin classes can later be activated by a valid command's
+        ``chemsmart_classes`` declaration without reimporting their modules.
+        """
+        token = _defer_plugin_registration.set(True)
+        try:
+            yield
+        finally:
+            _defer_plugin_registration.reset(token)
 
     @classmethod
     def subclasses(cls, allow_abstract=False):
@@ -1898,6 +1920,9 @@ class RegistryMixin(metaclass=RegistryMeta):
         """
         super().__init_subclass__(**kwargs)
         if cls.REGISTERABLE:
+            is_host_class = cls.__module__.startswith("chemsmart.")
+            if _defer_plugin_registration.get() and not is_host_class:
+                return
             # Append the subclass to the root _REGISTRY
             cls._REGISTRY.append(cls)
 
