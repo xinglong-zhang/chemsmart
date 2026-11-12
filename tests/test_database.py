@@ -1306,6 +1306,54 @@ class TestDatabaseInspect:
 
 
 class TestDatabaseAssembler:
+    def test_orca_mixed_basis_names_are_stored(
+        self, orca_he_output_freq, tmp_path
+    ):
+        with open(orca_he_output_freq) as source:
+            lines = source.readlines()
+        for index, line in enumerate(lines):
+            if "****END OF INPUT****" in line:
+                lines.insert(
+                    index,
+                    '| 99> %basis NewGTO He "def2-SVP" end NewGTO H "def2-TZVP" end end\n',
+                )
+                break
+        output = tmp_path / "mixed.out"
+        output.write_text("".join(lines))
+        record = SingleFileAssembler(str(output)).assemble_data
+        basis = record.meta["custom_basis"]
+        assert basis["heavy_elements_basis"] == "mixed"
+        assert basis["heavy_elements_basis_by_element"] == {
+            "He": "def2-SVP",
+            "H": "def2-TZVP",
+        }
+        db = Database(str(tmp_path / "mixed.db"))
+        db.create()
+        db.insert_record(record)
+        detail = DatabaseInspector(
+            db.db_file, record_id=record.record_id
+        ).format_record_detail()
+        assert "mixed" in detail
+        assert "He Basis" in detail
+        assert "H Basis" in detail
+        assert "def2-TZVP" in detail
+
+    def test_orca_expanded_basis_is_stored(
+        self, orca_he_output_freq, tmp_path
+    ):
+        record = SingleFileAssembler(orca_he_output_freq).assemble_data
+        basis = record.meta["custom_basis"]
+        shells = basis["heavy_elements_basis_functions"]["He"]
+        assert [shell["shell"] for shell in shells] == ["S", "S", "P"]
+        assert shells[0]["primitives"][0] == (38.354936737, 0.023831966567)
+        db = Database(str(tmp_path / "orca.db"))
+        db.create()
+        db.insert_record(record)
+        stored = db.get_record(record_id=record.record_id)["meta"][
+            "custom_basis"
+        ]
+        assert stored == json.loads(json.dumps(basis))
+
     def test_unidentified_genecp_preserves_functions_and_ecp(
         self, gaussian_custom_ecp_outfile, tmp_path
     ):

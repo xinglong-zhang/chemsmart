@@ -462,6 +462,17 @@ END
 
 
 class TestORCAOutput:
+    def test_printed_ecp_summary(self, orca_outputs_directory):
+        out = ORCAOutput(
+            os.path.join(orca_outputs_directory, "L2_ts1_opt_pka_HA_sp.out")
+        )
+        assert out.heavy_elements_ecp["Pd"] == {
+            "name": "Def2-ECP",
+            "core_electrons": 28,
+            "lmax": 3,
+            "parameters_available": False,
+        }
+
     @pytest.mark.parametrize(
         "fixture_name", ["orca_he_output_freq", "orca_he_output_freq_new"]
     )

@@ -179,7 +179,7 @@ def canonical_json_hash(obj):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def canonical_custom_basis_hash(custom_basis):
+def canonical_custom_basis_hash(custom_basis, include_basis_names=False):
     """Hash basis functions/ECPs using the pre-split identity format.
 
     New metadata keeps the name and functions in separate fields. Only
@@ -190,7 +190,11 @@ def canonical_custom_basis_hash(custom_basis):
     if not custom_basis:
         return None
     identity = dict(custom_basis)
-    identity.pop("heavy_elements_basis_by_element", None)
+    names = identity.pop("heavy_elements_basis_by_element", None)
+    if include_basis_names and names:
+        # Without expanded functions, element assignments are the only
+        # available basis identity and must distinguish mixed assignments.
+        identity["heavy_elements_basis_by_element"] = names
     if "heavy_elements_basis_functions" in identity:
         identity["heavy_elements_basis"] = identity.pop(
             "heavy_elements_basis_functions"

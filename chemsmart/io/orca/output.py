@@ -425,6 +425,80 @@ class ORCAOutput(ORCAFileMixin):
         )
 
     @property
+    def has_custom_basis(self):
+        """Whether echoed input defines element/atom basis overrides."""
+        lines = []
+        for line in self.contents:
+            if "****END OF INPUT****" in line:
+                break
+            match = re.match(r"^\|\s*\d+>(.*)$", line)
+            if match:
+                lines.append(match.group(1))
+        text = re.sub(
+            orca_input_comment_pattern,
+            lambda match: (
+                "" if match.group().startswith("#") else match.group()
+            ),
+            "\n".join(lines),
+            flags=re.MULTILINE,
+        )
+        return any(
+            token.casefold() in {"newgto", "newecp", "addgto"}
+            for token in re.findall(orca_input_token_pattern, text)
+        )
+
+    @cached_property
+    def heavy_elements_basis_functions(self):
+        """Expanded NewGTO functions printed in the results, when available."""
+        result = {}
+        shells = None
+        for line in self.contents:
+            tokens = line.split()
+            if len(tokens) == 2 and tokens[0].casefold() == "newgto":
+                element = tokens[1].capitalize()
+                shells = [] if element in p.PERIODIC_TABLE else None
+                if shells is not None:
+                    result[element] = shells
+            elif shells is not None:
+                if tokens and tokens[0].casefold() == "end":
+                    shells = None
+                elif (
+                    len(tokens) == 2
+                    and tokens[0].upper()
+                    in ("S", "P", "D", "F", "G", "H", "I", "SP")
+                    and tokens[1].isdigit()
+                ):
+                    shells.append(
+                        {"shell": tokens[0].upper(), "primitives": []}
+                    )
+                elif tokens and tokens[0].isdigit() and shells:
+                    values = tuple(
+                        float(v.replace("D", "E")) for v in tokens[1:]
+                    )
+                    shells[-1]["primitives"].append(values)
+        return result or None
+
+    @cached_property
+    def heavy_elements_ecp(self):
+        """Printed ECP summaries; unprinted potential terms are not inferred."""
+        result = {}
+        pattern = re.compile(
+            r"Group \d+, Type (\w+) ECP (\S+) "
+            r"\(replacing (\d+) core electrons, lmax=(\d+)\)"
+        )
+        for line in self.contents:
+            match = pattern.search(line)
+            if match:
+                element, name, core, lmax = match.groups()
+                result[element] = {
+                    "name": name,
+                    "core_electrons": int(core),
+                    "lmax": int(lmax),
+                    "parameters_available": False,
+                }
+        return result or None
+
+    @property
     def heavy_elements_basis_by_element(self):
         """Named NewGTO assignments by element, or None if absent."""
         return dict(self._element_basis_names) or None

@@ -125,8 +125,13 @@ class BaseAssembler:
         )
         meta = {**meta, "trajectory_id": trajectory_id}
         custom_basis_hash = canonical_custom_basis_hash(
-            meta.get("custom_basis")
+            meta.get("custom_basis"),
+            include_basis_names=self.PROGRAM == "ORCA",
         )
+        if self.PROGRAM == "ORCA" and not self.output.has_custom_basis:
+            # Printed functions for a standard route basis are metadata;
+            # normalization can vary between ORCA versions.
+            custom_basis_hash = None
         custom_solvent_hash = canonical_json_hash(meta.get("custom_solvent"))
         route_tokens = canonicalize_route_string(
             self.output.route_string,
@@ -360,6 +365,19 @@ class ORCAAssembler(BaseAssembler):
                 "num_shells": self.output.num_shells,
             }
         )
+        names = self.output.heavy_elements_basis_by_element
+        functions = self.output.heavy_elements_basis_functions
+        ecps = self.output.heavy_elements_ecp
+        if names or functions or ecps:
+            meta_data["custom_basis"] = {
+                "heavy_elements": sorted(
+                    set(names or {}) | set(functions or {}) | set(ecps or {})
+                ),
+                "heavy_elements_basis": self.output.heavy_elements_basis,
+                "heavy_elements_basis_by_element": names,
+                "heavy_elements_basis_functions": functions,
+                "heavy_elements_ecp": ecps,
+            }
         return meta_data
 
     def get_calculation_results(self):

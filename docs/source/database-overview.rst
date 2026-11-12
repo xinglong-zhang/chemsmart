@@ -173,3 +173,11 @@ A typical CHEMSMART database workflow is:
    geometry using RDKit heuristics, not from first-principles electronic structure. Bond orders are inferred from
    interatomic distances, which may give incorrect results for unusual bonding, metal-ligand interactions, or strained
    systems. These tags should be treated as approximate.
+
+ORCA custom basis metadata
+==========================
+
+ORCA assembly stores named element-specific NewGTO assignments and expanded NewGTO functions printed in the output.
+Unprinted functions remain unavailable. Printed ECP summaries retain the name, replaced core-electron count and lmax;
+``parameters_available: false`` indicates that potential coefficients were not parsed and the summary is not a complete
+reconstructable ECP.
